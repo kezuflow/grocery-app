@@ -198,3 +198,146 @@ export function createPaymentRepository(database: D1Database) {
 }
 
 export type PaymentRepository = ReturnType<typeof createPaymentRepository>;
+
+export type InboxRow = {
+  id: string;
+  payloadHash: string;
+  processingStatus: string;
+};
+
+export function extendPaymentRepository(database: D1Database) {
+  const base = createPaymentRepository(database);
+  return {
+    ...base,
+    async findIntentByProviderReference(
+      provider: string,
+      providerReference: string,
+    ): Promise<PaymentIntentRow[]> {
+      const rows = await database
+        .prepare(
+          "SELECT pi.id, pi.purpose, pi.subject_type, pi.subject_id, pi.customer_id, pi.amount_minor, pi.currency, pi.status, pi.idempotency_key, pi.version FROM payment_intent pi JOIN payment_attempt pa ON pa.payment_intent_id=pi.id WHERE pa.provider=? AND pa.provider_reference=? ORDER BY pi.created_at DESC",
+        )
+        .bind(provider, providerReference)
+        .all<{
+          id: string;
+          purpose: string;
+          subject_type: string;
+          subject_id: string;
+          customer_id: string;
+          amount_minor: number;
+          currency: string;
+          status: string;
+          idempotency_key: string;
+          version: number;
+        }>();
+      return rows.results.map((row) => ({
+        id: row.id,
+        purpose: row.purpose,
+        subjectType: row.subject_type,
+        subjectId: row.subject_id,
+        customerId: row.customer_id,
+        amountMinor: row.amount_minor,
+        currency: row.currency,
+        status: row.status,
+        idempotencyKey: row.idempotency_key,
+        version: row.version,
+      }));
+    },
+    async findInboxEntry(provider: string, providerEventId: string): Promise<InboxRow | null> {
+      const row = await database
+        .prepare(
+          "SELECT id, payload_hash, processing_status FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
+        )
+        .bind(provider, providerEventId)
+        .first<{ id: string; payload_hash: string; processing_status: string }>();
+      return row
+        ? { id: row.id, payloadHash: row.payload_hash, processingStatus: row.processing_status }
+        : null;
+    },
+    insertInbox(input: {
+      provider: string;
+      providerEventId: string;
+      payloadHash: string;
+      now: number;
+    }): Promise<number> {
+      return database
+        .prepare(
+          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, processing_status, attempts, received_at, updated_at) VALUES (?, ?, ?, ?, 'RECEIVED', 0, ?, ?)",
+        )
+        .bind(
+          crypto.randomUUID(),
+          input.provider,
+          input.providerEventId,
+          input.payloadHash,
+          input.now,
+          input.now,
+        )
+        .run()
+        .then((result) => result.meta?.changes ?? 0);
+    },
+    setInboxStatus(input: {
+      id: string;
+      processingStatus: string;
+      errorCode?: string | null;
+      now: number;
+    }): Promise<void> {
+      return database
+        .prepare(
+          "UPDATE payment_provider_event_inbox SET processing_status=?, last_error_code=?, attempts=attempts+1, processed_at=?, updated_at=? WHERE id=?",
+        )
+        .bind(input.processingStatus, input.errorCode ?? null, input.now, input.now, input.id)
+        .run()
+        .then(() => undefined);
+    },
+    applyObservationWithReaction(input: {
+      intentId: string;
+      expectedVersion: number;
+      expectedStatus: string;
+      nextStatus: string;
+      reaction: {
+        reactionType: string;
+        subjectType: string;
+        subjectId: string;
+        idempotencyKey: string;
+        now: number;
+      } | null;
+    }): Promise<boolean> {
+      const statements: D1PreparedStatement[] = [
+        database
+          .prepare(
+            "UPDATE payment_intent SET status=?, version=version+1, updated_at=? WHERE id=? AND version=? AND status=?",
+          )
+          .bind(
+            input.nextStatus,
+            input.reaction?.now ?? Date.now(),
+            input.intentId,
+            input.expectedVersion,
+            input.expectedStatus,
+          ),
+      ];
+      if (input.reaction)
+        statements.push(
+          database
+            .prepare(
+              "INSERT OR IGNORE INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, 0, ?, ?)",
+            )
+            .bind(
+              crypto.randomUUID(),
+              input.intentId,
+              input.reaction.reactionType,
+              input.reaction.subjectType,
+              input.reaction.subjectId,
+              input.reaction.idempotencyKey,
+              input.reaction.now,
+              input.reaction.now,
+            ),
+        );
+      return database
+        .batch(statements)
+        .then((results) => (results[0]?.meta?.changes ?? 0) === 1)
+        .catch(() => false);
+    },
+  };
+}
+
+export type ExtendedPaymentRepository = ReturnType<typeof extendPaymentRepository>;

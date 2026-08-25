@@ -34,6 +34,8 @@ import { isSandboxPaymentEnabled, type PaymentRuntimeEnvironment } from "./payme
 import { financialOperationDisposition } from "./orders/financial-safety";
 import { adjustInventory as adjustInventoryCommand } from "./inventory/application/adjust-inventory";
 import { startReceiving as startReceivingCommand } from "./procurement/application/start-receiving";
+import { handleProviderWebhook } from "./payments/http/provider-webhook";
+import { ProviderRegistry } from "./payments/infrastructure/providers/provider-registry";
 import { recordReceivedLine as recordReceivedLineCommand } from "./procurement/application/record-received-line";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
 import { expireCheckoutAttempts } from "./commerce/reconciliation";
@@ -144,6 +146,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return Response.json(await this.health({ requestId: id }), {
         headers: { "x-request-id": id },
       });
+    if (path.startsWith("/webhooks/payments/"))
+      return handleProviderWebhook(
+        this.env.DB,
+        new ProviderRegistry((this.env as PaymentRuntimeEnvironment).ENVIRONMENT),
+        request,
+      );
     if (path.startsWith("/api/auth")) return this.handleAuthHttp(request);
     return Response.json(
       { error: { code: "NOT_FOUND", message: "Core route not found", requestId: id } },
