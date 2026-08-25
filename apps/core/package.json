@@ -17,7 +17,8 @@
     "@freshmarkets/domain-shared": "workspace:*",
     "@freshmarkets/validation": "workspace:*",
     "better-auth": "1.7.1",
-    "drizzle-orm": "0.45.2"
+    "drizzle-orm": "0.45.2",
+    "temporal-polyfill": "^1.0.4"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
