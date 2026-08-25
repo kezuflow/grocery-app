@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding, ServiceabilityRequest } from "@freshmarkets/contracts";
+import type { ServiceabilityRequest } from "@freshmarkets/contracts";
+import { coreClient } from "@/lib/core-client/core";
 
 export async function POST(request: Request): Promise<Response> {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -20,7 +21,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400, headers: { "x-request-id": requestId } },
     );
   }
-  const result = await (env.CORE as unknown as CoreServiceBinding).resolveServiceability({
+  const result = await coreClient(env.CORE).resolveServiceability({
     ...input,
     requestId,
   });

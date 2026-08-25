@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../lib/core-client/request";
+import { coreClient } from "@/lib/core-client/core";
 const operationBodySchema = z.object({
   command: z.enum(["inventory", "procurement", "receiving", "fulfillment", "delivery", "orders"]),
   locationId: z.string().trim().min(1).optional(),
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     headers: requestHeaders(request),
     idempotencyKey: String(body.idempotencyKey ?? crypto.randomUUID()),
   };
-  const core = env.CORE as unknown as CoreServiceBinding;
+  const core = coreClient(env.CORE);
   if (body.command === "inventory") {
     if (
       !body.locationId ||

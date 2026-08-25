@@ -1,11 +1,11 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { proxyAuthRequest, resolvePublicAppOrigin } from "@/lib/auth/proxy";
+import { coreClient } from "@/lib/core-client/core";
 
 async function proxy(request: Request): Promise<Response> {
   return proxyAuthRequest(
     request,
-    env.CORE as unknown as CoreServiceBinding,
+    coreClient(env.CORE),
     resolvePublicAppOrigin(env.PUBLIC_APP_ORIGIN),
   );
 }

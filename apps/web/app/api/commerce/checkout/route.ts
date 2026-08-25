@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../../lib/core-client/request";
 import { isWebSandboxPaymentEnabled } from "../../../../lib/payments/runtime-policy";
+import { coreClient } from "@/lib/core-client/core";
 const checkoutBodySchema = z.object({
   cartId: z.string().trim().min(1),
   addressId: z.string().trim().min(1),
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     addressId: body.addressId,
     cycleId: body.cycleId,
   };
-  const core = env.CORE as unknown as CoreServiceBinding;
+  const core = coreClient(env.CORE);
   if (body.commit) {
     if (!isWebSandboxPaymentEnabled(env))
       return Response.json(
