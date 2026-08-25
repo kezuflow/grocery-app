@@ -44,7 +44,10 @@ async function checkoutFixture(quantity: number) {
   const cookie = await authenticatedCookie();
   const headers = { cookie };
   const request = () => ({ headers, requestId: requestId() });
-  const trial = await core.startTrial(request());
+  const trial = await core.startTrial({
+    ...request(),
+    idempotencyKey: `trial-${crypto.randomUUID()}`,
+  });
   expect(trial.ok).toBe(true);
   const address = await core.createCustomerAddress({
     ...request(),

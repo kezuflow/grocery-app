@@ -10,6 +10,7 @@ import {
   type RequestMeta,
 } from "@freshmarkets/contracts";
 import { runtimeEnvironment } from "@freshmarkets/config";
+import { idempotencyKeySchema } from "@freshmarkets/validation";
 import { systemClock, type Clock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
@@ -37,6 +38,7 @@ import { startReceiving as startReceivingCommand } from "./procurement/applicati
 import { handleProviderWebhook } from "./payments/http/provider-webhook";
 import { ProviderRegistry } from "./payments/infrastructure/providers/provider-registry";
 import { recordReceivedLine as recordReceivedLineCommand } from "./procurement/application/record-received-line";
+import { startPromotionalTrial as startPromotionalTrialCommand } from "./membership/application/start-promotional-trial";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
 import { expireCheckoutAttempts } from "./commerce/reconciliation";
 import { drizzle } from "drizzle-orm/d1";
@@ -564,58 +566,18 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return { ok: true as const, value: customerAddressView(row), requestId: input.requestId };
   }
   async startTrial(input: import("@freshmarkets/contracts").StartTrialRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
+    const validation = authenticatedRequestSchema
+      .extend({ idempotencyKey: idempotencyKeySchema })
+      .safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const customer = await this.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    const existing = await this.env.DB.prepare(
-      "SELECT status, trial_ends_at FROM subscription WHERE customer_id=? ORDER BY updated_at DESC LIMIT 1",
-    )
-      .bind(customer.value.customerId)
-      .first<{ status: string; trial_ends_at: number | null }>();
-    if (existing)
-      return {
-        ok: true as const,
-        value: {
-          eligible: ["ACTIVE", "TRIALING"].includes(existing.status),
-          status: existing.status,
-          trialEndsAt: existing.trial_ends_at
-            ? new Date(existing.trial_ends_at).toISOString()
-            : null,
-        },
-        requestId: input.requestId,
-      };
-    const offer = await this.env.DB.prepare(
-      "SELECT id, trial_days FROM subscription_offer WHERE status='active' AND ((? IS NOT NULL AND code=?) OR (? IS NULL AND is_default=1))",
-    )
-      .bind(input.offerCode ?? null, input.offerCode ?? null, input.offerCode ?? null)
-      .first<{ id: string; trial_days: number }>();
-    if (!offer) return fail("NOT_FOUND", "Subscription offer not found", input.requestId);
-    const now = this.now();
-    const trialEnds = now + offer.trial_days * 86400000;
-    const subscriptionId = crypto.randomUUID();
-    await this.env.DB.prepare(
-      "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, created_at, updated_at) VALUES (?, ?, ?, 'TRIALING', ?, ?, ?, ?)",
-    )
-      .bind(subscriptionId, customer.value.customerId, offer.id, now, trialEnds, now, now)
-      .run();
-    await this.env.DB.prepare(
-      "INSERT INTO audit_event (id, actor_user_id, action, aggregate_type, aggregate_id, details_json, occurred_at) VALUES (?, ?, 'TRIAL_STARTED', 'subscription', ?, ?, ?)",
-    )
-      .bind(
-        crypto.randomUUID(),
-        customer.value.user.id,
-        subscriptionId,
-        JSON.stringify({ offerId: offer.id }),
-        now,
-      )
-      .run();
-    return {
-      ok: true as const,
-      value: { eligible: true, status: "TRIALING", trialEndsAt: new Date(trialEnds).toISOString() },
+    return startPromotionalTrialCommand(this.env.DB, {
+      customerId: customer.value.customerId,
+      idempotencyKey: input.idempotencyKey!,
       requestId: input.requestId,
-    };
+    });
   }
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,

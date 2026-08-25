@@ -1,20 +1,28 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 export default function AccountPage() {
   const [message, setMessage] = useState("");
+  // One stable key per logical start-trial action, reused across retries.
+  const attemptKey = useRef(`trial-${crypto.randomUUID()}`);
   async function trial() {
-    const response = await fetch("/api/commerce/trial", { method: "POST" });
+    const response = await fetch("/api/commerce/trial", {
+      method: "POST",
+      headers: { "idempotency-key": attemptKey.current },
+    });
     const result = (await response.json()) as {
       ok?: boolean;
       value?: { state: string | null; trialEndsAt: string | null };
       error?: { message: string };
     };
-    setMessage(
-      result.ok
-        ? `Membership: ${result.value?.state ?? "none"}.`
-        : (result.error?.message ?? "Unable to start trial."),
-    );
+    if (result.ok) {
+      setMessage(
+        `Membership: ${result.value?.state ?? "none"}. Trial ends ${result.value?.trialEndsAt ?? "-"}.`,
+      );
+      attemptKey.current = `trial-${crypto.randomUUID()}`;
+    } else {
+      setMessage(result.error?.message ?? "Unable to start trial.");
+    }
   }
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-12">
