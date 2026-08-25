@@ -1,19 +1,27 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MapPin, CheckCircle2, TriangleAlert } from "lucide-react";
 import { Button } from "../../components/ui/button";
 export default function RiderPage() {
   const [orderId, setOrderId] = useState("");
   const [status, setStatus] = useState("");
+  const [expectedVersion, setExpectedVersion] = useState("1");
+  // One stable idempotency key per logical delivery update; it is reused on
+  // retries of the same action and replaced only after terminal success.
+  const attemptKey = useRef(`delivery-${crypto.randomUUID()}`);
   async function run(action: "DISPATCH" | "DELIVER" | "FAIL") {
+    if (!orderId || expectedVersion === "") {
+      setStatus("Provide the order ID and its current version.");
+      return;
+    }
     const response = await fetch("/api/operations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "idempotency-key": attemptKey.current },
       body: JSON.stringify({
         command: "delivery",
         orderId,
         action,
-        idempotencyKey: crypto.randomUUID(),
+        expectedVersion: Number(expectedVersion),
       }),
     });
     const result = (await response.json()) as {
@@ -21,9 +29,12 @@ export default function RiderPage() {
       value?: { status: string };
       error?: { message: string };
     };
-    setStatus(
-      result.ok ? (result.value?.status ?? "Updated") : (result.error?.message ?? "Update failed"),
-    );
+    if (result.ok) {
+      setStatus(result.value?.status ?? "Updated");
+      attemptKey.current = `delivery-${crypto.randomUUID()}`;
+    } else {
+      setStatus(result.error?.message ?? "Update failed");
+    }
   }
   return (
     <main className="mx-auto min-h-screen max-w-md bg-white px-5 py-8">

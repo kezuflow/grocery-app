@@ -41,9 +41,11 @@ export default function AdminPage() {
   async function command(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+    // Each submission begins one logical action, so the browser creates its
+    // idempotency key once here; retries of the same action must resend it.
     const response = await fetch("/api/operations", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify(body),
     });
     const payload = (await response.json()) as {

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../lib/core-client/request";
 import { coreClient } from "@/lib/core-client/core";
+import { requireIdempotencyKey } from "@/lib/core-client/commands";
 const operationBodySchema = z.object({
   command: z.enum(["inventory", "procurement", "receiving", "fulfillment", "delivery", "orders"]),
   locationId: z.string().trim().min(1).optional(),
@@ -26,10 +27,26 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const body = parsed.data;
+  let idempotencyKey: string;
+  try {
+    idempotencyKey = requireIdempotencyKey(request, body.idempotencyKey);
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: (error as Error).message,
+          requestId: crypto.randomUUID(),
+        },
+      },
+      { status: 400 },
+    );
+  }
   const common = {
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
-    idempotencyKey: String(body.idempotencyKey ?? crypto.randomUUID()),
+    idempotencyKey,
   };
   const core = coreClient(env.CORE);
   if (body.command === "inventory") {

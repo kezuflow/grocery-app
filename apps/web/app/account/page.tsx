@@ -7,12 +7,12 @@ export default function AccountPage() {
     const response = await fetch("/api/commerce/trial", { method: "POST" });
     const result = (await response.json()) as {
       ok?: boolean;
-      value?: { status: string; trialEndsAt: string | null };
+      value?: { state: string | null; trialEndsAt: string | null };
       error?: { message: string };
     };
     setMessage(
       result.ok
-        ? `Membership: ${result.value?.status}.`
+        ? `Membership: ${result.value?.state ?? "none"}.`
         : (result.error?.message ?? "Unable to start trial."),
     );
   }

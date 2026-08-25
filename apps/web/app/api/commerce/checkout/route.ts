@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../../lib/core-client/request";
 import { isWebSandboxPaymentEnabled } from "../../../../lib/payments/runtime-policy";
+import { requireIdempotencyKey } from "@/lib/core-client/commands";
 import { coreClient } from "@/lib/core-client/core";
 const checkoutBodySchema = z.object({
   cartId: z.string().trim().min(1),
@@ -33,6 +34,15 @@ export async function POST(request: Request) {
   };
   const core = coreClient(env.CORE);
   if (body.commit) {
+    let idempotencyKey: string;
+    try {
+      idempotencyKey = requireIdempotencyKey(request, body.idempotencyKey);
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: { code: "VALIDATION_FAILED", message: (error as Error).message } },
+        { status: 400 },
+      );
+    }
     if (!isWebSandboxPaymentEnabled(env))
       return Response.json(
         {
@@ -44,20 +54,7 @@ export async function POST(request: Request) {
         },
         { status: 503 },
       );
-    if (!body.idempotencyKey)
-      return Response.json(
-        {
-          ok: false,
-          error: {
-            code: "VALIDATION_FAILED",
-            message: "A stable idempotency key from the client attempt is required",
-          },
-        },
-        { status: 400 },
-      );
-    return Response.json(
-      await core.commitMockOrder({ ...input, idempotencyKey: body.idempotencyKey }),
-    );
+    return Response.json(await core.commitMockOrder({ ...input, idempotencyKey }));
   }
   return Response.json(await core.evaluateCheckout(input));
 }
