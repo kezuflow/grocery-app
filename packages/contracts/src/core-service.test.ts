@@ -60,14 +60,16 @@ describe("domain-grouped core services", () => {
     void ({} as CatalogService);
     void ({} as PaymentsService);
     void ({
-      paymentAttemptId: "",
+      paymentIntentId: "",
       state: "PROCESSING",
       actionType: "NONE",
-      actionUrl: null,
+      redirectUrl: null,
+      clientToken: null,
+      expiresAt: null,
     } satisfies PaymentActionView);
     void ({
-      paymentAttemptId: "",
-      purpose: "ORDER_COMMITMENT",
+      paymentIntentId: "",
+      purpose: "GROCERY_CHECKOUT",
       amountMinor: 1,
       currency: "PHP",
       state: "SUCCEEDED",

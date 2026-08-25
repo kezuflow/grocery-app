@@ -10,15 +10,27 @@ export type PaymentMethodToken = {
 };
 
 export type PaymentActionView = {
-  paymentAttemptId: string;
+  paymentIntentId: string;
   state: Exclude<PaymentState, "PARTIALLY_REFUNDED" | "REFUNDED">;
+  /** Mutually exclusive safe client actions; never a fabricated success state. */
   actionType: "NONE" | "REDIRECT" | "SDK";
-  actionUrl: string | null;
+  redirectUrl: string | null;
+  clientToken: string | null;
+  expiresAt: string | null;
 };
 
+export const paymentPurposesContract = [
+  "MEMBERSHIP_ENROLLMENT",
+  "MEMBERSHIP_RENEWAL",
+  "GROCERY_CHECKOUT",
+  "ORDER_AMENDMENT",
+] as const;
+
+export type PaymentPurpose = (typeof paymentPurposesContract)[number];
+
 export type PaymentSummary = {
-  paymentAttemptId: string;
-  purpose: "MEMBERSHIP_RENEWAL" | "ORDER_COMMITMENT" | "ORDER_AMENDMENT";
+  paymentIntentId: string;
+  purpose: PaymentPurpose;
   amountMinor: number;
   currency: string;
   state: PaymentState;
