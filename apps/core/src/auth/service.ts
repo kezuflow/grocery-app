@@ -8,7 +8,8 @@ import {
   type AuthEmailMessage,
 } from "./email-delivery";
 import { trustedOriginsForEnvironment } from "./origins";
-import { authSchema } from "./schema";
+import { betterAuthSchema } from "./schema";
+import { iamSchema } from "../iam/schema";
 
 export type AuthEnvironment = {
   DB: D1Database;
@@ -22,11 +23,16 @@ export type AuthEnvironment = {
 
 const localSecret = "freshmarkets-phase1-local-secret-change-me";
 
+export function createBetterAuthDatabase(env: AuthEnvironment) {
+  return drizzle(env.DB, { schema: betterAuthSchema });
+}
+
 export function createAuth(
   env: AuthEnvironment,
   dependencies?: { authEmailDelivery?: AuthEmailDelivery },
 ): Auth<any> {
-  const database = drizzle(env.DB, { schema: authSchema });
+  const betterAuthDatabase = createBetterAuthDatabase(env);
+  const iamDatabase = drizzle(env.DB, { schema: iamSchema });
   const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
   const environment = env.ENVIRONMENT ?? "development";
   const authEmailDelivery = dependencies?.authEmailDelivery ?? new UnavailableAuthEmailDelivery();
@@ -44,17 +50,17 @@ export function createAuth(
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET ?? (environment === "production" ? undefined : localSecret),
-    database: drizzleAdapter(database, {
+    database: drizzleAdapter(betterAuthDatabase, {
       provider: "sqlite",
-      schema: authSchema,
+      schema: betterAuthSchema,
       transaction: false,
     }),
     databaseHooks: {
       user: {
         create: {
           after: async (user) => {
-            await database
-              .insert(authSchema.customerPrincipal)
+            await iamDatabase
+              .insert(iamSchema.customerPrincipal)
               .values({
                 id: crypto.randomUUID(),
                 authUserId: user.id,
@@ -62,7 +68,7 @@ export function createAuth(
                 createdAt: new Date(),
                 updatedAt: new Date(),
               })
-              .onConflictDoNothing({ target: authSchema.customerPrincipal.authUserId });
+              .onConflictDoNothing({ target: iamSchema.customerPrincipal.authUserId });
           },
         },
       },

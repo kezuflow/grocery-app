@@ -36,7 +36,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { log, requestId } from "./observability";
 import { applicationContext, hasOperationalScope } from "./auth/authorization";
 import { createAuth, type AuthEnvironment } from "./auth/service";
-import { authSchema } from "./auth/schema";
+import { iamSchema } from "./iam/schema";
 import { resolveServiceability } from "./geography/serviceability";
 import { getProduct, listCategories, searchCatalog } from "./catalog/service";
 import { checkoutEligibility } from "./commerce/service";
@@ -168,7 +168,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async getApplicationContext(input: AuthContextRequest) {
     return applicationContext(
       createAuth(this.env as Env & AuthEnvironment),
-      drizzle(this.env.DB, { schema: authSchema }),
+      drizzle(this.env.DB, { schema: iamSchema }),
       input,
     );
   }
