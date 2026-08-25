@@ -242,6 +242,7 @@ describe("financial safety containment", () => {
         action,
         reason: `safety-${action.toLowerCase()}`,
         idempotencyKey: `safety-${crypto.randomUUID()}`,
+        expectedVersion: 0,
       });
       expect(rejected).toMatchObject({
         ok: false,

@@ -1439,14 +1439,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!transitionResult.ok) return transitionResult;
     const next = transitionResult.value;
     const orderUpdate = this.env.DB.prepare(
-      input.expectedVersion === undefined
-        ? "UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=?"
-        : "UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=? AND version=?",
-    ).bind(
-      ...(input.expectedVersion === undefined
-        ? [next, input.orderId, row.status]
-        : [next, input.orderId, row.status, input.expectedVersion]),
-    );
+      "UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=? AND version=?",
+    ).bind(next, input.orderId, row.status, input.expectedVersion);
     const statements: D1PreparedStatement[] = [
       orderUpdate,
       this.env.DB.prepare(
@@ -1676,15 +1670,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       );
     }
     const result = await this.env.DB.prepare(
-      input.expectedVersion === undefined
-        ? "UPDATE fulfillment_record SET status=?, updated_at=?, version=version+1 WHERE order_id=?"
-        : "UPDATE fulfillment_record SET status=?, updated_at=?, version=version+1 WHERE order_id=? AND version=?",
+      "UPDATE fulfillment_record SET status=?, updated_at=?, version=version+1 WHERE order_id=? AND version=?",
     )
-      .bind(
-        ...(input.expectedVersion === undefined
-          ? [next, this.now(), input.orderId]
-          : [next, this.now(), input.orderId, input.expectedVersion]),
-      )
+      .bind(next, this.now(), input.orderId, input.expectedVersion)
       .run();
     if ((result.meta?.changes ?? 0) !== 1) {
       await this.env.DB.prepare(
@@ -1762,19 +1750,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         };
       return fail("CONFLICT", "The original delivery command is still processing", input.requestId);
     }
-    const deliveryUpdate =
-      input.expectedVersion === undefined
-        ? this.env.DB.prepare(
-            "UPDATE delivery_job SET status=?, delivered_at=?, version=version+1 WHERE order_id=?",
-          ).bind(next, next === "DELIVERED" ? this.now() : null, input.orderId)
-        : this.env.DB.prepare(
-            "UPDATE delivery_job SET status=?, delivered_at=?, version=version+1 WHERE order_id=? AND version=?",
-          ).bind(
-            next,
-            next === "DELIVERED" ? this.now() : null,
-            input.orderId,
-            input.expectedVersion,
-          );
+    const deliveryUpdate = this.env.DB.prepare(
+      "UPDATE delivery_job SET status=?, delivered_at=?, version=version+1 WHERE order_id=? AND version=?",
+    ).bind(next, next === "DELIVERED" ? this.now() : null, input.orderId, input.expectedVersion);
     const statements = [deliveryUpdate];
     if (next === "DELIVERED")
       statements.push(

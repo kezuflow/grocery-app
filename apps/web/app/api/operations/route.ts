@@ -67,14 +67,15 @@ export async function POST(request: Request) {
       !body.deliveryCycleId ||
       !body.locationId ||
       !body.inventoryPoolId ||
-      body.quantity === undefined
+      body.quantity === undefined ||
+      body.expectedVersion === undefined
     )
       return Response.json(
         {
           ok: false,
           error: {
             code: "VALIDATION_FAILED",
-            message: "Procurement fields are required",
+            message: "Procurement fields including expectedVersion are required",
             requestId: common.requestId,
           },
         },
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
         locationId: body.locationId,
         inventoryPoolId: body.inventoryPoolId,
         quantity: body.quantity,
+        expectedVersion: body.expectedVersion,
       }),
     );
   }
@@ -121,49 +123,59 @@ export async function POST(request: Request) {
   }
   if (body.command === "fulfillment") {
     const action = z.enum(["START", "PACK", "SHORTAGE"]).safeParse(body.action);
-    if (!body.orderId || !action.success)
+    if (!body.orderId || !action.success || body.expectedVersion === undefined)
       return Response.json(
         {
           ok: false,
           error: {
             code: "VALIDATION_FAILED",
-            message: "Fulfillment fields are required",
+            message: "Fulfillment fields including expectedVersion are required",
             requestId: common.requestId,
           },
         },
         { status: 400 },
       );
     return Response.json(
-      await core.advanceFulfillment({ ...common, orderId: body.orderId, action: action.data }),
+      await core.advanceFulfillment({
+        ...common,
+        orderId: body.orderId,
+        action: action.data,
+        expectedVersion: body.expectedVersion,
+      }),
     );
   }
   if (body.command === "delivery") {
     const action = z.enum(["DISPATCH", "DELIVER", "FAIL"]).safeParse(body.action);
-    if (!body.orderId || !action.success)
+    if (!body.orderId || !action.success || body.expectedVersion === undefined)
       return Response.json(
         {
           ok: false,
           error: {
             code: "VALIDATION_FAILED",
-            message: "Delivery fields are required",
+            message: "Delivery fields including expectedVersion are required",
             requestId: common.requestId,
           },
         },
         { status: 400 },
       );
     return Response.json(
-      await core.advanceDelivery({ ...common, orderId: body.orderId, action: action.data }),
+      await core.advanceDelivery({
+        ...common,
+        orderId: body.orderId,
+        action: action.data,
+        expectedVersion: body.expectedVersion,
+      }),
     );
   }
   if (body.command === "orders") {
     const action = z.enum(["CANCEL", "REFUND"]).safeParse(body.action);
-    if (!body.orderId || !body.reason || !action.success)
+    if (!body.orderId || !body.reason || !action.success || body.expectedVersion === undefined)
       return Response.json(
         {
           ok: false,
           error: {
             code: "VALIDATION_FAILED",
-            message: "Order command fields are required",
+            message: "Order command fields including expectedVersion are required",
             requestId: common.requestId,
           },
         },
@@ -174,6 +186,7 @@ export async function POST(request: Request) {
       orderId: body.orderId,
       action: action.data,
       reason: body.reason,
+      expectedVersion: body.expectedVersion,
     });
     if (!result.ok && result.error.code === "FINANCIAL_OPERATION_REQUIRES_REVIEW")
       return Response.json(result, { status: 409 });

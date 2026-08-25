@@ -1,7 +1,7 @@
-import type { CoreHealthResponse, CoreServiceBinding } from "@freshmarkets/contracts";
+import type { CoreHealthResponse, HealthService } from "@freshmarkets/contracts";
 
 export async function getCoreHealth(
-  core: CoreServiceBinding,
+  core: HealthService,
   requestId = crypto.randomUUID(),
 ): Promise<CoreHealthResponse> {
   return core.health({ requestId });

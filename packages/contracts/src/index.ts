@@ -1,60 +1,21 @@
-export const CONTRACT_VERSION = "2026-08-25.mvp-commerce" as const;
+export * from "./common";
+export * from "./states";
 
-export type RequestMeta = {
-  requestId: string;
-  idempotencyKey?: string;
-  locale?: string;
-  timezone?: string;
-};
-
-export type AppErrorCode =
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "VALIDATION_FAILED"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "STALE_VERSION"
-  | "SUBSCRIPTION_REQUIRED"
-  | "ADDRESS_NOT_SERVICEABLE"
-  | "CYCLE_CLOSED"
-  | "CYCLE_FULL"
-  | "INSUFFICIENT_STOCK"
-  | "CAPACITY_UNAVAILABLE"
-  | "PRICE_CHANGED"
-  | "ITEM_UNAVAILABLE"
-  | "PROMOTION_INELIGIBLE"
-  | "PAYMENT_REQUIRED"
-  | "PAYMENT_FAILED"
-  | "PAYMENT_PROVIDER_UNAVAILABLE"
-  | "FINANCIAL_OPERATION_REQUIRES_REVIEW"
-  | "CONFIGURATION_ERROR"
-  | "ILLEGAL_TRANSITION"
-  | "IDEMPOTENCY_CONFLICT"
-  | "INTERNAL_ERROR";
-
-export type AppError = {
-  code: AppErrorCode;
-  message: string;
-  requestId: string;
-  details?: Readonly<Record<string, string>>;
-};
-
-export type RpcResult<T> =
-  | { ok: true; value: T; requestId: string }
-  | { ok: false; error: AppError };
-
-export type CoreHealthResponse = {
-  service: "core";
-  status: "ok";
-  contractVersion: typeof CONTRACT_VERSION;
-  environment: string;
-  databaseBindingConfigured: boolean;
-  timestamp: string;
-};
+import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult } from "./common";
+import type {
+  CustomerAddressStatus,
+  DeliveryCycleState,
+  ImplementedOrderState,
+  OperationsCommandState,
+  ReceivingRecordState,
+  SubscriptionState,
+} from "./states";
 
 export type CoreEntrypoint = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
 };
+
+export type HealthService = Pick<CoreServiceBinding, "health">;
 
 export type CoreServiceBinding = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
@@ -291,13 +252,13 @@ export type CustomerAddressView = {
   serviceAreaCode: string | null;
   deliveryZoneCode: string | null;
   resolutionVersion: number | null;
-  status: string;
+  status: CustomerAddressStatus;
   version: number;
 };
 export type SubscriptionEligibilityRequest = AuthenticatedRequest;
 export type SubscriptionEligibility = {
   eligible: boolean;
-  status: string | null;
+  status: SubscriptionState | null;
   trialEndsAt: string | null;
 };
 export type DeliveryCycleRequest = RequestMeta & { marketCode?: string };
@@ -306,7 +267,7 @@ export type DeliveryCycleView = {
   name: string;
   cutoffAt: string;
   deliveryDate: string;
-  status: string;
+  status: DeliveryCycleState;
   capacityRemaining: number;
 };
 export type CheckoutEligibilityRequest = AuthenticatedRequest & {
@@ -349,7 +310,7 @@ export type SetCartItemRequest = AuthenticatedRequest & {
 };
 export type CustomerOrderView = {
   id: string;
-  status: string;
+  status: ImplementedOrderState;
   deliveryDate: string;
   totalMinor: number;
   currency: string;
@@ -360,9 +321,9 @@ export type AdminOrderCommandRequest = AuthenticatedRequest & {
   action: "CANCEL" | "REFUND";
   reason: string;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };
-export type AdminCommandResult = { id: string; status: string };
+export type AdminCommandResult = { id: string; status: OperationsCommandState };
 export type InventoryAdjustmentRequest = AuthenticatedRequest & {
   locationId: string;
   inventoryPoolId: string;
@@ -385,7 +346,7 @@ export type ProcurementCommandRequest = AuthenticatedRequest & {
   inventoryPoolId: string;
   quantity: number;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };
 export type ReceivingCommandRequest = AuthenticatedRequest & {
   requirementId: string;
@@ -397,7 +358,7 @@ export type ReceivingCommandRequest = AuthenticatedRequest & {
 };
 export type ReceivingCommandResult = {
   receivingRecordId: string;
-  status: string;
+  status: ReceivingRecordState;
   acceptedBase: number;
   rejectedBase: number;
   remainingBase: number;
@@ -407,11 +368,11 @@ export type FulfillmentCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "START" | "PACK" | "SHORTAGE";
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };
 export type DeliveryCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "DISPATCH" | "DELIVER" | "FAIL";
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };

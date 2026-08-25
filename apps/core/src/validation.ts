@@ -86,9 +86,8 @@ export const inventoryAdjustmentSchema = headersRequest.extend({
   delta: nonZeroIntegerSchema,
   reason: reasonSchema,
   idempotencyKey: idempotencyKeySchema,
-  // Concurrent balance mutation requires an explicit expected version; the
-  // optional shared schema cannot bypass concurrency protection here.
-  expectedVersion: expectedVersionSchema.unwrap(),
+  // Concurrent balance mutation requires an explicit expected version.
+  expectedVersion: expectedVersionSchema,
 });
 
 export const procurementCommandSchema = headersRequest.extend({
@@ -107,7 +106,7 @@ export const receivingCommandSchema = headersRequest.extend({
   reason: z.string().max(1000).optional(),
   idempotencyKey: idempotencyKeySchema,
   // Concurrent receipt mutation requires an explicit expected version.
-  expectedVersion: expectedVersionSchema.unwrap(),
+  expectedVersion: expectedVersionSchema,
 });
 
 export const fulfillmentCommandSchema = headersRequest.extend({
