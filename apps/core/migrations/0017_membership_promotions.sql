@@ -91,6 +91,12 @@ CREATE INDEX IF NOT EXISTS promotion_redemption_customer_idx
 CREATE INDEX IF NOT EXISTS promotion_grant_status_idx
   ON promotion_grant(status, benefit_code);
 
+-- System grant authorizing the introductory calendar-month trial. Eligibility
+-- and consumption are enforced through promotion_redemption uniqueness.
+INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, parameters_json, created_at, updated_at)
+VALUES ('grant-introductory-trial', 'INTRO_TRIAL', 'MEMBERSHIP_FEE_WAIVER', 1000000, 'ACTIVE',
+        '{"duration":"CALENDAR_MONTH","scope":"MEMBERSHIP"}', 0, 0);
+
 -- Historical backfill: mark existing trial subscriptions as legacy history with
 -- their actual stored timestamps; durations are not rewritten.
 INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, parameters_json, created_at, updated_at)
