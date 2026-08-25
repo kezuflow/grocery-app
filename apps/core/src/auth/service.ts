@@ -2,7 +2,11 @@ import { drizzle } from "drizzle-orm/d1";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth/minimal";
 import type { Auth } from "better-auth";
-import { log } from "../observability";
+import {
+  UnavailableAuthEmailDelivery,
+  type AuthEmailDelivery,
+  type AuthEmailMessage,
+} from "./email-delivery";
 import { trustedOriginsForEnvironment } from "./origins";
 import { authSchema } from "./schema";
 
@@ -18,30 +22,22 @@ export type AuthEnvironment = {
 
 const localSecret = "freshmarkets-phase1-local-secret-change-me";
 
-function originFromRequest(request?: Request): string | undefined {
-  if (!request) return undefined;
-  const forwardedProto =
-    request.headers.get("x-forwarded-proto") ?? new URL(request.url).protocol.slice(0, -1);
-  const forwardedHost = request.headers.get("x-forwarded-host") ?? new URL(request.url).host;
-  return `${forwardedProto}://${forwardedHost}`;
-}
-
-async function deliverAuthEmail(
-  kind: "verification" | "reset",
-  data: { user: { email: string }; url: string },
-  request?: Request,
-) {
-  log("info", `auth.email.${kind}.requested`, {
-    email: data.user.email,
-    url: data.url,
-    origin: originFromRequest(request),
-  });
-}
-
-export function createAuth(env: AuthEnvironment): Auth<any> {
+export function createAuth(
+  env: AuthEnvironment,
+  dependencies?: { authEmailDelivery?: AuthEmailDelivery },
+): Auth<any> {
   const database = drizzle(env.DB, { schema: authSchema });
   const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
   const environment = env.ENVIRONMENT ?? "development";
+  const authEmailDelivery = dependencies?.authEmailDelivery ?? new UnavailableAuthEmailDelivery();
+  const deliverAuthEmail = (
+    data: { user: { email: string }; url: string },
+    kind: AuthEmailMessage["kind"],
+  ) => {
+    const { email } = data.user;
+    const bearerUrl = data.url;
+    return authEmailDelivery.send({ kind, recipient: email, url: bearerUrl });
+  };
 
   return betterAuth({
     appName: "FreshMarkets",
@@ -74,12 +70,11 @@ export function createAuth(env: AuthEnvironment): Auth<any> {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
-      sendResetPassword: async (data, request) => deliverAuthEmail("reset", data, request),
+      sendResetPassword: async (data) => deliverAuthEmail(data, "reset"),
     },
     emailVerification: {
       sendOnSignUp: true,
-      sendVerificationEmail: async (data, request) =>
-        deliverAuthEmail("verification", data, request),
+      sendVerificationEmail: async (data) => deliverAuthEmail(data, "verification"),
     },
     socialProviders: googleConfigured
       ? {
