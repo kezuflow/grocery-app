@@ -32,6 +32,7 @@ import {
 import { findIdempotencyRecord, requestHash } from "./idempotency";
 import { isSandboxPaymentEnabled, type PaymentRuntimeEnvironment } from "./payments/sandbox-policy";
 import { financialOperationDisposition } from "./orders/financial-safety";
+import { adjustInventory as adjustInventoryCommand } from "./inventory/application/adjust-inventory";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
 import { expireCheckoutAttempts } from "./commerce/reconciliation";
 import { drizzle } from "drizzle-orm/d1";
@@ -1487,75 +1488,18 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         "Inventory capability and location scope are required",
         input.requestId,
       );
-    const scope = "inventory.adjust";
-    const hash = await requestHash({
+    const actor = await this.session(input);
+    if (!actor) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    return adjustInventoryCommand(this.env.DB, {
+      requestId: input.requestId,
+      actorId: actor.id,
       locationId: input.locationId,
       inventoryPoolId: input.inventoryPoolId,
-      delta: input.delta,
+      deltaBase: input.delta,
       reason: input.reason,
       expectedVersion: input.expectedVersion,
+      idempotencyKey: input.idempotencyKey,
     });
-    const replay = await findIdempotencyRecord(this.env.DB, scope, input.idempotencyKey);
-    if (replay) {
-      if (replay.requestHash !== hash)
-        return fail(
-          "IDEMPOTENCY_CONFLICT",
-          "Idempotency key was used with a different request",
-          input.requestId,
-        );
-      return replay.status === "SUCCEEDED"
-        ? {
-            ok: true as const,
-            value: { id: `${input.locationId}:${input.inventoryPoolId}`, status: "ADJUSTED" },
-            requestId: input.requestId,
-          }
-        : fail("CONFLICT", "The original inventory command is still processing", input.requestId);
-    }
-    const result = await this.env.DB.prepare(
-      input.expectedVersion === undefined
-        ? "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) VALUES (?, ?, ?, 0, 1) ON CONFLICT(location_id, inventory_pool_id) DO UPDATE SET on_hand=on_hand+excluded.on_hand, version=version+1"
-        : "UPDATE inventory_balance SET on_hand=on_hand+?, version=version+1 WHERE location_id=? AND inventory_pool_id=? AND version=?",
-    )
-      .bind(
-        ...(input.expectedVersion === undefined
-          ? [input.locationId, input.inventoryPoolId, input.delta]
-          : [input.delta, input.locationId, input.inventoryPoolId, input.expectedVersion]),
-      )
-      .run();
-    if ((result.meta?.changes ?? 0) !== 1)
-      return fail("STALE_VERSION", "Inventory changed; refresh before retrying", input.requestId);
-    const now = this.now();
-    await this.env.DB.batch([
-      this.env.DB.prepare(
-        "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, actor_id, reason_code, metadata_json, created_at, idempotency_key) VALUES (?, ?, ?, 'MANUAL_ADJUSTMENT', ?, 0, 'inventory_balance', ?, 'STAFF', ?, ?, ?, ?, ?)",
-      ).bind(
-        crypto.randomUUID(),
-        input.inventoryPoolId,
-        input.locationId,
-        input.delta,
-        `${input.locationId}:${input.inventoryPoolId}`,
-        input.headers["x-user-id"] ?? null,
-        input.reason,
-        JSON.stringify({ requestId: input.requestId }),
-        now,
-        input.idempotencyKey,
-      ),
-      this.env.DB.prepare(
-        "INSERT INTO idempotency_records (scope, idempotency_key, request_hash, result_type, result_reference, status, created_at, updated_at) VALUES (?, ?, ?, 'inventory_balance', ?, 'SUCCEEDED', ?, ?)",
-      ).bind(
-        scope,
-        input.idempotencyKey,
-        hash,
-        `${input.locationId}:${input.inventoryPoolId}`,
-        now,
-        now,
-      ),
-    ]);
-    return {
-      ok: true as const,
-      value: { id: `${input.locationId}:${input.inventoryPoolId}`, status: "ADJUSTED" },
-      requestId: input.requestId,
-    };
   }
   async createProcurementRequirement(
     input: import("@freshmarkets/contracts").ProcurementCommandRequest,

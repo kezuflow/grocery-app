@@ -92,7 +92,9 @@ export type CoreServiceBinding = {
     request: AuthenticatedRequest,
   ): Promise<RpcResult<ReadonlyArray<CustomerOrderView>>>;
   advanceOrder(request: AdminOrderCommandRequest): Promise<RpcResult<AdminCommandResult>>;
-  adjustInventory(request: InventoryAdjustmentRequest): Promise<RpcResult<AdminCommandResult>>;
+  adjustInventory(
+    request: InventoryAdjustmentRequest,
+  ): Promise<RpcResult<InventoryAdjustmentResult>>;
   createProcurementRequirement(
     request: ProcurementCommandRequest,
   ): Promise<RpcResult<AdminCommandResult>>;
@@ -367,7 +369,15 @@ export type InventoryAdjustmentRequest = AuthenticatedRequest & {
   delta: number;
   reason: string;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
+};
+export type InventoryAdjustmentResult = {
+  locationId: string;
+  inventoryPoolId: string;
+  onHandBase: number;
+  reservedBase: number;
+  version: number;
+  ledgerEntryId: string;
 };
 export type ProcurementCommandRequest = AuthenticatedRequest & {
   deliveryCycleId: string;

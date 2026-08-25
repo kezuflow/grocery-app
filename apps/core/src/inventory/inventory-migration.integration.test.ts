@@ -60,6 +60,8 @@ describe("receiving integrity migration", () => {
     const row = await env.DB.prepare(
       "SELECT name FROM d1_migrations WHERE name LIKE '0015%' ORDER BY name",
     ).all<{ name: string }>();
-    expect(row.results.map((entry) => entry.name)).toEqual(["0015_inventory_receiving_integrity.sql"]);
+    expect(row.results.map((entry) => entry.name)).toEqual([
+      "0015_inventory_receiving_integrity.sql",
+    ]);
   });
 });
