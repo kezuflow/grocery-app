@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 
 const { commitMockOrder, evaluateCheckout } = vi.hoisted(() => ({
   commitMockOrder: vi.fn(),
