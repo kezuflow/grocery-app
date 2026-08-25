@@ -1,6 +1,14 @@
 # FreshMarkets Implementation Status
 
-This is the implementation record for `IMPLEMENTATION_PLAN.md`. It does not weaken the canonical architecture, domain invariants, state machines, or MVP scope.
+This is a descriptive implementation snapshot for `IMPLEMENTATION_PLAN.md`. It is non-authoritative and may lag the worktree. It does not define or weaken the canonical architecture, ownership, domain invariants, state machines, data model, contracts, MVP scope, or sequencing. When this file conflicts with the canonical set named in `AGENTS.md`, the canonical set wins.
+
+> **2026-08-26 architecture reconciliation.** The canonical documents now define
+> one PHP 299.00/calendar-month membership, a Promotions-owned one-calendar-month
+> introductory trial, separate Payments ownership, terminal `CANCELED` and
+> `EXPIRED` subscription states, and provider-event inbox/CAS semantics. No
+> application code or migration was changed by that reconciliation. The dirty
+> Phase 4C implementation and untracked `0015_phase4c_subscriptions.sql` remain
+> incomplete worktree state and are not accepted architecture.
 
 > **2026-08-25 correction.** A per-phase architecture review found that earlier
 > "IMPLEMENTED" labels over-stated maturity for Phases 4–14 and hid BLOCKER-class
@@ -24,7 +32,7 @@ the 2026-08-25 review verdict against `IMPLEMENTATION_PLAN.md` acceptance criter
 | Phase 1 | Better Auth and RBAC Foundation | IMPLEMENTED LOCALLY; PROVIDER CONFIG REQUIRED | IMPLEMENTED (real module); auth-flow acceptance tests largely absent |
 | Phase 2 | Markets, Locations, Serviceability, and Geofencing | IMPLEMENTED LOCALLY; APPROVED POLYGON/GEOCODER REQUIRED | IMPLEMENTED (real module) — cleanest phase |
 | Phase 3 | Catalog, SKUs, Units, Availability, and Pricing | IMPLEMENTED MVP SLICE | IMPLEMENTED (real module); pricing drops `market_id`/`price_type`; ~1 test vs 6-item acceptance list |
-| Phase 4 | Customers, Addresses, Subscriptions, and Trials | IMPLEMENTED MVP SLICE; BILLING PROVIDER REQUIRED | PARTIAL — Phase 4A customer-principal boundary and Phase 4B addresses are implemented with migration and flow tests; subscriptions remain for the next phase |
+| Phase 4 | Customers, Addresses, Membership, and Introductory Trial | IMPLEMENTED MVP SLICE; BILLING PROVIDER REQUIRED | PARTIAL — Phase 4A customer-principal boundary and Phase 4B addresses are implemented with migration and flow tests; Membership/Promotions reconciliation is not implemented or accepted |
 | Phase 5 | Delivery Cycles, Fees, Cutoff, and Capacity | IMPLEMENTED MVP SLICE | PARTIAL (inline) — cycle-zone-location capacity/allocation and persisted zone-fee foundations added; cycle administration remains seed-only |
 | Phase 6 | Cart and Checkout Eligibility | IMPLEMENTED MVP SLICE | PARTIAL (inline) — checkout attempts and quote snapshots now persist through the compatibility commit path; full quote lifecycle and promotion policy remain incomplete |
 | Phase 7 | Payments, Orders, Commitment Boundary, and Amendments | IMPLEMENTED WITH SANDBOX PAYMENT; PRODUCTION PROVIDER REQUIRED | PARTIAL (inline) — sandbox only; `order_amendment` table has no code; no webhook verification; `paymentTransitions` dead code |
@@ -58,13 +66,27 @@ before any production deployment.
   cycle × delivery zone × fulfillment location. Historical cycle counters remain
   compatibility data and are no longer the commitment authority.
 - **HIGH — idempotency is not yet integrated across every replayable command.**
+- **BLOCKER — payment commitment is still a compatibility mock.** The current
+  route can synthesize sandbox payment success without a production provider,
+  signed event, or canonical Payments-to-Membership/Order reaction.
+- **BLOCKER — Phase 4C is not reconciled.** The dirty code/contracts and untracked
+  `0015` draft conflict with the canonical membership, trial, cancellation, and
+  payment-ownership decisions and currently fail workspace typechecking.
+- **BLOCKER — auth production safety remains unproven.** Dynamic trusted-origin
+  behavior and authentication bearer URLs in logs require correction before launch.
+- **BLOCKER — inventory/receiving/refund command integrity remains incomplete.**
+  Atomic ledger/idempotency, bounded replay-safe receiving, and provider-confirmed
+  refund behavior are not established.
 - **HIGH — flow coverage is still narrow.** The customer checkout loop,
   customer-address ownership/versioning, D1 capacity/inventory races, and
   checkout-expiry reconciliation now have automated tests; payment-provider,
   refund/amendment, procurement, fulfillment, delivery, and scheduled
   reconciliation flows remain uncovered.
 
-## Remediation Pass 1 Status
+## Historical Remediation Pass Status
+
+The bullets in this section describe earlier implementation passes. They are not
+architecture authority or proof that the audited commerce phases are production-ready.
 
 - **P0:** Scope authorization, boundary validation, canonical Cebu configuration, safe transition errors, and compatibility-preserving RPC behavior are implemented in the current working tree.
 - **P1 foundations:** Clock abstraction, request hashing/idempotency foundation, expected-version contract fields, and corrective migration `0007_remediation_foundations.sql` are implemented.
@@ -78,7 +100,7 @@ before any production deployment.
   vocabulary, and scheduled expiry/reconciliation execution remain unfinished.
   Checkout-expiry reconciliation is implemented as a reusable Core utility and is
   invoked before checkout; it is not yet wired to a production scheduler.
-- **Verification note:** Existing unrelated Web/admin work in the working tree required a syntax correction before typechecking. Formatting, naming, typecheck, lint, tests, and recursive builds now pass locally after the remediation edits.
+- **Historical verification note:** Earlier remediation snapshots reported formatting, naming, typecheck, lint, tests, and recursive builds passing. That statement does not describe the current dirty Phase 4C worktree; see the current verification section below.
 
 ## Proven Local Business Loop
 
@@ -117,17 +139,15 @@ Admin and operations commands require Core capabilities.
 
 ## Verification
 
-> **2026-08-26 note.** The commands below were re-run after the subsequent
-> remediation edits. Passing tests do not imply production readiness: provider,
-> lifecycle, and scheduled-operations coverage remains incomplete.
+> **2026-08-26 documentation-reconciliation note.** Only read-only checks relevant
+> to this documentation phase were run. Passing tests do not imply production
+> readiness, and the current dirty Phase 4C worktree does not typecheck.
 
-- All D1 migrations through `0014_phase4b_address_serviceability_outcome.sql` apply to the local database.
-- `pnpm format:check`, `pnpm naming:check`, `pnpm typecheck`, `pnpm lint`,
-  `pnpm test`, and `pnpm -r build` pass locally. Core deploy dry run and vinext
-  production build are included in the recursive build.
-- `vinext check` reports 100% compatibility for used imports/libraries and the current route structure.
-- `wrangler check startup` succeeds.
-- Web/Core local Service Binding routes and desktop/mobile marketplace rendering were smoke-tested.
+- Migration history through `0014_phase4b_address_serviceability_outcome.sql` is the last tracked migration baseline. The untracked `0015` draft is excluded from accepted architecture.
+- `pnpm naming:check` passes.
+- `pnpm test` passes across the workspace, including 14 Core test files and 42 Core tests.
+- `pnpm typecheck` fails because the dirty Phase 4C contract requires an idempotency key missing from the Web trial route and the Web Core-binding mock lacks the newly declared subscription methods.
+- Formatting, lint, recursive build, vinext compatibility, Wrangler startup, and UI smoke checks were not re-run for this documentation-only reconciliation; earlier results remain historical evidence only.
 - Phase 4B owner-scoped address reads and optimistic-version updates have integration coverage.
 - Phase 4B address views persist Core's serviceability outcome and resolver reason; legacy
   rows remain explicitly unresolved until re-resolved.

@@ -1,5 +1,7 @@
 # FreshMarkets Core
 
+> **Non-authoritative README.** This file is operational/setup guidance and includes historical phase notes. It does not define architecture, domain ownership, lifecycle, or current implementation status; use the canonical set named in `AGENTS.md` and `docs/product/IMPLEMENTATION_STATUS.md`.
+
 Authoritative modular-monolith Worker. Phase 1 adds:
 
 - `health()` typed Service Binding RPC;
@@ -8,7 +10,7 @@ Authoritative modular-monolith Worker. Phase 1 adds:
 - `GET /health` for local/runtime smoke checks;
 - structured 404 errors.
 
-Better Auth owns identity, account, session, and verification records only. Staff roles, permissions, scopes, and customer principals are Core-owned application records. Customer commerce, subscriptions, and all product features remain out of scope until later phases.
+Better Auth owns authentication infrastructure only. Staff roles, permissions, scopes, and customer principals are Core-owned application records. The remainder of this paragraph's Phase 1 scope boundary is historical; later commerce work is described by the non-authoritative implementation status and governed by the canonical documents.
 
 Phase 2 adds the authoritative `resolveServiceability()` RPC backed by versioned D1 service areas, delivery zones, fulfillment-location capabilities, and zone eligibility. Textual city labels are never authoritative, and the resolver does not allow customer location selection.
 

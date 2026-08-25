@@ -2,13 +2,15 @@
 
 FreshMarkets is a pnpm monorepo targeting Cloudflare Workers.
 
+> **Non-authoritative README.** This file is setup guidance and contains historical phase summaries that may lag implementation. Architecture and scope are defined only by the canonical set named in `AGENTS.md`; current implementation state is described in `docs/product/IMPLEMENTATION_STATUS.md`.
+
 ## Phase 0 deployments
 
 - `apps/web`: vinext presentation Worker.
 - `apps/core`: authoritative modular-monolith Worker.
 - `packages/contracts`: typed Web/Core application boundary.
 
-No authentication or product/business domains are implemented yet.
+This Phase 0 summary is historical and must not be read as current implementation status.
 
 ## Setup and validation
 

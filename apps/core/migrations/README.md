@@ -1,12 +1,14 @@
 # Core D1 migrations
 
+> **Non-authoritative migration guide.** Numbered tracked migration files are the historical schema record; this README may lag them and does not define target architecture. The canonical target data model is `docs/architecture/DATA_MODEL.md`, while `docs/product/IMPLEMENTATION_STATUS.md` describes current implementation. Untracked or draft migrations are not accepted merely by existing in the working tree.
+
 Phase 1 adds the Better Auth-supported identity tables and application-owned customer/staff authorization tables in `0001_phase1_auth.sql`. `0002_better_auth_issuer.sql` adds the Better Auth 1.7 account issuer column and issuer/account identity index required for credential and OAuth account ownership.
 
 Phase 2 adds organization, market, fulfillment-location, capability, versioned service-area/delivery-zone, and zone-to-location eligibility tables in `0003_phase2_geography.sql`. It seeds the local bootstrap Metro Cebu geography. Replace the bootstrap polygon with an approved versioned boundary before production launch; do not mutate a deployed polygon version in place.
 
 Phase 3 adds the global catalog, units, shared product inventory pools, fixed SKUs, versioned prices, and location availability in `0004_phase3_catalog.sql`.
 
-Phases 4-13 use `0005_mvp_commerce_operations.sql` for customer/application state, subscriptions, addresses, delivery cycles, carts, sandbox payment attempts, committed order snapshots, inventory reservations, committed procurement demand, procurement/receiving, fulfillment, and delivery records. D1 triggers guard cycle capacity and stocked reservations.
+Phases 4-13 use `0005_mvp_commerce_operations.sql` for customer/application state, subscriptions, addresses, delivery cycles, carts, sandbox payment attempts, committed order snapshots, inventory reservations, committed procurement demand, procurement/receiving, fulfillment, and delivery records. Its historical D1 capacity/inventory triggers were later dropped by tracked migration `0008` after equivalent Core command foundations were introduced.
 
 Phase 14 uses `0006_phase14_promotions_audit.sql` for the deliberately small promotion seam, audit/domain events, refunds/amendments, supplier and exception records, and delivery batches/stops. Production provider credentials and provider-specific webhook behavior remain external launch work.
 

@@ -6,14 +6,18 @@ Implement vertical/domain foundations in dependency order, not page order. Each 
 
 Every phase below explicitly excludes work that belongs later.
 
+This document is authoritative for implementation sequence and phase acceptance, not for redefining runtime ownership, business semantics, lifecycle vocabulary, conceptual persistence, or API boundaries. Those decisions remain authoritative in `ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, `DATA_MODEL.md`, and `API_CONTRACTS.md`. Historical remediation-pass notes below describe prior work and never override those documents or accept a draft migration.
+
 ## Remediation Pass 1 — P0/P1 Foundations (2026-08-25)
 
 This bounded remediation pass is applied across the existing MVP slice before
 further phase expansion. It preserves compatibility behavior and the locked
-business invariants while making the following decisions authoritative:
+business invariants. Its recorded decisions are historical implementation
+context, not an additional authority:
 
-- `docs/architecture/REMEDIATION_DECISIONS.md` records naming, lifecycle,
-  configuration, capacity, pricing, and migration decisions for this pass.
+- `docs/architecture/REMEDIATION_DECISIONS.md` records historical naming,
+  configuration, capacity, pricing, and migration decisions for this pass; the
+  canonical document set supersedes any conflict.
 - `STATE_MACHINES.md` remains authoritative for lifecycle vocabulary and legal
   transitions; `API_CONTRACTS.md` remains authoritative for target RPC shapes.
 - Existing MVP RPCs remain compatibility adapters until their replacement
@@ -127,7 +131,7 @@ Phase 0.
 ### Cloudflare resources
 
 - Core D1 Better Auth/application tables.
-- Core secrets for Google OAuth and the production email delivery provider. Development verification/reset delivery logs generated links for local capture until a transactional provider is configured.
+- Core secrets for Google OAuth and the production email delivery provider. Local tests may capture verification/reset links through an explicit test-only sink; production and shared logs must never contain bearer URLs or authentication tokens.
 
 ### Tests and acceptance
 
@@ -220,11 +224,11 @@ Phase 2 location model.
 
 Cart, subscriptions, checkout, procurement, or physical inventory balances.
 
-## Phase 4 — Customers, Addresses, Subscriptions, and Trials
+## Phase 4 — Customers, Addresses, Membership, and Introductory Trial
 
 ### Purpose
 
-Add commerce customer state and purchase eligibility membership.
+Add commerce customer state, paid membership semantics, and the introductory promotional entitlement required for purchase eligibility.
 
 ### Dependencies
 
@@ -233,32 +237,37 @@ Phases 1–3.
 ### Domain/application work
 
 - Customer profile and address domain.
-- Subscription offer, trial, recurring membership states, eligibility policy, and lifecycle commands.
+- One paid membership offer at PHP 299.00 per calendar billing month.
+- Subscription aggregate, canonical lifecycle/eligibility policy, scheduled-cancellation metadata, and guarded lifecycle commands.
+- Promotions-owned one-per-customer introductory grant/redemption that permits `TRIALING` for exactly one calendar billing month. Calculate in the Market business timezone, clamp to the target month's final valid day when necessary, and persist UTC instants.
+- Membership reaction ports for canonical Payments outcomes; no payment-provider payload or vendor state enters Membership.
 
 ### D1/data changes
 
-- Customer/address/subscription tables and indexes.
+- Customer/address/membership-offer/subscription tables and indexes.
+- The minimal promotion definition, grant, and redemption persistence required for the introductory membership trial. Membership offers contain no `trial_days` authority.
 
 ### RPC/contracts
 
-- Customer/account/address/subscription queries and commands.
+- Customer/account/address/subscription queries and commands, including immediate and period-end cancellation intent.
 - Subscription eligibility DTO for checkout consumers.
 
 ### Web/UI work
 
-- Account, addresses, subscription/trial offer, billing-state, and gated purchase messaging.
+- Account, addresses, paid membership offer, introductory promotion terms, billing state, scheduled-cancellation state, and gated purchase messaging.
 
 ### Cloudflare resources
 
-- Provider ports/secrets for membership billing and email notifications; no provider-specific domain leakage.
+- No payment provider is owned by this phase. Define only the Membership-side application port consumed later by canonical Payments outcomes; provider secrets and adapters belong to Phase 7.
 
 ### Tests and acceptance
 
-- Trial fee semantics, eligible/ineligible states, payment failure transitions, address edits, and secure session/authorization integration.
+- Exact calendar-month trial boundary cases, grant/redemption replay, one-trial eligibility, terminal `CANCELED`/`EXPIRED` behavior, scheduled cancellation that preserves the current entitled state until its effective instant, eligible/ineligible states, address edits, and secure session/authorization integration.
+- Domain tests prove that only a valid promotion redemption enters `TRIALING` and only a canonical sufficient Payments outcome can enter/recover `ACTIVE`; no provider integration is implemented in this phase.
 
 ### Not in this phase
 
-Paid grocery order commitment or delivery execution.
+Payment-provider integration, paid membership activation orchestration, paid grocery order commitment, or delivery execution.
 
 ## Phase 5 — Delivery Cycles, Fees, Cutoff, and Capacity
 
@@ -340,7 +349,7 @@ Actual payment provider side effects or committed orders.
 
 ### Purpose
 
-Convert a valid paid checkout into exactly one immutable commercial commitment.
+Implement the separate Payments context and convert provider-confirmed canonical outcomes into exactly one paid membership activation or immutable order commitment.
 
 ### Dependencies
 
@@ -348,19 +357,21 @@ Phase 6; provider integration port from Phase 0.
 
 ### Domain/application work
 
-- Provider-neutral payment adapter, attempts, webhook verification, payment state, order commitment transaction, immutable snapshots, amendments, cancellation/refund policy seams.
+- Provider-neutral Payments context, payment intents/attempts by purpose, provider mappings/adapters, signed durable event inbox, canonical payment state, and reconciliation.
+- Explicit idempotent reactions from canonical sufficient Payments outcomes to Membership activation/recovery and Order commitment.
+- Order commitment transaction, immutable snapshots, amendments, and cancellation/refund policy seams.
 
 ### D1/data changes
 
-- Checkout/order/order-item/amendment/payment/refund/event/idempotency tables.
+- Checkout/order/order-item/amendment/payment-intent/payment-attempt/provider-mapping/provider-event-inbox/refund/idempotency tables. Provider references remain Payments-owned rather than Subscription fields.
 
 ### RPC/contracts
 
-- Payment action, checkout commitment/recovery, customer orders, amendments, admin payment/order commands.
+- Membership and grocery payment actions, checkout/membership commitment recovery, customer orders, amendments, and admin payment/order commands.
 
 ### Web/UI work
 
-- Payment handoff/return, pending/success/failure/recovery pages, committed order detail, pre-cutoff add-on flow.
+- Membership/grocery payment handoff and return, pending/success/failure/recovery pages, committed order detail, and pre-cutoff add-on flow. Browser return state never asserts payment success.
 
 ### Cloudflare resources
 
@@ -368,11 +379,11 @@ Phase 6; provider integration port from Phase 0.
 
 ### Tests and acceptance
 
-- Duplicate checkout, duplicate webhook, lost response after payment, price/capacity race, immutable snapshots, amendment payment, cancellation/refund paths.
+- Duplicate checkout/application commands, duplicate/out-of-order provider events, signature failure, provider-to-canonical mapping, handler compare-and-swap conflict/retry/reconciliation, lost response after payment, membership activation replay, price/capacity race, immutable snapshots, amendment payment, and cancellation/refund paths. Provider events do not supply `expectedVersion`.
 
 ### Not in this phase
 
-Procurement execution, packing, rider operations, or production provider commitment if vendor selection is not complete.
+Procurement execution, packing, or rider operations. This phase is not accepted for production until a provider is selected and the configured commitment policy is proven with signed provider events and reconciliation.
 
 ## Phase 8 — Location Inventory, Reservations, and Committed Demand
 
@@ -614,7 +625,7 @@ Stable MVP operations and observability.
 
 ### Candidate work
 
-- MVP promotion subset and stacking.
+- Grocery promotion subset and stacking beyond the introductory membership trial already owned by Phase 4.
 - Notifications and analytics projections/events.
 - Recurring subscription orders.
 - Multi-location candidates, transfers, richer proof, and capacity escalation.
@@ -631,7 +642,7 @@ Unapproved scope expansion or a general promotion engine by default.
 
 - Core is the only business authority.
 - Contracts are typed, validated, versioned, and tested from both apps.
-- Mutations have legal transitions, authorization, expected-version checks, idempotency where replayable, and audit where material.
+- Client/application/admin lifecycle commands have legal transitions, authorization, stable idempotency where replayable, expected-version checks where concurrent mutation is possible, and audit where material. Provider events instead have unique provider-event inbox identity, handler-side compare-and-swap, and safe retry/reconciliation.
 - D1 changes are migration-based and tested against local/preview environments.
 - Web UI handles loading, empty, unavailable, permission, cutoff, payment pending, and recovery states.
 - Structured logs and correlation IDs make the critical flow traceable.
