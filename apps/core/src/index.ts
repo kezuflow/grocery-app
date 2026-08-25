@@ -948,114 +948,29 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       requestId: input.requestId,
     };
   }
-  async advanceOrder(input: import("@freshmarkets/contracts").AdminOrderCommandRequest) {
-    const validation = adminOrderCommandSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const row = await this.env.DB.prepare(
-      "SELECT o.status, f.location_id FROM grocery_order o LEFT JOIN fulfillment_record f ON f.order_id=o.id WHERE o.id=?",
-    )
-      .bind(input.orderId)
-      .first<{ status: string; location_id: string | null }>();
-    if (!row) return fail("NOT_FOUND", "Order not found", input.requestId);
-    const locationId =
-      row.location_id ?? (await this.activeFulfillmentLocationId(await this.activeMarketCode()));
-    if (!locationId)
-      return fail(
-        "CONFIGURATION_ERROR",
-        "No active fulfillment location is configured",
-        input.requestId,
-      );
-    if (!(await this.requireOperationalAccess(input, "order:manage", locationId)))
-      return fail(
-        "FORBIDDEN",
-        "Order management capability and location scope are required",
-        input.requestId,
-      );
-    if (
-      financialOperationDisposition(input.action, row.status) === "REQUIRES_CANONICAL_ORCHESTRATION"
-    )
-      return fail(
-        "FINANCIAL_OPERATION_REQUIRES_REVIEW",
-        "Refunds and paid-order cancellation require canonical payment orchestration",
-        input.requestId,
-      );
-    const operationScope = "orders.advance";
-    const operationPayload = {
+  async requestCancellation(
+    input: import("@freshmarkets/contracts").RequestOrderCancellationRequest,
+  ) {
+    const customerOrStaff = await this.session(input);
+    if (!customerOrStaff)
+      return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const { cancelOrder } = await import("./orders/application/cancel-order");
+    const result = await cancelOrder(this.env.DB, {
       orderId: input.orderId,
-      action: input.action,
-      reason: input.reason,
       expectedVersion: input.expectedVersion,
-    };
-    const idempotency = await this.claimCommandIdempotency(
-      operationScope,
-      input.idempotencyKey,
-      operationPayload,
-    );
-    if (idempotency.existing) {
-      if (idempotency.existing.requestHash !== idempotency.hash)
-        return fail(
-          "IDEMPOTENCY_CONFLICT",
-          "Idempotency key was used with a different request",
-          input.requestId,
-        );
-      if (idempotency.existing.status === "SUCCEEDED" && idempotency.existing.resultReference) {
-        const prior = await this.env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
-          .bind(idempotency.existing.resultReference)
-          .first<{ status: string }>();
-        if (prior)
-          return {
-            ok: true as const,
-            value: { id: idempotency.existing.resultReference, status: prior.status },
-            requestId: input.requestId,
-          };
-      }
-      return fail("CONFLICT", "The original order command is still processing", input.requestId);
-    }
-    const transitionResult = this.transitionOrError(
-      row.status,
-      input.action === "CANCEL" ? "CANCELED" : "REFUNDED",
-      orderTransitions,
-      input.requestId,
-    );
-    if (!transitionResult.ok) return transitionResult;
-    const next = transitionResult.value;
-    const orderUpdate = this.env.DB.prepare(
-      "UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=? AND version=?",
-    ).bind(next, input.orderId, row.status, input.expectedVersion);
-    const statements: D1PreparedStatement[] = [
-      orderUpdate,
-      this.env.DB.prepare(
-        "UPDATE idempotency_records SET result_reference=?, status='SUCCEEDED', updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING' AND changes()=1",
-      ).bind(input.orderId, this.now(), operationScope, input.idempotencyKey, idempotency.hash),
-      this.env.DB.prepare(
-        "INSERT INTO audit_event (id, action, aggregate_type, aggregate_id, details_json, idempotency_key, occurred_at) SELECT ?, ?, 'grocery_order', ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-      ).bind(
-        crypto.randomUUID(),
-        input.action,
-        input.orderId,
-        JSON.stringify({ reason: input.reason }),
-        input.idempotencyKey,
-        this.now(),
-        operationScope,
-        input.idempotencyKey,
-      ),
-    ];
-    const batchResults = await this.env.DB.batch(statements);
-    if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
-      await this.env.DB.prepare(
-        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-      )
-        .bind(this.now(), operationScope, input.idempotencyKey)
-        .run();
-      return fail("STALE_VERSION", "Order changed; refresh before retrying", input.requestId);
-    }
+      reasonCode: input.reason,
+      idempotencyKey: input.idempotencyKey,
+      requestId: input.requestId,
+    });
+    if (!result.ok)
+      return fail(result.error.code as AppErrorCode, result.error.message, input.requestId);
     return {
       ok: true as const,
-      value: { id: input.orderId, status: next },
+      value: { orderId: input.orderId, cancellationRequestedAt: new Date().toISOString() },
       requestId: input.requestId,
     };
   }
+
   async adjustInventory(input: import("@freshmarkets/contracts").InventoryAdjustmentRequest) {
     const validation = inventoryAdjustmentSchema.safeParse(input);
     if (!validation.success)

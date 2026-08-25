@@ -1,4 +1,4 @@
-import type { AppError, RpcResult } from "./common";
+import type { RpcResult } from "./common";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
@@ -6,7 +6,6 @@ import type { AdminOrderCommandRequest, HealthService } from "./index";
 import type { MembershipService } from "./membership";
 import type { CancellationResult, OrdersService, RequestOrderCancellationRequest } from "./orders";
 import type { OperationsService } from "./operations";
-import type { OperationsCommandState } from "./states";
 import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
 import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
 
@@ -24,15 +23,7 @@ export interface ImplementedCoreService
     Pick<OrdersService, "listCustomerOrders"> {}
 
 /** Generic operations commands pending the Plan 08 canonical operations surface. */
-export interface LegacyOperationsService extends OperationsService {
-  /** Legacy paid-order cancel/refund; replaced by requestCancellation plus Payments refunds (Plans 05/07). */
-  advanceOrder(
-    request: AdminOrderCommandRequest,
-  ): Promise<
-    | { ok: true; value: { id: string; status: OperationsCommandState }; requestId: string }
-    | { ok: false; error: AppError }
-  >;
-}
+export interface LegacyOperationsService extends OperationsService {}
 
 /**
  * The full Worker binding surface. Legacy members are compile-time

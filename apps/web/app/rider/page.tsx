@@ -14,7 +14,7 @@ export default function RiderPage() {
       setStatus("Provide the order ID and its current version.");
       return;
     }
-    const response = await fetch("/api/operations", {
+    const response = await fetch(`/api/rider/jobs?v=${encodeURIComponent(expectedVersion)}`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": attemptKey.current },
       body: JSON.stringify({

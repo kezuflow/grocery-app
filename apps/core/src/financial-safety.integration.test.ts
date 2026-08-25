@@ -198,21 +198,26 @@ describe("financial safety containment", () => {
     };
     const before = await counts();
 
-    for (const action of ["REFUND", "CANCEL"] as const) {
-      const rejected = await core.advanceOrder({
-        headers: { cookie: staffCookie },
-        requestId: requestId(),
-        orderId,
-        action,
-        reason: `safety-${action.toLowerCase()}`,
-        idempotencyKey: `safety-${crypto.randomUUID()}`,
-        expectedVersion: 0,
-      });
-      expect(rejected).toMatchObject({
-        ok: false,
-        error: { code: "FINANCIAL_OPERATION_REQUIRES_REVIEW" },
-      });
-    }
-    expect(await counts()).toEqual(before);
+    // The generic advanceOrder surface was removed; the paid-order path is
+    // the versioned requestCancellation command, which records intent only.
+    const requested = await core.requestCancellation({
+      headers: { cookie: staffCookie },
+      requestId: requestId(),
+      orderId,
+      reason: "safety-check",
+      idempotencyKey: `safety-${crypto.randomUUID()}`,
+      expectedVersion: 1,
+    });
+    expect(requested.ok).toBe(true);
+    // Only the cancellation intent is recorded: no refund row, no inventory,
+    // capacity, or demand mutation, and the order remains COMMITTED.
+    const after = await counts();
+    expect(after["refund"]).toBe(before["refund"]);
+    expect(after["inventory_reservation"]).toBe(before["inventory_reservation"]);
+    expect(after["committed_demand"]).toBe(before["committed_demand"]);
+    expect(after["capacity_allocations"]).toBe(before["capacity_allocations"]);
+    expect(after["order.isCommitted"]).toBe(1);
+    expect(after["order.version"]).toBe(before["order.version"] + 1);
+    expect(after["idempotency_records"]).toBe(before["idempotency_records"] + 1);
   });
 });
