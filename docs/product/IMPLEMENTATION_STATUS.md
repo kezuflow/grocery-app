@@ -1,5 +1,22 @@
 # FreshMarkets Implementation Status
 
+> **Remediation update (2026-08-26, isolated branch `remediation/2026-08-26`).**
+> Remediation Plans 01–07 and the Plan 08 P1 core are implemented: static
+> trusted origins, fail-closed redacted auth email port, Better Auth/IAM schema
+> split, sandbox payment containment, atomic replay-safe inventory/receiving,
+> canonical provider-neutral Payments (intents, signed inbox with dedupe/CAS,
+> non-synthetic refunds, reconciliation), one-calendar-month Promotions-consumed
+> trials with versioned lifecycle and Payments-driven activation, authoritative
+> expiring quotes with commitment only from canonical payment reactions (mock
+> commitment removed), capability/location-scoped operational commands, and
+> domain routes replacing `/api/operations`. Verification: 180 Core + 27 Web +
+> 15 contracts + 2 validation tests green; typecheck/lint/format/naming/build/
+> vinext exit 0; migrations `0001`–`0018` apply fresh; concurrency suites ran
+> three times each. Intentionally unresolved: production payment provider,
+> renewal dunning/grace, default cancellation timing, paid-success downstream
+> recovery policy, post-clamp billing anchor.
+
+
 This is a descriptive implementation snapshot for `IMPLEMENTATION_PLAN.md`. It is non-authoritative and may lag the worktree. It does not define or weaken the canonical architecture, ownership, domain invariants, state machines, data model, contracts, MVP scope, or sequencing. When this file conflicts with the canonical set named in `AGENTS.md`, the canonical set wins.
 
 > **2026-08-26 architecture reconciliation.** The canonical documents now define
