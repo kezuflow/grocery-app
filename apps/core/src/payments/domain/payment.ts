@@ -77,3 +77,29 @@ export type PaymentObservationInput = {
 export function isSufficientForCommitment(state: PaymentDomainState): boolean {
   return mvpPaymentCommitmentPolicy.isSufficient(state);
 }
+
+/**
+ * Shortest legal transition path between two canonical states, used by
+ * reconciliation to catch a lagging stored state up to a verified provider
+ * observation without ever skipping an intermediate canonical state.
+ */
+export function findPaymentTransitionPath(
+  from: PaymentDomainState,
+  to: PaymentDomainState,
+): PaymentDomainState[] | null {
+  if (from === to) return [];
+  const queue: PaymentDomainState[][] = [[from]];
+  const visited = new Set<PaymentDomainState>([from]);
+  while (queue.length > 0) {
+    const path = queue.shift()!;
+    const last = path[path.length - 1];
+    for (const next of paymentTransitions[last]) {
+      if (next === to) return [...path, next];
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push([...path, next]);
+      }
+    }
+  }
+  return null;
+}

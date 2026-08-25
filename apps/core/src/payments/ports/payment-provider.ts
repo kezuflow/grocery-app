@@ -9,6 +9,9 @@ export type VerifiedProviderEvent = {
   amountMinor: number;
   currency: string;
   payloadHash: string;
+  kind: "payment" | "refund";
+  /** Present when kind === "refund": the provider-side refund identity. */
+  refundReference: string | null;
 };
 
 export type ProviderEventVerificationFailure = {

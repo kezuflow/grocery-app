@@ -1,5 +1,8 @@
-import { canTransitionPayment, isSufficientForCommitment } from "../domain/payment";
-import { extendPaymentRepository } from "../infrastructure/d1/payment-repository";
+import {
+  extendPaymentRepository,
+  extendPaymentRepositoryForRefunds,
+} from "../infrastructure/d1/payment-repository";
+import { applyObservationToIntents } from "./apply-observation";
 import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 
 export type ProviderEventProcessingStatus =
@@ -127,6 +130,86 @@ export async function ingestProviderEvent(
     return result(event.provider, event.providerEventId, "DUPLICATE");
   }
 
+  if (event.kind === "refund" && event.refundReference) {
+    const refunds = extendPaymentRepositoryForRefunds(database);
+    const refund = await refunds.findRefundByProviderReference(event.refundReference);
+    if (!refund) {
+      await repository.recordReconciliationCase({
+        intentId: null,
+        category: "UNMAPPED_PROVIDER_REFERENCE",
+        detailsJson: JSON.stringify({
+          provider: event.provider,
+          refundReference: event.refundReference,
+        }),
+        now,
+      });
+      await repository.setInboxStatus({
+        id: inboxEntry.id,
+        processingStatus: "RECONCILIATION_REQUIRED",
+        errorCode: "REFUND_UNMAPPED",
+        now,
+      });
+      return result(event.provider, event.providerEventId, "RECONCILIATION_REQUIRED");
+    }
+    if (refund.status === event.canonicalState) {
+      await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
+      return result(
+        event.provider,
+        event.providerEventId,
+        "DUPLICATE",
+        refund.paymentIntentId,
+        event.canonicalState,
+      );
+    }
+    const changed = await refunds.updateRefundStatusCas({
+      refundId: refund.id,
+      expectedVersion: refund.version,
+      fromStatus: refund.status,
+      toStatus: event.canonicalState,
+      now,
+    });
+    if (changed !== 1) {
+      await repository.setInboxStatus({
+        id: inboxEntry.id,
+        processingStatus: "RETRY_REQUIRED",
+        errorCode: "VERSION_CONFLICT",
+        now,
+      });
+      return result(
+        event.provider,
+        event.providerEventId,
+        "RETRY_REQUIRED",
+        refund.paymentIntentId,
+        event.canonicalState,
+      );
+    }
+    if (event.canonicalState === "SUCCEEDED") {
+      // Reflect aggregate refund progression on the payment itself.
+      const intent = await refunds.findIntentById(refund.paymentIntentId);
+      if (intent && intent.status === "SUCCEEDED") {
+        const total = await refunds.succeededRefundSum(intent.id);
+        const next = total >= intent.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED";
+        await refunds
+          .updateIntentStatusCas({
+            intentId: intent.id,
+            expectedVersion: intent.version,
+            fromStatus: "SUCCEEDED",
+            toStatus: next,
+            now,
+          })
+          .run();
+      }
+    }
+    await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
+    return result(
+      event.provider,
+      event.providerEventId,
+      "APPLIED",
+      refund.paymentIntentId,
+      event.canonicalState,
+    );
+  }
+
   const intents = await repository.findIntentByProviderReference(
     event.provider,
     event.providerReference,
@@ -151,60 +234,23 @@ export async function ingestProviderEvent(
     return result(event.provider, event.providerEventId, "RECONCILIATION_REQUIRED");
   }
 
-  const intent = intents[0];
-  if (intent.status === event.canonicalState) {
-    await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
-    return result(
-      event.provider,
-      event.providerEventId,
-      "APPLIED",
-      intent.id,
-      event.canonicalState,
-    );
-  }
-  if (!canTransitionPayment(intent.status as never, event.canonicalState)) {
+  const application = await applyObservationToIntents(database, intents, event.canonicalState);
+  if (application.processingStatus === "RECONCILIATION_REQUIRED") {
     await repository.setInboxStatus({
       id: inboxEntry.id,
       processingStatus: "RECONCILIATION_REQUIRED",
       errorCode: "ILLEGAL_TRANSITION",
       now,
     });
-    await repository.recordReconciliationCase({
-      intentId: intent.id,
-      category: "AMBIGUOUS_OUTCOME",
-      detailsJson: JSON.stringify({ from: intent.status, to: event.canonicalState }),
-      now,
-    });
     return result(
       event.provider,
       event.providerEventId,
       "RECONCILIATION_REQUIRED",
-      intent.id,
+      application.paymentIntentId,
       event.canonicalState,
     );
   }
-
-  const sufficient = isSufficientForCommitment(event.canonicalState);
-  const applied = await repository.applyObservationWithReaction({
-    intentId: intent.id,
-    expectedVersion: intent.version,
-    expectedStatus: intent.status,
-    nextStatus: event.canonicalState,
-    reaction:
-      sufficient && intent.status !== "PARTIALLY_REFUNDED" && intent.status !== "REFUNDED"
-        ? {
-            reactionType: reactionTypeFor(intent.purpose),
-            subjectType: intent.subjectType,
-            subjectId: intent.subjectId,
-            // One reaction identity per intent and type: repeated sufficient
-            // observations cannot create duplicate downstream effects.
-            idempotencyKey: `reaction:intent:${intent.id}:${reactionTypeFor(intent.purpose)}`,
-            now,
-          }
-        : null,
-  });
-
-  if (!applied) {
+  if (application.processingStatus === "RETRY_REQUIRED") {
     // Concurrent command changed the payment; retry or reconcile later.
     await repository.setInboxStatus({
       id: inboxEntry.id,
@@ -216,11 +262,17 @@ export async function ingestProviderEvent(
       event.provider,
       event.providerEventId,
       "RETRY_REQUIRED",
-      intent.id,
+      application.paymentIntentId,
       event.canonicalState,
     );
   }
 
   await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
-  return result(event.provider, event.providerEventId, "APPLIED", intent.id, event.canonicalState);
+  return result(
+    event.provider,
+    event.providerEventId,
+    "APPLIED",
+    application.paymentIntentId,
+    event.canonicalState,
+  );
 }

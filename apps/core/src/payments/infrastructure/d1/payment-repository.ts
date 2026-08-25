@@ -341,3 +341,136 @@ export function extendPaymentRepository(database: D1Database) {
 }
 
 export type ExtendedPaymentRepository = ReturnType<typeof extendPaymentRepository>;
+
+export type RefundRow = {
+  id: string;
+  paymentIntentId: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  providerRefundReference: string | null;
+  version: number;
+};
+
+export function extendPaymentRepositoryForRefunds(database: D1Database) {
+  const base = extendPaymentRepository(database);
+  return {
+    ...base,
+    async findRefundByIdempotencyKey(idempotencyKey: string): Promise<RefundRow | null> {
+      const row = await database
+        .prepare(
+          "SELECT id, payment_intent_id, amount_minor, currency, status, provider_refund_reference, version FROM payment_refund WHERE idempotency_key=?",
+        )
+        .bind(idempotencyKey)
+        .first<{
+          id: string;
+          payment_intent_id: string;
+          amount_minor: number;
+          currency: string;
+          status: string;
+          provider_refund_reference: string | null;
+          version: number;
+        }>();
+      return row
+        ? {
+            id: row.id,
+            paymentIntentId: row.payment_intent_id,
+            amountMinor: row.amount_minor,
+            currency: row.currency,
+            status: row.status,
+            providerRefundReference: row.provider_refund_reference,
+            version: row.version,
+          }
+        : null;
+    },
+    insertRefundClaim(input: {
+      refundId: string;
+      intentId: string;
+      amountMinor: number;
+      currency: string;
+      reason: string | null;
+      idempotencyKey: string;
+      now: number;
+    }): Promise<number> {
+      return database
+        .prepare(
+          "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, 'REQUESTED', ?, ?, 1, ?, ?)",
+        )
+        .bind(
+          input.refundId,
+          input.intentId,
+          input.amountMinor,
+          input.currency,
+          input.reason,
+          input.idempotencyKey,
+          input.now,
+          input.now,
+        )
+        .run()
+        .then((result) => result.meta?.changes ?? 0);
+    },
+    updateRefundStatusCas(input: {
+      refundId: string;
+      expectedVersion: number;
+      fromStatus: string;
+      toStatus: string;
+      providerRefundReference?: string | null;
+      now: number;
+    }): Promise<number> {
+      return database
+        .prepare(
+          "UPDATE payment_refund SET status=?, provider_refund_reference=COALESCE(?, provider_refund_reference), version=version+1, updated_at=? WHERE id=? AND version=? AND status=?",
+        )
+        .bind(
+          input.toStatus,
+          input.providerRefundReference ?? null,
+          input.now,
+          input.refundId,
+          input.expectedVersion,
+          input.fromStatus,
+        )
+        .run()
+        .then((result) => result.meta?.changes ?? 0);
+    },
+    findRefundByProviderReference(refundReference: string): Promise<RefundRow | null> {
+      return database
+        .prepare(
+          "SELECT id, payment_intent_id, amount_minor, currency, status, provider_refund_reference, version FROM payment_refund WHERE provider_refund_reference=?",
+        )
+        .bind(refundReference)
+        .first<{
+          id: string;
+          payment_intent_id: string;
+          amount_minor: number;
+          currency: string;
+          status: string;
+          provider_refund_reference: string;
+          version: number;
+        }>()
+        .then((row) =>
+          row
+            ? {
+                id: row.id,
+                paymentIntentId: row.payment_intent_id,
+                amountMinor: row.amount_minor,
+                currency: row.currency,
+                status: row.status,
+                providerRefundReference: row.provider_refund_reference,
+                version: row.version,
+              }
+            : null,
+        );
+    },
+    succeededRefundSum(intentId: string): Promise<number> {
+      return database
+        .prepare(
+          "SELECT COALESCE(SUM(amount_minor),0) AS total FROM payment_refund WHERE payment_intent_id=? AND status IN ('SUCCEEDED','PROCESSING')",
+        )
+        .bind(intentId)
+        .first<{ total: number }>()
+        .then((row) => row?.total ?? 0);
+    },
+  };
+}
+
+export type ExtendedRefundRepository = ReturnType<typeof extendPaymentRepositoryForRefunds>;

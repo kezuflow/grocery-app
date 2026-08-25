@@ -6,6 +6,27 @@ import type {
 } from "../../ports/payment-provider";
 import type { PaymentDomainState } from "../../domain/payment";
 
+const fakeObservedStates = new WeakMap<PaymentProvider, Map<string, PaymentDomainState>>();
+const fakeFailingRefunds = new WeakMap<PaymentProvider, Set<string>>();
+
+/** Test control: pin the state a provider lookup observes for a reference. */
+export function setFakeObservedState(
+  provider: PaymentProvider,
+  reference: string,
+  state: PaymentDomainState,
+): void {
+  const states = fakeObservedStates.get(provider);
+  if (!states) throw new Error("Not the fake provider");
+  states.set(reference, state);
+}
+
+/** Test control: force deterministic refund rejections for a payment reference. */
+export function setFakeRefundFailure(provider: PaymentProvider, reference: string): void {
+  const failures = fakeFailingRefunds.get(provider);
+  if (!failures) throw new Error("Not the fake provider");
+  failures.add(reference);
+}
+
 const FAKE_SHARED_SECRET = "fake-provider-test-secret";
 
 function sha256Hex(value: string): Promise<string> {
@@ -42,7 +63,7 @@ function mapVendorState(vendorState: string): PaymentDomainState | null {
 export function createFakePaymentProvider(): PaymentProvider {
   const observedStates = new Map<string, PaymentDomainState>();
   const failingRefunds = new Set<string>();
-  return {
+  const provider: PaymentProvider = {
     code: "fake",
     async createPayment(input) {
       return {
@@ -82,6 +103,8 @@ export function createFakePaymentProvider(): PaymentProvider {
         vendorState?: string;
         amountMinor?: number;
         currency?: string;
+        kind?: string;
+        refundReference?: string;
       };
       try {
         parsed = JSON.parse(rawBody);
@@ -97,9 +120,9 @@ export function createFakePaymentProvider(): PaymentProvider {
           : mapVendorState(parsed.vendorState ?? "");
       if (
         !parsed.eventId ||
-        !parsed.reference ||
         !canonicalState ||
-        typeof parsed.amountMinor !== "number"
+        typeof parsed.amountMinor !== "number" ||
+        (parsed.kind === "refund" ? !parsed.refundReference : !parsed.reference)
       ) {
         return {
           ok: false,
@@ -111,12 +134,14 @@ export function createFakePaymentProvider(): PaymentProvider {
         event: {
           provider: "fake",
           providerEventId: parsed.eventId,
-          providerReference: parsed.reference,
+          providerReference: parsed.reference ?? parsed.refundReference!,
           observedAt: timestamp,
           canonicalState,
           amountMinor: parsed.amountMinor,
           currency: parsed.currency ?? "PHP",
           payloadHash: await sha256Hex(rawBody),
+          kind: parsed.kind === "refund" ? "refund" : "payment",
+          refundReference: parsed.refundReference ?? null,
         },
       } satisfies ProviderEventVerificationSuccess;
     },
@@ -139,6 +164,9 @@ export function createFakePaymentProvider(): PaymentProvider {
       };
     },
   };
+  fakeObservedStates.set(provider, observedStates);
+  fakeFailingRefunds.set(provider, failingRefunds);
+  return provider;
 }
 
 export const fakeProviderTestSecret = FAKE_SHARED_SECRET;
