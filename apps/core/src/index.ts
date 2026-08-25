@@ -66,6 +66,8 @@ type CustomerAddressRow = {
   service_area_code: string | null;
   delivery_zone_code: string | null;
   resolution_version: number | null;
+  serviceable: number | null;
+  serviceability_reason: import("@freshmarkets/contracts").ServiceabilityFailureReason | null;
   notes: string | null;
   status: string;
   version: number;
@@ -80,7 +82,8 @@ function customerAddressView(row: CustomerAddressRow) {
     recipient: row.recipient,
     latitude: row.latitude,
     longitude: row.longitude,
-    serviceable: Boolean(row.service_area_code && row.delivery_zone_code),
+    serviceable: row.serviceable === null ? null : row.serviceable === 1,
+    serviceabilityReason: row.serviceability_reason,
     serviceAreaCode: row.service_area_code,
     deliveryZoneCode: row.delivery_zone_code,
     resolutionVersion: row.resolution_version,
@@ -405,7 +408,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const id = crypto.randomUUID();
     const now = this.now();
     await this.env.DB.prepare(
-      "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)",
+      "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)",
     )
       .bind(
         id,
@@ -419,6 +422,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         geo.value.serviceArea?.code ?? null,
         geo.value.deliveryZone?.code ?? null,
         geo.value.serviceArea?.polygonVersion ?? null,
+        geo.value.serviceable ? 1 : 0,
+        geo.value.reason,
         input.notes ?? null,
         now,
         now,
@@ -433,6 +438,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         latitude: input.latitude,
         longitude: input.longitude,
         serviceable: geo.value.serviceable,
+        serviceabilityReason: geo.value.reason,
         serviceAreaCode: geo.value.serviceArea?.code ?? null,
         deliveryZoneCode: geo.value.deliveryZone?.code ?? null,
         resolutionVersion: geo.value.serviceArea?.polygonVersion ?? null,
@@ -450,7 +456,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     const rows = await this.env.DB.prepare(
-      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at FROM customer_address WHERE customer_id=? AND status='active' ORDER BY updated_at DESC, id DESC",
+      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at FROM customer_address WHERE customer_id=? AND status='active' ORDER BY updated_at DESC, id DESC",
     )
       .bind(customer.value.customerId)
       .all<CustomerAddressRow>();
@@ -470,7 +476,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     const current = await this.env.DB.prepare(
-      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
+      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
     )
       .bind(input.addressId, customer.value.customerId)
       .first<CustomerAddressRow>();
@@ -483,6 +489,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       serviceAreaCode: current.service_area_code,
       deliveryZoneCode: current.delivery_zone_code,
       resolutionVersion: current.resolution_version,
+      serviceable: current.serviceable,
+      reason: current.serviceability_reason,
     };
     if (locationChanged) {
       const geo = await resolveServiceability(drizzle(this.env.DB), {
@@ -504,11 +512,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         serviceAreaCode: geo.value.serviceArea?.code ?? null,
         deliveryZoneCode: geo.value.deliveryZone?.code ?? null,
         resolutionVersion: geo.value.serviceArea?.polygonVersion ?? null,
+        serviceable: geo.value.serviceable ? 1 : 0,
+        reason: geo.value.reason,
       };
     }
 
     const updated = await this.env.DB.prepare(
-      "UPDATE customer_address SET label=?, recipient=?, phone=?, address_json=?, latitude=?, longitude=?, service_area_code=?, delivery_zone_code=?, resolution_version=?, notes=?, version=version+1, updated_at=? WHERE id=? AND customer_id=? AND status='active' AND version=?",
+      "UPDATE customer_address SET label=?, recipient=?, phone=?, address_json=?, latitude=?, longitude=?, service_area_code=?, delivery_zone_code=?, resolution_version=?, serviceable=?, serviceability_reason=?, notes=?, version=version+1, updated_at=? WHERE id=? AND customer_id=? AND status='active' AND version=?",
     )
       .bind(
         input.label ?? current.label,
@@ -520,6 +530,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         serviceability.serviceAreaCode,
         serviceability.deliveryZoneCode,
         serviceability.resolutionVersion,
+        serviceability.serviceable,
+        serviceability.reason,
         input.notes !== undefined ? input.notes : current.notes,
         this.now(),
         current.id,
@@ -531,7 +543,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("STALE_VERSION", "Address changed; refresh before updating", input.requestId);
 
     const row = await this.env.DB.prepare(
-      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at FROM customer_address WHERE id=? AND customer_id=?",
+      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at FROM customer_address WHERE id=? AND customer_id=?",
     )
       .bind(current.id, customer.value.customerId)
       .first<CustomerAddressRow>();

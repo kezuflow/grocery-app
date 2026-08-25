@@ -98,7 +98,10 @@ Core derives the customer from the Better Auth session, verifies address ownersh
 and never accepts a client-selected customer or principal ID. Address updates require
 `expectedVersion`; stale writes return `STALE_VERSION`. Coordinate changes re-run
 authoritative serviceability resolution, while service-area, delivery-zone, resolution
-version, status, and other serviceability fields are server-derived.
+version, status, and other serviceability fields are server-derived. The address view
+returns the persisted resolver `serviceable` outcome and failure reason. Both are null
+only for legacy rows that have not yet been authoritatively re-resolved; code presence
+is never treated as proof of serviceability.
 
 ## Subscription
 

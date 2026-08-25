@@ -56,7 +56,9 @@ A global commerce profile linked to one Better Auth user ID. A customer is not d
 A customer-owned saved delivery address. Recipient name and phone are address-owned
 delivery data, not customer or Better Auth identity fields. Core stores the latest
 authoritative serviceability resolution, including service area, delivery zone, and
-polygon resolution version. Coordinates are re-evaluated whenever an address update
+polygon resolution version, the resolver's serviceable outcome, and its existing
+failure reason when unserviceable. Legacy rows without a persisted outcome remain
+explicitly unresolved and are never inferred from area/zone codes. Coordinates are re-evaluated whenever an address update
 changes location-relevant fields. Updates use optimistic version checks and never
 rewrite historical order snapshots.
 

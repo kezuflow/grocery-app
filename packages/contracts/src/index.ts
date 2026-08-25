@@ -282,7 +282,8 @@ export type CustomerAddressView = {
   recipient: string;
   latitude: number;
   longitude: number;
-  serviceable: boolean;
+  serviceable: boolean | null;
+  serviceabilityReason: ServiceabilityFailureReason | null;
   serviceAreaCode: string | null;
   deliveryZoneCode: string | null;
   resolutionVersion: number | null;

@@ -36,6 +36,11 @@ Core-authoritative customer address reads and optimistic updates. Address
 ownership remains enforced by the authenticated customer resolver and the
 conditional update predicate.
 
+`0014_phase4b_address_serviceability_outcome.sql` persists the exact Core
+serviceability boolean and existing resolver failure reason. Existing rows remain
+nullable and are exposed as unresolved rather than being inferred from stored
+service-area and delivery-zone codes.
+
 Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tables must remain compatible with Better Auth's supported schema/adapter workflow; application tables remain separately owned by Core. Do not edit deployed rows manually as part of application behavior.
 
 For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.

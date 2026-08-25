@@ -121,7 +121,7 @@ Admin and operations commands require Core capabilities.
 > remediation edits. Passing tests do not imply production readiness: provider,
 > lifecycle, and scheduled-operations coverage remains incomplete.
 
-- All D1 migrations through `0013_phase4b_customer_addresses.sql` apply to the local database.
+- All D1 migrations through `0014_phase4b_address_serviceability_outcome.sql` apply to the local database.
 - `pnpm format:check`, `pnpm naming:check`, `pnpm typecheck`, `pnpm lint`,
   `pnpm test`, and `pnpm -r build` pass locally. Core deploy dry run and vinext
   production build are included in the recursive build.
@@ -129,4 +129,6 @@ Admin and operations commands require Core capabilities.
 - `wrangler check startup` succeeds.
 - Web/Core local Service Binding routes and desktop/mobile marketplace rendering were smoke-tested.
 - Phase 4B owner-scoped address reads and optimistic-version updates have integration coverage.
+- Phase 4B address views persist Core's serviceability outcome and resolver reason; legacy
+  rows remain explicitly unresolved until re-resolved.
 - Checkout flow, D1 concurrency guards, and checkout-expiry reconciliation have focused integration coverage.

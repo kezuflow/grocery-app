@@ -66,6 +66,65 @@ describe("Phase 4B customer addresses", () => {
     expect(listed).toMatchObject({ ok: true, value: [created.value] });
     expect(created.value.serviceAreaCode).toBe("CEBU_CITY");
     expect(created.value.deliveryZoneCode).toBe("CEBU_CITY_CORE");
+    expect(created.value.serviceable).toBe(true);
+    expect(created.value.serviceabilityReason).toBeNull();
+  });
+
+  it("persists NO_ELIGIBLE_LOCATION even when area and zone codes resolve", async () => {
+    await env.DB.prepare("UPDATE location_capability SET enabled=0").run();
+    const user = await account();
+    const created = await createAddress(user.request());
+    expect(created).toMatchObject({
+      ok: true,
+      value: {
+        serviceAreaCode: "CEBU_CITY",
+        deliveryZoneCode: "CEBU_CITY_CORE",
+        serviceable: false,
+        serviceabilityReason: "NO_ELIGIBLE_LOCATION",
+      },
+    });
+  });
+
+  it("persists an explicit out-of-area resolution", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Out of area",
+      recipient: "Recipient",
+      phone: "09000000000",
+      addressJson: "{}",
+      latitude: 11,
+      longitude: 124,
+    });
+    expect(created).toMatchObject({
+      ok: true,
+      value: {
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+        serviceAreaCode: null,
+        deliveryZoneCode: null,
+      },
+    });
+  });
+
+  it("exposes legacy rows as unresolved rather than inferring serviceability", async () => {
+    const user = await account();
+    await core.listCustomerAddresses(user.request());
+    const customer = await env.DB.prepare(
+      "SELECT c.id FROM customer c JOIN customer_principal p ON p.id=c.principal_id WHERE p.auth_user_id=?",
+    )
+      .bind(user.userId)
+      .first<{ id: string }>();
+    await env.DB.prepare(
+      "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, status, version, created_at, updated_at) VALUES (?, ?, 'Legacy', 'Recipient', '09000000000', '{}', 10.32, 123.9, 'CEBU_CITY', 'CEBU_CITY_CORE', 1, 'active', 1, 0, 0)",
+    )
+      .bind(crypto.randomUUID(), customer!.id)
+      .run();
+    const listed = await core.listCustomerAddresses(user.request());
+    expect(listed).toMatchObject({
+      ok: true,
+      value: [{ serviceable: null, serviceabilityReason: null }],
+    });
   });
 
   it("updates with the correct version and rejects stale versions", async () => {
@@ -150,7 +209,14 @@ describe("Phase 4B customer addresses", () => {
     });
     expect(moved).toMatchObject({
       ok: true,
-      value: { latitude: 11, longitude: 124, serviceAreaCode: null, deliveryZoneCode: null },
+      value: {
+        latitude: 11,
+        longitude: 124,
+        serviceAreaCode: null,
+        deliveryZoneCode: null,
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+      },
     });
     if (!moved.ok) return;
     const renamed = await core.updateCustomerAddress({
@@ -161,7 +227,13 @@ describe("Phase 4B customer addresses", () => {
     });
     expect(renamed).toMatchObject({
       ok: true,
-      value: { serviceAreaCode: null, deliveryZoneCode: null, resolutionVersion: null },
+      value: {
+        serviceAreaCode: null,
+        deliveryZoneCode: null,
+        resolutionVersion: null,
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+      },
     });
   });
 });

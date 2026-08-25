@@ -64,7 +64,7 @@ address-owned.
 
 ## Customers and Addresses
 
-- `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, user_confirmed_at, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, notes, status, version, created_at, updated_at)`
+- `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, user_confirmed_at, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, serviceable NULL, serviceability_reason NULL, notes, status, version, created_at, updated_at)`
 
 Core address reads and writes are scoped through the authenticated customer resolver.
 Address updates use a conditional `(id, customer_id, status, version)` predicate;
