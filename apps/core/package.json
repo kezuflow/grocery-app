@@ -1,0 +1,28 @@
+{
+  "name": "@freshmarkets/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "build": "wrangler deploy --config wrangler.jsonc --dry-run",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "types": "wrangler types ./src/worker-configuration.d.ts"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.1",
+    "@freshmarkets/config": "workspace:*",
+    "@freshmarkets/contracts": "workspace:*",
+    "better-auth": "1.7.1",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@types/node": "26.3.0",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.125.0"
+  }
+}
