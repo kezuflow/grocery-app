@@ -98,7 +98,7 @@ export type CoreServiceBinding = {
   createProcurementRequirement(
     request: ProcurementCommandRequest,
   ): Promise<RpcResult<AdminCommandResult>>;
-  receiveProcurement(request: ReceivingCommandRequest): Promise<RpcResult<AdminCommandResult>>;
+  receiveProcurement(request: ReceivingCommandRequest): Promise<RpcResult<ReceivingCommandResult>>;
   advanceFulfillment(request: FulfillmentCommandRequest): Promise<RpcResult<AdminCommandResult>>;
   advanceDelivery(request: DeliveryCommandRequest): Promise<RpcResult<AdminCommandResult>>;
 };
@@ -393,7 +393,15 @@ export type ReceivingCommandRequest = AuthenticatedRequest & {
   rejectedQuantity: number;
   reason?: string;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
+};
+export type ReceivingCommandResult = {
+  receivingRecordId: string;
+  status: string;
+  acceptedBase: number;
+  rejectedBase: number;
+  remainingBase: number;
+  version: number;
 };
 export type FulfillmentCommandRequest = AuthenticatedRequest & {
   orderId: string;

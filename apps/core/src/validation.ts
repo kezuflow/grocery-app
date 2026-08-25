@@ -106,7 +106,8 @@ export const receivingCommandSchema = headersRequest.extend({
   rejectedQuantity: z.number().int().safe().nonnegative(),
   reason: z.string().max(1000).optional(),
   idempotencyKey: idempotencyKeySchema,
-  expectedVersion: expectedVersionSchema,
+  // Concurrent receipt mutation requires an explicit expected version.
+  expectedVersion: expectedVersionSchema.unwrap(),
 });
 
 export const fulfillmentCommandSchema = headersRequest.extend({

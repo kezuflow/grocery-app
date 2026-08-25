@@ -33,6 +33,8 @@ import { findIdempotencyRecord, requestHash } from "./idempotency";
 import { isSandboxPaymentEnabled, type PaymentRuntimeEnvironment } from "./payments/sandbox-policy";
 import { financialOperationDisposition } from "./orders/financial-safety";
 import { adjustInventory as adjustInventoryCommand } from "./inventory/application/adjust-inventory";
+import { startReceiving as startReceivingCommand } from "./procurement/application/start-receiving";
+import { recordReceivedLine as recordReceivedLineCommand } from "./procurement/application/record-received-line";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
 import { expireCheckoutAttempts } from "./commerce/reconciliation";
 import { drizzle } from "drizzle-orm/d1";
@@ -1564,25 +1566,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = receivingCommandSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const status =
-      input.rejectedQuantity > 0
-        ? input.acceptedQuantity > 0
-          ? "PARTIALLY_RECEIVED"
-          : "EXCEPTION"
-        : "RECEIVED";
     const requirement = await this.env.DB.prepare(
-      "SELECT location_id, inventory_pool_id, version FROM procurement_requirement WHERE id=?",
+      "SELECT id, location_id, status FROM procurement_requirement WHERE id=?",
     )
       .bind(input.requirementId)
-      .first<{ location_id: string; inventory_pool_id: string; version: number }>();
+      .first<{ id: string; location_id: string; status: string }>();
     if (!requirement)
       return fail("NOT_FOUND", "Procurement requirement not found", input.requestId);
-    const receivingRecord = await this.env.DB.prepare(
-      "SELECT id FROM receiving_record WHERE procurement_requirement_id=?",
-    )
-      .bind(input.requirementId)
-      .first<{ id: string }>();
-    if (!receivingRecord) return fail("NOT_FOUND", "Receiving record not found", input.requestId);
     if (
       !(await this.requireOperationalAccess(input, "procurement:manage", requirement.location_id))
     )
@@ -1591,112 +1581,50 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         "Procurement capability and location scope are required",
         input.requestId,
       );
-    const scope = "procurement.receive";
-    const idempotency = await this.claimCommandIdempotency(scope, input.idempotencyKey, {
-      requirementId: input.requirementId,
-      acceptedQuantity: input.acceptedQuantity,
-      rejectedQuantity: input.rejectedQuantity,
-      reason: input.reason,
-      expectedVersion: input.expectedVersion,
-    });
-    if (idempotency.existing) {
-      if (idempotency.existing.requestHash !== idempotency.hash)
-        return fail(
-          "IDEMPOTENCY_CONFLICT",
-          "Idempotency key was used with a different request",
-          input.requestId,
-        );
-      if (idempotency.existing.status === "SUCCEEDED")
-        return {
-          ok: true as const,
-          value: { id: input.requirementId, status },
-          requestId: input.requestId,
-        };
-      return fail(
-        "CONFLICT",
-        "The original receiving command is still processing",
-        input.requestId,
-      );
+    const actor = await this.session(input);
+    if (!actor) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const record = await this.env.DB.prepare(
+      "SELECT id, status, version FROM receiving_record WHERE procurement_requirement_id=? ORDER BY rowid ASC LIMIT 1",
+    )
+      .bind(input.requirementId)
+      .first<{ id: string; status: string; version: number }>();
+    if (!record) return fail("NOT_FOUND", "Receiving record not found", input.requestId);
+    let lineVersion = record.version;
+    if (record.status === "PENDING") {
+      const started = await startReceivingCommand(this.env.DB, {
+        requirementId: input.requirementId,
+        expectedVersion: record.version,
+        idempotencyKey: input.idempotencyKey,
+        actorId: actor.id,
+        requestId: input.requestId,
+      });
+      if (!started.ok) return started;
+      lineVersion = started.value.version;
     }
-    const receivingStatements: D1PreparedStatement[] = [
-      this.env.DB.prepare(
-        input.expectedVersion === undefined
-          ? "UPDATE procurement_requirement SET status=?, version=version+1 WHERE id=?"
-          : "UPDATE procurement_requirement SET status=?, version=version+1 WHERE id=? AND version=?",
-      ).bind(
-        ...(input.expectedVersion === undefined
-          ? [status, input.requirementId]
-          : [status, input.requirementId, input.expectedVersion]),
-      ),
-      this.env.DB.prepare(
-        "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING' AND changes()=1",
-      ).bind(input.requirementId, this.now(), scope, input.idempotencyKey, idempotency.hash),
-      this.env.DB.prepare(
-        "UPDATE receiving_record SET accepted_quantity=?, rejected_quantity=?, status=?, version=version+1 WHERE procurement_requirement_id=? AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-      ).bind(
-        input.acceptedQuantity,
-        input.rejectedQuantity,
-        status,
-        input.requirementId,
-        scope,
-        input.idempotencyKey,
-      ),
-      this.env.DB.prepare(
-        "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) SELECT ?, ?, ?, 0, 1 WHERE EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED') ON CONFLICT(location_id, inventory_pool_id) DO UPDATE SET on_hand=on_hand+excluded.on_hand, version=version+1",
-      ).bind(
-        requirement.location_id,
-        requirement.inventory_pool_id,
-        input.acceptedQuantity,
-        scope,
-        input.idempotencyKey,
-      ),
-      this.env.DB.prepare(
-        "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at, idempotency_key) SELECT ?, ?, ?, 'RECEIVING_ACCEPTED', ?, 0, 'procurement_requirement', ?, 'STAFF', 'PROCUREMENT_RECEIPT', ?, ?, ? WHERE ?>0 AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-      ).bind(
-        crypto.randomUUID(),
-        requirement.inventory_pool_id,
-        requirement.location_id,
-        input.acceptedQuantity,
-        input.requirementId,
-        JSON.stringify({ rejectedQuantity: input.rejectedQuantity, reason: input.reason ?? null }),
-        this.now(),
-        input.idempotencyKey,
-        input.acceptedQuantity,
-        scope,
-        input.idempotencyKey,
-      ),
-    ];
-    if (input.rejectedQuantity > 0)
-      receivingStatements.push(
-        this.env.DB.prepare(
-          "INSERT INTO supply_exception (id, requirement_id, kind, affected_quantity, status, created_at) SELECT ?, ?, 'QUALITY_REJECTION', ?, 'OPEN', ? WHERE EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-        ).bind(
-          crypto.randomUUID(),
-          input.requirementId,
-          input.rejectedQuantity,
-          this.now(),
-          scope,
-          input.idempotencyKey,
-        ),
-      );
-    const receivingResults = await this.env.DB.batch(receivingStatements);
-    if ((receivingResults[0]?.meta?.changes ?? 0) !== 1) {
-      await this.env.DB.prepare(
-        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-      )
-        .bind(this.now(), scope, input.idempotencyKey)
-        .run();
-      return fail(
-        "STALE_VERSION",
-        "Procurement requirement changed; refresh before retrying",
-        input.requestId,
-      );
-    }
-    return {
-      ok: true as const,
-      value: { id: input.requirementId, status },
+    const result = await recordReceivedLineCommand(this.env.DB, {
+      receivingRecordId: record.id,
+      acceptedDeltaBase: input.acceptedQuantity,
+      rejectedDeltaBase: input.rejectedQuantity,
+      reason: input.reason ?? "PROCUREMENT_RECEIPT",
+      expectedVersion: lineVersion,
+      idempotencyKey: input.idempotencyKey,
+      actorId: actor.id,
       requestId: input.requestId,
-    };
+    });
+    if (result.ok)
+      return {
+        ok: true as const,
+        value: {
+          receivingRecordId: result.value.receivingRecordId,
+          status: result.value.status,
+          acceptedBase: result.value.acceptedBase,
+          rejectedBase: result.value.rejectedBase,
+          remainingBase: result.value.remainingBase,
+          version: result.value.version,
+        },
+        requestId: input.requestId,
+      };
+    return result;
   }
   async advanceFulfillment(input: import("@freshmarkets/contracts").FulfillmentCommandRequest) {
     const validation = fulfillmentCommandSchema.safeParse(input);
