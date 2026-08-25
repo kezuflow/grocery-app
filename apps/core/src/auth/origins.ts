@@ -36,7 +36,10 @@ export function parseTrustedOrigins(value: string | undefined): readonly string[
     if (parsed.search || parsed.hash) {
       throw new Error(`INVALID_TRUSTED_ORIGIN: ${candidate}`);
     }
-    if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopbackHost(parsed.hostname))) {
+    if (
+      parsed.protocol !== "https:" &&
+      !(parsed.protocol === "http:" && isLoopbackHost(parsed.hostname))
+    ) {
       throw new Error(`INVALID_TRUSTED_ORIGIN: ${candidate}`);
     }
     const origin = parsed.origin;

@@ -26,18 +26,17 @@ describe("auth and iam schema ownership", () => {
   });
 
   it("binds only better auth tables to the database composed for the drizzle adapter", () => {
-    const database = createBetterAuthDatabase({ DB: env.DB } satisfies AuthEnvironment) as unknown as SchemaBoundDatabase;
+    const database = createBetterAuthDatabase({
+      DB: env.DB,
+    } satisfies AuthEnvironment) as unknown as SchemaBoundDatabase;
     const fullSchema = database._.fullSchema ?? {};
-    expect(Object.keys(fullSchema).sort()).toEqual([
-      "account",
-      "session",
-      "user",
-      "verification",
-    ]);
+    expect(Object.keys(fullSchema).sort()).toEqual(["account", "session", "user", "verification"]);
   });
 
   it("keeps iam tables out of the better auth bound schema", () => {
-    const database = createBetterAuthDatabase({ DB: env.DB } satisfies AuthEnvironment) as unknown as SchemaBoundDatabase;
+    const database = createBetterAuthDatabase({
+      DB: env.DB,
+    } satisfies AuthEnvironment) as unknown as SchemaBoundDatabase;
     const bound = Object.keys(database._.fullSchema ?? {});
     for (const iamTable of Object.keys(iamSchema)) {
       expect(bound).not.toContain(iamTable);

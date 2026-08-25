@@ -30,7 +30,13 @@ export function resolvePublicAppOrigin(value: string | undefined): string {
   ) {
     throw new Error("PUBLIC_APP_ORIGIN_INVALID");
   }
-  if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
     throw new Error("PUBLIC_APP_ORIGIN_INVALID");
   }
   return parsed.origin;

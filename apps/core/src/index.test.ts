@@ -9,6 +9,7 @@ describe("Core Worker foundation", () => {
       DB: {} as D1Database,
       ENVIRONMENT: "development",
       BETTER_AUTH_URL: "http://127.0.0.1:8788",
+      TRUSTED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,https://core.example.invalid",
     });
 
     expect(response.service).toBe("core");

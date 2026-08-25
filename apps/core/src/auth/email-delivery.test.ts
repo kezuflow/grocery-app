@@ -34,7 +34,9 @@ afterEach(() => {
 describe("createAuthEmailDelivery", () => {
   it("forwards the full bearer url to the sender while logs stay redacted", async () => {
     const logs = captureLogs();
-    const sender = vi.fn<(message: AuthEmailMessage) => Promise<void>>().mockResolvedValue(undefined);
+    const sender = vi
+      .fn<(message: AuthEmailMessage) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const delivery = createAuthEmailDelivery(sender);
     await delivery.send({
       kind: "reset",
