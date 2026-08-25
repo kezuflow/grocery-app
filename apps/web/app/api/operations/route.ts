@@ -16,6 +16,7 @@ const operationBodySchema = z.object({
   rejectedQuantity: z.coerce.number().int().nonnegative().optional(),
   reason: z.string().trim().min(1).optional(),
   idempotencyKey: z.string().trim().min(1).optional(),
+  expectedVersion: z.coerce.number().int().nonnegative().optional(),
 });
 export async function POST(request: Request) {
   const parsed = operationBodySchema.safeParse(await request.json().catch(() => null));
@@ -32,13 +33,19 @@ export async function POST(request: Request) {
   };
   const core = env.CORE as unknown as CoreServiceBinding;
   if (body.command === "inventory") {
-    if (!body.locationId || !body.inventoryPoolId || body.delta === undefined || !body.reason)
+    if (
+      !body.locationId ||
+      !body.inventoryPoolId ||
+      body.delta === undefined ||
+      !body.reason ||
+      body.expectedVersion === undefined
+    )
       return Response.json(
         {
           ok: false,
           error: {
             code: "VALIDATION_FAILED",
-            message: "Inventory fields are required",
+            message: "Inventory fields including expectedVersion are required",
             requestId: common.requestId,
           },
         },
@@ -51,6 +58,7 @@ export async function POST(request: Request) {
         inventoryPoolId: body.inventoryPoolId,
         delta: body.delta,
         reason: body.reason,
+        expectedVersion: body.expectedVersion,
       }),
     );
   }
@@ -86,14 +94,15 @@ export async function POST(request: Request) {
     if (
       !body.requirementId ||
       body.acceptedQuantity === undefined ||
-      body.rejectedQuantity === undefined
+      body.rejectedQuantity === undefined ||
+      body.expectedVersion === undefined
     )
       return Response.json(
         {
           ok: false,
           error: {
             code: "VALIDATION_FAILED",
-            message: "Receiving fields are required",
+            message: "Receiving fields including expectedVersion are required",
             requestId: common.requestId,
           },
         },
@@ -106,6 +115,7 @@ export async function POST(request: Request) {
         acceptedQuantity: body.acceptedQuantity,
         rejectedQuantity: body.rejectedQuantity,
         reason: body.reason,
+        expectedVersion: body.expectedVersion,
       }),
     );
   }
