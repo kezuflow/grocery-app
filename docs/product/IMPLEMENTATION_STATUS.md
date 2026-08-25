@@ -63,9 +63,10 @@ before any production deployment.
 
 - **P0:** Scope authorization, boundary validation, canonical Cebu configuration, safe transition errors, and compatibility-preserving RPC behavior are implemented in the current working tree.
 - **P1 foundations:** Clock abstraction, request hashing/idempotency foundation, expected-version contract fields, and corrective migration `0007_remediation_foundations.sql` are implemented.
-- **P1 commerce foundations:** Migrations `0008` and `0009` add canonical capacity,
+- **P1 commerce foundations:** Migrations `0008` through `0010` add canonical capacity,
   allocations, checkout attempts/quotes, sandbox payment events, persisted policy,
-  inventory holds, and the inventory ledger. `commitMockOrder`, order operations,
+  inventory holds, the inventory ledger, persisted default market/location/offer
+  selection, and scoped price metadata. `commitMockOrder`, order operations,
   manual inventory adjustment, and receiving use these foundations.
 - **P1 remaining:** Full idempotency integration for every replayable operational
   command, production webhook verification/recovery, full canonical lifecycle
@@ -94,10 +95,10 @@ email/password session
  -> fulfillment and delivery records
 ```
 
-D1 guards capacity and stocked reservation at write time **via triggers (a known
-architecture defect, not the intended Core-command pattern)**. Duplicate checkout
-idempotency returns the original order via a unique `payment_attempt.idempotency_key`
-lookup. Admin and operations commands require Core capabilities.
+D1 guards capacity and stocked reservation at write time through conditional Core
+command updates and explicit hold/allocation records. Duplicate checkout
+idempotency returns the original order through the persisted idempotency record.
+Admin and operations commands require Core capabilities.
 
 
 ## Production Launch Blockers

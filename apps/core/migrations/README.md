@@ -20,6 +20,17 @@ persisted market/zone commercial policy, and pre-commit inventory holds. `0008`
 also drops the four historical capacity/inventory triggers after equivalent Core
 command behavior is introduced.
 
+Remediation Pass 3 adds `0010_commerce_defaults_and_pricing_scope.sql`, which
+persists default market/location/offer selection and adds canonical market,
+location, and price-type scope columns to price versions.
+
+`0011_phase4a_customer_principal_boundary.sql` links the commerce customer
+aggregate to the application-owned customer principal while retaining the
+legacy authentication column for compatibility.
+
+`0012_price_scope_guards.sql` enforces valid market/location and price-type
+scope for future price-version writes.
+
 Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tables must remain compatible with Better Auth's supported schema/adapter workflow; application tables remain separately owned by Core. Do not edit deployed rows manually as part of application behavior.
 
 For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.

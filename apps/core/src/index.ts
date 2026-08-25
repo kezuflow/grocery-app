@@ -9,13 +9,7 @@ import {
   type CoreHealthResponse,
   type RequestMeta,
 } from "@freshmarkets/contracts";
-import {
-  DEFAULT_FULFILLMENT_LOCATION_ID,
-  DEFAULT_MARKET_CODE,
-  DEFAULT_MINIMUM_BASKET_MINOR,
-  DEFAULT_SUBSCRIPTION_OFFER_CODE,
-  runtimeEnvironment,
-} from "@freshmarkets/config";
+import { runtimeEnvironment } from "@freshmarkets/config";
 import { systemClock, type Clock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
@@ -52,6 +46,30 @@ import {
 } from "./commerce/state-machines";
 
 type SessionUser = { id: string; email: string; name: string; emailVerified: boolean };
+type AuthenticatedCustomer = {
+  user: SessionUser;
+  principalId: string;
+  customerId: string;
+  customerStatus: string;
+};
+type CustomerAddressRow = {
+  id: string;
+  customer_id: string;
+  label: string;
+  recipient: string;
+  phone: string;
+  address_json: string;
+  latitude: number;
+  longitude: number;
+  service_area_code: string | null;
+  delivery_zone_code: string | null;
+  resolution_version: number | null;
+  notes: string | null;
+  status: string;
+  version: number;
+  created_at: number;
+  updated_at: number;
+};
 export function buildHealthResponse(env: Env): CoreHealthResponse {
   return {
     service: "core",
@@ -68,6 +86,29 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
 
   private now(): number {
     return this.clock.now().getTime();
+  }
+
+  private async activeMarketCode(): Promise<string | null> {
+    const row = await this.env.DB.prepare(
+      "SELECT code FROM market WHERE status='active' AND is_default=1",
+    ).first<{ code: string }>();
+    return row?.code ?? null;
+  }
+
+  private async activeFulfillmentLocationId(marketCode: string | null): Promise<string | null> {
+    const row = await this.env.DB.prepare(
+      "SELECT fl.id FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id WHERE fl.status='active' AND fl.is_default=1 AND m.status='active' AND (? IS NULL OR m.code=?)",
+    )
+      .bind(marketCode, marketCode)
+      .first<{ id: string }>();
+    return row?.id ?? null;
+  }
+
+  private async defaultCurrency(): Promise<string | null> {
+    const row = await this.env.DB.prepare(
+      "SELECT COALESCE(mcp.currency, m.currency) AS currency FROM market m LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id WHERE m.status='active' AND m.is_default=1",
+    ).first<{ currency: string }>();
+    return row?.currency ?? null;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -161,24 +202,89 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         }
       : null;
   }
-  private async customer(input: AuthenticatedRequest, create = true) {
+  private async resolveAuthenticatedCustomer(
+    input: AuthenticatedRequest,
+  ): Promise<
+    | { ok: true; value: AuthenticatedCustomer; requestId: string }
+    | { ok: false; error: ReturnType<typeof fail>["error"] }
+  > {
     const user = await this.session(input);
-    if (!user) return null;
-    let row = await this.env.DB.prepare(
-      "SELECT id, auth_user_id FROM customer WHERE auth_user_id=?",
+    if (!user) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+
+    let principal = await this.env.DB.prepare(
+      "SELECT id, status FROM customer_principal WHERE auth_user_id=?",
     )
       .bind(user.id)
-      .first<{ id: string; auth_user_id: string }>();
-    if (!row && create) {
-      const id = crypto.randomUUID();
+      .first<{ id: string; status: string }>();
+    if (!principal) {
+      const principalId = crypto.randomUUID();
       await this.env.DB.prepare(
-        "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+        "INSERT OR IGNORE INTO customer_principal (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
       )
-        .bind(id, user.id, this.now(), this.now())
+        .bind(principalId, user.id, this.now(), this.now())
         .run();
-      row = { id, auth_user_id: user.id };
+      principal = await this.env.DB.prepare(
+        "SELECT id, status FROM customer_principal WHERE auth_user_id=?",
+      )
+        .bind(user.id)
+        .first<{ id: string; status: string }>();
     }
-    return row ? { ...row, user } : null;
+    if (!principal)
+      return fail("INTERNAL_ERROR", "Customer principal could not be resolved", input.requestId);
+    if (principal.status !== "active")
+      return fail("FORBIDDEN", "Customer access is disabled", input.requestId);
+
+    let customer = await this.env.DB.prepare("SELECT id, status FROM customer WHERE principal_id=?")
+      .bind(principal.id)
+      .first<{ id: string; status: string }>();
+    if (!customer) {
+      const legacy = await this.env.DB.prepare(
+        "SELECT id, status FROM customer WHERE auth_user_id=? AND principal_id IS NULL",
+      )
+        .bind(user.id)
+        .first<{ id: string; status: string }>();
+      if (legacy) {
+        await this.env.DB.prepare(
+          "UPDATE customer SET principal_id=? WHERE id=? AND principal_id IS NULL",
+        )
+          .bind(principal.id, legacy.id)
+          .run();
+      } else {
+        const customerId = crypto.randomUUID();
+        await this.env.DB.prepare(
+          "INSERT OR IGNORE INTO customer (id, auth_user_id, principal_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
+        )
+          .bind(customerId, user.id, principal.id, this.now(), this.now())
+          .run();
+      }
+      customer = await this.env.DB.prepare("SELECT id, status FROM customer WHERE principal_id=?")
+        .bind(principal.id)
+        .first<{ id: string; status: string }>();
+    }
+    if (!customer)
+      return fail("INTERNAL_ERROR", "Customer aggregate could not be reconciled", input.requestId);
+    if (customer.status !== "active")
+      return fail("FORBIDDEN", "Customer access is disabled", input.requestId);
+    return {
+      ok: true,
+      value: {
+        user,
+        principalId: principal.id,
+        customerId: customer.id,
+        customerStatus: customer.status,
+      },
+      requestId: input.requestId,
+    };
+  }
+
+  private async customer(input: AuthenticatedRequest) {
+    const resolved = await this.resolveAuthenticatedCustomer(input);
+    if (!resolved.ok) return null;
+    return {
+      id: resolved.value.customerId,
+      auth_user_id: resolved.value.user.id,
+      user: resolved.value.user,
+    };
   }
 
   private async requireCapability(
@@ -257,8 +363,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = addressRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.customer(input);
-    if (!customer) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
     const geo = await resolveServiceability(drizzle(this.env.DB), input);
     if (!geo.ok) return { ok: false as const, error: geo.error };
     const id = crypto.randomUUID();
@@ -268,7 +374,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     )
       .bind(
         id,
-        customer.id,
+        customer.value.customerId,
         input.label,
         input.recipient,
         input.phone,
@@ -303,12 +409,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = authenticatedRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.customer(input);
-    if (!customer) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
     const existing = await this.env.DB.prepare(
       "SELECT status, trial_ends_at FROM subscription WHERE customer_id=? ORDER BY updated_at DESC LIMIT 1",
     )
-      .bind(customer.id)
+      .bind(customer.value.customerId)
       .first<{ status: string; trial_ends_at: number | null }>();
     if (existing)
       return {
@@ -323,9 +429,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         requestId: input.requestId,
       };
     const offer = await this.env.DB.prepare(
-      "SELECT id, trial_days FROM subscription_offer WHERE code=? AND status='active'",
+      "SELECT id, trial_days FROM subscription_offer WHERE status='active' AND ((? IS NOT NULL AND code=?) OR (? IS NULL AND is_default=1))",
     )
-      .bind(input.offerCode ?? DEFAULT_SUBSCRIPTION_OFFER_CODE)
+      .bind(input.offerCode ?? null, input.offerCode ?? null, input.offerCode ?? null)
       .first<{ id: string; trial_days: number }>();
     if (!offer) return fail("NOT_FOUND", "Subscription offer not found", input.requestId);
     const now = this.now();
@@ -334,14 +440,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     await this.env.DB.prepare(
       "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, created_at, updated_at) VALUES (?, ?, ?, 'TRIALING', ?, ?, ?, ?)",
     )
-      .bind(subscriptionId, customer.id, offer.id, now, trialEnds, now, now)
+      .bind(subscriptionId, customer.value.customerId, offer.id, now, trialEnds, now, now)
       .run();
     await this.env.DB.prepare(
       "INSERT INTO audit_event (id, actor_user_id, action, aggregate_type, aggregate_id, details_json, occurred_at) VALUES (?, ?, 'TRIAL_STARTED', 'subscription', ?, ?, ?)",
     )
       .bind(
         crypto.randomUUID(),
-        customer.user.id,
+        customer.value.user.id,
         subscriptionId,
         JSON.stringify({ offerId: offer.id }),
         now,
@@ -356,14 +462,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,
   ) {
-    const customer = await this.customer(input, false);
-    const row = customer
-      ? await this.env.DB.prepare(
-          "SELECT status, trial_ends_at FROM subscription WHERE customer_id=? ORDER BY updated_at DESC LIMIT 1",
-        )
-          .bind(customer.id)
-          .first<{ status: string; trial_ends_at: number | null }>()
-      : null;
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    const row = await this.env.DB.prepare(
+      "SELECT status, trial_ends_at FROM subscription WHERE customer_id=? ORDER BY updated_at DESC LIMIT 1",
+    )
+      .bind(customer.value.customerId)
+      .first<{ status: string; trial_ends_at: number | null }>();
     const eligible = Boolean(
       row &&
       ["ACTIVE", "TRIALING"].includes(row.status) &&
@@ -380,10 +485,17 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     };
   }
   async listDeliveryCycles(input: import("@freshmarkets/contracts").DeliveryCycleRequest) {
+    const marketCode = input.marketCode ?? (await this.activeMarketCode());
+    if (!marketCode)
+      return {
+        ok: true as const,
+        value: [],
+        requestId: input.requestId,
+      };
     const rows = await this.env.DB.prepare(
-      "SELECT dc.id, dc.name, dc.cutoff_at, dc.delivery_date, dc.status, COALESCE((SELECT MIN(czc.capacity-czc.allocated) FROM cycle_zone_capacity czc WHERE czc.cycle_id=dc.id), dc.capacity-dc.allocated) AS capacity_remaining FROM delivery_cycle dc JOIN market m ON m.id=dc.market_id WHERE m.code=COALESCE(?, ?) ORDER BY dc.delivery_date",
+      "SELECT dc.id, dc.name, dc.cutoff_at, dc.delivery_date, dc.status, COALESCE((SELECT MIN(czc.capacity-czc.allocated) FROM cycle_zone_capacity czc WHERE czc.cycle_id=dc.id), dc.capacity-dc.allocated) AS capacity_remaining FROM delivery_cycle dc JOIN market m ON m.id=dc.market_id WHERE m.code=? ORDER BY dc.delivery_date",
     )
-      .bind(input.marketCode ?? null, DEFAULT_MARKET_CODE)
+      .bind(marketCode)
       .all<{
         id: string;
         name: string;
@@ -410,25 +522,39 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = authenticatedRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.customer(input);
-    if (!customer) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
     let cart = await this.env.DB.prepare(
-      "SELECT id, version FROM cart WHERE customer_id=? AND status='ACTIVE' ORDER BY updated_at DESC LIMIT 1",
+      "SELECT id, location_id, version FROM cart WHERE customer_id=? AND status='ACTIVE' ORDER BY updated_at DESC LIMIT 1",
     )
-      .bind(customer.id)
-      .first<{ id: string; version: number }>();
+      .bind(customer.value.customerId)
+      .first<{ id: string; location_id: string; version: number }>();
     if (!cart) {
-      cart = { id: crypto.randomUUID(), version: 1 };
+      const locationId = await this.activeFulfillmentLocationId(await this.activeMarketCode());
+      if (!locationId)
+        return fail(
+          "CONFIGURATION_ERROR",
+          "No active fulfillment location is configured",
+          input.requestId,
+        );
+      cart = { id: crypto.randomUUID(), location_id: locationId, version: 1 };
       await this.env.DB.prepare(
         "INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at) VALUES (?, ?, ?, 'ACTIVE', 1, ?, ?)",
       )
-        .bind(cart.id, customer.id, DEFAULT_FULFILLMENT_LOCATION_ID, this.now(), this.now())
+        .bind(cart.id, customer.value.customerId, locationId, this.now(), this.now())
         .run();
     }
-    const rows = await this.env.DB.prepare(
-      "SELECT ci.sku_id, ci.quantity, s.name, COALESCE((SELECT amount_minor FROM price_version pv WHERE pv.sku_id=s.id AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY pv.version DESC LIMIT 1),0) AS unit_price_minor FROM cart_item ci JOIN sku s ON s.id=ci.sku_id WHERE ci.cart_id=? ORDER BY s.sort_order",
+    const currency = await this.env.DB.prepare(
+      "SELECT COALESCE(mcp.currency, m.currency) AS currency FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id WHERE fl.id=?",
     )
-      .bind(this.now(), this.now(), cart.id)
+      .bind(cart.location_id)
+      .first<{ currency: string }>();
+    if (!currency)
+      return fail("CONFIGURATION_ERROR", "Cart market currency is not configured", input.requestId);
+    const rows = await this.env.DB.prepare(
+      "SELECT ci.sku_id, ci.quantity, s.name, COALESCE((SELECT amount_minor FROM price_version pv JOIN fulfillment_location fl ON fl.id=c.location_id WHERE pv.sku_id=s.id AND pv.market_id=fl.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND (pv.location_id IS NULL OR pv.location_id=c.location_id) AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1),0) AS unit_price_minor FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN cart c ON c.id=ci.cart_id WHERE ci.cart_id=? ORDER BY s.sort_order",
+    )
+      .bind(currency.currency, this.now(), this.now(), cart.id)
       .all<{ sku_id: string; quantity: number; name: string; unit_price_minor: number }>();
     const items = rows.results.map((r) => ({
       skuId: r.sku_id,
@@ -444,7 +570,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         version: cart.version,
         items,
         totalMinor: items.reduce((sum, i) => sum + i.lineTotalMinor, 0),
-        currency: "PHP",
+        currency: currency.currency,
       },
       requestId: input.requestId,
     };
@@ -453,8 +579,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = setCartItemRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.customer(input);
-    if (!customer) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
     const current = await this.getCart(input);
     if (!current.ok) return current;
     const sku = await this.env.DB.prepare("SELECT id FROM sku WHERE id=? AND status='active'")
@@ -484,23 +610,18 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = checkoutRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.customer(input, false);
-    if (!customer)
-      return {
-        ok: true as const,
-        value: { eligible: false, failures: ["UNAUTHENTICATED"], totalMinor: 0, currency: "PHP" },
-        requestId: input.requestId,
-      };
-    const [subscription, address, cycle, cart, policy] = await Promise.all([
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    const [subscription, address, cycle, policy] = await Promise.all([
       this.env.DB.prepare(
         "SELECT status, trial_ends_at FROM subscription WHERE customer_id=? ORDER BY updated_at DESC LIMIT 1",
       )
-        .bind(customer.id)
+        .bind(customer.value.customerId)
         .first<{ status: string; trial_ends_at: number | null }>(),
       this.env.DB.prepare(
         "SELECT latitude, longitude, delivery_zone_code FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
       )
-        .bind(input.addressId, customer.id)
+        .bind(input.addressId, customer.value.customerId)
         .first<{ latitude: number; longitude: number; delivery_zone_code: string | null }>(),
       this.env.DB.prepare(
         "SELECT id, status, cutoff_at, capacity, allocated FROM delivery_cycle WHERE id=?",
@@ -514,15 +635,46 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
           allocated: number;
         }>(),
       this.env.DB.prepare(
-        "SELECT c.id, COALESCE(SUM(ci.quantity * COALESCE((SELECT amount_minor FROM price_version pv WHERE pv.sku_id=ci.sku_id AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY pv.version DESC LIMIT 1),0)),0) AS total_minor FROM cart c LEFT JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=? AND c.customer_id=? GROUP BY c.id",
-      )
-        .bind(this.now(), this.now(), input.cartId, customer.id)
-        .first<{ id: string; total_minor: number }>(),
-      this.env.DB.prepare(
         "SELECT mcp.minimum_basket_minor, mcp.currency FROM delivery_cycle dc JOIN market_commerce_policy mcp ON mcp.market_id=dc.market_id WHERE dc.id=?",
       )
         .bind(input.cycleId)
         .first<{ minimum_basket_minor: number; currency: string }>(),
+    ]);
+    const routing = address?.delivery_zone_code
+      ? await this.env.DB.prepare(
+          "SELECT dz.id zone_id, ls.location_id FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id JOIN delivery_cycle dc ON dc.market_id=sa.market_id JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1 JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active' WHERE dz.code=? AND dz.status='active' AND dc.id=? ORDER BY ls.priority LIMIT 1",
+        )
+          .bind(address.delivery_zone_code, input.cycleId)
+          .first<{ zone_id: string; location_id: string }>()
+      : null;
+    const [cart, fee, zoneCapacity] = await Promise.all([
+      this.env.DB.prepare(
+        "SELECT c.id, COALESCE(SUM(ci.quantity * COALESCE((SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=? WHERE pv.sku_id=ci.sku_id AND pv.market_id=dc.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND (pv.location_id IS NULL OR pv.location_id=?) AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1),0)),0) AS total_minor FROM cart c LEFT JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=? AND c.customer_id=? AND c.status='ACTIVE' GROUP BY c.id",
+      )
+        .bind(
+          input.cycleId,
+          policy?.currency ?? "",
+          routing?.location_id ?? null,
+          this.now(),
+          this.now(),
+          input.cartId,
+          customer.value.customerId,
+        )
+        .first<{ id: string; total_minor: number }>(),
+      routing
+        ? this.env.DB.prepare(
+            "SELECT fee_minor, currency FROM delivery_zone_fee WHERE zone_id=? AND location_id=? AND status='active'",
+          )
+            .bind(routing.zone_id, routing.location_id)
+            .first<{ fee_minor: number; currency: string }>()
+        : null,
+      routing
+        ? this.env.DB.prepare(
+            "SELECT capacity-allocated AS remaining FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
+          )
+            .bind(input.cycleId, routing.zone_id, routing.location_id)
+            .first<{ remaining: number }>()
+        : null,
     ]);
     const geo = address
       ? await resolveServiceability(drizzle(this.env.DB), {
@@ -531,19 +683,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
           longitude: address.longitude,
         })
       : null;
-    const zoneCapacity = address?.delivery_zone_code
-      ? await this.env.DB.prepare(
-          "SELECT MIN(czc.capacity-czc.allocated) AS remaining FROM cycle_zone_capacity czc JOIN delivery_zone dz ON dz.id=czc.zone_id WHERE czc.cycle_id=? AND dz.code=?",
-        )
-          .bind(input.cycleId, address.delivery_zone_code)
-          .first<{ remaining: number | null }>()
-      : null;
     const eligibility = checkoutEligibility(
       {
         requestId: input.requestId,
         latitude: address?.latitude ?? 0,
         longitude: address?.longitude ?? 0,
-        customerId: customer.id,
+        customerId: customer.value.customerId,
         hasEligibleSubscription: Boolean(
           subscription &&
           ["ACTIVE", "TRIALING"].includes(subscription.status) &&
@@ -554,20 +699,26 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     );
     const failures = [...eligibility.failures];
     if (!address) failures.push("ADDRESS_REQUIRED");
+    if (address && !routing) failures.push("ADDRESS_NOT_SERVICEABLE");
     if (!cycle || cycle.status !== "OPEN" || cycle.cutoff_at <= this.now())
       failures.push("CYCLE_CLOSED");
     if (zoneCapacity?.remaining !== null && zoneCapacity?.remaining !== undefined) {
       if (zoneCapacity.remaining <= 0) failures.push("CYCLE_FULL");
     } else if (cycle && cycle.allocated >= cycle.capacity) failures.push("CYCLE_FULL");
-    if (!cart || cart.total_minor < (policy?.minimum_basket_minor ?? DEFAULT_MINIMUM_BASKET_MINOR))
+    if (!policy) failures.push("CONFIGURATION_ERROR");
+    if (routing && !fee) failures.push("CONFIGURATION_ERROR");
+    if (policy && fee && policy.currency !== fee.currency) failures.push("CONFIGURATION_ERROR");
+    if (cart && policy && cart.total_minor < policy.minimum_basket_minor)
       failures.push("MINIMUM_ORDER_NOT_MET");
+    if (!cart) failures.push("MINIMUM_ORDER_NOT_MET");
+    const totalMinor = (cart?.total_minor ?? 0) + (fee?.fee_minor ?? 0);
     return {
       ok: true as const,
       value: {
         eligible: failures.length === 0,
         failures,
-        totalMinor: cart?.total_minor ?? 0,
-        currency: "PHP",
+        totalMinor,
+        currency: policy?.currency ?? fee?.currency ?? (await this.defaultCurrency()) ?? "",
       },
       requestId: input.requestId,
     };
@@ -640,18 +791,18 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!check.ok) return check;
     if (!check.value.eligible)
       return fail("VALIDATION_FAILED", check.value.failures.join(","), input.requestId);
-    const customer = await this.customer(input, false);
-    if (!customer) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
     const address = await this.env.DB.prepare(
       "SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
     )
-      .bind(input.addressId, customer.id)
-      .first<Record<string, any>>();
+      .bind(input.addressId, customer.value.customerId)
+      .first<CustomerAddressRow>();
     if (!address) return fail("NOT_FOUND", "Customer address not found", input.requestId);
     const routing = await this.env.DB.prepare(
-      "SELECT dz.id zone_id, ls.location_id FROM delivery_zone dz JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1 WHERE dz.code=? AND dz.status='active' ORDER BY ls.priority LIMIT 1",
+      "SELECT dz.id zone_id, ls.location_id FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id JOIN delivery_cycle dc ON dc.market_id=sa.market_id JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1 JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active' WHERE dz.code=? AND dz.status='active' AND dc.id=? ORDER BY ls.priority LIMIT 1",
     )
-      .bind(address.delivery_zone_code)
+      .bind(address.delivery_zone_code, input.cycleId)
       .first<{ zone_id: string; location_id: string }>();
     if (!routing)
       return fail(
@@ -660,9 +811,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         input.requestId,
       );
     const cart = await this.env.DB.prepare(
-      "SELECT ci.sku_id, ci.quantity, s.name variant_name, p.name product_name, u.symbol unit, s.consumption_base_quantity, p.inventory_pool_id, ip.sourcing_mode, COALESCE((SELECT amount_minor FROM price_version pv WHERE pv.sku_id=s.id AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY pv.version DESC LIMIT 1),0) unit_price_minor FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id JOIN unit u ON u.id=s.sellable_unit_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE ci.cart_id=?",
+      "SELECT ci.sku_id, ci.quantity, s.name variant_name, p.name product_name, u.symbol unit, s.consumption_base_quantity, p.inventory_pool_id, ip.sourcing_mode, COALESCE((SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=? WHERE pv.sku_id=s.id AND pv.market_id=dc.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND (pv.location_id IS NULL OR pv.location_id=?) AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1),0) unit_price_minor FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id JOIN unit u ON u.id=s.sellable_unit_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE ci.cart_id=?",
     )
-      .bind(this.now(), this.now(), input.cartId)
+      .bind(
+        input.cycleId,
+        check.value.currency,
+        routing.location_id,
+        this.now(),
+        this.now(),
+        input.cartId,
+      )
       .all<{
         sku_id: string;
         quantity: number;
@@ -731,7 +889,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         "INSERT INTO checkout_attempts (id, customer_id, cart_id, address_id, cycle_id, zone_id, location_id, status, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'PROCESSING', ?, 1, ?, ?)",
       ).bind(
         checkoutAttemptId,
-        customer.id,
+        customer.value.customerId,
         input.cartId,
         input.addressId,
         input.cycleId,
@@ -742,12 +900,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         now,
       ),
       this.env.DB.prepare(
-        "INSERT INTO checkout_quote_snapshots (id, checkout_attempt_id, merchandise_minor, total_minor, currency, item_snapshot_json, eligibility_snapshot_json, created_at) VALUES (?, ?, ?, ?, 'PHP', ?, ?, ?)",
+        "INSERT INTO checkout_quote_snapshots (id, checkout_attempt_id, merchandise_minor, total_minor, currency, item_snapshot_json, eligibility_snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).bind(
         crypto.randomUUID(),
         checkoutAttemptId,
+        cart.results.reduce((sum, item) => sum + item.quantity * item.unit_price_minor, 0),
         check.value.totalMinor,
-        check.value.totalMinor,
+        check.value.currency,
         JSON.stringify(cart.results),
         JSON.stringify(check.value),
         now,
@@ -794,12 +953,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const guardArgs = [checkoutAttemptId, holdCount, allocationId];
     statements.push(
       this.env.DB.prepare(
-        `INSERT INTO payment_attempt (id, customer_id, checkout_attempt_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) SELECT ?, ?, ?, ?, 'PHP', 'SUCCEEDED', 'sandbox', ?, ?, ?, ? WHERE ${guard}`,
+        `INSERT INTO payment_attempt (id, customer_id, checkout_attempt_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) SELECT ?, ?, ?, ?, ?, 'SUCCEEDED', 'sandbox', ?, ?, ?, ? WHERE ${guard}`,
       ).bind(
         paymentId,
-        customer.id,
+        customer.value.customerId,
         checkoutAttemptId,
         check.value.totalMinor,
+        check.value.currency,
         `sandbox_${paymentId}`,
         input.idempotencyKey,
         now,
@@ -807,13 +967,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         ...guardArgs,
       ),
       this.env.DB.prepare(
-        `INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at) SELECT ?, ?, ?, ?, 'COMMITTED', ?, 'PHP', ?, ? WHERE ${guard}`,
+        `INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at) SELECT ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ? WHERE ${guard}`,
       ).bind(
         orderId,
-        customer.id,
+        customer.value.customerId,
         input.cycleId,
         JSON.stringify(address),
         check.value.totalMinor,
+        check.value.currency,
         paymentId,
         now,
         ...guardArgs,
@@ -828,7 +989,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         `INSERT INTO audit_event (id, actor_user_id, action, aggregate_type, aggregate_id, details_json, idempotency_key, occurred_at) SELECT ?, ?, 'ORDER_COMMITTED', 'grocery_order', ?, ?, ?, ? WHERE ${guard}`,
       ).bind(
         crypto.randomUUID(),
-        customer.user.id,
+        customer.value.user.id,
         orderId,
         JSON.stringify({ totalMinor: check.value.totalMinor }),
         input.idempotencyKey,
@@ -985,6 +1146,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         this.env.DB.prepare(
           "UPDATE checkout_attempts SET status='FAILED', version=version+1, updated_at=? WHERE id=?",
         ).bind(now, checkoutAttemptId),
+        this.env.DB.prepare(
+          "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+        ).bind(now, scope, input.idempotencyKey),
       ]);
       return fail(
         heldAllocation && (heldHolds?.count ?? 0) < holdCount
@@ -1001,19 +1165,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         paymentStatus: "SUCCEEDED" as const,
         orderStatus: "COMMITTED" as const,
         totalMinor: check.value.totalMinor,
-        currency: "PHP",
+        currency: check.value.currency,
       },
       requestId: input.requestId,
     };
   }
 
   async listCustomerOrders(input: AuthenticatedRequest) {
-    const customer = await this.customer(input, false);
-    if (!customer) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
     const rows = await this.env.DB.prepare(
       "SELECT o.id,o.status,c.delivery_date,o.total_minor,o.currency,(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id=o.id) item_count FROM grocery_order o JOIN delivery_cycle c ON c.id=o.cycle_id WHERE o.customer_id=? ORDER BY o.created_at DESC",
     )
-      .bind(customer.id)
+      .bind(customer.value.customerId)
       .all<{
         id: string;
         status: string;
@@ -1077,7 +1241,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       .bind(input.orderId)
       .first<{ status: string; location_id: string | null }>();
     if (!row) return fail("NOT_FOUND", "Order not found", input.requestId);
-    const locationId = row.location_id ?? DEFAULT_FULFILLMENT_LOCATION_ID;
+    const locationId =
+      row.location_id ?? (await this.activeFulfillmentLocationId(await this.activeMarketCode()));
+    if (!locationId)
+      return fail(
+        "CONFIGURATION_ERROR",
+        "No active fulfillment location is configured",
+        input.requestId,
+      );
     if (!(await this.requireOperationalAccess(input, "order:manage", locationId)))
       return fail(
         "FORBIDDEN",
@@ -1543,13 +1714,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       .bind(input.orderId)
       .first<{ status: string; version: number; location_id: string | null }>();
     if (!row) return fail("NOT_FOUND", "Delivery job not found", input.requestId);
-    if (
-      !(await this.requireOperationalAccess(
-        input,
-        "delivery:manage",
-        row.location_id ?? DEFAULT_FULFILLMENT_LOCATION_ID,
-      ))
-    )
+    const deliveryLocationId =
+      row.location_id ?? (await this.activeFulfillmentLocationId(await this.activeMarketCode()));
+    if (!deliveryLocationId)
+      return fail(
+        "CONFIGURATION_ERROR",
+        "No active fulfillment location is configured",
+        input.requestId,
+      );
+    if (!(await this.requireOperationalAccess(input, "delivery:manage", deliveryLocationId)))
       return fail(
         "FORBIDDEN",
         "Delivery capability and location scope are required",
