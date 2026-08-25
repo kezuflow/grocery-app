@@ -88,7 +88,17 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 
 `ServiceabilityResult` includes `serviceable`, stable failure reason, market/area/zone display context, active polygon versions, resolution-change detection, and a fulfillment-eligibility summary. Internal polygon GeoJSON, location codes, and ranking rules are never exposed. Customers do not select a location; Core resolves eligible operations context internally and always re-resolves at checkout.
 
-Saved-address commands (`addresses.create`, `addresses.update`, and `addresses.listMine`) are introduced in Phase 4 with the customer/address domain. Phase 2 intentionally exposes only authoritative coordinate evaluation.
+Saved-address commands are customer-boundary operations:
+
+- `addresses.listMine({ headers }) -> CustomerAddressView[]`
+- `addresses.create({ label, recipient, phone, addressJson, latitude, longitude, notes? }) -> CustomerAddressView`
+- `addresses.update({ addressId, expectedVersion, changed address fields }) -> CustomerAddressView`
+
+Core derives the customer from the Better Auth session, verifies address ownership,
+and never accepts a client-selected customer or principal ID. Address updates require
+`expectedVersion`; stale writes return `STALE_VERSION`. Coordinate changes re-run
+authoritative serviceability resolution, while service-area, delivery-zone, resolution
+version, status, and other serviceability fields are server-derived.
 
 ## Subscription
 

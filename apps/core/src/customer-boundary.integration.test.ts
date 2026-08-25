@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
-import type { CoreServiceBinding, RpcResult, SubscriptionEligibility } from "@freshmarkets/contracts";
+import type {
+  CoreServiceBinding,
+  RpcResult,
+  SubscriptionEligibility,
+} from "@freshmarkets/contracts";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -45,9 +49,13 @@ describe("Phase 4A authenticated customer boundary", () => {
     const account = await signUp();
     const principal = await env.DB.prepare(
       "SELECT id, auth_user_id, status FROM customer_principal WHERE auth_user_id=?",
-    ).bind(account.userId).first<{ id: string; auth_user_id: string; status: string }>();
+    )
+      .bind(account.userId)
+      .first<{ id: string; auth_user_id: string; status: string }>();
     expect(principal).toMatchObject({ auth_user_id: account.userId, status: "active" });
-    await env.DB.prepare("DELETE FROM customer_principal WHERE auth_user_id=?").bind(account.userId).run();
+    await env.DB.prepare("DELETE FROM customer_principal WHERE auth_user_id=?")
+      .bind(account.userId)
+      .run();
     await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(account.userId).run();
     const cookie = await signIn(account.email);
     expect(cookie).toContain("better-auth");
@@ -55,7 +63,9 @@ describe("Phase 4A authenticated customer boundary", () => {
     expect(reconciledAccess.ok).toBe(true);
     const reconciled = await env.DB.prepare(
       "SELECT id FROM customer_principal WHERE auth_user_id=?",
-    ).bind(account.userId).first<{ id: string }>();
+    )
+      .bind(account.userId)
+      .first<{ id: string }>();
     expect(reconciled?.id).toBeTruthy();
   });
 
@@ -68,7 +78,9 @@ describe("Phase 4A authenticated customer boundary", () => {
     expect(second.ok).toBe(true);
     const customers = await env.DB.prepare(
       "SELECT id, principal_id, auth_user_id FROM customer WHERE auth_user_id=?",
-    ).bind(account.userId).all<{ id: string; principal_id: string; auth_user_id: string }>();
+    )
+      .bind(account.userId)
+      .all<{ id: string; principal_id: string; auth_user_id: string }>();
     expect(customers.results).toHaveLength(1);
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
@@ -79,10 +91,12 @@ describe("Phase 4A authenticated customer boundary", () => {
     const account = await signUp();
     await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(account.userId).run();
     const cookie = await signIn(account.email);
-    const principal = await env.DB.prepare(
-      "SELECT id FROM customer_principal WHERE auth_user_id=?",
-    ).bind(account.userId).first<{ id: string }>();
-    await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE id=?").bind(principal!.id).run();
+    const principal = await env.DB.prepare("SELECT id FROM customer_principal WHERE auth_user_id=?")
+      .bind(account.userId)
+      .first<{ id: string }>();
+    await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE id=?")
+      .bind(principal!.id)
+      .run();
     const blockedBefore = await commerceContext(cookie);
     expect(blockedBefore).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(
@@ -93,7 +107,9 @@ describe("Phase 4A authenticated customer boundary", () => {
 
     await env.DB.prepare(
       "INSERT INTO customer (id, auth_user_id, principal_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
-    ).bind(crypto.randomUUID(), account.userId, principal!.id, Date.now(), Date.now()).run();
+    )
+      .bind(crypto.randomUUID(), account.userId, principal!.id, Date.now(), Date.now())
+      .run();
     const blockedAfter = await commerceContext(cookie);
     expect(blockedAfter).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
@@ -102,13 +118,18 @@ describe("Phase 4A authenticated customer boundary", () => {
     const a = await signUp();
     const b = await signUp();
     await env.DB.batch([
-      env.DB.prepare("UPDATE user SET email_verified=1 WHERE id IN (?, ?)").bind(a.userId, b.userId),
+      env.DB.prepare("UPDATE user SET email_verified=1 WHERE id IN (?, ?)").bind(
+        a.userId,
+        b.userId,
+      ),
     ]);
     const [aCookie, bCookie] = await Promise.all([signIn(a.email), signIn(b.email)]);
     await Promise.all([commerceContext(aCookie), commerceContext(bCookie)]);
     const rows = await env.DB.prepare(
       "SELECT auth_user_id, id FROM customer WHERE auth_user_id IN (?, ?) ORDER BY auth_user_id",
-    ).bind(a.userId, b.userId).all<{ auth_user_id: string; id: string }>();
+    )
+      .bind(a.userId, b.userId)
+      .all<{ auth_user_id: string; id: string }>();
     expect(rows.results).toHaveLength(2);
     expect(rows.results[0].id).not.toBe(rows.results[1].id);
 

@@ -67,6 +67,12 @@ export type CoreServiceBinding = {
   createCustomerAddress(
     request: CreateCustomerAddressRequest,
   ): Promise<RpcResult<CustomerAddressView>>;
+  listCustomerAddresses(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<ReadonlyArray<CustomerAddressView>>>;
+  updateCustomerAddress(
+    request: UpdateCustomerAddressRequest,
+  ): Promise<RpcResult<CustomerAddressView>>;
   getSubscriptionEligibility(
     request: SubscriptionEligibilityRequest,
   ): Promise<RpcResult<SubscriptionEligibility>>;
@@ -257,7 +263,18 @@ export type CreateCustomerAddressRequest = AuthenticatedRequest & {
   addressJson: string;
   latitude: number;
   longitude: number;
-  notes?: string;
+  notes?: string | null;
+};
+export type UpdateCustomerAddressRequest = AuthenticatedRequest & {
+  addressId: string;
+  expectedVersion: number;
+  label?: string;
+  recipient?: string;
+  phone?: string;
+  addressJson?: string;
+  latitude?: number;
+  longitude?: number;
+  notes?: string | null;
 };
 export type CustomerAddressView = {
   id: string;
@@ -269,6 +286,8 @@ export type CustomerAddressView = {
   serviceAreaCode: string | null;
   deliveryZoneCode: string | null;
   resolutionVersion: number | null;
+  status: string;
+  version: number;
 };
 export type SubscriptionEligibilityRequest = AuthenticatedRequest;
 export type SubscriptionEligibility = {

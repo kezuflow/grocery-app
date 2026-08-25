@@ -11,6 +11,18 @@ const addressBodySchema = z.object({
   longitude: z.number().finite(),
   notes: z.string().max(1000).optional(),
 });
+const updateAddressBodySchema = addressBodySchema.partial().extend({
+  addressId: z.string().trim().min(1),
+  expectedVersion: z.number().int().nonnegative(),
+});
+export async function GET(request: Request) {
+  return Response.json(
+    await (env.CORE as unknown as CoreServiceBinding).listCustomerAddresses({
+      requestId: crypto.randomUUID(),
+      headers: requestHeaders(request),
+    }),
+  );
+}
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   const parsed = addressBodySchema.safeParse(await request.json().catch(() => null));
@@ -35,4 +47,32 @@ export async function POST(request: Request) {
     notes: body.notes,
   });
   return Response.json(result);
+}
+export async function PATCH(request: Request) {
+  const requestId = crypto.randomUUID();
+  const parsed = updateAddressBodySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success)
+    return Response.json(
+      {
+        ok: false,
+        error: { code: "VALIDATION_FAILED", message: "Invalid address update", requestId },
+      },
+      { status: 400 },
+    );
+  const body = parsed.data;
+  return Response.json(
+    await (env.CORE as unknown as CoreServiceBinding).updateCustomerAddress({
+      requestId,
+      headers: requestHeaders(request),
+      addressId: body.addressId,
+      expectedVersion: body.expectedVersion,
+      label: body.label,
+      recipient: body.recipient,
+      phone: body.phone,
+      addressJson: body.address ? JSON.stringify(body.address) : undefined,
+      latitude: body.latitude,
+      longitude: body.longitude,
+      notes: body.notes,
+    }),
+  );
 }

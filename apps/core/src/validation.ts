@@ -41,7 +41,19 @@ export const addressRequestSchema = headersRequest.extend({
   addressJson: z.string().min(2),
   latitude: coordinateSchema,
   longitude: coordinateSchema,
-  notes: z.string().max(1000).optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+export const addressUpdateRequestSchema = headersRequest.extend({
+  addressId: identifierSchema,
+  expectedVersion: z.number().int().safe().nonnegative(),
+  label: reasonSchema.optional(),
+  recipient: reasonSchema.optional(),
+  phone: reasonSchema.optional(),
+  addressJson: z.string().min(2).optional(),
+  latitude: coordinateSchema.optional(),
+  longitude: coordinateSchema.optional(),
+  notes: z.string().max(1000).nullable().optional(),
 });
 
 export const checkoutRequestSchema = headersRequest.extend({

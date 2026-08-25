@@ -66,9 +66,14 @@ address-owned.
 
 - `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, user_confirmed_at, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, notes, status, version, created_at, updated_at)`
 
+Core address reads and writes are scoped through the authenticated customer resolver.
+Address updates use a conditional `(id, customer_id, status, version)` predicate;
+serviceability fields are updated only from Core's resolution result.
+
 Indexes: customer/status, last resolved zone, and optional coordinate bounding fields. Address edits create a new version/update saved data but never touch order snapshots.
 
-These saved-address tables remain conceptual until Phase 4. Phase 2 does not persist customer addresses.
+Saved customer addresses are persisted in the Phase 4B migration. Historical order
+snapshots remain independent of subsequent address edits.
 
 ## Subscriptions
 

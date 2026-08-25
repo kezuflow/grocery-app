@@ -13,6 +13,7 @@ import { runtimeEnvironment } from "@freshmarkets/config";
 import { systemClock, type Clock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
+  addressUpdateRequestSchema,
   adminOrderCommandSchema,
   authenticatedRequestSchema,
   catalogProductRequestSchema,
@@ -30,6 +31,7 @@ import {
 } from "./validation";
 import { findIdempotencyRecord, requestHash } from "./idempotency";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
+import { expireCheckoutAttempts } from "./commerce/reconciliation";
 import { drizzle } from "drizzle-orm/d1";
 import { log, requestId } from "./observability";
 import { applicationContext, hasOperationalScope } from "./auth/authorization";
@@ -70,6 +72,22 @@ type CustomerAddressRow = {
   created_at: number;
   updated_at: number;
 };
+
+function customerAddressView(row: CustomerAddressRow) {
+  return {
+    id: row.id,
+    label: row.label,
+    recipient: row.recipient,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    serviceable: Boolean(row.service_area_code && row.delivery_zone_code),
+    serviceAreaCode: row.service_area_code,
+    deliveryZoneCode: row.delivery_zone_code,
+    resolutionVersion: row.resolution_version,
+    status: row.status,
+    version: row.version,
+  };
+}
 export function buildHealthResponse(env: Env): CoreHealthResponse {
   return {
     service: "core",
@@ -277,6 +295,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     };
   }
 
+  // Retained for existing internal callers; boundary resolution above remains authoritative.
   private async customer(input: AuthenticatedRequest) {
     const resolved = await this.resolveAuthenticatedCustomer(input);
     if (!resolved.ok) return null;
@@ -340,7 +359,23 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private async claimCommandIdempotency(scope: string, key: string, payload: unknown) {
     const hash = await requestHash(payload);
     const existing = await findIdempotencyRecord(this.env.DB, scope, key);
-    if (existing) return { hash, existing, claimed: false };
+    if (existing) {
+      if (existing.requestHash !== hash) return { hash, existing, claimed: false };
+      if (existing.status === "FAILED") {
+        const reclaimed = await this.env.DB.prepare(
+          "UPDATE idempotency_records SET status='PROCESSING', result_reference=NULL, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='FAILED'",
+        )
+          .bind(this.now(), scope, key, hash)
+          .run();
+        if ((reclaimed.meta?.changes ?? 0) === 1) return { hash, existing: null, claimed: true };
+        return {
+          hash,
+          existing: await findIdempotencyRecord(this.env.DB, scope, key),
+          claimed: false,
+        };
+      }
+      return { hash, existing, claimed: false };
+    }
     const now = this.now();
     const result = await this.env.DB.prepare(
       "INSERT OR IGNORE INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'PROCESSING', ?, ?)",
@@ -401,9 +436,107 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         serviceAreaCode: geo.value.serviceArea?.code ?? null,
         deliveryZoneCode: geo.value.deliveryZone?.code ?? null,
         resolutionVersion: geo.value.serviceArea?.polygonVersion ?? null,
+        status: "active",
+        version: 1,
       },
       requestId: input.requestId,
     };
+  }
+
+  async listCustomerAddresses(input: AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    const rows = await this.env.DB.prepare(
+      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at FROM customer_address WHERE customer_id=? AND status='active' ORDER BY updated_at DESC, id DESC",
+    )
+      .bind(customer.value.customerId)
+      .all<CustomerAddressRow>();
+    return {
+      ok: true as const,
+      value: rows.results.map(customerAddressView),
+      requestId: input.requestId,
+    };
+  }
+
+  async updateCustomerAddress(
+    input: import("@freshmarkets/contracts").UpdateCustomerAddressRequest,
+  ) {
+    const validation = addressUpdateRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    const current = await this.env.DB.prepare(
+      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
+    )
+      .bind(input.addressId, customer.value.customerId)
+      .first<CustomerAddressRow>();
+    if (!current) return fail("NOT_FOUND", "Customer address not found", input.requestId);
+
+    const latitude = input.latitude ?? current.latitude;
+    const longitude = input.longitude ?? current.longitude;
+    const locationChanged = latitude !== current.latitude || longitude !== current.longitude;
+    let serviceability = {
+      serviceAreaCode: current.service_area_code,
+      deliveryZoneCode: current.delivery_zone_code,
+      resolutionVersion: current.resolution_version,
+    };
+    if (locationChanged) {
+      const geo = await resolveServiceability(drizzle(this.env.DB), {
+        requestId: input.requestId,
+        latitude,
+        longitude,
+        previousResolution:
+          current.service_area_code && current.resolution_version !== null
+            ? {
+                serviceAreaCode: current.service_area_code,
+                serviceAreaPolygonVersion: current.resolution_version,
+                deliveryZoneCode: current.delivery_zone_code,
+                deliveryZonePolygonVersion: null,
+              }
+            : undefined,
+      });
+      if (!geo.ok) return geo;
+      serviceability = {
+        serviceAreaCode: geo.value.serviceArea?.code ?? null,
+        deliveryZoneCode: geo.value.deliveryZone?.code ?? null,
+        resolutionVersion: geo.value.serviceArea?.polygonVersion ?? null,
+      };
+    }
+
+    const updated = await this.env.DB.prepare(
+      "UPDATE customer_address SET label=?, recipient=?, phone=?, address_json=?, latitude=?, longitude=?, service_area_code=?, delivery_zone_code=?, resolution_version=?, notes=?, version=version+1, updated_at=? WHERE id=? AND customer_id=? AND status='active' AND version=?",
+    )
+      .bind(
+        input.label ?? current.label,
+        input.recipient ?? current.recipient,
+        input.phone ?? current.phone,
+        input.addressJson ?? current.address_json,
+        latitude,
+        longitude,
+        serviceability.serviceAreaCode,
+        serviceability.deliveryZoneCode,
+        serviceability.resolutionVersion,
+        input.notes !== undefined ? input.notes : current.notes,
+        this.now(),
+        current.id,
+        customer.value.customerId,
+        input.expectedVersion,
+      )
+      .run();
+    if ((updated.meta?.changes ?? 0) !== 1)
+      return fail("STALE_VERSION", "Address changed; refresh before updating", input.requestId);
+
+    const row = await this.env.DB.prepare(
+      "SELECT id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, notes, status, version, created_at, updated_at FROM customer_address WHERE id=? AND customer_id=?",
+    )
+      .bind(current.id, customer.value.customerId)
+      .first<CustomerAddressRow>();
+    if (!row) return fail("INTERNAL_ERROR", "Updated address could not be read", input.requestId);
+    return { ok: true as const, value: customerAddressView(row), requestId: input.requestId };
   }
   async startTrial(input: import("@freshmarkets/contracts").StartTrialRequest) {
     const validation = authenticatedRequestSchema.safeParse(input);
@@ -729,6 +862,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const scope = "checkout.commitMockOrder";
+    await expireCheckoutAttempts(this.env.DB, this.now());
     const hash = await requestHash({
       cartId: input.cartId,
       addressId: input.addressId,
@@ -761,7 +895,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
             requestId: input.requestId,
           };
       }
-      return fail("CONFLICT", "The original request is still processing", input.requestId);
+      if (canonicalRecord.status === "FAILED") {
+        return fail(
+          "CONFLICT",
+          "The original checkout request failed; submit a new attempt with a new idempotency key",
+          input.requestId,
+        );
+      } else {
+        return fail("CONFLICT", "The original request is still processing", input.requestId);
+      }
     }
     const prior = await this.env.DB.prepare(
       "SELECT id FROM payment_attempt WHERE idempotency_key=?",
@@ -886,7 +1028,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const holdCount = [...holds.values()].filter((value) => value > 0).length;
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
-        "INSERT INTO checkout_attempts (id, customer_id, cart_id, address_id, cycle_id, zone_id, location_id, status, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'PROCESSING', ?, 1, ?, ?)",
+        "INSERT INTO checkout_attempts (id, customer_id, cart_id, address_id, cycle_id, zone_id, location_id, status, idempotency_key, expires_at, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'PROCESSING', ?, ?, 1, ?, ?)",
       ).bind(
         checkoutAttemptId,
         customer.value.customerId,
@@ -896,6 +1038,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         routing.zone_id,
         routing.location_id,
         input.idempotencyKey,
+        now + 15 * 60 * 1000,
         now,
         now,
       ),

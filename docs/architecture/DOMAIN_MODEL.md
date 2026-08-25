@@ -53,6 +53,13 @@ A global commerce profile linked to one Better Auth user ID. A customer is not d
 
 ### CustomerAddress
 
+A customer-owned saved delivery address. Recipient name and phone are address-owned
+delivery data, not customer or Better Auth identity fields. Core stores the latest
+authoritative serviceability resolution, including service area, delivery zone, and
+polygon resolution version. Coordinates are re-evaluated whenever an address update
+changes location-relevant fields. Updates use optimistic version checks and never
+rewrite historical order snapshots.
+
 A saved delivery destination with recipient, phone, structured components, barangay/city labels, coordinates, delivery notes, geocoder metadata, and most recently resolved service area/zone. Serviceability is revalidated for checkout.
 
 Orders snapshot addresses. Editing a saved address never rewrites an existing order.

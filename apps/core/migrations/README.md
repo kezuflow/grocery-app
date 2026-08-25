@@ -31,6 +31,11 @@ legacy authentication column for compatibility.
 `0012_price_scope_guards.sql` enforces valid market/location and price-type
 scope for future price-version writes.
 
+`0013_phase4b_customer_addresses.sql` adds owner/status/version indexes for
+Core-authoritative customer address reads and optimistic updates. Address
+ownership remains enforced by the authenticated customer resolver and the
+conditional update predicate.
+
 Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tables must remain compatible with Better Auth's supported schema/adapter workflow; application tables remain separately owned by Core. Do not edit deployed rows manually as part of application behavior.
 
 For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.

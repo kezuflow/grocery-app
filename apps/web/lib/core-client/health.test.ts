@@ -21,6 +21,8 @@ describe("Web Core client", () => {
       getCatalogProduct: vi.fn(),
       listCategories: vi.fn(),
       createCustomerAddress: vi.fn(),
+      listCustomerAddresses: vi.fn(),
+      updateCustomerAddress: vi.fn(),
       getSubscriptionEligibility: vi.fn(),
       listDeliveryCycles: vi.fn(),
       evaluateCheckout: vi.fn(),

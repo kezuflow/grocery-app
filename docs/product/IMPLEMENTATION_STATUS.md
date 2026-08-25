@@ -8,9 +8,10 @@ This is the implementation record for `IMPLEMENTATION_PLAN.md`. It does not weak
 > See `docs/product/PHASE_REVIEW_2026_08_25.md` for the full findings and citations.
 > Pass 1 decisions are recorded in `docs/architecture/REMEDIATION_DECISIONS.md`.
 > Structural reality: Phases 0–3 have dedicated Core domain modules and are
-> implemented; Phases 4–14 are implemented only as inline SQL in
-> `apps/core/src/index.ts` (~lines 155–785), are partial, and are not covered by
-> flow-level tests.
+> implemented; Phases 4–14 remain partial and retain compatibility command paths
+> in `apps/core/src/index.ts`. Phase 4A/4B boundary and checkout flow,
+> concurrency, and reconciliation tests now provide focused coverage, but they do
+> not establish production readiness for the later commerce phases.
 
 ## Phase Status
 
@@ -23,7 +24,7 @@ the 2026-08-25 review verdict against `IMPLEMENTATION_PLAN.md` acceptance criter
 | Phase 1 | Better Auth and RBAC Foundation | IMPLEMENTED LOCALLY; PROVIDER CONFIG REQUIRED | IMPLEMENTED (real module); auth-flow acceptance tests largely absent |
 | Phase 2 | Markets, Locations, Serviceability, and Geofencing | IMPLEMENTED LOCALLY; APPROVED POLYGON/GEOCODER REQUIRED | IMPLEMENTED (real module) — cleanest phase |
 | Phase 3 | Catalog, SKUs, Units, Availability, and Pricing | IMPLEMENTED MVP SLICE | IMPLEMENTED (real module); pricing drops `market_id`/`price_type`; ~1 test vs 6-item acceptance list |
-| Phase 4 | Customers, Addresses, Subscriptions, and Trials | IMPLEMENTED MVP SLICE; BILLING PROVIDER REQUIRED | PARTIAL — Phase 4A customer-principal boundary implemented with migration and flow tests; address and subscription work remains for Phase 4B |
+| Phase 4 | Customers, Addresses, Subscriptions, and Trials | IMPLEMENTED MVP SLICE; BILLING PROVIDER REQUIRED | PARTIAL — Phase 4A customer-principal boundary and Phase 4B addresses are implemented with migration and flow tests; subscriptions remain for the next phase |
 | Phase 5 | Delivery Cycles, Fees, Cutoff, and Capacity | IMPLEMENTED MVP SLICE | PARTIAL (inline) — cycle-zone-location capacity/allocation and persisted zone-fee foundations added; cycle administration remains seed-only |
 | Phase 6 | Cart and Checkout Eligibility | IMPLEMENTED MVP SLICE | PARTIAL (inline) — checkout attempts and quote snapshots now persist through the compatibility commit path; full quote lifecycle and promotion policy remain incomplete |
 | Phase 7 | Payments, Orders, Commitment Boundary, and Amendments | IMPLEMENTED WITH SANDBOX PAYMENT; PRODUCTION PROVIDER REQUIRED | PARTIAL (inline) — sandbox only; `order_amendment` table has no code; no webhook verification; `paymentTransitions` dead code |
@@ -57,7 +58,11 @@ before any production deployment.
   cycle × delivery zone × fulfillment location. Historical cycle counters remain
   compatibility data and are no longer the commitment authority.
 - **HIGH — idempotency is not yet integrated across every replayable command.**
-- **HIGH — no flow-level tests** for the Phase 4–11 commerce loop beyond the new Phase 4A customer-boundary coverage.
+- **HIGH — flow coverage is still narrow.** The customer checkout loop,
+  customer-address ownership/versioning, D1 capacity/inventory races, and
+  checkout-expiry reconciliation now have automated tests; payment-provider,
+  refund/amendment, procurement, fulfillment, delivery, and scheduled
+  reconciliation flows remain uncovered.
 
 ## Remediation Pass 1 Status
 
@@ -70,17 +75,17 @@ before any production deployment.
   manual inventory adjustment, and receiving use these foundations.
 - **P1 remaining:** Full idempotency integration for every replayable operational
   command, production webhook verification/recovery, full canonical lifecycle
-  vocabulary, expiry/reconciliation jobs, and complete database-backed flow and
-  concurrency coverage remain unfinished.
+  vocabulary, and scheduled expiry/reconciliation execution remain unfinished.
+  Checkout-expiry reconciliation is implemented as a reusable Core utility and is
+  invoked before checkout; it is not yet wired to a production scheduler.
 - **Verification note:** Existing unrelated Web/admin work in the working tree required a syntax correction before typechecking. Formatting, naming, typecheck, lint, tests, and recursive builds now pass locally after the remediation edits.
 
 ## Proven Local Business Loop
 
-The local Worker stack has been exercised **manually / via inline code** through the
-sequence below. This is a demonstration, not a certified capability: there are **no
-automated flow-level tests** for these steps, and the open defects above (versioning,
-ledger, trigger-based concurrency) mean correctness under concurrency and replay is
-not established.
+The local Worker stack has automated integration coverage through the sequence
+below. This is focused compatibility-path coverage, not a certified production
+capability: provider payment, complete lifecycle, and scheduled reconciliation
+behavior remain outside this proof.
 
 ```text
 email/password session
@@ -112,14 +117,16 @@ Admin and operations commands require Core capabilities.
 
 ## Verification
 
-> **2026-08-25 note.** The commands below were re-run after Remediation Pass 1.
-> Passing tests do not imply behavioral coverage: there are no flow-level tests for
-> the Phase 4–11 commerce loop (see review report).
+> **2026-08-26 note.** The commands below were re-run after the subsequent
+> remediation edits. Passing tests do not imply production readiness: provider,
+> lifecycle, and scheduled-operations coverage remains incomplete.
 
-- All D1 migrations through `0009_commerce_policy_and_holds.sql` applied to the local database.
+- All D1 migrations through `0013_phase4b_customer_addresses.sql` apply to the local database.
 - `pnpm format:check`, `pnpm naming:check`, `pnpm typecheck`, `pnpm lint`,
   `pnpm test`, and `pnpm -r build` pass locally. Core deploy dry run and vinext
   production build are included in the recursive build.
 - `vinext check` reports 100% compatibility for used imports/libraries and the current route structure.
 - `wrangler check startup` succeeds.
 - Web/Core local Service Binding routes and desktop/mobile marketplace rendering were smoke-tested.
+- Phase 4B owner-scoped address reads and optimistic-version updates have integration coverage.
+- Checkout flow, D1 concurrency guards, and checkout-expiry reconciliation have focused integration coverage.
