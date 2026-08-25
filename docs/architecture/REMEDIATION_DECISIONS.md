@@ -12,6 +12,14 @@ This record resolves implementation ambiguity without replacing the domain speci
 - **Migration strategy:** A later corrective migration may consolidate or explicitly link the two records after a data-backfill plan is approved. No destructive rename is part of Pass 1.
 - **Consequence:** New commerce commands must resolve the authenticated user to the existing `customer` aggregate; Better Auth records and `customer_principal` are not treated as commerce orders or profiles.
 
+### Phase 4A principal boundary
+
+- **Decision:** The authenticated commerce chain is Better Auth user/session -> `customer_principal` -> `customer`.
+- **Authority:** Better Auth owns authentication identity/session records. Core owns principal status, customer provisioning, and commerce authorization.
+- **Reconciliation:** The Core resolver uses unique auth-user/principal and principal/customer relationships with idempotent insert/link behavior. The Better Auth user-create hook is eager provisioning only.
+- **Access rule:** Principal status is checked on every customer-boundary resolution. Disabled principals are denied even when a customer already exists. Client-supplied customer/principal/auth-user IDs are not accepted as identity inputs.
+- **Compatibility:** The historical `customer.auth_user_id` NOT NULL column remains populated but is not an authorization source; no Better Auth identity fields are duplicated into the customer aggregate.
+
 ## State Machines
 
 - **Decision:** `docs/architecture/STATE_MACHINES.md` is authoritative for canonical lifecycle vocabulary and legal transitions.

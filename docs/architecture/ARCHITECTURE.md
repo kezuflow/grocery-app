@@ -109,11 +109,31 @@ Better Auth runs in `apps/core` and persists its tables in D1. It owns authentic
 
 Application tables link to the Better Auth user identifier but remain independently owned:
 
-- `customers` and customer addresses;
+- `customer_principal` is the auth-linked application principal and commerce access gate;
+- `customer` is the commerce aggregate linked 1:1 to that principal, with addresses and subscriptions owned by Core;
 - `staff_principals`;
 - subscriptions;
 - roles, capabilities, and location scopes;
 - all commerce and operational data.
+
+### Authenticated customer boundary
+
+Every customer-scoped Core command/query derives identity from the Better Auth session
+cookie and resolves:
+
+```text
+Better Auth user/session -> customer_principal -> customer -> commerce-owned domains
+```
+
+Core reconciles a missing principal or customer idempotently. Principal status is checked
+on every resolution, including when a customer row already exists; a disabled principal
+cannot regain commerce access. Client-provided customer, principal, or auth-user IDs are
+not authorization inputs. Better Auth's user-create hook is eager/idempotent provisioning
+only and is not treated as a transaction boundary.
+
+The legacy `customer.auth_user_id` column remains populated for compatibility with the
+historical schema, but it is not an authentication or authorization authority and no
+additional Better Auth identity fields are copied into `customer`.
 
 Web provides login, registration, verification, reset, and OAuth initiation/callback UX. Browser-facing auth routes proxy or route through Web to Core while preserving request URL semantics, origin/host, cookies, `Set-Cookie`, redirects, callback parameters, and CSRF protections. The adapter must stream/forward auth responses faithfully and must not parse and reconstruct cookie headers incorrectly.
 

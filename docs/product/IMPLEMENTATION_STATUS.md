@@ -23,7 +23,7 @@ the 2026-08-25 review verdict against `IMPLEMENTATION_PLAN.md` acceptance criter
 | Phase 1 | Better Auth and RBAC Foundation | IMPLEMENTED LOCALLY; PROVIDER CONFIG REQUIRED | IMPLEMENTED (real module); auth-flow acceptance tests largely absent |
 | Phase 2 | Markets, Locations, Serviceability, and Geofencing | IMPLEMENTED LOCALLY; APPROVED POLYGON/GEOCODER REQUIRED | IMPLEMENTED (real module) — cleanest phase |
 | Phase 3 | Catalog, SKUs, Units, Availability, and Pricing | IMPLEMENTED MVP SLICE | IMPLEMENTED (real module); pricing drops `market_id`/`price_type`; ~1 test vs 6-item acceptance list |
-| Phase 4 | Customers, Addresses, Subscriptions, and Trials | IMPLEMENTED MVP SLICE; BILLING PROVIDER REQUIRED | PARTIAL (inline) — address create-only; subscription trial-only (configured seeded offer); `subscriptionTransitions` dead code; no flow tests |
+| Phase 4 | Customers, Addresses, Subscriptions, and Trials | IMPLEMENTED MVP SLICE; BILLING PROVIDER REQUIRED | PARTIAL — Phase 4A customer-principal boundary implemented with migration and flow tests; address and subscription work remains for Phase 4B |
 | Phase 5 | Delivery Cycles, Fees, Cutoff, and Capacity | IMPLEMENTED MVP SLICE | PARTIAL (inline) — cycle-zone-location capacity/allocation and persisted zone-fee foundations added; cycle administration remains seed-only |
 | Phase 6 | Cart and Checkout Eligibility | IMPLEMENTED MVP SLICE | PARTIAL (inline) — checkout attempts and quote snapshots now persist through the compatibility commit path; full quote lifecycle and promotion policy remain incomplete |
 | Phase 7 | Payments, Orders, Commitment Boundary, and Amendments | IMPLEMENTED WITH SANDBOX PAYMENT; PRODUCTION PROVIDER REQUIRED | PARTIAL (inline) — sandbox only; `order_amendment` table has no code; no webhook verification; `paymentTransitions` dead code |
@@ -57,7 +57,7 @@ before any production deployment.
   cycle × delivery zone × fulfillment location. Historical cycle counters remain
   compatibility data and are no longer the commitment authority.
 - **HIGH — idempotency is not yet integrated across every replayable command.**
-- **HIGH — no flow-level tests** for the Phase 4–11 commerce loop.
+- **HIGH — no flow-level tests** for the Phase 4–11 commerce loop beyond the new Phase 4A customer-boundary coverage.
 
 ## Remediation Pass 1 Status
 

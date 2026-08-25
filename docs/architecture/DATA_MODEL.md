@@ -45,7 +45,8 @@ Phase 2 materializes these geography tables and stable seed identities for `METR
 
 ## Application Identity and RBAC
 
-- `customers(id PK, auth_user_id UNIQUE, email_snapshot, phone, status, version, created_at, updated_at)`
+- `customer_principal(id PK, auth_user_id UNIQUE FK Better Auth user, status active|disabled, created_at, updated_at)`
+- `customers(id PK, principal_id UNIQUE FK customer_principal, auth_user_id UNIQUE legacy compatibility column, status, version, created_at, updated_at)`
 - `staff_principals(id PK, auth_user_id UNIQUE, display_name, status, version)`
 - `riders(id PK, staff_id FK NULL, auth_user_id UNIQUE NULL, preferred_location_id FK NULL, status, version)`
 - `roles(id PK, code UNIQUE, name, description)`
@@ -54,6 +55,12 @@ Phase 2 materializes these geography tables and stable seed identities for `METR
 - `staff_role_assignments(id PK, staff_id FK, role_id FK, organization_id FK NULL, market_id FK NULL, location_id FK NULL, created_at)`
 
 Scope check constraint/application rule: exactly the intended hierarchy scope is populated; global assignments have no market/location, market assignments have market only, and location assignments have its market/location or a canonical location reference.
+
+`customer_principal` is the application authorization gate for commerce access. Better
+Auth remains authoritative for identity, sessions, accounts, and verification. The
+resolver validates principal status before reading or provisioning the linked customer.
+Customer does not duplicate Better Auth profile fields; delivery recipient identity remains
+address-owned.
 
 ## Customers and Addresses
 
