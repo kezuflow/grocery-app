@@ -186,11 +186,11 @@ export async function createCheckoutQuote(
       );
     const availability = await database
       .prepare(
-        "SELECT status FROM location_product_availability WHERE location_id=? AND product_id=?",
+        "SELECT availability_status FROM location_product_availability WHERE location_id=? AND product_id=?",
       )
       .bind(routing.location_id, item.product_id)
-      .first<{ status: string }>();
-    if (availability && availability.status !== "available")
+      .first<{ availability_status: string }>();
+    if (availability && availability.availability_status !== "AVAILABLE")
       return failure(
         "UNAVAILABLE_ITEM",
         `${item.product_name} is unavailable at this location`,
