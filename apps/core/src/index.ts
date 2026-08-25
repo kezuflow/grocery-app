@@ -628,7 +628,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       ok: true as const,
       value: {
         eligible,
-        status: row?.status ?? null,
+        state: (row?.status ?? null) as import("@freshmarkets/contracts").SubscriptionState | null,
         trialEndsAt: row?.trial_ends_at ? new Date(row.trial_ends_at).toISOString() : null,
       },
       requestId: input.requestId,
