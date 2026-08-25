@@ -10,6 +10,16 @@ Phases 4-13 use `0005_mvp_commerce_operations.sql` for customer/application stat
 
 Phase 14 uses `0006_phase14_promotions_audit.sql` for the deliberately small promotion seam, audit/domain events, refunds/amendments, supplier and exception records, and delivery batches/stops. Production provider credentials and provider-specific webhook behavior remain external launch work.
 
+Remediation Pass 1 adds `0007_remediation_foundations.sql` as an append-only corrective migration. It adds optimistic-concurrency columns to mutable operational records and the shared `idempotency_records` table. The migration does not claim the related workflows are complete and does not rewrite `0005` or `0006`.
+
+Remediation Pass 2 adds `0008_commerce_invariant_foundations.sql` and
+`0009_commerce_policy_and_holds.sql`. These append-only migrations introduce
+cycle-zone-location capacity, capacity allocations, checkout attempts and quote
+snapshots, payment-event deduplication records, inventory ledger entries,
+persisted market/zone commercial policy, and pre-commit inventory holds. `0008`
+also drops the four historical capacity/inventory triggers after equivalent Core
+command behavior is introduced.
+
 Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tables must remain compatible with Better Auth's supported schema/adapter workflow; application tables remain separately owned by Core. Do not edit deployed rows manually as part of application behavior.
 
 For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.

@@ -165,3 +165,6 @@ Do not rewrite historical details after catalog/address changes. Show amendments
 - Avoid relying on Cache Components/PPR or undocumented caching semantics in MVP.
 - Use explicit cache/revalidation policy for public catalog content; never cache personalized eligibility, prices, subscription, or order responses incorrectly.
 
+## Phase-0 Research And Proposal
+
+The detailed phase-0 storefront proposal, selected rendered Mobbin references, token decisions, component inventory, and implementation sequence live in `STOREFRONT_DESIGN.md`. `REFERENCES.md` records the reference-use boundary and the 2026-08-25 Mobbin research log.

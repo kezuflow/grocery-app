@@ -62,3 +62,6 @@ FreshMarkets must develop its own brand, visual tokens, iconography, photography
 
 For a future design decision, record the reference, the pattern adopted, the grocery-specific adaptation, and the reason it preserves FreshMarkets business invariants. Rejected patterns should be noted when they would incorrectly imply instant delivery, customer hub selection, free groceries during trial, arbitrary weight, or freely editable paid orders.
 
+## Mobbin Research Log (2026-08-25)
+
+The phase-0 research used the Mobbin MCP to inspect rendered DoorDash references rather than relying on metadata. Selected evidence and the adopted/rejected patterns are recorded in `STOREFRONT_DESIGN.md`. The primary flow references are [Placing an order](https://mobbin.com/flows/7f3299cb-8374-42f7-b2c6-16394ed74ed6), [Market detail](https://mobbin.com/flows/574c9430-44d3-40b4-9605-305e6990d11d), and [Item details (grocery)](https://mobbin.com/flows/3ce0bff7-a442-47ab-8da8-7b0b75d25e06). Screen references cover home, DashMart/grocery landing, produce/category, search, product detail, cart, address, checkout, tracking, notifications, account, and iOS mobile equivalents.

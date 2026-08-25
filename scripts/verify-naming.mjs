@@ -11,6 +11,7 @@ const ignoredDirectories = new Set([
   "coverage",
 ]);
 const allowedDirectoryNames = new Set([
+  ".github",
   "app",
   "apps",
   "packages",

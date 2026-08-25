@@ -87,6 +87,8 @@ docs/
 
 Core domain modules remain under `apps/core` unless sharing provides a concrete deployment-independent benefit. Likely shared code is limited to RPC contracts, validation schemas, identifiers, money/units/time value objects, configuration, and test utilities.
 
+Remediation decisions that preserve compatibility while aligning the current implementation with this architecture are recorded in `REMEDIATION_DECISIONS.md`. Existing RPC names and historical migrations remain compatibility surfaces until additive migrations and client migrations are complete.
+
 ## Web to Core Boundary
 
 Web communicates with Core through a Cloudflare Service Binding and typed RPC methods. Shared source types live in `packages/contracts`; contracts are application DTOs, not database models.
@@ -199,4 +201,3 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 MVP uses two Workers, one D1 database, D1 capacity coordination, one active Cebu fulfillment location, and a provider-neutral payment integration boundary. The schema and domain remain multi-location.
 
 Future scaling options include additional locations and markets, D1 read replication sessions for read-heavy operations, Durable Objects for proven hot coordination, stock transfers, central/local procurement routing, Workflows for long-running orchestration, richer analytics stores, and selective module extraction. Extraction requires a demonstrated independent scaling, security, deployment, or ownership need and must preserve typed contracts and business invariants.
-

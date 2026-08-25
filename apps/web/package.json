@@ -14,7 +14,9 @@
     "deploy": "vinext-cloudflare deploy --config dist/server/wrangler.json"
   },
   "dependencies": {
+    "@freshmarkets/config": "workspace:*",
     "@freshmarkets/contracts": "workspace:*",
+    "@freshmarkets/validation": "workspace:*",
     "@vinext/cloudflare": "1.0.0-beta.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

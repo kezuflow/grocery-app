@@ -22,3 +22,15 @@ Repository path, migration, documentation, and workspace-package conventions are
 ## Verification Scope
 
 The local checker validates source/config/documentation paths and package manifests while ignoring generated output, dependencies, caches, and local runtime state. It reports every violation with the expected rule and exits non-zero so it can gate commits and GitHub Actions.
+
+## Commit Messages
+
+New commits use the Conventional Commits format:
+
+```text
+<type>(<optional-scope>): <imperative description>
+```
+
+Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, and `test`. Use `!` before the colon for a breaking change, for example `feat(api)!: replace the catalog response`. Descriptions must be non-empty and must not end with a period.
+
+Run `pnpm commit:check` to validate `HEAD`. Run `pnpm hooks:install` once per clone to enable the repository-managed `.githooks/commit-msg` hook for new commits. Existing history predating this rule is not rewritten automatically.

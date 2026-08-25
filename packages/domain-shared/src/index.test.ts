@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { assertNonNegativeInteger } from "./index";
+import { fixedClock, systemClock } from "./index";
 
-describe("shared integer conventions", () => {
-  it("accepts exact non-negative integers", () => {
-    expect(assertNonNegativeInteger(250, "quantity")).toBe(250);
+describe("Clock", () => {
+  it("returns deterministic copies for tests", () => {
+    const clock = fixedClock("2026-01-02T03:04:05.000Z");
+    const first = clock.now();
+    first.setUTCFullYear(2030);
+    expect(clock.now().toISOString()).toBe("2026-01-02T03:04:05.000Z");
   });
 
-  it("rejects negative and fractional values", () => {
-    expect(() => assertNonNegativeInteger(-1, "quantity")).toThrow();
-    expect(() => assertNonNegativeInteger(1.5, "quantity")).toThrow();
+  it("provides a system clock", () => {
+    expect(systemClock.now()).toBeInstanceOf(Date);
   });
 });

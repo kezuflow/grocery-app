@@ -150,3 +150,6 @@ Every workspace designs:
 - Staff/Roles: manage capabilities and location scope.
 - Audit: inspect immutable material operations.
 
+## Phase-0 Proposal
+
+The detailed admin IA, shell, table/filter standards, component inventory, responsive behavior, and approval gates live in `ADMIN_DESIGN.md`.

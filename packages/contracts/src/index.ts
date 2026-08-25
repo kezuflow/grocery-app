@@ -14,6 +14,19 @@ export type AppErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "STALE_VERSION"
+  | "SUBSCRIPTION_REQUIRED"
+  | "ADDRESS_NOT_SERVICEABLE"
+  | "CYCLE_CLOSED"
+  | "CYCLE_FULL"
+  | "INSUFFICIENT_STOCK"
+  | "CAPACITY_UNAVAILABLE"
+  | "PRICE_CHANGED"
+  | "ITEM_UNAVAILABLE"
+  | "PROMOTION_INELIGIBLE"
+  | "PAYMENT_REQUIRED"
+  | "PAYMENT_FAILED"
+  | "ILLEGAL_TRANSITION"
+  | "IDEMPOTENCY_CONFLICT"
   | "INTERNAL_ERROR";
 
 export type AppError = {
@@ -322,6 +335,7 @@ export type AdminOrderCommandRequest = AuthenticatedRequest & {
   action: "CANCEL" | "REFUND";
   reason: string;
   idempotencyKey: string;
+  expectedVersion?: number;
 };
 export type AdminCommandResult = { id: string; status: string };
 export type InventoryAdjustmentRequest = AuthenticatedRequest & {
@@ -330,6 +344,7 @@ export type InventoryAdjustmentRequest = AuthenticatedRequest & {
   delta: number;
   reason: string;
   idempotencyKey: string;
+  expectedVersion?: number;
 };
 export type ProcurementCommandRequest = AuthenticatedRequest & {
   deliveryCycleId: string;
@@ -337,6 +352,7 @@ export type ProcurementCommandRequest = AuthenticatedRequest & {
   inventoryPoolId: string;
   quantity: number;
   idempotencyKey: string;
+  expectedVersion?: number;
 };
 export type ReceivingCommandRequest = AuthenticatedRequest & {
   requirementId: string;
@@ -344,14 +360,17 @@ export type ReceivingCommandRequest = AuthenticatedRequest & {
   rejectedQuantity: number;
   reason?: string;
   idempotencyKey: string;
+  expectedVersion?: number;
 };
 export type FulfillmentCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "START" | "PACK" | "SHORTAGE";
   idempotencyKey: string;
+  expectedVersion?: number;
 };
 export type DeliveryCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "DISPATCH" | "DELIVER" | "FAIL";
   idempotencyKey: string;
+  expectedVersion?: number;
 };

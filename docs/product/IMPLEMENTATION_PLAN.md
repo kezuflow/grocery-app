@@ -6,6 +6,46 @@ Implement vertical/domain foundations in dependency order, not page order. Each 
 
 Every phase below explicitly excludes work that belongs later.
 
+## Remediation Pass 1 — P0/P1 Foundations (2026-08-25)
+
+This bounded remediation pass is applied across the existing MVP slice before
+further phase expansion. It preserves compatibility behavior and the locked
+business invariants while making the following decisions authoritative:
+
+- `docs/architecture/REMEDIATION_DECISIONS.md` records naming, lifecycle,
+  configuration, capacity, pricing, and migration decisions for this pass.
+- `STATE_MACHINES.md` remains authoritative for lifecycle vocabulary and legal
+  transitions; `API_CONTRACTS.md` remains authoritative for target RPC shapes.
+- Existing MVP RPCs remain compatibility adapters until their replacement
+  contracts are implemented in the relevant phase.
+
+Completed foundations include boundary validation, operational scope checks,
+canonical Cebu configuration, clock injection, safe transition errors,
+expected-version fields/checks, idempotency primitives, and corrective
+migration `0007_remediation_foundations.sql`. These changes do not claim that
+the later commerce phases are complete.
+
+Still explicitly deferred to their owning phases are full replay/idempotency
+coverage, trigger replacement, cycle-zone capacity, checkout attempts and quote
+snapshots, payment events/webhooks, the inventory ledger, and complete flow and
+concurrency test coverage.
+
+## Remediation Pass 2 — Commerce Invariants (2026-08-26)
+
+The second bounded pass moves the existing compatibility checkout path onto the
+canonical persistence foundations without extracting domains or expanding UI.
+It adds cycle-zone-location capacity/allocation records, persisted checkout
+attempts and quote snapshots, sandbox payment events, inventory holds and ledger
+entries, and persisted Cebu minimum-basket/zone-fee policy. The historical D1
+triggers are removed by append-only migration after the compatibility command
+path takes ownership of those checks and writes.
+
+`commitMockOrder` remains the consumed compatibility RPC. It now coordinates
+idempotency, quote persistence, conditional capacity and stock holds, payment and
+order snapshots, and failure compensation. Full production payment webhooks,
+all-command idempotency, broader lifecycle implementations, and complete
+database-backed concurrent flow tests remain owned by their later phases.
+
 ## Phase 0 — Repository, Cloudflare, and Tooling Foundation
 
 ### Purpose

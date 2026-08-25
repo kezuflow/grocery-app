@@ -1,0 +1,116 @@
+import {
+  authenticatedRequestSchema,
+  coordinateSchema,
+  expectedVersionSchema,
+  idempotencyKeySchema,
+  identifierSchema,
+  nonZeroIntegerSchema,
+  positiveIntegerSchema,
+  reasonSchema,
+  z,
+} from "@freshmarkets/validation";
+
+export { authenticatedRequestSchema };
+
+const headersRequest = authenticatedRequestSchema;
+
+export const serviceabilityRequestSchema = z.object({
+  requestId: identifierSchema,
+  latitude: coordinateSchema,
+  longitude: coordinateSchema,
+  marketCode: identifierSchema.optional(),
+});
+
+export const catalogSearchRequestSchema = z.object({
+  requestId: identifierSchema,
+  query: z.string().trim().max(200).optional(),
+  limit: z.number().int().safe().min(1).max(50).optional(),
+  locationId: identifierSchema.optional(),
+});
+
+export const catalogProductRequestSchema = z.object({
+  requestId: identifierSchema,
+  slug: identifierSchema,
+  locationId: identifierSchema.optional(),
+});
+
+export const addressRequestSchema = headersRequest.extend({
+  label: reasonSchema,
+  recipient: reasonSchema,
+  phone: reasonSchema,
+  addressJson: z.string().min(2),
+  latitude: coordinateSchema,
+  longitude: coordinateSchema,
+  notes: z.string().max(1000).optional(),
+});
+
+export const checkoutRequestSchema = headersRequest.extend({
+  addressId: identifierSchema,
+  cycleId: identifierSchema,
+  cartId: identifierSchema,
+});
+
+export const commitOrderRequestSchema = checkoutRequestSchema.extend({
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const setCartItemRequestSchema = headersRequest.extend({
+  skuId: identifierSchema,
+  quantity: z.number().int().safe().nonnegative(),
+  locationId: identifierSchema.optional(),
+});
+
+export const adminOrderCommandSchema = headersRequest.extend({
+  orderId: identifierSchema,
+  action: z.enum(["CANCEL", "REFUND"]),
+  reason: reasonSchema,
+  idempotencyKey: idempotencyKeySchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const inventoryAdjustmentSchema = headersRequest.extend({
+  locationId: identifierSchema,
+  inventoryPoolId: identifierSchema,
+  delta: nonZeroIntegerSchema,
+  reason: reasonSchema,
+  idempotencyKey: idempotencyKeySchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const procurementCommandSchema = headersRequest.extend({
+  deliveryCycleId: identifierSchema,
+  locationId: identifierSchema,
+  inventoryPoolId: identifierSchema,
+  quantity: positiveIntegerSchema,
+  idempotencyKey: idempotencyKeySchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const receivingCommandSchema = headersRequest.extend({
+  requirementId: identifierSchema,
+  acceptedQuantity: z.number().int().safe().nonnegative(),
+  rejectedQuantity: z.number().int().safe().nonnegative(),
+  reason: z.string().max(1000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const fulfillmentCommandSchema = headersRequest.extend({
+  orderId: identifierSchema,
+  action: z.enum(["START", "PACK", "SHORTAGE"]),
+  idempotencyKey: idempotencyKeySchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const deliveryCommandSchema = headersRequest.extend({
+  orderId: identifierSchema,
+  action: z.enum(["DISPATCH", "DELIVER", "FAIL"]),
+  idempotencyKey: idempotencyKeySchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export function validationMessage(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`)
+    .join(", ");
+}

@@ -14,6 +14,8 @@ Conventions:
 - Status columns are changed only by explicit application commands.
 - JSON snapshots are versioned application data, not an excuse to omit queryable foreign keys.
 
+The canonical operational capacity key is cycle × delivery zone × fulfillment location. The canonical price scope is SKU × market × optional location × price type. Historical MVP migrations may be narrower, but corrective migrations must move toward these keys without rewriting applied migrations.
+
 ## Better Auth-Owned Tables
 
 Better Auth migrations/schema define its exact table names and fields. Conceptually it owns (including the issuer-qualified account identity used by Better Auth 1.7+):

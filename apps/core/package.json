@@ -14,6 +14,8 @@
     "@better-auth/drizzle-adapter": "1.7.1",
     "@freshmarkets/config": "workspace:*",
     "@freshmarkets/contracts": "workspace:*",
+    "@freshmarkets/domain-shared": "workspace:*",
+    "@freshmarkets/validation": "workspace:*",
     "better-auth": "1.7.1",
     "drizzle-orm": "0.45.2"
   },

@@ -120,3 +120,16 @@ export function hasScope(scopes: ReadonlyArray<Scope>, required: Scope): boolean
         scope.locationId === required.locationId),
   );
 }
+
+export function hasOperationalScope(
+  scopes: ReadonlyArray<Scope>,
+  locationId: string,
+  marketId?: string,
+): boolean {
+  return scopes.some(
+    (scope) =>
+      scope.kind === "global" ||
+      (scope.kind === "location" && scope.locationId === locationId) ||
+      (scope.kind === "market" && Boolean(marketId) && scope.marketId === marketId),
+  );
+}

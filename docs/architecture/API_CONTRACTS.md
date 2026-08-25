@@ -4,6 +4,8 @@
 
 Contracts live in `packages/contracts` and are shared as source/types within the monorepo. They define RPC method names, input validation, purpose-built DTOs, stable error codes, and pagination. They never export D1 row types, Better Auth table records, provider payloads, or infrastructure handles.
 
+During remediation, the domain-oriented commands in this document are the target contract. Existing MVP RPC methods such as `commitMockOrder` and `advanceDelivery` remain compatibility adapters until Web clients migrate; they must not become a second business implementation.
+
 Core owns implementation and authorization. Web owns presentation adapters. Contract changes are reviewed as application-interface changes and should prefer additive evolution while both deployments may be temporarily version-skewed during rollout.
 
 ## Common Envelope and Context
