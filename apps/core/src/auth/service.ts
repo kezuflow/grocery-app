@@ -3,6 +3,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth/minimal";
 import type { Auth } from "better-auth";
 import { log } from "../observability";
+import { trustedOriginsForEnvironment } from "./origins";
 import { authSchema } from "./schema";
 
 export type AuthEnvironment = {
@@ -10,6 +11,7 @@ export type AuthEnvironment = {
   ENVIRONMENT?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  TRUSTED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 };
@@ -88,14 +90,7 @@ export function createAuth(env: AuthEnvironment): Auth<any> {
           },
         }
       : {},
-    trustedOrigins: async (request) => {
-      const origin = request?.headers.get("origin");
-      const forwardedOrigin = request?.headers.get("x-forwarded-origin");
-      const requestOrigin = originFromRequest(request);
-      return [origin, forwardedOrigin, requestOrigin].filter((value): value is string =>
-        Boolean(value),
-      );
-    },
+    trustedOrigins: [...trustedOriginsForEnvironment(env)],
     advanced: {
       useSecureCookies: environment === "production",
       defaultCookieAttributes: {
