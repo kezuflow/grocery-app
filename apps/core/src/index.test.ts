@@ -10,6 +10,7 @@ describe("Core Worker foundation", () => {
       ENVIRONMENT: "development",
       BETTER_AUTH_URL: "http://127.0.0.1:8788",
       TRUSTED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,https://core.example.invalid",
+      PAYMENT_MODE: "sandbox",
     });
 
     expect(response.service).toBe("core");

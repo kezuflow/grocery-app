@@ -3,7 +3,7 @@ import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../lib/core-client/request";
 const operationBodySchema = z.object({
-  command: z.enum(["inventory", "procurement", "receiving", "fulfillment", "delivery"]),
+  command: z.enum(["inventory", "procurement", "receiving", "fulfillment", "delivery", "orders"]),
   locationId: z.string().trim().min(1).optional(),
   inventoryPoolId: z.string().trim().min(1).optional(),
   deliveryCycleId: z.string().trim().min(1).optional(),
@@ -144,6 +144,30 @@ export async function POST(request: Request) {
     return Response.json(
       await core.advanceDelivery({ ...common, orderId: body.orderId, action: action.data }),
     );
+  }
+  if (body.command === "orders") {
+    const action = z.enum(["CANCEL", "REFUND"]).safeParse(body.action);
+    if (!body.orderId || !body.reason || !action.success)
+      return Response.json(
+        {
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Order command fields are required",
+            requestId: common.requestId,
+          },
+        },
+        { status: 400 },
+      );
+    const result = await core.advanceOrder({
+      ...common,
+      orderId: body.orderId,
+      action: action.data,
+      reason: body.reason,
+    });
+    if (!result.ok && result.error.code === "FINANCIAL_OPERATION_REQUIRES_REVIEW")
+      return Response.json(result, { status: 409 });
+    return Response.json(result);
   }
   return Response.json(
     {

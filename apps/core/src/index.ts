@@ -31,6 +31,7 @@ import {
 } from "./validation";
 import { findIdempotencyRecord, requestHash } from "./idempotency";
 import { isSandboxPaymentEnabled, type PaymentRuntimeEnvironment } from "./payments/sandbox-policy";
+import { financialOperationDisposition } from "./orders/financial-safety";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
 import { expireCheckoutAttempts } from "./commerce/reconciliation";
 import { drizzle } from "drizzle-orm/d1";
@@ -1366,6 +1367,34 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminOrderCommandSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const row = await this.env.DB.prepare(
+      "SELECT o.status, f.location_id FROM grocery_order o LEFT JOIN fulfillment_record f ON f.order_id=o.id WHERE o.id=?",
+    )
+      .bind(input.orderId)
+      .first<{ status: string; location_id: string | null }>();
+    if (!row) return fail("NOT_FOUND", "Order not found", input.requestId);
+    const locationId =
+      row.location_id ?? (await this.activeFulfillmentLocationId(await this.activeMarketCode()));
+    if (!locationId)
+      return fail(
+        "CONFIGURATION_ERROR",
+        "No active fulfillment location is configured",
+        input.requestId,
+      );
+    if (!(await this.requireOperationalAccess(input, "order:manage", locationId)))
+      return fail(
+        "FORBIDDEN",
+        "Order management capability and location scope are required",
+        input.requestId,
+      );
+    if (
+      financialOperationDisposition(input.action, row.status) === "REQUIRES_CANONICAL_ORCHESTRATION"
+    )
+      return fail(
+        "FINANCIAL_OPERATION_REQUIRES_REVIEW",
+        "Refunds and paid-order cancellation require canonical payment orchestration",
+        input.requestId,
+      );
     const operationScope = "orders.advance";
     const operationPayload = {
       orderId: input.orderId,
@@ -1398,26 +1427,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       }
       return fail("CONFLICT", "The original order command is still processing", input.requestId);
     }
-    const row = await this.env.DB.prepare(
-      "SELECT o.status, f.location_id FROM grocery_order o LEFT JOIN fulfillment_record f ON f.order_id=o.id WHERE o.id=?",
-    )
-      .bind(input.orderId)
-      .first<{ status: string; location_id: string | null }>();
-    if (!row) return fail("NOT_FOUND", "Order not found", input.requestId);
-    const locationId =
-      row.location_id ?? (await this.activeFulfillmentLocationId(await this.activeMarketCode()));
-    if (!locationId)
-      return fail(
-        "CONFIGURATION_ERROR",
-        "No active fulfillment location is configured",
-        input.requestId,
-      );
-    if (!(await this.requireOperationalAccess(input, "order:manage", locationId)))
-      return fail(
-        "FORBIDDEN",
-        "Order management capability and location scope are required",
-        input.requestId,
-      );
     const transitionResult = this.transitionOrError(
       row.status,
       input.action === "CANCEL" ? "CANCELED" : "REFUNDED",
@@ -1426,11 +1435,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     );
     if (!transitionResult.ok) return transitionResult;
     const next = transitionResult.value;
-    const orderContext = await this.env.DB.prepare(
-      "SELECT cycle_id, payment_id, total_minor, currency FROM grocery_order WHERE id=?",
-    )
-      .bind(input.orderId)
-      .first<{ cycle_id: string; payment_id: string; total_minor: number; currency: string }>();
     const orderUpdate = this.env.DB.prepare(
       input.expectedVersion === undefined
         ? "UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=?"
@@ -1457,45 +1461,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         operationScope,
         input.idempotencyKey,
       ),
-      this.env.DB.prepare(
-        "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at) SELECT lower(hex(randomblob(16))), r.inventory_pool_id, r.location_id, 'RESERVATION_RELEASE', 0, -SUM(r.quantity), 'grocery_order', r.order_id, 'STAFF', 'ORDER_CANCELLATION', '{}', ? FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED') GROUP BY r.inventory_pool_id, r.location_id, r.order_id",
-      ).bind(this.now(), input.orderId, operationScope, input.idempotencyKey),
-      this.env.DB.prepare(
-        "UPDATE inventory_balance SET reserved=MAX(0,reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED')), version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED') AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-      ).bind(input.orderId, input.orderId, operationScope, input.idempotencyKey),
-      this.env.DB.prepare(
-        "UPDATE inventory_reservation SET status='RELEASED', version=version+1 WHERE order_id=? AND status='RESERVED' AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-      ).bind(input.orderId, operationScope, input.idempotencyKey),
-      this.env.DB.prepare(
-        "UPDATE committed_demand SET status='CANCELED', version=version+1 WHERE order_id=? AND status='OPEN' AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-      ).bind(input.orderId, operationScope, input.idempotencyKey),
     ];
-    if (orderContext)
-      statements.push(
-        this.env.DB.prepare(
-          "UPDATE cycle_zone_capacity SET allocated=MAX(0,allocated-1), version=version+1 WHERE EXISTS (SELECT 1 FROM capacity_allocations ca WHERE ca.order_id=? AND ca.cycle_id=cycle_zone_capacity.cycle_id AND ca.zone_id=cycle_zone_capacity.zone_id AND ca.location_id=cycle_zone_capacity.location_id AND ca.status='COMMITTED') AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-        ).bind(input.orderId, operationScope, input.idempotencyKey),
-        this.env.DB.prepare(
-          "UPDATE capacity_allocations SET status='RELEASED', updated_at=? WHERE order_id=? AND status='COMMITTED' AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-        ).bind(this.now(), input.orderId, operationScope, input.idempotencyKey),
-      );
-    if (input.action === "REFUND" && orderContext)
-      statements.push(
-        this.env.DB.prepare(
-          "INSERT INTO refund (id, payment_id, order_id, amount_minor, currency, status, reason, created_at, updated_at) SELECT ?, ?, ?, ?, ?, 'SUCCEEDED', ?, ?, ? WHERE EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='SUCCEEDED')",
-        ).bind(
-          crypto.randomUUID(),
-          orderContext.payment_id,
-          input.orderId,
-          orderContext.total_minor,
-          orderContext.currency,
-          input.reason,
-          this.now(),
-          this.now(),
-          operationScope,
-          input.idempotencyKey,
-        ),
-      );
     const batchResults = await this.env.DB.batch(statements);
     if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
       await this.env.DB.prepare(
