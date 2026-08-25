@@ -82,3 +82,10 @@ export type PaymentsService = {
     request: RecoverActivationRequest,
   ): Promise<RpcResult<SubscriptionActivationResult>>;
 };
+
+export type PaymentIntentCommandRequest = AuthenticatedRequest & {
+  checkoutAttemptId: string;
+  providerCode?: string;
+  returnUrl: string;
+  idempotencyKey: string;
+};

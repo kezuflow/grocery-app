@@ -107,7 +107,7 @@ export async function applyAmendmentPaymentReaction(
           .bind(reserved, amendment.location_id ?? "", poolId, reserved),
         database
           .prepare(
-            "INSERT INTO inventory_reservation (id, order_id, location_id, inventory_pool_id, quantity, status) VALUES (?, ?, ?, ?, ?, 'RESERVED')",
+            "INSERT INTO inventory_reservation (id, order_id, location_id, inventory_pool_id, quantity, status) SELECT ?, ?, ?, ?, ?, 'RESERVED' WHERE changes()=1",
           )
           .bind(
             crypto.randomUUID(),

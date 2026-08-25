@@ -211,9 +211,22 @@ export async function applyCheckoutPaymentReaction(
           .bind(reservedBase, cycleSnapshot.locationId, plan.poolId, reservedBase),
         database
           .prepare(
-            "INSERT INTO inventory_reservation (id, order_id, location_id, inventory_pool_id, quantity, status) VALUES (?, ?, ?, ?, ?, 'RESERVED')",
+            "INSERT INTO inventory_reservation (id, order_id, location_id, inventory_pool_id, quantity, status) SELECT ?, ?, ?, ?, ?, 'RESERVED' WHERE changes()=1",
           )
           .bind(crypto.randomUUID(), orderId, cycleSnapshot.locationId, plan.poolId, reservedBase),
+        database
+          .prepare(
+            "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at, idempotency_key) SELECT ?, ?, ?, 'CHECKOUT_HOLD', 0, ?, 'grocery_order', ?, 'CUSTOMER', 'CHECKOUT_COMMIT', '{}', ?, ? WHERE changes()=1",
+          )
+          .bind(
+            crypto.randomUUID(),
+            plan.poolId,
+            cycleSnapshot.locationId,
+            reservedBase,
+            orderId,
+            now,
+            input.reactionId,
+          ),
       );
     }
     if (plannedBase > 0) {
@@ -234,7 +247,24 @@ export async function applyCheckoutPaymentReaction(
     }
   }
 
+  // Hard-abort sentinel: when any guarded reservation failed to land, the
+  // mismatching count forces a CHECK violation that rolls back the entire
+  // commitment transaction.
+  const expectedReservationRows = [...pools.values()].filter((plan) => {
+    const reserved =
+      plan.sourcingMode === "STOCKED"
+        ? plan.requestedBase
+        : plan.sourcingMode === "HYBRID"
+          ? Math.min(plan.requestedBase, plan.availableBase)
+          : 0;
+    return reserved > 0;
+  }).length;
   statements.push(
+    database
+      .prepare(
+        "INSERT INTO commitment_abort (id) SELECT -1 WHERE ? > 0 AND (SELECT COUNT(*) FROM inventory_reservation WHERE order_id=?) != ?",
+      )
+      .bind(expectedReservationRows, orderId, expectedReservationRows),
     database
       .prepare(
         "UPDATE payment_reaction SET status='SUCCEEDED', attempts=attempts+1, updated_at=? WHERE id=?",
@@ -254,8 +284,8 @@ export async function applyCheckoutPaymentReaction(
       .first<{ order_id: string }>();
     if (winner) return { applied: true, reason: "ALREADY_APPLIED", orderId: winner.order_id };
     if (
+      message.includes("CHECK constraint failed") ||
       message.includes("on_hand-reserved") ||
-      message.includes("CHECK constraint failed: allocated") ||
       message.includes("capacity")
     ) {
       await database

@@ -72,7 +72,7 @@ async function seededCheckout(
 
   const cartId = `cart-co-${n}`;
   await env.DB.prepare(
-    "INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at) VALUES (?, ?, 'location-cebu-central', 'active', 3, ?, ?)",
+    "INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at) VALUES (?, ?, 'location-cebu-central', 'ACTIVE', 3, ?, ?)",
   )
     .bind(cartId, customerId, now, now)
     .run();

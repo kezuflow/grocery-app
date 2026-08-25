@@ -97,3 +97,11 @@ CREATE TABLE IF NOT EXISTS finance_exception (
 
 CREATE INDEX IF NOT EXISTS finance_exception_open_idx ON finance_exception(status, created_at);
 CREATE INDEX IF NOT EXISTS finance_exception_intent_idx ON finance_exception(payment_intent_id, status);
+
+-- Transactional abort sentinel: exactly one row with id=0 may exist. A batched
+-- INSERT of any other value violates the CHECK and rolls back the whole
+-- commitment when guarded effects (reservations/capacity) did not fully land.
+CREATE TABLE IF NOT EXISTS commitment_abort (
+  id INTEGER PRIMARY KEY CHECK (id = 0)
+);
+INSERT OR IGNORE INTO commitment_abort (id) VALUES (0);

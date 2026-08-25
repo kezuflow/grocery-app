@@ -52,32 +52,59 @@ export default function CheckoutPage() {
       setStatus("Address confirmed for delivery.");
     } else setStatus(result.error?.message ?? "Address is outside the active delivery area.");
   }
-  async function commit(cycleId: string) {
+  async function startPayment(cycleId: string) {
     if (!cart || !addressId) {
       setStatus("Confirm a serviceable address first.");
       return;
     }
-    const response = await fetch("/api/commerce/checkout", {
+    // 1) Core-authoritative quote (evidence only; reserves nothing).
+    const quoteResponse = await fetch("/api/checkout/quote", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": attemptKey.current,
+      },
       body: JSON.stringify({
         cartId: cart.id,
+        cartVersion: cart.version,
         addressId,
         cycleId,
-        commit: true,
-        idempotencyKey: attemptKey.current,
       }),
     });
-    const result = (await response.json()) as {
+    const quoteResult = (await quoteResponse.json()) as {
       ok: boolean;
-      value?: { orderId: string };
+      value?: { quoteId: string; totalMinor: number; currency: string };
+      error?: { code: string; message: string };
+    };
+    if (!quoteResult.ok) {
+      setStatus(quoteResult.error?.message ?? "Could not price your order.");
+      return;
+    }
+    setStatus(
+      `Quote ready: ${quoteResult.value?.currency} ${(quoteResult.value?.totalMinor ?? 0) / 100}. Starting payment...`,
+    );
+    // 2) Canonical payment intent. Order commitment happens in Core from the
+    // provider-confirmed payment reaction — never from this browser.
+    const paymentResponse = await fetch("/api/checkout/payment", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": attemptKey.current,
+      },
+      body: JSON.stringify({
+        checkoutAttemptId: quoteResult.value?.quoteId ?? "",
+        returnUrl: window.location.origin + "/orders",
+      }),
+    });
+    const paymentResult = (await paymentResponse.json()) as {
+      ok: boolean;
       error?: { message: string };
     };
-    if (result.ok) {
-      setStatus(`Local sandbox order ${result.value?.orderId} recorded (nonproduction).`);
+    if (paymentResult.ok) {
+      setStatus("Payment started. Your order appears here once payment is confirmed.");
       attemptKey.current = `checkout-${crypto.randomUUID()}`;
     } else {
-      setStatus(result.error?.message ?? "Checkout failed.");
+      setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
     }
   }
   return (
@@ -115,7 +142,7 @@ export default function CheckoutPage() {
           {cycles.map((cycle) => (
             <button
               key={cycle.id}
-              onClick={() => commit(cycle.id)}
+              onClick={() => startPayment(cycle.id)}
               disabled={!sandboxPaymentEnabled}
               className="flex items-center justify-between rounded-lg border bg-white p-4 text-left disabled:cursor-not-allowed disabled:opacity-50"
             >

@@ -31,7 +31,6 @@ export type HealthService = {
 export type {
   CoreServiceBinding,
   ImplementedCoreService,
-  LegacyCommerceService,
   LegacyOperationsService,
 } from "./core-service";
 
@@ -252,13 +251,27 @@ export type CheckoutEligibilityView = {
   totalMinor: number;
   currency: string;
 };
-export type CommitMockOrderRequest = CheckoutEligibilityRequest & { idempotencyKey: string };
-export type CommittedOrderView = {
-  orderId: string;
-  paymentStatus: "SUCCEEDED";
-  orderStatus: "COMMITTED";
-  totalMinor: number;
+export type CheckoutQuoteCommandRequest = AuthenticatedRequest & {
+  cartId: string;
+  cartVersion: number;
+  addressId: string;
+  deliveryCycleId: string;
+  idempotencyKey: string;
+};
+export type CheckoutQuoteView = {
+  quoteId: string;
+  attemptVersion: number;
+  expiresAt: string;
   currency: string;
+  subtotalMinor: number;
+  discountMinor: number;
+  deliveryFeeMinor: number;
+  totalMinor: number;
+  lines: ReadonlyArray<Record<string, unknown>>;
+};
+export type CheckoutQuoteRefreshRequest = AuthenticatedRequest & {
+  quoteId: string;
+  expectedVersion: number;
 };
 export type StartTrialRequest = AuthenticatedRequest & { offerCode?: string };
 export type CartView = {

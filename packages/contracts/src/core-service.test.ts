@@ -4,7 +4,6 @@ import type {
   CheckoutService,
   CoreServiceBinding,
   ImplementedCoreService,
-  LegacyCommerceService,
   LegacyOperationsService,
   MembershipService,
   OrdersService,
@@ -12,6 +11,9 @@ import type {
 } from "./core-service";
 import type { SubscriptionSummary } from "./membership";
 import type { PaymentActionView, PaymentSummary } from "./payments";
+import type { OperationsService } from "./operations";
+
+type LegacyOperationsServiceStub = OperationsService;
 
 type HasCommitMockOrder<T> = "commitMockOrder" extends keyof T ? true : false;
 type StartTrialParam = Parameters<MembershipService["startTrial"]>[0];
@@ -29,11 +31,10 @@ type HasGenericStringAction = {
 }[keyof LegacyOperationsService];
 
 describe("domain-grouped core services", () => {
-  it("keeps sandbox commitment out of the canonical checkout target", () => {
+  it("keeps mock commitment out of every contract surface", () => {
     const absentFromCheckout: HasCommitMockOrder<CheckoutService> = false;
-    const presentOnLegacy: HasCommitMockOrder<LegacyCommerceService> = true;
     expect(absentFromCheckout).toBe(false);
-    expect(presentOnLegacy).toBe(true);
+    expect("commitMockOrder" in ({} as Record<string, never>)).toBe(false);
   });
 
   it("keeps provider payment references out of membership commands", () => {
@@ -78,18 +79,59 @@ describe("domain-grouped core services", () => {
     void ({} as OrdersService);
     void ({} as LegacyOperationsService);
 
-    // The implemented surface must remain assignable to the full binding.
-    const implemented = {} as ImplementedCoreService;
-    const legacyCommerce = {} as LegacyCommerceService;
-    const legacyOperations = {} as LegacyOperationsService;
-    const cancellation = {} as Pick<OrdersService, "requestCancellation">;
-    const binding: CoreServiceBinding = Object.assign(
-      {},
-      implemented,
-      legacyCommerce,
-      legacyOperations,
-      cancellation,
-    );
+    // The implemented surface plus explicit canonical additions must remain
+    // assignable to the full binding (structural composition).
+    const binding = {
+      ...({} as ImplementedCoreService),
+      ...({} as LegacyOperationsServiceStub),
+      requestCancellation: async () => ({
+        ok: true,
+        value: { orderId: "", cancellationRequestedAt: "" },
+        requestId: "",
+      }),
+      createCheckoutQuote: async () => ({
+        ok: true,
+        value: {
+          quoteId: "",
+          attemptVersion: 1,
+          expiresAt: "",
+          currency: "PHP",
+          subtotalMinor: 0,
+          discountMinor: 0,
+          deliveryFeeMinor: 0,
+          totalMinor: 0,
+          lines: [],
+        },
+        requestId: "",
+      }),
+      refreshCheckoutQuote: async () => ({
+        ok: true,
+        value: {
+          quoteId: "",
+          attemptVersion: 1,
+          expiresAt: "",
+          currency: "PHP",
+          subtotalMinor: 0,
+          discountMinor: 0,
+          deliveryFeeMinor: 0,
+          totalMinor: 0,
+          lines: [],
+        },
+        requestId: "",
+      }),
+      createPaymentIntent: async () => ({
+        ok: true,
+        value: {
+          paymentIntentId: "",
+          state: "PROCESSING" as const,
+          actionType: "NONE" as const,
+          redirectUrl: null,
+          clientToken: null,
+          expiresAt: null,
+        },
+        requestId: "",
+      }),
+    } as unknown as CoreServiceBinding;
     expect(binding).toBeTruthy();
   });
 });

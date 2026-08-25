@@ -2,16 +2,13 @@ import type { AppError, RpcResult } from "./common";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
-import type {
-  AdminOrderCommandRequest,
-  CommittedOrderView,
-  CommitMockOrderRequest,
-  HealthService,
-} from "./index";
+import type { AdminOrderCommandRequest, HealthService } from "./index";
 import type { MembershipService } from "./membership";
 import type { CancellationResult, OrdersService, RequestOrderCancellationRequest } from "./orders";
 import type { OperationsService } from "./operations";
 import type { OperationsCommandState } from "./states";
+import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
+import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
 
 /**
  * The subset of the Core binding that Core supplies today. Target services are
@@ -25,12 +22,6 @@ export interface ImplementedCoreService
     Pick<MembershipService, "getSubscriptionEligibility" | "startTrial">,
     CheckoutService,
     Pick<OrdersService, "listCustomerOrders"> {}
-
-/** Compatibility methods pending their canonical replacements. */
-export interface LegacyCommerceService {
-  /** Sandbox commitment path guarded by PAYMENT_MODE; replaced by canonical checkout commitment (Plan 07). */
-  commitMockOrder(request: CommitMockOrderRequest): Promise<RpcResult<CommittedOrderView>>;
-}
 
 /** Generic operations commands pending the Plan 08 canonical operations surface. */
 export interface LegacyOperationsService extends OperationsService {
@@ -50,9 +41,14 @@ export interface LegacyOperationsService extends OperationsService {
 export interface CoreServiceBinding
   extends
     ImplementedCoreService,
-    LegacyCommerceService,
     LegacyOperationsService,
-    Pick<OrdersService, "requestCancellation"> {}
+    Pick<OrdersService, "requestCancellation"> {
+  /** Canonical quote creation resolved against the authenticated customer. */
+  createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
+  refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;
+  /** Canonical payment intent creation for a quote (fail-closed without a provider). */
+  createPaymentIntent(request: PaymentIntentCommandRequest): Promise<RpcResult<PaymentActionView>>;
+}
 
 export type { CancellationResult, RequestOrderCancellationRequest };
 

@@ -128,3 +128,22 @@ export function validationMessage(error: z.ZodError): string {
     .map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`)
     .join(", ");
 }
+
+export const createCheckoutQuoteSchema = headersRequest.extend({
+  cartId: identifierSchema,
+  cartVersion: positiveIntegerSchema,
+  addressId: identifierSchema,
+  deliveryCycleId: identifierSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const refreshCheckoutQuoteSchema = headersRequest.extend({
+  quoteId: identifierSchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const createPaymentIntentSchema = headersRequest.extend({
+  checkoutAttemptId: identifierSchema,
+  returnUrl: z.string().url().max(2000),
+  idempotencyKey: idempotencyKeySchema,
+});

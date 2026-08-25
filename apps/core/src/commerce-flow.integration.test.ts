@@ -81,23 +81,40 @@ describe("customer checkout flow", () => {
     };
     const eligibility = await core.evaluateCheckout(checkoutInput);
     expect(eligibility).toMatchObject({ ok: true, value: { eligible: true } });
-    const idempotencyKey = `flow-${crypto.randomUUID()}`;
-    const first = await core.commitMockOrder({ ...checkoutInput, idempotencyKey });
-    expect(first).toMatchObject({ ok: true, value: { orderStatus: "COMMITTED" } });
-    if (!first.ok) return;
-    const replay = await core.commitMockOrder({
-      ...checkoutInput,
-      requestId: requestId(),
-      idempotencyKey,
-    });
-    expect(replay).toMatchObject({ ok: true, value: first.value });
 
-    const conflict = await core.commitMockOrder({
-      ...checkoutInput,
+    // Canonical authoritative quote (idempotent replay, no payment artifacts).
+    const cartNow = await core.getCart(request());
+    if (!cartNow.ok) throw new Error("cart unavailable");
+    const quoteKey = `flow-quote-${crypto.randomUUID()}`;
+    const quote = await core.createCheckoutQuote({
+      headers,
       requestId: requestId(),
-      addressId: `${address.value.id}-different`,
-      idempotencyKey,
+      addressId: address.value.id,
+      cartId: cart.value.id,
+      deliveryCycleId: cycles.value[0].id,
+      cartVersion: cartNow.value.version,
+      idempotencyKey: quoteKey,
     });
-    expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(quote).toMatchObject({
+      ok: true,
+      value: { totalMinor: quote.ok ? quote.value.totalMinor : 0 },
+    });
+    if (!quote.ok) return;
+    const quoteReplay = await core.createCheckoutQuote({
+      headers,
+      requestId: requestId(),
+      addressId: address.value.id,
+      cartId: cart.value.id,
+      deliveryCycleId: cycles.value[0].id,
+      cartVersion: cartNow.value.version,
+      idempotencyKey: quoteKey,
+    });
+    expect(quoteReplay.ok).toBe(true);
+    if (!quoteReplay.ok) return;
+    expect(quoteReplay.value.quoteId).toBe(quote.value.quoteId);
+    const intents = await env.DB.prepare("SELECT COUNT(*) AS count FROM payment_intent").first<{
+      count: number;
+    }>();
+    expect(intents?.count).toBe(0);
   });
 });

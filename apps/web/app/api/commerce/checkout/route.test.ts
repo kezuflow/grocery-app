@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("checkout route containment", () => {
-  it("returns HTTP 503 with the stable code and never calls commit outside sandbox", async () => {
+  it("retires the mock commitment path with HTTP 410 in every environment", async () => {
     const response = await POST(
       checkoutRequest({
         cartId: "cart-1",
@@ -42,7 +42,7 @@ describe("checkout route containment", () => {
         idempotencyKey: "attempt-1",
       }),
     );
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(410);
     const body = (await response.json()) as { ok: boolean; error: { code: string } };
     expect(body.ok).toBe(false);
     expect(body.error.code).toBe("PAYMENT_PROVIDER_UNAVAILABLE");

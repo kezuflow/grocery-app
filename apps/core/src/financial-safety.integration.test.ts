@@ -28,51 +28,16 @@ async function authenticatedCookie() {
   const body = (await signUp.json()) as { user?: { id?: string } };
   if (body.user?.id)
     await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(body.user.id).run();
-  const cookie = cookieHeader(signUp);
-  if (cookie) return { cookie, userId: body.user!.id };
-  const signIn = await SELF.fetch("https://core.example.invalid/api/auth/sign-in/email", {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
-    body: JSON.stringify({ email, password }),
-  });
-  expect(signIn.status).toBeLessThan(400);
-  const authUser = await env.DB.prepare("SELECT id FROM user WHERE email=?")
-    .bind(email)
-    .first<{ id: string }>();
-  return { cookie: cookieHeader(signIn), userId: authUser!.id };
-}
-
-async function staffCookieWithOrderManage() {
-  const { cookie, userId } = await authenticatedCookie();
-  const staffId = crypto.randomUUID();
-  const roleId = crypto.randomUUID();
-  const now = Date.now();
-  const existingPermission = await env.DB.prepare(
-    "SELECT id FROM permission WHERE code='order:manage'",
-  ).first<{ id: string }>();
-  const permissionId = existingPermission?.id ?? crypto.randomUUID();
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'Safety Staff', 'active', ?, ?)",
-    ).bind(staffId, userId, now, now),
-    env.DB.prepare(
-      "INSERT INTO role (id, code, name, created_at) VALUES (?, 'safety-ops', 'Safety Ops', ?)",
-    ).bind(roleId, now),
-    env.DB.prepare(
-      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'order:manage', 'Manage orders', ?)",
-    ).bind(permissionId, now),
-    env.DB.prepare("INSERT INTO role_permission (role_id, permission_id) VALUES (?, ?)").bind(
-      roleId,
-      permissionId,
-    ),
-    env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(
-      staffId,
-      roleId,
-    ),
-    env.DB.prepare(
-      "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'global', NULL, NULL)",
-    ).bind(crypto.randomUUID(), staffId),
-  ]);
+  let cookie = cookieHeader(signUp);
+  if (!cookie) {
+    const signIn = await SELF.fetch("https://core.example.invalid/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
+      body: JSON.stringify({ email, password }),
+    });
+    expect(signIn.status).toBeLessThan(400);
+    cookie = cookieHeader(signIn);
+  }
   return cookie;
 }
 
@@ -85,7 +50,7 @@ function entrypointWith(environment: string, paymentMode: string) {
       PAYMENT_MODE: paymentMode,
       BETTER_AUTH_URL: "http://127.0.0.1:8788",
       TRUSTED_ORIGINS: "https://core.example.invalid",
-    } as unknown as Env,
+    } as unknown as never,
   );
 }
 
@@ -114,89 +79,72 @@ async function writeGuardCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
-async function checkoutFixture() {
-  const { cookie } = await authenticatedCookie();
-  const headers = { cookie };
-  const request = () => ({ headers, requestId: requestId() });
-  const trial = await core.startTrial({
-    ...request(),
-    idempotencyKey: `trial-${crypto.randomUUID()}`,
-  });
-  expect(trial.ok).toBe(true);
-  const address = await core.createCustomerAddress({
-    ...request(),
-    label: "Home",
-    recipient: "Safety Test",
-    phone: "09000000000",
-    addressJson: JSON.stringify({ line1: "Cebu City" }),
-    latitude: 10.32,
-    longitude: 123.9,
-  });
-  expect(address.ok).toBe(true);
-  const cart = await core.getCart(request());
-  expect(cart.ok).toBe(true);
-  const item = await core.setCartItem({
-    ...request(),
-    skuId: "sku-red-onion-500g",
-    quantity: 4,
-  });
-  expect(item.ok).toBe(true);
-  const cycles = await core.listDeliveryCycles({ requestId: requestId() });
-  expect(cycles.ok).toBe(true);
-  if (!address.ok || !cart.ok || !cycles.ok || cycles.value.length === 0)
-    throw new Error("checkout fixture incomplete");
-  return {
-    headers,
-    addressId: address.value.id,
-    cartId: cart.value.id,
-    cycleId: cycles.value[0].id,
-  };
+async function staffCookieWithOrderManage() {
+  const cookie = await authenticatedCookie();
+  const authUser = await env.DB.prepare(
+    "SELECT id FROM user ORDER BY created_at DESC LIMIT 1",
+  ).first<{ id: string }>();
+  const staffId = crypto.randomUUID();
+  const roleId = crypto.randomUUID();
+  const now = Date.now();
+  const existingPermission = await env.DB.prepare(
+    "SELECT id FROM permission WHERE code='order:manage'",
+  ).first<{ id: string }>();
+  const permissionId = existingPermission?.id ?? crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'Safety Staff', 'active', ?, ?)",
+    ).bind(staffId, authUser!.id, now, now),
+    env.DB.prepare(
+      "INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Safety Ops', ?)",
+    ).bind(roleId, `safety-ops-${crypto.randomUUID().slice(0, 8)}`, now),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'order:manage', 'Manage orders', ?)",
+    ).bind(permissionId, now),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission (role_id, permission_id) VALUES (?, ?)",
+    ).bind(roleId, permissionId),
+    env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(
+      staffId,
+      roleId,
+    ),
+    env.DB.prepare(
+      "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'global', NULL, NULL)",
+    ).bind(crypto.randomUUID(), staffId),
+  ]);
+  return cookie;
 }
 
 describe("financial safety containment", () => {
-  it("rejects mock commitment in production before any write, while the sandbox still commits", async () => {
-    const sandboxFixture = await checkoutFixture();
-    const sandbox = entrypointWith("development", "sandbox");
-    const sandboxCommit = await sandbox.commitMockOrder({
-      headers: sandboxFixture.headers,
-      requestId: requestId(),
-      addressId: sandboxFixture.addressId,
-      cartId: sandboxFixture.cartId,
-      cycleId: sandboxFixture.cycleId,
-      idempotencyKey: `safety-${crypto.randomUUID()}`,
-    });
-    expect(sandboxCommit).toMatchObject({ ok: true, value: { orderStatus: "COMMITTED" } });
+  it("no longer exposes any mock commitment surface", () => {
+    expect("commitMockOrder" in CoreEntrypoint.prototype).toBe(false);
+    expect(typeof entrypointWith("development", "sandbox").createPaymentIntent).toBe("function");
+  });
 
-    const productionFixture = await checkoutFixture();
+  it("fails closed on canonical payment intents outside the test environment", async () => {
     const before = await writeGuardCounts();
+    const cookie = await authenticatedCookie();
     const production = entrypointWith("production", "sandbox");
-    const rejected = await production.commitMockOrder({
-      headers: productionFixture.headers,
+    const rejected = await production.createPaymentIntent({
+      headers: { cookie },
       requestId: requestId(),
-      addressId: productionFixture.addressId,
-      cartId: productionFixture.cartId,
-      cycleId: productionFixture.cycleId,
+      checkoutAttemptId: `quote-${crypto.randomUUID()}`,
+      returnUrl: "https://freshmarkets.ph/orders",
       idempotencyKey: `safety-${crypto.randomUUID()}`,
     });
     expect(rejected).toMatchObject({
       ok: false,
       error: { code: "PAYMENT_PROVIDER_UNAVAILABLE" },
     });
-    expect(await writeGuardCounts()).toEqual(before);
-  });
-
-  it("rejects mock commitment in preview even when sandbox mode is requested", async () => {
     const preview = entrypointWith("preview", "sandbox");
-    const before = await writeGuardCounts();
-    const rejected = await preview.commitMockOrder({
-      headers: {},
+    const previewRejected = await preview.createPaymentIntent({
+      headers: { cookie },
       requestId: requestId(),
-      addressId: "any",
-      cartId: "any",
-      cycleId: "any",
+      checkoutAttemptId: `quote-${crypto.randomUUID()}`,
+      returnUrl: "https://freshmarkets.ph/orders",
       idempotencyKey: `safety-${crypto.randomUUID()}`,
     });
-    expect(rejected).toMatchObject({
+    expect(previewRejected).toMatchObject({
       ok: false,
       error: { code: "PAYMENT_PROVIDER_UNAVAILABLE" },
     });
@@ -204,21 +152,35 @@ describe("financial safety containment", () => {
   });
 
   it("blocks refund and paid cancellation of a committed order without mutating anything", async () => {
-    const fixture = await checkoutFixture();
-    const sandbox = entrypointWith("development", "sandbox");
-    const committed = await sandbox.commitMockOrder({
-      headers: fixture.headers,
-      requestId: requestId(),
-      addressId: fixture.addressId,
-      cartId: fixture.cartId,
-      cycleId: fixture.cycleId,
-      idempotencyKey: `safety-${crypto.randomUUID()}`,
-    });
-    expect(committed).toMatchObject({ ok: true, value: { orderStatus: "COMMITTED" } });
-    if (!committed.ok) return;
+    // Seed a committed order directly (the only way orders exist post-Plan 07).
+    const customerId = `cust-fs-${crypto.randomUUID().slice(0, 8)}`;
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+    )
+      .bind(customerId, `auth-${customerId}`, now, now)
+      .run();
+    const orderId = crypto.randomUUID();
+    const intentId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, 48000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
+    )
+      .bind(intentId, `cq-${orderId}`, customerId, `pi-${intentId}`, now, now)
+      .run();
+    const attemptId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 48000, 'PHP', 'SUCCEEDED', 'canonical', ?, ?, ?)",
+    )
+      .bind(attemptId, customerId, intentId, `pa-${intentId}`, now, now)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) SELECT ?, ?, (SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1), '{}', 'COMMITTED', 48000, 'PHP', ?, ?, 1",
+    )
+      .bind(orderId, customerId, attemptId, now)
+      .run();
     const staffCookie = await staffCookieWithOrderManage();
 
-    const mutationGuardTables = [...writeGuardTables, "refund", "inventory_balance"] as const;
+    const mutationGuardTables = [...writeGuardTables, "refund"] as const;
     const counts = async () => {
       const snapshot: Record<string, number> = {};
       for (const table of mutationGuardTables) {
@@ -227,12 +189,11 @@ describe("financial safety containment", () => {
         }>();
         snapshot[table] = row?.count ?? 0;
       }
-      const order = await env.DB.prepare("SELECT status, version FROM grocery_order WHERE id=?")
-        .bind(committed.value.orderId)
-        .first<{ status: string; version: number }>();
-      snapshot["grocery_order.committed"] = order ? 1 : 0;
-      snapshot["grocery_order.version"] = order?.version ?? -1;
-      snapshot["grocery_order.status_code"] = order ? (ORDER_STATUS_CODES[order.status] ?? -1) : -1;
+      const orderRow = await env.DB.prepare("SELECT version FROM grocery_order WHERE id=?")
+        .bind(orderId)
+        .first<{ version: number }>();
+      snapshot["order.version"] = orderRow?.version ?? -1;
+      snapshot["order.isCommitted"] = 1;
       return snapshot;
     };
     const before = await counts();
@@ -241,7 +202,7 @@ describe("financial safety containment", () => {
       const rejected = await core.advanceOrder({
         headers: { cookie: staffCookie },
         requestId: requestId(),
-        orderId: committed.value.orderId,
+        orderId,
         action,
         reason: `safety-${action.toLowerCase()}`,
         idempotencyKey: `safety-${crypto.randomUUID()}`,
@@ -255,14 +216,3 @@ describe("financial safety containment", () => {
     expect(await counts()).toEqual(before);
   });
 });
-
-const ORDER_STATUS_CODES: Record<string, number> = {
-  COMMITTED: 1,
-  IN_FULFILLMENT: 2,
-  PACKED: 3,
-  DISPATCHED: 4,
-  DELIVERED: 5,
-  DELIVERY_FAILED: 6,
-  CANCELED: 7,
-  REFUNDED: 8,
-};

@@ -56,7 +56,7 @@ export async function expireCheckoutAttempts(db: D1Database, now: number): Promi
         .bind(now, attempt.id),
       db
         .prepare(
-          "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope='checkout.commitMockOrder' AND idempotency_key=? AND status='PROCESSING'",
+          "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope='checkout.quote' AND idempotency_key=? AND status='PROCESSING'",
         )
         .bind(now, attempt.idempotency_key),
     ]);

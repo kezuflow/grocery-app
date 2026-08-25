@@ -76,7 +76,7 @@ export async function createCheckoutQuote(
 
   // Cart identity and version.
   const cart = await database
-    .prepare("SELECT id, customer_id, version FROM cart WHERE id=? AND status='active'")
+    .prepare("SELECT id, customer_id, version FROM cart WHERE id=? AND status='ACTIVE'")
     .bind(command.cartId)
     .first<{ id: string; customer_id: string; version: number }>();
   if (!cart || cart.customer_id !== command.customerId)

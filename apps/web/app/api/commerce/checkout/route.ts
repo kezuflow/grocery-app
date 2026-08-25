@@ -25,6 +25,18 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const body = parsed.data;
+  if (body.commit)
+    return Response.json(
+      {
+        ok: false,
+        error: {
+          code: "PAYMENT_PROVIDER_UNAVAILABLE",
+          message:
+            "Mock commitment was removed; use /api/checkout/quote and /api/checkout/payment.",
+        },
+      },
+      { status: 410 },
+    );
   const input = {
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
@@ -33,28 +45,5 @@ export async function POST(request: Request) {
     cycleId: body.cycleId,
   };
   const core = coreClient(env.CORE);
-  if (body.commit) {
-    let idempotencyKey: string;
-    try {
-      idempotencyKey = requireIdempotencyKey(request, body.idempotencyKey);
-    } catch (error) {
-      return Response.json(
-        { ok: false, error: { code: "VALIDATION_FAILED", message: (error as Error).message } },
-        { status: 400 },
-      );
-    }
-    if (!isWebSandboxPaymentEnabled(env))
-      return Response.json(
-        {
-          ok: false,
-          error: {
-            code: "PAYMENT_PROVIDER_UNAVAILABLE",
-            message: "A payment provider is not configured for this environment.",
-          },
-        },
-        { status: 503 },
-      );
-    return Response.json(await core.commitMockOrder({ ...input, idempotencyKey }));
-  }
   return Response.json(await core.evaluateCheckout(input));
 }

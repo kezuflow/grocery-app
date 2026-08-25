@@ -13,7 +13,7 @@ import type {
 /**
  * Canonical checkout target port. Commitment lives behind
  * `createAttempt`/`createPayment`/`recoverCommitment`; the sandbox-only
- * `commitMockOrder` compatibility method is deliberately absent here.
+ * The retired sandbox commitment path has no representation here.
  */
 export type CheckoutService = {
   evaluateCheckout(
