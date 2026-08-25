@@ -1,5 +1,14 @@
+import type { CoreServiceBinding } from "./core-service";
+
 export * from "./common";
 export * from "./states";
+export type * from "./auth";
+export type * from "./catalog";
+export type * from "./membership";
+export type * from "./payments";
+export type * from "./checkout";
+export type * from "./orders";
+export type * from "./operations";
 
 import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult } from "./common";
 import type {
@@ -15,54 +24,16 @@ export type CoreEntrypoint = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
 };
 
-export type HealthService = Pick<CoreServiceBinding, "health">;
-
-export type CoreServiceBinding = {
+export type HealthService = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
-  auth(request: AuthRequest): Promise<AuthResponse>;
-  getApplicationContext(request: AuthContextRequest): Promise<RpcResult<ApplicationContext>>;
-  resolveServiceability(request: ServiceabilityRequest): Promise<RpcResult<ServiceabilityResult>>;
-  searchCatalog(request: CatalogSearchRequest): Promise<RpcResult<CatalogSearchPage>>;
-  getCatalogProduct(
-    request: CatalogProductRequest,
-  ): Promise<RpcResult<MarketplaceProductView | null>>;
-  listCategories(request: RequestMeta): Promise<RpcResult<CategoryNavigationView>>;
-  createCustomerAddress(
-    request: CreateCustomerAddressRequest,
-  ): Promise<RpcResult<CustomerAddressView>>;
-  listCustomerAddresses(
-    request: AuthenticatedRequest,
-  ): Promise<RpcResult<ReadonlyArray<CustomerAddressView>>>;
-  updateCustomerAddress(
-    request: UpdateCustomerAddressRequest,
-  ): Promise<RpcResult<CustomerAddressView>>;
-  getSubscriptionEligibility(
-    request: SubscriptionEligibilityRequest,
-  ): Promise<RpcResult<SubscriptionEligibility>>;
-  listDeliveryCycles(
-    request: DeliveryCycleRequest,
-  ): Promise<RpcResult<ReadonlyArray<DeliveryCycleView>>>;
-  evaluateCheckout(
-    request: CheckoutEligibilityRequest,
-  ): Promise<RpcResult<CheckoutEligibilityView>>;
-  commitMockOrder(request: CommitMockOrderRequest): Promise<RpcResult<CommittedOrderView>>;
-  startTrial(request: StartTrialRequest): Promise<RpcResult<SubscriptionEligibility>>;
-  getCart(request: AuthenticatedRequest): Promise<RpcResult<CartView>>;
-  setCartItem(request: SetCartItemRequest): Promise<RpcResult<CartView>>;
-  listCustomerOrders(
-    request: AuthenticatedRequest,
-  ): Promise<RpcResult<ReadonlyArray<CustomerOrderView>>>;
-  advanceOrder(request: AdminOrderCommandRequest): Promise<RpcResult<AdminCommandResult>>;
-  adjustInventory(
-    request: InventoryAdjustmentRequest,
-  ): Promise<RpcResult<InventoryAdjustmentResult>>;
-  createProcurementRequirement(
-    request: ProcurementCommandRequest,
-  ): Promise<RpcResult<AdminCommandResult>>;
-  receiveProcurement(request: ReceivingCommandRequest): Promise<RpcResult<ReceivingCommandResult>>;
-  advanceFulfillment(request: FulfillmentCommandRequest): Promise<RpcResult<AdminCommandResult>>;
-  advanceDelivery(request: DeliveryCommandRequest): Promise<RpcResult<AdminCommandResult>>;
 };
+
+export type {
+  CoreServiceBinding,
+  ImplementedCoreService,
+  LegacyCommerceService,
+  LegacyOperationsService,
+} from "./core-service";
 
 export type AuthRequest = {
   method: string;
@@ -258,7 +229,7 @@ export type CustomerAddressView = {
 export type SubscriptionEligibilityRequest = AuthenticatedRequest;
 export type SubscriptionEligibility = {
   eligible: boolean;
-  status: SubscriptionState | null;
+  state: SubscriptionState | null;
   trialEndsAt: string | null;
 };
 export type DeliveryCycleRequest = RequestMeta & { marketCode?: string };
