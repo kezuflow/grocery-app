@@ -30,6 +30,7 @@ import {
   validationMessage,
 } from "./validation";
 import { findIdempotencyRecord, requestHash } from "./idempotency";
+import { isSandboxPaymentEnabled, type PaymentRuntimeEnvironment } from "./payments/sandbox-policy";
 import { buildInventoryCommitPlan } from "./commerce/inventory-plan";
 import { expireCheckoutAttempts } from "./commerce/reconciliation";
 import { drizzle } from "drizzle-orm/d1";
@@ -870,6 +871,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   async commitMockOrder(input: import("@freshmarkets/contracts").CommitMockOrderRequest) {
+    if (!isSandboxPaymentEnabled(this.env as PaymentRuntimeEnvironment)) {
+      return fail(
+        "PAYMENT_PROVIDER_UNAVAILABLE",
+        "A payment provider is not configured for this environment.",
+        input.requestId,
+      );
+    }
     const validation = commitOrderRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
