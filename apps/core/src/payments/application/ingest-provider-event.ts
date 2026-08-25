@@ -250,6 +250,26 @@ export async function ingestProviderEvent(
       event.canonicalState,
     );
   }
+  if (application.processingStatus === "APPLIED" && event.kind === "payment") {
+    // Dispatch any durable downstream reaction created by this observation.
+    const reaction = await database
+      .prepare(
+        "SELECT id, subject_id FROM payment_reaction WHERE payment_intent_id=? AND status='PENDING' ORDER BY created_at ASC LIMIT 1",
+      )
+      .bind(application.paymentIntentId)
+      .first<{ id: string; subject_id: string }>();
+    if (reaction) {
+      const { applyMembershipPaymentReaction } =
+        await import("../../membership/application/apply-payment-reaction");
+      await applyMembershipPaymentReaction(database, {
+        reactionId: reaction.id,
+        paymentIntentId: application.paymentIntentId!,
+        subscriptionId: reaction.subject_id,
+        canonicalPaymentState: event.canonicalState,
+      });
+    }
+  }
+
   if (application.processingStatus === "RETRY_REQUIRED") {
     // Concurrent command changed the payment; retry or reconcile later.
     await repository.setInboxStatus({
