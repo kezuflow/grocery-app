@@ -38,7 +38,8 @@ async function seedCustomerWithSubscription(
 function query(customerId: string) {
   return {
     customerId,
-    headers: {},
+    requestId: crypto.randomUUID(),
+    headers: { "x-test-context": "subscription-eligibility" },
   };
 }
 
