@@ -33,6 +33,12 @@ export class ProviderRegistry {
     return this.providers.get(providerCode) ?? null;
   }
 
+  /** First registered provider code, for callers without an explicit choice. */
+  firstCode(): string | null {
+    for (const code of this.providers.keys()) return code;
+    return null;
+  }
+
   require(providerCode: string): PaymentProvider {
     const provider = this.providers.get(providerCode);
     if (!provider) throw new Error(`PAYMENT_PROVIDER_UNCONFIGURED:${providerCode}`);

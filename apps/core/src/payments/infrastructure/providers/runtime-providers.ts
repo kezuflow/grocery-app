@@ -1,5 +1,6 @@
 import type { PayMongoConfig, PayMongoProviderEnvironment } from "./paymongo-env";
 import { PayMongoProvider } from "./paymongo-provider";
+import { createFakePaymentProvider } from "./fake-payment-provider";
 import { ProviderRegistry } from "./provider-registry";
 
 export type RuntimePaymentsEnvironment = PayMongoProviderEnvironment & { ENVIRONMENT?: string };
@@ -15,6 +16,8 @@ export function buildProviderRegistry(environment: RuntimePaymentsEnvironment): 
   const registry = new ProviderRegistry(environment.ENVIRONMENT);
   const config = payMongoConfigFrom(environment);
   if (config) registry.register(new PayMongoProvider(config), environment.ENVIRONMENT);
+  if (environment.ENVIRONMENT === "test")
+    registry.register(createFakePaymentProvider(), environment.ENVIRONMENT);
   return registry;
 }
 
