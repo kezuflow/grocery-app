@@ -114,10 +114,36 @@ export type RiderJobsValue = {
   }>;
 };
 
+/**
+ * Observation record of one finished scheduled-job attempt. Purpose-built
+ * operational telemetry: no raw scheduler internals are exposed.
+ */
+export type ScheduledJobRunView = {
+  id: string;
+  jobName: string;
+  cronExpression: string;
+  status: "SUCCEEDED" | "FAILED" | "SKIPPED";
+  affectedCount: number | null;
+  errorCode: string | null;
+  detail: string | null;
+  startedAt: number;
+  finishedAt: number;
+};
+
+export type AdminScheduledJobRunsRequest = AuthenticatedRequest & {
+  /** Defaults to the platform bound; clamped by Core. */
+  limit?: number;
+};
+
+export type AdminScheduledJobRunsValue = { runs: ReadonlyArray<ScheduledJobRunView> };
+
 export type OperationsReadService = {
   adminOperationsBoard(
     request: AdminOperationsBoardRequest,
   ): Promise<RpcResult<AdminOperationsBoardValue>>;
   assignRider(request: AssignRiderRequest): Promise<RpcResult<AssignRiderValue>>;
   riderJobs(request: AuthenticatedRequest): Promise<RpcResult<RiderJobsValue>>;
+  adminScheduledJobRuns(
+    request: AdminScheduledJobRunsRequest,
+  ): Promise<RpcResult<AdminScheduledJobRunsValue>>;
 };

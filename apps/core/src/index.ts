@@ -17,6 +17,7 @@ import {
 } from "./checkout/application/create-checkout-quote";
 import { ProviderRegistry } from "./payments/infrastructure/providers/provider-registry";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
+import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
 import { createPayment as createPaymentIntentCommand } from "./payments/application/create-payment";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
@@ -563,6 +564,34 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
    */
   async scheduled(controller: { readonly cron: string }): Promise<void> {
     await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
+  }
+
+  /**
+   * Recent scheduled-job runs for operational visibility. Scheduler telemetry
+   * is platform-wide (not location-scoped); any operational manage capability
+   * grants visibility, mirroring the operations board's capability set.
+   */
+  async adminScheduledJobRuns(
+    input: import("@freshmarkets/contracts").AdminScheduledJobRunsRequest,
+  ) {
+    const session = await this.context.session(input);
+    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const OPERATIONAL_CAPABILITIES = [
+      "inventory:manage",
+      "procurement:manage",
+      "fulfillment:manage",
+      "delivery:manage",
+    ] as const satisfies readonly import("@freshmarkets/contracts").Capability[];
+    let authorized = false;
+    for (const capability of OPERATIONAL_CAPABILITIES) {
+      if (await this.context.requireCapability(input, capability)) {
+        authorized = true;
+        break;
+      }
+    }
+    if (!authorized)
+      return fail("FORBIDDEN", "An operational capability is required", input.requestId);
+    return listRecentScheduledJobRuns(this.env.DB, input);
   }
 }
 
