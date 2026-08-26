@@ -5,6 +5,29 @@ export function transition(current: string, next: string, legal: StateMap): stri
   return next;
 }
 
+/** Application-envelope mapping of a guarded transition attempt. */
+export function transitionToResult(
+  current: string,
+  next: string,
+  legal: StateMap,
+  requestId: string,
+):
+  | { ok: true; value: string }
+  | { ok: false; error: { code: "ILLEGAL_TRANSITION"; message: string; requestId: string } } {
+  try {
+    return { ok: true as const, value: transition(current, next, legal) };
+  } catch {
+    return {
+      ok: false as const,
+      error: {
+        code: "ILLEGAL_TRANSITION" as const,
+        message: `Cannot move ${current} to ${next}`,
+        requestId,
+      },
+    };
+  }
+}
+
 export const subscriptionTransitions: StateMap = {
   PENDING: ["TRIALING", "ACTIVE", "CANCELED"],
   TRIALING: ["ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"],

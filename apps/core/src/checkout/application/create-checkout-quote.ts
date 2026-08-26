@@ -294,6 +294,26 @@ export async function refreshCheckoutQuote(
     : failure("INTERNAL_ERROR", "Refresh failed", input.requestId);
 }
 
+/**
+ * Customer-scoped quote refresh: enforces that the quote exists and belongs
+ * to the requesting customer before delegating to the versioned refresh
+ * command. Ownership is authorization policy; it never widens the command.
+ */
+export async function refreshCustomerCheckoutQuote(
+  database: D1Database,
+  input: { quoteId: string; expectedVersion: number; requestId: string; customerId: string },
+): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
+  const repository = createCheckoutRepository(database);
+  const quote = await repository.findQuoteById(input.quoteId);
+  if (!quote || quote.customerId !== input.customerId)
+    return failure("NOT_FOUND", "Quote not found", input.requestId);
+  return refreshCheckoutQuote(database, {
+    quoteId: input.quoteId,
+    expectedVersion: input.expectedVersion,
+    requestId: input.requestId,
+  });
+}
+
 function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
   return {
     quoteId: row.id,
