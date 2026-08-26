@@ -10,6 +10,19 @@ const bodySchema = z.object({
 });
 
 /**
+ * The requesting rider's own open jobs. Core resolves the session and
+ * returns only assignments belonging to that rider.
+ */
+export async function GET(request: Request) {
+  return Response.json(
+    await coreClient(env.CORE).riderJobs({
+      requestId: crypto.randomUUID(),
+      headers: requestHeaders(request),
+    }),
+  );
+}
+
+/**
  * Rider console command route. Riders may act only on their assigned jobs;
  * assignment and location scoping are enforced by Core IAM before any effect.
  */
