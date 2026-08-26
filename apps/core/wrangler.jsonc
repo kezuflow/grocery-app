@@ -4,6 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
+  // Every-minute tick drives time-critical fairness jobs; the quarter-hour
+  // sweep bounds provider-facing redrive/reconciliation call rates. Keys must
+  // match apps/core/src/scheduling/job-registry.ts exactly.
+  "triggers": {
+    "crons": ["* * * * *", "*/15 * * * *"],
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

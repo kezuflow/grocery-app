@@ -16,6 +16,7 @@ import {
   refreshCustomerCheckoutQuote,
 } from "./checkout/application/create-checkout-quote";
 import { ProviderRegistry } from "./payments/infrastructure/providers/provider-registry";
+import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
 import { createPayment as createPaymentIntentCommand } from "./payments/application/create-payment";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
@@ -553,6 +554,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       value: { jobs: await listRiderJobs(this.env.DB, { riderAuthUserId: session.id }) },
       requestId: input.requestId,
     };
+  }
+
+  /**
+   * Time-driven dispatch only: resolves the fired cron expression through the
+   * scheduling registry to idempotent bounded-context commands. No business
+   * policy lives here.
+   */
+  async scheduled(controller: { readonly cron: string }): Promise<void> {
+    await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
   }
 }
 
