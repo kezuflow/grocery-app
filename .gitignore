@@ -10,3 +10,7 @@ dist/
 coverage/
 *.tsbuildinfo
 *.cpuprofile
+
+# Playwright local run artifacts
+test-results/
+playwright-report/
