@@ -1,5 +1,23 @@
 # FreshMarkets Implementation Status
 
+> **Program 3 completion (2026-08-26).** Membership renewal, trial conversion,
+> and dunning are implemented on `main` (slices `dbf641f`, `afbb3bf`,
+> `90d87ac`/`9bac554`, `4470816`, `bf5e0a8`, `19ecd08`/`49a4362`): a
+> Payments-owned `payment_authorization` aggregate (`0020`) gates the
+> introductory trial (recurring-capable mandate required before `TRIALING`;
+> one trial per instrument identity per D3; no synthesized ₱0 payment), the
+> scheduler initiates one renewal charge per period at the trial/paid boundary
+> (provider owns retries per the recorded PayMongo decision), provider-
+> confirmed failures move `ACTIVE -> PAST_DUE` with an exact 7-calendar-day
+> grace that preserves checkout eligibility (failed first conversion expires
+> the uncontinued trial), recovery returns to `ACTIVE` only from verified
+> canonical success, and exhausted grace expires the subscription. Paid
+> periods follow the nominal billing anchor across short-month clamping. The
+> account flow enrolls (authorize → redirect → confirm → trial) through new
+> fail-closed RPCs. External go-live config (PayMongo Subscriptions/Card
+> Vaulting enablement, written Maya/setup semantics) remains recorded in
+> `docs/architecture/PROVIDER_DECISIONS.md`.
+
 > **Program 4 (2026-08-26, Production Payment Provider).** The PayMongo
 > production adapter is implemented behind the provider-neutral Payments port
 > (`cb09478`): checkout-session redirect creation with idempotency keys,

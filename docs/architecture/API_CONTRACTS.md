@@ -126,6 +126,13 @@ is never treated as proof of serviceability.
 
 `startTrial` resolves the current paid offer and introductory promotion server-side, then succeeds only after Promotions authorizes and atomically consumes the one-calendar-month grant/redemption. Calendar arithmetic follows `DOMAIN_MODEL.md`; an offer field such as `trial_days` is never accepted as authority. `beginPaidEnrollment` may create `PENDING` but cannot create `ACTIVE`; payment-method collection and provider interaction use Payments contracts. These contracts never imply grocery merchandise or delivery is free during a membership trial.
 
+## Recurring Authorization (Payments-owned)
+
+- `payments.beginRecurringAuthorization({ providerCode?, returnUrl, idempotencyKey }) -> { authorizationId, actionType: "REDIRECT" | "SDK" | "NONE", redirectUrl?, clientToken?, expiresAt? }`
+- `payments.completeRecurringAuthorization({ authorizationId }) -> { authorizationId }`
+
+Establishing a mandate is instrument collection, never payment success; only a provider-confirmed recurring-capable authorization with a stable method identity becomes `ACTIVE`, and entering `TRIALING` requires one. Providers without recurring capability fail closed.
+
 ## Membership Payments
 
 - `payments.createMembershipPayment({ subscriptionId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`

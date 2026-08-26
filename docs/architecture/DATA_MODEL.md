@@ -139,14 +139,14 @@ Indexes: customer/committed time, optional cycle/status, fulfillment mode/locati
 
 - `payment_intents(id PK, purpose, subject_type, subject_id, customer_id FK, amount_minor, currency, status, idempotency_key UNIQUE, version, created_at, updated_at)`
 - `payment_attempts(id PK, payment_intent_id FK, provider, provider_reference NULL, status, idempotency_key UNIQUE, version, created_at, updated_at)`
-- `payment_provider_customers(id PK, customer_id FK, provider, provider_customer_reference, created_at, UNIQUE(provider, provider_customer_reference), UNIQUE(customer_id, provider))`
+- `payment_authorizations(id PK, customer_id FK, provider, provider_authorization_reference, provider_method_reference NULL, recurring_capable, status PENDING|ACTIVE|REVOKED, established_at NULL, revoked_at NULL, created_at, updated_at, UNIQUE(provider, provider_authorization_reference), UNIQUE(provider, provider_method_reference) among non-revoked rows)` — the Payments-owned recurring-capable mandate aggregate. Entering `TRIALING` requires an `ACTIVE`, recurring-capable row for the customer; Membership stores only its id on the subscription.
 - `payment_provider_methods(id PK, provider_customer_id FK, provider, provider_method_reference, status, metadata_json, created_at, updated_at, UNIQUE(provider, provider_method_reference))`
 - `payment_provider_event_inbox(id PK, provider, provider_event_id, provider_reference NULL, event_type, payload_hash, received_at, processing_status, processed_at NULL, last_error_code NULL, attempt_count, UNIQUE(provider, provider_event_id))`
 - `refunds(id PK, payment_attempt_id FK, order_id FK NULL, amount_minor, currency, reason_code, reason, status, provider_reference NULL, idempotency_key UNIQUE, requested_by_staff_id FK NULL, version, created_at, updated_at)`
 
 `purpose` distinguishes at least membership enrollment/renewal, grocery checkout, order amendment, and other approved financial intents without coupling Payments to a provider's object model. Provider mappings and inbox payload metadata are Payments-owned. Membership and Orders store only stable application payment references needed for audit/reaction.
 
-Indexes: provider/reference, payment intent/subject/status, refund/payment/status, and inbox processing status/time. A provider event handler conditionally updates current aggregate versions and records retry/reconciliation state; no inbox payload field acts as `expectedVersion`.
+Indexes: provider/reference, payment intent/subject/status, refund/payment/status, and inbox processing status/time. Subscription renewal/dunning columns (`grace_ends_at`, `nominal_billing_day`, `renewal_initiated_through`) are Membership-owned lifecycle metadata; charge deduplication rests on the payment-intent idempotency key plus the provider idempotency mechanism. A provider event handler conditionally updates current aggregate versions and records retry/reconciliation state; no inbox payload field acts as `expectedVersion`.
 
 ## Promotions
 
