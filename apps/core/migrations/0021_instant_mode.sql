@@ -84,3 +84,33 @@ FROM order_fulfillment_snapshot;
 
 DROP TABLE order_fulfillment_snapshot;
 ALTER TABLE order_fulfillment_snapshot_new RENAME TO order_fulfillment_snapshot;
+
+-- The legacy attempt aggregate is also cycle-bound; rebuild so an INSTANT
+-- attempt can exist without a fabricated cycle.
+CREATE TABLE IF NOT EXISTS checkout_attempts_new (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL REFERENCES customer(id) ON DELETE RESTRICT,
+  cart_id TEXT NOT NULL REFERENCES cart(id) ON DELETE RESTRICT,
+  address_id TEXT NOT NULL REFERENCES customer_address(id) ON DELETE RESTRICT,
+  cycle_id TEXT REFERENCES delivery_cycle(id) ON DELETE RESTRICT,
+  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED' CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
+  zone_id TEXT NOT NULL REFERENCES delivery_zone(id) ON DELETE RESTRICT,
+  location_id TEXT NOT NULL REFERENCES fulfillment_location(id) ON DELETE RESTRICT,
+  quote_version INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL CHECK (status IN ('PROCESSING', 'SUCCEEDED', 'FAILED', 'EXPIRED')),
+  idempotency_key TEXT NOT NULL UNIQUE,
+  expires_at INTEGER,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+INSERT INTO checkout_attempts_new
+  (id, customer_id, cart_id, address_id, cycle_id, fulfillment_mode, zone_id, location_id,
+   quote_version, status, idempotency_key, expires_at, version, created_at, updated_at)
+SELECT id, customer_id, cart_id, address_id, cycle_id, 'SCHEDULED', zone_id, location_id,
+       quote_version, status, idempotency_key, expires_at, version, created_at, updated_at
+FROM checkout_attempts;
+DROP TABLE checkout_attempts;
+ALTER TABLE checkout_attempts_new RENAME TO checkout_attempts;
+CREATE INDEX IF NOT EXISTS checkout_attempts_customer_idx
+  ON checkout_attempts(customer_id, created_at);

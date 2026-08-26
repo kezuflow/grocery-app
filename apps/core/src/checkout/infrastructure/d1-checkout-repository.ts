@@ -6,7 +6,8 @@ export type CheckoutQuoteRow = {
   customerId: string;
   cartId: string;
   addressId: string;
-  deliveryCycleId: string;
+  deliveryCycleId: string | null;
+  fulfillmentMode?: "INSTANT" | "SCHEDULED";
   currency: string;
   subtotalMinor: number;
   discountMinor: number;
@@ -92,7 +93,7 @@ export function createCheckoutRepository(database: D1Database) {
     ): D1PreparedStatement {
       return database
         .prepare(
-          "INSERT INTO checkout_quote (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, status, version, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO checkout_quote (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, status, version, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
           input.id,
@@ -101,6 +102,7 @@ export function createCheckoutRepository(database: D1Database) {
           input.cartId,
           input.addressId,
           input.deliveryCycleId,
+          input.fulfillmentMode ?? "SCHEDULED",
           input.currency,
           input.subtotalMinor,
           input.discountMinor,

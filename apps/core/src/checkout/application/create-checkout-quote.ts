@@ -4,13 +4,15 @@ import {
 } from "../infrastructure/d1-checkout-repository";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
+import { createInstantQuote, type QuoteItem } from "./instant-quote";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
   cartId: string;
   cartVersion: number;
   addressId: string;
-  deliveryCycleId: string;
+  /** Null selects the INSTANT path; a cycle id selects SCHEDULED. */
+  deliveryCycleId: string | null;
   idempotencyKey: string;
   requestId: string;
 };
@@ -50,7 +52,7 @@ export async function createCheckoutQuote(
       existing.customerId !== command.customerId ||
       existing.cartId !== command.cartId ||
       existing.addressId !== command.addressId ||
-      existing.deliveryCycleId !== command.deliveryCycleId
+      (existing.deliveryCycleId ?? null) !== (command.deliveryCycleId ?? null)
     )
       return failure(
         "IDEMPOTENCY_CONFLICT",
@@ -110,6 +112,34 @@ export async function createCheckoutQuote(
   if (cartItems.results.length === 0)
     return failure("VALIDATION_FAILED", "Cart is empty", command.requestId);
 
+  // Address serviceability evidence shared by both fulfillment modes.
+  const address = await database
+    .prepare("SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'")
+    .bind(command.addressId, command.customerId)
+    .first<Record<string, unknown> & { delivery_zone_code: string | null }>();
+  if (!address) return failure("NOT_FOUND", "Customer address not found", command.requestId);
+
+  // The routed location's active mode governs checkout semantics: a cycle id
+  // selects Scheduled; no cycle id selects Instant where a location offers it.
+  if (command.deliveryCycleId === null)
+    return createInstantQuote(database, repository, command, cartItems.results, address);
+  return createScheduledQuote(
+    database,
+    repository,
+    { ...command, deliveryCycleId: command.deliveryCycleId },
+    cartItems.results,
+    address,
+  );
+}
+
+/** The existing Scheduled path: open-cycle, cutoff, capacity, priced lines. */
+async function createScheduledQuote(
+  database: D1Database,
+  repository: ReturnType<typeof createCheckoutRepository>,
+  command: CreateCheckoutQuoteCommand & { deliveryCycleId: string },
+  items: readonly QuoteItem[],
+  address: Record<string, unknown> & { delivery_zone_code: string | null },
+): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
   // Cycle must be open and before cutoff.
   const cycle = await database
     .prepare(
@@ -128,13 +158,7 @@ export async function createCheckoutQuote(
   if (cycle.cutoff_at <= now)
     return failure("CYCLE_CLOSED", "The cycle cutoff has passed", command.requestId);
 
-  // Address serviceability and zone routing for this cycle's market.
-  const address = await database
-    .prepare("SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'")
-    .bind(command.addressId, command.customerId)
-    .first<Record<string, unknown> & { delivery_zone_code: string | null }>();
-  if (!address) return failure("NOT_FOUND", "Customer address not found", command.requestId);
-
+  // Zone routing for this cycle's market (address already resolved).
   const routing = await database
     .prepare(
       `SELECT dz.id AS zone_id, ls.location_id, fl.name AS location_name
@@ -167,7 +191,7 @@ export async function createCheckoutQuote(
   const now2 = Date.now();
   const lines: QuoteLine[] = [];
   let subtotalMinor = 0;
-  for (const item of cartItems.results) {
+  for (const item of items) {
     const price = await database
       .prepare(
         `SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=?
@@ -243,7 +267,7 @@ export async function createCheckoutQuote(
           fulfillmentSnapshot: {
             fulfillmentMode: "SCHEDULED",
             sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
-            poolIds: [...new Set(cartItems.results.map((item) => item.inventory_pool_id))],
+            poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
           },
           status: "ACTIVE",
           version: 1,
