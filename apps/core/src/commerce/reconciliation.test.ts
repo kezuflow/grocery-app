@@ -38,7 +38,7 @@ describe("checkout reconciliation", () => {
         "UPDATE inventory_balance SET reserved=500 WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
       ),
       env.DB.prepare(
-        "INSERT INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES ('checkout.commitMockOrder', ?, 'hash', 'grocery_order', 'PROCESSING', ?, ?)",
+        "INSERT INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES ('checkout.quote', ?, 'hash', 'grocery_order', 'PROCESSING', ?, ?)",
       ).bind(key, now, now),
     ]);
 

@@ -86,6 +86,7 @@ export const inventoryAdjustmentSchema = headersRequest.extend({
   delta: nonZeroIntegerSchema,
   reason: reasonSchema,
   idempotencyKey: idempotencyKeySchema,
+  // Concurrent balance mutation requires an explicit expected version.
   expectedVersion: expectedVersionSchema,
 });
 
@@ -104,6 +105,7 @@ export const receivingCommandSchema = headersRequest.extend({
   rejectedQuantity: z.number().int().safe().nonnegative(),
   reason: z.string().max(1000).optional(),
   idempotencyKey: idempotencyKeySchema,
+  // Concurrent receipt mutation requires an explicit expected version.
   expectedVersion: expectedVersionSchema,
 });
 
@@ -126,3 +128,22 @@ export function validationMessage(error: z.ZodError): string {
     .map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`)
     .join(", ");
 }
+
+export const createCheckoutQuoteSchema = headersRequest.extend({
+  cartId: identifierSchema,
+  cartVersion: positiveIntegerSchema,
+  addressId: identifierSchema,
+  deliveryCycleId: identifierSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const refreshCheckoutQuoteSchema = headersRequest.extend({
+  quoteId: identifierSchema,
+  expectedVersion: expectedVersionSchema,
+});
+
+export const createPaymentIntentSchema = headersRequest.extend({
+  checkoutAttemptId: identifierSchema,
+  returnUrl: z.string().url().max(2000),
+  idempotencyKey: idempotencyKeySchema,
+});

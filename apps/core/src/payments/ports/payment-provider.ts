@@ -1,0 +1,71 @@
+import type { PaymentDomainState } from "../domain/payment";
+
+export type VerifiedProviderEvent = {
+  provider: string;
+  providerEventId: string;
+  providerReference: string;
+  observedAt: number;
+  canonicalState: PaymentDomainState;
+  amountMinor: number;
+  currency: string;
+  payloadHash: string;
+  kind: "payment" | "refund";
+  /** Present when kind === "refund": the provider-side refund identity. */
+  refundReference: string | null;
+};
+
+export type ProviderEventVerificationFailure = {
+  ok: false;
+  reason: "INVALID_SIGNATURE" | "INVALID_TIMESTAMP" | "UNPARSEABLE_PAYLOAD" | "UNKNOWN_EVENT_TYPE";
+};
+
+export type ProviderEventVerificationSuccess = { ok: true; event: VerifiedProviderEvent };
+
+export type ProviderPaymentView = {
+  providerReference: string;
+  canonicalState: PaymentDomainState;
+  amountMinor: number;
+  currency: string;
+};
+
+/**
+ * The only seam through which vendor specifics enter Core. Implementations
+ * verify raw HTTP ingress before any identifier or state is trusted, so a
+ * caller can never construct a trusted observation from browser JSON.
+ */
+export interface PaymentProvider {
+  readonly code: string;
+
+  /** Creates a provider-side payment for the intent; returns an action for the client, never canonical success. */
+  createPayment(input: {
+    providerCustomerId: string | null;
+    amountMinor: number;
+    currency: string;
+    returnUrl: string;
+    idempotencyKey: string;
+  }): Promise<
+    | {
+        ok: true;
+        providerReference: string;
+        actionType: "NONE" | "REDIRECT" | "SDK";
+        redirectUrl: string | null;
+        clientToken: string | null;
+        expiresAt: number | null;
+      }
+    | { ok: false; errorCode: string }
+  >;
+
+  verifyAndParseEvent(
+    headers: Headers,
+    rawBody: string,
+  ): Promise<ProviderEventVerificationSuccess | ProviderEventVerificationFailure>;
+
+  getPayment(providerReference: string): Promise<ProviderPaymentView | null>;
+
+  requestRefund(input: {
+    providerReference: string;
+    refundProviderIdempotencyKey: string;
+    amountMinor: number;
+    currency: string;
+  }): Promise<{ ok: true; providerRefundReference: string } | { ok: false; errorCode: string }>;
+}

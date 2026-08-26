@@ -2,61 +2,65 @@ import { drizzle } from "drizzle-orm/d1";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth/minimal";
 import type { Auth } from "better-auth";
-import { log } from "../observability";
-import { authSchema } from "./schema";
+import {
+  UnavailableAuthEmailDelivery,
+  type AuthEmailDelivery,
+  type AuthEmailMessage,
+} from "./email-delivery";
+import { trustedOriginsForEnvironment } from "./origins";
+import { betterAuthSchema } from "./schema";
+import { iamSchema } from "../iam/schema";
 
 export type AuthEnvironment = {
   DB: D1Database;
   ENVIRONMENT?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  TRUSTED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 };
 
 const localSecret = "freshmarkets-phase1-local-secret-change-me";
 
-function originFromRequest(request?: Request): string | undefined {
-  if (!request) return undefined;
-  const forwardedProto =
-    request.headers.get("x-forwarded-proto") ?? new URL(request.url).protocol.slice(0, -1);
-  const forwardedHost = request.headers.get("x-forwarded-host") ?? new URL(request.url).host;
-  return `${forwardedProto}://${forwardedHost}`;
+export function createBetterAuthDatabase(env: AuthEnvironment) {
+  return drizzle(env.DB, { schema: betterAuthSchema });
 }
 
-async function deliverAuthEmail(
-  kind: "verification" | "reset",
-  data: { user: { email: string }; url: string },
-  request?: Request,
-) {
-  log("info", `auth.email.${kind}.requested`, {
-    email: data.user.email,
-    url: data.url,
-    origin: originFromRequest(request),
-  });
-}
-
-export function createAuth(env: AuthEnvironment): Auth<any> {
-  const database = drizzle(env.DB, { schema: authSchema });
+export function createAuth(
+  env: AuthEnvironment,
+  dependencies?: { authEmailDelivery?: AuthEmailDelivery },
+): Auth<any> {
+  const betterAuthDatabase = createBetterAuthDatabase(env);
+  const iamDatabase = drizzle(env.DB, { schema: iamSchema });
   const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
   const environment = env.ENVIRONMENT ?? "development";
+  const authEmailDelivery = dependencies?.authEmailDelivery ?? new UnavailableAuthEmailDelivery();
+  const deliverAuthEmail = (
+    data: { user: { email: string }; url: string },
+    kind: AuthEmailMessage["kind"],
+  ) => {
+    const { email } = data.user;
+    const bearerUrl = data.url;
+    return authEmailDelivery.send({ kind, recipient: email, url: bearerUrl });
+  };
 
   return betterAuth({
     appName: "FreshMarkets",
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET ?? (environment === "production" ? undefined : localSecret),
-    database: drizzleAdapter(database, {
+    database: drizzleAdapter(betterAuthDatabase, {
       provider: "sqlite",
-      schema: authSchema,
+      schema: betterAuthSchema,
       transaction: false,
     }),
     databaseHooks: {
       user: {
         create: {
           after: async (user) => {
-            await database
-              .insert(authSchema.customerPrincipal)
+            await iamDatabase
+              .insert(iamSchema.customerPrincipal)
               .values({
                 id: crypto.randomUUID(),
                 authUserId: user.id,
@@ -64,7 +68,7 @@ export function createAuth(env: AuthEnvironment): Auth<any> {
                 createdAt: new Date(),
                 updatedAt: new Date(),
               })
-              .onConflictDoNothing({ target: authSchema.customerPrincipal.authUserId });
+              .onConflictDoNothing({ target: iamSchema.customerPrincipal.authUserId });
           },
         },
       },
@@ -72,12 +76,11 @@ export function createAuth(env: AuthEnvironment): Auth<any> {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
-      sendResetPassword: async (data, request) => deliverAuthEmail("reset", data, request),
+      sendResetPassword: async (data) => deliverAuthEmail(data, "reset"),
     },
     emailVerification: {
       sendOnSignUp: true,
-      sendVerificationEmail: async (data, request) =>
-        deliverAuthEmail("verification", data, request),
+      sendVerificationEmail: async (data) => deliverAuthEmail(data, "verification"),
     },
     socialProviders: googleConfigured
       ? {
@@ -88,14 +91,7 @@ export function createAuth(env: AuthEnvironment): Auth<any> {
           },
         }
       : {},
-    trustedOrigins: async (request) => {
-      const origin = request?.headers.get("origin");
-      const forwardedOrigin = request?.headers.get("x-forwarded-origin");
-      const requestOrigin = originFromRequest(request);
-      return [origin, forwardedOrigin, requestOrigin].filter((value): value is string =>
-        Boolean(value),
-      );
-    },
+    trustedOrigins: [...trustedOriginsForEnvironment(env)],
     advanced: {
       useSecureCookies: environment === "production",
       defaultCookieAttributes: {

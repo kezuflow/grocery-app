@@ -1,21 +1,30 @@
 "use client";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { CartView, DeliveryCycleView } from "@freshmarkets/contracts";
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [cycles, setCycles] = useState<ReadonlyArray<DeliveryCycleView>>([]);
   const [addressId, setAddressId] = useState("");
   const [status, setStatus] = useState("");
+  const [sandboxPaymentEnabled, setSandboxPaymentEnabled] = useState(false);
+  const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   useEffect(() => {
     void Promise.all([
       fetch("/api/commerce/cart").then((r) => r.json() as Promise<{ value?: CartView }>),
       fetch("/api/commerce/cycles").then(
         (r) => r.json() as Promise<{ value?: ReadonlyArray<DeliveryCycleView> }>,
       ),
-    ]).then(([cartResult, cycleResult]) => {
+      fetch("/api/commerce/checkout").then(
+        (r) =>
+          r.json() as Promise<{
+            value?: { sandboxPaymentEnabled?: boolean };
+          }>,
+      ),
+    ]).then(([cartResult, cycleResult, capabilityResult]) => {
       setCart(cartResult.value ?? null);
       setCycles(cycleResult.value ?? []);
+      setSandboxPaymentEnabled(Boolean(capabilityResult.value?.sandboxPaymentEnabled));
     });
   }, []);
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
@@ -43,32 +52,60 @@ export default function CheckoutPage() {
       setStatus("Address confirmed for delivery.");
     } else setStatus(result.error?.message ?? "Address is outside the active delivery area.");
   }
-  async function commit(cycleId: string) {
+  async function startPayment(cycleId: string) {
     if (!cart || !addressId) {
       setStatus("Confirm a serviceable address first.");
       return;
     }
-    const response = await fetch("/api/commerce/checkout", {
+    // 1) Core-authoritative quote (evidence only; reserves nothing).
+    const quoteResponse = await fetch("/api/checkout/quote", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": attemptKey.current,
+      },
       body: JSON.stringify({
         cartId: cart.id,
+        cartVersion: cart.version,
         addressId,
         cycleId,
-        commit: true,
-        idempotencyKey: crypto.randomUUID(),
       }),
     });
-    const result = (await response.json()) as {
+    const quoteResult = (await quoteResponse.json()) as {
       ok: boolean;
-      value?: { orderId: string };
+      value?: { quoteId: string; totalMinor: number; currency: string };
+      error?: { code: string; message: string };
+    };
+    if (!quoteResult.ok) {
+      setStatus(quoteResult.error?.message ?? "Could not price your order.");
+      return;
+    }
+    setStatus(
+      `Quote ready: ${quoteResult.value?.currency} ${(quoteResult.value?.totalMinor ?? 0) / 100}. Starting payment...`,
+    );
+    // 2) Canonical payment intent. Order commitment happens in Core from the
+    // provider-confirmed payment reaction — never from this browser.
+    const paymentResponse = await fetch("/api/checkout/payment", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": attemptKey.current,
+      },
+      body: JSON.stringify({
+        checkoutAttemptId: quoteResult.value?.quoteId ?? "",
+        returnUrl: window.location.origin + "/orders",
+      }),
+    });
+    const paymentResult = (await paymentResponse.json()) as {
+      ok: boolean;
       error?: { message: string };
     };
-    setStatus(
-      result.ok
-        ? `Order ${result.value?.orderId} is paid and committed.`
-        : (result.error?.message ?? "Checkout failed."),
-    );
+    if (paymentResult.ok) {
+      setStatus("Payment started. Your order appears here once payment is confirmed.");
+      attemptKey.current = `checkout-${crypto.randomUUID()}`;
+    } else {
+      setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
+    }
   }
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-12">
@@ -77,7 +114,9 @@ export default function CheckoutPage() {
       </Link>
       <h1 className="mt-6 text-3xl font-semibold">Checkout</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Sandbox payment is used locally. Payment success locks the order.
+        {sandboxPaymentEnabled
+          ? "Local sandbox order (nonproduction). No real payment is processed."
+          : "Payments are not available in this environment."}
       </p>
       <form
         onSubmit={saveAddress}
@@ -103,8 +142,9 @@ export default function CheckoutPage() {
           {cycles.map((cycle) => (
             <button
               key={cycle.id}
-              onClick={() => commit(cycle.id)}
-              className="flex items-center justify-between rounded-lg border bg-white p-4 text-left"
+              onClick={() => startPayment(cycle.id)}
+              disabled={!sandboxPaymentEnabled}
+              className="flex items-center justify-between rounded-lg border bg-white p-4 text-left disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span>
                 {cycle.name}
@@ -112,7 +152,7 @@ export default function CheckoutPage() {
                   {new Date(cycle.deliveryDate).toLocaleString()}
                 </small>
               </span>
-              <span className="font-medium">Pay and commit</span>
+              <span className="font-medium">Local sandbox order</span>
             </button>
           ))}
         </div>

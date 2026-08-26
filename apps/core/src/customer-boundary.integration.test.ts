@@ -139,6 +139,6 @@ describe("Phase 4A authenticated customer boundary", () => {
       customerId: rows.results[1].id,
     } as unknown as Parameters<CoreServiceBinding["getSubscriptionEligibility"]>[0]);
     expect(forged.ok).toBe(true);
-    if (forged.ok) expect(forged.value.status).toBeNull();
+    if (forged.ok) expect(forged.value.state).toBeNull();
   });
 });

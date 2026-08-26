@@ -1,5 +1,7 @@
 # FreshMarkets Web
 
+> **Non-authoritative README.** This file is operational/setup guidance and includes historical phase notes. It does not define architecture, domain ownership, lifecycle, or current implementation status; use the canonical set named in `AGENTS.md` and `docs/product/IMPLEMENTATION_STATUS.md`.
+
 vinext presentation Worker. Phase 1 contains browser auth screens and a thin Web -> Core auth proxy. Web does not own auth storage or interpret Better Auth identity.
 
 ## Scripts

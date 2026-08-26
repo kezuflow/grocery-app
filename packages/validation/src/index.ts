@@ -12,7 +12,8 @@ export const nonZeroIntegerSchema = z
   .refine((value) => value !== 0);
 export const coordinateSchema = z.number().finite();
 export const reasonSchema = z.string().trim().min(1).max(1000);
-export const expectedVersionSchema = z.number().int().safe().nonnegative().optional();
+// Concurrent lifecycle mutation requires an explicit optimistic version.
+export const expectedVersionSchema = z.number().int().safe().nonnegative();
 
 export const requestMetaSchema = z.object({
   requestId: z.string().min(1),

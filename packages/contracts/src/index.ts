@@ -1,103 +1,38 @@
-export const CONTRACT_VERSION = "2026-08-25.mvp-commerce" as const;
+import type { CoreServiceBinding } from "./core-service";
 
-export type RequestMeta = {
-  requestId: string;
-  idempotencyKey?: string;
-  locale?: string;
-  timezone?: string;
-};
+export * from "./common";
+export * from "./states";
+export type * from "./auth";
+export type * from "./catalog";
+export type * from "./membership";
+export type * from "./payments";
+export type * from "./checkout";
+export type * from "./orders";
+export type * from "./operations";
 
-export type AppErrorCode =
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "VALIDATION_FAILED"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "STALE_VERSION"
-  | "SUBSCRIPTION_REQUIRED"
-  | "ADDRESS_NOT_SERVICEABLE"
-  | "CYCLE_CLOSED"
-  | "CYCLE_FULL"
-  | "INSUFFICIENT_STOCK"
-  | "CAPACITY_UNAVAILABLE"
-  | "PRICE_CHANGED"
-  | "ITEM_UNAVAILABLE"
-  | "PROMOTION_INELIGIBLE"
-  | "PAYMENT_REQUIRED"
-  | "PAYMENT_FAILED"
-  | "CONFIGURATION_ERROR"
-  | "ILLEGAL_TRANSITION"
-  | "IDEMPOTENCY_CONFLICT"
-  | "INTERNAL_ERROR";
-
-export type AppError = {
-  code: AppErrorCode;
-  message: string;
-  requestId: string;
-  details?: Readonly<Record<string, string>>;
-};
-
-export type RpcResult<T> =
-  | { ok: true; value: T; requestId: string }
-  | { ok: false; error: AppError };
-
-export type CoreHealthResponse = {
-  service: "core";
-  status: "ok";
-  contractVersion: typeof CONTRACT_VERSION;
-  environment: string;
-  databaseBindingConfigured: boolean;
-  timestamp: string;
-};
+import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult } from "./common";
+import type {
+  CustomerAddressStatus,
+  DeliveryCycleState,
+  ImplementedOrderState,
+  OperationsCommandState,
+  ReceivingRecordState,
+  SubscriptionState,
+} from "./states";
 
 export type CoreEntrypoint = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
 };
 
-export type CoreServiceBinding = {
+export type HealthService = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
-  auth(request: AuthRequest): Promise<AuthResponse>;
-  getApplicationContext(request: AuthContextRequest): Promise<RpcResult<ApplicationContext>>;
-  resolveServiceability(request: ServiceabilityRequest): Promise<RpcResult<ServiceabilityResult>>;
-  searchCatalog(request: CatalogSearchRequest): Promise<RpcResult<CatalogSearchPage>>;
-  getCatalogProduct(
-    request: CatalogProductRequest,
-  ): Promise<RpcResult<MarketplaceProductView | null>>;
-  listCategories(request: RequestMeta): Promise<RpcResult<CategoryNavigationView>>;
-  createCustomerAddress(
-    request: CreateCustomerAddressRequest,
-  ): Promise<RpcResult<CustomerAddressView>>;
-  listCustomerAddresses(
-    request: AuthenticatedRequest,
-  ): Promise<RpcResult<ReadonlyArray<CustomerAddressView>>>;
-  updateCustomerAddress(
-    request: UpdateCustomerAddressRequest,
-  ): Promise<RpcResult<CustomerAddressView>>;
-  getSubscriptionEligibility(
-    request: SubscriptionEligibilityRequest,
-  ): Promise<RpcResult<SubscriptionEligibility>>;
-  listDeliveryCycles(
-    request: DeliveryCycleRequest,
-  ): Promise<RpcResult<ReadonlyArray<DeliveryCycleView>>>;
-  evaluateCheckout(
-    request: CheckoutEligibilityRequest,
-  ): Promise<RpcResult<CheckoutEligibilityView>>;
-  commitMockOrder(request: CommitMockOrderRequest): Promise<RpcResult<CommittedOrderView>>;
-  startTrial(request: StartTrialRequest): Promise<RpcResult<SubscriptionEligibility>>;
-  getCart(request: AuthenticatedRequest): Promise<RpcResult<CartView>>;
-  setCartItem(request: SetCartItemRequest): Promise<RpcResult<CartView>>;
-  listCustomerOrders(
-    request: AuthenticatedRequest,
-  ): Promise<RpcResult<ReadonlyArray<CustomerOrderView>>>;
-  advanceOrder(request: AdminOrderCommandRequest): Promise<RpcResult<AdminCommandResult>>;
-  adjustInventory(request: InventoryAdjustmentRequest): Promise<RpcResult<AdminCommandResult>>;
-  createProcurementRequirement(
-    request: ProcurementCommandRequest,
-  ): Promise<RpcResult<AdminCommandResult>>;
-  receiveProcurement(request: ReceivingCommandRequest): Promise<RpcResult<AdminCommandResult>>;
-  advanceFulfillment(request: FulfillmentCommandRequest): Promise<RpcResult<AdminCommandResult>>;
-  advanceDelivery(request: DeliveryCommandRequest): Promise<RpcResult<AdminCommandResult>>;
 };
+
+export type {
+  CoreServiceBinding,
+  ImplementedCoreService,
+  LegacyOperationsService,
+} from "./core-service";
 
 export type AuthRequest = {
   method: string;
@@ -287,13 +222,13 @@ export type CustomerAddressView = {
   serviceAreaCode: string | null;
   deliveryZoneCode: string | null;
   resolutionVersion: number | null;
-  status: string;
+  status: CustomerAddressStatus;
   version: number;
 };
 export type SubscriptionEligibilityRequest = AuthenticatedRequest;
 export type SubscriptionEligibility = {
   eligible: boolean;
-  status: string | null;
+  state: SubscriptionState | null;
   trialEndsAt: string | null;
 };
 export type DeliveryCycleRequest = RequestMeta & { marketCode?: string };
@@ -302,7 +237,7 @@ export type DeliveryCycleView = {
   name: string;
   cutoffAt: string;
   deliveryDate: string;
-  status: string;
+  status: DeliveryCycleState;
   capacityRemaining: number;
 };
 export type CheckoutEligibilityRequest = AuthenticatedRequest & {
@@ -316,13 +251,27 @@ export type CheckoutEligibilityView = {
   totalMinor: number;
   currency: string;
 };
-export type CommitMockOrderRequest = CheckoutEligibilityRequest & { idempotencyKey: string };
-export type CommittedOrderView = {
-  orderId: string;
-  paymentStatus: "SUCCEEDED";
-  orderStatus: "COMMITTED";
-  totalMinor: number;
+export type CheckoutQuoteCommandRequest = AuthenticatedRequest & {
+  cartId: string;
+  cartVersion: number;
+  addressId: string;
+  deliveryCycleId: string;
+  idempotencyKey: string;
+};
+export type CheckoutQuoteView = {
+  quoteId: string;
+  attemptVersion: number;
+  expiresAt: string;
   currency: string;
+  subtotalMinor: number;
+  discountMinor: number;
+  deliveryFeeMinor: number;
+  totalMinor: number;
+  lines: ReadonlyArray<Record<string, unknown>>;
+};
+export type CheckoutQuoteRefreshRequest = AuthenticatedRequest & {
+  quoteId: string;
+  expectedVersion: number;
 };
 export type StartTrialRequest = AuthenticatedRequest & { offerCode?: string };
 export type CartView = {
@@ -345,7 +294,7 @@ export type SetCartItemRequest = AuthenticatedRequest & {
 };
 export type CustomerOrderView = {
   id: string;
-  status: string;
+  status: ImplementedOrderState;
   deliveryDate: string;
   totalMinor: number;
   currency: string;
@@ -356,16 +305,24 @@ export type AdminOrderCommandRequest = AuthenticatedRequest & {
   action: "CANCEL" | "REFUND";
   reason: string;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };
-export type AdminCommandResult = { id: string; status: string };
+export type AdminCommandResult = { id: string; status: OperationsCommandState };
 export type InventoryAdjustmentRequest = AuthenticatedRequest & {
   locationId: string;
   inventoryPoolId: string;
   delta: number;
   reason: string;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
+};
+export type InventoryAdjustmentResult = {
+  locationId: string;
+  inventoryPoolId: string;
+  onHandBase: number;
+  reservedBase: number;
+  version: number;
+  ledgerEntryId: string;
 };
 export type ProcurementCommandRequest = AuthenticatedRequest & {
   deliveryCycleId: string;
@@ -373,7 +330,7 @@ export type ProcurementCommandRequest = AuthenticatedRequest & {
   inventoryPoolId: string;
   quantity: number;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };
 export type ReceivingCommandRequest = AuthenticatedRequest & {
   requirementId: string;
@@ -381,17 +338,25 @@ export type ReceivingCommandRequest = AuthenticatedRequest & {
   rejectedQuantity: number;
   reason?: string;
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
+};
+export type ReceivingCommandResult = {
+  receivingRecordId: string;
+  status: ReceivingRecordState;
+  acceptedBase: number;
+  rejectedBase: number;
+  remainingBase: number;
+  version: number;
 };
 export type FulfillmentCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "START" | "PACK" | "SHORTAGE";
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };
 export type DeliveryCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "DISPATCH" | "DELIVER" | "FAIL";
   idempotencyKey: string;
-  expectedVersion?: number;
+  expectedVersion: number;
 };

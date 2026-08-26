@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../../lib/core-client/request";
+import { coreClient } from "@/lib/core-client/core";
 const addressBodySchema = z.object({
   label: z.string().trim().min(1),
   recipient: z.string().trim().min(1),
@@ -17,7 +17,7 @@ const updateAddressBodySchema = addressBodySchema.partial().extend({
 });
 export async function GET(request: Request) {
   return Response.json(
-    await (env.CORE as unknown as CoreServiceBinding).listCustomerAddresses({
+    await coreClient(env.CORE).listCustomerAddresses({
       requestId: crypto.randomUUID(),
       headers: requestHeaders(request),
     }),
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const body = parsed.data;
-  const result = await (env.CORE as unknown as CoreServiceBinding).createCustomerAddress({
+  const result = await coreClient(env.CORE).createCustomerAddress({
     requestId,
     headers: requestHeaders(request),
     label: body.label,
@@ -61,7 +61,7 @@ export async function PATCH(request: Request) {
     );
   const body = parsed.data;
   return Response.json(
-    await (env.CORE as unknown as CoreServiceBinding).updateCustomerAddress({
+    await coreClient(env.CORE).updateCustomerAddress({
       requestId,
       headers: requestHeaders(request),
       addressId: body.addressId,

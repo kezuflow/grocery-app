@@ -2,37 +2,47 @@
 
 ## Enforcement Rules
 
-States are changed only through named application commands. Every command checks the current state, actor capability/scope, business preconditions, expected version, and idempotency key where replay is possible. Repositories must not expose generic status setters.
+States are changed only through named application commands. Client, application, and admin lifecycle commands check current state, actor capability/scope, business preconditions, a stable idempotency key where replay is possible, and the expected aggregate version where concurrent mutation is possible. Repositories must not expose generic status setters.
 
-Payment success is the customer commitment boundary. Delivery-cycle cutoff is the later operational/procurement commitment boundary. These events are deliberately separate.
+External provider events are not client commands and never supply or invent an `expectedVersion`. Ingestion requires unique `(provider, providerEventId)` identity and a durable inbox. The handler loads current aggregate state, applies legal-transition and compare-and-swap protection, and safely retries or reconciles if another command changed the aggregate concurrently.
+
+A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid membership and paid orders. For MVP, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, delivery-cycle cutoff is the later operational/procurement commitment boundary. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate.
 
 ## Subscription
 
 ```text
-TRIALING -> ACTIVE
-TRIALING -> CANCELLED -> EXPIRED
-TRIALING -> EXPIRED
+PENDING -> TRIALING / ACTIVE / CANCELED / EXPIRED
+TRIALING -> ACTIVE / CANCELED / EXPIRED
+ACTIVE -> PAST_DUE / PAUSED / CANCELED / EXPIRED
+PAST_DUE -> ACTIVE / PAUSED / CANCELED / EXPIRED
+PAUSED -> ACTIVE / CANCELED / EXPIRED
 
-ACTIVE -> PAST_DUE -> ACTIVE
-ACTIVE -> PAUSED -> ACTIVE
-ACTIVE -> CANCELLED -> EXPIRED
-
-PAST_DUE -> PAUSED / CANCELLED / EXPIRED
-PAUSED -> CANCELLED / EXPIRED
+CANCELED (terminal)
+EXPIRED (terminal)
 ```
 
-Commands include `StartTrial`, `ActivateSubscription`, `RecordMembershipPaymentFailure`, `RecoverSubscription`, `PauseSubscription`, `ResumeSubscription`, `CancelSubscription`, and `ExpireSubscription`.
+Commands include `BeginMembershipEnrollment`, `StartPromotionalTrial`, `ActivateSubscriptionFromPayment`, `RecordMembershipPaymentFailure`, `RecoverSubscriptionFromPayment`, `PauseSubscription`, `ResumeSubscription`, `RequestSubscriptionCancellation`, `ApplyScheduledSubscriptionCancellation`, and `ExpireSubscription`.
 
-Only `TRIALING` and `ACTIVE` are checkout-eligible. Eligibility also considers effective dates, not just a stored enum. Trial waives only membership fees. Cancellation may be immediate or end-of-period according to the configured policy and must store requested/effective timestamps.
+Rules:
+
+- `PENDING` is not eligible. It may enter `TRIALING` only when Promotions supplies a valid introductory-trial grant/redemption, or `ACTIVE` only after a provider-confirmed canonical Payments outcome satisfies the payment commitment policy.
+- Only `TRIALING` and `ACTIVE` are checkout-eligible. Eligibility also considers exact effective timestamps, not just a stored enum.
+- The introductory trial lasts exactly one calendar billing month as calculated in the Market's configured business timezone under `DOMAIN_MODEL.md`; persisted start/end values are UTC instants.
+- Immediate intentional termination transitions an allowed nonterminal state to `CANCELED`.
+- Cancel-at-period-end records `cancelAtPeriodEnd` and `scheduledCancellationAt`/`endsAt` without changing `TRIALING` or `ACTIVE`. At the effective instant, `ApplyScheduledSubscriptionCancellation` performs the guarded transition to `CANCELED`.
+- `EXPIRED` is used only when entitlement naturally ends without continuation, including a timed-out pending enrollment or an uncontinued trial/entitlement. It is not the successor of `CANCELED`.
+- `CANCELED` and `EXPIRED` are terminal. Neither may transition to the other or back to an entitled state; a later membership requires a new subscription aggregate subject to eligibility policy.
 
 ## Delivery Cycle
+
+DeliveryCycle exists only for `SCHEDULED`; `WEEKLY` is a configured cadence. Location mode switching is an explicit versioned configuration command, not a DeliveryCycle state transition. Activating a new configuration atomically retires the prior effective configuration so the location has exactly one active `INSTANT`/`SCHEDULED` mode, and it never advances or rewrites existing Orders.
 
 ```text
 DRAFT -> SCHEDULED -> OPEN -> CUTOFF_REACHED
       -> PROCUREMENT -> RECEIVING -> PACKING
       -> DISPATCHING -> DELIVERING -> CLOSED
 
-DRAFT / SCHEDULED / OPEN -> CANCELLED
+DRAFT / SCHEDULED / OPEN -> CANCELED
 later cancellation -> explicit exceptional operations command
 ```
 
@@ -44,6 +54,7 @@ Rules:
 - Reaching cutoff prevents normal procurement-affecting customer modifications.
 - Time-based advancement is still an explicit idempotent command invoked by a request or scheduled trigger.
 - Cancelling a cycle with commitments requires an operational compensation plan; a raw transition is forbidden.
+- No `INSTANT` Order is assigned a synthetic cycle merely to reuse these transitions.
 
 ## Order
 
@@ -52,32 +63,35 @@ PENDING_PAYMENT -> COMMITTED -> FULFILLMENT_PENDING
                  -> FULFILLMENT_READY -> OUT_FOR_DELIVERY
                  -> DELIVERED
 
-PENDING_PAYMENT -> EXPIRED / CANCELLED
-COMMITTED or later -> CANCELLATION_REQUESTED -> CANCELLED
+PENDING_PAYMENT -> EXPIRED / CANCELED
+COMMITTED or later -> CANCELLATION_REQUESTED -> CANCELED
 COMMITTED or later -> EXCEPTION
-EXCEPTION -> prior valid flow / CANCELLED
+EXCEPTION -> prior valid flow / CANCELED
 ```
 
-`PENDING_PAYMENT` may be represented as a checkout attempt rather than a durable Order if the implementation can preserve payment recovery and idempotency. A durable Order is never considered commercially committed until payment succeeds and the order commitment transaction completes.
+`PENDING_PAYMENT` may be represented as a checkout attempt rather than a durable Order if the implementation can preserve payment recovery and idempotency. A durable Order is never considered commercially committed until Payments records a provider-confirmed canonical outcome sufficient under the configured commitment policy and the explicit idempotent order-commitment command completes.
 
 Commands include `CommitOrderAfterPayment`, `RequestOrderCancellation`, `ApproveOrderCancellation`, `MarkFulfillmentPending`, `MarkFulfillmentReady`, `MarkOutForDelivery`, `MarkOrderDelivered`, and `RecordOrderException`.
 
 Rules:
 
 - Committed order items and snapshots are immutable.
+- Commitment snapshots the resolved fulfillment mode, location, service area/zone, delivery promise/window/ETA, and `SCHEDULED` cycle identifiers only when applicable.
+- `INSTANT` commitment converts the checkout attempt's valid stock hold into a committed reservation atomically; an expired/missing hold cannot be ignored after payment and instead enters visible retry/reconciliation policy.
+- `SCHEDULED` commitment atomically allocates cycle/zone/location capacity and records configured stocked reservation and/or planned demand effects.
 - Additions create an `OrderAmendment`; removal/repricing is not normal mutation.
-- Cancellation is policy-driven by cutoff, procurement, fulfillment, dispatch, reservation, demand, and refund state.
+- Cancellation is policy-driven by fulfillment mode, Scheduled cutoff/procurement where applicable, fulfillment/dispatch progress, hold/reservation/demand, and refund state.
 - Delivery/fulfillment projections may advance order state only through application orchestration after their own transition succeeds.
 
 ## Order Amendment
 
 ```text
 DRAFT -> PENDING_PAYMENT -> COMMITTED
-DRAFT / PENDING_PAYMENT -> CANCELLED / EXPIRED
+DRAFT / PENDING_PAYMENT -> CANCELED / EXPIRED
 COMMITTED -> REFUND_PENDING / REFUNDED (exceptional resolution)
 ```
 
-An amendment is additive-only, normally requires the original cycle to remain open and before cutoff, and has its own payment and item snapshots. Commitment creates additional capacity/demand/reservation effects without modifying original order lines.
+An amendment is additive-only and has its own payment and item snapshots. `SCHEDULED` normally requires the original cycle to remain open and before cutoff. The normal customer deadline for `INSTANT` amendments is not yet approved, so Instant amendment creation fails closed until that policy is defined. Commitment creates the applicable incremental hold/reservation, capacity, and/or demand effects without modifying original order lines.
 
 ## Payment Attempt
 
@@ -89,15 +103,15 @@ SUCCEEDED -> PARTIALLY_REFUNDED -> REFUNDED
 SUCCEEDED -> REFUNDED
 ```
 
-Provider states map into stable application states behind the payment adapter. `SUCCEEDED` means funds reached the configured commercial-success boundary (normally captured), not merely that a browser returned successfully.
+Provider states map into stable application states behind the payment adapter. `SUCCEEDED` means funds reached the configured payment-commitment boundary (captured for MVP), not merely that a browser returned successfully or that payment was initiated. Membership and Order react through separate explicit idempotent application commands.
 
 Commands/events include `InitiatePayment`, `RecordActionRequired`, `ProcessPaymentWebhook`, `ReconcilePayment`, and `MarkPaymentExpired`.
 
 Rules:
 
-- Provider event IDs and checkout idempotency keys are unique.
-- Duplicate webhooks return the previously recorded outcome.
-- If payment succeeds but commitment initially fails or the response is lost, recovery must either commit the same order exactly once or create a visible refund/finance exception. Money must never become an invisible orphan.
+- Provider events are durably unique by `(provider, providerEventId)`; application checkout/payment commands have their own stable idempotency keys.
+- Duplicate webhooks return the previously recorded inbox outcome. Provider events do not carry `expectedVersion`; the handler uses current-state validation, conditional aggregate updates, and safe retry/reconciliation on concurrent change.
+- If canonical Payments reaches `SUCCEEDED` but commitment initially fails or the response is lost, recovery must either commit the same order exactly once or create a visible refund/finance exception. Money must never become an invisible orphan.
 - A payment state is never inferred solely from client state.
 
 ## Refund
@@ -134,7 +148,7 @@ Rules:
 ```text
 NOT_STARTED -> IN_PROGRESS -> COMPLETED
 IN_PROGRESS -> DISCREPANCY -> IN_PROGRESS / COMPLETED
-IN_PROGRESS / DISCREPANCY -> CANCELLED (authorized exceptional case)
+IN_PROGRESS / DISCREPANCY -> CANCELED (authorized exceptional case)
 ```
 
 Commands include `StartReceiving`, `RecordReceivedLine`, `RecordQualityRejection`, `RecordReceivingShortage`, `ResolveReceivingDiscrepancy`, and `CompleteReceiving`.
@@ -148,18 +162,20 @@ NOT_STARTED -> PICKING -> READY_TO_PACK -> PACKING -> PACKED
             -> HANDED_OFF -> COMPLETED
 
 PICKING / READY_TO_PACK / PACKING -> SHORTED
-SHORTED -> PICKING / READY_TO_PACK / CANCELLED / ESCALATED
+SHORTED -> PICKING / READY_TO_PACK / CANCELED / ESCALATED
 ```
 
 Commands include `StartPicking`, `RecordPickedQuantity`, `RecordFulfillmentShortage`, `ResolveFulfillmentException`, `StartPacking`, `MarkPacked`, `HandOffToDelivery`, and `CompleteFulfillment`.
 
 Packed quantities consume reservations/stock through explicit ledger movements. `PACKED` does not imply dispatched or delivered.
 
+The lifecycle is shared by `INSTANT` and `SCHEDULED`; mode-specific differences live in Fulfillment policies that construct tasks, deadlines, queues, and allowed actions. Repeated mode conditionals must not be scattered across unrelated state machines.
+
 ## Delivery Batch
 
 ```text
 DRAFT -> READY -> ASSIGNED -> DISPATCHED -> IN_PROGRESS -> COMPLETED
-DRAFT / READY / ASSIGNED -> CANCELLED
+DRAFT / READY / ASSIGNED -> CANCELED
 IN_PROGRESS -> EXCEPTION -> IN_PROGRESS / COMPLETED
 ```
 
@@ -171,7 +187,7 @@ Batch assignment requires rider capability and allowed scope. Reordering stops, 
 UNASSIGNED -> ASSIGNED -> EN_ROUTE -> ARRIVED -> DELIVERED
                                       -> FAILED
 FAILED -> RETRY_SCHEDULED -> ASSIGNED
-FAILED -> ESCALATED / CANCELLED
+FAILED -> ESCALATED / CANCELED
 ```
 
 Commands include `AssignDeliveryJob`, `MarkEnRoute`, `MarkArrived`, `MarkDelivered`, `MarkDeliveryFailed`, `ScheduleDeliveryRetry`, and `EscalateFailedDelivery`.
@@ -185,7 +201,7 @@ MVP delivery proof records delivered timestamp, rider, and event/status. Later p
 | Stage | Normal authority | Inventory/demand effect | Financial effect |
 |---|---|---|---|
 | Before payment | Customer/system | None | None |
-| Paid before cutoff | Customer request under policy | Release stocked reservation; cancel planned demand if not operationally locked | Normally full refund, subject to configured fee policy |
+| Paid before Scheduled cutoff or before Instant fulfillment work begins | Customer request under mode policy | Release Instant/stocked reservation; cancel planned demand if not operationally locked | Normally full refund, subject to configured fee policy |
 | After cutoff before procurement | Operations | Explicit demand adjustment | Full/partial refund by policy |
 | Procurement started | Operations | Preserve supplier commitment; route resulting supply to inventory/resolution | Partial/full refund or credit by approved policy |
 | After receiving | Operations/support | Inventory remains auditable; reverse allocation if usable | Affected-line or policy refund |
@@ -195,5 +211,4 @@ MVP delivery proof records delivered timestamp, rider, and event/status. Later p
 
 ## Transition Test Expectations
 
-For every state machine, test all allowed transitions, representative illegal transitions, authorization/scope failures, duplicate commands, stale versions, and cross-domain effects. Time-boundary tests must cover exactly-at-cutoff behavior using an injected clock.
-
+For every state machine, test all allowed transitions, representative illegal transitions, authorization/scope failures, duplicate commands, stale versions for versioned lifecycle commands, and cross-domain effects. Provider-event tests instead cover duplicate `(provider, providerEventId)`, out-of-order delivery, handler compare-and-swap conflict, retry, and reconciliation. Time-boundary tests must cover exactly-at-cutoff behavior using an injected clock.

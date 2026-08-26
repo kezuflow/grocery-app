@@ -6,7 +6,7 @@ import type {
   RpcResult,
   Scope,
 } from "@freshmarkets/contracts";
-import { authSchema } from "./schema";
+import { iamSchema } from "../iam/schema";
 import type { AuthInstance } from "./service";
 
 type Database = ReturnType<typeof import("drizzle-orm/d1").drizzle>;
@@ -30,8 +30,8 @@ export async function applicationContext(
 
   const staff = await database
     .select()
-    .from(authSchema.staffIdentity)
-    .where(eq(authSchema.staffIdentity.authUserId, session.user.id))
+    .from(iamSchema.staffIdentity)
+    .where(eq(iamSchema.staffIdentity.authUserId, session.user.id))
     .limit(1);
   const staffRecord = staff[0];
   const capabilities: Capability[] = [];
@@ -39,19 +39,19 @@ export async function applicationContext(
 
   if (staffRecord?.status === "active") {
     const roles = await database
-      .select({ roleId: authSchema.staffRole.roleId })
-      .from(authSchema.staffRole)
-      .where(eq(authSchema.staffRole.staffId, staffRecord.id));
+      .select({ roleId: iamSchema.staffRole.roleId })
+      .from(iamSchema.staffRole)
+      .where(eq(iamSchema.staffRole.staffId, staffRecord.id));
     const roleIds = roles.map((item) => item.roleId);
     if (roleIds.length) {
       const permissions = await database
-        .select({ code: authSchema.permission.code })
-        .from(authSchema.rolePermission)
+        .select({ code: iamSchema.permission.code })
+        .from(iamSchema.rolePermission)
         .innerJoin(
-          authSchema.permission,
-          eq(authSchema.permission.id, authSchema.rolePermission.permissionId),
+          iamSchema.permission,
+          eq(iamSchema.permission.id, iamSchema.rolePermission.permissionId),
         )
-        .where(inArray(authSchema.rolePermission.roleId, roleIds));
+        .where(inArray(iamSchema.rolePermission.roleId, roleIds));
       for (const permission of permissions) {
         if (
           permission.code === "staff:read" ||
@@ -72,8 +72,8 @@ export async function applicationContext(
     }
     const staffScopes = await database
       .select()
-      .from(authSchema.staffScope)
-      .where(eq(authSchema.staffScope.staffId, staffRecord.id));
+      .from(iamSchema.staffScope)
+      .where(eq(iamSchema.staffScope.staffId, staffRecord.id));
     for (const scope of staffScopes) {
       if (scope.scopeKind === "global") scopes.push({ kind: "global" });
       else if (scope.scopeKind === "market" && scope.marketId)

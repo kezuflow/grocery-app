@@ -1,11 +1,22 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { requestHeaders } from "../../../../lib/core-client/request";
+import { coreClient } from "@/lib/core-client/core";
+import { requireIdempotencyKey } from "@/lib/core-client/commands";
+
 export async function POST(request: Request) {
-  const requestId = crypto.randomUUID();
-  const result = await (env.CORE as unknown as CoreServiceBinding).startTrial({
-    requestId,
+  let idempotencyKey: string;
+  try {
+    idempotencyKey = await Promise.resolve(requireIdempotencyKey(request));
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: { code: "VALIDATION_FAILED", message: (error as Error).message } },
+      { status: 400 },
+    );
+  }
+  const result = await coreClient(env.CORE).startTrial({
+    requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
+    idempotencyKey,
   });
   return Response.json(result);
 }

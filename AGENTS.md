@@ -1,6 +1,6 @@
 # FreshMarkets Agent Instructions
 
-This file is the enforcement and documentation router for this repository. The detailed documents under `docs/` are the source of truth. Read the relevant documents before changing a domain or product surface.
+This file is the enforcement and documentation router for this repository. The canonical set is `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/STATE_MACHINES.md`, `docs/architecture/DATA_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, `docs/product/MVP_SCOPE.md`, and `docs/product/IMPLEMENTATION_PLAN.md`. `IMPLEMENTATION_STATUS.md`, phase reviews, remediation notes, READMEs, code, and migration history describe implementation or historical compatibility; they do not override the canonical set. Read the relevant canonical documents before changing a domain or product surface.
 
 ## Mandatory Architecture
 
@@ -8,7 +8,7 @@ This file is the enforcement and documentation router for this repository. The d
 - `apps/web` uses vinext and runs on Cloudflare Workers. Validate every relied-on Next.js feature against vinext before adoption.
 - `apps/core` is the authoritative Cloudflare Worker and an internal modular monolith.
 - Web calls Core through Cloudflare Service Bindings using shared typed contracts. Web must not directly access authoritative D1 data or duplicate Core business logic.
-- Core owns application commands, queries, authorization, checkout eligibility, pricing, inventory, procurement, fulfillment, delivery, subscriptions, payments, audit behavior, and business storage.
+- Core owns the application bounded contexts, commands, queries, authorization, business storage, and provider adapters enumerated in `ARCHITECTURE.md`. Each state has exactly one owning bounded context even though all contexts deploy together in Core.
 - Do not introduce public HTTP APIs, CORS, microservices, Durable Objects, Workflows, KV, or Queues without a documented need. Provider webhooks are a narrow exception.
 - Preserve the layer direction: UI -> application command/query -> domain policy/service -> repository -> storage/integration.
 - Use purpose-built DTOs and read models. Raw database/ORM rows are not public RPC or UI contracts.
@@ -17,7 +17,7 @@ This file is the enforcement and documentation router for this repository. The d
 ## Authentication and Authorization
 
 - Better Auth runs authoritatively in `apps/core` using Cloudflare D1.
-- Better Auth owns only users/authentication identities, linked accounts, sessions, and verification/authentication records.
+- Better Auth owns only authentication users/identities, credentials and linked accounts, sessions, email verification, password reset, OAuth, and other authentication infrastructure required by its configured plugins.
 - Customer profiles, addresses, subscriptions, staff identities, roles, permissions, and location scopes are application-owned domains linked to the Better Auth user ID.
 - Authentication answers who the user is. Core authorization answers what the user may do.
 - Web provides the browser auth experience and proxies auth routes/callbacks to Core while preserving cookies, `Set-Cookie`, callback URLs, host/origin, OAuth redirects, and CSRF protections. Web must not become a second auth authority.
@@ -26,17 +26,29 @@ This file is the enforcement and documentation router for this repository. The d
 ## Locked Business Invariants
 
 - A customer must have an active or trialing subscription to successfully checkout, pay, or place an order.
-- Payment success is the customer commitment boundary. Paid orders are locked and cannot be freely mutated.
-- Delivery-cycle cutoff is the operational/procurement commitment boundary.
+- The current membership is one paid offer at PHP 299.00 per calendar billing month. The introductory free trial is a Promotion grant over that paid membership for exactly one calendar billing month; it is not a zero-price offer or plan.
+- Membership owns subscription state; Promotions owns trial eligibility/grant/redemption; Payments owns all provider interactions and canonical financial state. Better Auth owns none of these concepts.
+- `CANCELED` and `EXPIRED` are distinct terminal subscription states. Scheduled cancellation is intent metadata while the subscription remains in its entitled state until an explicit transition at the effective instant.
+- Paid membership activation and paid order commitment require a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. For MVP, provider captured/success states map to canonical `SUCCEEDED`; browser return state or payment initiation is never sufficient.
+- Paid orders are locked and cannot be freely mutated after commitment.
+- Customer fulfillment mode is exactly `INSTANT` or `SCHEDULED`. Each active fulfillment location has one active mode configuration; `WEEKLY` is the initial Scheduled cadence, never a fulfillment mode. A later configuration change never rewrites a committed Order's fulfillment snapshot.
+- Fulfillment mode and sourcing mode are separate. Canonical sourcing values are `STOCKED`, `PLANNED`, `ON_DEMAND`, and `MIXED`; valid combinations include `INSTANT + STOCKED` and `SCHEDULED + PLANNED`.
+- Scheduled delivery-cycle cutoff is the operational/procurement commitment boundary for `SCHEDULED`. `INSTANT` checkout must not be forced through delivery-cycle semantics and instead uses current location inventory, an expiring checkout hold/reservation, and mode-specific fulfillment promises.
 - Post-payment additions use an additive amendment/supplemental transaction with independent price and payment history.
 - Catalog is global. Availability, sourcing behavior, and physical inventory are location-specific.
-- Sellable variants consume a shared product inventory pool expressed in a base unit; variants do not own independent physical stock.
+- Inventory balances and demand use integer canonical base units `GRAM`, `MILLILITER`, or `PIECE`. Controlled sell units are data-driven within `MASS`, `VOLUME`, or `COUNT`; cross-dimension conversion and floating-point authoritative quantities are forbidden.
+- Sellable variants are persisted configuration and consume a SKU-specific integer quantity from a shared product inventory pool; variants do not own independent physical stock. Pack, bunch, tray, and similar labels never define global conversions.
+- Authoritative price belongs to a sellable SKU in its applicable market/location price context. Missing or invalid price is unavailable, never silently zero.
 - Stocked inventory reservation and planned-procurement committed demand are separate concepts.
-- Historical orders snapshot product, SKU/unit, prices, discounts, address, schedule, and fulfillment context.
-- Core authoritatively validates coordinates, serviceability polygons, delivery zone, fulfillment eligibility, cycle/cutoff/capacity, cart, prices, promotions, minimum order, subscription, and payment readiness.
+- Historical orders snapshot product, SKU/unit and base consumption, prices and explicit monetary components, discounts/promotions, address, fulfillment mode/location/zone/promise, and Scheduled cycle/window identifiers where applicable.
+- Promotions owns one controlled benefit/rule system for membership fee waivers, order discounts, and delivery discounts. MVP stacking permits at most one merchandise/order benefit plus one delivery benefit; Membership benefits remain separate. Arbitrary executable promotion scripting is forbidden.
+- Core authoritatively validates coordinates, serviceability polygons, delivery zone, fulfillment mode/location/promise, mode-specific inventory or cycle/cutoff/capacity, cart, SKU prices, promotions/stacking, minimum order, subscription, and payment readiness.
 - Customers buy from FreshMarkets and never select a fulfillment hub.
 - Preserve multi-market and multi-location support even while MVP operates one Cebu location.
 - Maintain independent state machines for subscription, cycle, order, payment, refund, procurement, receiving, fulfillment, and delivery.
+- Client/application/admin lifecycle commands require stable idempotency keys and expected aggregate versions where concurrent mutation is possible. Provider events never invent or accept client `expectedVersion` values; they use unique `(provider, providerEventId)` inbox identity, handler-side compare-and-swap protection, and safe retry/reconciliation.
+- Admin uses purpose-built Core commands/read models and capability-based IAM, never raw tables, Better Auth user rows as Customer records, or a global `isAdmin` authority.
+- Analytics is a derived read-side concern inside the Core modular monolith for MVP. Every published named metric requires one versioned canonical definition; Analytics never owns Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state.
 
 ## Design Rules
 
@@ -50,9 +62,10 @@ This file is the enforcement and documentation router for this repository. The d
 - Any architecture or Cloudflare change: read `docs/architecture/ARCHITECTURE.md` and `docs/architecture/API_CONTRACTS.md`.
 - Authentication/session change: read `docs/architecture/ARCHITECTURE.md`, the identity sections of `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, and `docs/architecture/DATA_MODEL.md`.
 - Checkout, orders, payments, subscriptions, or delivery cycles: read `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`.
+- Catalog, units, SKUs, pricing, fulfillment modes, or promotions: read `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`; read `STATE_MACHINES.md` when lifecycle or commitment behavior changes.
 - Inventory, procurement, receiving, fulfillment, or delivery: read `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, and `DATA_MODEL.md`.
 - MVP or sequencing change: read `docs/product/MVP_SCOPE.md` and `docs/product/IMPLEMENTATION_PLAN.md`.
-- Admin UI change: read `docs/design/admin/DESIGN.md` and `docs/design/admin/COMPONENTS.md`.
+- Admin or Analytics change: read the Admin/Analytics sections of `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`, plus `docs/design/admin/DESIGN.md` and `docs/design/admin/COMPONENTS.md` for Admin UI.
 - Marketplace UI change: read `docs/design/marketplace/DESIGN.md` and `docs/design/marketplace/REFERENCES.md`.
 
 ## Repository and Testing Conventions
@@ -65,6 +78,7 @@ This file is the enforcement and documentation router for this repository. The d
 - Tests must scale with risk and cover domain invariants, legal/illegal transitions, authorization and location scopes, snapshots, idempotency/replay, webhook verification, and concurrent capacity/inventory mutations.
 - Run type checks, focused unit/integration tests, Worker-local integration tests, and relevant Playwright flows before considering a phase complete.
 - Update canonical documentation in the same change when an approved architecture, contract, state, data, scope, or design decision changes.
+- Update `IMPLEMENTATION_STATUS.md` and READMEs only as descriptive, non-authoritative records after the canonical documents agree.
 
 ## Phase Execution Rules
 

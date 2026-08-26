@@ -2,7 +2,7 @@
 
 ## Status and Authority
 
-This document describes the approved runtime, repository, ownership, and layering architecture. It distinguishes the MVP deployment from possible future scaling options. Product behavior is further defined in `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, and the product scope documents.
+This document is authoritative for the approved runtime, repository, bounded-context ownership, integration boundaries, and layering architecture. `DOMAIN_MODEL.md` owns business meaning and invariants, `STATE_MACHINES.md` owns lifecycle vocabulary and transitions, `DATA_MODEL.md` owns conceptual persistence, and `API_CONTRACTS.md` owns application boundary semantics. Product scope and sequencing are authoritative only in `MVP_SCOPE.md` and `IMPLEMENTATION_PLAN.md`. Status reports, remediation notes, READMEs, code, and migrations do not override these decisions.
 
 ## System Shape
 
@@ -46,6 +46,32 @@ Core owns:
 - purpose-built read models returned to Web.
 
 Core is a modular monolith. Modules have explicit application/domain/repository boundaries but deploy together. A domain is not extracted into a separate Worker merely because it has a name.
+
+## Bounded Context Ownership
+
+All application bounded contexts below are authoritative modules inside `apps/core`; a context boundary does not imply a separate deployment. A record or transition has one owner. Other contexts react through explicit application commands or consume purpose-built read models rather than mutating the owner's storage.
+
+| Bounded context | Authoritative responsibility | Explicit exclusions |
+|---|---|---|
+| Identity/Auth | Better Auth users, credentials/accounts, sessions, email verification, password reset, OAuth, and configured authentication infrastructure | Customer profiles, authorization, membership, promotions, payments, orders, or operations |
+| Application IAM | Customer principals, staff/rider identities, roles, capabilities, market/location scopes, and authorization decisions | Authentication credentials/sessions and business aggregate state |
+| Customers | Customer profile and saved-address ownership | Authentication identity and serviceability policy |
+| Geography and Assignment | Markets, service areas, delivery zones, location capabilities, the single active `INSTANT`/`SCHEDULED` mode configuration per fulfillment location, serviceability, and fulfillment-location assignment | Customer-selected hubs, fulfillment execution, and catalog availability |
+| Catalog, Availability, and Pricing | Global products, controlled unit registry, persisted sellable SKUs and SKU-specific base consumption, plus market/location SKU price and availability policy | Physical stock, universal pack/bunch/tray conversions, and committed order snapshots |
+| Membership | Paid membership offer, subscriptions, eligibility, billing periods, and subscription lifecycle | Trial eligibility/grants, provider interactions, and payment state |
+| Promotions | Controlled benefit/rule definitions, eligibility, grants, redemptions, deterministic component-level stacking, and the introductory membership trial authority | Subscription state, arbitrary executable rules, and payment-provider operations |
+| Cart and Checkout | Versioned cart, mode-aware eligibility orchestration, immutable quote and financial breakdown, checkout attempt, and pre-payment recovery state | Canonical payment state and committed orders |
+| Payments and Refunds | Provider-neutral payment intents/attempts, commitment policy, provider adapters/mappings, event inbox, refunds, and reconciliation | Membership and order lifecycle ownership |
+| Orders and Amendments | Immutable paid order commitment, snapshots, cancellation policy, and additive amendments | Provider financial state and physical fulfillment execution |
+| Delivery Cycles and Capacity | `SCHEDULED` cadence/window/cutoff lifecycle and cycle-zone-location capacity allocation | `INSTANT` fulfillment, order, procurement, and delivery execution states |
+| Inventory | Integer location inventory positions, expiring Instant checkout holds, committed stocked reservations, planned-demand distinction, and append-only movements | Unit/SKU definitions, procurement approval, and fulfillment workflow state |
+| Procurement and Receiving | Demand aggregation, requirements, purchasing, receipt/discrepancy state, and supply exceptions | Direct unexplained inventory mutation |
+| Fulfillment | Explicit `INSTANT`/`SCHEDULED` policies after location resolution plus picking, shortage, packing, and handoff state | Location mode configuration, Order financial truth, and delivery execution |
+| Delivery and Rider Work | Delivery jobs/batches/stops, assignments, rider events, retries, and delivery exceptions | Raw order-state mutation and payment/refund policy |
+| Audit and Reliability | Durable audit history, command idempotency, outbox/inbox processing metadata, and operational exceptions | Owning another context's business state |
+| Analytics and Reporting | Derived operational/business projections, canonical versioned metric definitions, aggregation, and reporting read models | Authoritative Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state |
+
+The canonical membership, introductory-trial, payment-commitment, and subscription-lifecycle semantics are defined in `DOMAIN_MODEL.md` and `STATE_MACHINES.md`; this table establishes ownership only.
 
 ## Recommended Repository Structure
 
@@ -107,13 +133,14 @@ Rules:
 
 Better Auth runs in `apps/core` and persists its tables in D1. It owns authentication identity, accounts, sessions, verification records, Google OAuth, email/password credentials, email verification, password reset, and persistent secure sessions.
 
-Application tables link to the Better Auth user identifier but remain independently owned:
+Application tables link to the Better Auth user identifier but remain independently owned by their application context:
 
 - `customer_principal` is the auth-linked application principal and commerce access gate;
-- `customer` is the commerce aggregate linked 1:1 to that principal, with addresses and subscriptions owned by Core;
-- `staff_principals`;
-- subscriptions;
+- `customer` is the commerce aggregate linked 1:1 to that principal;
+- customer addresses;
+- `staff_principals` and rider identities;
 - roles, capabilities, and location scopes;
+- memberships, promotions, payments, orders, and every other business record;
 - all commerce and operational data.
 
 ### Authenticated customer boundary
@@ -170,6 +197,8 @@ Use pragmatic CQRS-lite:
 - Writes are explicit commands such as `ConfirmOrder`, `CreateOrderAmendment`, `ReceiveProcurement`, `AdjustInventory`, `MarkPacked`, and `MarkDelivered`.
 - Read and write paths share one D1 database and one deployment. There is no event-sourced command bus or separate read database in MVP.
 - Read models may use optimized SQL joins/projections but must retain authorization and scope checks.
+- Admin customer summaries, operational queues, and Analytics dashboards compose purpose-built projections over owning contexts. They never use Better Auth tables as the Customer database or mutate source state through projection storage.
+- A named metric is publishable only through one versioned canonical definition specifying formula, source context/events, time basis/timezone, inclusion/exclusion rules, and unresolved accounting dependencies.
 
 ## Cloudflare Resource Ownership
 
@@ -212,12 +241,14 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 - Trace checkout attempts, provider payment references, webhook event IDs, order commitment, refunds, queue jobs, and reconciliation outcomes.
 - Keep audit events separate from diagnostic logs. Audit events are durable business records.
 - Every externally replayable command requires an idempotency key or provider event identity.
+- External provider events are durably deduplicated by `(provider, providerEventId)`. They do not carry an application `expectedVersion`; handlers use current-state validation and conditional aggregate version updates, then safely retry or reconcile after concurrent changes.
+- Payment providers are infrastructure adapters. They translate vendor payloads and states into canonical Payments outcomes. Membership and Orders react to those outcomes through explicit idempotent application commands and never infer commitment from browser redirects or payment initiation.
 - Secrets live in Cloudflare secret bindings, never source/config.
 - Define migration, backup/export, restoration, failed-job, webhook-replay, and reconciliation runbooks before production launch.
 - Apply rate limits at abuse-sensitive public boundaries such as login, registration, reset, checkout attempts, and webhook ingress where justified.
 
 ## MVP Versus Future Scaling
 
-MVP uses two Workers, one D1 database, D1 capacity coordination, one active Cebu fulfillment location, and a provider-neutral payment integration boundary. The schema and domain remain multi-location.
+MVP uses two Workers, one D1 database, one active Cebu fulfillment location with exactly one configured active fulfillment mode, D1 coordination for the applicable Instant inventory hold or Scheduled cycle capacity, and a provider-neutral payment integration boundary. `SCHEDULED` initially supports `WEEKLY` cadence, but cadence is configuration rather than a platform-wide fulfillment mode. The schema and domain remain multi-location and mode-aware.
 
 Future scaling options include additional locations and markets, D1 read replication sessions for read-heavy operations, Durable Objects for proven hot coordination, stock transfers, central/local procurement routing, Workflows for long-running orchestration, richer analytics stores, and selective module extraction. Extraction requires a demonstrated independent scaling, security, deployment, or ownership need and must preserve typed contracts and business invariants.

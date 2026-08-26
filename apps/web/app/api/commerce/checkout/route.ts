@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../../lib/core-client/request";
+import { isWebSandboxPaymentEnabled } from "../../../../lib/payments/runtime-policy";
+import { requireIdempotencyKey } from "@/lib/core-client/commands";
+import { coreClient } from "@/lib/core-client/core";
 const checkoutBodySchema = z.object({
   cartId: z.string().trim().min(1),
   addressId: z.string().trim().min(1),
@@ -9,6 +11,12 @@ const checkoutBodySchema = z.object({
   commit: z.boolean().optional(),
   idempotencyKey: z.string().trim().min(1).optional(),
 });
+export async function GET(_request?: Request) {
+  return Response.json({
+    ok: true,
+    value: { sandboxPaymentEnabled: isWebSandboxPaymentEnabled(env) },
+  });
+}
 export async function POST(request: Request) {
   const parsed = checkoutBodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
@@ -17,6 +25,18 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const body = parsed.data;
+  if (body.commit)
+    return Response.json(
+      {
+        ok: false,
+        error: {
+          code: "PAYMENT_PROVIDER_UNAVAILABLE",
+          message:
+            "Mock commitment was removed; use /api/checkout/quote and /api/checkout/payment.",
+        },
+      },
+      { status: 410 },
+    );
   const input = {
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
@@ -24,13 +44,6 @@ export async function POST(request: Request) {
     addressId: body.addressId,
     cycleId: body.cycleId,
   };
-  const core = env.CORE as unknown as CoreServiceBinding;
-  return Response.json(
-    body.commit
-      ? await core.commitMockOrder({
-          ...input,
-          idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
-        })
-      : await core.evaluateCheckout(input),
-  );
+  const core = coreClient(env.CORE);
+  return Response.json(await core.evaluateCheckout(input));
 }
