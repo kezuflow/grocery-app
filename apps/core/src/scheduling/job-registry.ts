@@ -5,6 +5,7 @@ import { deliveryCycleCutoffJob } from "./jobs/delivery-cycle-cutoff";
 import { deliveryCycleCloseoutJob } from "./jobs/delivery-cycle-closeout";
 import { paymentsReactionRedriveJob } from "./jobs/payments-reaction-redrive";
 import { paymentsReconciliationRedriveJob } from "./jobs/payments-reconciliation-redrive";
+import { membershipRenewalsJob } from "./jobs/membership-renewals";
 
 const EVERY_MINUTE = "* * * * *";
 const EVERY_FIFTEEN_MINUTES = "*/15 * * * *";
@@ -16,6 +17,7 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
   [EVERY_MINUTE]: [
     checkoutHoldExpiryJob,
     membershipScheduledCancellationsJob,
+    membershipRenewalsJob,
     deliveryCycleCutoffJob,
   ],
   [EVERY_FIFTEEN_MINUTES]: [
