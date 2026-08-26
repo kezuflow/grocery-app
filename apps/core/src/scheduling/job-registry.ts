@@ -3,6 +3,8 @@ import { checkoutHoldExpiryJob } from "./jobs/checkout-hold-expiry";
 import { membershipScheduledCancellationsJob } from "./jobs/membership-scheduled-cancellations";
 import { deliveryCycleCutoffJob } from "./jobs/delivery-cycle-cutoff";
 import { deliveryCycleCloseoutJob } from "./jobs/delivery-cycle-closeout";
+import { paymentsReactionRedriveJob } from "./jobs/payments-reaction-redrive";
+import { paymentsReconciliationRedriveJob } from "./jobs/payments-reconciliation-redrive";
 
 const EVERY_MINUTE = "* * * * *";
 const EVERY_FIFTEEN_MINUTES = "*/15 * * * *";
@@ -16,7 +18,11 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
     membershipScheduledCancellationsJob,
     deliveryCycleCutoffJob,
   ],
-  [EVERY_FIFTEEN_MINUTES]: [deliveryCycleCloseoutJob],
+  [EVERY_FIFTEEN_MINUTES]: [
+    deliveryCycleCloseoutJob,
+    paymentsReactionRedriveJob,
+    paymentsReconciliationRedriveJob,
+  ],
 };
 
 export function getJobsForCron(cronExpression: string): readonly ScheduledJob[] {

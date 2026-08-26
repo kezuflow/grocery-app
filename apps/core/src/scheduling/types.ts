@@ -1,3 +1,5 @@
+import type { ProviderRegistry } from "../payments/infrastructure/providers/provider-registry";
+
 /** Outcome of one scheduled job attempt. */
 export interface ScheduledJobOutcome {
   status: "SUCCEEDED" | "FAILED" | "SKIPPED";
@@ -9,6 +11,8 @@ export interface ScheduledJobOutcome {
 /** Dependencies handed to every scheduled job; no business policy lives here. */
 export interface ScheduledJobContext {
   readonly database: D1Database;
+  /** Configured provider adapters for jobs that must observe provider truth. */
+  readonly registry: ProviderRegistry;
   readonly now: number;
 }
 

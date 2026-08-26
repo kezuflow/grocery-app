@@ -1,4 +1,5 @@
 import { log } from "../observability";
+import { ProviderRegistry } from "../payments/infrastructure/providers/provider-registry";
 import { getJobsForCron } from "./job-registry";
 import type { ScheduledJob, ScheduledJobOutcome } from "./types";
 
@@ -52,12 +53,14 @@ export async function runRegisteredJobs(
   cronExpression: string,
   now: number,
   jobs: readonly ScheduledJob[] = getJobsForCron(cronExpression),
+  registry?: ProviderRegistry,
 ): Promise<ScheduledJobOutcome[]> {
+  const providerRegistry = registry ?? new ProviderRegistry("development");
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
     let outcome: ScheduledJobOutcome;
     try {
-      outcome = await job.run({ database, now });
+      outcome = await job.run({ database, now, registry: providerRegistry });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
     }
@@ -69,9 +72,15 @@ export async function runRegisteredJobs(
 
 /** Entrypoint-facing wrapper resolving the registry for a fired cron expression. */
 export async function runScheduledJobs(
-  env: { DB: D1Database },
+  env: { DB: D1Database; ENVIRONMENT?: string },
   cronExpression: string,
   now: number,
 ): Promise<ScheduledJobOutcome[]> {
-  return runRegisteredJobs(env.DB, cronExpression, now);
+  return runRegisteredJobs(
+    env.DB,
+    cronExpression,
+    now,
+    undefined,
+    new ProviderRegistry(env.ENVIRONMENT ?? "development"),
+  );
 }
