@@ -15,7 +15,7 @@ import {
   createCheckoutQuote as createCheckoutQuoteCommand,
   refreshCustomerCheckoutQuote,
 } from "./checkout/application/create-checkout-quote";
-import { ProviderRegistry } from "./payments/infrastructure/providers/provider-registry";
+import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
 import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
 import { createPayment as createPaymentIntentCommand } from "./payments/application/create-payment";
@@ -117,11 +117,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         headers: { "x-request-id": id },
       });
     if (path.startsWith("/webhooks/payments/"))
-      return handleProviderWebhook(
-        this.env.DB,
-        new ProviderRegistry((this.env as PaymentRuntimeEnvironment).ENVIRONMENT),
-        request,
-      );
+      return handleProviderWebhook(this.env.DB, buildProviderRegistry(this.env), request);
     if (path.startsWith("/api/auth"))
       return createAuth(this.env as Env & AuthEnvironment).handler(request);
     return Response.json(
