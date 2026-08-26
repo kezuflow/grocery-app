@@ -25,7 +25,7 @@ This file is the enforcement and documentation router for this repository. The c
 
 ## Locked Business Invariants
 
-- A customer must have an active or trialing subscription to successfully checkout, pay, or place an order.
+- A customer must have an active, trialing, or past-due-within-grace subscription to successfully checkout, pay, or place an order. The introductory trial and paid renewal require a recurring-capable payment authorization; establishing authorization is never payment success, and no zero-value payment is synthesized.
 - The current membership is one paid offer at PHP 299.00 per calendar billing month. The introductory free trial is a Promotion grant over that paid membership for exactly one calendar billing month; it is not a zero-price offer or plan.
 - Membership owns subscription state; Promotions owns trial eligibility/grant/redemption; Payments owns all provider interactions and canonical financial state. Better Auth owns none of these concepts.
 - `CANCELED` and `EXPIRED` are distinct terminal subscription states. Scheduled cancellation is intent metadata while the subscription remains in its entitled state until an explicit transition at the effective instant.

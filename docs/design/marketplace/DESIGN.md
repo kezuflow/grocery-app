@@ -39,11 +39,11 @@ Secondary/supporting surfaces:
 
 Home should establish:
 
-- what FreshMarkets sells and how scheduled delivery works;
+- what FreshMarkets sells and how its fulfillment modes work — an explicit Instant promise or Scheduled delivery in windows;
 - current market/service context;
 - categories and seasonal/high-intent collections;
 - subscription/trial value without implying groceries are free;
-- delivery-cycle context when an address is known.
+- fulfillment-mode context when an address is known.
 
 Use a strong search entry point, horizontally browsable category/collection groups on mobile, and product modules with clear fixed variant labels. Marketing content should remain useful without requiring login.
 
@@ -114,11 +114,11 @@ enter structured address
 
 Use recipient, phone, barangay, city, notes, and landmark/instructions fields. Explain that the map pin determines serviceability. If outside the active polygon, do not permit checkout and provide a useful correction path. Core revalidates coordinates at checkout even if the frontend has already resolved them.
 
-## Delivery-Cycle Selection
+## Fulfillment Selection
 
-Present delivery date/window and any zone fee/capacity messaging in customer language. Do not expose internal hub names as choices. If a cycle is full, offer available valid alternatives rather than accepting and silently shifting the order.
+Present the location's active mode commitment in customer language: an explicit Instant promise/ETA with its fee, or the Scheduled delivery date/window with any zone fee/capacity messaging. Do not expose internal hub names as choices. If a Scheduled cycle is full, offer available valid alternatives rather than accepting and silently shifting the order. Instant presentation follows the dedicated Instant-mode design specification and must not promise times the current rider supply cannot keep.
 
-At/after cutoff, show that ordinary procurement-affecting changes are closed. If an additive amendment is available before cutoff, show it as a separate add-on action rather than “edit paid order.”
+At/after a Scheduled cutoff, show that ordinary procurement-affecting changes are closed. If an additive amendment is available before cutoff, show it as a separate add-on action rather than “edit paid order.”
 
 ## Checkout
 
@@ -126,7 +126,7 @@ Checkout should make the commitment legible:
 
 1. Subscription eligibility.
 2. Delivery address and serviceability.
-3. Delivery cycle/window and fee.
+3. Fulfillment commitment — Instant promise or Scheduled cycle/window — and fee.
 4. Items, fixed variants, price snapshots, discounts, minimum order.
 5. Payment method/provider handoff.
 6. Terms/commitment notice.
@@ -143,7 +143,7 @@ Order detail prioritizes:
 - item/variant/price snapshot;
 - payment/total summary;
 - fulfillment/delivery timeline;
-- next valid customer action (amend, cancel request, retry payment, contact support).
+- next valid customer action (amend, cancel request, retry payment, report an issue, buy again, contact support).
 
 Do not rewrite historical details after catalog/address changes. Show amendments as separate financial additions in one understandable timeline.
 

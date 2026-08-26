@@ -35,6 +35,7 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Google OAuth, email/password, email verification, password reset, persistent secure sessions.
 - Customer/staff application records linked to Better Auth user IDs.
 - Capability-based RBAC with global/market/location scopes.
+- Privacy/account-closure baseline: data-subject request intake, account-closure request, request status, audit trail, an explicit distinction between disabling account access, deletion, and anonymization, and retention-policy hooks. Closing authentication access never silently destroys legally or operationally required order/payment/audit history; exact Philippine retention/anonymization rules remain gated on authoritative legal/accounting confirmation.
 
 ### Customer commerce
 
@@ -43,17 +44,25 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Controlled unit registry for `MASS`, `VOLUME`, and `COUNT`; authoritative inventory/demand uses integer `GRAM`, `MILLILITER`, or `PIECE` base units.
 - Fixed sellable SKU sizes/packs persisted as configuration with SKU-specific integer base consumption; no universal pack/bunch/tray conversion.
 - SKU plus market/location authoritative pricing with historical snapshots and no silent zero-price fallback.
+- Canonical product media in Cloudflare R2 with stable media references/object keys and alt/accessibility text; at minimum one primary image per sellable product, associated through a basic admin upload/association flow or controlled import/seed path. Arbitrary external URLs are not the canonical media source.
 - Customer saved addresses with geocode coordinates and map confirmation where supported.
+- Structured delivery instructions (building/unit, landmark, gate/guard instruction, delivery note, recipient/contact instruction where appropriate) captured separately from structured Address fields and snapshotted immutably onto each committed Order; later Address edits never rewrite historical Order instructions.
 - Cebu City polygon serviceability and delivery-zone resolution.
 - `INSTANT` and `SCHEDULED` fulfillment with exactly one active mode per fulfillment location. Scheduled cadence starts with configurable `WEEKLY`; Instant does not require a cycle.
 - Instant current-availability policy and expiring checkout inventory holds; Scheduled cycles/windows, fees, cutoff, capacity, planned demand, and procurement compatibility.
 - One paid membership at PHP 299.00 per calendar billing month, with basic lifecycle management using the canonical Subscription states.
-- One introductory Promotions grant that waives the membership fee for exactly one calendar billing month; calendar arithmetic uses the configured business timezone and persists UTC start/end instants.
+- One introductory Promotions grant that waives the membership fee for exactly one calendar billing month; calendar arithmetic uses the configured business timezone and persists UTC start/end instants. Introductory trial activation requires an existing recurring-capable payment authorization — establishing authorization is not payment success, no zero-value payment is synthesized, and the first paid charge becomes due at `trialEndsAt`.
+- Membership renewal, trial conversion, and dunning: paid renewal requires provider-confirmed canonical Payments success; failed renewal enters `PAST_DUE` with a 7-calendar-day grace window preserving entitlement; verified recovery returns `ACTIVE`; grace exhaustion transitions to `EXPIRED`; customer cancellation during `PAST_DUE` terminates immediately to `CANCELED`. Retry ownership prefers provider-native recurring/retry behavior, with approximately +1/+3/+6-day application retries inside the grace window where the application owns attempts, finalized by the provider integration specification.
+- Introductory-trial abuse policy: one trial per application customer, the authorization precondition above, and provider authorization-identity reuse prevention where the provider exposes a stable identity; no mandatory SMS/phone verification; residual promotional abuse is accepted at launch.
 - Central checkout eligibility service.
 - One Promotions context with controlled MVP membership-fee-waiver, order percentage/fixed discount, and delivery fee waiver/discount benefits; closed configurable eligibility rules, grants/redemptions, limits, and deterministic one-order-plus-one-delivery stacking.
 - Separate provider-neutral Payments boundary for membership and grocery payments. Sandbox/mock adapters are local-only; production requires a selected provider, signed event ingestion, canonical state translation, and reconciliation before launch.
-- Explicit Quote/Order monetary components and committed immutable SKU conversion, Promotion, fulfillment mode/location/zone/promise/window/ETA, and optional Scheduled-cycle snapshots.
+- Explicit Quote/Order monetary components and committed immutable SKU conversion, Promotion, fulfillment mode/location/zone/promise/window/ETA, delivery-instruction, and optional Scheduled-cycle snapshots.
 - Committed order creation and additive paid-order amendments under mode-specific eligibility. Scheduled uses cutoff; the normal Instant amendment deadline remains fail-closed until approved.
+- Customer Order Detail surface with an authoritative timeline derived from Order/Fulfillment/Delivery state, including amendments, delivery status, and next valid customer actions. Live rider GPS tracking is excluded.
+- Reorder/buy-again from a historical Order: currently purchasable items are added to the current ordinary cart under current price, catalog state, serviceability, and availability; unavailable/discontinued items are skipped and clearly reported; historical pricing, inventory, or capacity is never restored; no recurring baskets.
+- Customer order-issue intake for at least missing item, wrong item, damaged item, poor-quality produce, quantity discrepancy, delivery issue, and other-with-notes. Issue intake is separate from Refund/Credit authorization, never fabricates a refund, and feeds an admin operational queue.
+- Minimal support/contact routing from relevant order and account surfaces.
 
 ### Operations
 
@@ -64,12 +73,18 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Admin Overview, Customers, Orders, Catalog, Inventory, Promotions, Memberships, Payments, Fulfillment, Delivery, Procurement, Analytics, and Staff & Access workspaces using purpose-built Core commands/read models.
 - Capability-based Application IAM and scoped customer summary/detail, operational queue, and read-only Analytics projections. Named metrics are unavailable until one canonical versioned formula is approved.
 - Structured logs, correlation IDs, audit events, idempotency, webhook replay handling, and basic reconciliation.
+- Time-driven execution via Cloudflare Cron Triggers dispatching an explicit scheduled-job registry of idempotent Core commands (checkout/payment-hold expiry, scheduled membership cancellation, renewal initiation where application-owned, dunning/grace processing, provider reconciliation/re-drive, cycle cutoff/advancement/closeout, notification scheduling). Cron owns no business state and contains no business policy.
+- Transactional notification emails as the launch channel (order confirmed; payment action required; payment failed; Scheduled cutoff reminder; out for delivery; delivered; failed delivery; renewal payment failed/action required; introductory trial ending; upcoming first paid renewal). Notifications are side effects that communicate authoritative state and never mutate domain truth.
+- BIR-compliant invoicing readiness: persistence seams for invoice identifier/serial, issuance timestamp, seller/taxpayer snapshot, taxable/VAT breakdown, immutable relationship to the committed Order/payment, and future external/electronic invoice references. Exact computation and retention rules remain gated on authoritative accounting/tax confirmation before go-live.
 
 ## MVP Exclusions
 
 - Customer-directed substitution engine.
 - Variable-weight settlement, post-pick repricing, capture adjustment, or weight-based supplemental charge/refund.
 - Customer-selectable hubs.
+- Customer reviews/ratings.
+- Live GPS/rider tracking.
+- Customer-initiated post-commitment delivery-window rescheduling; the supported MVP route is the legally allowed cancellation path followed by reorder where applicable.
 - Full multi-market rollout or multiple live locations, though schemas support them.
 - Internal stock transfers UI/workflow.
 - Complex route optimization or map-based fleet routing.
@@ -99,15 +114,24 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 15. Every quoteable SKU has a positive authoritative market/location price. Quote and Order snapshots preserve merchandise subtotal, item/order discounts, delivery fee/discount, optional service fee/tax, and final total.
 16. Promotions evaluates only approved benefit/rule types, applies at most one merchandise/order and one delivery benefit deterministically, and preserves Membership-fee Promotion independence.
 17. Admin actions require named capabilities/scopes. Customer/operational views and Analytics are purpose-built derived read models; Analytics cannot mutate source state or publish a named metric without one versioned canonical definition.
+18. Delivery instructions applicable at commitment are snapshotted onto the committed Order; later Address edits never rewrite them.
+19. No introductory trial activates without an existing recurring-capable payment authorization and no zero-value payment is synthesized; the first paid charge becomes due at `trialEndsAt`; failed renewal enters `PAST_DUE` with a 7-calendar-day grace window preserving checkout eligibility; verified recovery returns `ACTIVE`; grace exhaustion transitions to `EXPIRED`; cancellation during `PAST_DUE` transitions immediately to `CANCELED` with no further renewal attempts.
+20. Notification emails are side effects only: a failed notification send never changes a committed domain outcome, and no notification handler mutates domain state.
+21. Every sellable product presents a canonical R2-backed primary image (or an explicitly approved placeholder state); no arbitrary external URL acts as the canonical media source.
+22. Reorder applies current price, catalog, serviceability, and availability; skipped items are reported; historical pricing, inventory, or capacity is never restored.
+23. Order-issue intake records issues with typed categories and status without authorizing a refund; issues are visible in an admin operational queue.
+24. Account closure disables authentication access without destroying required order/payment/audit history; data-subject/closure requests carry auditable status.
+25. Invoicing seams are additive and immutable: issuance data references exactly one committed Order/payment outcome and can never be rewritten after creation.
 
 ## Phase 1.5
 
 - Extend the production payment provider and local methods after the MVP commitment paths are operational.
-- Notifications and customer operational messaging.
+- SMS/push notification channels, notification preferences, and richer operational messaging beyond the launch email set.
+- Favorites.
 - Supplier master data and richer procurement approval/reconciliation.
 - Recurring subscription-generated orders.
-- More complete refunds, credits, and finance reconciliation.
-- Product media in R2 and stronger image workflows.
+- More complete refunds, credits, and finance reconciliation, including fuller customer credit/refund self-service.
+- Richer product-media administration and additional image workflows beyond the primary-image baseline.
 - Approved accounting definitions for currently blocked GMV/revenue/AOV/refund-rate metrics and renewal/cohort definitions for MRR, churn, and trial conversion.
 
 ## Phase 2

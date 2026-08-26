@@ -46,6 +46,23 @@ This is a descriptive implementation snapshot for `IMPLEMENTATION_PLAN.md`. It i
 > Phase 4C implementation and untracked `0015_phase4c_subscriptions.sql` remain
 > incomplete worktree state and are not accepted architecture.
 
+> **2026-08-26 product-rulings reconciliation.** Product decisions D1-D11 plus the
+> delivery-instruction, order-detail/tracking, and minimal-support rulings are
+> now encoded in the canonical set: `MVP_SCOPE.md` (launch inclusions,
+> exclusions, Phase 1.5, acceptance criteria 18-25), `STATE_MACHINES.md` and
+> `DOMAIN_MODEL.md` (trial authorization precondition, renewal/dunning with
+> 7-calendar-day `PAST_DUE` grace that preserves checkout eligibility, retry
+> ownership, trial-abuse policy), `ARCHITECTURE.md` (Cron Triggers mechanism,
+> Notifications bounded context, Catalog-owned R2 media records, inline launch
+> email clarification), and the marketplace design documents (Instant restored
+> as a first-class mode pending its dedicated design specification). The program
+> decomposition lives in
+> `docs/superpowers/plans/2026-08-26/PRODUCT_FEATURE_PROGRAMS.md`. Documentation
+> only: no application code or migration changed. The remediation state above is
+> unaffected; production-launch blockers remain open with two policy deltas now
+> resolved by ruling: the post-clamp billing anchor (nominal anchor preserved)
+> and the renewal/dunning policy itself (approved; automation unbuilt).
+
 > **2026-08-25 correction.** A per-phase architecture review found that earlier
 > "IMPLEMENTED" labels over-stated maturity for Phases 4–14 and hid BLOCKER-class
 > invariant violations. This document has been corrected to reflect actual code.

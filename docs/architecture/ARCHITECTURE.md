@@ -57,7 +57,7 @@ All application bounded contexts below are authoritative modules inside `apps/co
 | Application IAM | Customer principals, staff/rider identities, roles, capabilities, market/location scopes, and authorization decisions | Authentication credentials/sessions and business aggregate state |
 | Customers | Customer profile and saved-address ownership | Authentication identity and serviceability policy |
 | Geography and Assignment | Markets, service areas, delivery zones, location capabilities, the single active `INSTANT`/`SCHEDULED` mode configuration per fulfillment location, serviceability, and fulfillment-location assignment | Customer-selected hubs, fulfillment execution, and catalog availability |
-| Catalog, Availability, and Pricing | Global products, controlled unit registry, persisted sellable SKUs and SKU-specific base consumption, plus market/location SKU price and availability policy | Physical stock, universal pack/bunch/tray conversions, and committed order snapshots |
+| Catalog, Availability, and Pricing | Global products, controlled unit registry, persisted sellable SKUs and SKU-specific base consumption, canonical product media records (R2 object references, alt text, primary-image designation), plus market/location SKU price and availability policy | Physical stock, universal pack/bunch/tray conversions, committed order snapshots, and binary blob storage beyond validated metadata attachment |
 | Membership | Paid membership offer, subscriptions, eligibility, billing periods, and subscription lifecycle | Trial eligibility/grants, provider interactions, and payment state |
 | Promotions | Controlled benefit/rule definitions, eligibility, grants, redemptions, deterministic component-level stacking, and the introductory membership trial authority | Subscription state, arbitrary executable rules, and payment-provider operations |
 | Cart and Checkout | Versioned cart, mode-aware eligibility orchestration, immutable quote and financial breakdown, checkout attempt, and pre-payment recovery state | Canonical payment state and committed orders |
@@ -68,6 +68,7 @@ All application bounded contexts below are authoritative modules inside `apps/co
 | Procurement and Receiving | Demand aggregation, requirements, purchasing, receipt/discrepancy state, and supply exceptions | Direct unexplained inventory mutation |
 | Fulfillment | Explicit `INSTANT`/`SCHEDULED` policies after location resolution plus picking, shortage, packing, and handoff state | Location mode configuration, Order financial truth, and delivery execution |
 | Delivery and Rider Work | Delivery jobs/batches/stops, assignments, rider events, retries, and delivery exceptions | Raw order-state mutation and payment/refund policy |
+| Notifications | Transactional message rendering (minimal launch set: email), delivery attempts with status, and notification scheduling metadata | Owning or mutating any business aggregate state; notifications communicate authoritative state and never decide it |
 | Audit and Reliability | Durable audit history, command idempotency, outbox/inbox processing metadata, and operational exceptions | Owning another context's business state |
 | Analytics and Reporting | Derived operational/business projections, canonical versioned metric definitions, aggregation, and reporting read models | Authoritative Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state |
 
@@ -212,7 +213,7 @@ R2 stores durable blobs such as product media, future proof-of-delivery files, a
 
 ### Queues
 
-Queues handle non-critical asynchronous work: notification delivery, analytics/event ingestion, retryable webhook follow-up, and reconciliation jobs. Critical order commitment, capacity, inventory, and payment state changes remain synchronous and transactionally guarded. Consumers must tolerate duplicate delivery.
+Queues handle non-critical asynchronous work: notification delivery, analytics/event ingestion, retryable webhook follow-up, and reconciliation jobs. Critical order commitment, capacity, inventory, and payment state changes remain synchronous and transactionally guarded. Consumers must tolerate duplicate delivery. Queues are introduced only after a documented need; the launch-scale transactional email set is dispatched inline as an idempotent command side effect until then.
 
 ### KV
 
@@ -225,6 +226,10 @@ Durable Objects are not part of the MVP architecture. D1 atomic conditional allo
 ### Workflows
 
 Workflows are deferred. They may later orchestrate genuinely long-running procurement, exception, or retry processes. Simple request/response operations and critical synchronous transitions do not use Workflows.
+
+### Cron Triggers
+
+Cloudflare Cron Triggers are the approved time-driven execution mechanism. They own no domain state and contain no business rules: a scheduled handler dispatches through an explicit job registry to existing idempotent Core commands such as checkout/hold expiration, subscription renewal orchestration where application-owned, scheduled-cancellation application, dunning/grace processing, provider reconciliation/redrive, delivery-cycle cutoff and advancement/closeout, and reminder scheduling. Every invoked command keeps its normal authorization, idempotency, expected-version, and concurrency semantics.
 
 ## vinext Compatibility Policy
 
