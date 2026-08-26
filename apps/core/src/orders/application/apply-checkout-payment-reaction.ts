@@ -72,9 +72,14 @@ export async function applyCheckoutPaymentReaction(
     locationName: string;
     [key: string]: unknown;
   }
-  const cycleSnapshot = quote.cycleSnapshot as CycleSnapshot | null;
-  if (!cycleSnapshot || Date.parse(cycleSnapshot.cutoffAt) <= now)
+  const routingSnapshot = quote.cycleSnapshot as CycleSnapshot | null;
+  const instant = quote.fulfillmentMode === "INSTANT";
+  if (!instant) {
+    if (!routingSnapshot || Date.parse(routingSnapshot.cutoffAt) <= now)
+      return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
+  } else if (!routingSnapshot)
     return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
+  const cycleSnapshot = routingSnapshot;
 
   const fulfillment = quote.fulfillmentSnapshot as {
     sourcingModes: Array<"STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID">;
@@ -135,32 +140,49 @@ export async function applyCheckoutPaymentReaction(
       .bind(paymentAttemptId, `intent:${input.paymentIntentId}`, now, now, input.paymentIntentId),
     database
       .prepare(
-        "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at) VALUES (?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?)",
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at) VALUES (?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?)",
       )
       .bind(
         orderId,
         quote.customerId,
-        quote.deliveryCycleId,
+        instant ? null : quote.deliveryCycleId,
+        instant ? "INSTANT" : "SCHEDULED",
         JSON.stringify(quote.addressSnapshot),
         quote.totalMinor,
         quote.currency,
         paymentAttemptId,
         now,
       ),
-    database
-      .prepare(
-        "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, ?, ?, ?, ?, ?, 'SCHEDULED', ?, ?)",
-      )
-      .bind(
-        orderId,
-        cycleSnapshot.locationId,
-        cycleSnapshot.cycleId,
-        cycleSnapshot.zoneId,
-        Date.parse(cycleSnapshot.cutoffAt),
-        Date.parse(cycleSnapshot.cutoffAt),
-        JSON.stringify(fulfillment?.sourcingModes ?? []),
-        now,
-      ),
+    instant
+      ? database
+          .prepare(
+            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, ?, NULL, ?, NULL, NULL, ?, 'INSTANT', ?, ?)",
+          )
+          .bind(
+            orderId,
+            cycleSnapshot.locationId,
+            cycleSnapshot.zoneId,
+            Date.parse(
+              (fulfillment as { promisedAt?: string } | null)?.promisedAt ??
+                new Date(now).toISOString(),
+            ),
+            JSON.stringify(fulfillment?.sourcingModes ?? []),
+            now,
+          )
+      : database
+          .prepare(
+            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'SCHEDULED', ?, ?)",
+          )
+          .bind(
+            orderId,
+            cycleSnapshot.locationId,
+            cycleSnapshot.cycleId,
+            cycleSnapshot.zoneId,
+            Date.parse(cycleSnapshot.cutoffAt),
+            Date.parse(cycleSnapshot.cutoffAt),
+            JSON.stringify(fulfillment?.sourcingModes ?? []),
+            now,
+          ),
     // Operational lifecycle records begin here: fulfillment is queued for
     // picking and the delivery job starts unassigned (PENDING) until a
     // scoped assignment command names its rider.
@@ -171,12 +193,13 @@ export async function applyCheckoutPaymentReaction(
       .bind(crypto.randomUUID(), orderId, cycleSnapshot.locationId, now),
     database
       .prepare(
-        "INSERT INTO delivery_job (id, order_id, cycle_id, rider_user_id, status, address_snapshot_json, delivered_at) VALUES (?, ?, ?, NULL, 'PENDING', ?, NULL)",
+        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at) VALUES (?, ?, ?, ?, NULL, 'PENDING', ?, NULL)",
       )
       .bind(
         crypto.randomUUID(),
         orderId,
-        quote.deliveryCycleId,
+        instant ? null : quote.deliveryCycleId,
+        instant ? "INSTANT" : "SCHEDULED",
         JSON.stringify(quote.addressSnapshot),
       ),
     database
@@ -208,6 +231,28 @@ export async function applyCheckoutPaymentReaction(
       )
       .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId),
   ];
+
+  // Instant commitments convert their expiring holds and respect the
+  // location's concurrent-order capacity instead of cycle capacity.
+  let maxConcurrentInstantOrders: number | null = null;
+  if (instant) {
+    const mode = await database
+      .prepare(
+        "SELECT max_concurrent_instant_orders FROM fulfillment_location_mode WHERE location_id=? AND active_mode='INSTANT'",
+      )
+      .bind(cycleSnapshot.locationId)
+      .first<{ max_concurrent_instant_orders: number | null }>();
+    if (!mode || mode.max_concurrent_instant_orders === null)
+      return recordException(database, input, "INSTANT_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
+    maxConcurrentInstantOrders = mode.max_concurrent_instant_orders;
+    statements.push(
+      database
+        .prepare(
+          "UPDATE checkout_inventory_holds SET status='COMMITTED', updated_at=? WHERE checkout_attempt_id=? AND status='HELD'",
+        )
+        .bind(now, quote.id),
+    );
+  }
 
   for (const plan of pools.values()) {
     let reservedBase = 0;
@@ -283,6 +328,23 @@ export async function applyCheckoutPaymentReaction(
         "INSERT INTO commitment_abort (id) SELECT -1 WHERE ? > 0 AND (SELECT COUNT(*) FROM inventory_reservation WHERE order_id=?) != ?",
       )
       .bind(expectedReservationRows, orderId, expectedReservationRows),
+  );
+  if (instant && maxConcurrentInstantOrders !== null) {
+    // Capacity abort sentinel: too many open instant orders rolls the whole
+    // commitment back into a finance exception.
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO commitment_abort (id) SELECT -2 WHERE (
+            SELECT COUNT(*) FROM grocery_order go
+            JOIN order_fulfillment_snapshot s ON s.order_id = go.id
+            WHERE s.location_id=? AND s.fulfillment_mode='INSTANT' AND go.status NOT IN ('CANCELED','REFUNDED')
+          ) > ?`,
+        )
+        .bind(cycleSnapshot.locationId, maxConcurrentInstantOrders),
+    );
+  }
+  statements.push(
     database
       .prepare(
         "UPDATE payment_reaction SET status='SUCCEEDED', attempts=attempts+1, updated_at=? WHERE id=?",
@@ -346,7 +408,7 @@ async function recordFinanceExceptionRow(
 async function recordException(
   database: D1Database,
   input: ApplyCheckoutPaymentReactionInput,
-  kind: "QUOTE_EXPIRED" | "MEMBERSHIP_LOST" | "CYCLE_CLOSED",
+  kind: "QUOTE_EXPIRED" | "MEMBERSHIP_LOST" | "CYCLE_CLOSED" | "INSTANT_MODE_UNAVAILABLE",
   reason: OrderCommittedOutcome["reason"],
 ): Promise<OrderCommittedOutcome> {
   await recordFinanceExceptionRow(database, input, kind, reason, Date.now());

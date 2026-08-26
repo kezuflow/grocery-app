@@ -29,7 +29,7 @@ async function paidOrderFixture(options: { cutoffOffsetMs?: number } = {}) {
     "SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1",
   ).first<{ id: string }>())!.id;
   await env.DB.prepare(
-    "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at) VALUES (?, ?, ?, '{}', 'COMMITTED', 24000, 'PHP', ?, ?)",
+    "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at) VALUES (?, ?, ?, 'SCHEDULED', '{}', 'COMMITTED', 24000, 'PHP', ?, ?)",
   )
     .bind(orderId, customerId, cycleId, attemptId, now)
     .run();

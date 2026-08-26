@@ -114,3 +114,45 @@ DROP TABLE checkout_attempts;
 ALTER TABLE checkout_attempts_new RENAME TO checkout_attempts;
 CREATE INDEX IF NOT EXISTS checkout_attempts_customer_idx
   ON checkout_attempts(customer_id, created_at);
+
+-- The order aggregate and its delivery job are cycle-bound; rebuild so an
+-- INSTANT commitment exists without a fabricated cycle (empty child tables at
+-- this point in a fresh apply keep the parent swap legal).
+CREATE TABLE IF NOT EXISTS grocery_order_new (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL REFERENCES customer(id),
+  cycle_id TEXT REFERENCES delivery_cycle(id),
+  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED' CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
+  address_snapshot_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  total_minor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  payment_id TEXT NOT NULL REFERENCES payment_attempt(id),
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  CHECK ((fulfillment_mode = 'SCHEDULED') = (cycle_id IS NOT NULL))
+);
+INSERT INTO grocery_order_new
+  (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, version, created_at)
+SELECT id, customer_id, cycle_id, 'SCHEDULED', address_snapshot_json, status, total_minor, currency, payment_id, version, created_at
+FROM grocery_order;
+DROP TABLE grocery_order;
+ALTER TABLE grocery_order_new RENAME TO grocery_order;
+
+CREATE TABLE IF NOT EXISTS delivery_job_new (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL UNIQUE,
+  cycle_id TEXT,
+  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED' CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
+  rider_user_id TEXT,
+  status TEXT NOT NULL,
+  address_snapshot_json TEXT NOT NULL,
+  delivered_at INTEGER,
+  version INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO delivery_job_new
+  (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version)
+SELECT id, order_id, cycle_id, 'SCHEDULED', rider_user_id, status, address_snapshot_json, delivered_at, version
+FROM delivery_job;
+DROP TABLE delivery_job;
+ALTER TABLE delivery_job_new RENAME TO delivery_job;
