@@ -16,6 +16,20 @@ async function trialingWithPendingReaction(): Promise<{
   )
     .bind(customerId, `auth-${customerId}`, Date.now(), Date.now())
     .run();
+  const now = Date.now();
+  await env.DB.prepare(
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+  )
+    .bind(
+      `authz-${customerId}`,
+      customerId,
+      `fake_auth_${customerId}`,
+      `fake_method_${customerId}`,
+      now,
+      now,
+      now,
+    )
+    .run();
   const trial = await startPromotionalTrial(env.DB, {
     customerId,
     idempotencyKey: `trial-${crypto.randomUUID()}`,

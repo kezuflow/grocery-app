@@ -1,4 +1,4 @@
-import { calculateCalendarMonthEnd } from "../domain/billing-calendar";
+import { calculateCalendarMonthEnd, calendarDayOfMonth } from "../domain/billing-calendar";
 import { createMembershipRepository } from "../infrastructure/d1/membership-repository";
 import {
   claimIntroductoryTrialRedemption,
@@ -109,6 +109,41 @@ export async function startPromotionalTrial(
   }
   const trialEndsAtMs = Date.parse(trialEndsAtIso);
 
+  // D2: entering TRIALING requires an existing recurring-capable payment
+  // authorization. Establishing it is never payment success, and no
+  // zero-value payment is synthesized for the trial.
+  const authorization = await database
+    .prepare(
+      "SELECT id, provider, provider_method_ref FROM payment_authorization WHERE customer_id=? AND status='ACTIVE' AND recurring_capable=1 ORDER BY established_at DESC, updated_at DESC LIMIT 1",
+    )
+    .bind(command.customerId)
+    .first<{ id: string; provider: string; provider_method_ref: string | null }>();
+  if (!authorization)
+    return failure(
+      "RECURRING_AUTHORIZATION_REQUIRED",
+      "A recurring-capable payment authorization is required before starting the trial",
+      command.requestId,
+    );
+
+  // D3: one introductory trial per payment-instrument identity, wherever the
+  // provider exposes a stable mandate identity.
+  if (authorization.provider_method_ref) {
+    const identityReused = await database
+      .prepare(
+        "SELECT 1 FROM subscription s JOIN payment_authorization a ON a.id = s.payment_authorization_id WHERE a.provider=? AND a.provider_method_ref=? AND s.trial_ends_at IS NOT NULL LIMIT 1",
+      )
+      .bind(authorization.provider, authorization.provider_method_ref)
+      .first();
+    if (identityReused)
+      return failure(
+        "PROMOTION_INELIGIBLE",
+        "The introductory trial was already used with this payment instrument",
+        command.requestId,
+      );
+  }
+
+  const nominalBillingDay = calendarDayOfMonth(trialStartsAtIso, timeZone);
+
   // The canonical PHP 299/calendar-month paid offer this trial precedes.
   const offer = await database
     .prepare(
@@ -141,9 +176,19 @@ export async function startPromotionalTrial(
       }),
       database
         .prepare(
-          "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, cancel_at_period_end, version, created_at, updated_at) VALUES (?, ?, ?, 'TRIALING', ?, ?, 0, 1, ?, ?)",
+          "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, cancel_at_period_end, payment_authorization_id, nominal_billing_day, version, created_at, updated_at) VALUES (?, ?, ?, 'TRIALING', ?, ?, 0, ?, ?, 1, ?, ?)",
         )
-        .bind(subscriptionId, command.customerId, offer.id, now, trialEndsAtMs, now2, now2),
+        .bind(
+          subscriptionId,
+          command.customerId,
+          offer.id,
+          now,
+          trialEndsAtMs,
+          authorization.id,
+          nominalBillingDay,
+          now2,
+          now2,
+        ),
       database
         .prepare(
           "INSERT INTO subscription_event (id, subscription_id, event_type, promotion_redemption_id, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'TRIAL_STARTED', ?, 'CUSTOMER', ?, ?, ?)",
