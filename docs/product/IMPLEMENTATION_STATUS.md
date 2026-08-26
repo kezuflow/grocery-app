@@ -12,9 +12,28 @@
 > domain routes replacing `/api/operations`. Verification: 180 Core + 27 Web +
 > 15 contracts + 2 validation tests green; typecheck/lint/format/naming/build/
 > vinext exit 0; migrations `0001`–`0018` apply fresh; concurrency suites ran
-> three times each. Intentionally unresolved: production payment provider,
-> renewal dunning/grace, default cancellation timing, paid-success downstream
-> recovery policy, post-clamp billing anchor.
+> three times each.
+
+> **Plan 08 scope note (explicit).** Implemented from Plan 08: the operational
+> command authorization/integrity audit, architecture ownership scans, domain
+> routes (`/api/admin/delivery`, `/api/rider/jobs`) replacing the generic
+> `/api/operations` surface, and removal of the legacy `advanceOrder` RPC in
+> favor of versioned `Orders.requestCancellation`. NOT implemented (deferred
+> follow-on work, not claimed here): the Core composition-root extraction,
+> purpose-built operational read models, the purpose-built admin/rider screens
+> and Playwright flows, and the full residual compatibility-symbol sweep. The
+> existing admin/rider pages remain minimal compatibility surfaces pending that
+> work.
+
+> **Blockers: two distinct categories.** (1) Remediation blockers: none — every
+> remediation plan executed above passes its verification gate with no open
+> defects attributable to this branch. (2) Production-launch blockers: still
+> open and intentionally out of scope for this branch — production payment-
+> provider integration (only the test fake exists; live checkout fails closed),
+> renewal/dunning/grace policy automation, the default immediate-vs-period-end
+> cancellation UX choice, the paid-success downstream recovery policy, the
+> post-clamp recurring billing anchor, and the deferred Plan 08 items listed
+> above. This branch does not resolve or implement any of them.
 
 
 This is a descriptive implementation snapshot for `IMPLEMENTATION_PLAN.md`. It is non-authoritative and may lag the worktree. It does not define or weaken the canonical architecture, ownership, domain invariants, state machines, data model, contracts, MVP scope, or sequencing. When this file conflicts with the canonical set named in `AGENTS.md`, the canonical set wins.
