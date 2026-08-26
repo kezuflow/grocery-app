@@ -33,20 +33,6 @@ function result(
   };
 }
 
-function reactionTypeFor(purpose: string): string {
-  switch (purpose) {
-    case "MEMBERSHIP_ENROLLMENT":
-    case "MEMBERSHIP_RENEWAL":
-      return "ACTIVATE_MEMBERSHIP";
-    case "GROCERY_CHECKOUT":
-      return "COMMIT_ORDER";
-    case "ORDER_AMENDMENT":
-      return "COMMIT_AMENDMENT";
-    default:
-      return "ACTIVATE_MEMBERSHIP";
-  }
-}
-
 /**
  * Verify-first durable provider-event ingestion. Signature verification happens
  * through the selected adapter before any identifier is trusted. Inbox identity
@@ -252,13 +238,19 @@ export async function ingestProviderEvent(
   }
   if (application.processingStatus === "APPLIED" && event.kind === "payment") {
     // Dispatch any durable downstream reaction created by this observation.
+    // Membership reactions apply inline; order/amendment commitment stays
+    // with the redrive job that owns those appliers.
     const reaction = await database
       .prepare(
-        "SELECT id, subject_id FROM payment_reaction WHERE payment_intent_id=? AND status='PENDING' ORDER BY created_at ASC LIMIT 1",
+        "SELECT id, reaction_type, subject_id FROM payment_reaction WHERE payment_intent_id=? AND status='PENDING' ORDER BY created_at ASC LIMIT 1",
       )
       .bind(application.paymentIntentId)
-      .first<{ id: string; subject_id: string }>();
-    if (reaction) {
+      .first<{ id: string; reaction_type: string; subject_id: string }>();
+    if (
+      reaction &&
+      (reaction.reaction_type === "ACTIVATE_MEMBERSHIP" ||
+        reaction.reaction_type === "RECOVER_MEMBERSHIP")
+    ) {
       const { applyMembershipPaymentReaction } =
         await import("../../membership/application/apply-payment-reaction");
       await applyMembershipPaymentReaction(database, {

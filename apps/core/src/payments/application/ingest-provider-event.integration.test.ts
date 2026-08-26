@@ -264,4 +264,44 @@ describe("provider event ingestion", () => {
     // The client-supplied field is ignored; the observation applies through internal CAS.
     expect(outcome).toMatchObject({ ok: true, value: { processingStatus: "APPLIED" } });
   });
+
+  it("leaves non-membership reactions to the redrive owner on success", async () => {
+    const customerId = await seedCustomer();
+    const created = await createPayment(env.DB, testRegistry(), {
+      purpose: "GROCERY_CHECKOUT",
+      subjectType: "checkout_quote",
+      subjectId: `quote-${crypto.randomUUID()}`,
+      customerId,
+      amountMinor: 15000,
+      currency: "PHP",
+      providerCode: "fake",
+      returnUrl: "https://app.example/return",
+      idempotencyKey: `ing-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error("fixture failed");
+    const attemptRow = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(created.value.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    const paid = await signedEvent(eventFor(attemptRow!.provider_reference));
+    const outcome = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "fake",
+      paid.headers,
+      paid.rawBody,
+    );
+    expect(outcome).toMatchObject({ ok: true, value: { processingStatus: "APPLIED" } });
+    // The COMMIT_ORDER reaction stays pending for its owning applier; the
+    // membership reaction applier is never invoked for checkout subjects.
+    const reaction = await env.DB.prepare(
+      "SELECT status FROM payment_reaction WHERE payment_intent_id=?",
+    )
+      .bind(created.value.paymentIntentId)
+      .first<{ status: string }>();
+    expect(reaction?.status).toBe("PENDING");
+  });
 });

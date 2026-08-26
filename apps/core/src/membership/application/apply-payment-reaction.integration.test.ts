@@ -150,4 +150,131 @@ describe("membership payment reaction", () => {
       .first<{ status: string }>();
     expect(reactionRow?.status).not.toBe("SUCCEEDED");
   });
+
+  it("installs the first paid period on conversion with the nominal anchor", async () => {
+    const fixture = await trialingWithPendingReaction();
+    const outcome = await applyMembershipPaymentReaction(env.DB, {
+      ...fixture,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
+    const row = await env.DB.prepare(
+      "SELECT status, trial_ends_at, current_period_starts_at, current_period_ends_at, nominal_billing_day, billing_starts_at FROM subscription WHERE id=?",
+    )
+      .bind(fixture.subscriptionId)
+      .first<{
+        status: string;
+        trial_ends_at: number | null;
+        current_period_starts_at: number | null;
+        current_period_ends_at: number | null;
+        nominal_billing_day: number | null;
+        billing_starts_at: number | null;
+      }>();
+    expect(row?.status).toBe("ACTIVE");
+    // The paid period begins exactly where the trial ended.
+    expect(row?.current_period_starts_at).toBe(row?.trial_ends_at);
+    expect(row?.current_period_ends_at).toBeGreaterThan(row?.current_period_starts_at ?? 0);
+    // One nominal calendar month, anchored on the trial start day.
+    const days =
+      ((row?.current_period_ends_at ?? 0) - (row?.current_period_starts_at ?? 0)) / 86_400_000;
+    expect(days).toBeGreaterThanOrEqual(28);
+    expect(days).toBeLessThanOrEqual(31);
+    expect(row?.nominal_billing_day).toBeGreaterThanOrEqual(1);
+    expect(row?.billing_starts_at).not.toBeNull();
+  });
+
+  it("advances the period on renewal success while ACTIVE", async () => {
+    const fixture = await trialingWithPendingReaction();
+    const before = Date.now();
+    // Anchor-aligned paid history: the boundary sits on the anchor day, as it
+    // does organically once conversion installed the first anchored period.
+    const day = 86_400_000;
+    const periodStart = before - 61 * day;
+    const periodEnd = before - 31 * day;
+    await env.DB.prepare(
+      "UPDATE subscription SET status='ACTIVE', current_period_starts_at=?, current_period_ends_at=?, version=version+1 WHERE id=?",
+    )
+      .bind(periodStart, periodEnd, fixture.subscriptionId)
+      .run();
+    await env.DB.prepare("UPDATE payment_reaction SET status='PENDING' WHERE id=?")
+      .bind(fixture.reactionId)
+      .run();
+    const outcome = await applyMembershipPaymentReaction(env.DB, {
+      ...fixture,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
+    const row = await env.DB.prepare(
+      "SELECT current_period_starts_at, current_period_ends_at FROM subscription WHERE id=?",
+    )
+      .bind(fixture.subscriptionId)
+      .first<{ current_period_starts_at: number; current_period_ends_at: number }>();
+    // The new period starts at the old boundary and ends one anchored month later.
+    expect(row?.current_period_starts_at).toBe(periodEnd);
+    expect(row?.current_period_ends_at).toBeGreaterThan(periodEnd + 28 * day - 2 * day);
+    const events = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM subscription_event WHERE subscription_id=? AND event_type='PERIOD_ADVANCED_FROM_PAYMENT'",
+    )
+      .bind(fixture.subscriptionId)
+      .first<{ count: number }>();
+    expect(events?.count).toBe(1);
+  });
+
+  it("recovers PAST_DUE to ACTIVE and clears the grace window", async () => {
+    const fixture = await trialingWithPendingReaction();
+    await env.DB.prepare(
+      "UPDATE subscription SET status='PAST_DUE', grace_ends_at=?, current_period_starts_at=?, current_period_ends_at=?, version=version+1 WHERE id=?",
+    )
+      .bind(
+        Date.now() + 86_400_000,
+        Date.now() - 40 * 86_400_000,
+        Date.now() - 10 * 86_400_000,
+        fixture.subscriptionId,
+      )
+      .run();
+    const outcome = await applyMembershipPaymentReaction(env.DB, {
+      ...fixture,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
+    const row = await env.DB.prepare("SELECT status, grace_ends_at FROM subscription WHERE id=?")
+      .bind(fixture.subscriptionId)
+      .first<{ status: string; grace_ends_at: number | null }>();
+    expect(row).toMatchObject({ status: "ACTIVE", grace_ends_at: null });
+    const events = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM subscription_event WHERE subscription_id=? AND event_type='RECOVERED_FROM_PAYMENT'",
+    )
+      .bind(fixture.subscriptionId)
+      .first<{ count: number }>();
+    expect(events?.count).toBe(1);
+  });
+
+  it("escalates money received against a terminal subscription", async () => {
+    const fixture = await trialingWithPendingReaction();
+    await env.DB.prepare(
+      "UPDATE subscription SET status='EXPIRED', ended_at=?, version=version+1 WHERE id=?",
+    )
+      .bind(Date.now(), fixture.subscriptionId)
+      .run();
+    const outcome = await applyMembershipPaymentReaction(env.DB, {
+      ...fixture,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(outcome).toMatchObject({ applied: false, reason: "ESCALATED" });
+    const reactionRow = await env.DB.prepare(
+      "SELECT status, last_error_code FROM payment_reaction WHERE id=?",
+    )
+      .bind(fixture.reactionId)
+      .first<{ status: string; last_error_code: string | null }>();
+    expect(reactionRow).toMatchObject({
+      status: "ESCALATED",
+      last_error_code: "SUBSCRIPTION_TERMINATED_WITH_PAYMENT",
+    });
+    const cases = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_reconciliation_case WHERE payment_intent_id=? AND status='OPEN'",
+    )
+      .bind(fixture.paymentIntentId)
+      .first<{ count: number }>();
+    expect(cases?.count).toBe(1);
+  });
 });
