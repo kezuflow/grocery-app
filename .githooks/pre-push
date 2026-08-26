@@ -1,11 +1,17 @@
 #!/bin/sh
-# Trunk-based development guard: this repository pushes directly to main.
-# Rejects any push that would create or update a remote branch other than
-# main. Bypass deliberately with `git push --no-verify` when the owner
-# explicitly asks for an exception (e.g., a coordinated review branch).
+# Trunk-based development guard + local naming enforcement on every push.
+# Replaces the removed GitHub Actions commit-message workflow: all convention
+# checks now run locally. Bypass deliberately with `git push --no-verify`
+# only for an owner-approved exception.
+main_remote=""
+main_local=""
+zero=0000000000000000000000000000000000000000
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in
-    refs/heads/main) ;;
+    refs/heads/main)
+      main_remote=$remote_sha
+      main_local=$local_sha
+      ;;
     *)
       echo "pre-push: rejected $remote_ref" >&2
       echo "This repository uses trunk-based development: push to main only." >&2
@@ -14,4 +20,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       ;;
   esac
 done
-exec node scripts/verify-naming.mjs
+
+cd "$(git rev-parse --show-toplevel)"
+
+# File/path naming conventions on every push.
+node scripts/verify-naming.mjs || exit 1
+
+# Commit-message conventions for every commit being pushed (parity with the
+# removed GitHub workflow). Skipped on initial push where there is no remote tip.
+if [ -n "$main_remote" ] && [ "$main_remote" != "$zero" ]; then
+  node scripts/verify-commit-message.mjs --range "$main_remote..$main_local" || exit 1
+fi

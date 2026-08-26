@@ -1,0 +1,5 @@
+#!/bin/sh
+# Local naming-convention enforcement on every commit (replaces GitHub Actions
+# checks; solo trunk-based workflow). Runs from the repo root via core.hooksPath.
+cd "$(git rev-parse --show-toplevel)"
+exec node scripts/verify-naming.mjs

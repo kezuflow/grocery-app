@@ -73,6 +73,7 @@ This file is the enforcement and documentation router for this repository. The c
 - Trunk-based development: this is a single-developer repository; commit directly to `main` and push with `git push origin main`. Full policy: `TRUNK.md`.
 - Do not create feature branches, push branches, or open PRs unless the owner explicitly requests an exception.
 - The `.githooks/pre-push` guard rejects pushes of any branch other than `main`; bypass only with `--no-verify` for an owner-approved exception.
+- Convention checks run locally on every commit (`commit-msg` message convention, `pre-commit` naming) and every push (`pre-push` naming plus commit-message range). There are no GitHub Actions checks.
 - Use separate git worktrees only to protect uncommitted local state, never as a parallel branch strategy; land their commits on `main` promptly.
 
 ## Repository and Testing Conventions
