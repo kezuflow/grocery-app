@@ -1,5 +1,16 @@
 # FreshMarkets Implementation Status
 
+> **Program 5 software completion (2026-08-26).** Instant fulfillment is
+> implemented as a first-class mode (slices `44716c9`, `5c0744a`, `f224a0d`;
+> migration `0021`): each location has exactly one active mode configuration,
+> instant quotes route only through complete INSTANT configurations, require
+> STOCKED sourcing with real usable stock, persist a promised-at timestamp and
+> zone fee (with per-zone instant override), and reserve stock through expiring
+> holds that convert at commitment. Instant commitments write no-cycle
+> order/snapshot/delivery-job records (synthetic cycles are forbidden),
+> enforce per-location concurrent-order capacity, and seed fulfillment
+> immediately. Remaining wiring: admin RPC/UI for mode configuration.
+
 > **Program 3 completion (2026-08-26).** Membership renewal, trial conversion,
 > and dunning are implemented on `main` (slices `dbf641f`, `afbb3bf`,
 > `90d87ac`/`9bac554`, `4470816`, `bf5e0a8`, `19ecd08`/`49a4362`): a
