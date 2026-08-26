@@ -14,16 +14,22 @@
 > vinext exit 0; migrations `0001`–`0018` apply fresh; concurrency suites ran
 > three times each.
 
-> **Plan 08 scope note (explicit).** Implemented from Plan 08: the operational
-> command authorization/integrity audit, architecture ownership scans, domain
-> routes (`/api/admin/delivery`, `/api/rider/jobs`) replacing the generic
-> `/api/operations` surface, and removal of the legacy `advanceOrder` RPC in
-> favor of versioned `Orders.requestCancellation`. NOT implemented (deferred
-> follow-on work, not claimed here): the Core composition-root extraction,
-> purpose-built operational read models, the purpose-built admin/rider screens
-> and Playwright flows, and the full residual compatibility-symbol sweep. The
-> existing admin/rider pages remain minimal compatibility surfaces pending that
-> work.
+> **Plan 08 completion (2026-08-26, Program 1).** All remaining Plan 08 scope
+> is implemented on `main`: the Core composition-root extraction
+> (`apps/core/src/index.ts` is transport/composition/delegation only; domain
+> behavior lives in its bounded-context modules), purpose-built scoped
+> operational read models (`adminOperationsBoard` fulfillment/delivery/
+> procurement sections plus a derived exception queue; `riderJobs`;
+> `assignRider`), commitment now seeds `fulfillment_record` and an unassigned
+> `delivery_job` inside the atomic reaction batch, riders are restricted to
+> their own assigned jobs during delivery commands, the admin operations board
+> and rider console render Core-derived queues with legal actions only, the
+> `LegacyOperationsService` shim is retired from contracts, and Playwright
+> operational specs exist (unauthenticated paths verified live against
+> `pnpm dev:stack`; authenticated journeys are gated on provisioning a
+> development auth-email transport, since that port is fail-closed by design).
+> Verification: pnpm check green (187 core + 27 web + 15 contracts tests),
+> recursive builds, vinext check, naming/lint/format clean.
 
 > **Blockers: two distinct categories.** (1) Remediation blockers: none — every
 > remediation plan executed above passes its verification gate with no open
