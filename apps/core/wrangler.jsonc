@@ -11,9 +11,11 @@
   "vars": {
     "ENVIRONMENT": "development",
     "BETTER_AUTH_URL": "http://127.0.0.1:8788",
-    // Development-only loopback origins plus the workerd test host. Production sets
-    // TRUSTED_ORIGINS through environment configuration, never a source default.
-    "TRUSTED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,https://core.example.invalid",
+    // Development-only loopback origins plus the workerd test host. Port 8787
+    // is the combined local stack (web + core service binding) used by the
+    // operational Playwright flows. Production sets TRUSTED_ORIGINS through
+    // environment configuration, never a source default.
+    "TRUSTED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,http://127.0.0.1:8787,https://core.example.invalid",
     // Compatibility sandbox payments are local-only. Production has no default
     // and must configure a real payment provider instead.
     "PAYMENT_MODE": "sandbox",
