@@ -55,6 +55,26 @@ export type RecoverActivationRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type BeginRecurringAuthorizationRequest = AuthenticatedRequest & {
+  /** Omit to let Core resolve the first configured provider. */
+  providerCode?: string;
+  currency?: string;
+  returnUrl: string;
+  idempotencyKey: string;
+};
+
+export type RecurringAuthorizationActionView = {
+  authorizationId: string;
+  actionType: "REDIRECT" | "SDK" | "NONE";
+  redirectUrl: string | null;
+  clientToken: string | null;
+  expiresAt: string | null;
+};
+
+export type CompleteRecurringAuthorizationRequest = AuthenticatedRequest & {
+  authorizationId: string;
+};
+
 export type SubscriptionActivationResult = {
   subscriptionId: string;
   state: SubscriptionActivationState;
@@ -76,6 +96,12 @@ export type RefundView = {
  * `SUCCEEDED` here.
  */
 export type PaymentsService = {
+  beginRecurringAuthorization(
+    request: BeginRecurringAuthorizationRequest,
+  ): Promise<RpcResult<RecurringAuthorizationActionView>>;
+  completeRecurringAuthorization(
+    request: CompleteRecurringAuthorizationRequest,
+  ): Promise<RpcResult<{ authorizationId: string }>>;
   createPayment(request: CreatePaymentRequest): Promise<RpcResult<PaymentActionView>>;
   getPayment(request: GetPaymentRequest): Promise<RpcResult<PaymentSummary | null>>;
   recoverMembershipActivation(

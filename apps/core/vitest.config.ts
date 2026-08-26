@@ -12,7 +12,9 @@ export default defineConfig({
         configPath: "./wrangler.jsonc",
       },
       miniflare: {
-        bindings: { TEST_MIGRATIONS: JSON.stringify(migrations) },
+        // The automated harness runs as the test environment so the fake
+        // payment provider registers through the runtime construction point.
+        bindings: { TEST_MIGRATIONS: JSON.stringify(migrations), ENVIRONMENT: "test" },
       },
     }),
   ],

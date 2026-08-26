@@ -2,16 +2,22 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 
 describe("provider webhook route", () => {
-  it("fails closed with PAYMENT_PROVIDER_UNCONFIGURED while no production adapter is selected", async () => {
-    const response = await SELF.fetch("https://core.example.invalid/webhooks/payments/fake", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-fake-signature": "x",
-        "x-fake-timestamp": "0",
+  it("fails closed with PAYMENT_PROVIDER_UNCONFIGURED for an unregistered provider", async () => {
+    // The automated harness runs as the test environment, where the fake
+    // adapter registers through the runtime construction point; an
+    // unregistered code proves the fail-closed webhook path.
+    const response = await SELF.fetch(
+      "https://core.example.invalid/webhooks/payments/never-registered",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-fake-signature": "x",
+          "x-fake-timestamp": "0",
+        },
+        body: "{}",
       },
-      body: "{}",
-    });
+    );
     expect(response.status).toBe(503);
     const body = (await response.json()) as { ok: boolean; error: { code: string } };
     expect(body.ok).toBe(false);

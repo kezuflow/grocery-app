@@ -10,7 +10,7 @@ import {
   type RequestMeta,
 } from "@freshmarkets/contracts";
 import { runtimeEnvironment } from "@freshmarkets/config";
-import { idempotencyKeySchema } from "@freshmarkets/validation";
+import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
 import {
   createCheckoutQuote as createCheckoutQuoteCommand,
   refreshCustomerCheckoutQuote,
@@ -19,6 +19,8 @@ import { buildProviderRegistry } from "./payments/infrastructure/providers/runti
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
 import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
 import { createPayment as createPaymentIntentCommand } from "./payments/application/create-payment";
+import { beginRecurringAuthorization as beginRecurringAuthorizationCommand } from "./payments/application/begin-recurring-authorization";
+import { completeRecurringAuthorization as completeRecurringAuthorizationCommand } from "./payments/application/complete-recurring-authorization";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
@@ -235,6 +237,48 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return startPromotionalTrialCommand(this.env.DB, {
       customerId: customer.value.customerId,
       idempotencyKey: input.idempotencyKey!,
+      requestId: input.requestId,
+    });
+  }
+  async beginRecurringAuthorization(
+    input: import("@freshmarkets/contracts").BeginRecurringAuthorizationRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({
+        providerCode: validationSchema.string().optional(),
+        currency: validationSchema.string().optional(),
+        returnUrl: validationSchema.string().min(1),
+        idempotencyKey: idempotencyKeySchema,
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.context.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    const registry = buildProviderRegistry(this.env);
+    const providerCode = validation.data.providerCode ?? registry.firstCode() ?? "";
+    return beginRecurringAuthorizationCommand(this.env.DB, registry, {
+      customerId: customer.value.customerId,
+      providerCode,
+      currency: validation.data.currency ?? "PHP",
+      returnUrl: validation.data.returnUrl,
+      idempotencyKey: validation.data.idempotencyKey!,
+      requestId: input.requestId,
+    });
+  }
+  async completeRecurringAuthorization(
+    input: import("@freshmarkets/contracts").CompleteRecurringAuthorizationRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({ authorizationId: validationSchema.string().min(1) })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.context.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    return completeRecurringAuthorizationCommand(this.env.DB, buildProviderRegistry(this.env), {
+      customerId: customer.value.customerId,
+      authorizationId: validation.data.authorizationId!,
       requestId: input.requestId,
     });
   }

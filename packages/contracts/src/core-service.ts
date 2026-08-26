@@ -6,6 +6,7 @@ import type { AdminOrderCommandRequest, HealthService } from "./index";
 import type { MembershipService } from "./membership";
 import type { CancellationResult, OrdersService, RequestOrderCancellationRequest } from "./orders";
 import type { OperationsReadService, OperationsService } from "./operations";
+import type { PaymentsService } from "./payments";
 import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
 import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
 
@@ -20,6 +21,7 @@ export interface ImplementedCoreService
     Pick<AuthService, "auth" | "getApplicationContext">,
     CatalogService,
     Pick<MembershipService, "getSubscriptionEligibility" | "startTrial">,
+    Pick<PaymentsService, "beginRecurringAuthorization" | "completeRecurringAuthorization">,
     CheckoutService,
     Pick<OrdersService, "listCustomerOrders">,
     OperationsReadService,
