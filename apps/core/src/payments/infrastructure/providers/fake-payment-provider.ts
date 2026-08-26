@@ -1,4 +1,6 @@
 import type {
+  ProviderAuthorizationAction,
+  ProviderAuthorizationView,
   ProviderEventVerificationFailure,
   ProviderEventVerificationSuccess,
   PaymentProvider,
@@ -8,6 +10,10 @@ import type { PaymentDomainState } from "../../domain/payment";
 
 const fakeObservedStates = new WeakMap<PaymentProvider, Map<string, PaymentDomainState>>();
 const fakeFailingRefunds = new WeakMap<PaymentProvider, Set<string>>();
+const fakeAuthorizationOutcomes = new WeakMap<
+  PaymentProvider,
+  Map<string, ProviderAuthorizationView>
+>();
 
 /** Test control: pin the state a provider lookup observes for a reference. */
 export function setFakeObservedState(
@@ -18,6 +24,17 @@ export function setFakeObservedState(
   const states = fakeObservedStates.get(provider);
   if (!states) throw new Error("Not the fake provider");
   states.set(reference, state);
+}
+
+/** Test control: pin the authorization outcome a provider lookup reports. */
+export function setFakeAuthorizationOutcome(
+  provider: PaymentProvider,
+  providerAuthorizationReference: string,
+  outcome: ProviderAuthorizationView,
+): void {
+  const outcomes = fakeAuthorizationOutcomes.get(provider);
+  if (!outcomes) throw new Error("Not the fake provider");
+  outcomes.set(providerAuthorizationReference, outcome);
 }
 
 /** Test control: force deterministic refund rejections for a payment reference. */
@@ -63,8 +80,37 @@ function mapVendorState(vendorState: string): PaymentDomainState | null {
 export function createFakePaymentProvider(): PaymentProvider {
   const observedStates = new Map<string, PaymentDomainState>();
   const failingRefunds = new Set<string>();
+  const authorizationOutcomes = new Map<string, ProviderAuthorizationView>();
   const provider: PaymentProvider = {
     code: "fake",
+    async createAuthorization(input) {
+      const reference = `fake_auth_${input.idempotencyKey}`;
+      return {
+        ok: true,
+        action: {
+          providerAuthorizationReference: reference,
+          actionType: "REDIRECT",
+          redirectUrl: `https://fake.pay.example/authorize/${encodeURIComponent(input.idempotencyKey)}?return=${encodeURIComponent(input.returnUrl)}`,
+          clientToken: null,
+          expiresAt: Date.now() + 15 * 60 * 1000,
+        } satisfies ProviderAuthorizationAction,
+      };
+    },
+    async getAuthorization(providerAuthorizationReference) {
+      const pinned = authorizationOutcomes.get(providerAuthorizationReference);
+      if (pinned) return { ok: true, authorization: pinned };
+      if (!providerAuthorizationReference.startsWith("fake_auth_"))
+        return { ok: false, errorCode: "PROVIDER_NOT_FOUND" };
+      return {
+        ok: true,
+        authorization: {
+          providerAuthorizationReference,
+          recurringCapable: true,
+          providerMethodRef: `fake_method_${providerAuthorizationReference}`,
+          status: "ACTIVE",
+        } satisfies ProviderAuthorizationView,
+      };
+    },
     async createPayment(input) {
       return {
         ok: true,
@@ -166,6 +212,7 @@ export function createFakePaymentProvider(): PaymentProvider {
   };
   fakeObservedStates.set(provider, observedStates);
   fakeFailingRefunds.set(provider, failingRefunds);
+  fakeAuthorizationOutcomes.set(provider, authorizationOutcomes);
   return provider;
 }
 

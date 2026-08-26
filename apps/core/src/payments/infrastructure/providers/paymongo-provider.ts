@@ -132,6 +132,17 @@ export class PayMongoProvider implements PaymentProvider {
     };
   }
 
+  async createAuthorization(): Promise<{ ok: false; errorCode: string }> {
+    // External blocker (PROVIDER_DECISIONS.md): Card Vaulting / setup
+    // semantics await written vendor confirmation, so no mandate is ever
+    // guessed or fabricated here.
+    return { ok: false, errorCode: "PROVIDER_RECURRING_UNAVAILABLE" };
+  }
+
+  async getAuthorization(): Promise<{ ok: false; errorCode: string }> {
+    return { ok: false, errorCode: "PROVIDER_RECURRING_UNAVAILABLE" };
+  }
+
   async verifyAndParseEvent(
     headers: Headers,
     rawBody: string,

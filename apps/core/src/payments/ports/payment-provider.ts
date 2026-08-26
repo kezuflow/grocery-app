@@ -28,6 +28,21 @@ export type ProviderPaymentView = {
   currency: string;
 };
 
+export type ProviderAuthorizationAction = {
+  providerAuthorizationReference: string;
+  actionType: "REDIRECT" | "SDK" | "NONE";
+  redirectUrl: string | null;
+  clientToken: string | null;
+  expiresAt: number | null;
+};
+
+export type ProviderAuthorizationView = {
+  providerAuthorizationReference: string;
+  recurringCapable: boolean;
+  providerMethodRef: string | null;
+  status: "PENDING" | "ACTIVE" | "REVOKED";
+};
+
 /**
  * The only seam through which vendor specifics enter Core. Implementations
  * verify raw HTTP ingress before any identifier or state is trusted, so a
@@ -59,6 +74,24 @@ export interface PaymentProvider {
     headers: Headers,
     rawBody: string,
   ): Promise<ProviderEventVerificationSuccess | ProviderEventVerificationFailure>;
+
+  /**
+   * Establishes a recurring-capable authorization session for a customer. The
+   * returned action is instrument collection, never canonical payment success;
+   * the mandate exists only after `getAuthorization` confirms it.
+   */
+  createAuthorization(input: {
+    providerCustomerId: string | null;
+    currency: string;
+    idempotencyKey: string;
+    returnUrl: string;
+  }): Promise<{ ok: true; action: ProviderAuthorizationAction } | { ok: false; errorCode: string }>;
+
+  getAuthorization(
+    providerAuthorizationReference: string,
+  ): Promise<
+    { ok: true; authorization: ProviderAuthorizationView } | { ok: false; errorCode: string }
+  >;
 
   getPayment(providerReference: string): Promise<ProviderPaymentView | null>;
 
