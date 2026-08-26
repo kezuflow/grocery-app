@@ -13,7 +13,7 @@ push only `main`; no feature branches or PRs without owner-approved exception; n
 | Remediation Plans 01-07 + Plan 08 P1 core (authz audit, domain routes, `requestCancellation`) | approved (executed) | executed + reviewed | landed on `main` via remediation branch merge (PR #1, `7111518`) | COMPLETE |
 | product-rulings reconciliation (D1-D11 into canonical docs; program map; ledger) | approved | done | landed directly on `main` per `TRUNK.md` | COMPLETE |
 | Program 1 — Plan 08 completion | remediation program text is the spec base; slices approved by owner directive | all slices done | direct on `main` per `TRUNK.md` | COMPLETE (final report delivered) |
-| Program 2 — Scheduled Jobs & Reconciliation | not started | not started | — | NOT STARTED |
+| Program 2 — Scheduled Jobs & Reconciliation | self-reviewed spec `PROGRAM_2_SCHEDULED_JOBS_SPEC.md` (implements D4 + ARCHITECTURE Cron Triggers section; no new product decisions) | slice plan `PROGRAM_2_SCHEDULED_JOBS_PLAN.md` (4 slices) | direct on `main` | SPEC+PLAN APPROVED; Slice 1 next |
 | Program 3 — Renewal / Trial Conversion / Dunning | canonical policy approved (D2, encoded); program spec not started | not started | — | NOT STARTED |
 | Program 4 — Payment Provider Readiness | not started (blocked on provider selection) | not started | — | BLOCKED-HUMAN |
 | Program 5 — Instant Mode | design brainstorm not started (D1 requires dedicated design spec) | not started | — | NOT STARTED |
