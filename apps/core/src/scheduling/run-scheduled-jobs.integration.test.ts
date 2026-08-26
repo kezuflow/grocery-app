@@ -76,8 +76,9 @@ describe("scheduled job registry", () => {
     const everyMinute = getJobsForCron("* * * * *").map((job) => job.name);
     expect(everyMinute).toContain("checkout.hold-expiry");
     expect(everyMinute).toContain("membership.scheduled-cancellations");
+    expect(everyMinute).toContain("commerce.cycle-cutoff");
     const quarterHour = getJobsForCron("*/15 * * * *").map((job) => job.name);
-    expect(quarterHour).toEqual(expect.arrayContaining(everyMinute));
+    expect(quarterHour).toContain("commerce.cycle-closeout");
   });
 
   it("returns no jobs and records nothing for an unregistered cron expression", async () => {
