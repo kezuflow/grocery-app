@@ -1,5 +1,19 @@
 # FreshMarkets Implementation Status
 
+> **Program 4 (2026-08-26, Production Payment Provider).** The PayMongo
+> production adapter is implemented behind the provider-neutral Payments port
+> (`cb09478`): checkout-session redirect creation with idempotency keys,
+> `Paymongo-Signature` (`t/te/li`) HMAC verification with replay tolerance and
+> a closed event-type map, payment-then-checkout-session lookup fallback, and
+> refund requests. `buildProviderRegistry` is the single env-driven
+> construction point — no secret means every payments path fails closed with
+> `PAYMENT_PROVIDER_UNCONFIGURED`, and the fake provider stays test-only.
+> Entrypoint webhook handling and the scheduler both resolve providers through
+> it. Vendor vocabulary is contained in `payments/infrastructure/providers`.
+> External go-live configuration (account/KYC, Subscriptions + Card Vaulting
+> enablement, live keys, webhook registration) is recorded in
+> `docs/architecture/PROVIDER_DECISIONS.md` and is not a software defect.
+
 > **Program 2 (2026-08-26, Scheduled Jobs & Reconciliation).** Cloudflare Cron
 > Triggers now drive time-driven work through an explicit job registry
 > (`apps/core/src/scheduling/`; `scheduled()` contains no business policy):
