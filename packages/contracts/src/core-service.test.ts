@@ -4,7 +4,6 @@ import type {
   CheckoutService,
   CoreServiceBinding,
   ImplementedCoreService,
-  LegacyOperationsService,
   MembershipService,
   OrdersService,
   PaymentsService,
@@ -13,22 +12,18 @@ import type { SubscriptionSummary } from "./membership";
 import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
 
-type LegacyOperationsServiceStub = OperationsService;
-
 type HasCommitMockOrder<T> = "commitMockOrder" extends keyof T ? true : false;
 type StartTrialParam = Parameters<MembershipService["startTrial"]>[0];
 type HasProviderPaymentRef = "paymentMethodRef" extends keyof StartTrialParam ? true : false;
 type HasGenericStringAction = {
-  [K in keyof LegacyOperationsService]: LegacyOperationsService[K] extends (
-    input: infer I,
-  ) => unknown
+  [K in keyof OperationsService]: OperationsService[K] extends (input: infer I) => unknown
     ? "action" extends keyof I
       ? string extends I["action"]
         ? true
         : false
       : false
     : false;
-}[keyof LegacyOperationsService];
+}[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
   it("keeps mock commitment out of every contract surface", () => {
@@ -77,13 +72,12 @@ describe("domain-grouped core services", () => {
       updatedAt: "",
     } satisfies PaymentSummary);
     void ({} as OrdersService);
-    void ({} as LegacyOperationsService);
+    void ({} as OperationsService);
 
     // The implemented surface plus explicit canonical additions must remain
     // assignable to the full binding (structural composition).
     const binding = {
       ...({} as ImplementedCoreService),
-      ...({} as LegacyOperationsServiceStub),
       requestCancellation: async () => ({
         ok: true,
         value: { orderId: "", cancellationRequestedAt: "" },

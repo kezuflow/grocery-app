@@ -28,11 +28,7 @@ export type HealthService = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
 };
 
-export type {
-  CoreServiceBinding,
-  ImplementedCoreService,
-  LegacyOperationsService,
-} from "./core-service";
+export type { CoreServiceBinding, ImplementedCoreService } from "./core-service";
 
 export type AuthRequest = {
   method: string;

@@ -10,8 +10,9 @@ import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from ".
 import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
 
 /**
- * The subset of the Core binding that Core supplies today. Target services are
- * adopted member-by-member as downstream remediation plans implement them.
+ * The Core binding surface Core supplies today. The five operations commands
+ * are canonical typed domain commands (Plan 08); the read models are
+ * purpose-built decision DTOs.
  */
 export interface ImplementedCoreService
   extends
@@ -21,20 +22,16 @@ export interface ImplementedCoreService
     Pick<MembershipService, "getSubscriptionEligibility" | "startTrial">,
     CheckoutService,
     Pick<OrdersService, "listCustomerOrders">,
-    OperationsReadService {}
-
-/** Generic operations commands pending the Plan 08 canonical operations surface. */
-export interface LegacyOperationsService extends OperationsService {}
+    OperationsReadService,
+    OperationsService {}
 
 /**
- * The full Worker binding surface. Legacy members are compile-time
- * distinguishable so callers migrate deliberately before their removal gates.
+ * The full Worker binding surface. Every member is a canonical typed domain
+ * command or purpose-built read model; generic table access has no place
+ * here.
  */
 export interface CoreServiceBinding
-  extends
-    ImplementedCoreService,
-    LegacyOperationsService,
-    Pick<OrdersService, "requestCancellation"> {
+  extends ImplementedCoreService, Pick<OrdersService, "requestCancellation"> {
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
   refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;
