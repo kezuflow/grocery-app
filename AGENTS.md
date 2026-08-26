@@ -68,6 +68,13 @@ This file is the enforcement and documentation router for this repository. The c
 - Admin or Analytics change: read the Admin/Analytics sections of `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`, plus `docs/design/admin/DESIGN.md` and `docs/design/admin/COMPONENTS.md` for Admin UI.
 - Marketplace UI change: read `docs/design/marketplace/DESIGN.md` and `docs/design/marketplace/REFERENCES.md`.
 
+## Repository Workflow
+
+- Trunk-based development: this is a single-developer repository; commit directly to `main` and push with `git push origin main`. Full policy: `TRUNK.md`.
+- Do not create feature branches, push branches, or open PRs unless the owner explicitly requests an exception.
+- The `.githooks/pre-push` guard rejects pushes of any branch other than `main`; bypass only with `--no-verify` for an owner-approved exception.
+- Use separate git worktrees only to protect uncommitted local state, never as a parallel branch strategy; land their commits on `main` promptly.
+
 ## Repository and Testing Conventions
 
 - Follow `docs/architecture/NAMING_CONVENTIONS.md`; run `pnpm naming:check` before committing repository structure, packages, migrations, routes, or source files.

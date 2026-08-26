@@ -1,0 +1,17 @@
+#!/bin/sh
+# Trunk-based development guard: this repository pushes directly to main.
+# Rejects any push that would create or update a remote branch other than
+# main. Bypass deliberately with `git push --no-verify` when the owner
+# explicitly asks for an exception (e.g., a coordinated review branch).
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main) ;;
+    *)
+      echo "pre-push: rejected $remote_ref" >&2
+      echo "This repository uses trunk-based development: push to main only." >&2
+      echo "If this exception is intentional, retry with --no-verify." >&2
+      exit 1
+      ;;
+  esac
+done
+exec node scripts/verify-naming.mjs
