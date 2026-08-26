@@ -12,7 +12,7 @@ push only `main`; no feature branches or PRs without owner-approved exception; n
 |---|---|---|---|---|
 | Remediation Plans 01-07 + Plan 08 P1 core (authz audit, domain routes, `requestCancellation`) | approved (executed) | executed + reviewed | landed on `main` via remediation branch merge (PR #1, `7111518`) | COMPLETE |
 | product-rulings reconciliation (D1-D11 into canonical docs; program map; ledger) | approved | done | landed directly on `main` per `TRUNK.md` | COMPLETE |
-| Program 1 — Plan 08 completion | pending brainstorm-lite (remediation program text is the spec base) | not started | — | NOT STARTED |
+| Program 1 — Plan 08 completion | remediation program text is the spec base; slices approved by owner directive | Slice 1 done | direct on `main` per `TRUNK.md` | IN PROGRESS — next: operational read models |
 | Program 2 — Scheduled Jobs & Reconciliation | not started | not started | — | NOT STARTED |
 | Program 3 — Renewal / Trial Conversion / Dunning | canonical policy approved (D2, encoded); program spec not started | not started | — | NOT STARTED |
 | Program 4 — Payment Provider Readiness | not started (blocked on provider selection) | not started | — | BLOCKED-HUMAN |
@@ -32,7 +32,7 @@ push only `main`; no feature branches or PRs without owner-approved exception; n
 | Program/spec | Task | Status | Commit SHA | Verification | Review result | Push result | Next incomplete task |
 |---|---|---|---|---|---|---|---|
 | product-rulings reconciliation | Reconcile D1-D11 + additional rulings into canonical docs; write program map + ledger; land on `main` | DONE | see `git log` "docs: reconcile product rulings D1-D11 and approve feature programs" on `main` | docs-only; `pnpm naming:check` pass | owner-approved landing during trunk cleanup | pushed to `origin/main` | Wave 0 programs |
-| Program 1 | composition-root extraction slice | NOT STARTED | — | — | — | — | brainstorm-lite/writing-plan |
+| Program 1 / Slice 1 | Composition-root extraction: entrypoint -> transport+composition+delegation; domain moved to customer/geography/membership/commerce/checkout/orders/procurement/operations/payments modules; ownership test extended RED-first | DONE | `19d3cf1` | `pnpm check` green (format/naming/lint/typecheck/182 tests/recursive builds); `check:vinext` exit 0; `git diff --check` clean | self-review pass; behavior-preserving with one noted error-precedence normalization in receiveProcurement (session resolved before requirement lookup) | pushed `origin/main` | Slice 2: purpose-built operational read models |
 | Program 2 | cron registry + hold-expiry slice | NOT STARTED | — | — | — | — | full brainstorm/spec |
 | Program 3 | state/command machinery slice | NOT STARTED | — | — | — | — | full brainstorm/spec |
 | Program 4 | provider integration spec | BLOCKED-HUMAN | — | — | — | — | provider selection |
