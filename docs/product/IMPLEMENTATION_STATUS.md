@@ -1,5 +1,19 @@
 # FreshMarkets Implementation Status
 
+> **Program 2 (2026-08-26, Scheduled Jobs & Reconciliation).** Cloudflare Cron
+> Triggers now drive time-driven work through an explicit job registry
+> (`apps/core/src/scheduling/`; `scheduled()` contains no business policy):
+> checkout hold expiry, scheduled membership cancellations, guarded
+> `OPEN -> CUTOFF_REACHED` claims, completion-guarded cycle closeout through the
+> legal transition chain, pending payment-reaction redrive with attempt-bound
+> escalation to visible finance exceptions, and provider-lookup reconciliation
+> of stale pre-commitment payments. Run records (`0019`) power the
+> capability-gated `adminScheduledJobRuns` read model and `/api/admin/jobs`.
+> Verification: full `pnpm check` green (format/naming/lint/typecheck/all
+> suites/recursive builds), `check:vinext` exit 0, migration `0019` applies
+> fresh; scheduler repeat-fire/overlap/failure-isolation covered by integration
+> tests.
+
 > **Remediation update (2026-08-26, isolated branch `remediation/2026-08-26`).**
 > Remediation Plans 01–07 and the Plan 08 P1 core are implemented: static
 > trusted origins, fail-closed redacted auth email port, Better Auth/IAM schema
