@@ -68,6 +68,18 @@ import { createProcurementRequirement as createProcurementRequirementCommand } f
 import { receiveProcurement as receiveProcurementCommand } from "./procurement/application/receive-procurement";
 import { advanceFulfillment as advanceFulfillmentCommand } from "./operations/application/advance-fulfillment";
 import { advanceDelivery as advanceDeliveryCommand } from "./operations/application/advance-delivery";
+import {
+  listFulfillmentQueue,
+  allowedFulfillmentActions,
+} from "./fulfillment/application/list-fulfillment-queue";
+import {
+  listDeliveryDispatch,
+  allowedDeliveryActions,
+} from "./delivery/application/list-delivery-dispatch";
+import { listRiderJobs } from "./delivery/application/list-rider-jobs";
+import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
+import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
+import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import { cancelOrder } from "./orders/application/cancel-order";
 import { CoreContext } from "./entrypoint/context";
 
@@ -422,9 +434,125 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return advanceDeliveryCommand(this.env.DB, input, {
-      authorize: (locationId) =>
-        this.context.requireOperationalAccess(input, "delivery:manage", locationId),
+      authorize: (job) => this.context.authorizeDeliveryJob(input, job),
     });
+  }
+
+  /**
+   * Purpose-built operational board: one location-scoped decision surface
+   * composed from the fulfillment, delivery, procurement, and exception read
+   * models. Sections the actor holds no capability for are reported as
+   * denied instead of leaking rows; a requester with no authorized section
+   * at all is rejected.
+   */
+  async adminOperationsBoard(input: import("@freshmarkets/contracts").AdminOperationsBoardRequest) {
+    const session = await this.context.session(input);
+    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    const locationId = await this.context.resolveBoardLocation(input.locationId);
+    if (!locationId)
+      return fail(
+        "CONFIGURATION_ERROR",
+        "No active fulfillment location is configured",
+        input.requestId,
+      );
+    const sections: Array<{
+      name: import("@freshmarkets/contracts").OperationsReadSection;
+      capability: import("@freshmarkets/contracts").Capability;
+      load: () => Promise<
+        | { items: import("@freshmarkets/contracts").AdminOperationsBoardValue["fulfillment"] }
+        | { items: import("@freshmarkets/contracts").AdminOperationsBoardValue["delivery"] }
+        | { items: import("@freshmarkets/contracts").AdminOperationsBoardValue["procurement"] }
+      >;
+    }> = [
+      {
+        name: "fulfillment",
+        capability: "fulfillment:manage",
+        load: async () => ({
+          items: (await listFulfillmentQueue(this.env.DB, { locationId })).map((item) => ({
+            ...item,
+            allowedActions: allowedFulfillmentActions(item.status),
+          })),
+        }),
+      },
+      {
+        name: "delivery",
+        capability: "delivery:manage",
+        load: async () => ({
+          items: (await listDeliveryDispatch(this.env.DB, { locationId })).map((item) => ({
+            ...item,
+            allowedActions: allowedDeliveryActions(item.status, item.riderAuthUserId !== null),
+          })),
+        }),
+      },
+      {
+        name: "procurement",
+        capability: "procurement:manage",
+        load: async () => ({ items: await listProcurementQueue(this.env.DB, { locationId }) }),
+      },
+    ];
+    const value: {
+      locationId: string;
+      fulfillment: import("@freshmarkets/contracts").AdminOperationsBoardValue["fulfillment"];
+      delivery: import("@freshmarkets/contracts").AdminOperationsBoardValue["delivery"];
+      procurement: import("@freshmarkets/contracts").AdminOperationsBoardValue["procurement"];
+      exceptions: import("@freshmarkets/contracts").AdminOperationsBoardValue["exceptions"];
+      sectionsDenied: import("@freshmarkets/contracts").OperationsReadSection[];
+    } = {
+      locationId,
+      fulfillment: [],
+      delivery: [],
+      procurement: [],
+      exceptions: [],
+      sectionsDenied: [],
+    };
+    let authorizedSections = 0;
+    for (const section of sections) {
+      if (!(await this.context.requireOperationalAccess(input, section.capability, locationId))) {
+        value.sectionsDenied.push(section.name);
+        continue;
+      }
+      authorizedSections += 1;
+      const loaded = (await section.load()) as { items: unknown[] };
+      (value[section.name] as unknown[]) = loaded.items;
+    }
+    if (authorizedSections === 0)
+      return fail("FORBIDDEN", "No operational capability for this location", input.requestId);
+    if (value.sectionsDenied.length < 3 || authorizedSections > 0)
+      value.exceptions = await listOperationalExceptions(this.env.DB, { locationId });
+    return { ok: true as const, value, requestId: input.requestId };
+  }
+
+  /** Assign an open delivery job to an active staff rider. */
+  async assignRider(input: import("@freshmarkets/contracts").AssignRiderRequest) {
+    const session = await this.context.session(input);
+    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    return assignRiderCommand(
+      this.env.DB,
+      {
+        requestId: input.requestId,
+        orderId: input.orderId,
+        riderAuthUserId: input.riderAuthUserId,
+        expectedVersion: input.expectedVersion,
+        idempotencyKey: input.idempotencyKey,
+      },
+      {
+        authorize: (locationId) =>
+          locationId
+            ? this.context.requireOperationalAccess(input, "delivery:manage", locationId)
+            : Promise.resolve(false),
+      },
+    );
+  }
+
+  /** The requesting rider's own open delivery jobs. */
+  async riderJobs(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const session = await this.context.session(input);
+    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    return {
+      ok: true as const,
+      value: { jobs: await listRiderJobs(this.env.DB, { riderAuthUserId: session.id }) },
+      requestId: input.requestId,
+    };
   }
 }
 

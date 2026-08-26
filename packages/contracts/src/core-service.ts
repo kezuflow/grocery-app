@@ -5,7 +5,7 @@ import type { CheckoutService } from "./checkout";
 import type { AdminOrderCommandRequest, HealthService } from "./index";
 import type { MembershipService } from "./membership";
 import type { CancellationResult, OrdersService, RequestOrderCancellationRequest } from "./orders";
-import type { OperationsService } from "./operations";
+import type { OperationsReadService, OperationsService } from "./operations";
 import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
 import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
 
@@ -20,7 +20,8 @@ export interface ImplementedCoreService
     CatalogService,
     Pick<MembershipService, "getSubscriptionEligibility" | "startTrial">,
     CheckoutService,
-    Pick<OrdersService, "listCustomerOrders"> {}
+    Pick<OrdersService, "listCustomerOrders">,
+    OperationsReadService {}
 
 /** Generic operations commands pending the Plan 08 canonical operations surface. */
 export interface LegacyOperationsService extends OperationsService {}
@@ -49,4 +50,5 @@ export type { CheckoutService } from "./checkout";
 export type { MembershipService, SubscriptionSummary } from "./membership";
 export type { PaymentsService, PaymentActionView, PaymentSummary } from "./payments";
 export type { OrdersService } from "./orders";
+export type { OperationsReadService } from "./operations";
 export type { OperationsService } from "./operations";

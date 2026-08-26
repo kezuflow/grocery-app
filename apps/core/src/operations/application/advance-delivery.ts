@@ -8,8 +8,11 @@ function failure(code: string, message: string, requestId: string) {
 }
 
 export type AdvanceDeliveryPorts = {
-  /** Capability + location-scope authorization resolved by the caller. */
-  authorize: (locationId: string) => Promise<boolean>;
+  /**
+   * Capability + location-scope authorization for this specific job,
+   * including the assigned-rider restriction resolved by the caller.
+   */
+  authorize: (job: { locationId: string; riderAuthUserId: string | null }) => Promise<boolean>;
 };
 
 export type AdvanceDeliveryResult =
@@ -32,10 +35,15 @@ export async function advanceDelivery(
 ): Promise<AdvanceDeliveryResult> {
   const row = await database
     .prepare(
-      "SELECT d.status, d.version, f.location_id FROM delivery_job d LEFT JOIN fulfillment_record f ON f.order_id=d.order_id WHERE d.order_id=?",
+      "SELECT d.status, d.version, d.rider_user_id, f.location_id FROM delivery_job d LEFT JOIN fulfillment_record f ON f.order_id=d.order_id WHERE d.order_id=?",
     )
     .bind(command.orderId)
-    .first<{ status: string; version: number; location_id: string | null }>();
+    .first<{
+      status: string;
+      version: number;
+      rider_user_id: string | null;
+      location_id: string | null;
+    }>();
   if (!row) return failure("NOT_FOUND", "Delivery job not found", command.requestId);
   const deliveryLocationId =
     row.location_id ??
@@ -46,7 +54,9 @@ export async function advanceDelivery(
       "No active fulfillment location is configured",
       command.requestId,
     );
-  if (!(await ports.authorize(deliveryLocationId)))
+  if (
+    !(await ports.authorize({ locationId: deliveryLocationId, riderAuthUserId: row.rider_user_id }))
+  )
     return failure(
       "FORBIDDEN",
       "Delivery capability and location scope are required",

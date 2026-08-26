@@ -5,6 +5,7 @@ import { systemClock } from "@freshmarkets/domain-shared";
 import { applicationContext, hasOperationalScope } from "../auth/authorization";
 import { createAuth, type AuthEnvironment } from "../auth/service";
 import { iamSchema } from "../iam/schema";
+import { activeFulfillmentLocationId, activeMarketCode } from "../geography/market-defaults";
 import {
   resolveAuthenticatedCustomer,
   type AuthenticatedCustomer,
@@ -93,6 +94,40 @@ export class CoreContext {
       .bind(locationId)
       .first<{ market_id: string }>();
     return hasOperationalScope(context.scopes, locationId, location?.market_id);
+  }
+
+  /**
+   * Delivery-job authorization: delivery capability with location scope, and
+   * — for a job already assigned to a rider — either the assigned rider
+   * themselves or an actor holding the supervisory order:manage capability.
+   * This enforces that riders act only on their own assignments.
+   */
+  async authorizeDeliveryJob(
+    input: AuthenticatedRequest,
+    job: { locationId: string; riderAuthUserId: string | null },
+  ): Promise<boolean> {
+    if (!(await this.requireOperationalAccess(input, "delivery:manage", job.locationId)))
+      return false;
+    if (job.riderAuthUserId === null) return true;
+    const context = await applicationContext(
+      createAuth(this.env),
+      drizzle(this.env.DB, { schema: iamSchema }),
+      { headers: input.headers, requestId: input.requestId },
+    );
+    if (!context.ok || !context.value.authenticated) return false;
+    return (
+      context.value.capabilities.includes("order:manage") ||
+      context.value.principal?.userId === job.riderAuthUserId
+    );
+  }
+
+  /**
+   * Resolve the board's effective location: an explicitly requested location
+   * or the market's active default. Returns null when none is configured.
+   */
+  async resolveBoardLocation(requestedLocationId?: string | null): Promise<string | null> {
+    if (requestedLocationId) return requestedLocationId;
+    return activeFulfillmentLocationId(this.env.DB, await activeMarketCode(this.env.DB));
   }
 }
 

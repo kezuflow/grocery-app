@@ -1,5 +1,6 @@
 import type { RpcResult } from "./common";
 import type {
+  AuthenticatedRequest,
   DeliveryCommandRequest,
   FulfillmentCommandRequest,
   InventoryAdjustmentRequest,
@@ -29,4 +30,94 @@ export type OperationsService = {
     request: FulfillmentCommandRequest,
   ): Promise<RpcResult<OperationsCommandResult>>;
   advanceDelivery(request: DeliveryCommandRequest): Promise<RpcResult<OperationsCommandResult>>;
+};
+
+/**
+ * Purpose-built operational read models. Sections are decision DTOs scoped by
+ * capability and location in Core; a section the actor is not authorized for
+ * is reported in `sectionsDenied` instead of leaking rows. `allowedActions`
+ * derive from canonical transition policy — the UI never invents
+ * authorization.
+ */
+export type OperationsReadSection = "fulfillment" | "delivery" | "procurement";
+
+export type AdminOperationsBoardRequest = AuthenticatedRequest & {
+  /** Defaults to the market's active default fulfillment location. */
+  locationId?: string | null;
+};
+
+export type FulfillmentQueueItem = {
+  orderId: string;
+  status: string;
+  locationId: string;
+  version: number;
+  allowedActions: ReadonlyArray<"START" | "PACK" | "SHORTAGE">;
+};
+
+export type DeliveryDispatchItem = {
+  jobId: string;
+  orderId: string;
+  status: string;
+  riderAuthUserId: string | null;
+  addressSnapshotJson: string;
+  deliveredAtIso: string | null;
+  version: number;
+  allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;
+};
+
+export type ProcurementQueueItem = {
+  requirementId: string;
+  locationId: string;
+  inventoryPoolId: string;
+  requiredQuantityBase: number;
+  acceptedBase: number;
+  rejectedBase: number;
+  requirementStatus: string;
+  receivingStatus: string | null;
+  receivingVersion: number | null;
+};
+
+export type OperationalExceptionItem = {
+  kind: "FULFILLMENT_SHORTAGE" | "DELIVERY_FAILED" | "RECEIVING_DISCREPANCY";
+  referenceId: string;
+  orderId: string | null;
+  locationId: string | null;
+  detail: string;
+};
+
+export type AdminOperationsBoardValue = {
+  locationId: string;
+  fulfillment: ReadonlyArray<FulfillmentQueueItem>;
+  delivery: ReadonlyArray<DeliveryDispatchItem>;
+  procurement: ReadonlyArray<ProcurementQueueItem>;
+  exceptions: ReadonlyArray<OperationalExceptionItem>;
+  sectionsDenied: ReadonlyArray<OperationsReadSection>;
+};
+
+export type AssignRiderRequest = AuthenticatedRequest & {
+  orderId: string;
+  riderAuthUserId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type AssignRiderValue = { orderId: string; riderAuthUserId: string; status: string };
+
+export type RiderJobsValue = {
+  jobs: ReadonlyArray<{
+    jobId: string;
+    orderId: string;
+    status: string;
+    addressSnapshotJson: string;
+    version: number;
+    allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;
+  }>;
+};
+
+export type OperationsReadService = {
+  adminOperationsBoard(
+    request: AdminOperationsBoardRequest,
+  ): Promise<RpcResult<AdminOperationsBoardValue>>;
+  assignRider(request: AssignRiderRequest): Promise<RpcResult<AssignRiderValue>>;
+  riderJobs(request: AuthenticatedRequest): Promise<RpcResult<RiderJobsValue>>;
 };
