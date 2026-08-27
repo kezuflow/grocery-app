@@ -95,6 +95,9 @@ import { getAdminContext as getAdminContextQuery } from "./admin/application/get
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
 import { listAdminAuditEvents as listAdminAuditEventsQuery } from "./audit/application/list-audit-events";
 import { getAdminAuditEvent as getAdminAuditEventQuery } from "./audit/application/get-audit-event";
+import { listAdminStaff as listAdminStaffQuery } from "./admin/application/list-admin-staff";
+import { getAdminStaff as getAdminStaffQuery } from "./admin/application/get-admin-staff";
+import { listAdminStaffInvitations as listAdminStaffInvitationsQuery } from "./admin/application/list-admin-staff-invitations";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -116,6 +119,15 @@ const adminAuditListRequestSchema = authenticatedRequestSchema.extend({
 
 const adminAuditDetailRequestSchema = authenticatedRequestSchema.extend({
   auditEventId: validationSchema.string().trim().min(1).max(200),
+});
+
+const staffListRequestSchema = authenticatedRequestSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const staffDetailRequestSchema = authenticatedRequestSchema.extend({
+  staffId: validationSchema.string().trim().min(1).max(200),
 });
 
 export function buildHealthResponse(env: Env): CoreHealthResponse {
@@ -225,6 +237,35 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminAuditEventQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminStaff(input: import("@freshmarkets/contracts").AdminStaffListRequest) {
+    const validation = staffListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminStaffQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminStaff(input: import("@freshmarkets/contracts").AdminStaffDetailRequest) {
+    const validation = staffDetailRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminStaffQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminStaffInvitations(
+    input: import("@freshmarkets/contracts").AdminStaffInvitationListRequest,
+  ) {
+    const validation = staffListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminStaffInvitationsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
