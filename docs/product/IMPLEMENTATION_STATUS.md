@@ -3,6 +3,22 @@
 Status date: 2026-08-27. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
+## Produce catalog storefront rollout
+
+- All 226 public produce assets are D1-backed products across seven controlled categories
+  (migration `0025`, generated from the typed manifest in `apps/core/src/catalog/seed/`). 415 fixed
+  sellable SKUs use `G`/`KG`/`PC` controlled units; assembled packs/bunches keep exact internal gram
+  recipes with customer-facing approximate contents notes and staff packing instructions stored in
+  OPERATIONS-only SKU detail rows.
+- Every launch SKU carries positive versioned Metro Cebu STANDARD pricing and Cebu Central
+  `AVAILABLE` state through `sku_location_availability`; Scheduled display ignores on-hand inventory.
+- Storefront browsing uses Core's bounded `getMarketplaceHome` rails and database-side cursor
+  pagination; Web renders Core media/details with no slug-image map and placeholder fallback.
+- Media binaries remain public Web assets pending the deferred R2 `product_media` migration.
+- Known local-stack limitation: committed migration `0021_instant_mode.sql` cannot apply to dev
+  databases containing pre-existing grocery orders because of its unconditional `DROP TABLE
+  grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
+
 ## Reconciled implementation state
 
 ### Payments and paid-order recovery

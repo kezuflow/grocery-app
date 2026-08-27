@@ -74,6 +74,10 @@ All application bounded contexts below are authoritative modules inside `apps/co
 
 The canonical membership, introductory-trial, payment-commitment, and subscription-lifecycle semantics are defined in `DOMAIN_MODEL.md` and `STATE_MACHINES.md`; this table establishes ownership only.
 
+### Temporary public-asset product media compatibility
+
+The launch produce catalog stores validated version-1 media metadata (`assetKey`, `altText`) in `product.image_metadata_json`, while the image binaries remain public static assets under Web's `/produce/*` path served from `apps/web/public`. Core validates asset keys and alt text before they ever reach a public DTO; invalid metadata resolves to a customer-safe placeholder instead of a guessed path. Canonical R2-backed `product_media` records with object references are the approved target state; moving these binaries to R2 and replacing the compatibility column is an explicitly deferred media-storage task and must not be re-decided per feature.
+
 ## Recommended Repository Structure
 
 ```text

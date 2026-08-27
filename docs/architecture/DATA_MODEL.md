@@ -104,6 +104,15 @@ Indexes: customer/state, next billing, trial end, scheduled cancellation, and on
 
 Indexes: product/category/status, SKU/product/status, availability/location/status/mode, active prices by SKU/market/location/time. Core prevents overlapping active price records for the same precedence key.
 
+The launch implementation adds normalized detail and SKU-level availability storage:
+
+- `product_detail(id PK, product_id FK, label, value, sort_order, UNIQUE(product_id, label))` for ordered customer-facing product details (`Contents`, `Storage`, ...).
+- `sku_detail(id PK, sku_id FK, audience CUSTOMER|OPERATIONS, label, value, sort_order, UNIQUE(sku_id, audience, label))`; OPERATIONS rows carry staff packing instructions and are excluded from every public read model.
+- `sku_location_availability(sku_id FK, location_id FK, availability_status AVAILABLE|UNAVAILABLE, sourcing_mode, version, PRIMARY KEY(sku_id, location_id))`, the display authority for Scheduled Cebu availability. It is admin-flag driven and never derived from on-hand inventory quantities.
+- `sku.merchandising_label NULL`, `sku.sell_quantity`, `sku.version` extend persisted variant configuration; merchandising labels such as `Pack`/`Bunch` remain customer copy, never conversion units. Staff-assembled packs persist one exact gram recipe (`sell_quantity = inventory_quantity_base`) while customers see only approximate contents notes.
+
+Until the deferred R2 migration, `product.image_metadata_json` holds a validated versioned `{version:1, assetKey, altText}` record pointing at Web's public produce assets; it is a compatibility attachment, not the canonical `product_media` table, and Core rejects malformed or unsafe payloads to public consumers.
+
 `inventory_pools` makes shared physical inventory explicit where multiple SKUs consume one product pool. `sourcing_mode` is constrained to `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED`; it never encodes `INSTANT`/`SCHEDULED`. Packaging labels have no global conversion row: each SKU records its exact `inventory_quantity_base`. Core verifies the sell-unit conversion is dimension-compatible but uses the persisted SKU consumption for inventory, Quote, and Order effects.
 
 ## Delivery Pricing, Scheduled Cycles, and Capacity

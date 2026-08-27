@@ -191,12 +191,6 @@ export type CatalogProduct = {
   /** Ordered customer-facing product details. */
   details: ReadonlyArray<CatalogDetail>;
   available: boolean;
-  /**
-   * @deprecated internal sourcing vocabulary must not be part of the public
-   * marketplace DTO. Removed by the coordinated final contract change; do not
-   * populate or read it from new code.
-   */
-  sourcingMode?: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
   variants: ReadonlyArray<CatalogVariant>;
 };
 

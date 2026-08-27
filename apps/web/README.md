@@ -25,8 +25,13 @@ directly from Core through the Service Binding (`coreClient(env.CORE)`); it does
 `/api/catalog`. Interactivity hydrates on top of the server-rendered output:
 
 - `lib/storefront/catalog-presentation.ts` maps contract DTOs to presentation view-models
-  (deterministic default variant, curated slug → `/produce/*.webp` image map, money formatting).
-  Missing prices render as unavailable, never zero.
+  (deterministic default variant selected from Core's merchandising metadata, Core-provided
+  media paths plus alt text, ordered details, approximate pack contents notes, money formatting).
+  Web owns no catalog data: images come from D1 through the Service Binding, invalid media falls
+  back to an accessible placeholder, and missing prices render as unavailable, never zero.
+- `lib/storefront/storefront-pagination.ts` merges cursor pages without duplicate products;
+  `components/storefront/marketplace/catalog-results.tsx` loads them progressively over
+  `/api/catalog` with live announcements while the server renders only the first page.
 - `lib/storefront/cart-client.ts` wraps `/api/commerce/cart` with a cart-change broadcast
   (`fm:cart-changed`) and a toast channel (`fm:storefront-toast`). Cart mutations require an
   authenticated customer; anonymous add-to-cart shows a sign-in affordance instead of
