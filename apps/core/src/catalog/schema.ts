@@ -6,7 +6,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import { fulfillmentLocation } from "../geography/schema";
+import { fulfillmentLocation, market } from "../geography/schema";
 
 export const category = sqliteTable(
   "category",
@@ -93,6 +93,9 @@ export const sku = sqliteTable(
       .notNull()
       .references(() => unit.id, { onDelete: "restrict" }),
     consumptionBaseQuantity: integer("consumption_base_quantity").notNull(),
+    merchandisingLabel: text("merchandising_label"),
+    sellQuantity: integer("sell_quantity").notNull().default(1),
+    version: integer("version").notNull().default(1),
     status: text("status", { enum: ["active", "inactive"] }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
@@ -104,6 +107,54 @@ export const sku = sqliteTable(
       table.productId,
       table.status,
       table.sortOrder,
+    ),
+  }),
+);
+
+export const productDetail = sqliteTable("product_detail", {
+  id: text("id").primaryKey(),
+  productId: text("product_id")
+    .notNull()
+    .references(() => product.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  value: text("value").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const skuDetail = sqliteTable("sku_detail", {
+  id: text("id").primaryKey(),
+  skuId: text("sku_id")
+    .notNull()
+    .references(() => sku.id, { onDelete: "cascade" }),
+  audience: text("audience", { enum: ["CUSTOMER", "OPERATIONS"] }).notNull(),
+  label: text("label").notNull(),
+  value: text("value").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const skuLocationAvailability = sqliteTable(
+  "sku_location_availability",
+  {
+    skuId: text("sku_id")
+      .notNull()
+      .references(() => sku.id, { onDelete: "cascade" }),
+    locationId: text("location_id")
+      .notNull()
+      .references(() => fulfillmentLocation.id, { onDelete: "cascade" }),
+    availabilityStatus: text("availability_status", {
+      enum: ["AVAILABLE", "UNAVAILABLE"],
+    }).notNull(),
+    sourcingMode: text("sourcing_mode", {
+      enum: ["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"],
+    }).notNull(),
+    version: integer("version").notNull().default(1),
+  },
+  (table) => ({
+    primary: primaryKey({ columns: [table.skuId, table.locationId] }),
+    locationIndex: index("sku_location_availability_location_idx").on(
+      table.locationId,
+      table.availabilityStatus,
+      table.skuId,
     ),
   }),
 );
@@ -120,6 +171,10 @@ export const priceVersion = sqliteTable(
     validFrom: integer("valid_from", { mode: "timestamp_ms" }).notNull(),
     validTo: integer("valid_to", { mode: "timestamp_ms" }),
     version: integer("version").notNull(),
+    // Canonical price scope added by migrations 0010/0012.
+    marketId: text("market_id").references(() => market.id, { onDelete: "restrict" }),
+    locationId: text("location_id"),
+    priceType: text("price_type").notNull().default("STANDARD"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => ({
@@ -162,4 +217,7 @@ export const catalogSchema = {
   sku,
   priceVersion,
   locationProductAvailability,
+  productDetail,
+  skuDetail,
+  skuLocationAvailability,
 };

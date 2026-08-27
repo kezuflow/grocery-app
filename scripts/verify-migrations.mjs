@@ -55,6 +55,43 @@ function assertFinalSchema(database) {
       .all()
       .some((column) => column.name === "delivery_fee_snapshot_json"),
   );
+
+  // Catalog detail/availability storage (migration 0024).
+  for (const table of ["product_detail", "sku_detail", "sku_location_availability"])
+    assert.ok(
+      database
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+        .get(table),
+      `missing catalog table ${table}`,
+    );
+  const skuColumns = database
+    .prepare("PRAGMA table_info(sku)")
+    .all()
+    .map((column) => column.name);
+  for (const column of ["merchandising_label", "sell_quantity", "version"])
+    assert.ok(skuColumns.includes(column), `missing sku column ${column}`);
+  // Every active SKU of a product with product-level Cebu availability was
+  // backfilled into SKU-level availability.
+  const missingBackfill = database
+    .prepare(
+      `SELECT COUNT(*) AS count FROM sku s
+       JOIN location_product_availability lpa ON lpa.product_id = s.product_id
+       WHERE s.status = 'active'
+         AND NOT EXISTS (
+           SELECT 1 FROM sku_location_availability sla
+           WHERE sla.sku_id = s.id AND sla.location_id = lpa.location_id
+         )`,
+    )
+    .get().count;
+  assert.equal(missingBackfill, 0, "sku_location_availability backfill missed active SKUs");
+  assert.ok(
+    database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM sku_location_availability WHERE location_id = 'location-cebu-central'",
+      )
+      .get().count > 0,
+    "expected Cebu Central SKU availability rows",
+  );
 }
 
 const fresh = database();
