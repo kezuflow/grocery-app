@@ -1,4 +1,5 @@
 import type { RpcResult } from "./common";
+import type { AdminFoundationService } from "./admin-foundation";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
@@ -25,7 +26,8 @@ export interface ImplementedCoreService
     CheckoutService,
     Pick<OrdersService, "listCustomerOrders">,
     OperationsReadService,
-    OperationsService {}
+    OperationsService,
+    AdminFoundationService {}
 
 /**
  * The full Worker binding surface. Every member is a canonical typed domain
@@ -40,6 +42,7 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   createPaymentIntent(request: PaymentIntentCommandRequest): Promise<RpcResult<PaymentActionView>>;
 }
 
+export type { AdminFoundationService } from "./admin-foundation";
 export type { AuthService } from "./auth";
 export type { CatalogService } from "./catalog";
 export type { CheckoutService } from "./checkout";

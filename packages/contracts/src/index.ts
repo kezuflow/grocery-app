@@ -1,6 +1,7 @@
 import type { CoreServiceBinding } from "./core-service";
 
 export * from "./common";
+export * from "./admin-foundation";
 export * from "./states";
 export type * from "./auth";
 export type * from "./catalog";
@@ -11,6 +12,7 @@ export type * from "./orders";
 export type * from "./operations";
 
 import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult } from "./common";
+import type { Capability } from "./admin-foundation";
 import type {
   CustomerAddressStatus,
   DeliveryCycleState,
@@ -55,18 +57,11 @@ export type AuthenticatedPrincipal = {
   emailVerified: boolean;
 };
 
-export type Capability =
-  | "staff:read"
-  | "staff:manage"
-  | "rbac:read"
-  | "rbac:manage"
-  | "location:read"
-  | "location:manage"
-  | "order:manage"
-  | "inventory:manage"
-  | "procurement:manage"
-  | "fulfillment:manage"
-  | "delivery:manage";
+/**
+ * Canonical admin capability. Derived from the closed dot-form vocabulary in
+ * `admin-foundation.ts`; historical colon-form rows remain compatibility data.
+ */
+export type { Capability } from "./admin-foundation";
 
 export type Scope =
   | { kind: "global" }

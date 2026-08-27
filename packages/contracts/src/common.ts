@@ -1,4 +1,4 @@
-export const CONTRACT_VERSION = "2026-08-27.checkout-reconciliation" as const;
+export const CONTRACT_VERSION = "2026-08-27.admin-foundation" as const;
 
 export type RequestMeta = {
   requestId: string;
