@@ -137,15 +137,47 @@ export type ServiceabilityResult = {
   evaluatedAt: string;
 };
 
+/**
+ * Customer-facing controlled sell-unit codes for catalog variants.
+ * `PACK`/`BUNCH` merchandising labels are never universal units, so the
+ * public surface is limited to `G`, `KG`, and `PC`.
+ */
+export type CatalogSellUnitCode = "G" | "KG" | "PC";
+
 export type CatalogVariant = {
   id: string;
   code: string;
+  /** Fixed customer-facing variant display name, e.g. `500 g` or `1 pack`. */
   name: string;
+  /** Optional merchandising label such as `Pack` or `Bunch`. */
+  merchandisingLabel: string | null;
+  /** Sellable quantity expressed in the controlled sell unit. */
+  sellQuantity: number;
+  sellUnitCode: CatalogSellUnitCode;
+  /** Customer-facing sell-unit symbol derived from the stored unit row. */
   unit: string;
+  /** Exact integer base-unit (GRAM/PIECE) consumption per sellable unit. */
   consumptionBaseQuantity: number;
+  /**
+   * Approximate customer contents copy for assembled packs/bunches. Exact
+   * recipes and staff packing instructions stay server-side.
+   */
+  contentsNote: string | null;
   priceMinor: number | null;
   currency: string | null;
   priceVersion: number | null;
+};
+
+export type CatalogMedia = {
+  /** Public asset path served by Web, e.g. `/produce/<asset-key>.webp`. */
+  src: string;
+  alt: string;
+};
+
+export type CatalogDetail = {
+  label: string;
+  value: string;
+  sortOrder: number;
 };
 
 export type CatalogProduct = {
@@ -154,8 +186,17 @@ export type CatalogProduct = {
   name: string;
   description: string | null;
   category: { code: string; name: string; slug: string };
+  /** Core-resolved media metadata; null renders the accessible placeholder. */
+  media: CatalogMedia | null;
+  /** Ordered customer-facing product details. */
+  details: ReadonlyArray<CatalogDetail>;
   available: boolean;
-  sourcingMode: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+  /**
+   * @deprecated internal sourcing vocabulary must not be part of the public
+   * marketplace DTO. Removed by the coordinated final contract change; do not
+   * populate or read it from new code.
+   */
+  sourcingMode?: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
   variants: ReadonlyArray<CatalogVariant>;
 };
 
@@ -168,6 +209,24 @@ export type CategoryNavigationView = {
   categories: ReadonlyArray<{ code: string; name: string; slug: string }>;
 };
 
+export type MarketplaceHomeRail = {
+  code: string;
+  title: string;
+  categorySlug: string;
+  items: ReadonlyArray<CatalogProduct>;
+};
+
+/** Bounded home discovery view; rails never materialize the full catalog. */
+export type MarketplaceHomeView = {
+  categories: CategoryNavigationView["categories"];
+  rails: ReadonlyArray<MarketplaceHomeRail>;
+};
+
+export type MarketplaceHomeRequest = RequestMeta & {
+  locationId?: string;
+  itemsPerRail?: number;
+};
+
 export type MarketplaceProductView = {
   product: CatalogProduct;
   deliveryContext: { locationAware: boolean };
@@ -175,6 +234,8 @@ export type MarketplaceProductView = {
 
 export type CatalogSearchRequest = RequestMeta & {
   query?: string;
+  categorySlug?: string;
+  cursor?: string;
   limit?: number;
   locationId?: string;
 };

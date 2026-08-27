@@ -94,6 +94,9 @@ async function productView(
     name: row.product.name,
     description: row.product.description,
     category: { code: row.category.code, name: row.category.name, slug: row.category.slug },
+    // Transitional placeholders until the batched media/detail read models land.
+    media: null,
+    details: [],
     available,
     sourcingMode: row.pool.sourcingMode,
     variants: skuRows.map(({ sku, unit }) => {
@@ -105,8 +108,12 @@ async function productView(
         id: sku.id,
         code: sku.code,
         name: sku.name,
+        merchandisingLabel: null,
+        sellQuantity: 1,
+        sellUnitCode: "G",
         unit: unit.symbol,
         consumptionBaseQuantity: sku.consumptionBaseQuantity,
+        contentsNote: null,
         priceMinor: price?.amountMinor ?? null,
         currency: price?.currency ?? null,
         priceVersion: price?.version ?? null,
