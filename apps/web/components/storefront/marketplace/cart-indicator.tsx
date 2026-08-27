@@ -6,6 +6,7 @@ import { useRef } from "react";
 import { ShoppingCart } from "lucide-react";
 import {
   CART_CHANGED_EVENT,
+  CART_DRAWER_REQUEST_EVENT,
   cartCountFromView,
   fetchCart,
 } from "../../../lib/storefront/cart-client";
@@ -39,6 +40,11 @@ export function CartIndicator() {
     <Link
       href="/cart"
       aria-label={count ? `Cart, ${count} item${count === 1 ? "" : "s"}` : "Cart"}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
+      }}
       className="relative inline-flex h-10 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-3 text-sm font-semibold text-[var(--fm-primary-dark)] transition-colors hover:bg-[#a9e83f]"
     >
       <ShoppingCart className="size-4" aria-hidden="true" />

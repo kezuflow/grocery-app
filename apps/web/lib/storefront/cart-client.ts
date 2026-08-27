@@ -8,6 +8,7 @@ import type { CartView } from "@freshmarkets/contracts";
  */
 
 export const CART_CHANGED_EVENT = "fm:cart-changed";
+export const CART_DRAWER_REQUEST_EVENT = "fm:cart-drawer-request";
 export const STOREFRONT_TOAST_EVENT = "fm:storefront-toast";
 
 export type StorefrontToast = {

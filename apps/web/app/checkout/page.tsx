@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
+import { MapPin } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { CartView, DeliveryCycleView } from "@freshmarkets/contracts";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
+import { OrderSummary } from "../../components/storefront/marketplace/order-summary";
 import { fetchCart } from "../../lib/storefront/cart-client";
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartView | null>(null);
@@ -146,89 +148,206 @@ export default function CheckoutPage() {
       setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
     }
   }
+  const guest = cart?.id === "guest-cart";
+  const canReview = Boolean(cart?.items.length && addressId && !guest);
   return (
     <StorefrontShell>
-      <div className="min-h-screen w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-        <Link href="/cart" className="text-sm underline">
+      <div className="min-h-[100dvh] w-full px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
+        <Link
+          href="/cart"
+          className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
+        >
           Back to cart
         </Link>
-        <h1 className="mt-6 text-3xl font-semibold">Checkout</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Price, stock, serviceability, and delivery fees are confirmed before payment.
-        </p>
-        {cart?.id === "guest-cart" ? (
-          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
-            <p className="font-medium">Sign in to continue with this saved cart.</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Your items stay saved while you sign in, and the current minimum order is checked by
-              Core.
+        <div className="mt-7 grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+              Secure checkout
             </p>
-            <Link
-              href="/auth/login?returnTo=/checkout"
-              className="mt-4 inline-flex rounded bg-emerald-700 px-4 py-2 font-medium text-white"
-            >
-              Sign in to continue
-            </Link>
-          </div>
-        ) : null}
-        <form
-          onSubmit={saveAddress}
-          className="mt-6 grid gap-4 rounded-lg border bg-white p-6 sm:grid-cols-2"
-        >
-          <input name="recipient" placeholder="Recipient" required className="rounded border p-3" />
-          <input name="phone" placeholder="Phone" required className="rounded border p-3" />
-          <input
-            name="address"
-            placeholder="Cebu address"
-            required
-            className="rounded border p-3 sm:col-span-2"
-          />
-          <input name="latitude" defaultValue="10.3157" required className="rounded border p-3" />
-          <input name="longitude" defaultValue="123.8854" required className="rounded border p-3" />
-          <button className="rounded bg-slate-950 px-4 py-2 text-white sm:col-span-2">
-            Confirm address
-          </button>
-        </form>
-        <section className="mt-6">
-          <h2 className="font-semibold">Delivery cycle</h2>
-          <div className="mt-3 grid gap-3">
-            {cycles.map((cycle) => (
-              <button
-                key={cycle.id}
-                onClick={() => reviewTotal(cycle.id)}
-                className="flex items-center justify-between rounded-lg border bg-white p-4 text-left"
-              >
-                <span>
-                  {cycle.name}
-                  <small className="block text-slate-600">
-                    {new Date(cycle.deliveryDate).toLocaleString()}
-                  </small>
+            <h1 className="mt-1 text-3xl font-bold tracking-[-0.03em]">Checkout</h1>
+            <p className="mt-2 max-w-xl text-sm text-[var(--fm-text-muted)]">
+              Confirm your delivery details and current total before payment.
+            </p>
+
+            {guest ? (
+              <div className="mt-6 rounded-[var(--fm-radius-surface)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] p-5">
+                <p className="font-semibold">Sign in to continue with this saved cart.</p>
+                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                  Your items stay saved while you sign in. The current minimum order is checked by
+                  Core.
+                </p>
+                <Link
+                  href="/auth/login?returnTo=/checkout"
+                  className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white hover:bg-[#294f30]"
+                >
+                  Sign in to continue
+                </Link>
+              </div>
+            ) : null}
+
+            <section className="mt-6 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--fm-primary-dark)] text-sm font-bold text-white">
+                  1
                 </span>
-                <span className="font-medium">Review total</span>
-              </button>
-            ))}
+                <div>
+                  <h2 className="text-lg font-bold">Delivery details</h2>
+                  <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                    We use this address to confirm Cebu coverage and delivery fees.
+                  </p>
+                </div>
+              </div>
+              <form onSubmit={saveAddress} className="mt-5 grid gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm font-semibold">
+                  Recipient
+                  <input
+                    name="recipient"
+                    placeholder="Full name"
+                    required
+                    className="min-h-12 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 font-normal outline-none focus:border-[var(--fm-primary-dark)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold">
+                  Phone
+                  <input
+                    name="phone"
+                    placeholder="09xx xxx xxxx"
+                    required
+                    className="min-h-12 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 font-normal outline-none focus:border-[var(--fm-primary-dark)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold sm:col-span-2">
+                  Cebu address
+                  <input
+                    name="address"
+                    placeholder="House, street, barangay"
+                    required
+                    className="min-h-12 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 font-normal outline-none focus:border-[var(--fm-primary-dark)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold">
+                  Latitude
+                  <input
+                    name="latitude"
+                    defaultValue="10.3157"
+                    required
+                    className="min-h-12 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 font-normal outline-none focus:border-[var(--fm-primary-dark)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold">
+                  Longitude
+                  <input
+                    name="longitude"
+                    defaultValue="123.8854"
+                    required
+                    className="min-h-12 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 font-normal outline-none focus:border-[var(--fm-primary-dark)]"
+                  />
+                </label>
+                <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white hover:bg-[#294f30] sm:col-span-2">
+                  <MapPin className="size-4" aria-hidden="true" />
+                  Confirm address
+                </button>
+              </form>
+            </section>
+
+            <section className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--fm-primary-dark)] text-sm font-bold text-white">
+                  2
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold">Delivery cycle</h2>
+                  <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                    Choose an open delivery window. Core rechecks cutoff and capacity before
+                    payment.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3">
+                {cycles.length ? (
+                  cycles.map((cycle) => (
+                    <button
+                      key={cycle.id}
+                      type="button"
+                      onClick={() => reviewTotal(cycle.id)}
+                      disabled={!canReview}
+                      className="flex min-h-16 items-center justify-between gap-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] p-4 text-left transition-colors hover:border-[var(--fm-primary-dark)] hover:bg-[var(--fm-surface-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span>
+                        <span className="block font-semibold">{cycle.name}</span>
+                        <small className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                          {new Date(cycle.deliveryDate).toLocaleString()}
+                        </small>
+                      </span>
+                      <span className="text-sm font-bold text-[var(--fm-primary-dark)]">
+                        Review total
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-4 text-sm text-[var(--fm-text-muted)]">
+                    Delivery windows are not available right now.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {pendingQuote ? (
+              <section
+                className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-5 sm:p-6"
+                aria-label="Order total review"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--fm-success)] text-sm font-bold text-white">
+                    3
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-bold">Payment review</h2>
+                    <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                      Core returned the current authoritative total. Accept it to start payment.
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-5 text-2xl font-bold tabular-nums">
+                  {pendingQuote.currency} {(pendingQuote.totalMinor / 100).toFixed(2)}
+                </p>
+                <button
+                  type="button"
+                  onClick={confirmPayment}
+                  className="mt-4 inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-5 text-sm font-bold text-[var(--fm-primary-dark)] hover:bg-[#c4fa69]"
+                >
+                  Accept total and continue to payment
+                </button>
+              </section>
+            ) : null}
+            {status ? (
+              <p
+                role="status"
+                className="mt-5 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white p-4 text-sm"
+              >
+                {status}
+              </p>
+            ) : null}
           </div>
-        </section>
-        {pendingQuote ? (
-          <section className="mt-6 rounded-lg border bg-white p-6" aria-label="Order total review">
-            <p className="text-sm text-slate-600">Current authoritative total</p>
-            <p className="mt-1 text-2xl font-semibold">
-              {pendingQuote.currency} {(pendingQuote.totalMinor / 100).toFixed(2)}
-            </p>
-            <button
-              type="button"
-              onClick={confirmPayment}
-              className="mt-4 rounded bg-slate-950 px-4 py-2 text-white"
-            >
-              Accept total and continue to payment
-            </button>
-          </section>
-        ) : null}
-        {status ? (
-          <p role="status" className="mt-6 rounded border bg-white p-4">
-            {status}
-          </p>
-        ) : null}
+
+          <div className="xl:sticky xl:top-24">
+            <OrderSummary
+              cart={cart}
+              totalMinor={pendingQuote?.totalMinor}
+              actionLabel={
+                guest
+                  ? "Sign in to continue"
+                  : pendingQuote
+                    ? "Accept total and continue"
+                    : "Review total after address"
+              }
+              actionHref={guest ? "/auth/login?returnTo=/checkout" : undefined}
+              onAction={pendingQuote ? confirmPayment : undefined}
+              disabled={guest ? false : !pendingQuote}
+              note="Minimum order, availability, serviceability, and delivery fees are confirmed by Core."
+            />
+          </div>
+        </div>
       </div>
     </StorefrontShell>
   );

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CartView } from "@freshmarkets/contracts";
 import {
   CART_CHANGED_EVENT,
+  CART_DRAWER_REQUEST_EVENT,
   addToCart,
   cartCountFromView,
   fetchCart,
@@ -24,6 +25,10 @@ function view(overrides: Partial<CartView> = {}): CartView {
 }
 
 describe("cart view helpers", () => {
+  it("exposes a stable event for opening the storefront cart drawer", () => {
+    assert.equal(CART_DRAWER_REQUEST_EVENT, "fm:cart-drawer-request");
+  });
+
   it("sums item quantities into the cart count", () => {
     assert.equal(cartCountFromView(view()), 3);
     assert.equal(cartCountFromView(view({ items: [] })), 0);
