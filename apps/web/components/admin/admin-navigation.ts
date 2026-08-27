@@ -58,6 +58,12 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
 
 export type AdminNavigationEntry = AdminNavigationItem & { icon: LucideIcon };
 
+/** Workspace-scoped sub-navigation for the Staff & Access section. */
+export const STAFF_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [
+  { code: "staff", label: "Staff", href: "/admin/staff" },
+  { code: "staff-roles", label: "Roles", href: "/admin/staff/roles" },
+];
+
 export function adminNavigationFromContext(
   items: ReadonlyArray<AdminNavigationItem>,
 ): ReadonlyArray<AdminNavigationEntry> {
