@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ChevronDown, Home, MapPin, Search, ShoppingCart, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { CartIndicator } from "./marketplace/cart-indicator";
+import { ToastAnnouncer } from "./marketplace/toast-announcer";
 
 export const storefrontNavigation = [
   { label: "Home", href: "/", icon: Home },
@@ -17,50 +19,49 @@ export const storefrontNavigation = [
 
 const mobileNavigation = [
   { label: "Home", href: "/", icon: Home },
-  { label: "Shop", href: "/?category=shop", icon: Search },
+  { label: "Shop", href: "/?category=produce", icon: Search },
   { label: "Orders", href: "/orders", icon: ShoppingCart },
   { label: "Account", href: "/account", icon: UserRound },
 ];
 
-export function StorefrontShell({
-  children,
-  cartCount = 0,
-}: {
-  children: ReactNode;
-  cartCount?: number;
-}) {
+export function StorefrontShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[var(--fm-background)] text-[var(--fm-text)]">
-      <StorefrontHeader cartCount={cartCount} />
+      <StorefrontHeader />
       <div className="mx-auto flex w-full max-w-[var(--fm-container-storefront)]">
         <StorefrontSidebar />
         <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
       </div>
       <MobileNavigation />
+      <ToastAnnouncer />
     </div>
   );
 }
 
-export function StorefrontHeader({ cartCount = 0 }: { cartCount?: number }) {
+export function StorefrontHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-white/95 shadow-[var(--fm-shadow-header)] backdrop-blur">
       <div className="mx-auto flex h-16 max-w-[var(--fm-container-storefront)] items-center gap-3 px-4 sm:px-6 lg:gap-6 lg:px-8">
         <Link
           href="/"
-          className="shrink-0 text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)] lg:text-xl"
+          className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)] lg:text-xl"
         >
+          <span
+            aria-hidden="true"
+            className="inline-block size-6 rounded-[6px] bg-[var(--fm-primary-lime)]"
+          />
           FreshMarkets
         </Link>
         <form action="/" className="hidden min-w-0 flex-1 md:block">
           <label className="sr-only" htmlFor="storefront-search">
             Search groceries
           </label>
-          <div className="flex h-10 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] px-3 text-[var(--fm-text-muted)]">
+          <div className="flex h-10 items-center gap-2 rounded-full border border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-3 text-[var(--fm-text-muted)] transition-colors focus-within:border-[var(--fm-primary-dark)]">
             <Search className="size-4" aria-hidden="true" />
             <input
               id="storefront-search"
               name="q"
-              placeholder="Search groceries"
+              placeholder="Search fresh groceries"
               className="min-w-0 flex-1 bg-transparent text-sm text-[var(--fm-text)] outline-none placeholder:text-[var(--fm-text-muted)]"
             />
           </div>
@@ -74,7 +75,7 @@ export function StorefrontHeader({ cartCount = 0 }: { cartCount?: number }) {
           <span>
             <span className="block text-[10px] text-[var(--fm-text-muted)]">Deliver to</span>
             <span className="flex items-center gap-1 font-semibold">
-              Choose address <ChevronDown className="size-3" aria-hidden="true" />
+              Cebu City <ChevronDown className="size-3" aria-hidden="true" />
             </span>
           </span>
         </Link>
@@ -85,31 +86,19 @@ export function StorefrontHeader({ cartCount = 0 }: { cartCount?: number }) {
         >
           <UserRound className="size-5" aria-hidden="true" />
         </Link>
-        <Link
-          href="/cart"
-          className="relative inline-flex h-10 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-3 text-sm font-semibold text-[var(--fm-primary-dark)] hover:bg-[#a9e83f]"
-          aria-label={`Cart${cartCount ? `, ${cartCount} items` : ""}`}
-        >
-          <ShoppingCart className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Cart</span>
-          {cartCount > 0 ? (
-            <span className="rounded-full bg-[var(--fm-primary-dark)] px-1.5 py-0.5 text-[10px] text-white">
-              {cartCount}
-            </span>
-          ) : null}
-        </Link>
+        <CartIndicator />
       </div>
       <div className="border-t border-[var(--fm-border)] px-4 py-2 md:hidden">
         <form action="/">
           <label className="sr-only" htmlFor="mobile-storefront-search">
             Search groceries
           </label>
-          <div className="flex h-10 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] px-3 text-[var(--fm-text-muted)]">
+          <div className="flex h-10 items-center gap-2 rounded-full border border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-3 text-[var(--fm-text-muted)]">
             <Search className="size-4" aria-hidden="true" />
             <input
               id="mobile-storefront-search"
               name="q"
-              placeholder="Search groceries"
+              placeholder="Search fresh groceries"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
           </div>
@@ -121,7 +110,7 @@ export function StorefrontHeader({ cartCount = 0 }: { cartCount?: number }) {
 
 export function StorefrontSidebar() {
   return (
-    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 border-r border-[var(--fm-border)] bg-white px-3 py-6 lg:block">
+    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 overflow-y-auto border-r border-[var(--fm-border)] bg-white px-3 py-6 lg:block">
       <nav aria-label="Storefront navigation" className="space-y-1">
         {storefrontNavigation.map((item, index) => {
           const Icon = item.icon;
@@ -131,7 +120,8 @@ export function StorefrontSidebar() {
               href={item.href}
               className={cn(
                 "flex items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]",
-                index === 0 && "bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]",
+                index === 0 &&
+                  "bg-[var(--fm-surface-soft)] font-semibold text-[var(--fm-primary-dark)]",
               )}
             >
               {Icon ? (

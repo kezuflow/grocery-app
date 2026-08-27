@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { ProductImage } from "../../../components/storefront/catalog-components";
+import { ProductMedia } from "../../../components/storefront/catalog-components";
+import { toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
+import { addToCart, announceToast } from "../../../lib/storefront/cart-client";
 
 export function ProductView({ slug }: { slug: string }) {
   const [view, setView] = useState<MarketplaceProductView | null>(null);
@@ -70,23 +72,27 @@ export function ProductView({ slug }: { slug: string }) {
   async function add() {
     if (!selectedVariant || selectedPrice === null || !product.available) return;
     setStatus("");
-    const response = await fetch("/api/commerce/cart", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ skuId: selectedVariant.id, quantity }),
-    });
-    const result = (await response.json()) as { ok: boolean; error?: { message: string } };
-    setStatus(
-      result.ok
-        ? `${quantity} × ${product.name} added to cart.`
-        : (result.error?.message ?? "Sign in to add items."),
-    );
+    const result = await addToCart(selectedVariant.id, quantity);
+    if (result.ok) {
+      setStatus(`${quantity} × ${product.name} added to cart.`);
+      return;
+    }
+    if (result.reason === "unauthenticated") {
+      announceToast({
+        message: "Sign in to add items to your cart.",
+        tone: "error",
+        signInHref: "/auth/login",
+      });
+      setStatus("Sign in to add items to your cart.");
+      return;
+    }
+    setStatus(result.message);
   }
 
   return (
     <div className="grid gap-8 md:grid-cols-[1fr_1.1fr]">
       <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-6">
-        <ProductImage product={view.product} alt={view.product.name} />
+        <ProductMedia image={toPresentationProduct(view.product).image} name={view.product.name} />
       </div>
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-[var(--fm-primary-dark)]">
