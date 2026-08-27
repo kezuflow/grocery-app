@@ -11,7 +11,6 @@ import {
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import {
-  AdminShell,
   FilterBar,
   ListPageSection,
   PageHeader,
@@ -157,209 +156,205 @@ export default function AdminPage() {
   }
 
   return (
-    <AdminShell>
-      <div className="mx-auto max-w-[1280px] space-y-6">
-        <PageHeader
-          title="Operations board"
-          description="Location-scoped queues, exceptions, and the legal actions for this shift."
-          action={<Badge>Scoped by Core IAM</Badge>}
-        />
-        <FilterBar>
-          <span className="text-xs text-[var(--fm-text-muted)]">
-            {state.phase === "ready" ? `Location: ${state.board.locationId}` : "Loading context…"}
-          </span>
-        </FilterBar>
+    <div className="mx-auto max-w-[1280px] space-y-6">
+      <PageHeader
+        title="Operations board"
+        description="Location-scoped queues, exceptions, and the legal actions for this shift."
+        action={<Badge>Scoped by Core IAM</Badge>}
+      />
+      <FilterBar>
+        <span className="text-xs text-[var(--fm-text-muted)]">
+          {state.phase === "ready" ? `Location: ${state.board.locationId}` : "Loading context…"}
+        </span>
+      </FilterBar>
 
-        {state.phase === "loading" ? (
-          <ListPageSection title="Operations board">
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
-              Loading operational queues…
-            </p>
-          </ListPageSection>
-        ) : null}
+      {state.phase === "loading" ? (
+        <ListPageSection title="Operations board">
+          <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+            Loading operational queues…
+          </p>
+        </ListPageSection>
+      ) : null}
 
-        {state.phase === "error" ? (
-          <ListPageSection title="Operations board unavailable">
-            <p className="flex items-center gap-2 p-5 text-sm" role="alert">
-              <AlertCircle className="size-4 text-red-600" aria-hidden />
-              {state.message}
-            </p>
-          </ListPageSection>
-        ) : null}
+      {state.phase === "error" ? (
+        <ListPageSection title="Operations board unavailable">
+          <p className="flex items-center gap-2 p-5 text-sm" role="alert">
+            <AlertCircle className="size-4 text-red-600" aria-hidden />
+            {state.message}
+          </p>
+        </ListPageSection>
+      ) : null}
 
-        {state.phase === "ready" ? (
-          <>
-            {notice ? (
-              <p
-                role="status"
-                className="rounded border border-[var(--fm-border)] bg-white p-3 text-sm"
-              >
-                {notice}
-              </p>
-            ) : null}
-            {state.board.sectionsDenied.length > 0 ? (
-              <ListPageSection title="Sections not permitted for your role">
-                <p className="flex flex-wrap items-center gap-2 p-5 text-sm text-[var(--fm-text-muted)]">
-                  {state.board.sectionsDenied.map((section) => (
-                    <StatusBadge key={section} tone="neutral">
-                      {section} denied
-                    </StatusBadge>
-                  ))}
-                </p>
-              </ListPageSection>
-            ) : null}
-
-            <ListPageSection
-              title={sectionMeta.fulfillment.title}
-              description={sectionMeta.fulfillment.description}
+      {state.phase === "ready" ? (
+        <>
+          {notice ? (
+            <p
+              role="status"
+              className="rounded border border-[var(--fm-border)] bg-white p-3 text-sm"
             >
-              {state.board.fulfillment.length === 0 ? (
-                <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open fulfillment work.</p>
-              ) : (
-                <ul className="divide-y divide-[var(--fm-border)]">
-                  {state.board.fulfillment.map((item) => (
-                    <li
-                      key={item.orderId}
-                      className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"
-                    >
-                      <ClipboardList className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
+              {notice}
+            </p>
+          ) : null}
+          {state.board.sectionsDenied.length > 0 ? (
+            <ListPageSection title="Sections not permitted for your role">
+              <p className="flex flex-wrap items-center gap-2 p-5 text-sm text-[var(--fm-text-muted)]">
+                {state.board.sectionsDenied.map((section) => (
+                  <StatusBadge key={section} tone="neutral">
+                    {section} denied
+                  </StatusBadge>
+                ))}
+              </p>
+            </ListPageSection>
+          ) : null}
+
+          <ListPageSection
+            title={sectionMeta.fulfillment.title}
+            description={sectionMeta.fulfillment.description}
+          >
+            {state.board.fulfillment.length === 0 ? (
+              <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open fulfillment work.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--fm-border)]">
+                {state.board.fulfillment.map((item) => (
+                  <li
+                    key={item.orderId}
+                    className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"
+                  >
+                    <ClipboardList className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
+                    <span className="font-mono text-sm">{shortId(item.orderId)}</span>
+                    <StatusBadge tone={item.status === "SHORTAGE" ? "warning" : "info"}>
+                      {item.status}
+                    </StatusBadge>
+                    <span className="text-xs text-[var(--fm-text-muted)]">v{item.version}</span>
+                    <span className="ml-auto flex gap-2">
+                      {item.allowedActions.map((action) => (
+                        <Button
+                          key={action}
+                          size="sm"
+                          variant={action === "SHORTAGE" ? "outline" : "default"}
+                          onClick={() => fulfillmentAction(item, action)}
+                        >
+                          {action === "START"
+                            ? "Start picking"
+                            : action === "PACK"
+                              ? "Mark packed"
+                              : "Report shortage"}
+                        </Button>
+                      ))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ListPageSection>
+
+          <ListPageSection
+            title={sectionMeta.delivery.title}
+            description={sectionMeta.delivery.description}
+          >
+            {state.board.delivery.length === 0 ? (
+              <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open delivery jobs.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--fm-border)]">
+                {state.board.delivery.map((item) => (
+                  <li key={item.jobId} className="px-4 py-3 sm:px-5">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Truck className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
                       <span className="font-mono text-sm">{shortId(item.orderId)}</span>
-                      <StatusBadge tone={item.status === "SHORTAGE" ? "warning" : "info"}>
+                      <StatusBadge tone={item.status === "FAILED" ? "warning" : "info"}>
                         {item.status}
                       </StatusBadge>
+                      <span className="text-xs text-[var(--fm-text-muted)]">
+                        {item.riderAuthUserId
+                          ? `Rider ${shortId(item.riderAuthUserId)}`
+                          : "Unassigned"}
+                      </span>
                       <span className="text-xs text-[var(--fm-text-muted)]">v{item.version}</span>
-                      <span className="ml-auto flex gap-2">
+                      <span className="ml-auto flex flex-wrap items-center gap-2">
+                        <AssignControl item={item} onAssign={assignRider} />
                         {item.allowedActions.map((action) => (
                           <Button
                             key={action}
                             size="sm"
-                            variant={action === "SHORTAGE" ? "outline" : "default"}
-                            onClick={() => fulfillmentAction(item, action)}
+                            variant={action === "FAIL" ? "outline" : "default"}
+                            onClick={() => deliveryAction(item, action)}
                           >
-                            {action === "START"
-                              ? "Start picking"
-                              : action === "PACK"
-                                ? "Mark packed"
-                                : "Report shortage"}
+                            {action === "DISPATCH"
+                              ? "Dispatch"
+                              : action === "DELIVER"
+                                ? "Delivered"
+                                : "Fail"}
                           </Button>
                         ))}
                       </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </ListPageSection>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ListPageSection>
 
-            <ListPageSection
-              title={sectionMeta.delivery.title}
-              description={sectionMeta.delivery.description}
-            >
-              {state.board.delivery.length === 0 ? (
-                <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open delivery jobs.</p>
-              ) : (
-                <ul className="divide-y divide-[var(--fm-border)]">
-                  {state.board.delivery.map((item) => (
-                    <li key={item.jobId} className="px-4 py-3 sm:px-5">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Truck className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
-                        <span className="font-mono text-sm">{shortId(item.orderId)}</span>
-                        <StatusBadge tone={item.status === "FAILED" ? "warning" : "info"}>
-                          {item.status}
-                        </StatusBadge>
-                        <span className="text-xs text-[var(--fm-text-muted)]">
-                          {item.riderAuthUserId
-                            ? `Rider ${shortId(item.riderAuthUserId)}`
-                            : "Unassigned"}
-                        </span>
-                        <span className="text-xs text-[var(--fm-text-muted)]">v{item.version}</span>
-                        <span className="ml-auto flex flex-wrap items-center gap-2">
-                          <AssignControl item={item} onAssign={assignRider} />
-                          {item.allowedActions.map((action) => (
-                            <Button
-                              key={action}
-                              size="sm"
-                              variant={action === "FAIL" ? "outline" : "default"}
-                              onClick={() => deliveryAction(item, action)}
-                            >
-                              {action === "DISPATCH"
-                                ? "Dispatch"
-                                : action === "DELIVER"
-                                  ? "Delivered"
-                                  : "Fail"}
-                            </Button>
-                          ))}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </ListPageSection>
+          <ListPageSection
+            title={sectionMeta.procurement.title}
+            description={sectionMeta.procurement.description}
+          >
+            {state.board.procurement.length === 0 ? (
+              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+                No procurement requirements.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--fm-border)]">
+                {state.board.procurement.map((item: ProcurementQueueItem) => (
+                  <li
+                    key={item.requirementId}
+                    className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"
+                  >
+                    <Boxes className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
+                    <span className="font-mono text-sm">{shortId(item.requirementId)}</span>
+                    <StatusBadge tone={item.receivingStatus === null ? "neutral" : "info"}>
+                      {item.requirementStatus}
+                      {item.receivingStatus ? ` · ${item.receivingStatus}` : ""}
+                    </StatusBadge>
+                    <span className="text-xs text-[var(--fm-text-muted)]">
+                      expected {item.requiredQuantityBase} · accepted {item.acceptedBase} · rejected{" "}
+                      {item.rejectedBase}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ListPageSection>
 
-            <ListPageSection
-              title={sectionMeta.procurement.title}
-              description={sectionMeta.procurement.description}
-            >
-              {state.board.procurement.length === 0 ? (
-                <p className="p-5 text-sm text-[var(--fm-text-muted)]">
-                  No procurement requirements.
-                </p>
-              ) : (
-                <ul className="divide-y divide-[var(--fm-border)]">
-                  {state.board.procurement.map((item: ProcurementQueueItem) => (
-                    <li
-                      key={item.requirementId}
-                      className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"
-                    >
-                      <Boxes className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
-                      <span className="font-mono text-sm">{shortId(item.requirementId)}</span>
-                      <StatusBadge tone={item.receivingStatus === null ? "neutral" : "info"}>
-                        {item.requirementStatus}
-                        {item.receivingStatus ? ` · ${item.receivingStatus}` : ""}
-                      </StatusBadge>
-                      <span className="text-xs text-[var(--fm-text-muted)]">
-                        expected {item.requiredQuantityBase} · accepted {item.acceptedBase} ·
-                        rejected {item.rejectedBase}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </ListPageSection>
-
-            <ListPageSection
-              title="Exception queue"
-              description="Shortages, failed deliveries, and receiving discrepancies needing resolution."
-            >
-              {state.board.exceptions.length === 0 ? (
-                <p className="flex items-center gap-2 p-5 text-sm text-[var(--fm-text-muted)]">
-                  <StatusBadge tone="success">Clear</StatusBadge> No active exceptions.
-                </p>
-              ) : (
-                <ul className="divide-y divide-[var(--fm-border)]">
-                  {state.board.exceptions.map((exception) => (
-                    <li
-                      key={`${exception.kind}-${exception.referenceId}`}
-                      className="flex items-start gap-3 px-4 py-3 sm:px-5"
-                    >
-                      <AlertCircle className="mt-0.5 size-4 text-amber-600" aria-hidden />
-                      <div>
-                        <p className="text-sm font-semibold">
-                          {exception.kind.replaceAll("_", " ")}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
-                          {exception.detail}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </ListPageSection>
-          </>
-        ) : null}
-      </div>
-    </AdminShell>
+          <ListPageSection
+            title="Exception queue"
+            description="Shortages, failed deliveries, and receiving discrepancies needing resolution."
+          >
+            {state.board.exceptions.length === 0 ? (
+              <p className="flex items-center gap-2 p-5 text-sm text-[var(--fm-text-muted)]">
+                <StatusBadge tone="success">Clear</StatusBadge> No active exceptions.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--fm-border)]">
+                {state.board.exceptions.map((exception) => (
+                  <li
+                    key={`${exception.kind}-${exception.referenceId}`}
+                    className="flex items-start gap-3 px-4 py-3 sm:px-5"
+                  >
+                    <AlertCircle className="mt-0.5 size-4 text-amber-600" aria-hidden />
+                    <div>
+                      <p className="text-sm font-semibold">{exception.kind.replaceAll("_", " ")}</p>
+                      <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
+                        {exception.detail}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ListPageSection>
+        </>
+      ) : null}
+    </div>
   );
 }
 
