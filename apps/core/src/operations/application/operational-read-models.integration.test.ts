@@ -110,7 +110,7 @@ describe("scoped operational read models", () => {
     await seedOperationalRow({ fulfillmentStatus: "PENDING", deliveryStatus: "PENDING" });
     await seedOperationalRow({ fulfillmentStatus: "SHORTAGE", deliveryStatus: "FAILED" });
     const fullAccess = await staffCookie({
-      permissionCodes: ["fulfillment:manage", "delivery:manage", "procurement:manage"],
+      permissionCodes: ["fulfillment.manage", "delivery.manage", "procurement.manage"],
     });
     const board = await core.adminOperationsBoard({
       requestId: crypto.randomUUID(),
@@ -145,7 +145,7 @@ describe("scoped operational read models", () => {
   });
 
   it("reports sections denied when capabilities are missing instead of leaking rows", async () => {
-    const fulfillmentOnly = await staffCookie({ permissionCodes: ["fulfillment:manage"] });
+    const fulfillmentOnly = await staffCookie({ permissionCodes: ["fulfillment.manage"] });
     const board = await core.adminOperationsBoard({
       requestId: crypto.randomUUID(),
       headers: { cookie: fulfillmentOnly.cookie },
@@ -158,11 +158,11 @@ describe("scoped operational read models", () => {
 
   it("lets a supervisor assign a rider and riders see only their own jobs", async () => {
     const supervisor = await staffCookie({
-      permissionCodes: ["delivery:manage", "order:manage"],
+      permissionCodes: ["delivery.manage", "orders.manage"],
     });
-    const riderA = await staffCookie({ permissionCodes: ["delivery:manage"] });
+    const riderA = await staffCookie({ permissionCodes: ["delivery.manage"] });
     const riderB = await staffCookie({
-      permissionCodes: ["delivery:manage"],
+      permissionCodes: ["delivery.manage"],
       locationId: "location-other-empty",
     });
     const jobA = await seedOperationalRow({ deliveryStatus: "PENDING" });
@@ -231,9 +231,9 @@ describe("scoped operational read models", () => {
   });
 
   it("denies a rider acting on another rider's assigned job while supervisors keep access", async () => {
-    const supervisor = await staffCookie({ permissionCodes: ["delivery:manage", "order:manage"] });
-    const riderA = await staffCookie({ permissionCodes: ["delivery:manage"] });
-    const riderB = await staffCookie({ permissionCodes: ["delivery:manage"] });
+    const supervisor = await staffCookie({ permissionCodes: ["delivery.manage", "orders.manage"] });
+    const riderA = await staffCookie({ permissionCodes: ["delivery.manage"] });
+    const riderB = await staffCookie({ permissionCodes: ["delivery.manage"] });
     const jobId = await seedOperationalRow({ deliveryStatus: "PENDING" });
     await core.assignRider({
       requestId: crypto.randomUUID(),

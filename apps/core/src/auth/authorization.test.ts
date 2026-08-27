@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { isAdminCapability } from "@freshmarkets/contracts";
 import { can, hasOperationalScope, hasScope } from "./authorization";
 
 describe("application authorization", () => {
   it("keeps authentication separate from capabilities", () => {
-    expect(can([], "staff:read")).toBe(false);
-    expect(can(["staff:read"], "staff:read")).toBe(true);
+    expect(can([], "staff.read")).toBe(false);
+    expect(can(["staff.read"], "staff.read")).toBe(true);
+  });
+
+  it("accepts only the canonical closed capability vocabulary", () => {
+    expect(can([], "staff.read")).toBe(false);
+    expect(can(["staff.read"], "staff.read")).toBe(true);
+    expect(isAdminCapability("staff:read")).toBe(false);
   });
 
   it("accepts global scope and exact scoped access", () => {

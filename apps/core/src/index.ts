@@ -441,7 +441,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = inventoryAdjustmentSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    if (!(await this.context.requireOperationalAccess(input, "inventory:manage", input.locationId)))
+    if (!(await this.context.requireOperationalAccess(input, "inventory.adjust", input.locationId)))
       return fail(
         "FORBIDDEN",
         "Inventory capability and location scope are required",
@@ -467,7 +467,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     if (
-      !(await this.context.requireOperationalAccess(input, "procurement:manage", input.locationId))
+      !(await this.context.requireOperationalAccess(input, "procurement.manage", input.locationId))
     )
       return fail(
         "FORBIDDEN",
@@ -487,7 +487,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       { ...input, actorId: actor.id },
       {
         authorize: (locationId) =>
-          this.context.requireOperationalAccess(input, "procurement:manage", locationId),
+          this.context.requireOperationalAccess(input, "procurement.manage", locationId),
       },
     );
   }
@@ -497,7 +497,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return advanceFulfillmentCommand(this.env.DB, input, {
       authorize: (locationId) =>
-        this.context.requireOperationalAccess(input, "fulfillment:manage", locationId),
+        this.context.requireOperationalAccess(input, "fulfillment.manage", locationId),
     });
   }
   async advanceDelivery(input: import("@freshmarkets/contracts").DeliveryCommandRequest) {
@@ -537,7 +537,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     }> = [
       {
         name: "fulfillment",
-        capability: "fulfillment:manage",
+        capability: "fulfillment.manage",
         load: async () => ({
           items: (await listFulfillmentQueue(this.env.DB, { locationId })).map((item) => ({
             ...item,
@@ -547,7 +547,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       },
       {
         name: "delivery",
-        capability: "delivery:manage",
+        capability: "delivery.manage",
         load: async () => ({
           items: (await listDeliveryDispatch(this.env.DB, { locationId })).map((item) => ({
             ...item,
@@ -557,7 +557,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       },
       {
         name: "procurement",
-        capability: "procurement:manage",
+        capability: "procurement.manage",
         load: async () => ({ items: await listProcurementQueue(this.env.DB, { locationId }) }),
       },
     ];
@@ -609,7 +609,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         authorize: (locationId) =>
           locationId
-            ? this.context.requireOperationalAccess(input, "delivery:manage", locationId)
+            ? this.context.requireOperationalAccess(input, "delivery.manage", locationId)
             : Promise.resolve(false),
       },
     );
@@ -646,10 +646,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const session = await this.context.session(input);
     if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
     const OPERATIONAL_CAPABILITIES = [
-      "inventory:manage",
-      "procurement:manage",
-      "fulfillment:manage",
-      "delivery:manage",
+      "inventory.adjust",
+      "procurement.manage",
+      "fulfillment.manage",
+      "delivery.manage",
     ] as const satisfies readonly import("@freshmarkets/contracts").Capability[];
     let authorized = false;
     for (const capability of OPERATIONAL_CAPABILITIES) {

@@ -103,7 +103,7 @@ describe("operational command authorization and integrity matrix", () => {
     );
   });
 
-  it("requires the inventory:manage capability with matching location scope", async () => {
+  it("requires the inventory.adjust capability with matching location scope", async () => {
     // Staff WITHOUT the required permission.
     const noPermission = await staffCookie({ permissionCode: "rbac:read" });
     const denied = await core.adjustInventory({
@@ -120,7 +120,7 @@ describe("operational command authorization and integrity matrix", () => {
 
     // Staff WITH the permission but scoped to another location.
     const otherScope = await staffCookie({
-      permissionCode: "inventory:manage",
+      permissionCode: "inventory.adjust",
       locationId: "location-other-empty",
     });
     const deniedScope = await core.adjustInventory({
@@ -137,7 +137,7 @@ describe("operational command authorization and integrity matrix", () => {
   });
 
   it("enforces optimistic versions on receiving commands", async () => {
-    const cookie = await staffCookie({ permissionCode: "procurement:manage" });
+    const cookie = await staffCookie({ permissionCode: "procurement.manage" });
     const requirementId = `req-${crypto.randomUUID()}`;
     await env.DB.batch([
       env.DB.prepare(
@@ -219,7 +219,7 @@ describe("operational command authorization and integrity matrix", () => {
   });
 
   it("rejects paid-order refund/cancel through the generic path", async () => {
-    const cookie = await staffCookie({ permissionCode: "order:manage" });
+    const cookie = await staffCookie({ permissionCode: "orders.manage" });
     const now = Date.now();
     const orderId2 = `order-${crypto.randomUUID()}`;
     const paymentId2 = await seedPaidOrderSkeleton(orderId2, Date.now());

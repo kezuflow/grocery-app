@@ -6,6 +6,7 @@ import type {
   RpcResult,
   Scope,
 } from "@freshmarkets/contracts";
+import { isAdminCapability } from "@freshmarkets/contracts";
 import { iamSchema } from "../iam/schema";
 import type { AuthInstance } from "./service";
 
@@ -53,19 +54,9 @@ export async function applicationContext(
         )
         .where(inArray(iamSchema.rolePermission.roleId, roleIds));
       for (const permission of permissions) {
-        if (
-          permission.code === "staff:read" ||
-          permission.code === "staff:manage" ||
-          permission.code === "rbac:read" ||
-          permission.code === "rbac:manage" ||
-          permission.code === "location:read" ||
-          permission.code === "location:manage" ||
-          permission.code === "order:manage" ||
-          permission.code === "inventory:manage" ||
-          permission.code === "procurement:manage" ||
-          permission.code === "fulfillment:manage" ||
-          permission.code === "delivery:manage"
-        ) {
+        // Canonical dot-form capabilities only; historical colon-form rows are
+        // unrecognized compatibility data.
+        if (isAdminCapability(permission.code)) {
           capabilities.push(permission.code);
         }
       }

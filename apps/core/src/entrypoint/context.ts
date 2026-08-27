@@ -99,14 +99,14 @@ export class CoreContext {
   /**
    * Delivery-job authorization: delivery capability with location scope, and
    * — for a job already assigned to a rider — either the assigned rider
-   * themselves or an actor holding the supervisory order:manage capability.
+   * themselves or an actor holding the supervisory orders.manage capability.
    * This enforces that riders act only on their own assignments.
    */
   async authorizeDeliveryJob(
     input: AuthenticatedRequest,
     job: { locationId: string; riderAuthUserId: string | null },
   ): Promise<boolean> {
-    if (!(await this.requireOperationalAccess(input, "delivery:manage", job.locationId)))
+    if (!(await this.requireOperationalAccess(input, "delivery.manage", job.locationId)))
       return false;
     if (job.riderAuthUserId === null) return true;
     const context = await applicationContext(
@@ -116,7 +116,7 @@ export class CoreContext {
     );
     if (!context.ok || !context.value.authenticated) return false;
     return (
-      context.value.capabilities.includes("order:manage") ||
+      context.value.capabilities.includes("orders.manage") ||
       context.value.principal?.userId === job.riderAuthUserId
     );
   }

@@ -86,7 +86,7 @@ async function staffCookieWithOrderManage() {
   const roleId = crypto.randomUUID();
   const now = Date.now();
   const existingPermission = await env.DB.prepare(
-    "SELECT id FROM permission WHERE code='order:manage'",
+    "SELECT id FROM permission WHERE code='orders.manage'",
   ).first<{ id: string }>();
   const permissionId = existingPermission?.id ?? crypto.randomUUID();
   await env.DB.batch([
@@ -97,7 +97,7 @@ async function staffCookieWithOrderManage() {
       "INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Safety Ops', ?)",
     ).bind(roleId, `safety-ops-${crypto.randomUUID().slice(0, 8)}`, now),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'order:manage', 'Manage orders', ?)",
+      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'orders.manage', 'Manage orders', ?)",
     ).bind(permissionId, now),
     env.DB.prepare(
       "INSERT OR IGNORE INTO role_permission (role_id, permission_id) VALUES (?, ?)",
