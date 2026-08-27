@@ -8,9 +8,8 @@ describe("Core Worker foundation", () => {
     const response = buildHealthResponse({
       DB: {} as D1Database,
       ENVIRONMENT: "development",
-      BETTER_AUTH_URL: "http://127.0.0.1:8788",
-      TRUSTED_ORIGINS:
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,http://127.0.0.1:8787,https://core.example.invalid",
+      BETTER_AUTH_URL: "http://localhost:3000",
+      TRUSTED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,https://core.example.invalid",
       PAYMENT_PROVIDER: "mock",
       ROUTE_DISTANCE_PROVIDER: "mapbox",
       MAPBOX_ACCESS_TOKEN: "test-placeholder",

@@ -16,12 +16,13 @@
   },
   "vars": {
     "ENVIRONMENT": "development",
-    "BETTER_AUTH_URL": "http://127.0.0.1:8788",
-    // Development-only loopback origins plus the workerd test host. Port 8787
-    // is the combined local stack (web + core service binding) used by the
-    // operational Playwright flows. Production sets TRUSTED_ORIGINS through
-    // environment configuration, never a source default.
-    "TRUSTED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,http://127.0.0.1:8787,https://core.example.invalid",
+    // Browser auth is always exposed through Web, including when Core runs
+    // separately on Wrangler's default http://127.0.0.1:8787 listener.
+    "BETTER_AUTH_URL": "http://localhost:3000",
+    // Development-only loopback public origins plus the workerd test host.
+    // Production sets TRUSTED_ORIGINS through environment configuration,
+    // never a source default.
+    "TRUSTED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,https://core.example.invalid",
     // Deterministic mock payments are local-only. Production must not inherit
     // this variable and fails closed until an approved provider exists.
     "PAYMENT_PROVIDER": "mock",

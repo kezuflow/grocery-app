@@ -26,7 +26,7 @@ async function signUpRider(request: import("@playwright/test").APIRequestContext
   const signUp = await request.post("/api/auth/sign-up/email", {
     headers: {
       "content-type": "application/json",
-      origin: process.env.APP_BASE_URL ?? "http://localhost:8787",
+      origin: process.env.APP_BASE_URL ?? "http://localhost:3000",
     },
     data: { name: "Rider E2E", email, password: "correct-horse-battery-staple" },
   });

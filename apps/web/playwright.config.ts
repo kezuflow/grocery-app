@@ -8,7 +8,7 @@ import { defineConfig } from "@playwright/test";
  *   pnpm --filter @freshmarkets/core dev      # Core worker
  *   pnpm --filter @freshmarkets/web dev       # Web app (APP_BASE_URL port)
  *
- * APP_BASE_URL overrides http://localhost:8787. Suites self-skip when the
+ * APP_BASE_URL overrides http://localhost:3000. Suites self-skip when the
  * stack is unreachable so repository-wide verification never fails on an
  * environment without a running app.
  */
@@ -18,7 +18,7 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   use: {
-    baseURL: process.env.APP_BASE_URL ?? "http://localhost:8787",
+    baseURL: process.env.APP_BASE_URL ?? "http://localhost:3000",
     trace: "retain-on-failure",
   },
 });

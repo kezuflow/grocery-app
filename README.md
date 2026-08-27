@@ -35,6 +35,10 @@ pnpm dev:core
 pnpm dev:web
 ```
 
+Web is available at `http://localhost:3000`. The standalone Core Worker listens
+on Wrangler's default `http://127.0.0.1:8787`, while browser-facing Better Auth
+routes remain under Web at `http://localhost:3000/api/auth/*`.
+
 For the production-built Web Worker plus Core in one Cloudflare local runtime, first build Web, then run the multi-config Wrangler smoke stack:
 
 ```sh
@@ -42,7 +46,10 @@ pnpm --filter @freshmarkets/web build
 pnpm dev:stack
 ```
 
-Open `/api/core-health` on the primary local Worker to verify `Web -> CORE Service Binding -> Core`.
+The combined stack also uses `http://localhost:3000` as its public origin.
+
+Open `http://localhost:3000/api/core-health` to verify
+`Web -> CORE Service Binding -> Core`.
 
 The Core D1 `database_id` is an explicit development placeholder. Replace it with environment-specific provisioned IDs before remote deployment; do not commit secrets to Wrangler configuration.
 

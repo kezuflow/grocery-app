@@ -21,8 +21,8 @@ describe("parseTrustedOrigins", () => {
   });
 
   it("allows http only for explicit loopback hosts", () => {
-    expect(parseTrustedOrigins("http://127.0.0.1:8788")).toEqual(["http://127.0.0.1:8788"]);
-    expect(parseTrustedOrigins("http://localhost:5173")).toEqual(["http://localhost:5173"]);
+    expect(parseTrustedOrigins("http://127.0.0.1:8787")).toEqual(["http://127.0.0.1:8787"]);
+    expect(parseTrustedOrigins("http://localhost:3000")).toEqual(["http://localhost:3000"]);
     expect(() => parseTrustedOrigins("http://freshmarkets.ph")).toThrow("INVALID_TRUSTED_ORIGIN");
   });
 
@@ -82,7 +82,7 @@ describe("trustedOriginsForEnvironment", () => {
     expect(() =>
       trustedOriginsForEnvironment({
         ENVIRONMENT: "development",
-        BETTER_AUTH_URL: "http://127.0.0.1:8788",
+        BETTER_AUTH_URL: "http://localhost:3000",
         TRUSTED_ORIGINS: "javascript:alert(1)",
       }),
     ).toThrow("INVALID_TRUSTED_ORIGIN");
@@ -91,7 +91,7 @@ describe("trustedOriginsForEnvironment", () => {
   it("falls back to explicit loopback origins only outside production", () => {
     expect(
       trustedOriginsForEnvironment({ ENVIRONMENT: "development", BETTER_AUTH_URL: undefined }),
-    ).toEqual(["http://localhost:8788", "http://127.0.0.1:8788"]);
+    ).toEqual(["http://localhost:3000", "http://127.0.0.1:3000"]);
   });
 
   it("cannot be expanded by request-controlled values", () => {

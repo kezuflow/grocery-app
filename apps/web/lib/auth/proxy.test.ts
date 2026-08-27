@@ -79,7 +79,7 @@ describe("proxyAuthRequest", () => {
 describe("resolvePublicAppOrigin", () => {
   it("normalizes the configured public origin", () => {
     expect(resolvePublicAppOrigin("https://freshmarkets.ph")).toBe("https://freshmarkets.ph");
-    expect(resolvePublicAppOrigin("http://localhost:5173/")).toBe("http://localhost:5173");
+    expect(resolvePublicAppOrigin("http://localhost:3000/")).toBe("http://localhost:3000");
   });
 
   it("rejects missing, malformed, non-https, and non-origin values", () => {

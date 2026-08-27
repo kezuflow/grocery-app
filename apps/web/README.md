@@ -6,7 +6,7 @@ vinext presentation Worker. Phase 1 contains browser auth screens and a thin Web
 
 ## Scripts
 
-- `pnpm run dev` starts the vinext dev server.
+- `pnpm run dev` starts the vinext dev server at `http://localhost:3000`.
 - `pnpm run build` builds the Cloudflare Worker output.
 - `pnpm run start` starts the built Worker locally with Wrangler.
 - `pnpm run deploy` deploys the Cloudflare Worker.
@@ -14,7 +14,10 @@ vinext presentation Worker. Phase 1 contains browser auth screens and a thin Web
 
 The Web Worker has no D1 binding. Its `CORE` Service Binding targets `freshmarkets-core`.
 
-Browser auth requests use `/api/auth/*`; the proxy forwards the original URL/origin/host and reproduces all Core response headers, including repeated `Set-Cookie` headers. `/api/auth-context` exposes the Core application context DTO for capability-aware shells.
+Browser auth requests use `http://localhost:3000/api/auth/*` in local development;
+the proxy forwards the configured public URL/origin/host and reproduces all Core
+response headers, including repeated `Set-Cookie` headers. `/api/auth-context`
+exposes the Core application context DTO for capability-aware shells.
 
 Phase 2 adds `/serviceability` and `/api/serviceability` as thin coordinate-evaluation surfaces. Web forwards coordinates to Core and does not evaluate polygons or select fulfillment locations.
 

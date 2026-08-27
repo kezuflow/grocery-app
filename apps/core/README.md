@@ -17,3 +17,7 @@ Phase 2 adds the authoritative `resolveServiceability()` RPC backed by versioned
 Catalog seed tooling lives in `src/catalog/seed/`: the typed 226-product produce manifest with its aggregate validator (`pnpm --filter @freshmarkets/core test`) and the deterministic SQL generator. `pnpm catalog:generate` rewrites `migrations/0025_complete_produce_catalog.sql`; `pnpm catalog:check` fails on drift. Generated migrations are committed artifacts and never hand-edited.
 
 Configure `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` as Core secrets/vars per environment. Google routes are intentionally unavailable until both Google credentials are configured. Development email hooks log verification/reset URLs for test capture; production needs a configured transactional email binding/provider.
+
+For local development, `BETTER_AUTH_URL` is the browser-facing Web origin
+`http://localhost:3000`; it is not the standalone Core listener. `pnpm dev:core`
+uses Wrangler's default `http://127.0.0.1:8787` listener.

@@ -23,8 +23,8 @@ function testAuthEnvironment(): AuthEnvironment {
   return {
     DB: env.DB,
     ENVIRONMENT: "development",
-    BETTER_AUTH_URL: "http://127.0.0.1:8788",
-    TRUSTED_ORIGINS: "http://127.0.0.1:8788",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    TRUSTED_ORIGINS: "http://localhost:3000",
     BETTER_AUTH_SECRET: "test-secret",
   };
 }

@@ -4,7 +4,7 @@ export type AuthOriginEnvironment = {
   TRUSTED_ORIGINS?: string;
 };
 
-const loopbackDevelopmentOrigins = ["http://localhost:8788", "http://127.0.0.1:8788"] as const;
+const loopbackDevelopmentOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"] as const;
 
 function isLoopbackHost(hostname: string): boolean {
   return (

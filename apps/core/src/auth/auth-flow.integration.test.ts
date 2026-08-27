@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { createAuth, type AuthEnvironment } from "./service";
 import type { AuthEmailMessage } from "./email-delivery";
 
-const baseUrl = "http://127.0.0.1:8788";
+const baseUrl = "http://localhost:3000";
 
 function authEnvironment(overrides: Partial<AuthEnvironment> = {}): AuthEnvironment {
   return {

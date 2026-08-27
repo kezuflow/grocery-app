@@ -19,7 +19,7 @@
   "vars": {
     // Development-only loopback public origin. Production sets
     // PUBLIC_APP_ORIGIN through environment configuration, never a source default.
-    "PUBLIC_APP_ORIGIN": "http://localhost:5173",
+    "PUBLIC_APP_ORIGIN": "http://localhost:3000",
     "ENVIRONMENT": "development",
   },
   "observability": {
