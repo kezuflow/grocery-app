@@ -50,8 +50,9 @@ Phase 2 materializes these geography tables and stable seed identities for `METR
 - `customer_principal(id PK, auth_user_id UNIQUE FK Better Auth user, status active|disabled, created_at, updated_at)`
 - `customers(id PK, principal_id UNIQUE FK customer_principal, auth_user_id UNIQUE legacy compatibility column, status, version, created_at, updated_at)`
 - `staff_principals(id PK, auth_user_id UNIQUE, display_name, status, version)`
+- `staff_invitations(id PK, email_normalized, display_name, status PENDING|ACCEPTED|EXPIRED|REVOKED, invited_by_staff_id FK, expires_at, accepted_auth_user_id NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
 - `riders(id PK, staff_id FK NULL, auth_user_id UNIQUE NULL, preferred_location_id FK NULL, status, version)`
-- `roles(id PK, code UNIQUE, name, description)`
+- `roles(id PK, code UNIQUE, name, description, status ACTIVE|ARCHIVED, version)`
 - `capabilities(id PK, code UNIQUE, description)` seeded/configured from the closed capability vocabulary in `DOMAIN_MODEL.md`, including customer, order, catalog, inventory, promotion, membership, payment/refund, fulfillment, delivery, procurement, analytics, and staff read/manage capabilities.
 - `role_capabilities(role_id FK, capability_id FK, PRIMARY KEY(role_id, capability_id))`
 - `staff_role_assignments(id PK, staff_id FK, role_id FK, organization_id FK NULL, market_id FK NULL, location_id FK NULL, created_at)`
@@ -67,6 +68,10 @@ address-owned.
 ## Customers and Addresses
 
 - `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, user_confirmed_at, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, serviceable NULL, serviceability_reason NULL, notes, status, version, created_at, updated_at)`
+- `customer_invitations(id PK, email_normalized, status PENDING|ACCEPTED|EXPIRED|REVOKED, invited_by_staff_id FK, expires_at, accepted_customer_id FK NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
+- `privacy_requests(id PK, customer_id FK, request_type ACCESS|CORRECTION|CLOSURE|ANONYMIZATION, status SUBMITTED|VERIFYING|APPROVED|REJECTED|PROCESSING|COMPLETED|ESCALATED, requested_at, verified_at NULL, resolved_at NULL, assigned_staff_id FK NULL, reason NULL, resolution_json NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
+- `customer_support_notes(id PK, customer_id FK, author_staff_id FK, body, visibility SUPPORT, created_at)` when the good-to-have notes capability is approved for implementation; notes are append-only corrections rather than silent edits.
+- `customer_segments(id PK, code UNIQUE, name, status, version)` and `customer_segment_assignments(customer_id FK, segment_id FK, assigned_by_staff_id FK, created_at, PRIMARY KEY(customer_id, segment_id))` when controlled CRM segments are approved for implementation.
 
 Core address reads and writes are scoped through the authenticated customer resolver.
 Address updates use a conditional `(id, customer_id, status, version)` predicate;
@@ -76,6 +81,8 @@ Indexes: customer/status, last resolved zone, and optional coordinate bounding f
 
 Saved customer addresses are persisted in the Phase 4B migration. Historical order
 snapshots remain independent of subsequent address edits.
+
+Customer or Staff invitation records coordinate application provisioning but never store passwords, verification secrets, OAuth tokens, or session tokens. Privacy/closure completion may disable access and anonymize fields approved by retention policy; it never cascades deletion into Orders, Payments, Refunds, Promotion redemptions, inventory ledgers, or Audit events.
 
 ## Subscriptions
 

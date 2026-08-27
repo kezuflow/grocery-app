@@ -201,6 +201,32 @@ Customer order DTOs compose original and amendment timelines while preserving se
 
 Customer grocery-order cancellation is not exposed in the mock-payment MVP. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.
 
+## Admin Foundation, Audit, and Application IAM
+
+- `admin.context.get() -> AdminContextView`
+- `admin.scopes.list() -> AdminScopeOptionView[]`
+- `admin.audit.list(filters, page) -> AdminAuditEventPage`
+- `admin.audit.get({ auditEventId }) -> AdminAuditEventView`
+- `admin.staff.list(filters, page) -> AdminStaffPage`
+- `admin.staff.get({ staffId }) -> AdminStaffDetail`
+- `admin.staff.invite({ email, displayName, idempotencyKey }) -> AdminStaffDetail`
+- `admin.staff.update({ staffId, displayName, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
+- `admin.staff.changeAccess({ staffId, action: "ACTIVATE" | "SUSPEND", reason, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
+- `admin.staff.setRoles({ staffId, roleIds, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
+- `admin.staff.setScopes({ staffId, scopes, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
+- `admin.staff.revokeSessions({ staffId, reason, idempotencyKey }) -> SessionRevocationResult`
+- `admin.roles.list(page) -> AdminRolePage`
+- `admin.roles.get({ roleId }) -> AdminRoleDetail`
+- `admin.roles.create({ code, name, description, capabilityCodes, idempotencyKey }) -> AdminRoleDetail`
+- `admin.roles.update({ roleId, name, description, expectedVersion, idempotencyKey }) -> AdminRoleDetail`
+- `admin.roles.setCapabilities({ roleId, capabilityCodes, expectedVersion, idempotencyKey }) -> AdminRoleDetail`
+- `admin.roles.archive({ roleId, reason, expectedVersion, idempotencyKey }) -> AdminRoleDetail`
+- `admin.capabilities.list() -> CapabilityDefinitionView[]`
+
+Admin context derives the active Staff principal, canonical capability vocabulary, and global/market/location scopes from the Better Auth session plus Application IAM. It returns only permitted navigation and scope-selector options. Web never manufactures a capability or infers authorization from navigation visibility.
+
+Audit queries require `audit.read`, enforce resource scope, use bounded keyset pagination, and return sanitized purpose-built DTOs rather than raw JSON rows. Credential, bearer-token, cookie, authorization, provider-payload, and secret values are redacted recursively. Staff invitations never accept a password; Better Auth retains credentials, verification, and session authority. Roles with active assignments cannot be silently deleted, and session revocation is an explicit audited operation.
+
 ## Admin Orders and Payments
 
 - `admin.orders.list(filters, page) -> AdminOrderListPage`
@@ -217,6 +243,13 @@ Admin order detail is an operational read model combining order, payment, demand
 
 - `admin.customers.list(filters, page) -> AdminCustomerSummaryPage`
 - `admin.customers.get({ customerId }) -> AdminCustomerDetail`
+- `admin.customers.invite({ email, idempotencyKey }) -> AdminCustomerDetail`
+- `admin.customers.update({ customerId, changedApplicationFields, expectedVersion, idempotencyKey }) -> AdminCustomerDetail`
+- `admin.customers.changeAccess({ customerId, action: "DISABLE" | "RESTORE", reason, expectedVersion, idempotencyKey }) -> AdminCustomerDetail`
+- `admin.customers.revokeSessions({ customerId, reason, idempotencyKey }) -> SessionRevocationResult`
+- `admin.customers.requestClosure({ customerId, reason, idempotencyKey }) -> PrivacyRequestView`
+- `admin.privacy.listRequests(filters, page) -> PrivacyRequestPage`
+- `admin.privacy.applyAction({ requestId, action, reason, expectedVersion, idempotencyKey }) -> PrivacyRequestView`
 - `admin.catalog.listUnits({ dimension?, status? }) -> UnitDefinitionView[]`
 - `admin.catalog.createUnit({ code, displayName, dimension, canonicalBaseCode, conversionNumerator, conversionDenominator, idempotencyKey }) -> UnitDefinitionView`
 - `admin.catalog.createSku({ productId, code, displayName, merchandisingLabel?, sellQuantity, sellUnitId, inventoryQuantityBase, status, sortOrder, idempotencyKey }) -> SellableSkuView`
@@ -226,12 +259,33 @@ Admin order detail is an operational read model combining order, payment, demand
 - `admin.promotions.get({ promotionId }) -> PromotionDetail`
 - `admin.promotions.create({ definition, idempotencyKey }) -> PromotionDetail`
 - `admin.promotions.update({ promotionId, expectedVersion, definition, idempotencyKey }) -> PromotionDetail`
+- `admin.promotions.activate({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
+- `admin.promotions.deactivate({ promotionId, reason, expectedVersion, idempotencyKey }) -> PromotionDetail`
+- `admin.promotions.archive({ promotionId, reason, expectedVersion, idempotencyKey }) -> PromotionDetail`
+- `admin.promotions.preview({ promotionId, customerId?, cartSnapshot? }) -> PromotionPreviewView`
+- `admin.promotions.listRedemptions({ promotionId, cursor? }) -> PromotionRedemptionPage`
+- `admin.promotions.grant({ promotionId, customerId, idempotencyKey }) -> PromotionGrantView`
 - `admin.fulfillment.getModeConfiguration({ locationId }) -> FulfillmentModeConfigurationView`
 - `admin.fulfillment.activateMode({ locationId, fulfillmentMode, cadence?, configuration, expectedVersion, idempotencyKey }) -> FulfillmentModeConfigurationView`
 
-`AdminCustomerSummary` contains only authorized Customer/profile display data plus location, Order count, last Order, lifetime-spend/AOV fields only when their canonical metric definitions are approved, Membership/trial state, and creation date. Detail composes scoped addresses, Orders, Membership, Promotion/redemption, Payments summary, delivery, support-visible, and audit read models. Better Auth rows are not the Customer contract.
+`AdminCustomerSummary` contains only authorized Customer/profile display data plus location, Order count, last Order, lifetime-spend/AOV fields only when their canonical metric definitions are approved, Membership/trial state, and creation date. Detail composes scoped addresses, Orders, Membership, Promotion/redemption, Payments summary, delivery, support-visible, and audit read models. Better Auth rows are not the Customer contract. Customer "delete" is represented by the privacy/account-closure lifecycle: access may be disabled and eligible application fields may later be anonymized, but required Order, Payment, Refund, redemption, inventory-ledger, and Audit history is never hard-deleted by a generic Customer command.
 
 Unit and SKU commands accept integer quantities only and validate dimension compatibility. `PACK`, `BUNCH`, and `TRAY` are labels, not universal conversion codes. Promotion definitions accept only the closed benefit/rule types and validated parameters from `DOMAIN_MODEL.md`; no code/expression payload exists. All Admin operations require the capability and resource scope named by Application IAM.
+
+## Admin Memberships and Customer Issues
+
+- `admin.memberships.list(filters, page) -> AdminMembershipPage`
+- `admin.memberships.get({ subscriptionId }) -> AdminMembershipDetail`
+- `admin.memberships.pause({ subscriptionId, reason, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
+- `admin.memberships.resume({ subscriptionId, reason?, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
+- `admin.memberships.cancel({ subscriptionId, timing: "IMMEDIATE" | "PERIOD_END", reason, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
+- `admin.memberships.recover({ subscriptionId, idempotencyKey }) -> AdminMembershipDetail`
+- `admin.memberships.listExceptions(filters, page) -> MembershipExceptionPage`
+- `admin.orderIssues.list(filters, page) -> OrderIssuePage`
+- `admin.orderIssues.get({ issueId }) -> OrderIssueDetail`
+- `admin.orderIssues.applyAction({ issueId, action, reason?, expectedVersion, idempotencyKey }) -> OrderIssueDetail`
+
+Membership Admin commands invoke the canonical Membership state machine and never patch a state, fabricate a trial, or assert payment success. Recovery consumes provider-confirmed canonical Payments truth. Order-issue actions control intake/triage state only; they never implicitly authorize a Refund or Credit.
 
 ## Inventory
 
