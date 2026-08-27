@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type {
   AdminFoundationService,
   AdminStaffAccessService,
+  AdminCustomerService,
+  AdminPrivacyService,
   CatalogService,
   CheckoutService,
   CoreServiceBinding,
@@ -77,6 +79,8 @@ describe("domain-grouped core services", () => {
     void ({} as OperationsService);
     void ({} as AdminFoundationService);
     void ({} as AdminStaffAccessService);
+    void ({} as AdminCustomerService);
+    void ({} as AdminPrivacyService);
 
     // The implemented surface plus explicit canonical additions must remain
     // assignable to the full binding (structural composition).
