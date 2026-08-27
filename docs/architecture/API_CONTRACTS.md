@@ -237,6 +237,17 @@ Audit queries require `audit.read`, enforce resource scope, use bounded keyset p
 
 Migration `0026_admin_foundation.sql` seeds the canonical capability rows with stable `perm_<domain>_<action>_v1` ids and maps historical colon-form assignments additively. Historical colon-form permission rows and assignments remain compatibility data; new source and DTOs use canonical dot-form capabilities only.
 
+### Implemented Staff & Access service (Slice 2, 2026-08-27)
+
+`packages/contracts/src/admin-staff-access.ts` publishes `AdminStaffAccessService` — `listAdminStaff`, `getAdminStaff`, `listAdminStaffInvitations`, `inviteAdminStaff`, `revokeAdminStaffInvitation`, `updateAdminStaff`, `changeAdminStaffAccess`, `setAdminStaffRoles`, `setAdminStaffScopes`, `revokeAdminStaffSessions`, `listAdminRoles`, `getAdminRole`, `createAdminRole`, `updateAdminRole`, `setAdminRoleCapabilities`, `archiveAdminRole`, and `listCapabilityDefinitions`.
+
+- Authorization: every Staff & Access query/command requires `staff.read` (reads) or `staff.manage` (commands) **plus a global scope** in Core. Staff administration is a central concern; market/location-scoped principals receive `FORBIDDEN`.
+- Staff reads compose application IAM identities with roles, canonical capabilities, scopes, and a single Better-Auth display `email`; no Better Auth row is returned as a Staff DTO.
+- Commands take caller-stable `idempotencyKey`s and `expectedVersion` where concurrent mutation is possible, require a reason for access changes/revocation/archive, and append `audit_event` rows (closed action vocabulary `STAFF.*`/`ROLE.*`) with before/after snapshots and `correlation_id = requestId`. Identical replay returns the authoritative result; hash conflicts return `IDEMPOTENCY_CONFLICT`.
+- `setAdminStaffRoles`/`setAdminStaffScopes` replace atomically; every statement in their D1 batch carries the caller's version predicate so a concurrent change makes the whole batch read back as `STALE_VERSION`. Archived roles fail closed on assignment.
+- `revokeAdminStaffSessions` deletes the authentication authority's own session rows for the linked user (the minimal Better Auth build exposes no administrative revoke API), leaving no application-side session state.
+- Invitation lifecycle for MVP: `inviteAdminStaff` creates one durable `PENDING` record per normalized email with 14-day expiry; acceptance/provisioning of a new identity is an explicitly deferred later flow.
+
 ## Admin Orders and Payments
 
 - `admin.orders.list(filters, page) -> AdminOrderListPage`

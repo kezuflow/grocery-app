@@ -22,17 +22,17 @@ sequence. Completing one slice does not authorize the next.
 
 ## Dependency order
 
-| Slice | Deliverable | Entry dependency | Stop gate |
-|---|---|---|---|
-| 1 | Canonical admin capabilities, context/scopes, Audit read API, capability-aware shell foundation | Approved design | Context, Audit, BFF, and shell tests pass; no Staff CRUD begins |
-| 2 | Staff invitations, identities, roles, capabilities, scopes, suspension, session revocation | Slice 1 | Staff/RBAC flows pass; no Customer tables or pages begin |
-| 3 | Customer CRM, access disable/restore, composed detail, privacy/closure requests | Slices 1–2 | CRM/privacy flows pass; no Promotion management begins |
-| 4 | Controlled Promotion definitions, lifecycle, preview, grants, redemptions | Slices 1–3 | Promotion invariants and UI pass; no Catalog changes begin |
-| 5 | Catalog, categories, units, SKUs, availability, pricing, media, Inventory | Slices 1–4 | Catalog/Inventory flows pass; no finance work begins |
-| 6 | Orders, issues, Payments, Refunds, Memberships, reconciliation exceptions | Slices 1–5 | Finance and lifecycle flows pass; no operations convergence begins |
-| 7 | Procurement, Receiving, Fulfillment, Delivery, mode configuration, exception convergence | Slices 1–6 | Operational flows pass; no Analytics definitions begin |
-| 8 | Metric definitions, Analytics queries, Overview, approved exports | Slices 1–7 | Metric reconciliation passes; blocked metrics remain unavailable |
-| 9 | Cross-workspace accessibility, security, performance, Worker-local and production readiness | Slices 1–8 | All required non-skipped acceptance gates pass |
+| Slice | Deliverable                                                                                     | Entry dependency | Stop gate                                                          |
+| ----- | ----------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------ |
+| 1     | Canonical admin capabilities, context/scopes, Audit read API, capability-aware shell foundation | Approved design  | Context, Audit, BFF, and shell tests pass; no Staff CRUD begins    |
+| 2     | Staff invitations, identities, roles, capabilities, scopes, suspension, session revocation      | Slice 1          | Staff/RBAC flows pass; no Customer tables or pages begin           |
+| 3     | Customer CRM, access disable/restore, composed detail, privacy/closure requests                 | Slices 1–2       | CRM/privacy flows pass; no Promotion management begins             |
+| 4     | Controlled Promotion definitions, lifecycle, preview, grants, redemptions                       | Slices 1–3       | Promotion invariants and UI pass; no Catalog changes begin         |
+| 5     | Catalog, categories, units, SKUs, availability, pricing, media, Inventory                       | Slices 1–4       | Catalog/Inventory flows pass; no finance work begins               |
+| 6     | Orders, issues, Payments, Refunds, Memberships, reconciliation exceptions                       | Slices 1–5       | Finance and lifecycle flows pass; no operations convergence begins |
+| 7     | Procurement, Receiving, Fulfillment, Delivery, mode configuration, exception convergence        | Slices 1–6       | Operational flows pass; no Analytics definitions begin             |
+| 8     | Metric definitions, Analytics queries, Overview, approved exports                               | Slices 1–7       | Metric reconciliation passes; blocked metrics remain unavailable   |
+| 9     | Cross-workspace accessibility, security, performance, Worker-local and production readiness     | Slices 1–8       | All required non-skipped acceptance gates pass                     |
 
 ## Slice-owned migrations
 
@@ -56,5 +56,9 @@ Slice 1 is implemented per
 through the foundation-slice documentation commit). Its authenticated Playwright journeys remain
 an unmet gate pending a provisioned local auth-email transport; the unmodified owner-owned
 `apps/web/app/globals.css` deferred the shadcn CLI in favor of hand-themed shadcn-source
-primitives. Slice 2 is not authorized for implementation and requires its own plan produced from
-the then-current repository per the plan production rule.
+primitives. Slice 2 (Staff & Access) is implemented per
+`docs/superpowers/plans/ADMIN_STAFF_ACCESS_SLICE_2_IMPLEMENTATION_PLAN.md`; its authenticated
+browser journeys remain an unmet gate behind the unprovisioned auth-email transport, and
+invitation acceptance/provisioning is explicitly deferred. Slice 3 is not authorized for
+implementation and requires its own plan produced from the then-current repository per the plan
+production rule.

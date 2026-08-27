@@ -17,7 +17,7 @@ Status date: 2026-08-27. This file is descriptive evidence only. The canonical d
 - Media binaries remain public Web assets pending the deferred R2 `product_media` migration.
 - Known local-stack limitation: committed migration `0021_instant_mode.sql` cannot apply to dev
   databases containing pre-existing grocery orders because of its unconditional `DROP TABLE
-  grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
+grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
 
 ## Admin Foundation Slice 1 (2026-08-27)
 
@@ -46,6 +46,27 @@ Status date: 2026-08-27. This file is descriptive evidence only. The canonical d
   report). Authenticated Playwright journeys (staff shell, permission-filtered navigation, mobile
   trigger, Audit rows/filtered-empty) remain skipped because the local stack has no configured
   auth-email transport; they are an unmet acceptance gate, not satisfied evidence.
+
+## Admin Staff & Access Slice 2 (2026-08-27)
+
+- Migration `0027_staff_administration.sql` adds `staff_invitation`, `staff_identity.version`, and
+  role administration metadata (`description`, `ACTIVE|ARCHIVED` status, `version`). Roles are
+  archived, never deleted; archived roles fail closed on assignment.
+- Core implements `AdminStaffAccessService`: staff reads, invitations, rename, activate/suspend,
+  atomic role/scope replacement (version-guarded D1 batches), session revocation, role CRUD with
+  canonical-only capabilities, and the capability vocabulary read model. Authorization is
+  `staff.read`/`staff.manage` plus a global scope; every material command is idempotent,
+  version-guarded, and audited with before/after snapshots.
+- Session revocation deletes the authentication authority's own session rows (the minimal Better
+  Auth build exposes no admin revoke API); integration tests prove a live session dies.
+- Web adds twelve thin BFF adapters under `/api/admin/{staff,roles,capabilities}` and the Staff
+  workspace (`/admin/staff`, detail, roles list/detail) with invite, atomic editors, reason-gated
+  destructive actions, and loading/empty/permission/error states with request references.
+- Invitation acceptance/provisioning of a new identity is explicitly deferred to the slice that
+  implements the public acceptance flow; no password input exists anywhere.
+- Verification evidence: full workspace gate (naming, migration, lint, typecheck, tests, builds,
+  vinext) passes with fresh counts in the task report; authenticated Playwright journeys for the
+  staff workspace remain skipped behind the unprovisioned auth-email transport — an unmet gate.
 
 ## Reconciled implementation state
 
@@ -115,16 +136,16 @@ Status date: 2026-08-27. This file is descriptive evidence only. The canonical d
 
 ## Maturity by area
 
-| Area | Current evidence | Not established |
-|---|---|---|
-| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests | Production deployment acceptance |
-| Auth and IAM | Better Auth Core ownership, RBAC boundaries, fake email-flow tests | Production sender/domain and OAuth configuration |
-| Catalog/geography | SKU/base-unit/pricing foundations; route-price adapter tests | Approved production polygons/geocoder and Mapbox secret |
-| Checkout/orders | Authoritative quote revalidation, mock payment reaction, immutable order snapshots | Full authenticated browser acceptance and production payment |
-| Membership | Provider-neutral states, trial/authorization/renewal test seams | Approved production mandates and automatic charges |
-| Operations | Scoped commands/read models and local integration tests | Complete staff/rider authenticated Playwright acceptance |
-| Notifications | Auth verification/reset only | Product notification Program 6 |
-| Programs 6-14 | No completion claim | Planned product scope remains unfinished |
+| Area                       | Current evidence                                                                   | Not established                                              |
+| -------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests            | Production deployment acceptance                             |
+| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                 | Production sender/domain and OAuth configuration             |
+| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                       | Approved production polygons/geocoder and Mapbox secret      |
+| Checkout/orders            | Authoritative quote revalidation, mock payment reaction, immutable order snapshots | Full authenticated browser acceptance and production payment |
+| Membership                 | Provider-neutral states, trial/authorization/renewal test seams                    | Approved production mandates and automatic charges           |
+| Operations                 | Scoped commands/read models and local integration tests                            | Complete staff/rider authenticated Playwright acceptance     |
+| Notifications              | Auth verification/reset only                                                       | Product notification Program 6                               |
+| Programs 6-14              | No completion claim                                                                | Planned product scope remains unfinished                     |
 
 ## Verification truthfulness
 

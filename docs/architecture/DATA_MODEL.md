@@ -222,6 +222,8 @@ Indexes: audit resource/time, actor/time, location/time; outbox status/available
 
 Migration `0026_admin_foundation.sql` extends `audit_event` additively with nullable `market_id`, `location_id`, `reason`, `before_json`, `after_json`, and `correlation_id` query columns plus `(occurred_at, id)`, `(actor_user_id, occurred_at)`, `(market_id, occurred_at)`, and `(location_id, occurred_at)` indexes; `details_json` is retained for compatibility. The same migration seeds the closed canonical dot-form capability vocabulary (`perm_<domain>_<action>_v1` ids), maps historical colon-form assignments to canonical equivalents without deleting legacy rows or assignments, grants `role_operations_admin` canonical operational read/manage capabilities, and grants `role_operations_viewer` only canonical read capabilities.
 
+Migration `0027_staff_administration.sql` adds the application-owned `staff_invitation` table (status `PENDING|ACCEPTED|EXPIRED|REVOKED`, one `PENDING` invitation per normalized email, unique idempotency keys, invited-by reference), `staff_identity.version` for optimistic concurrency, and role administration metadata (`role.description`, `role.status ACTIVE|ARCHIVED`, `role.version`). Historical rows are backfilled with defaults; roles are archived, never deleted.
+
 ## Pagination and Read Models
 
 High-volume lists use keyset pagination with stable compound sort keys, commonly `(created_at, id)` or domain deadline plus ID. Admin read models may query normalized tables directly using selected joins and indexes. Materialized projection tables are added only when measured query shape/latency warrants them and remain rebuildable from transactional truth.
