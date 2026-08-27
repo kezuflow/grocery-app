@@ -93,12 +93,30 @@ import { listProcurementQueue } from "./procurement/application/list-procurement
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
+import { listAdminAuditEvents as listAdminAuditEventsQuery } from "./audit/application/list-audit-events";
+import { getAdminAuditEvent as getAdminAuditEventQuery } from "./audit/application/get-audit-event";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
 function fail(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
+
+const adminAuditListRequestSchema = authenticatedRequestSchema.extend({
+  action: validationSchema.string().trim().min(1).max(100).optional(),
+  resourceType: validationSchema.string().trim().min(1).max(100).optional(),
+  actorId: validationSchema.string().trim().min(1).max(200).optional(),
+  marketId: validationSchema.string().trim().min(1).max(200).optional(),
+  locationId: validationSchema.string().trim().min(1).max(200).optional(),
+  from: validationSchema.string().trim().min(4).max(40).optional(),
+  to: validationSchema.string().trim().min(4).max(40).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const adminAuditDetailRequestSchema = authenticatedRequestSchema.extend({
+  auditEventId: validationSchema.string().trim().min(1).max(200),
+});
 
 export function buildHealthResponse(env: Env): CoreHealthResponse {
   return {
@@ -186,6 +204,28 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         environment: runtimeEnvironment(this.env.ENVIRONMENT),
       },
+      input,
+    );
+  }
+  async listAdminAuditEvents(
+    input: import("@freshmarkets/contracts").AdminAuditListRequest,
+  ) {
+    const validation = adminAuditListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminAuditEventsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminAuditEvent(
+    input: import("@freshmarkets/contracts").AdminAuditDetailRequest,
+  ) {
+    const validation = adminAuditDetailRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminAuditEventQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
   }
