@@ -91,6 +91,8 @@ import { listRiderJobs } from "./delivery/application/list-rider-jobs";
 import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
+import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
+import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -158,6 +160,32 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return applicationContext(
       createAuth(this.env as Env & AuthEnvironment),
       drizzle(this.env.DB, { schema: iamSchema }),
+      input,
+    );
+  }
+  async getAdminContext(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminContextQuery(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        environment: runtimeEnvironment(this.env.ENVIRONMENT),
+      },
+      input,
+    );
+  }
+  async listAdminScopes(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminScopesQuery(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        environment: runtimeEnvironment(this.env.ENVIRONMENT),
+      },
       input,
     );
   }
