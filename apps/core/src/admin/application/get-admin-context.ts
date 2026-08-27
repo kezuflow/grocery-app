@@ -30,9 +30,24 @@ const WORKSPACES: ReadonlyArray<{
   capabilities: ReadonlyArray<Capability>;
 }> = [
   { code: "overview", label: "Overview", href: "/admin", capabilities: [] },
-  { code: "orders", label: "Orders", href: "/admin/orders", capabilities: ["orders.read", "orders.manage"] },
-  { code: "catalog", label: "Catalog", href: "/admin/catalog", capabilities: ["catalog.read", "catalog.manage"] },
-  { code: "inventory", label: "Inventory", href: "/admin/inventory", capabilities: ["inventory.read", "inventory.adjust"] },
+  {
+    code: "orders",
+    label: "Orders",
+    href: "/admin/orders",
+    capabilities: ["orders.read", "orders.manage"],
+  },
+  {
+    code: "catalog",
+    label: "Catalog",
+    href: "/admin/catalog",
+    capabilities: ["catalog.read", "catalog.manage"],
+  },
+  {
+    code: "inventory",
+    label: "Inventory",
+    href: "/admin/inventory",
+    capabilities: ["inventory.read", "inventory.adjust"],
+  },
   {
     code: "procurement",
     label: "Procurement",
@@ -45,25 +60,55 @@ const WORKSPACES: ReadonlyArray<{
     href: "/admin/fulfillment",
     capabilities: ["fulfillment.read", "fulfillment.manage"],
   },
-  { code: "delivery", label: "Delivery", href: "/admin/delivery", capabilities: ["delivery.read", "delivery.manage"] },
-  { code: "customers", label: "Customers", href: "/admin/customers", capabilities: ["customers.read", "customers.manage"] },
+  {
+    code: "delivery",
+    label: "Delivery",
+    href: "/admin/delivery",
+    capabilities: ["delivery.read", "delivery.manage"],
+  },
+  {
+    code: "customers",
+    label: "Customers",
+    href: "/admin/customers",
+    capabilities: ["customers.read", "customers.manage"],
+  },
   {
     code: "memberships",
     label: "Memberships",
     href: "/admin/memberships",
     capabilities: ["memberships.read", "memberships.manage"],
   },
-  { code: "payments", label: "Payments", href: "/admin/payments", capabilities: ["payments.read", "payments.manage"] },
+  {
+    code: "payments",
+    label: "Payments",
+    href: "/admin/payments",
+    capabilities: ["payments.read", "payments.manage"],
+  },
   {
     code: "promotions",
     label: "Promotions",
     href: "/admin/promotions",
     capabilities: ["promotions.read", "promotions.manage"],
   },
-  { code: "analytics", label: "Analytics", href: "/admin/analytics", capabilities: ["analytics.read"] },
-  { code: "staff", label: "Staff", href: "/admin/staff", capabilities: ["staff.read", "staff.manage"] },
+  {
+    code: "analytics",
+    label: "Analytics",
+    href: "/admin/analytics",
+    capabilities: ["analytics.read"],
+  },
+  {
+    code: "staff",
+    label: "Staff",
+    href: "/admin/staff",
+    capabilities: ["staff.read", "staff.manage"],
+  },
   { code: "audit", label: "Audit", href: "/admin/audit", capabilities: ["audit.read"] },
-  { code: "settings", label: "Settings", href: "/admin/settings", capabilities: ["settings.read", "settings.manage"] },
+  {
+    code: "settings",
+    label: "Settings",
+    href: "/admin/settings",
+    capabilities: ["settings.read", "settings.manage"],
+  },
 ];
 
 export function adminNavigationFor(
@@ -104,7 +149,11 @@ export async function getAdminContext(
   if (!staffRecord || staffRecord.status !== "active") {
     return {
       ok: false,
-      error: { code: "FORBIDDEN", message: "Staff access is required", requestId: request.requestId },
+      error: {
+        code: "FORBIDDEN",
+        message: "Staff access is required",
+        requestId: request.requestId,
+      },
     };
   }
 

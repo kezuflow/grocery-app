@@ -29,9 +29,7 @@ async function signUp(): Promise<{ cookie: string; userId: string }> {
       headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
       body: JSON.stringify({ email, password }),
     });
-    cookie = (signIn.headers.getSetCookie?.() ?? [])
-      .map((c) => c.split(";", 1)[0])
-      .join("; ");
+    cookie = (signIn.headers.getSetCookie?.() ?? []).map((c) => c.split(";", 1)[0]).join("; ");
   }
   return { cookie, userId };
 }
@@ -51,11 +49,9 @@ async function staffCookie(options: {
     env.DB.prepare(
       "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'Admin Context', 'active', ?, ?)",
     ).bind(staffId, user.userId, now, now),
-    env.DB.prepare("INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Ctx Role', ?)").bind(
-      roleId,
-      `ctx-${crypto.randomUUID().slice(0, 8)}`,
-      now,
-    ),
+    env.DB.prepare(
+      "INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Ctx Role', ?)",
+    ).bind(roleId, `ctx-${crypto.randomUUID().slice(0, 8)}`, now),
     env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(
       staffId,
       roleId,
@@ -104,12 +100,14 @@ describe("scoped admin context", () => {
   it("returns FORBIDDEN for an authenticated non-staff user", async () => {
     const user = await signUp();
     const headers = { cookie: user.cookie };
-    expect(
-      await core.getAdminContext({ requestId: crypto.randomUUID(), headers }),
-    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-    expect(
-      await core.listAdminScopes({ requestId: crypto.randomUUID(), headers }),
-    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(await core.getAdminContext({ requestId: crypto.randomUUID(), headers })).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    expect(await core.listAdminScopes({ requestId: crypto.randomUUID(), headers })).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
   });
 
   it("derives staff identity, canonical capabilities, scopes, and capability-filtered navigation", async () => {
@@ -121,7 +119,9 @@ describe("scoped admin context", () => {
     expect(context.ok).toBe(true);
     if (!context.ok) return;
     expect(context.value.capabilities).toEqual(["audit.read"]);
-    expect(context.value.scopes).toEqual([{ kind: "location", locationId: "location-cebu-central" }]);
+    expect(context.value.scopes).toEqual([
+      { kind: "location", locationId: "location-cebu-central" },
+    ]);
     expect(context.value.navigation.map((item) => item.code)).toEqual(["overview", "audit"]);
     expect(context.value.navigation).toContainEqual({
       code: "audit",

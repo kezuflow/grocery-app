@@ -36,15 +36,17 @@ export async function listAdminScopes(
   const staff = await database
     .select({ id: iamSchema.staffIdentity.id, status: iamSchema.staffIdentity.status })
     .from(iamSchema.staffIdentity)
-    .where(
-      eq(iamSchema.staffIdentity.authUserId, context.value.principal.userId),
-    )
+    .where(eq(iamSchema.staffIdentity.authUserId, context.value.principal.userId))
     .limit(1);
   const staffRecord = staff[0];
   if (!staffRecord || staffRecord.status !== "active") {
     return {
       ok: false,
-      error: { code: "FORBIDDEN", message: "Staff access is required", requestId: request.requestId },
+      error: {
+        code: "FORBIDDEN",
+        message: "Staff access is required",
+        requestId: request.requestId,
+      },
     };
   }
 
