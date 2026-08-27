@@ -98,6 +98,17 @@ import { getAdminAuditEvent as getAdminAuditEventQuery } from "./audit/applicati
 import { listAdminStaff as listAdminStaffQuery } from "./admin/application/list-admin-staff";
 import { getAdminStaff as getAdminStaffQuery } from "./admin/application/get-admin-staff";
 import { listAdminStaffInvitations as listAdminStaffInvitationsQuery } from "./admin/application/list-admin-staff-invitations";
+import {
+  inviteAdminStaff as inviteAdminStaffCommand,
+  revokeAdminStaffInvitation as revokeAdminStaffInvitationCommand,
+} from "./admin/application/invite-admin-staff";
+import {
+  updateAdminStaff as updateAdminStaffCommand,
+  changeAdminStaffAccess as changeAdminStaffAccessCommand,
+} from "./admin/application/update-admin-staff";
+import { setAdminStaffRoles as setAdminStaffRolesCommand } from "./admin/application/set-admin-staff-roles";
+import { setAdminStaffScopes as setAdminStaffScopesCommand } from "./admin/application/set-admin-staff-scopes";
+import { revokeAdminStaffSessions as revokeAdminStaffSessionsCommand } from "./admin/application/revoke-admin-staff-sessions";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -128,6 +139,72 @@ const staffListRequestSchema = authenticatedRequestSchema.extend({
 
 const staffDetailRequestSchema = authenticatedRequestSchema.extend({
   staffId: validationSchema.string().trim().min(1).max(200),
+});
+
+const emailTextSchema = validationSchema
+  .string()
+  .trim()
+  .min(3)
+  .max(200)
+  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "expected an email address");
+
+const staffInviteRequestSchema = authenticatedRequestSchema.extend({
+  email: emailTextSchema,
+  displayName: validationSchema.string().trim().min(1).max(120),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const staffInvitationRevokeRequestSchema = authenticatedRequestSchema.extend({
+  invitationId: validationSchema.string().trim().min(1).max(200),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const staffUpdateRequestSchema = authenticatedRequestSchema.extend({
+  staffId: validationSchema.string().trim().min(1).max(200),
+  displayName: validationSchema.string().trim().min(1).max(120),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const staffAccessChangeRequestSchema = authenticatedRequestSchema.extend({
+  staffId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["ACTIVATE", "SUSPEND"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const staffRolesRequestSchema = authenticatedRequestSchema.extend({
+  staffId: validationSchema.string().trim().min(1).max(200),
+  roleIds: validationSchema.array(validationSchema.string().trim().min(1).max(200)).max(50),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const scopeInputSchema = validationSchema.union([
+  validationSchema.object({ kind: validationSchema.literal("global") }),
+  validationSchema.object({
+    kind: validationSchema.literal("market"),
+    marketId: validationSchema.string().trim().min(1).max(200),
+  }),
+  validationSchema.object({
+    kind: validationSchema.literal("location"),
+    locationId: validationSchema.string().trim().min(1).max(200),
+  }),
+]);
+
+const staffScopesRequestSchema = authenticatedRequestSchema.extend({
+  staffId: validationSchema.string().trim().min(1).max(200),
+  scopes: validationSchema.array(scopeInputSchema).max(50),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const staffSessionRevocationRequestSchema = authenticatedRequestSchema.extend({
+  staffId: validationSchema.string().trim().min(1).max(200),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
 });
 
 export function buildHealthResponse(env: Env): CoreHealthResponse {
@@ -219,9 +296,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       input,
     );
   }
-  async listAdminAuditEvents(
-    input: import("@freshmarkets/contracts").AdminAuditListRequest,
-  ) {
+  async listAdminAuditEvents(input: import("@freshmarkets/contracts").AdminAuditListRequest) {
     const validation = adminAuditListRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
@@ -230,9 +305,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       input,
     );
   }
-  async getAdminAuditEvent(
-    input: import("@freshmarkets/contracts").AdminAuditDetailRequest,
-  ) {
+  async getAdminAuditEvent(input: import("@freshmarkets/contracts").AdminAuditDetailRequest) {
     const validation = adminAuditDetailRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
@@ -270,6 +343,75 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       input,
     );
   }
+  async inviteAdminStaff(input: import("@freshmarkets/contracts").AdminStaffInviteRequest) {
+    const validation = staffInviteRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return inviteAdminStaffCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async revokeAdminStaffInvitation(
+    input: import("@freshmarkets/contracts").AdminStaffInvitationRevokeRequest,
+  ) {
+    const validation = staffInvitationRevokeRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return revokeAdminStaffInvitationCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async updateAdminStaff(input: import("@freshmarkets/contracts").AdminStaffUpdateRequest) {
+    const validation = staffUpdateRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateAdminStaffCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async changeAdminStaffAccess(
+    input: import("@freshmarkets/contracts").AdminStaffAccessChangeRequest,
+  ) {
+    const validation = staffAccessChangeRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return changeAdminStaffAccessCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminStaffRoles(input: import("@freshmarkets/contracts").AdminStaffRolesRequest) {
+    const validation = staffRolesRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminStaffRolesCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminStaffScopes(input: import("@freshmarkets/contracts").AdminStaffScopesRequest) {
+    const validation = staffScopesRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminStaffScopesCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async revokeAdminStaffSessions(
+    input: import("@freshmarkets/contracts").AdminStaffSessionRevocationRequest,
+  ) {
+    const validation = staffSessionRevocationRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return revokeAdminStaffSessionsCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
   async resolveServiceability(input: import("@freshmarkets/contracts").ServiceabilityRequest) {
     const validation = serviceabilityRequestSchema.safeParse(input);
     if (!validation.success)
@@ -296,9 +438,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       throw error;
     }
   }
-  async getMarketplaceHome(
-    input: import("@freshmarkets/contracts").MarketplaceHomeRequest,
-  ) {
+  async getMarketplaceHome(input: import("@freshmarkets/contracts").MarketplaceHomeRequest) {
     const validation = marketplaceHomeRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);

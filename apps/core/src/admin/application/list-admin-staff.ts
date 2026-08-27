@@ -10,6 +10,7 @@ import {
   boundListLimit,
   decodeStaffCursor,
   encodeStaffCursor,
+  loadStaffRelations,
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
@@ -23,69 +24,6 @@ type StaffRow = {
   version: number;
   createdAt: number;
 };
-
-function toScope(row: { scope_kind: string; market_id: string | null; location_id: string | null }): Scope | null {
-  if (row.scope_kind === "global") return { kind: "global" };
-  if (row.scope_kind === "market" && row.market_id) return { kind: "market", marketId: row.market_id };
-  if (row.scope_kind === "location" && row.location_id) {
-    return { kind: "location", locationId: row.location_id };
-  }
-  return null;
-}
-
-export async function loadStaffRelations(
-  deps: StaffAdministrationDeps,
-  staffIds: ReadonlyArray<string>,
-): Promise<
-  Map<
-    string,
-    { roleCodes: Set<string>; capabilityCodes: Set<Capability>; scopes: Scope[] }
-  >
-> {  const relations = new Map<
-    string,
-    { roleCodes: Set<string>; capabilityCodes: Set<Capability>; scopes: Scope[] }
-  >();
-  if (staffIds.length === 0) return relations;
-  const placeholders = staffIds.map(() => "?").join(",");
-  const binds = [...staffIds];
-
-  const roles = await deps.db
-    .prepare(
-      `SELECT sr.staff_id AS staffId, r.code AS code FROM staff_role sr
-       JOIN role r ON r.id = sr.role_id WHERE sr.staff_id IN (${placeholders})`,
-    )
-    .bind(...binds)
-    .all<{ staffId: string; code: string }>();
-  const capabilities = await deps.db
-    .prepare(
-      `SELECT sr.staff_id AS staffId, p.code AS code FROM staff_role sr
-       JOIN role_permission rp ON rp.role_id = sr.role_id
-       JOIN permission p ON p.id = rp.permission_id
-       WHERE sr.staff_id IN (${placeholders})`,
-    )
-    .bind(...binds)
-    .all<{ staffId: string; code: string }>();
-  const scopes = await deps.db
-    .prepare(
-      `SELECT staff_id AS staffId, scope_kind, market_id, location_id FROM staff_scope
-       WHERE staff_id IN (${placeholders})`,
-    )
-    .bind(...binds)
-    .all<{ staffId: string; scope_kind: string; market_id: string | null; location_id: string | null }>();
-
-  for (const staffId of staffIds) {
-    relations.set(staffId, { roleCodes: new Set(), capabilityCodes: new Set(), scopes: [] });
-  }
-  for (const row of roles.results) relations.get(row.staffId)?.roleCodes.add(row.code);
-  for (const row of capabilities.results) {
-    if (isAdminCapability(row.code)) relations.get(row.staffId)?.capabilityCodes.add(row.code);
-  }
-  for (const row of scopes.results) {
-    const scope = toScope(row);
-    if (scope) relations.get(row.staffId)?.scopes.push(scope);
-  }
-  return relations;
-}
 
 /** Bounded keyset listing of staff identities for global staff readers. */
 export async function listAdminStaff(
@@ -121,9 +59,7 @@ export async function listAdminStaff(
     }
   }
 
-  const clause = cursor
-    ? "WHERE (s.created_at < ? OR (s.created_at = ? AND s.id < ?))"
-    : "";
+  const clause = cursor ? "WHERE (s.created_at < ? OR (s.created_at = ? AND s.id < ?))" : "";
   const binds = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : [];
   const rows = await deps.db
     .prepare(

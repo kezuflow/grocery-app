@@ -1,6 +1,13 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
+import type {
+  AdminStaffDetail,
+  AuthenticatedRequest,
+  Capability,
+  RpcResult,
+  Scope,
+} from "@freshmarkets/contracts";
+import { isAdminCapability } from "@freshmarkets/contracts";
 import { applicationContext } from "../../auth/authorization";
 import type { AuthInstance } from "../../auth/service";
 import { iamSchema } from "../../iam/schema";
@@ -61,7 +68,11 @@ export async function resolveStaffAdministrationAccess(
   if (!staffRecord) {
     return {
       ok: false,
-      error: { code: "FORBIDDEN", message: "Staff access is required", requestId: request.requestId },
+      error: {
+        code: "FORBIDDEN",
+        message: "Staff access is required",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -69,6 +80,124 @@ export async function resolveStaffAdministrationAccess(
     ok: true,
     value: { staffId: staffRecord.id, authUserId: context.value.principal.userId },
     requestId: request.requestId,
+  };
+}
+
+type StaffRelationRow = {
+  scope_kind: string;
+  market_id: string | null;
+  location_id: string | null;
+};
+
+function toScope(row: StaffRelationRow): Scope | null {
+  if (row.scope_kind === "global") return { kind: "global" };
+  if (row.scope_kind === "market" && row.market_id)
+    return { kind: "market", marketId: row.market_id };
+  if (row.scope_kind === "location" && row.location_id) {
+    return { kind: "location", locationId: row.location_id };
+  }
+  return null;
+}
+
+export type StaffRelations = {
+  roleCodes: Set<string>;
+  capabilityCodes: Set<Capability>;
+  scopes: Scope[];
+};
+
+/** Aggregate roles, canonical capabilities, and scopes for the given staff ids. */
+export async function loadStaffRelations(
+  deps: StaffAdministrationDeps,
+  staffIds: ReadonlyArray<string>,
+): Promise<Map<string, StaffRelations>> {
+  const relations = new Map<string, StaffRelations>();
+  if (staffIds.length === 0) return relations;
+  const placeholders = staffIds.map(() => "?").join(",");
+  const binds = [...staffIds];
+
+  const roles = await deps.db
+    .prepare(
+      `SELECT sr.staff_id AS staffId, r.code AS code FROM staff_role sr
+       JOIN role r ON r.id = sr.role_id WHERE sr.staff_id IN (${placeholders})`,
+    )
+    .bind(...binds)
+    .all<{ staffId: string; code: string }>();
+  const capabilities = await deps.db
+    .prepare(
+      `SELECT sr.staff_id AS staffId, p.code AS code FROM staff_role sr
+       JOIN role_permission rp ON rp.role_id = sr.role_id
+       JOIN permission p ON p.id = rp.permission_id
+       WHERE sr.staff_id IN (${placeholders})`,
+    )
+    .bind(...binds)
+    .all<{ staffId: string; code: string }>();
+  const scopes = await deps.db
+    .prepare(
+      `SELECT staff_id AS staffId, scope_kind, market_id, location_id FROM staff_scope
+       WHERE staff_id IN (${placeholders})`,
+    )
+    .bind(...binds)
+    .all<{ staffId: string } & StaffRelationRow>();
+
+  for (const staffId of staffIds) {
+    relations.set(staffId, { roleCodes: new Set(), capabilityCodes: new Set(), scopes: [] });
+  }
+  for (const row of roles.results) relations.get(row.staffId)?.roleCodes.add(row.code);
+  for (const row of capabilities.results) {
+    if (isAdminCapability(row.code)) relations.get(row.staffId)?.capabilityCodes.add(row.code);
+  }
+  for (const row of scopes.results) {
+    const scope = toScope(row);
+    if (scope) relations.get(row.staffId)?.scopes.push(scope);
+  }
+  return relations;
+}
+
+/** Authoritative staff detail read used by command results and the detail query. */
+export async function readStaffDetail(
+  deps: StaffAdministrationDeps,
+  staffId: string,
+  requestId: string,
+): Promise<RpcResult<AdminStaffDetail>> {
+  const row = await deps.db
+    .prepare(
+      `SELECT s.id AS staffId, s.auth_user_id AS authUserId, s.display_name AS displayName,
+              u.email AS email, s.status, s.version, s.created_at AS createdAt
+       FROM staff_identity s JOIN user u ON u.id = s.auth_user_id
+       WHERE s.id = ?`,
+    )
+    .bind(staffId)
+    .first<{
+      staffId: string;
+      authUserId: string;
+      displayName: string;
+      email: string;
+      status: "active" | "suspended";
+      version: number;
+      createdAt: number;
+    }>();
+  if (!row) {
+    return {
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Staff identity not found", requestId },
+    };
+  }
+  const relations = (await loadStaffRelations(deps, [row.staffId])).get(row.staffId)!;
+  return {
+    ok: true,
+    value: {
+      staffId: row.staffId,
+      authUserId: row.authUserId,
+      displayName: row.displayName,
+      email: row.email,
+      status: row.status,
+      roleCodes: [...relations.roleCodes].sort(),
+      capabilityCodes: [...relations.capabilityCodes].sort(),
+      scopes: relations.scopes,
+      version: row.version,
+      createdAt: new Date(row.createdAt).toISOString(),
+    },
+    requestId,
   };
 }
 
