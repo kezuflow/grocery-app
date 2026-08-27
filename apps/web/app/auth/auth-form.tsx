@@ -4,6 +4,10 @@ import { FormEvent, useState } from "react";
 
 type Mode = "login" | "register" | "forgot";
 
+function safeReturnTo(value: string | null): string {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
 export function AuthForm({ mode }: { mode: Mode }) {
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -13,6 +17,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setBusy(true);
     setStatus("");
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const returnTo = safeReturnTo(
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("returnTo"),
+    );
     const path =
       mode === "login"
         ? "sign-in/email"
@@ -23,7 +32,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       mode === "register"
         ? { name: data.name, email: data.email, password: data.password }
         : mode === "login"
-          ? { email: data.email, password: data.password, callbackURL: "/" }
+          ? { email: data.email, password: data.password, callbackURL: returnTo }
           : { email: data.email, redirectTo: "/auth/reset-password" };
     const response = await fetch(`/api/auth/${path}`, {
       method: "POST",
@@ -43,7 +52,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           : "Request completed."
         : (payload?.message ?? payload?.error ?? "Request failed."),
     );
-    if (response.ok && mode === "login") window.location.assign("/");
+    if (response.ok && mode === "login") window.location.assign(returnTo);
   }
 
   async function signInWithGoogle() {

@@ -69,7 +69,12 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
         </Link>
         {variant ? (
           <div className="absolute right-2 bottom-2">
-            <AddToCartButton skuId={variant.id} productName={product.name} />
+            <AddToCartButton
+              skuId={variant.id}
+              productName={product.name}
+              unitPriceMinor={variant.priceMinor}
+              currency={variant.currency ?? "PHP"}
+            />
           </div>
         ) : null}
       </div>

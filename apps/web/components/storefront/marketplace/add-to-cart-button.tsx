@@ -20,10 +20,14 @@ import type { CartView } from "@freshmarkets/contracts";
 export function AddToCartButton({
   skuId,
   productName,
+  unitPriceMinor,
+  currency = "PHP",
   className,
 }: {
   skuId: string;
   productName: string;
+  unitPriceMinor?: number | null;
+  currency?: string;
   className?: string;
 }) {
   const [quantity, setQuantity] = useState(() => {
@@ -43,11 +47,21 @@ export function AddToCartButton({
 
   async function mutate(next: number) {
     setPending(true);
-    const result = await addToCart(skuId, next);
+    const result = await addToCart(skuId, next, {
+      name: productName,
+      unitPriceMinor: unitPriceMinor ?? 0,
+      currency,
+    });
     setPending(false);
     if (result.ok) {
       if (next > quantity) {
-        announceToast({ message: `${productName} added to cart.`, tone: "success" });
+        announceToast({
+          message: result.requiresSignIn
+            ? `${productName} added to your cart. Sign in to continue when you’re ready.`
+            : `${productName} added to cart.`,
+          tone: "success",
+          signInHref: result.requiresSignIn ? "/auth/login?returnTo=/cart" : undefined,
+        });
       }
       setQuantity(next);
       return;

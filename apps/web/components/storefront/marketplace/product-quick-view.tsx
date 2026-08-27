@@ -83,12 +83,19 @@ export function ProductQuickView({
   async function add() {
     if (!selected || selected.priceMinor === null || !presentation) return;
     setPending(true);
-    const result = await addToCart(selected.id, quantity);
+    const result = await addToCart(selected.id, quantity, {
+      name: presentation.name,
+      unitPriceMinor: selected.priceMinor,
+      currency: selected.currency ?? "PHP",
+    });
     setPending(false);
     if (result.ok) {
       announceToast({
-        message: `${quantity} × ${presentation.name} added to cart.`,
+        message: result.requiresSignIn
+          ? `${quantity} × ${presentation.name} added to your cart. Sign in to continue when you’re ready.`
+          : `${quantity} × ${presentation.name} added to cart.`,
         tone: "success",
+        signInHref: result.requiresSignIn ? "/auth/login?returnTo=/cart" : undefined,
       });
       onClose();
       return;

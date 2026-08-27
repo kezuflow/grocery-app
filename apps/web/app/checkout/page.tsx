@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { CartView, DeliveryCycleView } from "@freshmarkets/contracts";
+import { StorefrontShell } from "../../components/storefront/storefront-shell";
+import { fetchCart } from "../../lib/storefront/cart-client";
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [cycles, setCycles] = useState<ReadonlyArray<DeliveryCycleView>>([]);
@@ -15,13 +17,16 @@ export default function CheckoutPage() {
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   useEffect(() => {
     void Promise.all([
-      fetch("/api/commerce/cart").then((r) => r.json() as Promise<{ value?: CartView }>),
+      fetchCart().then((value) => ({ value })),
       fetch("/api/commerce/cycles").then(
         (r) => r.json() as Promise<{ value?: ReadonlyArray<DeliveryCycleView> }>,
       ),
     ]).then(([cartResult, cycleResult]) => {
       setCart(cartResult.value ?? null);
       setCycles(cycleResult.value ?? []);
+      if (cartResult.value?.id === "guest-cart") {
+        setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
+      }
     });
   }, []);
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
@@ -52,6 +57,29 @@ export default function CheckoutPage() {
   async function reviewTotal(cycleId: string) {
     if (!cart || !addressId) {
       setStatus("Confirm a serviceable address first.");
+      return;
+    }
+    if (cart.id === "guest-cart") {
+      setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
+      return;
+    }
+    const eligibilityResponse = await fetch("/api/commerce/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cartId: cart.id, addressId, cycleId }),
+    });
+    const eligibilityResult = (await eligibilityResponse.json()) as {
+      ok: boolean;
+      value?: { eligible: boolean; failures: ReadonlyArray<string> };
+      error?: { message?: string };
+    };
+    if (!eligibilityResult.ok || !eligibilityResult.value?.eligible) {
+      const failures = eligibilityResult.value?.failures ?? [];
+      setStatus(
+        failures.includes("MINIMUM_ORDER_NOT_MET")
+          ? "Your basket is below the current minimum configured for this delivery cycle. Add more items to continue."
+          : (eligibilityResult.error?.message ?? "Checkout requirements are not met yet."),
+      );
       return;
     }
     // 1) Core-authoritative quote. Core recalculates before payment and any
@@ -119,72 +147,89 @@ export default function CheckoutPage() {
     }
   }
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-6 py-12">
-      <Link href="/cart" className="text-sm underline">
-        Back to cart
-      </Link>
-      <h1 className="mt-6 text-3xl font-semibold">Checkout</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        Price, stock, serviceability, and delivery fees are confirmed before payment.
-      </p>
-      <form
-        onSubmit={saveAddress}
-        className="mt-6 grid gap-4 rounded-lg border bg-white p-6 sm:grid-cols-2"
-      >
-        <input name="recipient" placeholder="Recipient" required className="rounded border p-3" />
-        <input name="phone" placeholder="Phone" required className="rounded border p-3" />
-        <input
-          name="address"
-          placeholder="Cebu address"
-          required
-          className="rounded border p-3 sm:col-span-2"
-        />
-        <input name="latitude" defaultValue="10.3157" required className="rounded border p-3" />
-        <input name="longitude" defaultValue="123.8854" required className="rounded border p-3" />
-        <button className="rounded bg-slate-950 px-4 py-2 text-white sm:col-span-2">
-          Confirm address
-        </button>
-      </form>
-      <section className="mt-6">
-        <h2 className="font-semibold">Delivery cycle</h2>
-        <div className="mt-3 grid gap-3">
-          {cycles.map((cycle) => (
-            <button
-              key={cycle.id}
-              onClick={() => reviewTotal(cycle.id)}
-              className="flex items-center justify-between rounded-lg border bg-white p-4 text-left"
-            >
-              <span>
-                {cycle.name}
-                <small className="block text-slate-600">
-                  {new Date(cycle.deliveryDate).toLocaleString()}
-                </small>
-              </span>
-              <span className="font-medium">Review total</span>
-            </button>
-          ))}
-        </div>
-      </section>
-      {pendingQuote ? (
-        <section className="mt-6 rounded-lg border bg-white p-6" aria-label="Order total review">
-          <p className="text-sm text-slate-600">Current authoritative total</p>
-          <p className="mt-1 text-2xl font-semibold">
-            {pendingQuote.currency} {(pendingQuote.totalMinor / 100).toFixed(2)}
-          </p>
-          <button
-            type="button"
-            onClick={confirmPayment}
-            className="mt-4 rounded bg-slate-950 px-4 py-2 text-white"
-          >
-            Accept total and continue to payment
-          </button>
-        </section>
-      ) : null}
-      {status ? (
-        <p role="status" className="mt-6 rounded border bg-white p-4">
-          {status}
+    <StorefrontShell>
+      <div className="min-h-screen w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+        <Link href="/cart" className="text-sm underline">
+          Back to cart
+        </Link>
+        <h1 className="mt-6 text-3xl font-semibold">Checkout</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Price, stock, serviceability, and delivery fees are confirmed before payment.
         </p>
-      ) : null}
-    </main>
+        {cart?.id === "guest-cart" ? (
+          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
+            <p className="font-medium">Sign in to continue with this saved cart.</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Your items stay saved while you sign in, and the current minimum order is checked by
+              Core.
+            </p>
+            <Link
+              href="/auth/login?returnTo=/checkout"
+              className="mt-4 inline-flex rounded bg-emerald-700 px-4 py-2 font-medium text-white"
+            >
+              Sign in to continue
+            </Link>
+          </div>
+        ) : null}
+        <form
+          onSubmit={saveAddress}
+          className="mt-6 grid gap-4 rounded-lg border bg-white p-6 sm:grid-cols-2"
+        >
+          <input name="recipient" placeholder="Recipient" required className="rounded border p-3" />
+          <input name="phone" placeholder="Phone" required className="rounded border p-3" />
+          <input
+            name="address"
+            placeholder="Cebu address"
+            required
+            className="rounded border p-3 sm:col-span-2"
+          />
+          <input name="latitude" defaultValue="10.3157" required className="rounded border p-3" />
+          <input name="longitude" defaultValue="123.8854" required className="rounded border p-3" />
+          <button className="rounded bg-slate-950 px-4 py-2 text-white sm:col-span-2">
+            Confirm address
+          </button>
+        </form>
+        <section className="mt-6">
+          <h2 className="font-semibold">Delivery cycle</h2>
+          <div className="mt-3 grid gap-3">
+            {cycles.map((cycle) => (
+              <button
+                key={cycle.id}
+                onClick={() => reviewTotal(cycle.id)}
+                className="flex items-center justify-between rounded-lg border bg-white p-4 text-left"
+              >
+                <span>
+                  {cycle.name}
+                  <small className="block text-slate-600">
+                    {new Date(cycle.deliveryDate).toLocaleString()}
+                  </small>
+                </span>
+                <span className="font-medium">Review total</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        {pendingQuote ? (
+          <section className="mt-6 rounded-lg border bg-white p-6" aria-label="Order total review">
+            <p className="text-sm text-slate-600">Current authoritative total</p>
+            <p className="mt-1 text-2xl font-semibold">
+              {pendingQuote.currency} {(pendingQuote.totalMinor / 100).toFixed(2)}
+            </p>
+            <button
+              type="button"
+              onClick={confirmPayment}
+              className="mt-4 rounded bg-slate-950 px-4 py-2 text-white"
+            >
+              Accept total and continue to payment
+            </button>
+          </section>
+        ) : null}
+        {status ? (
+          <p role="status" className="mt-6 rounded border bg-white p-4">
+            {status}
+          </p>
+        ) : null}
+      </div>
+    </StorefrontShell>
   );
 }

@@ -72,9 +72,24 @@ export function ProductView({ slug }: { slug: string }) {
   async function add() {
     if (!selectedVariant || selectedPrice === null || !product.available) return;
     setStatus("");
-    const result = await addToCart(selectedVariant.id, quantity);
+    const result = await addToCart(selectedVariant.id, quantity, {
+      name: product.name,
+      unitPriceMinor: selectedPrice,
+      currency: selectedVariant.currency ?? "PHP",
+    });
     if (result.ok) {
-      setStatus(`${quantity} × ${product.name} added to cart.`);
+      setStatus(
+        result.requiresSignIn
+          ? `${quantity} × ${product.name} added to your cart. Sign in to continue when you’re ready.`
+          : `${quantity} × ${product.name} added to cart.`,
+      );
+      if (result.requiresSignIn) {
+        announceToast({
+          message: "Your item is saved. Sign in when you’re ready to check out.",
+          tone: "success",
+          signInHref: "/auth/login?returnTo=/cart",
+        });
+      }
       return;
     }
     if (result.reason === "unauthenticated") {

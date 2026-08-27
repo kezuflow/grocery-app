@@ -60,13 +60,31 @@ describe("addToCart", () => {
   });
 
   it("classifies UNAUTHENTICATED failures", async () => {
-    stubFetch(
+    const storage = {
+      value: null as string | null,
+      getItem: () => storage.value,
+      setItem: (_key: string, value: string) => {
+        storage.value = value;
+      },
+      removeItem: () => {
+        storage.value = null;
+      },
+      clear: () => {
+        storage.value = null;
+      },
+    } as unknown as Storage;
+    const dispatch = stubFetch(
       { ok: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required" } },
       false,
     );
-    const result = await addToCart("sku-a", 1);
-    assert.equal(result.ok, false);
-    assert.equal(result.ok === false && result.reason, "unauthenticated");
+    vi.stubGlobal("window", { dispatchEvent: dispatch, localStorage: storage });
+    const result = await addToCart("sku-a", 1, {
+      name: "Avocado",
+      unitPriceMinor: 9450,
+      currency: "PHP",
+    });
+    assert.deepEqual(result, { ok: true, count: 1, requiresSignIn: true });
+    assert.equal(JSON.parse(storage.value ?? "{}").items[0].skuId, "sku-a");
   });
 
   it("reports fetch failures as generic errors", async () => {
@@ -112,5 +130,57 @@ describe("fetchCart", () => {
       }),
     );
     assert.equal(await fetchCart(), null);
+  });
+
+  it("merges a saved guest cart after authentication succeeds", async () => {
+    const storage = {
+      value: JSON.stringify({
+        version: 1,
+        items: [
+          {
+            skuId: "sku-a",
+            quantity: 2,
+            name: "Avocado",
+            unitPriceMinor: 9450,
+            currency: "PHP",
+            lineTotalMinor: 18900,
+          },
+        ],
+      }),
+      getItem: () => storage.value,
+      setItem: (_key: string, value: string) => {
+        storage.value = value;
+      },
+      removeItem: () => {
+        storage.value = null;
+      },
+    } as unknown as Storage;
+    vi.stubGlobal("window", { dispatchEvent: vi.fn(), localStorage: storage });
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            value: view({
+              items: [
+                {
+                  skuId: "sku-a",
+                  quantity: 2,
+                  name: "Avocado",
+                  unitPriceMinor: 9450,
+                  lineTotalMinor: 18900,
+                },
+              ],
+            }),
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ ok: true, value: view({ items: [] }) }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await fetchCart();
+    assert.equal(result?.items[0]?.skuId, "sku-a");
+    assert.equal(fetchMock.mock.calls.length, 2);
+    assert.equal(storage.value, null);
   });
 });

@@ -25,7 +25,7 @@ test("the marketplace home server-renders hero, categories, rails, and membershi
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Shop fresh, live well" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fresh this week" }).first()).toBeVisible();
-  await expect(page.getByText("FreshPass membership").first()).toBeVisible();
+  await expect(page.getByText("FreshMarkets membership").first()).toBeVisible();
   // Seeded catalog content renders with prices and fixed-variant labels.
   const avocado = page.getByRole("heading", { name: "Creamy Avocado" }).first();
   await expect(avocado).toBeVisible();
@@ -60,14 +60,27 @@ test("a product card opens the quick-view dialog with fixed variants", async ({ 
   await expect(dialog.getByRole("radio", { name: /1 kg/ })).not.toBeChecked();
 });
 
-test("anonymous add-to-cart is blocked with a sign-in affordance, not a redirect", async ({
+test("anonymous add-to-cart saves the item and offers sign-in without redirecting", async ({
   page,
 }) => {
   await page.goto("/");
   const addButton = page.getByRole("button", { name: "Add Creamy Avocado to cart" }).first();
   await addButton.click();
-  await expect(page.getByRole("status").filter({ hasText: "Sign in to add items" })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Creamy Avocado added to your cart" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cart, 1 item" })).toBeVisible();
   // Browsing context is preserved.
   await expect(page).toHaveURL("/");
+});
+
+test("guest cart remains visible and asks for sign-in before checkout", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Add Creamy Avocado to cart" }).first().click();
+  await page.getByRole("link", { name: "Cart, 1 item" }).click();
+  await expect(page.getByRole("heading", { name: "Cart" })).toBeVisible();
+  await expect(page.getByText("Creamy Avocado")).toBeVisible();
+  await expect(page.getByText("Sign in to checkout")).toBeVisible();
+  await expect(page.getByText(/minimum order is confirmed/i)).toBeVisible();
 });

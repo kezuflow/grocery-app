@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { StorefrontShell } from "../../components/storefront/storefront-shell";
 
 const PENDING_AUTHORIZATION_KEY = "freshmarkets.pendingAuthorization";
 
@@ -73,37 +74,39 @@ export default function AccountPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-12">
-      <Link href="/" className="text-sm underline">
-        Back to marketplace
-      </Link>
-      <h1 className="text-3xl font-semibold">Your account</h1>
-      <section className="rounded-lg border bg-white p-6">
-        <h2 className="font-semibold">FreshMarkets membership</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          A membership is required before checkout. The introductory trial is one calendar month and
-          starts after you authorize a recurring-capable payment instrument; the first paid charge
-          happens when the trial ends.
-        </p>
-        <button
-          onClick={enroll}
-          disabled={busy}
-          className="mt-4 rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {busy ? "Working…" : "Authorize and start trial"}
-        </button>
-        {message ? (
-          <p role="status" className="mt-3 text-sm">
-            {message}
+    <StorefrontShell>
+      <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+        <Link href="/" className="text-sm underline">
+          Back to marketplace
+        </Link>
+        <h1 className="text-3xl font-semibold">Your account</h1>
+        <section className="rounded-lg border bg-white p-6">
+          <h2 className="font-semibold">FreshMarkets membership</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            A membership is required before checkout. The introductory trial is one calendar month
+            and starts after you authorize a recurring-capable payment instrument; the first paid
+            charge happens when the trial ends.
           </p>
-        ) : null}
-      </section>
-      <Link href="/cart" className="font-medium underline">
-        Open cart
-      </Link>
-      <Link href="/orders" className="font-medium underline">
-        Order history
-      </Link>
-    </main>
+          <button
+            onClick={enroll}
+            disabled={busy}
+            className="mt-4 rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {busy ? "Working…" : "Authorize and start trial"}
+          </button>
+          {message ? (
+            <p role="status" className="mt-3 text-sm">
+              {message}
+            </p>
+          ) : null}
+        </section>
+        <Link href="/cart" className="font-medium underline">
+          Open cart
+        </Link>
+        <Link href="/orders" className="font-medium underline">
+          Order history
+        </Link>
+      </div>
+    </StorefrontShell>
   );
 }

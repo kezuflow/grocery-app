@@ -28,7 +28,7 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[var(--fm-background)] text-[var(--fm-text)]">
       <StorefrontHeader />
-      <div className="mx-auto flex w-full max-w-[var(--fm-container-storefront)]">
+      <div className="flex w-full">
         <StorefrontSidebar />
         <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
       </div>
@@ -41,7 +41,7 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
 export function StorefrontHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-white/95 shadow-[var(--fm-shadow-header)] backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-[var(--fm-container-storefront)] items-center gap-3 px-4 sm:px-6 lg:gap-6 lg:px-8">
+      <div className="flex h-16 w-full items-center gap-3 px-4 sm:px-6 lg:gap-6 lg:px-8">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)] lg:text-xl"
