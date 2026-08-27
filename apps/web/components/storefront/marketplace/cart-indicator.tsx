@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRef } from "react";
 import { ShoppingCart } from "lucide-react";
 import {
   CART_CHANGED_EVENT,
@@ -16,14 +17,19 @@ import type { CartView } from "@freshmarkets/contracts";
  */
 export function CartIndicator() {
   const [count, setCount] = useState<number | null>(null);
+  const receivedCartChange = useRef(false);
 
   useEffect(() => {
     void fetchCart().then((view: CartView | null) => {
+      if (receivedCartChange.current) return;
       setCount(view ? cartCountFromView(view) : 0);
     });
     const onCartChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ count?: number }>).detail;
-      if (typeof detail?.count === "number") setCount(detail.count);
+      if (typeof detail?.count === "number") {
+        receivedCartChange.current = true;
+        setCount(detail.count);
+      }
     };
     window.addEventListener(CART_CHANGED_EVENT, onCartChanged);
     return () => window.removeEventListener(CART_CHANGED_EVENT, onCartChanged);

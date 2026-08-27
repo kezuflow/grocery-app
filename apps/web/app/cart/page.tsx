@@ -2,12 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { CartView } from "@freshmarkets/contracts";
-import {
-  CART_CHANGED_EVENT,
-  addToCart,
-  cartCountFromView,
-  fetchCart,
-} from "../../lib/storefront/cart-client";
+import { addToCart, cartCountFromView, fetchCart } from "../../lib/storefront/cart-client";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 const money = (value: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
@@ -17,13 +12,9 @@ export default function CartPage() {
   async function load() {
     const next = await fetchCart();
     setCart(next);
-    setError(next ? "" : "Unable to load your cart right now.");
   }
   useEffect(() => {
     void load();
-    const onCartChanged = () => void load();
-    window.addEventListener(CART_CHANGED_EVENT, onCartChanged);
-    return () => window.removeEventListener(CART_CHANGED_EVENT, onCartChanged);
   }, []);
   async function update(item: CartView["items"][number], quantity: number) {
     const result = await addToCart(item.skuId, quantity, {
@@ -31,11 +22,16 @@ export default function CartPage() {
       unitPriceMinor: item.unitPriceMinor,
       currency: cart?.currency ?? "PHP",
     });
-    if (!result.ok) setError(result.message);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setError("");
     await load();
   }
   const guest = cart?.id === "guest-cart";
   const count = cart ? cartCountFromView(cart) : 0;
+  const canCheckout = Boolean(cart?.items.length);
   return (
     <StorefrontShell>
       <div className="min-h-screen w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
@@ -79,10 +75,10 @@ export default function CartPage() {
         <div className="mt-6 flex items-center justify-between">
           <strong>Total {money(cart?.totalMinor ?? 0)}</strong>
           <Link
-            href={guest ? "/auth/login?returnTo=/checkout" : "/checkout"}
+            href={!canCheckout ? "/" : guest ? "/auth/login?returnTo=/checkout" : "/checkout"}
             className="rounded bg-emerald-700 px-5 py-3 font-medium text-white"
           >
-            {guest ? "Sign in to checkout" : "Checkout"}
+            {!canCheckout ? "Continue shopping" : guest ? "Sign in to checkout" : "Checkout"}
           </Link>
         </div>
         <p className="mt-3 text-sm text-slate-600">

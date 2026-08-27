@@ -84,3 +84,17 @@ test("guest cart remains visible and asks for sign-in before checkout", async ({
   await expect(page.getByText("Sign in to checkout")).toBeVisible();
   await expect(page.getByText(/minimum order is confirmed/i)).toBeVisible();
 });
+
+test("guest cart survives client navigation after an anonymous add", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Add Red onion to cart" }).click();
+  await expect(page.getByRole("link", { name: "Cart, 1 item" })).toBeVisible();
+  await page.getByRole("link", { name: "Cart, 1 item" }).click();
+  await expect(page.getByRole("heading", { name: "Cart" })).toBeVisible();
+  await expect(page.getByText("Red onion")).toBeVisible();
+});
+
+test("an empty signed-out cart does not show a load error", async ({ page }) => {
+  await page.goto("/cart");
+  await expect(page.getByText("Unable to load your cart right now.")).toHaveCount(0);
+});
