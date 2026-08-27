@@ -94,9 +94,73 @@ function assertFinalSchema(database) {
   );
 }
 
+/** Produce launch acceptance (migrations through 0025). */
+function assertProduceLaunch(database) {
+  const assetDir = join(process.cwd(), "apps", "web", "public", "produce");
+  const publicAssets = new Set(
+    readdirSync(assetDir)
+      .filter((name) => name.endsWith(".webp"))
+      .sort(),
+  );
+  const mediaRows = database
+    .prepare("SELECT id, image_metadata_json FROM product WHERE image_metadata_json IS NOT NULL")
+    .all();
+  const assetKeys = new Set();
+  for (const row of mediaRows) {
+    const media = JSON.parse(row.image_metadata_json);
+    assert.equal(media.version, 1, `product ${row.id} media requires version 1`);
+    assert.match(media.assetKey, /\.webp$/, `product ${row.id} media asset key must be .webp`);
+    assert.ok(media.altText && media.altText.length > 0, `product ${row.id} needs alt text`);
+    assetKeys.add(media.assetKey);
+  }
+  assert.equal(assetKeys.size, 226, "expected 226 distinct produce asset mappings");
+  for (const asset of publicAssets)
+    assert.ok(assetKeys.has(asset), `public asset ${asset} has no product mapping`);
+  assert.equal(assetKeys.size, publicAssets.size, "unexpected extra media assets");
+
+  // Every active SKU of a mapped product is available in Cebu Central and
+  // carries an open positive Metro Cebu standard price.
+  const violations = database
+    .prepare(
+      `SELECT s.id FROM sku s
+       JOIN product p ON p.id = s.product_id AND p.image_metadata_json IS NOT NULL
+       WHERE s.status = 'active'
+         AND (
+           NOT EXISTS (
+             SELECT 1 FROM sku_location_availability sla
+             WHERE sla.sku_id = s.id
+               AND sla.location_id = 'location-cebu-central'
+               AND sla.availability_status = 'AVAILABLE'
+           )
+           OR NOT EXISTS (
+             SELECT 1 FROM price_version pv
+             WHERE pv.sku_id = s.id
+               AND pv.market_id = 'market-metro-cebu'
+               AND pv.price_type = 'STANDARD'
+               AND pv.amount_minor > 0
+               AND pv.valid_to IS NULL
+           )
+         )`,
+    )
+    .all();
+  assert.deepEqual(violations, [], "launch SKUs missing availability or open Cebu price");
+
+  // Retired variant combinations on reused products are deactivated, not deleted.
+  assert.equal(
+    database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM sku WHERE product_id='product-papaya' AND status='inactive'",
+      )
+      .get().count,
+    3,
+    "expected retired papaya weight SKUs deactivated",
+  );
+}
+
 const fresh = database();
 apply(fresh, migrations);
 assertFinalSchema(fresh);
+assertProduceLaunch(fresh);
 fresh.close();
 
 const populated = database();
@@ -143,6 +207,7 @@ apply(
   migrations.filter((migration) => migration.name > "0021_instant_mode.sql"),
 );
 assertFinalSchema(populated);
+assertProduceLaunch(populated);
 assert.equal(
   populated.prepare("SELECT fulfillment_mode FROM grocery_order WHERE id='upgrade-order'").get()
     .fulfillment_mode,

@@ -1,12 +1,11 @@
 import type {
   ProduceBaseUnit,
   ProduceCategoryCode,
-  ProduceCatalogSummary,
   ProduceMerchandisingLabel,
   ProduceSeedDetail,
   ProduceSeedProduct,
   ProduceSeedVariant,
-} from "./produce-catalog-types";
+} from "./produce-catalog-types.ts";
 
 /**
  * The complete development-time produce seed manifest: one reviewable entry

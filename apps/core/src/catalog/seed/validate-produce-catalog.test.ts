@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   validateProduceCatalog,
   ProduceCatalogValidationError,
-} from "./validate-produce-catalog";
-import type { ProduceSeedProduct } from "./produce-catalog-types";
+} from "./validate-produce-catalog.ts";
+import type { ProduceSeedProduct } from "./produce-catalog-types.ts";
 
 const ASSET_KEYS = ["chili-pepper-fruit-siling-labuyo.webp", "potato.webp"];
 

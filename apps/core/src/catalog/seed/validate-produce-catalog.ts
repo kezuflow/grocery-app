@@ -6,7 +6,7 @@ import {
   type ProducePriceRange,
   type ProduceSeedProduct,
   type ValidatedProduceCatalog,
-} from "./produce-catalog-types";
+} from "./produce-catalog-types.ts";
 
 /**
  * Aggregate manifest validation for the produce seed. Every discovered

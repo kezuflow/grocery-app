@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { validateProduceCatalog } from "./validate-produce-catalog";
-import { produceCatalog } from "./produce-catalog";
+import { validateProduceCatalog } from "./validate-produce-catalog.ts";
+import { produceCatalog } from "./produce-catalog.ts";
 
 /**
  * Real-directory integrity gate: the committed manifest must cover every
