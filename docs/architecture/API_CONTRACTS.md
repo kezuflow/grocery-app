@@ -227,6 +227,16 @@ Admin context derives the active Staff principal, canonical capability vocabular
 
 Audit queries require `audit.read`, enforce resource scope, use bounded keyset pagination, and return sanitized purpose-built DTOs rather than raw JSON rows. Credential, bearer-token, cookie, authorization, provider-payload, and secret values are redacted recursively. Staff invitations never accept a password; Better Auth retains credentials, verification, and session authority. Roles with active assignments cannot be silently deleted, and session revocation is an explicit audited operation.
 
+### Implemented Admin Foundation service (Slice 1, 2026-08-27)
+
+`packages/contracts/src/admin-foundation.ts` publishes the closed canonical dot-form capability vocabulary (`adminCapabilityCodes`), the derived `Capability` type, `isAdminCapability`, and the `AdminFoundationService` surface implemented by Core:
+
+- `getAdminContext` returns `AdminContextView`: staff principal identity, canonical capabilities, assigned global/market/location scopes, Core-provided navigation, and environment. Navigation uses the closed workspace codes `overview`, `orders`, `catalog`, `inventory`, `procurement`, `fulfillment`, `delivery`, `customers`, `memberships`, `payments`, `promotions`, `analytics`, `staff`, `audit`, and `settings`; a workspace appears only when its read or manage capability is held, and `overview` is always present for active Staff. Web renders these items verbatim and never infers permissions from their visibility.
+- `listAdminScopes` returns `AdminScopeOptionView` entries (market or location, with ids, codes, names, currency, and timezone) only for active markets/locations reachable by the caller's global, market, or location assignment. Geometry and location-ranking rules are never exposed.
+- `listAdminAuditEvents` and `getAdminAuditEvent` require `audit.read`, enforce resource scope in Core, bound `limit` to 1–100 (default 50), and page by a descending `(occurred_at, id)` opaque base64url cursor; malformed cursors return `VALIDATION_FAILED`. Audit detail parses `details_json`/`before_json`/`after_json` into structured objects and recursively redacts case-insensitive keys `password`, `token`, `secret`, `cookie`, `authorization`, `accessToken`, `refreshToken`, `idToken`, and `providerPayload` to `"[REDACTED]"`; invalid historical JSON becomes an empty object with a safe warning. Raw JSON strings and raw rows are never exposed.
+
+Migration `0026_admin_foundation.sql` seeds the canonical capability rows with stable `perm_<domain>_<action>_v1` ids and maps historical colon-form assignments additively. Historical colon-form permission rows and assignments remain compatibility data; new source and DTOs use canonical dot-form capabilities only.
+
 ## Admin Orders and Payments
 
 - `admin.orders.list(filters, page) -> AdminOrderListPage`

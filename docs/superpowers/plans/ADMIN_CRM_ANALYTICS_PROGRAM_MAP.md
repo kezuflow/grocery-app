@@ -51,6 +51,10 @@ reuse stale file inventories from this program map.
 
 ## Active plan
 
-Slice 1 is detailed in
-`docs/superpowers/plans/ADMIN_FOUNDATION_SLICE_1_IMPLEMENTATION_PLAN.md`. No later slice is currently
-authorized for implementation.
+Slice 1 is implemented per
+`docs/superpowers/plans/ADMIN_FOUNDATION_SLICE_1_IMPLEMENTATION_PLAN.md` (commits `5af8f2a`
+through the foundation-slice documentation commit). Its authenticated Playwright journeys remain
+an unmet gate pending a provisioned local auth-email transport; the unmodified owner-owned
+`apps/web/app/globals.css` deferred the shadcn CLI in favor of hand-themed shadcn-source
+primitives. Slice 2 is not authorized for implementation and requires its own plan produced from
+the then-current repository per the plan production rule.

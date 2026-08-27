@@ -19,6 +19,34 @@ Status date: 2026-08-27. This file is descriptive evidence only. The canonical d
   databases containing pre-existing grocery orders because of its unconditional `DROP TABLE
   grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
 
+## Admin Foundation Slice 1 (2026-08-27)
+
+- Canonical dot-form admin capabilities are seeded by `0026_admin_foundation.sql` with additive
+  legacy colon-form mapping; production authorization recognizes only canonical capabilities, and
+  historical permission rows remain untouched compatibility data.
+- Core exposes `getAdminContext`, `listAdminScopes`, `listAdminAuditEvents`, and
+  `getAdminAuditEvent` through the shared `AdminFoundationService` contract. Audit reads are
+  `audit.read`-gated, resource-scope filtered, cursor-bounded (limit 1–100, opaque base64url
+  cursor, `VALIDATION_FAILED` on malformed cursors), and recursively redact credential-shaped
+  keys; invalid historical JSON sanitizes to an empty object with a logged warning.
+- Web adds thin same-origin BFF routes (`/api/admin/context`, `/api/admin/scopes`,
+  `/api/admin/audit`, `/api/admin/audit/[audit-event-id]`) that forward session headers to the
+  Core Service Binding with no Web-owned authorization and no D1 access, plus a layout-owned
+  capability-aware admin shell that renders only Core-provided navigation and an Audit workspace
+  covering loading, empty, filtered-empty, permission, and error states with request references.
+- Deviation (owner-gate): the shadcn CLI was not run because `apps/web/app/globals.css` carries
+  owner-owned uncommitted storefront changes. The six required primitives (alert, breadcrumb,
+  input, sheet, skeleton, table) were added as shadcn-source components themed to the existing
+  `--fm-*` tokens; `@radix-ui/react-dialog` is the only new runtime dependency. `globals.css` was
+  not modified and no owner-owned file was staged.
+- Route-segment deviation: the Audit detail path uses kebab-case `[audit-event-id]` because
+  repository naming conventions reject uppercase route directories.
+- Verification evidence: contracts, Core unit/integration, and web suites pass; root naming,
+  migration, lint, typecheck, test, build, and vinext gates pass (fresh counts in the task
+  report). Authenticated Playwright journeys (staff shell, permission-filtered navigation, mobile
+  trigger, Audit rows/filtered-empty) remain skipped because the local stack has no configured
+  auth-email transport; they are an unmet acceptance gate, not satisfied evidence.
+
 ## Reconciled implementation state
 
 ### Payments and paid-order recovery
