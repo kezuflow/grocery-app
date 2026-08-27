@@ -32,6 +32,7 @@ import {
   catalogSearchRequestSchema,
   createCheckoutQuoteSchema,
   createPaymentIntentSchema,
+  marketplaceHomeRequestSchema,
   refreshCheckoutQuoteSchema,
   checkoutRequestSchema,
   deliveryCommandSchema,
@@ -55,7 +56,13 @@ import { createAuth, type AuthEnvironment } from "./auth/service";
 import { iamSchema } from "./iam/schema";
 import { resolveServiceability } from "./geography/serviceability";
 import { activeMarketCode } from "./geography/market-defaults";
-import { getProduct, listCategories, searchCatalog } from "./catalog/service";
+import {
+  CatalogValidationError,
+  getMarketplaceHome,
+  getProduct,
+  listCategories,
+  searchCatalog,
+} from "./catalog/service";
 import { listDeliveryCycles as listDeliveryCyclesQuery } from "./commerce/cycle-queries";
 import {
   getCart as getCartQuery,
@@ -168,11 +175,35 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = catalogSearchRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return {
-      ok: true as const,
-      value: await searchCatalog(drizzle(this.env.DB), input),
-      requestId: input.requestId,
-    };
+    try {
+      return {
+        ok: true as const,
+        value: await searchCatalog(this.env.DB, input),
+        requestId: input.requestId,
+      };
+    } catch (error) {
+      if (error instanceof CatalogValidationError)
+        return fail("VALIDATION_FAILED", error.message, input.requestId);
+      throw error;
+    }
+  }
+  async getMarketplaceHome(
+    input: import("@freshmarkets/contracts").MarketplaceHomeRequest,
+  ) {
+    const validation = marketplaceHomeRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    try {
+      return {
+        ok: true as const,
+        value: await getMarketplaceHome(this.env.DB, input),
+        requestId: input.requestId,
+      };
+    } catch (error) {
+      if (error instanceof CatalogValidationError)
+        return fail("VALIDATION_FAILED", error.message, input.requestId);
+      throw error;
+    }
   }
   async getCatalogProduct(input: import("@freshmarkets/contracts").CatalogProductRequest) {
     const validation = catalogProductRequestSchema.safeParse(input);
@@ -180,14 +211,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return {
       ok: true as const,
-      value: await getProduct(drizzle(this.env.DB), input.slug, input.locationId),
+      value: await getProduct(this.env.DB, input.slug, input.locationId),
       requestId: input.requestId,
     };
   }
   async listCategories(input: RequestMeta) {
     return {
       ok: true as const,
-      value: await listCategories(drizzle(this.env.DB)),
+      value: await listCategories(this.env.DB),
       requestId: input.requestId,
     };
   }

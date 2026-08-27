@@ -21,11 +21,26 @@ export const serviceabilityRequestSchema = z.object({
   marketCode: identifierSchema.optional(),
 });
 
+const catalogSlugSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug");
+
 export const catalogSearchRequestSchema = z.object({
   requestId: identifierSchema,
   query: z.string().trim().max(200).optional(),
+  categorySlug: catalogSlugSchema.optional(),
+  cursor: z.string().min(1).max(512).optional(),
   limit: z.number().int().safe().min(1).max(50).optional(),
   locationId: identifierSchema.optional(),
+});
+
+export const marketplaceHomeRequestSchema = z.object({
+  requestId: identifierSchema,
+  locationId: identifierSchema.optional(),
+  itemsPerRail: z.number().int().safe().min(1).max(12).optional(),
 });
 
 export const catalogProductRequestSchema = z.object({
