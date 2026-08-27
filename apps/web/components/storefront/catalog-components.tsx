@@ -5,27 +5,29 @@ import { ArrowRight, Leaf } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { formatMoney } from "../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../lib/storefront/catalog-presentation";
+import type { CatalogMedia } from "@freshmarkets/contracts";
 import { AddToCartButton } from "./marketplace/add-to-cart-button";
 import { useQuickView } from "./marketplace/quick-view-provider";
 
 /**
- * Canonical product media: resolved produce image or the stable leaf
- * placeholder until the R2 canonical-media boundary lands.
+ * Canonical product media: Core/D1 provides the asset path and alt text.
+ * Unknown or invalid media renders the stable accessible leaf placeholder —
+ * Web never guesses an image path from a slug.
  */
 export function ProductMedia({
-  image,
+  media,
   name,
   className,
 }: {
-  image: string | null;
+  media: CatalogMedia | null;
   name: string;
   className?: string;
 }) {
-  if (image) {
+  if (media) {
     return (
       <img
-        src={image}
-        alt={`${name} product image`}
+        src={media.src}
+        alt={media.alt}
         className={cn("aspect-square w-full object-contain", className)}
       />
     );
@@ -65,7 +67,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
           aria-label={`${product.name} details`}
           className="block rounded-[var(--fm-radius-surface)] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
         >
-          <ProductMedia image={product.image} name={product.name} />
+          <ProductMedia media={product.media} name={product.name} />
         </Link>
         {variant ? (
           <div className="absolute right-2 bottom-2">
@@ -93,7 +95,11 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
         </p>
         <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5">{product.name}</h3>
         <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
-          {variant ? `${variant.label} · fixed pack` : "Fixed variant unavailable"}
+          {variant
+            ? variant.merchandisingLabel
+              ? `${variant.label} · ${variant.merchandisingLabel.toLowerCase()}`
+              : variant.label
+            : "Fixed variant unavailable"}
         </p>
         <p
           className={cn(

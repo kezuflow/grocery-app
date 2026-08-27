@@ -161,10 +161,10 @@ export function ProductQuickView({
           </div>
           <div className="grid gap-6 p-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:p-6">
             <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
-              {presentation.image ? (
+              {presentation.media ? (
                 <img
-                  src={presentation.image}
-                  alt={presentation.name}
+                  src={presentation.media.src}
+                  alt={presentation.media.alt}
                   className="aspect-square w-full object-contain"
                 />
               ) : (
@@ -235,6 +235,23 @@ export function ProductQuickView({
                   ))}
                 </div>
               </fieldset>
+              {selected?.contentsNote ? (
+                <p className="mt-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
+                  {selected.contentsNote}
+                </p>
+              ) : null}
+              {presentation.details.length > 0 ? (
+                <dl className="mt-4 space-y-1.5 border-t border-[var(--fm-border)] pt-4">
+                  {presentation.details.map((detail) => (
+                    <div key={detail.label} className="flex gap-2 text-xs leading-5">
+                      <dt className="shrink-0 font-semibold text-[var(--fm-primary-dark)]">
+                        {detail.label}
+                      </dt>
+                      <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
               {recommendations.length > 0 ? (
                 <div className="mt-5">
                   <p className="text-sm font-semibold">More from {presentation.categoryName}</p>
@@ -246,9 +263,9 @@ export function ProductQuickView({
                         onClick={() => onNavigate(product.slug)}
                         className="w-24 shrink-0 rounded-[var(--fm-radius-surface)] p-1 text-left hover:bg-[var(--fm-hover)]"
                       >
-                        {product.image ? (
+                        {product.media ? (
                           <img
-                            src={product.image}
+                            src={product.media.src}
                             alt=""
                             className="aspect-square w-full rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] object-contain"
                           />

@@ -1,11 +1,11 @@
-import type { CatalogProduct, CatalogVariant } from "@freshmarkets/contracts";
+import type { CatalogDetail, CatalogMedia, CatalogProduct, CatalogVariant } from "@freshmarkets/contracts";
 
 /**
  * Presentation view-models for marketplace surfaces. Contract DTOs stay the
- * authoritative shape; these types only add presentation decisions (default
- * variant, image resolution, formatting) so every storefront surface makes the
- * same choices. Money never transforms here — minor units pass through
- * untouched and missing prices surface as unavailable, never zero.
+ * authoritative shape — media, alt text, ordered details, merchandising
+ * labels, and contents notes all come from Core/D1. Money never transforms
+ * here: minor units pass through untouched and missing prices surface as
+ * unavailable, never zero.
  */
 
 export type PresentationVariant = {
@@ -13,6 +13,12 @@ export type PresentationVariant = {
   label: string;
   priceMinor: number | null;
   currency: string | null;
+  /** Merchandising label from Core (`Pack`/`Bunch`) or null for fixed sizes. */
+  merchandisingLabel: string | null;
+  /** Approximate customer contents copy for assembled packs/bunches. */
+  contentsNote: string | null;
+  sellQuantity: number;
+  unitSymbol: string;
 };
 
 export type PresentationProduct = {
@@ -23,38 +29,13 @@ export type PresentationProduct = {
   categoryName: string;
   categorySlug: string;
   available: boolean;
-  /** Canonical produce image path or null for the leaf placeholder. */
-  image: string | null;
+  /** Core-resolved media metadata; null renders the accessible placeholder. */
+  media: CatalogMedia | null;
+  /** Ordered customer-facing product details. */
+  details: ReadonlyArray<CatalogDetail>;
   /** Deterministic card variant; null when no variant carries a valid price. */
   defaultVariant: PresentationVariant | null;
   variants: ReadonlyArray<PresentationVariant>;
-};
-
-/**
- * Curated slug -> produce image mapping. The catalog contract intentionally
- * has no media field yet (R2 canonical media is tracked separately), so the
- * storefront resolves images from the seeded public produce library. Unknown
- * slugs render the placeholder instead of a guessed broken path.
- */
-const imageBySlug: Record<string, string> = {
-  "red-onion": "/produce/onion-red-creole-bermuda-red.webp",
-  avocado: "/produce/avocado.webp",
-  "banana-lakatan": "/produce/banana-lakatan.webp",
-  "mango-carabao": "/produce/mango-carabao.webp",
-  strawberry: "/produce/strawberry.webp",
-  pineapple: "/produce/pineapple.webp",
-  watermelon: "/produce/watermelon.webp",
-  tomato: "/produce/tomato.webp",
-  carrot: "/produce/carrot.webp",
-  broccoli: "/produce/broccoli.webp",
-  cucumber: "/produce/japanese-cucumber.webp",
-  cabbage: "/produce/cabbage.webp",
-  garlic: "/produce/garlic-dried-bulb.webp",
-  calamansi: "/produce/calamansi.webp",
-  papaya: "/produce/papaya-solo.webp",
-  kangkong: "/produce/kangkong-swamp-cabbage.webp",
-  eggplant: "/produce/eggplant.webp",
-  pechay: "/produce/pechay-native.webp",
 };
 
 const pesoFormatter = new Intl.NumberFormat("en-PH", {
@@ -74,15 +55,23 @@ function presentationVariant(variant: CatalogVariant): PresentationVariant {
     label: variant.name,
     priceMinor: variant.priceMinor,
     currency: variant.currency,
+    merchandisingLabel: variant.merchandisingLabel,
+    contentsNote: variant.contentsNote,
+    sellQuantity: variant.sellQuantity,
+    unitSymbol: variant.unit,
   };
 }
 
 /**
- * Pick the variant a product card presents. Mass/volume packs (base quantity
- * of 100 or more) prefer the pack closest to 500 base units — the everyday
- * 500 g size. Counted packs (pieces/packs) take the first priced variant so
- * the smallest pack leads. Comparison happens within one product's variants,
- * all sharing the same base dimension.
+ * Pick the variant a product card presents, using Core's fixed variant
+ * metadata rather than guessing from base consumption:
+ *
+ * 1. staff-assembled packs/bunches lead through their merchandising label;
+ * 2. otherwise mass sizes prefer the everyday ~500 g fixed weight;
+ * 3. anything else falls back to the first priced variant.
+ *
+ * Comparison happens within one product; every variant shares a base
+ * dimension by construction.
  */
 export function pickDefaultVariant(
   variants: ReadonlyArray<CatalogVariant>,
@@ -92,14 +81,22 @@ export function pickDefaultVariant(
       variant.priceMinor !== null && variant.currency !== null,
   );
   if (priced.length === 0) return null;
-  const packs = priced.filter((variant) => variant.consumptionBaseQuantity >= 100);
-  if (packs.length === 0) return presentationVariant(priced[0]);
-  const closest = packs.reduce((best, variant) =>
-    Math.abs(variant.consumptionBaseQuantity - 500) < Math.abs(best.consumptionBaseQuantity - 500)
-      ? variant
-      : best,
-  );
-  return presentationVariant(closest);
+
+  const assembled = priced.find((variant) => variant.merchandisingLabel !== null);
+  if (assembled) return presentationVariant(assembled);
+
+  const massSizes = priced.filter((variant) => variant.sellUnitCode !== "PC");
+  if (massSizes.length > 0) {
+    const closest = massSizes.reduce((best, variant) =>
+      Math.abs(variant.consumptionBaseQuantity - 500) <
+      Math.abs(best.consumptionBaseQuantity - 500)
+        ? variant
+        : best,
+    );
+    return presentationVariant(closest);
+  }
+
+  return presentationVariant(priced[0]!);
 }
 
 export function toPresentationProduct(product: CatalogProduct): PresentationProduct {
@@ -111,7 +108,8 @@ export function toPresentationProduct(product: CatalogProduct): PresentationProd
     categoryName: product.category.name,
     categorySlug: product.category.slug,
     available: product.available,
-    image: imageBySlug[product.slug] ?? null,
+    media: product.media ?? null,
+    details: product.details ?? [],
     defaultVariant: pickDefaultVariant(product.variants),
     variants: product.variants.map(presentationVariant),
   };

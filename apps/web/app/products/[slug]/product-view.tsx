@@ -107,7 +107,10 @@ export function ProductView({ slug }: { slug: string }) {
   return (
     <div className="grid gap-8 md:grid-cols-[1fr_1.1fr]">
       <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-6">
-        <ProductMedia image={toPresentationProduct(view.product).image} name={view.product.name} />
+        <ProductMedia
+          media={toPresentationProduct(view.product).media}
+          name={view.product.name}
+        />
       </div>
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-[var(--fm-primary-dark)]">
@@ -115,6 +118,16 @@ export function ProductView({ slug }: { slug: string }) {
         </p>
         <h1 className="mt-2 text-4xl font-bold tracking-[-0.03em]">{view.product.name}</h1>
         <p className="mt-3 text-[var(--fm-text-muted)]">{view.product.description}</p>
+        {view.product.details.length > 0 ? (
+          <dl className="mt-4 space-y-1.5">
+            {view.product.details.map((detail) => (
+              <div key={`${detail.sortOrder}-${detail.label}`} className="flex gap-2 text-sm leading-6">
+                <dt className="shrink-0 font-semibold">{detail.label}</dt>
+                <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
         <fieldset className="mt-6 space-y-3">
           <legend className="text-sm font-semibold">Choose a fixed pack</legend>
           {view.product.variants.map((variant) => (
@@ -134,7 +147,10 @@ export function ProductView({ slug }: { slug: string }) {
                 <span>
                   <span className="block font-semibold">{variant.name}</span>
                   <span className="block text-xs text-[var(--fm-text-muted)]">
-                    Fixed pack · {variant.consumptionBaseQuantity} base units
+                    {variant.merchandisingLabel
+                      ? `Staff-assembled ${variant.merchandisingLabel.toLowerCase()}`
+                      : "Fixed pack"}
+                    {variant.contentsNote ? ` · ${variant.contentsNote}` : ""}
                   </span>
                 </span>
               </span>
