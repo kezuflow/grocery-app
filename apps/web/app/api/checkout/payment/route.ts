@@ -6,6 +6,7 @@ import { requireIdempotencyKey } from "@/lib/core-client/commands";
 
 const bodySchema = z.object({
   checkoutAttemptId: z.string().trim().min(1),
+  expectedTotalMinor: z.number().int().nonnegative(),
   returnUrl: z.string().url(),
 });
 
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       requestId: crypto.randomUUID(),
       headers: requestHeaders(request),
       checkoutAttemptId: parsed.data.checkoutAttemptId,
+      expectedTotalMinor: parsed.data.expectedTotalMinor,
       returnUrl: parsed.data.returnUrl,
       idempotencyKey,
     }),

@@ -125,7 +125,6 @@ export async function applyCheckoutPaymentReaction(
   }
 
   const orderId = crypto.randomUUID();
-  const paymentAttemptId = crypto.randomUUID();
   const statements: D1PreparedStatement[] = [
     // Unique payment-intent identity claims the entire commitment.
     database
@@ -135,12 +134,7 @@ export async function applyCheckoutPaymentReaction(
       .bind(crypto.randomUUID(), input.paymentIntentId, input.reactionId, orderId, now),
     database
       .prepare(
-        "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) SELECT ?, customer_id, id, amount_minor, currency, 'SUCCEEDED', 'canonical', ?, ?, ? FROM payment_intent WHERE id=?",
-      )
-      .bind(paymentAttemptId, `intent:${input.paymentIntentId}`, now, now, input.paymentIntentId),
-    database
-      .prepare(
-        "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at) VALUES (?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?)",
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at) SELECT ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, pa.id, ? FROM payment_attempt pa WHERE pa.payment_intent_id=? AND pa.status='SUCCEEDED' ORDER BY pa.created_at ASC LIMIT 1",
       )
       .bind(
         orderId,
@@ -150,13 +144,13 @@ export async function applyCheckoutPaymentReaction(
         JSON.stringify(quote.addressSnapshot),
         quote.totalMinor,
         quote.currency,
-        paymentAttemptId,
         now,
+        input.paymentIntentId,
       ),
     instant
       ? database
           .prepare(
-            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, ?, NULL, ?, NULL, NULL, ?, 'INSTANT', ?, ?)",
+            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, delivery_fee_snapshot_json, created_at) VALUES (?, ?, NULL, ?, NULL, NULL, ?, 'INSTANT', ?, ?, ?)",
           )
           .bind(
             orderId,
@@ -167,11 +161,12 @@ export async function applyCheckoutPaymentReaction(
                 new Date(now).toISOString(),
             ),
             JSON.stringify(fulfillment?.sourcingModes ?? []),
+            JSON.stringify(quote.deliveryFeeSnapshot),
             now,
           )
       : database
           .prepare(
-            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'SCHEDULED', ?, ?)",
+            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, delivery_fee_snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'SCHEDULED', ?, ?, ?)",
           )
           .bind(
             orderId,
@@ -181,6 +176,7 @@ export async function applyCheckoutPaymentReaction(
             Date.parse(cycleSnapshot.cutoffAt),
             Date.parse(cycleSnapshot.cutoffAt),
             JSON.stringify(fulfillment?.sourcingModes ?? []),
+            JSON.stringify(quote.deliveryFeeSnapshot),
             now,
           ),
     // Operational lifecycle records begin here: fulfillment is queued for

@@ -4,18 +4,18 @@ import { createPayment } from "./create-payment";
 import { ingestProviderEvent } from "./ingest-provider-event";
 import { requestRefund, type RequestRefundCommand } from "./request-refund";
 import {
-  createFakePaymentProvider,
-  fakeSignatureFor,
-  setFakeRefundFailure,
-} from "../infrastructure/providers/fake-payment-provider";
+  createMockPaymentProvider,
+  mockSignatureFor,
+  setMockRefundFailure,
+} from "../infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 
-const sharedFake = createFakePaymentProvider();
+const sharedMock = createMockPaymentProvider();
 function testRegistry(): ProviderRegistry {
-  return new ProviderRegistry("test", [sharedFake]);
+  return new ProviderRegistry("test", [sharedMock]);
 }
-function fake() {
-  return sharedFake;
+function mock() {
+  return sharedMock;
 }
 
 let customerIdCounter = 0;
@@ -37,7 +37,7 @@ async function succeededIntent() {
     customerId: await seedCustomer(),
     amountMinor: 20000,
     currency: "PHP",
-    providerCode: "fake",
+    providerCode: "mock",
     returnUrl: "https://app.example/return",
     idempotencyKey: `ref-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
@@ -61,10 +61,10 @@ async function succeededIntent() {
     await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       new Headers({
-        "x-fake-signature": await fakeSignatureFor(rawBody),
-        "x-fake-timestamp": String(Date.now()),
+        "x-mock-signature": await mockSignatureFor(rawBody),
+        "x-mock-timestamp": String(Date.now()),
       }),
       rawBody,
     );
@@ -116,7 +116,7 @@ describe("non-synthetic refunds", () => {
       customerId: await seedCustomer(),
       amountMinor: 29900,
       currency: "PHP",
-      providerCode: "fake",
+      providerCode: "mock",
       returnUrl: "https://app.example/r",
       idempotencyKey: `ref-pending-${crypto.randomUUID()}`,
       requestId: crypto.randomUUID(),
@@ -153,7 +153,7 @@ describe("non-synthetic refunds", () => {
 
   it("records a definitive provider rejection as REJECTED, never SUCCEEDED", async () => {
     const { intentId, reference } = await succeededIntent();
-    setFakeRefundFailure(fake(), reference);
+    setMockRefundFailure(mock(), reference);
     const result = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));
     expect(result).toMatchObject({ ok: false, error: { code: "PAYMENT_FAILED" } });
     const row = await env.DB.prepare("SELECT status FROM payment_refund WHERE payment_intent_id=?")
@@ -184,10 +184,10 @@ describe("non-synthetic refunds", () => {
     const outcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       new Headers({
-        "x-fake-signature": await fakeSignatureFor(rawBody),
-        "x-fake-timestamp": String(Date.now()),
+        "x-mock-signature": await mockSignatureFor(rawBody),
+        "x-mock-timestamp": String(Date.now()),
       }),
       rawBody,
     );

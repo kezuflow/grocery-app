@@ -8,7 +8,7 @@ Phase 2 adds organization, market, fulfillment-location, capability, versioned s
 
 Phase 3 adds the global catalog, units, shared product inventory pools, fixed SKUs, versioned prices, and location availability in `0004_phase3_catalog.sql`.
 
-Phases 4-13 use `0005_mvp_commerce_operations.sql` for customer/application state, subscriptions, addresses, delivery cycles, carts, sandbox payment attempts, committed order snapshots, inventory reservations, committed procurement demand, procurement/receiving, fulfillment, and delivery records. Its historical D1 capacity/inventory triggers were later dropped by tracked migration `0008` after equivalent Core command foundations were introduced.
+Phases 4-13 use `0005_mvp_commerce_operations.sql` for customer/application state, subscriptions, addresses, delivery cycles, carts, historical mock payment attempts, committed order snapshots, inventory reservations, committed procurement demand, procurement/receiving, fulfillment, and delivery records. Its historical D1 capacity/inventory triggers were later dropped by tracked migration `0008` after equivalent Core command foundations were introduced.
 
 Phase 14 uses `0006_phase14_promotions_audit.sql` for the deliberately small promotion seam, audit/domain events, refunds/amendments, supplier and exception records, and delivery batches/stops. Production provider credentials and provider-specific webhook behavior remain external launch work.
 
@@ -43,8 +43,10 @@ serviceability boolean and existing resolver failure reason. Existing rows remai
 nullable and are exposed as unresolved rather than being inferred from stored
 service-area and delivery-zone codes.
 
+`0015`-`0021` add receiving integrity, provider-neutral Payments, Membership/Promotions, checkout/order snapshots, scheduled jobs, renewal test seams, and first-class Instant mode. `0022_delivery_pricing_reconciliation.sql` is an append-only correction that restores quote/order indexes lost by the `0021` table rebuilds, restores one-order-per-payment enforcement, and adds versioned market/location delivery pricing plus quote/order delivery-calculation snapshots. Fresh and populated-`0021` upgrades run through `pnpm migration:check`.
+
 Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tables must remain compatible with Better Auth's supported schema/adapter workflow; application tables remain separately owned by Core. Do not edit deployed rows manually as part of application behavior.
 
 For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.
 
-Email verification and password-reset delivery are exposed through the Core email-delivery port. Development logs the generated URLs for test capture; production requires a configured transactional delivery provider before launch.
+Email verification and password-reset delivery use the Core auth-email port and Cloudflare Email Service `EMAIL` binding. Local tests inject fakes; bearer URLs and recipients are never logged. Production fails closed until `AUTH_EMAIL_FROM` and an onboarded sender are configured outside source.

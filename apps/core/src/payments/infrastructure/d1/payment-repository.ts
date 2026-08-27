@@ -314,6 +314,9 @@ export function extendPaymentRepository(database: D1Database) {
             input.expectedVersion,
             input.expectedStatus,
           ),
+        database
+          .prepare("UPDATE payment_attempt SET status=?, updated_at=? WHERE payment_intent_id=?")
+          .bind(input.nextStatus, input.reaction?.now ?? Date.now(), input.intentId),
       ];
       if (input.reaction)
         statements.push(

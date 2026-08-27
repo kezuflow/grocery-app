@@ -101,20 +101,19 @@ observable (last run, status, failure visibility) without exposing internals pub
 
 **CLASSIFICATION:** architectural
 
-**LAUNCH PRIORITY:** P0 (financial correctness and the business model's recurring revenue)
+**LAUNCH PRIORITY:** OPEN OWNER DECISION (production recurring charging is unapproved)
 
 **WHY:** D2 approves the full policy, now canonical in `STATE_MACHINES.md`/`DOMAIN_MODEL.md`:
 recurring-capable authorization before trial activation (no ₱0 payment), first paid charge at
 `trialEndsAt`, `PAST_DUE` with 7-calendar-day grace preserving entitlement/checkout eligibility,
 verified recovery to `ACTIVE`, grace exhaustion to `EXPIRED`, cancel-during-grace to immediate
-terminal `CANCELED`, provider-native retries preferred with ~+1/+3/+6-day application fallback,
-nominal billing anchor across short-month clamping. D3 approves the abuse baseline. The seams from
-remediation Plans 05/06 exist; automation is unbuilt.
+terminal `CANCELED`, and the nominal billing anchor across short-month clamping. D3 approves the
+abuse baseline. The seams from remediation Plans 05/06 exist, but production automatic charging,
+retry ownership, and retry cadence are not approved.
 
-**DEPENDENCIES:** Program 2 (renewal initiation scheduling, grace expiration, dunning notices
-timing) and Program 4's provider-capability verification (decides provider-native vs application
-retry ownership and recurring mandate behavior). State-machine/command implementation can begin
-earlier; retry-scheduling and live-charge slices wait on both.
+**DEPENDENCIES:** Explicit owner approval of a production recurring provider, mandate semantics,
+charge initiation, retry ownership/timing, and recovery policy. Program 2 supplies neutral
+scheduling mechanics and Program 4 supplies the future adapter boundary only after that approval.
 
 **CAN RUN IN PARALLEL WITH:** Programs 5 (design + non-payment slices), 7, 8, 9, 10, 11, 12, 13, 14.
 
@@ -132,15 +131,9 @@ fields, authorization-identity for abuse prevention)
 
 **SUPERPOWERS FLOW REQUIRED:** full flow — brainstorm → spec → writing-plan → TDD slices.
 
-**ACCEPTANCE BOUNDARY:** trial cannot activate without a recorded recurring-capable authorization
-and no zero-value payment row ever exists; `trialEndsAt` triggers exactly one first paid charge
-attempt; failed renewal yields `PAST_DUE` with correct 7-calendar-day grace bounds and preserved
-checkout eligibility; recovery requires provider-confirmed success and returns `ACTIVE`; grace
-exhaustion applies `ExpireSubscription`; cancellation during `PAST_DUE` lands in terminal
-`CANCELED` with renewal attempts permanently stopped; retry behavior matches the finalized provider
-integration spec with no duplicate retry layers; calendar-month clamping preserves the nominal
-anchor; one-trial-per-customer and provider-identity reuse prevention enforced where supported;
-all paths covered by integration tests including scheduler-driven timing.
+**ACCEPTANCE BOUNDARY:** currently open. Mock tests may prove authorization and lifecycle seams,
+but production acceptance additionally requires owner-approved mandate/charge/retry semantics and a
+real signed-provider integration. No mock scheduler result counts as production recurring evidence.
 
 ### Program 4 — Production Payment Provider Readiness
 
@@ -148,13 +141,13 @@ all paths covered by integration tests including scheduler-driven timing.
 
 **LAUNCH PRIORITY:** P0 (hard launch gate: live checkout fails closed without it)
 
-**WHY:** Only the test fake provider exists; production checkout fails closed by design. Requires
+**WHY:** Only the deterministic mock provider is approved; production checkout fails closed by design. Requires
 the selected Philippine provider with signed webhooks, canonical state translation, refunds,
 reconciliation, and verified recurring-capability for membership (D2/D3 dependency). Includes the
 already-blockered provider-integration specification that finalizes exact renewal/retry behavior.
 
 **DEPENDENCIES:** Human provider selection (see Remaining Human Decisions). Program 2 for
-reconciliation/redrive scheduling. Sandbox containment work from remediation Plan 02 is the seam.
+reconciliation/redrive scheduling. Mock containment work from remediation Plan 02 is the seam.
 
 **CAN RUN IN PARALLEL WITH:** Programs 1 (after its first slices), 2, 5 (design), 6 (render/queue
 side), 7, 8, 9, 10, 11, 12, 13, 14.
@@ -170,10 +163,10 @@ mapping, reconciliation), wrangler secrets/config, Web payment return/recovery s
 `0016` already provider-neutral)
 
 **SUPERPOWERS FLOW REQUIRED:** full flow — brainstorm → provider integration spec → writing-plan →
-TDD slices (contract tests against provider sandbox).
+TDD slices (contract tests against deterministic provider simulations).
 
 **ACCEPTANCE BOUNDARY:** live-configured Core passes the proven business loop end to end with real
-provider sandbox credentials; webhook ingress verifies signatures, dedupes by
+provider test configuration; webhook ingress verifies signatures, dedupes by
 `(provider, providerEventId)`, and never trusts client `expectedVersion`; captured/success maps to
 canonical `SUCCEEDED` and nothing weaker commits membership or orders; refunds are
 provider-confirmed only; reconciliation detects and resolves drift; recurring capability is
@@ -198,7 +191,7 @@ first-class status.
 
 **DEPENDENCIES:** Approved Instant-mode design specification (brainstorm first — D1 mandates it).
 Program 2 (expiring-hold expiry scheduling, dispatch follow-up). Program 4 for real payment at
-launch (sandbox suffices during build). Program 1 rider surfaces for dispatch operations (soft).
+launch (deterministic mock suffices during build). Program 1 rider surfaces for dispatch operations (soft).
 
 **CAN RUN IN PARALLEL WITH:** Programs 2, 3 (non-renewal slices), 4, 6, and all of Part C.
 
@@ -262,7 +255,7 @@ minimal preference fields)
 are triggered only by authoritative state changes through idempotent reactions; a failed send never
 alters the domain outcome and is retried/visible operationally; no notification handler mutates
 business state; customers can see delivery status minimally without a full preferences platform;
-secrets and customer data are handled per auth redaction standards; sandbox/test double keeps tests
+secrets and customer data are handled per auth redaction standards; deterministic test double keeps tests
 hermetic.
 
 ---
@@ -570,14 +563,14 @@ Optimized for (1) financial correctness, (2) operational correctness, (3) launch
    - Program 1 slices (composition root first — every later Core program merges cleaner).
    - Program 5 design brainstorm/spec (design-only; no code).
    - Programs 7, 8, 12, 13 (isolated bounded features).
-   - Human decision work: payment-provider selection, email-provider selection (longest lead
-     times; they gate Waves 2-3).
+   - Human decision work: production payment/recurring policy. Cloudflare Email Service and the
+     Core-only Mapbox route adapter are already selected; external onboarding remains deployment work.
 2. **Wave 1:** Program 2 (scheduled jobs) — after Program 1's composition-root slices; Programs
    9, 14, and 11 join the bounded track; Program 4 adapter work begins once the provider is
    selected.
-3. **Wave 2:** Program 4 completes (webhooks, reconciliation, recurring verification). Program 3
-   state/command machinery may have started in parallel; its retry/renewal-automation slices
-   finalize here using the verified provider capability. Program 6 build side (templates, render,
+3. **Wave 2:** Program 4 can resume only after production-provider approval. Program 3
+   state/command machinery remains a mock-tested seam until mandate, initiation, and retry policy
+   are approved. Program 6 build side (templates, render,
    inline dispatch) proceeds; its scheduled/dunning sends activate with P2/P3.
 4. **Wave 3:** Program 5 implementation (post-spec, post-P2; launch enablement after P4).
    Program 6 completion. Program 10 anytime from Wave 1 onward (independent; admin queue rides
@@ -603,21 +596,21 @@ root before programs that add entrypoint registrations.
 
 ## Remaining Decisions Requiring Human Approval
 
-1. **Production payment provider selection** (and its verified PH recurring/mandate capability) —
-   gates Program 4 and finalizes Program 3 retry ownership. Implementation-boundary deferral, not a
-   reopening of D2.
-2. **Email sending provider + from-domain/DNS** — gates Program 6 delivery.
+1. **Production payment provider selection and recurring policy** — mandate capability, automatic
+   initiation, retry ownership/timing, reconciliation, and refund behavior all require approval.
+2. **Cloudflare Email Service sender onboarding** — from-domain/DNS and sender configuration gate
+   deployed delivery; the provider/binding choice is settled.
 3. **Default cancellation UX choice (immediate vs period-end as the customer-facing default)** —
    the policy for both modes is canonical; only the presented default remains open.
-4. **Paid-success/downstream-commit recovery policy** (automatic refund vs retry when payment
-   succeeded but order/membership commitment failed) — visible exception state exists; the
-   automatic choice is still blocked.
+4. **Real-provider paid-success/downstream-commit recovery policy** — the mock MVP preserves the
+   payment, retries the same commitment, and escalates bounded failure without automatic refund;
+   future real-provider refund automation remains unapproved.
 5. **Accounting/tax authority confirmation** for BIR invoice computation/retention specifics —
    D11 boundary; seams ship without it, go-live does not.
 6. **Legal authority confirmation** for Philippine deletion/anonymization/financial retention
    periods — D9 boundary; hooks ship without it.
-7. **Production geocoder/map provider + approved service boundaries** — pre-existing launch
-   blocker outside D1-D11.
+7. **Production geocoder + approved service boundaries** — Mapbox is selected only for Core route
+   distance; address geocoding/polygon approval remains separate.
 8. **Google OAuth production credentials + production Better Auth base URL/cookie verification** —
    pre-existing launch blocker.
 9. **Instant operational go-live readiness** (rider supply, zone enablement) — an operational

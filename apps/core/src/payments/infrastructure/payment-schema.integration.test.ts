@@ -57,7 +57,7 @@ describe("payments context persistence", () => {
   it("deduplicates provider events on (provider, provider_event_id)", async () => {
     const insert = () =>
       env.DB.prepare(
-        "INSERT INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, processing_status, received_at, updated_at) VALUES (?, 'fake', 'evt-dup', 'hash-a', 'RECEIVED', ?, ?)",
+        "INSERT INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, processing_status, received_at, updated_at) VALUES (?, 'mock', 'evt-dup', 'hash-a', 'RECEIVED', ?, ?)",
       )
         .bind(crypto.randomUUID(), Date.now(), Date.now())
         .run();

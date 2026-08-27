@@ -3,7 +3,7 @@ import { SELF } from "cloudflare:test";
 
 describe("provider webhook route", () => {
   it("fails closed with PAYMENT_PROVIDER_UNCONFIGURED for an unregistered provider", async () => {
-    // The automated harness runs as the test environment, where the fake
+    // The automated harness runs as the test environment, where the mock
     // adapter registers through the runtime construction point; an
     // unregistered code proves the fail-closed webhook path.
     const response = await SELF.fetch(
@@ -12,8 +12,8 @@ describe("provider webhook route", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-fake-signature": "x",
-          "x-fake-timestamp": "0",
+          "x-mock-signature": "x",
+          "x-mock-timestamp": "0",
         },
         body: "{}",
       },

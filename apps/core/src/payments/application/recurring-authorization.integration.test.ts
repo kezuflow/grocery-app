@@ -6,9 +6,9 @@ import {
 } from "./begin-recurring-authorization";
 import { completeRecurringAuthorization } from "./complete-recurring-authorization";
 import {
-  createFakePaymentProvider,
-  setFakeAuthorizationOutcome,
-} from "../infrastructure/providers/fake-payment-provider";
+  createMockPaymentProvider,
+  setMockAuthorizationOutcome,
+} from "../infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 
 let customerIdCounter = 0;
@@ -27,7 +27,7 @@ async function beginCommand(
 ): Promise<BeginRecurringAuthorizationCommand> {
   return {
     customerId: await seedCustomer(),
-    providerCode: "fake",
+    providerCode: "mock",
     currency: "PHP",
     returnUrl: "https://app.example/membership",
     idempotencyKey: `auth-${crypto.randomUUID()}`,
@@ -37,7 +37,7 @@ async function beginCommand(
 }
 
 function testRegistry(): ProviderRegistry {
-  return new ProviderRegistry("test", [createFakePaymentProvider()]);
+  return new ProviderRegistry("test", [createMockPaymentProvider()]);
 }
 
 async function authorizationRow(id: string) {
@@ -62,13 +62,13 @@ describe("beginRecurringAuthorization", () => {
     const result = await beginRecurringAuthorization(env.DB, testRegistry(), command);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.provider).toBe("fake");
+    expect(result.value.provider).toBe("mock");
     expect(result.value.actionType).toBe("REDIRECT");
-    expect(result.value.redirectUrl).toContain("fake.pay.example");
+    expect(result.value.redirectUrl).toContain("mock.pay.invalid");
     const row = await authorizationRow(result.value.authorizationId);
     expect(row).toMatchObject({
       customer_id: command.customerId,
-      provider: "fake",
+      provider: "mock",
       status: "PENDING",
       recurring_capable: 0,
     });
@@ -101,7 +101,7 @@ describe("beginRecurringAuthorization", () => {
   });
 
   it("fails closed when no provider is configured", async () => {
-    const command = await beginCommand({ providerCode: "paymongo" });
+    const command = await beginCommand({ providerCode: "unapproved" });
     const result = await beginRecurringAuthorization(env.DB, new ProviderRegistry("test"), command);
     expect(result).toMatchObject({ ok: false, error: { code: "CONFIGURATION_ERROR" } });
     const count = await env.DB.prepare(
@@ -124,10 +124,10 @@ describe("completeRecurringAuthorization", () => {
       authorizationId: begun.value.authorizationId,
       requestId: command.requestId,
     });
-    expect(completed).toMatchObject({ ok: true, value: { provider: "fake" } });
+    expect(completed).toMatchObject({ ok: true, value: { provider: "mock" } });
     const row = await authorizationRow(begun.value.authorizationId);
     expect(row).toMatchObject({ status: "ACTIVE", recurring_capable: 1 });
-    expect(row?.provider_method_ref).toContain("fake_method_");
+    expect(row?.provider_method_ref).toContain("mock_method_");
     expect(row?.established_at).not.toBeNull();
   });
 
@@ -151,8 +151,8 @@ describe("completeRecurringAuthorization", () => {
     const registry = testRegistry();
     const begun = await beginRecurringAuthorization(env.DB, registry, command);
     if (!begun.ok) throw new Error("begin failed");
-    const reference = `fake_auth_${command.idempotencyKey}`;
-    setFakeAuthorizationOutcome(registry.require("fake"), reference, {
+    const reference = `mock_auth_${command.idempotencyKey}`;
+    setMockAuthorizationOutcome(registry.require("mock"), reference, {
       providerAuthorizationReference: reference,
       recurringCapable: true,
       providerMethodRef: null,
@@ -174,11 +174,11 @@ describe("completeRecurringAuthorization", () => {
     const registry = testRegistry();
     const begun = await beginRecurringAuthorization(env.DB, registry, command);
     if (!begun.ok) throw new Error("begin failed");
-    const reference = `fake_auth_${command.idempotencyKey}`;
-    setFakeAuthorizationOutcome(registry.require("fake"), reference, {
+    const reference = `mock_auth_${command.idempotencyKey}`;
+    setMockAuthorizationOutcome(registry.require("mock"), reference, {
       providerAuthorizationReference: reference,
       recurringCapable: false,
-      providerMethodRef: "fake_method_nonrecurring",
+      providerMethodRef: "mock_method_nonrecurring",
       status: "ACTIVE",
     });
     const result = await completeRecurringAuthorization(env.DB, registry, {
@@ -219,12 +219,12 @@ describe("completeRecurringAuthorization", () => {
     const second = await beginCommand();
     const secondBegun = await beginRecurringAuthorization(env.DB, registry, second);
     if (!secondBegun.ok) throw new Error("begin failed");
-    const reference = `fake_auth_${second.idempotencyKey}`;
-    setFakeAuthorizationOutcome(registry.require("fake"), reference, {
+    const reference = `mock_auth_${second.idempotencyKey}`;
+    setMockAuthorizationOutcome(registry.require("mock"), reference, {
       providerAuthorizationReference: reference,
       recurringCapable: true,
       // Same vaulted instrument as the first authorization.
-      providerMethodRef: `fake_method_fake_auth_${first.idempotencyKey}`,
+      providerMethodRef: `mock_method_mock_auth_${first.idempotencyKey}`,
       status: "ACTIVE",
     });
     const result = await completeRecurringAuthorization(env.DB, registry, {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createFakePaymentProvider, fakeSignatureFor } from "./fake-payment-provider";
+import { createMockPaymentProvider, mockSignatureFor } from "./mock-payment-provider";
 
-const provider = createFakePaymentProvider();
+const provider = createMockPaymentProvider();
 
 function eventHeaders(rawBody: string, timestamp = Date.now()) {
   return new Headers({
-    "x-fake-signature": "placeholder",
-    "x-fake-timestamp": String(timestamp),
+    "x-mock-signature": "placeholder",
+    "x-mock-timestamp": String(timestamp),
   });
 }
 
@@ -15,13 +15,13 @@ async function signedRequest(body: Record<string, unknown>, timestamp = Date.now
   return {
     rawBody,
     headers: new Headers({
-      "x-fake-signature": await fakeSignatureFor(rawBody),
-      "x-fake-timestamp": String(timestamp),
+      "x-mock-signature": await mockSignatureFor(rawBody),
+      "x-mock-timestamp": String(timestamp),
     }),
   };
 }
 
-describe("fake payment provider contract", () => {
+describe("mock payment provider contract", () => {
   it("creates redirect actions without canonical success states", async () => {
     const result = await provider.createPayment({
       providerCustomerId: null,
@@ -39,7 +39,7 @@ describe("fake payment provider contract", () => {
   it("verifies signed events and rejects tampered or stale ingress", async () => {
     const body = {
       eventId: `evt-${crypto.randomUUID()}`,
-      reference: "fake_pay_ref-1",
+      reference: "mock_pay_ref-1",
       vendorState: "paid",
       amountMinor: 29900,
       currency: "PHP",
@@ -62,15 +62,15 @@ describe("fake payment provider contract", () => {
   it("rejects unparseable payloads and unknown vendor states after signature verification", async () => {
     const garbage = "not-json";
     const garbageHeaders = new Headers({
-      "x-fake-signature": await fakeSignatureFor(garbage),
-      "x-fake-timestamp": String(Date.now()),
+      "x-mock-signature": await mockSignatureFor(garbage),
+      "x-mock-timestamp": String(Date.now()),
     });
     const unparseable = await provider.verifyAndParseEvent(garbageHeaders, garbage);
     expect(unparseable).toMatchObject({ ok: false, reason: "UNPARSEABLE_PAYLOAD" });
 
     const unknownBody = {
       eventId: `evt-${crypto.randomUUID()}`,
-      reference: "fake_pay_ref-2",
+      reference: "mock_pay_ref-2",
       vendorState: "mysterious",
       amountMinor: 100,
       currency: "PHP",
@@ -85,7 +85,7 @@ describe("fake payment provider contract", () => {
 
   it("requests refunds with stable references", async () => {
     const refund = await provider.requestRefund({
-      providerReference: "fake_pay_ref-1",
+      providerReference: "mock_pay_ref-1",
       refundProviderIdempotencyKey: `refund-${crypto.randomUUID()}`,
       amountMinor: 29900,
       currency: "PHP",

@@ -1,80 +1,53 @@
-# FreshMarkets Superpowers Progress Ledger
+# FreshMarkets Product Program Progress Ledger
 
-Recovery record for the product feature programs defined in `PRODUCT_FEATURE_PROGRAMS.md` and the
-completed architecture remediation program (`REMEDIATION_PROGRAM.md`). Any session resuming work
-must read `AGENTS.md`, `TRUNK.md`, `PRODUCT_FEATURE_PROGRAMS.md`, and this ledger's "Next
-incomplete task" column before touching a worktree. This is a trunk-based repository: commit and
-push only `main`; no feature branches or PRs without owner-approved exception; never force-push.
+Reconciled 2026-08-27. This ledger records present evidence, not authority. Canonical documents and
+owner decisions override historical completion labels, commit messages, and self-review notes.
 
-## Program / Spec Status
+## Current status
 
-| Program | Spec status | Plan status | Worktree / location | State |
-|---|---|---|---|---|
-| Remediation Plans 01-07 + Plan 08 P1 core (authz audit, domain routes, `requestCancellation`) | approved (executed) | executed + reviewed | landed on `main` via remediation branch merge (PR #1, `7111518`) | COMPLETE |
-| product-rulings reconciliation (D1-D11 into canonical docs; program map; ledger) | approved | done | landed directly on `main` per `TRUNK.md` | COMPLETE |
-| Program 1 — Plan 08 completion | remediation program text is the spec base; slices approved by owner directive | all slices done | direct on `main` per `TRUNK.md` | COMPLETE (final report delivered) |
-| Program 2 — Scheduled Jobs & Reconciliation | self-reviewed spec `PROGRAM_2_SCHEDULED_JOBS_SPEC.md` (implements D4 + ARCHITECTURE Cron Triggers section; no new product decisions) | all 4 slices done | direct on `main` per `TRUNK.md` | COMPLETE |
-| Program 3 — Renewal / Trial Conversion / Dunning | self-reviewed spec `PROGRAM_3_RENEWAL_DUNNING_SPEC.md` (implements D2/D3 + PROVIDER_DECISIONS retry-ownership constraint; rulings recorded in spec) | all 6 slices done | direct on `main` per `TRUNK.md` | COMPLETE except external go-live config (PayMongo Subscriptions/Card-Vaulting enablement + written Maya/setup semantics — adapter fails closed with `PROVIDER_RECURRING_UNAVAILABLE`) |
-| Program 4 — Payment Provider Readiness | self-reviewed spec `PROGRAM_4_PAYMENTS_PROVIDER_SPEC.md` (implements recorded PayMongo selection; no canonical domain change) | single-slice plan done | direct on `main` per `TRUNK.md` | COMPLETE except external go-live config (account/KYC, live keys, webhook registration, Maya/vaulting confirmation — see `PROVIDER_DECISIONS.md`) |
-| Program 5 — Instant Mode | self-reviewed spec `PROGRAM_5_INSTANT_MODE_SPEC.md` (implements D1; twelve areas covered; rulings recorded) | slices 1–3 done | direct on `main` | SOFTWARE COMPLETE except admin RPC/UI wiring for mode config (next slice); external: ops decision on promise/capacity numbers |
-| Program 6 — Transactional Notifications | not started (blocked on email provider selection for delivery slices) | not started | — | BLOCKED-HUMAN (partial) |
-| Program 7 — Delivery Instructions | not started | not started | — | NOT STARTED |
-| Program 8 — Product Media (R2) | not started | not started | — | NOT STARTED |
-| Program 9 — Order Detail / Tracking | not started | not started | — | NOT STARTED |
-| Program 10 — Order-Issue Intake | not started | not started | — | NOT STARTED |
-| Program 11 — Reorder / Buy Again | not started | not started | — | NOT STARTED |
-| Program 12 — Privacy / Account Closure | not started | not started | — | NOT STARTED |
-| Program 13 — Tax/Invoicing Seams | not started | not started | — | NOT STARTED |
-| Program 14 — Support / Contact | not started | not started | — | NOT STARTED |
+| Program | Demonstrated implementation | Open acceptance / decision | State |
+|---|---|---|---|
+| Remediation Plans 01-07 | Core boundary, authorization, payment inbox/reactions, quote/order and operational foundations have focused tests | Full phase acceptance remains governed by the canonical implementation plan | PARTIAL / VERIFIED SLICES |
+| Program 1 / Plan 08 | Composition split, operational read models, admin/rider surfaces and Playwright specs exist | Authenticated staff/rider journeys were gated/skipped; skipped tests are not acceptance evidence | OPEN |
+| Program 2 | Scheduled-job registry, run records, cutoff/closeout, reaction redrive and reconciliation sweeps have integration tests | Production provider behavior and deployed cron observation | IMPLEMENTED LOCAL SLICE |
+| Program 3 | Provider-neutral authorization, membership state, billing-calendar and scheduler seams pass mock tests | Production recurring mandate, automatic charging, and retry ownership are not approved or implemented | OPEN / NOT PRODUCTION-OPERATIONAL |
+| Program 4 | Deterministic mock payment adapter, explicit selection, signed events, reconciliation/refund simulation and fail-closed policy | No production provider is selected | MOCK MVP ONLY |
+| Program 5 | Instant fulfillment mode, holds, capacity and commitment foundations exist | Admin mode-configuration surface and complete browser acceptance | PARTIAL |
+| Program 6 | Auth verification/reset delivery now uses the Core Cloudflare Email Service port | Product notification templates/events/delivery are not built | NOT STARTED EXCEPT AUTH EMAIL |
+| Programs 7-14 | Plans and occasional schema seams only | Written program outcomes and acceptance criteria | NOT STARTED |
 
-## Task Ledger
+## 2026-08-27 reconciliation slice
 
-| Program/spec | Task | Status | Commit SHA | Verification | Review result | Push result | Next incomplete task |
-|---|---|---|---|---|---|---|---|
-| product-rulings reconciliation | Reconcile D1-D11 + additional rulings into canonical docs; write program map + ledger; land on `main` | DONE | see `git log` "docs: reconcile product rulings D1-D11 and approve feature programs" on `main` | docs-only; `pnpm naming:check` pass | owner-approved landing during trunk cleanup | pushed to `origin/main` | Wave 0 programs |
-| Program 1 / Slice 1 | Composition-root extraction: entrypoint -> transport+composition+delegation; domain moved to customer/geography/membership/commerce/checkout/orders/procurement/operations/payments modules; ownership test extended RED-first | DONE | `19d3cf1` | `pnpm check` green (format/naming/lint/typecheck/182 tests/recursive builds); `check:vinext` exit 0; `git diff --check` clean | self-review pass; behavior-preserving with one noted error-precedence normalization in receiveProcurement (session resolved before requirement lookup) | pushed `origin/main` | Program 1 / Slice 2 | Scoped operational read models + commitment seeds fulfillment/delivery records + assignRider + rider-job restriction on advanceDelivery | DONE | `131f493` | pnpm check green (187 core tests incl. 5-test matrix); vinext 0 | self-review; rider-assigned-job restriction implements the documented route contract; flagged in report | pushed `origin/main` | Slice 3: purpose-built Admin operational UI |
-| Program 1 / Slice 3 | Admin operations board: GET /api/admin/operations BFF, POST /api/admin/rider-assign, page rendering Core-derived queues/actions with explicit loading/empty/denied/stale states | DONE | `80cc5f5` | pnpm check green; web typecheck/tests/build clean | self-review pass | pushed `origin/main` | Slice 4: rider console |
-| Program 1 / Slice 4 | Rider console rebuilt on riderJobs read model: assigned jobs only, real versions, stable idempotency keys, explicit empty/error states; GET /api/rider/jobs BFF | DONE | `8fe0dd0` | pnpm check green | self-review pass | pushed `origin/main` | Slice 5: Playwright flows |
-| Program 1 / Slice 5 | Playwright harness + admin/rider operational specs; live run vs dev stack: unauthenticated paths PASS, authenticated paths gated-skip pending auth-email transport provisioning (E2E_AUTH_EMAIL_CONFIGURED=1); no auth backdoor added | DONE (gated E2E documented) | `8d44a0a`+`a94e5c1` | live playwright run evidence in ledger/report; full check green | self-review; provisioning dependency flagged to owner | pushed `origin/main` | Slice 6: compatibility sweep |
-| Program 1 / Slice 6 | Compatibility-symbol sweep: LegacyOperationsService dissolved into ImplementedCoreService; scan shows remaining legacy tokens only in negative tests, immutable migrations, generated typings, comments | DONE | `28e3c51` | pnpm check green; contracts tests green | self-review pass | pushed `origin/main` | Slice 7: final verification + status |
-| Slice 2: purpose-built operational read models |
-| Program 2 | cron registry + hold-expiry slice | NOT STARTED | — | — | — | — | full brainstorm/spec |
-| Program 3 | state/command machinery slice | NOT STARTED | — | — | — | — | full brainstorm/spec |
-| Program 4 | provider integration spec | BLOCKED-HUMAN | — | — | — | — | provider selection |
-| Program 5 | Instant design spec | NOT STARTED | — | — | — | — | brainstorm (twelve D1 areas) |
-| Program 6 | templates/render/dispatch slice | NOT STARTED | — | — | — | — | brainstorm/spec |
-| Programs 7-14 | (one row per slice once planned) | NOT STARTED | — | — | — | — | short-form specs |
-| Program 2 / Slice 1 | Migration `0019` + scheduling registry/orchestrator/run records + hold-expiry & scheduled-cancellation jobs + `scheduled()` wiring + wrangler crons + integration tests (6) | DONE | `6e87a6f` | targeted 6/6 green; naming/typecheck/lint/format/`git diff --check` green; RED collapsed into first run (harness startup cost) per autonomy ruling | self-review pass | pushed `origin/main` | Slice 2: guarded cycle cutoff/closeout commands + jobs |
-| Program 2 / Slice 2 | Guarded `reachDueCycleCutoff` + completion-guarded stepwise `closeCompletedDeliveryCycles` + two jobs + registry update + 4 integration tests | DONE | `41d4b03` | targeted 10/10 green; all gates green | self-review pass; ruling recorded: closeout requires all orders/jobs terminal + window passed — intermediate states are recorded bookkeeping, not fabricated operations | pushed `origin/main` | Slice 3: payments redrive |
-| Program 2 / Slice 3 | `redrivePaymentReactions` (attempt-bounded ESCALATED visibility, routing by reaction_type, one provider lookup on insufficient state) + `reconcileStuckPayments` sweep + two jobs + registry context gains ProviderRegistry + 5 integration tests | DONE | `16d9f2f` | targeted 15/15 green; typecheck/naming/format/diff-check green | self-review pass; ruling: inbox RETRY_REQUIRED re-ingestion deferred (needs original payload; provider lookup reaches the same outcome) | pushed `origin/main` | Slice 4: telemetry surface |
-| Program 2 / Slice 4 | Contracts `ScheduledJobRunView`+`adminScheduledJobRuns`, Core read model + capability-gated entrypoint method (any operational manage capability; ruling: no new IAM vocabulary invented), Web BFF `/api/admin/jobs`, 2 read-model tests | DONE | `e040c79` | FULL program verification: `pnpm check` green (all suites + recursive builds), `check:vinext` exit 0 verified explicitly, `0019` applies fresh via workerd harness | self-review pass vs spec acceptance boundary — all boxes satisfied | pushed `origin/main` | Program 2 COMPLETE; next: provider decision docs → Programs 4/3 spine |
-| Program 4 / Slice 1 | PayMongo adapter (`createPayment` checkout-session redirect, `verifyAndParseEvent` t/te/li HMAC with tolerance + closed event map, `getPayment` payments-then-session fallback, `requestRefund`) + `buildProviderRegistry` env-driven fail-closed registration + entrypoint webhook & scheduler wiring switch + 8 adapter tests (12 incl. contract suite) | DONE | `cb09478` | targeted 12/12 green; FULL `pnpm check` exit 0; `check:vinext` exit 0; naming/format/`git diff --check` green | recovery audit + self-review pass; vendor vocabulary contained in `payments/infrastructure/providers` (leak scan clean); one redundant ternary removed before commit | pushed `origin/main` | Program 4 COMPLETE except external go-live config; cross-program 1–4 verification clean; next: Program 3 per program map |
-| Program 3 / Slice 1 | Migration `0020` (`payment_authorization` aggregate + subscription renewal columns) + billing-calendar helpers (`calendarDayOfMonth`, `addCalendarDays`, `nextBillingPeriodEnd` with short-month clamp/re-expand) + unit tests | DONE | `dbf641f` | domain tests 16/16 green; typecheck clean; migration applies fresh via workerd harness | self-review pass | pushed `origin/main` | Slice 2: authorization port + commands |
-| Program 3 / Slice 2 | Port additions (`createAuthorization`/`getAuthorization`), fake provider authorization controls, PayMongo fail-closed stubs, `beginRecurringAuthorization`/`completeRecurringAuthorization` with idempotency/CAS/identity-uniqueness + 10 integration tests | DONE | `afbb3bf` | targeted 10/10 + provider contract suites green; typecheck/lint/format clean | self-review pass; ruling: non-recurring confirm closes the attempt REVOKED, never fabricates a mandate | pushed `origin/main` | Slice 3: trial gate + eligibility |
-| Program 3 / Slice 3 | Trial gate requires ACTIVE recurring-capable authorization (`RECURRING_AUTHORIZATION_REQUIRED`), D3 instrument-identity reuse prevention, anchor/link persistence, PAST_DUE-within-grace checkout eligibility + tests; fixture authorizations seeded across affected suites | DONE | `90d87ac`+`9bac554` | full core suite 239→244 green incl. 6 new grace-eligibility cases; web suite green; typecheck fix verified | self-review pass; ruling: revoked mandates still carry trial history for D3 checks | pushed `origin/main` | Slice 4: reaction outcome routing |
-| Program 3 / Slice 4 | Reaction applier purpose routing: conversion installs anchored first period, renewal advances period, recovery clears grace, terminal/paused receipt escalates with reconciliation case; ingest dispatch restricted to membership reaction types + test | DONE | `4470816` | membership+payments 103/103 green; full core 244 green; typecheck/format clean | self-review pass; ruling: money received against terminal/paused subscriptions is escalated, never applied or dropped | pushed `origin/main` | Slice 5: initiation/dunning scheduler |
-| Program 3 / Slice 5 | `processMembershipRenewals` (single-attempt-per-period initiation keyed `renewal:{id}:{boundary}`, attempt-evidenced failure application: TRIALING→EXPIRED uncontinued trial / ACTIVE→PAST_DUE 7-calendar-day grace, in-flight-aware grace expiry) + every-minute job registration + 7 integration tests | DONE | `bf5e0a8` | membership+scheduling 67/67 green; full core 251 green; typecheck clean | self-review pass; ruling: operational creation failures (no attempts) never read as payment failures | pushed `origin/main` | Slice 6: contracts/RPC/web/docs |
-| Program 3 / Slice 6 | Contracts (`BeginRecurringAuthorizationRequest` etc. + PaymentsService methods + binding picks), entrypoint RPCs with fail-closed registry resolution, Web BFF `/api/membership/authorization(/complete)`, account-page enroll→redirect→confirm→trial flow, canonical doc updates, test-env fake registration through runtime construction point | DONE | `19ecd08`+`49a4362` | FULL program verification: `pnpm check` exit 0 (all suites + recursive builds), `check:vinext` exit 0, format/diff-check clean | self-review pass; transient Windows workerd crash re-verified green on fresh run | pushed `origin/main` | Program 3 COMPLETE except external go-live config; next: Program 5 Instant design per spine |
-| Program 5 / Slice 1 | Migration `0021` (`fulfillment_location_mode`, nullable-cycle rebuilds of quote/attempts/snapshot/order/delivery_job with pairing CHECKs, instant fee override column) + `getLocationMode`/`setFulfillmentLocationMode`/`resolveCheckoutMode` + 6 integration tests | DONE | `44716c9` | 6/6 green; full core 257 green; migration applies fresh | self-review pass | pushed `origin/main` | Slice 2: instant checkout branch |
-| Program 5 / Slice 2 | Instant quote path in checkout: mode-governed routing join, STOCKED-only lines, usable-stock check, zone fee w/ instant override, persisted promise, HELD holds + attempt row in one batch; validation/repository nullable-cycle support; 4 integration tests | DONE | `5c0744a` | 8/8 checkout tests green; full core 261 green | self-review pass | pushed `origin/main` | Slice 3: instant commitment |
-| Program 5 / Slice 3 | Instant commitment branch: no-cycle order/snapshot/delivery-job writes with promised_at, hold conversion to COMMITTED, concurrent-order capacity abort sentinel, INSTANT_MODE_UNAVAILABLE fail-closed; rebuild fixes restoring remediation version columns; 2 integration tests | DONE | `f224a0d` | orders suites 15/15 green; FULL `pnpm check` exit 0 | self-review pass; ruling: capacity sentinel counts post-insert so legal when count <= max | pushed `origin/main` | Next: mode-config admin RPC wiring, then Programs 6+ per spine |
+- Removed unapproved production payment adapters and vendor-specific retry/readiness assumptions.
+- Made payment selection explicit and limited `mock` to allowed local/test environments.
+- Repaired Web → Core → Payments reaction → Order local checkout and paid-but-uncommitted redrive so
+  one canonical payment can create at most one order.
+- Removed customer grocery-cancellation RPC/contract exposure.
+- Added pre-payment authoritative recalculation and explicit changed-total acceptance.
+- Added versioned integer delivery configuration, provider-neutral route-distance port, Core-only
+  Mapbox adapter, immutable delivery snapshots, and corrective migration `0022`.
+- Added Cloudflare Email Service auth delivery behind the Core port with fake binding tests and
+  fail-closed configuration.
+- Added fresh and populated-0021 migration verification. Historical accepted migrations remain
+  unchanged.
 
-## Session Recovery Notes
+## Evidence policy
 
-- Repository policy is trunk-based development (`TRUNK.md`): commit directly to `main`, push with
-  `git push origin main`. `.githooks/pre-push` rejects non-`main` pushes; bypass only with
-  owner-approved `--no-verify`. Worktrees isolate uncommitted state only.
-- The short-lived branch `feature/product-rulings-reconciliation` (and its remote copy) was an
-  exception created before the trunk policy existed; its content was landed on `main` and the
-  branch deleted in the same cleanup. Do not recreate it.
-- History context: remediation work merged via PR #1 (`7111518`); the generated-typings formatting
-  fix reached `main` through merge `cb00658`/`0721e12`; the duplicate orphan commit `49d89eb` that
-  briefly carried the same fix on the feature branch is intentionally not part of `main`.
-- The rejected dirty Phase 4C implementation and untracked `0015_phase4c_subscriptions.sql` are
-  gone from all working trees (owner-approved discard). Their recorded evidence (SHA-256 baseline)
-  remains in `REMEDIATION_PROGRAM.md`; do not recreate them. The next accepted migration number
-  starts at `0019`.
-- Tracked migrations end at `0018_checkout_orders.sql`.
-- Verification gates per slice: `pnpm naming:check`, `pnpm typecheck`, `pnpm test`, `pnpm lint`,
-  `pnpm format:check` (changed files), `pnpm -r build` when bindings/contracts change, fresh-D1
-  migration apply for migration-owning slices, `check:vinext` for Web boundary slices.
+- `DONE`, `COMPLETE`, `SELF-REVIEWED`, a commit SHA, or a passing unit test never establishes
+  production-operational behavior by itself.
+- A provider-neutral seam tested only with `mock` is reported as a mock-tested seam.
+- Skipped/gated Playwright tests are recorded as skipped and leave their parent acceptance criterion
+  open.
+- External sender/domain, Mapbox secret, OAuth, and production payment configuration are deployment
+  work and are not fabricated in source.
+- Git history retains the detailed historical slice record; it is evidence of implementation work,
+  not a current status source.
+
+## Next incomplete work
+
+1. Finish current-tree verification and record exact results in the reconciliation task report.
+2. Provision and pass authenticated Plan 08 browser flows without skips.
+3. Obtain owner approval for a production payment/recurring model before implementing one.
+4. Complete the remaining Program 5 admin configuration surface.
+5. Begin Program 6 product notifications only from an approved spec; do not silently expand into
+   Programs 7-14.

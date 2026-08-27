@@ -6,9 +6,16 @@ import {
   getLocationMode,
 } from "../../fulfillment/application/location-mode";
 import { startPromotionalTrial } from ".././../membership/application/start-promotional-trial";
+import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 
 const LOCATION = "location-cebu-central";
 const ZONE_CODE = "CEBU_CITY_CORE";
+const quoteDependencies = {
+  routeDistance: buildRouteDistancePort({
+    ENVIRONMENT: "test",
+    ROUTE_DISTANCE_PROVIDER: "mock",
+  }),
+};
 
 let customerCounter = 0;
 async function seedBasket(options: {
@@ -23,13 +30,13 @@ async function seedBasket(options: {
     .bind(customerId, `auth-${customerId}`, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
   )
     .bind(
       `authz-${customerId}`,
       customerId,
-      `fake_auth_${customerId}`,
-      `fake_method_${customerId}`,
+      `mock_auth_${customerId}`,
+      `mock_method_${customerId}`,
       now,
       now,
       now,
@@ -125,6 +132,7 @@ describe("instant checkout quotes", () => {
     const result = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -157,6 +165,7 @@ describe("instant checkout quotes", () => {
     const replay = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
     );
     void replay;
   });
@@ -170,8 +179,43 @@ describe("instant checkout quotes", () => {
     const result = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
     );
     expect(result).toMatchObject({ ok: false, error: { code: "INSUFFICIENT_STOCK" } });
+  });
+
+  it("re-quotes the same cart without its prior hold consuming the available stock", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE checkout_inventory_holds SET status='EXPIRED' WHERE status='HELD'",
+    ).run();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 500 });
+    const first = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+    expect(first.ok).toBe(true);
+    const second = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+    expect(second.ok).toBe(true);
+    const holds = await env.DB.prepare(
+      "SELECT status, COUNT(*) AS count FROM checkout_inventory_holds WHERE checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?) GROUP BY status",
+    )
+      .bind(basket.cartId)
+      .all<{ status: string; count: number }>();
+    expect(holds.results).toEqual(
+      expect.arrayContaining([
+        { status: "EXPIRED", count: 1 },
+        { status: "HELD", count: 1 },
+      ]),
+    );
   });
 
   it("refuses non-stocked sourcing from the instant path", async () => {
@@ -180,6 +224,7 @@ describe("instant checkout quotes", () => {
     const result = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
     );
     expect(result).toMatchObject({ ok: false, error: { code: "UNAVAILABLE_ITEM" } });
     await env.DB.prepare(
@@ -209,6 +254,7 @@ describe("instant checkout quotes", () => {
     const result = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
     );
     expect(result).toMatchObject({ ok: false, error: { code: "INSTANT_MODE_UNAVAILABLE" } });
     // Restore instant mode for any later tests in this file.

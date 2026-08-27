@@ -39,14 +39,15 @@ concurrency test coverage.
 The second bounded pass moves the existing compatibility checkout path onto the
 canonical persistence foundations without extracting domains or expanding UI.
 It adds cycle-zone-location capacity/allocation records, persisted checkout
-attempts and quote snapshots, sandbox payment events, inventory holds and ledger
+attempts and quote snapshots, historical mock payment events, inventory holds and ledger
 entries, and persisted Cebu minimum-basket/zone-fee policy. The historical D1
 triggers are removed by append-only migration after the compatibility command
 path takes ownership of those checks and writes.
 
-`commitMockOrder` remains the consumed compatibility RPC. It now coordinates
+The historical synthetic paid-order compatibility RPC coordinated
 idempotency, quote persistence, conditional capacity and stock holds, payment and
-order snapshots, and failure compensation. Full production payment webhooks,
+order snapshots, and failure compensation; it has since been replaced by the provider-neutral
+payment-intent/reaction path. Production payment integration,
 all-command idempotency, broader lifecycle implementations, and complete
 database-backed concurrent flow tests remain owned by their later phases.
 
@@ -319,11 +320,11 @@ Phases 2–5.
 
 ### Domain/application work
 
-- Versioned cart, quote, eligibility policy, minimum basket, price revalidation, delivery fee, and promotion seam.
+- Versioned cart, quote, eligibility policy, minimum basket, price revalidation, provider-neutral route distance, versioned integer delivery fee, and promotion seam. Cart prices are advisory and have no guarantee countdown.
 
 ### D1/data changes
 
-- Cart, cart-item, checkout-attempt, quote snapshot tables.
+- Cart, cart-item, checkout-attempt, quote snapshot, delivery-fee configuration and immutable delivery-calculation snapshot tables.
 
 ### RPC/contracts
 
@@ -339,7 +340,7 @@ Phases 2–5.
 
 ### Tests and acceptance
 
-- Every eligibility condition, price changes, unavailable SKU, expired quote, stale cart, cycle cutoff, and subscription gate.
+- Every eligibility condition, price changes requiring explicit total re-acceptance, unavailable SKU, expired quote, stale cart, cycle cutoff, route timeout/NoRoute/malformed/missing configuration, integer minimum/per-kilometer fee, and subscription gate.
 
 ### Not in this phase
 
@@ -359,7 +360,7 @@ Phase 6; provider integration port from Phase 0.
 
 - Provider-neutral Payments context, payment intents/attempts by purpose, provider mappings/adapters, signed durable event inbox, canonical payment state, and reconciliation.
 - Explicit idempotent reactions from canonical sufficient Payments outcomes to Membership activation/recovery and Order commitment.
-- Order commitment transaction, immutable snapshots, amendments, and cancellation/refund policy seams.
+- Order commitment transaction, immutable snapshots, amendments, and internal cancellation/refund policy seams. Customer grocery cancellation remains unexposed for the mock-payment MVP.
 
 ### D1/data changes
 
@@ -379,11 +380,11 @@ Phase 6; provider integration port from Phase 0.
 
 ### Tests and acceptance
 
-- Duplicate checkout/application commands, duplicate/out-of-order provider events, signature failure, provider-to-canonical mapping, handler compare-and-swap conflict/retry/reconciliation, lost response after payment, membership activation replay, price/capacity race, immutable snapshots, amendment payment, and cancellation/refund paths. Provider events do not supply `expectedVersion`.
+- Duplicate checkout/application commands, duplicate/out-of-order provider events, signature failure, provider-to-canonical mapping, handler compare-and-swap conflict/retry/reconciliation, lost response after payment, paid-success/order-commitment recovery using the same payment, bounded exception escalation, membership activation replay, price/capacity race, immutable snapshots, amendment payment, and internal refund paths. Provider events do not supply `expectedVersion`.
 
 ### Not in this phase
 
-Procurement execution, packing, or rider operations. This phase is not accepted for production until a provider is selected and the configured commitment policy is proven with signed provider events and reconciliation.
+Procurement execution, packing, rider operations, or production recurring billing. This phase is not accepted for production until an owner-approved provider is selected and the configured commitment policy is proven with signed provider events and reconciliation. Mock evidence is local acceptance only.
 
 ## Phase 8 — Location Inventory, Reservations, and Committed Demand
 

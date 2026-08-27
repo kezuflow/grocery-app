@@ -5,6 +5,9 @@ import {
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
+import type { RouteDistancePort } from "../../geography/ports/route-distance";
+import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
+import { deliveryFeeFailure } from "./delivery-fee-failure";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -16,6 +19,8 @@ export type CreateCheckoutQuoteCommand = {
   idempotencyKey: string;
   requestId: string;
 };
+
+export type CheckoutQuoteDependencies = { routeDistance: RouteDistancePort };
 
 export type CheckoutQuoteView = {
   quoteId: string;
@@ -42,6 +47,7 @@ function failure(code: string, message: string, requestId: string) {
 export async function createCheckoutQuote(
   database: D1Database,
   command: CreateCheckoutQuoteCommand,
+  dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
   const repository = createCheckoutRepository(database);
 
@@ -116,19 +122,33 @@ export async function createCheckoutQuote(
   const address = await database
     .prepare("SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'")
     .bind(command.addressId, command.customerId)
-    .first<Record<string, unknown> & { delivery_zone_code: string | null }>();
+    .first<
+      Record<string, unknown> & {
+        delivery_zone_code: string | null;
+        latitude: number;
+        longitude: number;
+      }
+    >();
   if (!address) return failure("NOT_FOUND", "Customer address not found", command.requestId);
 
   // The routed location's active mode governs checkout semantics: a cycle id
   // selects Scheduled; no cycle id selects Instant where a location offers it.
   if (command.deliveryCycleId === null)
-    return createInstantQuote(database, repository, command, cartItems.results, address);
+    return createInstantQuote(
+      database,
+      repository,
+      command,
+      cartItems.results,
+      address,
+      dependencies,
+    );
   return createScheduledQuote(
     database,
     repository,
     { ...command, deliveryCycleId: command.deliveryCycleId },
     cartItems.results,
     address,
+    dependencies,
   );
 }
 
@@ -138,7 +158,12 @@ async function createScheduledQuote(
   repository: ReturnType<typeof createCheckoutRepository>,
   command: CreateCheckoutQuoteCommand & { deliveryCycleId: string },
   items: readonly QuoteItem[],
-  address: Record<string, unknown> & { delivery_zone_code: string | null },
+  address: Record<string, unknown> & {
+    delivery_zone_code: string | null;
+    latitude: number;
+    longitude: number;
+  },
+  dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
   // Cycle must be open and before cutoff.
   const cycle = await database
@@ -161,7 +186,8 @@ async function createScheduledQuote(
   // Zone routing for this cycle's market (address already resolved).
   const routing = await database
     .prepare(
-      `SELECT dz.id AS zone_id, ls.location_id, fl.name AS location_name
+      `SELECT dz.id AS zone_id, ls.location_id, fl.name AS location_name,
+              fl.latitude, fl.longitude
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
@@ -169,7 +195,13 @@ async function createScheduledQuote(
        ORDER BY ls.priority LIMIT 1`,
     )
     .bind(address.delivery_zone_code ?? "", cycle.market_id)
-    .first<{ zone_id: string; location_id: string; location_name: string }>();
+    .first<{
+      zone_id: string;
+      location_id: string;
+      location_name: string;
+      latitude: number;
+      longitude: number;
+    }>();
   if (!routing)
     return failure(
       "ADDRESS_UNSERVICEABLE",
@@ -237,6 +269,19 @@ async function createScheduledQuote(
     });
   }
 
+  let deliveryFee;
+  try {
+    deliveryFee = await quoteDeliveryFee(database, dependencies.routeDistance, {
+      marketId: cycle.market_id,
+      locationId: routing.location_id,
+      origin: { latitude: routing.latitude, longitude: routing.longitude },
+      destination: { latitude: address.latitude, longitude: address.longitude },
+      now: now2,
+    });
+  } catch (error) {
+    return deliveryFeeFailure(error, command.requestId);
+  }
+
   const quoteId = crypto.randomUUID();
   const expiresAt = Date.now() + QUOTE_TTL_MS;
   try {
@@ -252,8 +297,8 @@ async function createScheduledQuote(
           currency: "PHP",
           subtotalMinor,
           discountMinor: 0,
-          deliveryFeeMinor: 0,
-          totalMinor: subtotalMinor,
+          deliveryFeeMinor: deliveryFee.feeMinor,
+          totalMinor: subtotalMinor + deliveryFee.feeMinor,
           lines,
           addressSnapshot: address,
           cycleSnapshot: {
@@ -269,6 +314,7 @@ async function createScheduledQuote(
             sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
             poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
           },
+          deliveryFeeSnapshot: deliveryFee.snapshot,
           status: "ACTIVE",
           version: 1,
           expiresAt,

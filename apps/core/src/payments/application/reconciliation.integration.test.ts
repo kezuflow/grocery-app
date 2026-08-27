@@ -3,17 +3,17 @@ import { env } from "cloudflare:workers";
 import { createPayment } from "./create-payment";
 import { reconcilePayment } from "./reconcile-payment";
 import {
-  createFakePaymentProvider,
-  setFakeObservedState,
-} from "../infrastructure/providers/fake-payment-provider";
+  createMockPaymentProvider,
+  setMockObservedState,
+} from "../infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 
-const sharedFake = createFakePaymentProvider();
+const sharedMock = createMockPaymentProvider();
 function testRegistry(): ProviderRegistry {
-  return new ProviderRegistry("test", [sharedFake]);
+  return new ProviderRegistry("test", [sharedMock]);
 }
-function fake() {
-  return sharedFake;
+function mock() {
+  return sharedMock;
 }
 
 let customerIdCounter = 0;
@@ -35,7 +35,7 @@ async function seededIntent() {
     customerId: await seedCustomer(),
     amountMinor: 15000,
     currency: "PHP",
-    providerCode: "fake",
+    providerCode: "mock",
     returnUrl: "https://app.example/return",
     idempotencyKey: `rec-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
@@ -52,9 +52,9 @@ async function seededIntent() {
 
 describe("payment reconciliation", () => {
   it("recovers a lost webhook through provider lookup exactly once", async () => {
-    const provider = fake();
+    const provider = mock();
     const { intentId, reference } = await seededIntent();
-    setFakeObservedState(provider, reference, "SUCCEEDED");
+    setMockObservedState(provider, reference, "SUCCEEDED");
 
     const first = await reconcilePayment(env.DB, testRegistry(), {
       paymentIntentId: intentId,
@@ -122,7 +122,7 @@ describe("payment reconciliation", () => {
   });
 
   it("reports terminal-state disagreement as reconciliation required without mutation", async () => {
-    const provider = fake();
+    const provider = mock();
     const { intentId, reference } = await seededIntent();
     // Force the stored state to a terminal value; any observation disagrees.
     await env.DB.prepare(
@@ -130,7 +130,7 @@ describe("payment reconciliation", () => {
     )
       .bind(Date.now(), intentId)
       .run();
-    setFakeObservedState(provider, reference, "SUCCEEDED");
+    setMockObservedState(provider, reference, "SUCCEEDED");
     const outcome = await reconcilePayment(env.DB, testRegistry(), {
       paymentIntentId: intentId,
       idempotencyKey: `recon-${crypto.randomUUID()}`,

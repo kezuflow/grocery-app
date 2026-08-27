@@ -66,6 +66,8 @@ describe("closed lifecycle vocabularies", () => {
     for (const code of [
       "PAYMENT_PROVIDER_UNAVAILABLE",
       "FINANCIAL_OPERATION_REQUIRES_REVIEW",
+      "ROUTE_DISTANCE_UNAVAILABLE",
+      "DELIVERY_FEE_CONFIGURATION_MISSING",
     ] satisfies readonly AppErrorCode[]) {
       expect(appErrorCodes).toContain(code);
     }

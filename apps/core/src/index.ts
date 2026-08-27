@@ -15,17 +15,18 @@ import {
   createCheckoutQuote as createCheckoutQuoteCommand,
   refreshCustomerCheckoutQuote,
 } from "./checkout/application/create-checkout-quote";
-import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
+import {
+  buildProviderRegistry,
+  selectedPaymentProviderCode,
+} from "./payments/infrastructure/providers/runtime-providers";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
 import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
-import { createPayment as createPaymentIntentCommand } from "./payments/application/create-payment";
 import { beginRecurringAuthorization as beginRecurringAuthorizationCommand } from "./payments/application/begin-recurring-authorization";
 import { completeRecurringAuthorization as completeRecurringAuthorizationCommand } from "./payments/application/complete-recurring-authorization";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
   addressUpdateRequestSchema,
-  adminOrderCommandSchema,
   authenticatedRequestSchema,
   catalogProductRequestSchema,
   catalogSearchRequestSchema,
@@ -42,7 +43,6 @@ import {
   setCartItemRequestSchema,
   validationMessage,
 } from "./validation";
-import { isSandboxPaymentEnabled, type PaymentRuntimeEnvironment } from "./payments/sandbox-policy";
 import { createCheckoutPaymentIntent } from "./payments/application/create-checkout-payment-intent";
 import { adjustInventory as adjustInventoryCommand } from "./inventory/application/adjust-inventory";
 import { handleProviderWebhook } from "./payments/http/provider-webhook";
@@ -84,8 +84,8 @@ import { listRiderJobs } from "./delivery/application/list-rider-jobs";
 import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
-import { cancelOrder } from "./orders/application/cancel-order";
 import { CoreContext } from "./entrypoint/context";
+import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
 function fail(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -256,7 +256,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     const registry = buildProviderRegistry(this.env);
-    const providerCode = validation.data.providerCode ?? registry.firstCode() ?? "";
+    const providerCode = selectedPaymentProviderCode(this.env);
+    if (
+      !providerCode ||
+      (validation.data.providerCode && validation.data.providerCode !== providerCode)
+    )
+      return fail(
+        "PAYMENT_PROVIDER_UNAVAILABLE",
+        "Recurring authorization is unavailable in this environment.",
+        input.requestId,
+      );
     return beginRecurringAuthorizationCommand(this.env.DB, registry, {
       customerId: customer.value.customerId,
       providerCode,
@@ -335,15 +344,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    return createCheckoutQuoteCommand(this.env.DB, {
-      customerId: customer.value.customerId,
-      cartId: input.cartId,
-      cartVersion: input.cartVersion,
-      addressId: input.addressId,
-      deliveryCycleId: input.deliveryCycleId,
-      idempotencyKey: input.idempotencyKey,
-      requestId: input.requestId,
-    });
+    return createCheckoutQuoteCommand(
+      this.env.DB,
+      {
+        customerId: customer.value.customerId,
+        cartId: input.cartId,
+        cartVersion: input.cartVersion,
+        addressId: input.addressId,
+        deliveryCycleId: input.deliveryCycleId,
+        idempotencyKey: input.idempotencyKey,
+        requestId: input.requestId,
+      },
+      { routeDistance: buildRouteDistancePort(this.env) },
+    );
   }
 
   async refreshCheckoutQuote(input: import("@freshmarkets/contracts").CheckoutQuoteRefreshRequest) {
@@ -364,7 +377,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = createPaymentIntentSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    if (!isSandboxPaymentEnabled(this.env as PaymentRuntimeEnvironment))
+    const providerCode = selectedPaymentProviderCode(this.env);
+    if (!providerCode || (input.providerCode && input.providerCode !== providerCode))
       return fail(
         "PAYMENT_PROVIDER_UNAVAILABLE",
         "A payment provider is not configured for this environment.",
@@ -372,10 +386,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       );
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    return createCheckoutPaymentIntent(this.env.DB, this.env as PaymentRuntimeEnvironment, {
-      ...input,
-      customerId: customer.value.customerId,
-    });
+    return createCheckoutPaymentIntent(
+      this.env.DB,
+      buildProviderRegistry(this.env),
+      providerCode,
+      buildRouteDistancePort(this.env),
+      {
+        ...input,
+        customerId: customer.value.customerId,
+      },
+    );
   }
 
   async listCustomerOrders(input: AuthenticatedRequest) {
@@ -386,28 +406,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       requestId: input.requestId,
     });
   }
-  async requestCancellation(
-    input: import("@freshmarkets/contracts").RequestOrderCancellationRequest,
-  ) {
-    const customerOrStaff = await this.context.session(input);
-    if (!customerOrStaff)
-      return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    const result = await cancelOrder(this.env.DB, {
-      orderId: input.orderId,
-      expectedVersion: input.expectedVersion,
-      reasonCode: input.reason,
-      idempotencyKey: input.idempotencyKey,
-      requestId: input.requestId,
-    });
-    if (!result.ok)
-      return fail(result.error.code as AppErrorCode, result.error.message, input.requestId);
-    return {
-      ok: true as const,
-      value: { orderId: input.orderId, cancellationRequestedAt: new Date().toISOString() },
-      requestId: input.requestId,
-    };
-  }
-
   async adjustInventory(input: import("@freshmarkets/contracts").InventoryAdjustmentRequest) {
     const validation = inventoryAdjustmentSchema.safeParse(input);
     if (!validation.success)

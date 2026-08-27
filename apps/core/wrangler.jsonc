@@ -22,10 +22,18 @@
     // operational Playwright flows. Production sets TRUSTED_ORIGINS through
     // environment configuration, never a source default.
     "TRUSTED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,http://127.0.0.1:8787,https://core.example.invalid",
-    // Compatibility sandbox payments are local-only. Production has no default
-    // and must configure a real payment provider instead.
-    "PAYMENT_MODE": "sandbox",
+    // Deterministic mock payments are local-only. Production must not inherit
+    // this variable and fails closed until an approved provider exists.
+    "PAYMENT_PROVIDER": "mock",
+    "ROUTE_DISTANCE_PROVIDER": "mapbox",
   },
+  "secrets": {
+    "required": ["MAPBOX_ACCESS_TOKEN"],
+  },
+  // Cloudflare Email Service supplies transactional auth delivery without an
+  // API token. AUTH_EMAIL_FROM is deployment configuration and intentionally
+  // has no source-controlled production default.
+  "send_email": [{ "name": "EMAIL" }],
   "d1_databases": [
     {
       "binding": "DB",

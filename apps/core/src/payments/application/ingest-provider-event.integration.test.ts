@@ -3,13 +3,13 @@ import { env } from "cloudflare:workers";
 import { ingestProviderEvent } from "./ingest-provider-event";
 import { createPayment } from "./create-payment";
 import {
-  createFakePaymentProvider,
-  fakeSignatureFor,
-} from "../infrastructure/providers/fake-payment-provider";
+  createMockPaymentProvider,
+  mockSignatureFor,
+} from "../infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 
 function testRegistry(): ProviderRegistry {
-  return new ProviderRegistry("test", [createFakePaymentProvider()]);
+  return new ProviderRegistry("test", [createMockPaymentProvider()]);
 }
 
 let customerIdCounter = 0;
@@ -32,7 +32,7 @@ async function seededIntent() {
     customerId,
     amountMinor: 29900,
     currency: "PHP",
-    providerCode: "fake",
+    providerCode: "mock",
     returnUrl: "https://app.example/return",
     idempotencyKey: `ing-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
@@ -47,8 +47,8 @@ async function signedEvent(body: Record<string, unknown>) {
   return {
     rawBody,
     headers: new Headers({
-      "x-fake-signature": await fakeSignatureFor(rawBody),
-      "x-fake-timestamp": String(Date.now()),
+      "x-mock-signature": await mockSignatureFor(rawBody),
+      "x-mock-timestamp": String(Date.now()),
     }),
   };
 }
@@ -65,7 +65,7 @@ function eventFor(reference: string) {
 
 async function inboxCount(providerEventId: string) {
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM payment_provider_event_inbox WHERE provider='fake' AND provider_event_id=?",
+    "SELECT COUNT(*) AS count FROM payment_provider_event_inbox WHERE provider='mock' AND provider_event_id=?",
   )
     .bind(providerEventId)
     .first<{ count: number }>();
@@ -75,10 +75,10 @@ async function inboxCount(providerEventId: string) {
 describe("provider event ingestion", () => {
   it("rejects invalid signatures before trusting any identifier", async () => {
     const forged = new Headers({
-      "x-fake-signature": "nope",
-      "x-fake-timestamp": String(Date.now()),
+      "x-mock-signature": "nope",
+      "x-mock-timestamp": String(Date.now()),
     });
-    const outcome = await ingestProviderEvent(env.DB, testRegistry(), "fake", forged, "{}");
+    const outcome = await ingestProviderEvent(env.DB, testRegistry(), "mock", forged, "{}");
     expect(outcome).toMatchObject({
       ok: false,
       error: { code: "WEBHOOK_VERIFICATION_FAILED" },
@@ -86,7 +86,7 @@ describe("provider event ingestion", () => {
   });
 
   it("rejects events for unconfigured providers", async () => {
-    const signed = await signedEvent(eventFor("fake_pay_none"));
+    const signed = await signedEvent(eventFor("mock_pay_none"));
     const outcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),
@@ -99,8 +99,8 @@ describe("provider event ingestion", () => {
 
   it("applies a sufficient outcome exactly once with one pending reaction", async () => {
     const intent = await seededIntent();
-    const reference = `fake_pay_${intent.paymentIntentId}`;
-    // The fake attempt reference is derived from the idempotency key; recover it.
+    const reference = `mock_pay_${intent.paymentIntentId}`;
+    // The mock attempt reference is derived from the idempotency key; recover it.
     const attemptRow = await env.DB.prepare(
       "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
     )
@@ -114,7 +114,7 @@ describe("provider event ingestion", () => {
     const processingOutcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       processingSigned.headers,
       processingSigned.rawBody,
     );
@@ -132,7 +132,7 @@ describe("provider event ingestion", () => {
     const first = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       signed.headers,
       signed.rawBody,
     );
@@ -155,7 +155,7 @@ describe("provider event ingestion", () => {
     const duplicate = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       signed.headers,
       signed.rawBody,
     );
@@ -178,14 +178,14 @@ describe("provider event ingestion", () => {
       .first<{ provider_reference: string }>();
     const event = eventFor(attemptRow!.provider_reference);
     const signed = await signedEvent(event);
-    await ingestProviderEvent(env.DB, testRegistry(), "fake", signed.headers, signed.rawBody);
+    await ingestProviderEvent(env.DB, testRegistry(), "mock", signed.headers, signed.rawBody);
 
     const tampered = { ...event, vendorState: "failed" };
     const tamperedSigned = await signedEvent(tampered);
     const outcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       tamperedSigned.headers,
       tamperedSigned.rawBody,
     );
@@ -209,7 +209,7 @@ describe("provider event ingestion", () => {
     await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       processingSigned.headers,
       processingSigned.rawBody,
     );
@@ -220,8 +220,8 @@ describe("provider event ingestion", () => {
     const eventB = eventFor(reference);
     const [signedA, signedB] = await Promise.all([signedEvent(eventA), signedEvent(eventB)]);
     const outcomes = await Promise.all([
-      ingestProviderEvent(env.DB, testRegistry(), "fake", signedA.headers, signedA.rawBody),
-      ingestProviderEvent(env.DB, testRegistry(), "fake", signedB.headers, signedB.rawBody),
+      ingestProviderEvent(env.DB, testRegistry(), "mock", signedA.headers, signedA.rawBody),
+      ingestProviderEvent(env.DB, testRegistry(), "mock", signedB.headers, signedB.rawBody),
     ]);
     const statuses = outcomes.map((outcome) =>
       outcome.ok ? outcome.value.processingStatus : `error:${outcome.error.code}`,
@@ -245,7 +245,7 @@ describe("provider event ingestion", () => {
     await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       processingSigned.headers,
       processingSigned.rawBody,
     );
@@ -257,7 +257,7 @@ describe("provider event ingestion", () => {
     const outcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       paidSigned.headers,
       paidSigned.rawBody,
     );
@@ -274,7 +274,7 @@ describe("provider event ingestion", () => {
       customerId,
       amountMinor: 15000,
       currency: "PHP",
-      providerCode: "fake",
+      providerCode: "mock",
       returnUrl: "https://app.example/return",
       idempotencyKey: `ing-${crypto.randomUUID()}`,
       requestId: crypto.randomUUID(),
@@ -290,7 +290,7 @@ describe("provider event ingestion", () => {
     const outcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),
-      "fake",
+      "mock",
       paid.headers,
       paid.rawBody,
     );

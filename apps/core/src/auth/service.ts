@@ -3,7 +3,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth/minimal";
 import type { Auth } from "better-auth";
 import {
-  UnavailableAuthEmailDelivery,
+  createRuntimeAuthEmailDelivery,
   type AuthEmailDelivery,
   type AuthEmailMessage,
 } from "./email-delivery";
@@ -19,6 +19,8 @@ export type AuthEnvironment = {
   TRUSTED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  EMAIL?: SendEmail;
+  AUTH_EMAIL_FROM?: string;
 };
 
 const localSecret = "freshmarkets-phase1-local-secret-change-me";
@@ -35,7 +37,7 @@ export function createAuth(
   const iamDatabase = drizzle(env.DB, { schema: iamSchema });
   const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
   const environment = env.ENVIRONMENT ?? "development";
-  const authEmailDelivery = dependencies?.authEmailDelivery ?? new UnavailableAuthEmailDelivery();
+  const authEmailDelivery = dependencies?.authEmailDelivery ?? createRuntimeAuthEmailDelivery(env);
   const deliverAuthEmail = (
     data: { user: { email: string }; url: string },
     kind: AuthEmailMessage["kind"],

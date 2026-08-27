@@ -1,4 +1,5 @@
 import type { QuoteLine } from "../domain/quote";
+import type { DeliveryFeeSnapshot } from "../../geography/application/quote-delivery-fee";
 
 export type CheckoutQuoteRow = {
   id: string;
@@ -17,13 +18,14 @@ export type CheckoutQuoteRow = {
   addressSnapshot: unknown;
   cycleSnapshot: unknown;
   fulfillmentSnapshot: unknown;
+  deliveryFeeSnapshot: DeliveryFeeSnapshot | null;
   status: "ACTIVE" | "CONSUMED" | "EXPIRED" | "SUPERSEDED";
   version: number;
   expiresAt: number;
 };
 
 const COLUMNS =
-  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, status, version, expires_at";
+  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, status, version, expires_at";
 
 type RawRow = {
   id: string;
@@ -42,6 +44,7 @@ type RawRow = {
   address_snapshot_json: string | null;
   cycle_snapshot_json: string | null;
   fulfillment_snapshot_json: string | null;
+  delivery_fee_snapshot_json: string | null;
   status: CheckoutQuoteRow["status"];
   version: number;
   expires_at: number;
@@ -66,6 +69,9 @@ function map(row: RawRow): CheckoutQuoteRow {
     cycleSnapshot: row.cycle_snapshot_json ? JSON.parse(row.cycle_snapshot_json) : null,
     fulfillmentSnapshot: row.fulfillment_snapshot_json
       ? JSON.parse(row.fulfillment_snapshot_json)
+      : null,
+    deliveryFeeSnapshot: row.delivery_fee_snapshot_json
+      ? (JSON.parse(row.delivery_fee_snapshot_json) as DeliveryFeeSnapshot)
       : null,
     status: row.status,
     version: row.version,
@@ -95,7 +101,7 @@ export function createCheckoutRepository(database: D1Database) {
     ): D1PreparedStatement {
       return database
         .prepare(
-          "INSERT INTO checkout_quote (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, status, version, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO checkout_quote (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, status, version, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
           input.id,
@@ -114,6 +120,7 @@ export function createCheckoutRepository(database: D1Database) {
           JSON.stringify(input.addressSnapshot ?? null),
           JSON.stringify(input.cycleSnapshot ?? null),
           JSON.stringify(input.fulfillmentSnapshot ?? null),
+          JSON.stringify(input.deliveryFeeSnapshot ?? null),
           input.status,
           input.version,
           input.expiresAt,

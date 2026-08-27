@@ -1,4 +1,4 @@
-export const CONTRACT_VERSION = "2026-08-25.mvp-commerce" as const;
+export const CONTRACT_VERSION = "2026-08-27.checkout-reconciliation" as const;
 
 export type RequestMeta = {
   requestId: string;
@@ -21,6 +21,12 @@ export const appErrorCodes = [
   "INSUFFICIENT_STOCK",
   "CAPACITY_UNAVAILABLE",
   "PRICE_CHANGED",
+  "DELIVERY_FEE_CONFIGURATION_MISSING",
+  "ROUTE_DISTANCE_UNCONFIGURED",
+  "ROUTE_DISTANCE_UNAVAILABLE",
+  "ROUTE_DISTANCE_TIMEOUT",
+  "ROUTE_NOT_FOUND",
+  "ROUTE_DISTANCE_INVALID_RESPONSE",
   "ITEM_UNAVAILABLE",
   "PROMOTION_INELIGIBLE",
   "PAYMENT_REQUIRED",

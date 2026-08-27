@@ -18,13 +18,13 @@ async function seedTrialingSubscription(): Promise<string> {
     .bind(customerId, `auth-${customerId}`, NOW, NOW)
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
   )
     .bind(
       `authz-${customerId}`,
       customerId,
-      `fake_auth_${customerId}`,
-      `fake_method_${customerId}`,
+      `mock_auth_${customerId}`,
+      `mock_method_${customerId}`,
       NOW,
       NOW,
       NOW,
@@ -119,7 +119,7 @@ describe("redrivePaymentReactions", () => {
   });
 
   it("escalates exhausted reactions instead of retrying forever", async () => {
-    const { reactionId } = await seedReaction({
+    const { reactionId, intentId } = await seedReaction({
       intentStatus: "SUCCEEDED",
       reactionType: "RECOVER_MEMBERSHIP",
       attempts: 5,
@@ -133,6 +133,38 @@ describe("redrivePaymentReactions", () => {
       .first<{ status: string; last_error_code: string | null }>();
     expect(reaction?.status).toBe("ESCALATED");
     expect(reaction?.last_error_code).toBe("MAX_ATTEMPTS_EXCEEDED");
+    const exception = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REACTION_FAILURE' AND status='OPEN'",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(exception?.count).toBe(1);
+  });
+
+  it("increments and schedules a failed paid-order commitment before bounded escalation", async () => {
+    const { reactionId } = await seedReaction({
+      intentStatus: "SUCCEEDED",
+      reactionType: "COMMIT_ORDER",
+      subjectId: "missing-checkout-attempt",
+      attempts: 1,
+    });
+    await redrivePaymentReactions(env.DB, registry, NOW);
+    const reaction = await env.DB.prepare(
+      "SELECT status, attempts, available_at, last_error_code FROM payment_reaction WHERE id=?",
+    )
+      .bind(reactionId)
+      .first<{
+        status: string;
+        attempts: number;
+        available_at: number;
+        last_error_code: string;
+      }>();
+    expect(reaction).toMatchObject({
+      status: "PENDING",
+      attempts: 2,
+      last_error_code: "QUOTE_UNUSABLE",
+    });
+    expect(reaction?.available_at).toBeGreaterThan(NOW);
   });
 
   it("routes an insufficient-state order commitment through one provider lookup", async () => {

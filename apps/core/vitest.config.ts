@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const migrationDir = fileURLToPath(new URL("./migrations", import.meta.url));
 const migrations = await readD1Migrations(migrationDir);
+process.env.MAPBOX_ACCESS_TOKEN ??= "test-placeholder";
 
 export default defineConfig({
   plugins: [
@@ -12,9 +13,14 @@ export default defineConfig({
         configPath: "./wrangler.jsonc",
       },
       miniflare: {
-        // The automated harness runs as the test environment so the fake
+        // The automated harness runs as the test environment so the mock
         // payment provider registers through the runtime construction point.
-        bindings: { TEST_MIGRATIONS: JSON.stringify(migrations), ENVIRONMENT: "test" },
+        bindings: {
+          TEST_MIGRATIONS: JSON.stringify(migrations),
+          ENVIRONMENT: "test",
+          ROUTE_DISTANCE_PROVIDER: "mock",
+          MAPBOX_ACCESS_TOKEN: "test-placeholder",
+        },
       },
     }),
   ],

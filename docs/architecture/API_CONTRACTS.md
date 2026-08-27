@@ -4,7 +4,7 @@
 
 This document is authoritative for target Web/Core and provider-ingress application boundary semantics. Contracts live in `packages/contracts` and are shared as source/types within the monorepo. They define RPC method names, input validation, purpose-built DTOs, stable error codes, and pagination. They never export D1 row types, Better Auth table records, provider payloads, or infrastructure handles.
 
-During remediation, the domain-oriented commands in this document are the target contract. Existing MVP RPC methods such as `commitMockOrder` and `advanceDelivery` remain compatibility adapters until Web clients migrate; they must not become a second business implementation.
+Domain-oriented commands in this document are the contract. Removed broad compatibility RPCs must not be reintroduced as a second business implementation.
 
 Core owns implementation and authorization. Web owns presentation adapters. Contract changes are reviewed as application-interface changes and should prefer additive evolution while both deployments may be temporarily version-skewed during rollout.
 
@@ -128,10 +128,10 @@ is never treated as proof of serviceability.
 
 ## Recurring Authorization (Payments-owned)
 
-- `payments.beginRecurringAuthorization({ providerCode?, returnUrl, idempotencyKey }) -> { authorizationId, actionType: "REDIRECT" | "SDK" | "NONE", redirectUrl?, clientToken?, expiresAt? }`
+- `payments.beginRecurringAuthorization({ providerCode?, returnUrl, idempotencyKey }) -> { authorizationId, actionType: "REDIRECT" | "SDK" | "NONE", redirectUrl?, clientToken?, expiresAt? }` where Core selects only its explicitly configured provider and an optional `providerCode` is an equality assertion, never a registry-order fallback.
 - `payments.completeRecurringAuthorization({ authorizationId }) -> { authorizationId }`
 
-Establishing a mandate is instrument collection, never payment success; only a provider-confirmed recurring-capable authorization with a stable method identity becomes `ACTIVE`, and entering `TRIALING` requires one. Providers without recurring capability fail closed.
+Establishing a mandate is instrument collection, never payment success; only a provider-confirmed recurring-capable authorization with a stable method identity becomes `ACTIVE`, and entering `TRIALING` requires one. Providers without recurring capability fail closed. These DTOs are provider-neutral seams; no production mandate or automatic renewal charging is currently approved.
 
 ## Membership Payments
 
@@ -158,14 +158,14 @@ Cart `quantity` is an integer count of the configured SKU, never kilograms/liter
 
 The view reports each eligibility dimension, explicit financial components, price/availability changes, resolved serviceability, selected `INSTANT`/`SCHEDULED` option, delivery promise, Instant hold status or Scheduled cycle/capacity status, applied/rejected Promotions by price component, and available alternatives. Sensitive location-selection rules remain internal.
 
-`CheckoutQuoteView` contains `merchandiseSubtotalMinor`, `itemDiscountMinor`, `orderDiscountMinor`, `deliveryFeeMinor`, `deliveryDiscountMinor`, `serviceFeeMinor`, `taxMinor`, `finalTotalMinor`, and currency. Item lines snapshot SKU quantity/unit/base consumption and allocated discount. Percentage/fixed Order benefits use only the approved merchandise basis; Delivery benefits use only delivery fee.
+`CheckoutQuoteView` contains `merchandiseSubtotalMinor`, `itemDiscountMinor`, `orderDiscountMinor`, `deliveryFeeMinor`, `deliveryDiscountMinor`, `serviceFeeMinor`, `taxMinor`, `finalTotalMinor`, and currency. Item lines snapshot SKU quantity/unit/base consumption and allocated discount. The internal quote snapshot also records provider-neutral route meters, delivery minimum/rate, calculated fee, configuration version, and road-route/driving calculation metadata. Percentage/fixed Order benefits use only the approved merchandise basis; Delivery benefits use only delivery fee.
 
-The authoritative service validates authenticated Customer, subscription, cart, SKU/market/location prices, minimum basket, address coordinates, service area, zone, resolved location and active mode, mode-specific inventory hold or cycle/cutoff/capacity, Promotions eligibility/limits/stacking, and payment readiness. For each Order quote it selects at most one merchandise benefit and one delivery benefit; a valid explicit selection wins its component, otherwise highest computed value then stable Promotion ID determines the winner.
+The authoritative service validates authenticated Customer, subscription, cart, SKU/market/location prices, minimum basket, address coordinates, service area, zone, resolved location and active mode, mode-specific inventory hold or cycle/cutoff/capacity, Promotions eligibility/limits/stacking, provider-neutral route distance, effective delivery-fee configuration, and payment readiness. External route/configuration failure fails closed. For each Order quote it selects at most one merchandise benefit and one delivery benefit; a valid explicit selection wins its component, otherwise highest computed value then stable Promotion ID determines the winner.
 
 ## Checkout, Payment, and Order Commitment
 
 - `checkout.createAttempt({ cartId, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutAttemptView`
-- `checkout.createPayment({ checkoutAttemptId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
+- `checkout.createPayment({ checkoutAttemptId, expectedTotalMinor, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 - `checkout.getAttempt({ checkoutAttemptId }) -> CheckoutAttemptView`
 - `checkout.recoverCommitment({ checkoutAttemptId }) -> OrderCommitmentResult`
 
@@ -181,20 +181,23 @@ Core receives payment provider webhooks through a signed public webhook handler 
 
 Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for MVP; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Membership or Order DTOs.
 
-`OrderCommitmentResult` is either the existing/new committed order summary or a stable actionable exception. Duplicate requests return the same logical result. If mode-specific inventory/capacity is unavailable before charge, return valid fulfillment alternatives without exposing or asking the customer to select a location. If canonical payment commitment succeeds but the downstream Membership/Order command cannot complete, create a visible finance/reconciliation exception and execute the defined retry or refund recovery path.
+Immediately before payment creation, Core recalculates current catalog prices, discounts, stock, serviceability, route-based delivery fee, and fulfillment eligibility. `expectedTotalMinor` must equal the recalculated total; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must present a replacement quote for explicit acceptance.
 
-For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiring exact-base-unit inventory hold and commitment converts it into a committed reservation. For `SCHEDULED`, commitment uses the selected cycle/window, cutoff, capacity, and configured reservation/demand policy. The committed result snapshots fulfillment mode, resolved location/zone/service area, promise/window/ETA, optional Scheduled cycle identifiers, SKU conversion, Promotions, and all monetary components.
+`OrderCommitmentResult` is either the existing/new committed order summary or a stable actionable exception. Duplicate requests return the same logical result. If mode-specific inventory/capacity is unavailable before charge, return valid fulfillment alternatives without exposing or asking the customer to select a location. If canonical payment commitment succeeds but the downstream Membership/Order command cannot complete, preserve the payment observation and retry the same idempotent commitment. Bounded failure creates a visible finance/reconciliation exception. A second payment/order and automatic refund are forbidden unless a separately approved recovery command explicitly authorizes them.
+
+For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiring exact-base-unit inventory hold and commitment converts it into a committed reservation. For `SCHEDULED`, commitment uses the selected cycle/window, cutoff, capacity, and configured reservation/demand policy. The committed result snapshots fulfillment mode, resolved location/zone/service area, promise/window/ETA, optional Scheduled cycle identifiers, SKU conversion, Promotions, all monetary components, and the accepted provider-neutral route/delivery-fee calculation.
 
 ## Customer Orders and Amendments
 
 - `orders.listMine(page) -> CustomerOrderPage`
 - `orders.getMine({ orderId }) -> CustomerOrderDetail`
-- `orders.requestCancellation({ orderId, reason, expectedVersion, idempotencyKey }) -> CancellationResult`
 - `orders.getAmendmentEligibility({ orderId }) -> AmendmentEligibilityView`
 - `orders.createAmendmentDraft({ orderId, items, idempotencyKey }) -> AmendmentDraftView`
 - `orders.payAmendment({ amendmentId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 
 Customer order DTOs compose original and amendment timelines while preserving separate financial records.
+
+Customer grocery-order cancellation is not exposed in the mock-payment MVP. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.
 
 ## Admin Orders and Payments
 

@@ -17,13 +17,13 @@ async function seedDueScheduledCancellation(now: number): Promise<string> {
     .bind(customerId, `auth-${customerId}`, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
   )
     .bind(
       `authz-${customerId}`,
       customerId,
-      `fake_auth_${customerId}`,
-      `fake_method_${customerId}`,
+      `mock_auth_${customerId}`,
+      `mock_method_${customerId}`,
       now,
       now,
       now,

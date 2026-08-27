@@ -40,16 +40,17 @@ modes first-class.
    configuration, enforced as a guarded conditional insert at commitment (count of non-terminal
    instant orders < cap). Rider assignment itself stays the existing manual `assignRider`
    surface; no automated rider-supply modeling before launch.
-5. **Delivery fee policy** — `delivery_zone_fee.instant_fee_minor` nullable override; instant
-   checkout charges the override when present, otherwise the standard zone fee.
+5. **Delivery fee policy (superseded 2026-08-27)** — checkout now uses the effective versioned
+   market/location minimum and per-kilometer integer configuration with provider-neutral road-route
+   meters. Historical zone-fee columns are compatibility data, not quote authority.
 6. **Reservation/hold behavior** — instant quotes create `checkout_inventory_holds` exactly like
    today; the Program 2 expiry job releases abandoned holds; commitment converts HELD →
    COMMITTED atomically with payment reaction application.
 7. **Preparation** — expressed operationally through the existing Fulfillment transitions on
    `fulfillment_record` seeded at commitment; no new preparation domain object.
-8. **Cancellation stages** — customer `requestCancellation` remains allowed until the
-   fulfillment record leaves its initial state; after packing/dispatch, cancellation becomes an
-   operations command (existing exceptional-path authority). No new state machine.
+8. **Cancellation stages (superseded 2026-08-27)** — customer grocery cancellation is not exposed
+   in the mock-payment MVP. Existing scoped operations machinery remains internal and does not grant
+   customer authority.
 9. **Payment/commitment timing** — identical to Scheduled (pay at checkout, provider-confirmed
    canonical success commits), except there is no cutoff boundary: commitment seeds
    `fulfillment_record` + unassigned `delivery_job` immediately with the snapshotted promise.

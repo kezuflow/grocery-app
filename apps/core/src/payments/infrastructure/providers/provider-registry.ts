@@ -1,17 +1,16 @@
 import type { PaymentProvider } from "../../ports/payment-provider";
 
-export class FakeProviderProductionError extends Error {
+export class MockProviderEnvironmentError extends Error {
   constructor() {
-    super("FAKE_PROVIDER_BLOCKED_OUTSIDE_TEST");
-    this.name = "FakeProviderProductionError";
+    super("MOCK_PROVIDER_BLOCKED_OUTSIDE_ALLOWED_ENVIRONMENT");
+    this.name = "MockProviderEnvironmentError";
   }
 }
 
 /**
- * Holds configured production adapters behind stable codes. The `fake`
- * adapter is part of the port contract tests and can never be registered
- * outside the `test` environment, so production always fails closed until a
- * real provider is selected and configured.
+ * Holds configured adapters behind stable codes. The deterministic `mock`
+ * adapter is allowed only in development and test, so preview, staging, and
+ * production fail closed even when they are accidentally configured for it.
  */
 export class ProviderRegistry {
   private readonly providers = new Map<string, PaymentProvider>();
@@ -23,20 +22,14 @@ export class ProviderRegistry {
   }
 
   register(provider: PaymentProvider, environment: string | undefined): void {
-    if (provider.code === "fake" && environment !== "test") {
-      throw new FakeProviderProductionError();
+    if (provider.code === "mock" && environment !== "development" && environment !== "test") {
+      throw new MockProviderEnvironmentError();
     }
     this.providers.set(provider.code, provider);
   }
 
   get(providerCode: string): PaymentProvider | null {
     return this.providers.get(providerCode) ?? null;
-  }
-
-  /** First registered provider code, for callers without an explicit choice. */
-  firstCode(): string | null {
-    for (const code of this.providers.keys()) return code;
-    return null;
   }
 
   require(providerCode: string): PaymentProvider {

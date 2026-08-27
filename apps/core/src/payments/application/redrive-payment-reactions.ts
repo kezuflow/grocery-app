@@ -39,13 +39,22 @@ export async function redrivePaymentReactions(
   registry: ProviderRegistry,
   now: number,
 ): Promise<RedriveSummary> {
-  const escalation = await database
+  const exhausted = await database
     .prepare(
-      "UPDATE payment_reaction SET status='ESCALATED', last_error_code='MAX_ATTEMPTS_EXCEEDED', updated_at=? WHERE status='PENDING' AND attempts >= ?",
+      "SELECT id, payment_intent_id FROM payment_reaction WHERE status='PENDING' AND attempts >= ? LIMIT ?",
     )
-    .bind(now, REACTION_MAX_ATTEMPTS)
-    .run();
-  let escalated = escalation.meta?.changes ?? 0;
+    .bind(REACTION_MAX_ATTEMPTS, BATCH_LIMIT)
+    .all<{ id: string; payment_intent_id: string }>();
+  let escalated = 0;
+  for (const reaction of exhausted.results) {
+    escalated += await escalateReaction(
+      database,
+      reaction.id,
+      reaction.payment_intent_id,
+      "MAX_ATTEMPTS_EXCEEDED",
+      now,
+    );
+  }
   let applied = 0;
   let retried = 0;
   let reconciled = 0;
@@ -63,13 +72,13 @@ export async function redrivePaymentReactions(
       .bind(reaction.payment_intent_id)
       .first<{ status: string }>();
     if (!intent) {
-      await database
-        .prepare(
-          "UPDATE payment_reaction SET status='ESCALATED', last_error_code='INTENT_MISSING', updated_at=? WHERE id=? AND status='PENDING'",
-        )
-        .bind(now, reaction.id)
-        .run();
-      escalated += 1;
+      escalated += await escalateReaction(
+        database,
+        reaction.id,
+        reaction.payment_intent_id,
+        "INTENT_MISSING",
+        now,
+      );
       continue;
     }
     const canonicalPaymentState = canonicalStateOf(intent.status);
@@ -98,6 +107,38 @@ export async function redrivePaymentReactions(
       applied += 1;
       continue;
     }
+    const stored = await database
+      .prepare("SELECT attempts FROM payment_reaction WHERE id=? AND status='PENDING'")
+      .bind(reaction.id)
+      .first<{ attempts: number }>();
+    if (stored?.attempts === reaction.attempts) {
+      await database
+        .prepare(
+          "UPDATE payment_reaction SET attempts=attempts+1, last_error_code=?, available_at=?, updated_at=? WHERE id=? AND status='PENDING' AND attempts=?",
+        )
+        .bind(
+          outcome.reason,
+          now + Math.min(15 * 60_000, 30_000 * 2 ** reaction.attempts),
+          now,
+          reaction.id,
+          reaction.attempts,
+        )
+        .run();
+    }
+    const afterAttempt = await database
+      .prepare("SELECT attempts FROM payment_reaction WHERE id=? AND status='PENDING'")
+      .bind(reaction.id)
+      .first<{ attempts: number }>();
+    if ((afterAttempt?.attempts ?? 0) >= REACTION_MAX_ATTEMPTS) {
+      escalated += await escalateReaction(
+        database,
+        reaction.id,
+        reaction.payment_intent_id,
+        "MAX_ATTEMPTS_EXCEEDED",
+        now,
+      );
+      continue;
+    }
     if (outcome.reason === "CAS_CONFLICT") {
       retried += 1;
       continue;
@@ -113,4 +154,26 @@ export async function redrivePaymentReactions(
     reconciled += 1;
   }
   return { applied, retried, reconciled, escalated };
+}
+
+async function escalateReaction(
+  database: D1Database,
+  reactionId: string,
+  paymentIntentId: string,
+  errorCode: string,
+  now: number,
+): Promise<number> {
+  const [updated] = await database.batch([
+    database
+      .prepare(
+        "UPDATE payment_reaction SET status='ESCALATED', last_error_code=?, updated_at=? WHERE id=? AND status='PENDING'",
+      )
+      .bind(errorCode, now, reactionId),
+    database
+      .prepare(
+        "INSERT INTO payment_reconciliation_case (id, payment_intent_id, category, status, details_json, created_at) SELECT ?, ?, 'REACTION_FAILURE', 'OPEN', ?, ? WHERE changes()=1",
+      )
+      .bind(crypto.randomUUID(), paymentIntentId, JSON.stringify({ reactionId, errorCode }), now),
+  ]);
+  return updated?.meta?.changes ?? 0;
 }

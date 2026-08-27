@@ -33,8 +33,8 @@
 
 - Create: `apps/core/migrations/0016_payments_context.sql`.
 - Preserve legacy `payment_attempt`, `payment_event`, and `refund` rows as historical compatibility data.
-- Add canonical `payment_intent`, provider mapping, event inbox, reaction, and reconciliation tables. Link new attempts to intents additively; do not reinterpret old sandbox success as provider-confirmed production success.
-- Legacy sandbox methods remain isolated until Plan 07 removes their consumer.
+- Add canonical `payment_intent`, provider mapping, event inbox, reaction, and reconciliation tables. Link new attempts to intents additively; never reinterpret historical synthetic success as provider-confirmed production success.
+- Historical synthetic compatibility methods are removed; only the signed-event/reaction path remains.
 
 ## Task Impact Matrix
 
@@ -150,7 +150,7 @@ Run: `git add apps/core/migrations/0016_payments_context.sql apps/core/src/payme
 - Create: `apps/core/src/payments/application/create-payment.integration.test.ts`
 - Create: `apps/core/src/payments/infrastructure/d1/payment-repository.ts`
 - Create: `apps/core/src/payments/infrastructure/providers/provider-registry.ts`
-- Create: `apps/core/src/payments/infrastructure/providers/fake-payment-provider.ts`
+- Create: deterministic mock provider infrastructure (renamed to `mock-payment-provider.ts` by the 2026-08-27 reconciliation)
 - Test: `apps/core/src/payments/infrastructure/providers/provider-contract.test.ts`
 - Modify: `apps/core/src/index.ts` to compose/delegate only
 - Modify: `packages/contracts/src/payments.ts`

@@ -44,7 +44,7 @@ describe("mvp payment commitment policy", () => {
 describe("provider observation shape", () => {
   it("carries provider identity and never an application expectedVersion", () => {
     const observation: PaymentObservationInput = {
-      provider: "fake",
+      provider: "mock",
       providerEventId: "evt_1",
       providerReference: "pay_1",
       observedAt: Date.now(),

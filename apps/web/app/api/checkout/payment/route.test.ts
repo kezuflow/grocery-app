@@ -34,7 +34,11 @@ describe("checkout payment route", () => {
       new Request("https://freshmarkets.ph/api/checkout/payment", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ checkoutAttemptId: "q1", returnUrl: "https://x/orders" }),
+        body: JSON.stringify({
+          checkoutAttemptId: "q1",
+          expectedTotalMinor: 100,
+          returnUrl: "https://x/orders",
+        }),
       }),
     );
     const body = (await response.json()) as { error: { code: string } };
@@ -59,7 +63,11 @@ describe("checkout payment route", () => {
       new Request("https://freshmarkets.ph/api/checkout/payment", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": "k2" },
-        body: JSON.stringify({ checkoutAttemptId: "q1", returnUrl: "https://x/orders" }),
+        body: JSON.stringify({
+          checkoutAttemptId: "q1",
+          expectedTotalMinor: 100,
+          returnUrl: "https://x/orders",
+        }),
       }),
     );
     const body = (await response.json()) as { value: Record<string, unknown> };

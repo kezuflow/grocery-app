@@ -98,7 +98,7 @@ Cart shows:
 - address/cycle context when selected;
 - delivery-fee/promotion preview only when enough context exists.
 
-Cart is editable and does not permanently reserve stock or capacity. Stale price/availability responses link to refresh/review actions.
+Cart is editable and does not lock price or permanently reserve stock/capacity. Prices are current admin-managed values, not a time-boxed guarantee; do not show a countdown. Stale price/availability responses link to refresh/review actions.
 
 ## Address and Serviceability
 
@@ -132,7 +132,7 @@ Checkout should make the commitment legible:
 6. Terms/commitment notice.
 7. Pending/recovery/success state.
 
-Core performs final eligibility/quote/payment/order commitment. The browser must handle payment pending, return failure, duplicate submission, lost response, cycle-full race, price change, and recoverable retry states.
+Core recalculates current price, discount, stock, serviceability, and route-based delivery fee immediately before payment. If the total changed, the browser presents the replacement quote and requires a distinct acceptance action before creating payment. The browser must also handle payment pending, return failure, duplicate submission, lost response, cycle-full race, route-fee failure, and recoverable retry states.
 
 ## Order History and Status
 
@@ -143,7 +143,7 @@ Order detail prioritizes:
 - item/variant/price snapshot;
 - payment/total summary;
 - fulfillment/delivery timeline;
-- next valid customer action (amend, cancel request, retry payment, report an issue, buy again, contact support).
+- next valid customer action (amend where eligible, retry payment, report an issue, buy again, contact support).
 
 Do not rewrite historical details after catalog/address changes. Show amendments as separate financial additions in one understandable timeline.
 

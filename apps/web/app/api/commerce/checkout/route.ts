@@ -1,8 +1,6 @@
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { requestHeaders } from "../../../../lib/core-client/request";
-import { isWebSandboxPaymentEnabled } from "../../../../lib/payments/runtime-policy";
-import { requireIdempotencyKey } from "@/lib/core-client/commands";
 import { coreClient } from "@/lib/core-client/core";
 const checkoutBodySchema = z.object({
   cartId: z.string().trim().min(1),
@@ -11,12 +9,6 @@ const checkoutBodySchema = z.object({
   commit: z.boolean().optional(),
   idempotencyKey: z.string().trim().min(1).optional(),
 });
-export async function GET(_request?: Request) {
-  return Response.json({
-    ok: true,
-    value: { sandboxPaymentEnabled: isWebSandboxPaymentEnabled(env) },
-  });
-}
 export async function POST(request: Request) {
   const parsed = checkoutBodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)

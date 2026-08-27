@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
+import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
+
+const quoteDependencies = {
+  routeDistance: buildRouteDistancePort({
+    ENVIRONMENT: "test",
+    ROUTE_DISTANCE_PROVIDER: "mock",
+  }),
+};
 
 let counter = 0;
 
@@ -88,15 +96,19 @@ async function createQuote(fixture: Awaited<ReturnType<typeof seededCheckout>>) 
     "SELECT id FROM delivery_cycle WHERE status='OPEN' ORDER BY delivery_date ASC LIMIT 1",
   ).all<{ id: string }>();
   expect(cycles.results.length).toBeGreaterThan(0);
-  return createCheckoutQuote(env.DB, {
-    customerId: fixture.customerId,
-    cartId: fixture.cartId,
-    cartVersion: 3,
-    addressId: fixture.addressId,
-    deliveryCycleId: cycles.results[0].id,
-    idempotencyKey: `quote-${crypto.randomUUID()}`,
-    requestId: crypto.randomUUID(),
-  });
+  return createCheckoutQuote(
+    env.DB,
+    {
+      customerId: fixture.customerId,
+      cartId: fixture.cartId,
+      cartVersion: 3,
+      addressId: fixture.addressId,
+      deliveryCycleId: cycles.results[0].id,
+      idempotencyKey: `quote-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    },
+    quoteDependencies,
+  );
 }
 
 async function intentWithReaction(quoteId: string, customerId: string) {
@@ -105,6 +117,19 @@ async function intentWithReaction(quoteId: string, customerId: string) {
     "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, 48000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
   )
     .bind(intentId, quoteId, customerId, `pi-${intentId}`, Date.now(), Date.now())
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 48000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
+  )
+    .bind(
+      `attempt-${intentId}`,
+      customerId,
+      intentId,
+      `mock_pay_${intentId}`,
+      `intent:${intentId}`,
+      Date.now(),
+      Date.now(),
+    )
     .run();
   const reactionId = crypto.randomUUID();
   await env.DB.prepare(
@@ -159,7 +184,7 @@ describe("order commitment from canonical payment reactions", () => {
     const order = await env.DB.prepare("SELECT status, total_minor FROM grocery_order WHERE id=?")
       .bind(outcome.orderId)
       .first<{ status: string; total_minor: number }>();
-    expect(order).toMatchObject({ status: "COMMITTED", total_minor: 48000 });
+    expect(order).toMatchObject({ status: "COMMITTED", total_minor: 53000 });
     const items = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM order_item WHERE order_id=? AND base_quantity=2000",
     )
@@ -263,5 +288,53 @@ describe("order commitment from canonical payment reactions", () => {
       .bind(intentId)
       .first<{ count: number }>();
     expect(exceptions?.count).toBe(1);
+  });
+
+  it("retries a paid commitment with the same identities after stock recovers", async () => {
+    const fixture = await seededCheckout({ sourcingMode: "STOCKED", onHand: 0 });
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    const { intentId, reactionId } = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+    );
+
+    const failed = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(failed).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+    await env.DB.prepare(
+      "UPDATE inventory_balance SET on_hand=100000 WHERE location_id='location-cebu-central' AND inventory_pool_id=?",
+    )
+      .bind(fixture.poolId)
+      .run();
+
+    const recovered = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(recovered).toMatchObject({ applied: true, reason: "APPLIED" });
+    const replay = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(replay).toMatchObject({
+      applied: true,
+      reason: "ALREADY_APPLIED",
+      orderId: recovered.orderId,
+    });
+    const counts = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM payment_intent WHERE id=?) AS intents, (SELECT COUNT(*) FROM payment_attempt WHERE payment_intent_id=?) AS attempts, (SELECT COUNT(*) FROM grocery_order WHERE payment_id=(SELECT id FROM payment_attempt WHERE payment_intent_id=?)) AS orders",
+    )
+      .bind(intentId, intentId, intentId)
+      .first<{ intents: number; attempts: number; orders: number }>();
+    expect(counts).toEqual({ intents: 1, attempts: 1, orders: 1 });
   });
 });

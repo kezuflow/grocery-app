@@ -2,9 +2,9 @@ import type { RpcResult } from "./common";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
-import type { AdminOrderCommandRequest, HealthService } from "./index";
+import type { HealthService } from "./index";
 import type { MembershipService } from "./membership";
-import type { CancellationResult, OrdersService, RequestOrderCancellationRequest } from "./orders";
+import type { OrdersService } from "./orders";
 import type { OperationsReadService, OperationsService } from "./operations";
 import type { PaymentsService } from "./payments";
 import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
@@ -32,16 +32,13 @@ export interface ImplementedCoreService
  * command or purpose-built read model; generic table access has no place
  * here.
  */
-export interface CoreServiceBinding
-  extends ImplementedCoreService, Pick<OrdersService, "requestCancellation"> {
+export interface CoreServiceBinding extends ImplementedCoreService {
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
   refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;
   /** Canonical payment intent creation for a quote (fail-closed without a provider). */
   createPaymentIntent(request: PaymentIntentCommandRequest): Promise<RpcResult<PaymentActionView>>;
 }
-
-export type { CancellationResult, RequestOrderCancellationRequest };
 
 export type { AuthService } from "./auth";
 export type { CatalogService } from "./catalog";

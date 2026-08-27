@@ -1,32 +1,29 @@
-import type { PayMongoConfig, PayMongoProviderEnvironment } from "./paymongo-env";
-import { PayMongoProvider } from "./paymongo-provider";
-import { createFakePaymentProvider } from "./fake-payment-provider";
+import { createMockPaymentProvider } from "./mock-payment-provider";
 import { ProviderRegistry } from "./provider-registry";
 
-export type RuntimePaymentsEnvironment = PayMongoProviderEnvironment & { ENVIRONMENT?: string };
+export type RuntimePaymentsEnvironment = {
+  ENVIRONMENT?: string;
+  PAYMENT_PROVIDER?: string;
+};
+
+export function selectedPaymentProviderCode(
+  environment: RuntimePaymentsEnvironment,
+): string | null {
+  return environment.PAYMENT_PROVIDER === "mock" &&
+    (environment.ENVIRONMENT === "development" || environment.ENVIRONMENT === "test")
+    ? "mock"
+    : null;
+}
 
 /**
- * The single construction point for the production provider registry. An
- * adapter registers only when its configuration exists, so every payments
- * path fails closed with PAYMENT_PROVIDER_UNCONFIGURED until the operator
- * provisions credentials; the fake provider remains test-only through its own
- * registration guard.
+ * The single runtime construction point. Provider selection is explicit
+ * configuration, never registration order. Only the deterministic mock is
+ * approved for this MVP and only in development/test; every other combination
+ * yields an empty registry and therefore fails closed.
  */
 export function buildProviderRegistry(environment: RuntimePaymentsEnvironment): ProviderRegistry {
   const registry = new ProviderRegistry(environment.ENVIRONMENT);
-  const config = payMongoConfigFrom(environment);
-  if (config) registry.register(new PayMongoProvider(config), environment.ENVIRONMENT);
-  if (environment.ENVIRONMENT === "test")
-    registry.register(createFakePaymentProvider(), environment.ENVIRONMENT);
+  if (selectedPaymentProviderCode(environment) === "mock")
+    registry.register(createMockPaymentProvider(), environment.ENVIRONMENT);
   return registry;
-}
-
-function payMongoConfigFrom(environment: PayMongoProviderEnvironment): PayMongoConfig | null {
-  const secretKey = environment.PAYMONGO_SECRET_KEY;
-  if (!secretKey) return null;
-  return {
-    secretKey,
-    webhookSecretTest: environment.PAYMONGO_WEBHOOK_SECRET_TEST,
-    webhookSecretLive: environment.PAYMONGO_WEBHOOK_SECRET_LIVE,
-  };
 }

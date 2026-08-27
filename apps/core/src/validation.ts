@@ -145,6 +145,7 @@ export const refreshCheckoutQuoteSchema = headersRequest.extend({
 
 export const createPaymentIntentSchema = headersRequest.extend({
   checkoutAttemptId: identifierSchema,
+  expectedTotalMinor: z.number().int().nonnegative(),
   returnUrl: z.string().url().max(2000),
   idempotencyKey: idempotencyKeySchema,
 });

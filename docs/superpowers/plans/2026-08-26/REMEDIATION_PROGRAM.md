@@ -136,7 +136,7 @@ Before creating `0015_inventory_receiving_integrity.sql`, the execution worktree
 
 | Decision | Blocks | Does not block |
 |---|---|---|
-| Production payment provider/vendor mappings | Production adapter task in Plan 05 and launch acceptance | Financial containment, canonical Payments tables/state, fake provider contract tests, inbox/CAS/reconciliation |
+| Production payment provider/provider mappings | Future owner-approved adapter task and launch acceptance | Financial containment, canonical Payments tables/state, mock provider contract tests, inbox/CAS/reconciliation |
 | Renewal retry/grace/dunning policy | Automated `PAST_DUE` timing, retry scheduling, final renewal expiry in Plan 06 | Trial grant, terminal semantics, paid activation from canonical `SUCCEEDED`, manual reconciliation |
 | Immediate vs period-end cancellation default | UI default and automatic policy selection in Plan 06 | Both explicit command modes and scheduled metadata/transitions |
 | Paid-success/downstream-commit recovery policy | Automatic refund vs retry choice in Plan 07 | Durable finance exception, idempotent retry, visibility, and manual resolution seam |
@@ -242,9 +242,9 @@ Expected: both commands exit 0.
 
 - [ ] **Step 3: Audit state and secret terminology**
 
-Run: `rg -n -i "CANCELLED|trial_days|commitMockOrder|paymentStatus:\s*\"SUCCEEDED\"|url:\s*data\.url|x-forwarded-origin" apps packages`
+Run the current architecture/ownership and sensitive-data scans across `apps` and `packages`.
 
-Expected: no production-domain matches; any retained sandbox/test fixture is explicitly development-only and named as such.
+Expected: no production-domain matches; deterministic mock fixtures are explicitly development/test-only and named as such.
 
 - [ ] **Step 4: Update descriptive status and commit**
 

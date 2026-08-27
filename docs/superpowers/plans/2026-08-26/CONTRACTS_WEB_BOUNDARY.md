@@ -32,7 +32,7 @@
 ## Migration and Compatibility Impact
 
 - Migration impact: none.
-- Compatibility: existing RPCs remain in `LegacyCommerceService` or `LegacyOperationsService` until their callers move. `commitMockOrder` is sandbox-only from Plan 02.
+- Historical compatibility RPCs were temporary and are now removed; they are not an allowed service boundary.
 - Dirty Phase 4C declarations are not retained as implemented methods. Canonical Membership target types are rewritten here; Plan 06 adds them to the implemented Core surface only with working commands.
 - Contract version must change when the first new implemented grouped service replaces a compatibility surface; do not bump merely for internal file movement.
 
@@ -65,7 +65,7 @@
 - Modify: `packages/validation/src/index.ts`
 - Modify: `packages/validation/src/index.test.ts`
 - Modify: `apps/web/lib/core-client/health.test.ts`
-- Modify: `apps/web/app/api/commerce/trial/route.ts` only to remove use of an unimplemented dirty method or route it to the retained sandbox compatibility interface
+- Modify: `apps/web/app/api/commerce/trial/route.ts` only to remove use of an unimplemented dirty method
 
 **Interfaces:**
 - Produces: `SubscriptionState = "PENDING" | "TRIALING" | "ACTIVE" | "PAST_DUE" | "PAUSED" | "CANCELED" | "EXPIRED"`
@@ -136,7 +136,7 @@ Run: `git add packages/contracts/src/common.ts packages/contracts/src/states.ts 
 **Interfaces:**
 - Produces: `AuthService`, `CatalogService`, `MembershipService`, `PaymentsService`, `CheckoutService`, `OrdersService`, `OperationsService`
 - Produces: `ImplementedCoreService` composed only from services currently supplied by Core
-- Produces: `LegacyCommerceService` containing guarded sandbox compatibility methods
+- Produces: historical compatibility interfaces only during migration; none remain accepted
 - Produces: `LegacyOperationsService` containing generic operations pending Plan 08
 - Produces: `CoreServiceBinding = ImplementedCoreService & LegacyCommerceService & LegacyOperationsService`
 
@@ -150,7 +150,7 @@ const paymentsTarget: PaymentsService = paymentsFixture;
 const implemented: ImplementedCoreService = implementedFixture;
 ```
 
-Assert `commitMockOrder` is absent from `CheckoutService`, provider payload fields are absent from `MembershipService`, and generic actions are absent from `OperationsService` target command groups.
+Assert the removed synthetic checkout command is absent from `CheckoutService`, provider payload fields are absent from `MembershipService`, and generic actions are absent from `OperationsService` target command groups.
 
 - [ ] **Step 2: Run focused tests and prove failure**
 
@@ -261,8 +261,8 @@ Run: `git add apps/web/lib/core-client/commands.ts apps/web/lib/core-client/comm
 - [ ] Run: `pnpm --filter @freshmarkets/contracts test && pnpm --filter @freshmarkets/validation test && pnpm --filter @freshmarkets/web test`
 - [ ] Run: `pnpm typecheck && pnpm lint && pnpm format:check`
 - [ ] Run: `pnpm naming:check && pnpm -r build && pnpm --filter @freshmarkets/web check:vinext`
-- [ ] Run: `rg -n "status:\s*string|expectedVersion\?:|as unknown as CoreServiceBinding|idempotencyKey:\s*crypto\.randomUUID\(\)|commitMockOrder" packages/contracts/src apps/web`
-- [ ] Confirm remaining `commitMockOrder` appears only in `LegacyCommerceService` and an explicit sandbox route/caller from Plan 02.
+- [ ] Run the current ownership scan for broad compatibility RPCs, optional expected versions, and unsafe Core binding casts.
+- [ ] Confirm no synthetic paid-order compatibility route remains.
 - [ ] Confirm `git status --short` lists only files declared above.
 
 **Acceptance criteria:** root typecheck passes; canonical state/error DTOs are closed; unimplemented Phase 4C methods are not advertised as implemented; target contracts are domain-grouped; compatibility APIs are isolated; Web routes use one checked Core adapter; callers preserve stable idempotency and required versions.

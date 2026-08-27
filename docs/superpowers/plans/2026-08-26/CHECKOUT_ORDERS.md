@@ -50,7 +50,7 @@
 | 3. Order commitment | Tasks 1–2 and Plan 05 event reactions | Uses `0018`; no additional migration | Browser/mock commitment is superseded by canonical payment reaction | Recovery policy blocks automatic refund-versus-retry selection, not durable exception/retry handling |
 | 4. Amendments | Task 3 | Uses `0018`; no additional migration | Original paid orders remain immutable; additions become separate records/payment history | None |
 | 5. Cancellation/refunds | Tasks 3–4 and Plan 05 refund lifecycle | Uses `0018`; no additional migration | Generic paid cancellation is replaced by explicit Order/Payments orchestration | Downstream recovery policy does not block user-requested canonical refunds; no Membership cancellation default applies |
-| 6. Web migration | Tasks 1–5 and Plan 04 client | None | Removes `commitMockOrder` production contracts/routes after all callers migrate | Provider selection blocks live-provider UX, not canonical processing/pending UI |
+| 6. Web migration | Tasks 1–5 and Plan 04 client | None | Removes synthetic paid-order contracts/routes after all callers migrate | Provider selection blocks live-provider UX, not canonical processing/pending UI |
 
 ## Task 1: Implement authoritative, versioned checkout quotes
 
@@ -279,7 +279,7 @@ Run: `git add apps/core/src/orders apps/core/src/payments/application/request-re
 **Interfaces and behavior:**
 - Web creates/refreshes a Core quote, starts a canonical Payments intent, and polls/queries canonical attempt/order state.
 - Browser redirects/callbacks are UX signals only; they never create an order or assert payment success.
-- The old `commitMockOrder` RPC and mock-success UI path are removed after all consumers migrate.
+- The old synthetic paid-order RPC and mock-success UI path are removed after all consumers migrate.
 
 - [ ] **Step 1: Write failing route and browser tests**
 
@@ -297,7 +297,7 @@ Use the Plan 04 adapter and purpose-built DTOs. Generate/reuse idempotency keys 
 
 - [ ] **Step 4: Delete the mock commitment surface**
 
-Remove `commitMockOrder` from Core, contracts, route behavior, and UI only after the canonical tests pass. If a local sandbox helper remains from Plan 02, it must be outside production routes and incapable of writing paid orders.
+Remove the synthetic paid-order compatibility RPC from Core, contracts, route behavior, and UI only after the canonical tests pass. No local helper may bypass the signed-event/reaction path.
 
 - [ ] **Step 5: Run complete checkout gates and commit**
 
@@ -316,7 +316,7 @@ Run: `git add apps/web/app/api/checkout apps/web/app/api/commerce/checkout/route
 - [ ] Run: `pnpm naming:check && pnpm -r build && pnpm --filter @freshmarkets/web check:vinext`
 - [ ] Apply migrations `0001`–`0018` to a fresh database and to an accepted `0017` fixture.
 - [ ] Repeat quote refresh and payment-reaction concurrency tests three times.
-- [ ] Run: `rg -n "commitMockOrder|paymentMethodRef|provider[A-Z]|as unknown as CoreServiceBinding" apps/core/src apps/web packages/contracts/src`
+- [ ] Run the current ownership scan for legacy checkout commands, provider payload leakage, and unsafe Core binding casts.
 - [ ] Confirm no production checkout/Orders match and no compatibility surface remains.
 - [ ] Confirm `git status --short` lists only files declared above.
 

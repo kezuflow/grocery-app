@@ -7,7 +7,11 @@ export default function CheckoutPage() {
   const [cycles, setCycles] = useState<ReadonlyArray<DeliveryCycleView>>([]);
   const [addressId, setAddressId] = useState("");
   const [status, setStatus] = useState("");
-  const [sandboxPaymentEnabled, setSandboxPaymentEnabled] = useState(false);
+  const [pendingQuote, setPendingQuote] = useState<{
+    quoteId: string;
+    totalMinor: number;
+    currency: string;
+  } | null>(null);
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   useEffect(() => {
     void Promise.all([
@@ -15,16 +19,9 @@ export default function CheckoutPage() {
       fetch("/api/commerce/cycles").then(
         (r) => r.json() as Promise<{ value?: ReadonlyArray<DeliveryCycleView> }>,
       ),
-      fetch("/api/commerce/checkout").then(
-        (r) =>
-          r.json() as Promise<{
-            value?: { sandboxPaymentEnabled?: boolean };
-          }>,
-      ),
-    ]).then(([cartResult, cycleResult, capabilityResult]) => {
+    ]).then(([cartResult, cycleResult]) => {
       setCart(cartResult.value ?? null);
       setCycles(cycleResult.value ?? []);
-      setSandboxPaymentEnabled(Boolean(capabilityResult.value?.sandboxPaymentEnabled));
     });
   }, []);
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
@@ -52,12 +49,13 @@ export default function CheckoutPage() {
       setStatus("Address confirmed for delivery.");
     } else setStatus(result.error?.message ?? "Address is outside the active delivery area.");
   }
-  async function startPayment(cycleId: string) {
+  async function reviewTotal(cycleId: string) {
     if (!cart || !addressId) {
       setStatus("Confirm a serviceable address first.");
       return;
     }
-    // 1) Core-authoritative quote (evidence only; reserves nothing).
+    // 1) Core-authoritative quote. Core recalculates before payment and any
+    // changed total must be accepted through a new attempt.
     const quoteResponse = await fetch("/api/checkout/quote", {
       method: "POST",
       headers: {
@@ -77,12 +75,19 @@ export default function CheckoutPage() {
       error?: { code: string; message: string };
     };
     if (!quoteResult.ok) {
+      setPendingQuote(null);
       setStatus(quoteResult.error?.message ?? "Could not price your order.");
       return;
     }
+    if (!quoteResult.value) return;
+    setPendingQuote(quoteResult.value);
     setStatus(
-      `Quote ready: ${quoteResult.value?.currency} ${(quoteResult.value?.totalMinor ?? 0) / 100}. Starting payment...`,
+      `Review your current total: ${quoteResult.value.currency} ${(quoteResult.value.totalMinor / 100).toFixed(2)}.`,
     );
+  }
+
+  async function confirmPayment() {
+    if (!pendingQuote) return;
     // 2) Canonical payment intent. Order commitment happens in Core from the
     // provider-confirmed payment reaction — never from this browser.
     const paymentResponse = await fetch("/api/checkout/payment", {
@@ -92,18 +97,24 @@ export default function CheckoutPage() {
         "idempotency-key": attemptKey.current,
       },
       body: JSON.stringify({
-        checkoutAttemptId: quoteResult.value?.quoteId ?? "",
+        checkoutAttemptId: pendingQuote.quoteId,
+        expectedTotalMinor: pendingQuote.totalMinor,
         returnUrl: window.location.origin + "/orders",
       }),
     });
     const paymentResult = (await paymentResponse.json()) as {
       ok: boolean;
-      error?: { message: string };
+      error?: { code: string; message: string };
     };
     if (paymentResult.ok) {
       setStatus("Payment started. Your order appears here once payment is confirmed.");
+      setPendingQuote(null);
       attemptKey.current = `checkout-${crypto.randomUUID()}`;
     } else {
+      if (paymentResult.error?.code === "PRICE_CHANGED") {
+        setPendingQuote(null);
+        attemptKey.current = `checkout-${crypto.randomUUID()}`;
+      }
       setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
     }
   }
@@ -114,9 +125,7 @@ export default function CheckoutPage() {
       </Link>
       <h1 className="mt-6 text-3xl font-semibold">Checkout</h1>
       <p className="mt-2 text-sm text-slate-600">
-        {sandboxPaymentEnabled
-          ? "Local sandbox order (nonproduction). No real payment is processed."
-          : "Payments are not available in this environment."}
+        Price, stock, serviceability, and delivery fees are confirmed before payment.
       </p>
       <form
         onSubmit={saveAddress}
@@ -142,9 +151,8 @@ export default function CheckoutPage() {
           {cycles.map((cycle) => (
             <button
               key={cycle.id}
-              onClick={() => startPayment(cycle.id)}
-              disabled={!sandboxPaymentEnabled}
-              className="flex items-center justify-between rounded-lg border bg-white p-4 text-left disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => reviewTotal(cycle.id)}
+              className="flex items-center justify-between rounded-lg border bg-white p-4 text-left"
             >
               <span>
                 {cycle.name}
@@ -152,11 +160,26 @@ export default function CheckoutPage() {
                   {new Date(cycle.deliveryDate).toLocaleString()}
                 </small>
               </span>
-              <span className="font-medium">Local sandbox order</span>
+              <span className="font-medium">Review total</span>
             </button>
           ))}
         </div>
       </section>
+      {pendingQuote ? (
+        <section className="mt-6 rounded-lg border bg-white p-6" aria-label="Order total review">
+          <p className="text-sm text-slate-600">Current authoritative total</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {pendingQuote.currency} {(pendingQuote.totalMinor / 100).toFixed(2)}
+          </p>
+          <button
+            type="button"
+            onClick={confirmPayment}
+            className="mt-4 rounded bg-slate-950 px-4 py-2 text-white"
+          >
+            Accept total and continue to payment
+          </button>
+        </section>
+      ) : null}
       {status ? (
         <p role="status" className="mt-6 rounded border bg-white p-4">
           {status}

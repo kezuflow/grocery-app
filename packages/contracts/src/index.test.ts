@@ -3,7 +3,7 @@ import { CONTRACT_VERSION, type CoreHealthResponse } from "./index";
 
 describe("phase 0 contracts", () => {
   it("publishes a stable contract version", () => {
-    expect(CONTRACT_VERSION).toBe("2026-08-25.mvp-commerce");
+    expect(CONTRACT_VERSION).toBe("2026-08-27.checkout-reconciliation");
   });
 
   it("keeps the health DTO purpose-built", () => {

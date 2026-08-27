@@ -39,7 +39,7 @@ async function seedOrderWithJob(cycleId: string, status: OrderStatus): Promise<s
     .run();
   const paymentId = `pay-${fixtureCounter}-${crypto.randomUUID().slice(0, 8)}`;
   await env.DB.prepare(
-    "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 50000, 'PHP', 'SUCCEEDED', 'fake', ?, ?, ?)",
+    "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 50000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
   )
     .bind(paymentId, customerId, `${paymentId}-key`, NOW, NOW)
     .run();

@@ -20,10 +20,7 @@
     // Development-only loopback public origin. Production sets
     // PUBLIC_APP_ORIGIN through environment configuration, never a source default.
     "PUBLIC_APP_ORIGIN": "http://localhost:5173",
-    // Local-only compatibility sandbox checkout. Production configures a real
-    // payment provider and never a sandbox default.
     "ENVIRONMENT": "development",
-    "PAYMENT_MODE": "sandbox",
   },
   "observability": {
     "enabled": true,

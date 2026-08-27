@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { CoreEntrypoint } from "../../index";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -219,7 +220,6 @@ describe("operational command authorization and integrity matrix", () => {
 
   it("rejects paid-order refund/cancel through the generic path", async () => {
     const cookie = await staffCookie({ permissionCode: "order:manage" });
-    const orderId = `order-${crypto.randomUUID()}`;
     const now = Date.now();
     const orderId2 = `order-${crypto.randomUUID()}`;
     const paymentId2 = await seedPaidOrderSkeleton(orderId2, Date.now());
@@ -228,16 +228,7 @@ describe("operational command authorization and integrity matrix", () => {
     )
       .bind(orderId2, `cust-${orderId2}`, paymentId2, now)
       .run();
-    // The legacy generic refund/cancel RPC no longer exists; paid orders go
-    // through Orders.requestCancellation with an expected version.
-    const cancellation = await core.requestCancellation({
-      requestId: crypto.randomUUID(),
-      headers: { cookie },
-      orderId: orderId2,
-      reason: "audit-probe",
-      idempotencyKey: `cancel-${crypto.randomUUID()}`,
-      expectedVersion: 1,
-    });
-    expect(cancellation.ok).toBe(true);
+    void cookie;
+    expect("requestCancellation" in CoreEntrypoint.prototype).toBe(false);
   });
 });

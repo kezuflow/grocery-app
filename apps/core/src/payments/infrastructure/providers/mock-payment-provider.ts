@@ -8,43 +8,43 @@ import type {
 } from "../../ports/payment-provider";
 import type { PaymentDomainState } from "../../domain/payment";
 
-const fakeObservedStates = new WeakMap<PaymentProvider, Map<string, PaymentDomainState>>();
-const fakeFailingRefunds = new WeakMap<PaymentProvider, Set<string>>();
-const fakeAuthorizationOutcomes = new WeakMap<
+const mockObservedStates = new WeakMap<PaymentProvider, Map<string, PaymentDomainState>>();
+const mockFailingRefunds = new WeakMap<PaymentProvider, Set<string>>();
+const mockAuthorizationOutcomes = new WeakMap<
   PaymentProvider,
   Map<string, ProviderAuthorizationView>
 >();
 
 /** Test control: pin the state a provider lookup observes for a reference. */
-export function setFakeObservedState(
+export function setMockObservedState(
   provider: PaymentProvider,
   reference: string,
   state: PaymentDomainState,
 ): void {
-  const states = fakeObservedStates.get(provider);
-  if (!states) throw new Error("Not the fake provider");
+  const states = mockObservedStates.get(provider);
+  if (!states) throw new Error("Not the mock provider");
   states.set(reference, state);
 }
 
 /** Test control: pin the authorization outcome a provider lookup reports. */
-export function setFakeAuthorizationOutcome(
+export function setMockAuthorizationOutcome(
   provider: PaymentProvider,
   providerAuthorizationReference: string,
   outcome: ProviderAuthorizationView,
 ): void {
-  const outcomes = fakeAuthorizationOutcomes.get(provider);
-  if (!outcomes) throw new Error("Not the fake provider");
+  const outcomes = mockAuthorizationOutcomes.get(provider);
+  if (!outcomes) throw new Error("Not the mock provider");
   outcomes.set(providerAuthorizationReference, outcome);
 }
 
 /** Test control: force deterministic refund rejections for a payment reference. */
-export function setFakeRefundFailure(provider: PaymentProvider, reference: string): void {
-  const failures = fakeFailingRefunds.get(provider);
-  if (!failures) throw new Error("Not the fake provider");
+export function setMockRefundFailure(provider: PaymentProvider, reference: string): void {
+  const failures = mockFailingRefunds.get(provider);
+  if (!failures) throw new Error("Not the mock provider");
   failures.add(reference);
 }
 
-const FAKE_SHARED_SECRET = "fake-provider-test-secret";
+const MOCK_SHARED_SECRET = "mock-provider-test-secret";
 
 function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
@@ -74,23 +74,24 @@ function mapVendorState(vendorState: string): PaymentDomainState | null {
 }
 
 /**
- * Test-only provider adapter proving the port contract, signed-event parsing,
- * and canonical mapping. It must be impossible to register outside `test`.
+ * Deterministic non-production provider proving payment, authorization,
+ * webhook, reconciliation, expiry, failure, and refund paths without calling
+ * an external payment service.
  */
-export function createFakePaymentProvider(): PaymentProvider {
+export function createMockPaymentProvider(): PaymentProvider {
   const observedStates = new Map<string, PaymentDomainState>();
   const failingRefunds = new Set<string>();
   const authorizationOutcomes = new Map<string, ProviderAuthorizationView>();
   const provider: PaymentProvider = {
-    code: "fake",
+    code: "mock",
     async createAuthorization(input) {
-      const reference = `fake_auth_${input.idempotencyKey}`;
+      const reference = `mock_auth_${input.idempotencyKey}`;
       return {
         ok: true,
         action: {
           providerAuthorizationReference: reference,
           actionType: "REDIRECT",
-          redirectUrl: `https://fake.pay.example/authorize/${encodeURIComponent(input.idempotencyKey)}?return=${encodeURIComponent(input.returnUrl)}`,
+          redirectUrl: `https://mock.pay.invalid/authorize/${encodeURIComponent(input.idempotencyKey)}?return=${encodeURIComponent(input.returnUrl)}`,
           clientToken: null,
           expiresAt: Date.now() + 15 * 60 * 1000,
         } satisfies ProviderAuthorizationAction,
@@ -99,14 +100,14 @@ export function createFakePaymentProvider(): PaymentProvider {
     async getAuthorization(providerAuthorizationReference) {
       const pinned = authorizationOutcomes.get(providerAuthorizationReference);
       if (pinned) return { ok: true, authorization: pinned };
-      if (!providerAuthorizationReference.startsWith("fake_auth_"))
+      if (!providerAuthorizationReference.startsWith("mock_auth_"))
         return { ok: false, errorCode: "PROVIDER_NOT_FOUND" };
       return {
         ok: true,
         authorization: {
           providerAuthorizationReference,
           recurringCapable: true,
-          providerMethodRef: `fake_method_${providerAuthorizationReference}`,
+          providerMethodRef: `mock_method_${providerAuthorizationReference}`,
           status: "ACTIVE",
         } satisfies ProviderAuthorizationView,
       };
@@ -114,16 +115,16 @@ export function createFakePaymentProvider(): PaymentProvider {
     async createPayment(input) {
       return {
         ok: true,
-        providerReference: `fake_pay_${input.idempotencyKey}`,
+        providerReference: `mock_pay_${input.idempotencyKey}`,
         actionType: "REDIRECT",
-        redirectUrl: `https://fake.pay.example/checkout/${encodeURIComponent(input.idempotencyKey)}?return=${encodeURIComponent(input.returnUrl)}`,
+        redirectUrl: `https://mock.pay.invalid/checkout/${encodeURIComponent(input.idempotencyKey)}?return=${encodeURIComponent(input.returnUrl)}`,
         clientToken: null,
         expiresAt: Date.now() + 15 * 60 * 1000,
       };
     },
     async verifyAndParseEvent(headers, rawBody) {
-      const signature = headers.get("x-fake-signature");
-      const timestamp = Number(headers.get("x-fake-timestamp"));
+      const signature = headers.get("x-mock-signature");
+      const timestamp = Number(headers.get("x-mock-timestamp"));
       if (!signature) {
         return {
           ok: false,
@@ -136,7 +137,7 @@ export function createFakePaymentProvider(): PaymentProvider {
           reason: "INVALID_TIMESTAMP",
         } satisfies ProviderEventVerificationFailure;
       }
-      const expected = await sha256Hex(`${FAKE_SHARED_SECRET}:${rawBody}`);
+      const expected = await sha256Hex(`${MOCK_SHARED_SECRET}:${rawBody}`);
       if (signature !== expected) {
         return {
           ok: false,
@@ -178,7 +179,7 @@ export function createFakePaymentProvider(): PaymentProvider {
       return {
         ok: true,
         event: {
-          provider: "fake",
+          provider: "mock",
           providerEventId: parsed.eventId,
           providerReference: parsed.reference ?? parsed.refundReference!,
           observedAt: timestamp,
@@ -192,7 +193,7 @@ export function createFakePaymentProvider(): PaymentProvider {
       } satisfies ProviderEventVerificationSuccess;
     },
     async getPayment(providerReference): Promise<ProviderPaymentView | null> {
-      if (!providerReference.startsWith("fake_pay_")) return null;
+      if (!providerReference.startsWith("mock_pay_")) return null;
       return {
         providerReference,
         canonicalState: observedStates.get(providerReference) ?? "PROCESSING",
@@ -206,17 +207,17 @@ export function createFakePaymentProvider(): PaymentProvider {
       }
       return {
         ok: true,
-        providerRefundReference: `fake_refund_${input.refundProviderIdempotencyKey}`,
+        providerRefundReference: `mock_refund_${input.refundProviderIdempotencyKey}`,
       };
     },
   };
-  fakeObservedStates.set(provider, observedStates);
-  fakeFailingRefunds.set(provider, failingRefunds);
-  fakeAuthorizationOutcomes.set(provider, authorizationOutcomes);
+  mockObservedStates.set(provider, observedStates);
+  mockFailingRefunds.set(provider, failingRefunds);
+  mockAuthorizationOutcomes.set(provider, authorizationOutcomes);
   return provider;
 }
 
-export const fakeProviderTestSecret = FAKE_SHARED_SECRET;
-export async function fakeSignatureFor(rawBody: string): Promise<string> {
-  return sha256Hex(`${FAKE_SHARED_SECRET}:${rawBody}`);
+export const mockProviderTestSecret = MOCK_SHARED_SECRET;
+export async function mockSignatureFor(rawBody: string): Promise<string> {
+  return sha256Hex(`${MOCK_SHARED_SECRET}:${rawBody}`);
 }

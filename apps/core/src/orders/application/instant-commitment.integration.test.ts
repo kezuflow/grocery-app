@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
+import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import {
   setFulfillmentLocationMode,
   getLocationMode,
@@ -9,6 +10,12 @@ import { startPromotionalTrial } from "../../membership/application/start-promot
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
 
 const LOCATION = "location-cebu-central";
+const quoteDependencies = {
+  routeDistance: buildRouteDistancePort({
+    ENVIRONMENT: "test",
+    ROUTE_DISTANCE_PROVIDER: "mock",
+  }),
+};
 const ZONE_CODE = "CEBU_CITY_CORE";
 let counter = 0;
 
@@ -38,13 +45,13 @@ async function seededInstantQuote(): Promise<{ quoteId: string; customerId: stri
     .bind(customerId, `auth-${customerId}`, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
   )
     .bind(
       `authz-${customerId}`,
       customerId,
-      `fake_auth_${customerId}`,
-      `fake_method_${customerId}`,
+      `mock_auth_${customerId}`,
+      `mock_method_${customerId}`,
       now,
       now,
       now,
@@ -81,15 +88,19 @@ async function seededInstantQuote(): Promise<{ quoteId: string; customerId: stri
   )
     .bind(LOCATION)
     .run();
-  const quote = await createCheckoutQuote(env.DB, {
-    customerId,
-    cartId,
-    cartVersion: 1,
-    addressId,
-    deliveryCycleId: null,
-    idempotencyKey: `quote-${crypto.randomUUID()}`,
-    requestId: crypto.randomUUID(),
-  });
+  const quote = await createCheckoutQuote(
+    env.DB,
+    {
+      customerId,
+      cartId,
+      cartVersion: 1,
+      addressId,
+      deliveryCycleId: null,
+      idempotencyKey: `quote-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    },
+    quoteDependencies,
+  );
   if (!quote.ok) throw new Error(`quote failed: ${quote.error.code}`);
   return { quoteId: quote.value.quoteId, customerId };
 }
@@ -100,18 +111,15 @@ async function seedReaction(quoteId: string) {
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, 'cust-x', 15000, 'PHP', 'SUCCEEDED', ?, 2, ?, ?)",
-    ).bind(intentId, quoteId, `pi-${intentId}`, now, now),
+      "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) SELECT ?, 'GROCERY_CHECKOUT', 'checkout_quote', q.id, q.customer_id, q.total_minor, q.currency, 'SUCCEEDED', ?, 2, ?, ? FROM checkout_quote q WHERE q.id=?",
+    ).bind(intentId, `pi-${intentId}`, now, now, quoteId),
+    env.DB.prepare(
+      "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) SELECT ?, customer_id, id, amount_minor, currency, 'SUCCEEDED', 'mock', ?, ?, ?, ? FROM payment_intent WHERE id=?",
+    ).bind(`attempt-${intentId}`, `mock_pay_${intentId}`, `intent:${intentId}`, now, now, intentId),
     env.DB.prepare(
       "INSERT INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, created_at, updated_at) VALUES (?, ?, 'COMMIT_ORDER', 'checkout_quote', ?, 'PENDING', ?, 0, ?, ?)",
     ).bind(reactionId, intentId, quoteId, `reaction:${intentId}`, now, now),
   ]);
-  // Keep customer FK valid on the intent.
-  await env.DB.prepare(
-    "UPDATE payment_intent SET customer_id=(SELECT customer_id FROM checkout_quote WHERE id=?) WHERE id=?",
-  )
-    .bind(quoteId, intentId)
-    .run();
   return { intentId, reactionId };
 }
 

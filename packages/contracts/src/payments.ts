@@ -56,7 +56,7 @@ export type RecoverActivationRequest = AuthenticatedRequest & {
 };
 
 export type BeginRecurringAuthorizationRequest = AuthenticatedRequest & {
-  /** Omit to let Core resolve the first configured provider. */
+  /** Optional assertion against Core's explicitly configured provider. */
   providerCode?: string;
   currency?: string;
   returnUrl: string;
@@ -111,6 +111,7 @@ export type PaymentsService = {
 
 export type PaymentIntentCommandRequest = AuthenticatedRequest & {
   checkoutAttemptId: string;
+  expectedTotalMinor: number;
   providerCode?: string;
   returnUrl: string;
   idempotencyKey: string;

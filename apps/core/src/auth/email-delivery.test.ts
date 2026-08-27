@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import {
   UnavailableAuthEmailDelivery,
+  createCloudflareAuthEmailDelivery,
   createAuthEmailDelivery,
+  createRuntimeAuthEmailDelivery,
   type AuthEmailMessage,
 } from "./email-delivery";
 import { createAuth, type AuthEnvironment } from "./service";
@@ -65,6 +67,54 @@ describe("UnavailableAuthEmailDelivery", () => {
     expect(logs.flat().join(" ")).toContain('"configured":false');
     expect(JSON.stringify(logs)).not.toContain("secret-token");
     expect(JSON.stringify(logs)).not.toContain("customer@example.com");
+  });
+});
+
+describe("createCloudflareAuthEmailDelivery", () => {
+  it("sends verification and reset messages through the binding without exposing bearer data", async () => {
+    const logs = captureLogs();
+    const send = vi.fn().mockResolvedValue({ messageId: "message-id" });
+    const delivery = createCloudflareAuthEmailDelivery({
+      EMAIL: { send } as SendEmail,
+      AUTH_EMAIL_FROM: "auth@freshmarkets.example",
+      ENVIRONMENT: "test",
+    });
+
+    await delivery.send({
+      kind: "verification",
+      recipient: "customer@example.com",
+      url: secretUrl,
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      to: "customer@example.com",
+      from: { email: "auth@freshmarkets.example", name: "FreshMarkets" },
+      subject: "Verify your FreshMarkets email",
+      text: expect.stringContaining(secretUrl),
+      html: expect.stringContaining(secretUrl),
+    });
+    expect(JSON.stringify(logs)).not.toContain("secret-token");
+    expect(JSON.stringify(logs)).not.toContain("customer@example.com");
+  });
+
+  it("fails closed when production sender configuration is missing", async () => {
+    const delivery = createCloudflareAuthEmailDelivery({
+      EMAIL: { send: vi.fn() } as unknown as SendEmail,
+      ENVIRONMENT: "production",
+    });
+
+    await expect(
+      delivery.send({ kind: "reset", recipient: "customer@example.com", url: secretUrl }),
+    ).rejects.toThrow("AUTH_EMAIL_DELIVERY_UNCONFIGURED");
+  });
+});
+
+describe("createRuntimeAuthEmailDelivery", () => {
+  it("uses an explicit no-network fake in the Worker test environment", async () => {
+    const delivery = createRuntimeAuthEmailDelivery({ ENVIRONMENT: "test" });
+    await expect(
+      delivery.send({ kind: "verification", recipient: "customer@example.com", url: secretUrl }),
+    ).resolves.toBeUndefined();
   });
 });
 

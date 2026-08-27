@@ -21,12 +21,12 @@ async function seedMembershipAuthorization(authUserId: string) {
       "INSERT OR IGNORE INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
     ).bind(customerId, authUserId, now, now),
     env.DB.prepare(
-      "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+      "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
     ).bind(
       `authz-${customerId}`,
       customerId,
-      `fake_auth_${customerId}`,
-      `fake_method_${customerId}`,
+      `mock_auth_${customerId}`,
+      `mock_method_${customerId}`,
       now,
       now,
       now,
@@ -132,7 +132,7 @@ async function holdLedgerSum() {
 
 async function commit(fixture: Awaited<ReturnType<typeof checkoutFixture>>) {
   // Canonical path: authoritative quote, then the commitment reaction applied
-  // directly (the sandbox fake provider is test-registry-only).
+  // directly (the deterministic mock provider is test-registry-only).
   const cartNow = await core.getCart({ headers: fixture.headers, requestId: requestId() });
   if (!cartNow.ok) throw new Error("cart unavailable");
   const quote = await core.createCheckoutQuote({
@@ -145,10 +145,6 @@ async function commit(fixture: Awaited<ReturnType<typeof checkoutFixture>>) {
     idempotencyKey: `resdem-${crypto.randomUUID()}`,
   });
   if (!quote.ok) throw new Error(JSON.stringify(quote.error));
-  console.log(
-    "QMODE " +
-      JSON.stringify({ mode: quote.value.lines[0]?.sourcingMode, total: quote.value.totalMinor }),
-  );
   const intentId = crypto.randomUUID();
   const customerIdRow = await env.DB.prepare("SELECT customer_id FROM checkout_quote WHERE id=?")
     .bind(quote.value.quoteId)
@@ -165,6 +161,22 @@ async function commit(fixture: Awaited<ReturnType<typeof checkoutFixture>>) {
       `pi-${intentId}`,
       Date.now(),
       Date.now(),
+    )
+    .run();
+  const attemptId = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at, version, payment_intent_id) VALUES (?, ?, ?, ?, 'SUCCEEDED', 'mock', ?, ?, ?, ?, 1, ?)",
+  )
+    .bind(
+      attemptId,
+      customerIdRow!.customer_id,
+      quote.value.totalMinor,
+      quote.value.currency,
+      `mock_pay_${attemptId}`,
+      `attempt-${attemptId}`,
+      Date.now(),
+      Date.now(),
+      intentId,
     )
     .run();
   const reactionId = crypto.randomUUID();
@@ -268,24 +280,6 @@ describe("reservation and committed-demand separation", () => {
       const [fixtureA, fixtureB] = await Promise.all([checkoutFixture(4), checkoutFixture(4)]);
       const results = await Promise.allSettled([commit(fixtureA), commit(fixtureB)]);
       const fulfilled = results.filter((result) => result.status === "fulfilled").length;
-      console.log(
-        "FULFILLED " +
-          fulfilled +
-          " RESULTS " +
-          JSON.stringify(
-            results.map((r) =>
-              r.status === "fulfilled"
-                ? { orderId: r.value.value.orderId }
-                : String(r.reason).slice(0, 120),
-            ),
-          ),
-      );
-      const resNow = await env.DB.prepare(
-        "SELECT on_hand, reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?",
-      )
-        .bind(locationId, poolId)
-        .first();
-      console.log("BALNOW " + JSON.stringify(resNow));
       expect(fulfilled).toBe(1);
       const balance = await readBalance();
       expect(balance?.reserved ?? 0).toBeLessThanOrEqual(balance?.on_hand ?? 0);

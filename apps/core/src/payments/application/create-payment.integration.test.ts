@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createPayment, type CreatePaymentCommand } from "./create-payment";
-import { createFakePaymentProvider } from "../infrastructure/providers/fake-payment-provider";
+import { createMockPaymentProvider } from "../infrastructure/providers/mock-payment-provider";
 import {
-  FakeProviderProductionError,
+  MockProviderEnvironmentError,
   ProviderRegistry,
 } from "../infrastructure/providers/provider-registry";
 
@@ -28,7 +28,7 @@ async function command(
     customerId: await seedCustomer(),
     amountMinor: 29900,
     currency: "PHP",
-    providerCode: "fake",
+    providerCode: "mock",
     returnUrl: "https://app.example/membership",
     idempotencyKey: `pay-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
@@ -37,7 +37,7 @@ async function command(
 }
 
 function testRegistry(): ProviderRegistry {
-  return new ProviderRegistry("test", [createFakePaymentProvider()]);
+  return new ProviderRegistry("test", [createMockPaymentProvider()]);
 }
 
 async function intentRows(idempotencyKey: string) {
@@ -64,7 +64,7 @@ describe("payment intent creation", () => {
     if (!result.ok) return;
     expect(result.value.state).toBe("REQUIRES_ACTION");
     expect(result.value.actionType).toBe("REDIRECT");
-    expect(result.value.redirectUrl).toContain("fake.pay.example");
+    expect(result.value.redirectUrl).toContain("mock.pay.invalid");
     const { row, attempts } = await intentRows(attempt.idempotencyKey);
     expect(row).toMatchObject({ status: "REQUIRES_ACTION", version: 2 });
     expect(attempts).toBe(1);
@@ -106,12 +106,12 @@ describe("payment intent creation", () => {
     expect(row?.status).toBe("FAILED");
   });
 
-  it("blocks the fake provider outside the test environment", () => {
-    expect(() => new ProviderRegistry("production", [createFakePaymentProvider()])).toThrow(
-      FakeProviderProductionError,
+  it("blocks the mock provider outside allowed environments", () => {
+    expect(() => new ProviderRegistry("production", [createMockPaymentProvider()])).toThrow(
+      MockProviderEnvironmentError,
     );
-    expect(() => new ProviderRegistry("development", [createFakePaymentProvider()])).toThrow(
-      FakeProviderProductionError,
-    );
+    expect(
+      new ProviderRegistry("development", [createMockPaymentProvider()]).get("mock"),
+    ).not.toBeNull();
   });
 });

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
-import { env, exports } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { env } from "cloudflare:workers";
 import { CoreEntrypoint } from "./index";
 
-const core = exports.default as unknown as CoreServiceBinding;
 const password = "correct-horse-battery-staple";
 
 function requestId() {
@@ -47,7 +45,7 @@ function entrypointWith(environment: string, paymentMode: string) {
     {
       DB: env.DB,
       ENVIRONMENT: environment,
-      PAYMENT_MODE: paymentMode,
+      PAYMENT_PROVIDER: paymentMode,
       BETTER_AUTH_URL: "http://127.0.0.1:8788",
       TRUSTED_ORIGINS: "https://core.example.invalid",
     } as unknown as never,
@@ -118,17 +116,18 @@ async function staffCookieWithOrderManage() {
 describe("financial safety containment", () => {
   it("no longer exposes any mock commitment surface", () => {
     expect("commitMockOrder" in CoreEntrypoint.prototype).toBe(false);
-    expect(typeof entrypointWith("development", "sandbox").createPaymentIntent).toBe("function");
+    expect(typeof entrypointWith("development", "mock").createPaymentIntent).toBe("function");
   });
 
   it("fails closed on canonical payment intents outside the test environment", async () => {
     const before = await writeGuardCounts();
     const cookie = await authenticatedCookie();
-    const production = entrypointWith("production", "sandbox");
+    const production = entrypointWith("production", "mock");
     const rejected = await production.createPaymentIntent({
       headers: { cookie },
       requestId: requestId(),
       checkoutAttemptId: `quote-${crypto.randomUUID()}`,
+      expectedTotalMinor: 100,
       returnUrl: "https://freshmarkets.ph/orders",
       idempotencyKey: `safety-${crypto.randomUUID()}`,
     });
@@ -136,11 +135,12 @@ describe("financial safety containment", () => {
       ok: false,
       error: { code: "PAYMENT_PROVIDER_UNAVAILABLE" },
     });
-    const preview = entrypointWith("preview", "sandbox");
+    const preview = entrypointWith("preview", "mock");
     const previewRejected = await preview.createPaymentIntent({
       headers: { cookie },
       requestId: requestId(),
       checkoutAttemptId: `quote-${crypto.randomUUID()}`,
+      expectedTotalMinor: 100,
       returnUrl: "https://freshmarkets.ph/orders",
       idempotencyKey: `safety-${crypto.randomUUID()}`,
     });
@@ -198,26 +198,15 @@ describe("financial safety containment", () => {
     };
     const before = await counts();
 
-    // The generic advanceOrder surface was removed; the paid-order path is
-    // the versioned requestCancellation command, which records intent only.
-    const requested = await core.requestCancellation({
-      headers: { cookie: staffCookie },
-      requestId: requestId(),
-      orderId,
-      reason: "safety-check",
-      idempotencyKey: `safety-${crypto.randomUUID()}`,
-      expectedVersion: 1,
-    });
-    expect(requested.ok).toBe(true);
-    // Only the cancellation intent is recorded: no refund row, no inventory,
-    // capacity, or demand mutation, and the order remains COMMITTED.
+    void staffCookie;
+    expect("requestCancellation" in CoreEntrypoint.prototype).toBe(false);
     const after = await counts();
     expect(after["refund"]).toBe(before["refund"]);
     expect(after["inventory_reservation"]).toBe(before["inventory_reservation"]);
     expect(after["committed_demand"]).toBe(before["committed_demand"]);
     expect(after["capacity_allocations"]).toBe(before["capacity_allocations"]);
     expect(after["order.isCommitted"]).toBe(1);
-    expect(after["order.version"]).toBe(before["order.version"] + 1);
-    expect(after["idempotency_records"]).toBe(before["idempotency_records"] + 1);
+    expect(after["order.version"]).toBe(before["order.version"]);
+    expect(after["idempotency_records"]).toBe(before["idempotency_records"]);
   });
 });

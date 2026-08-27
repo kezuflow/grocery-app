@@ -81,7 +81,7 @@ describe("explicit cancellation and refund orchestration", () => {
           input.amountMinor,
           input.reason,
           input.idempotencyKey,
-          `fake_refund_${input.idempotencyKey}`,
+          `mock_refund_${input.idempotencyKey}`,
           Date.now(),
           Date.now(),
         );

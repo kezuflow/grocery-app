@@ -4,7 +4,13 @@ import {
 } from "../infrastructure/d1-checkout-repository";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
-import type { CreateCheckoutQuoteCommand, CheckoutQuoteView } from "./create-checkout-quote";
+import {
+  type CheckoutQuoteDependencies,
+  type CreateCheckoutQuoteCommand,
+  type CheckoutQuoteView,
+} from "./create-checkout-quote";
+import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
+import { deliveryFeeFailure } from "./delivery-fee-failure";
 
 export type QuoteItem = {
   sku_id: string;
@@ -32,7 +38,12 @@ export async function createInstantQuote(
   repository: ReturnType<typeof createCheckoutRepository>,
   command: CreateCheckoutQuoteCommand,
   items: readonly QuoteItem[],
-  address: Record<string, unknown> & { delivery_zone_code: string | null },
+  address: Record<string, unknown> & {
+    delivery_zone_code: string | null;
+    latitude: number;
+    longitude: number;
+  },
+  dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
   const unstocked = items.find((item) => item.sourcing_mode !== "STOCKED");
   if (unstocked)
@@ -47,7 +58,8 @@ export async function createInstantQuote(
   const routing = await database
     .prepare(
       `SELECT dz.id AS zone_id, sa.market_id, ls.location_id, fl.name AS location_name,
-              m.promise_minutes, m.max_concurrent_instant_orders
+              m.promise_minutes, m.max_concurrent_instant_orders,
+              fl.latitude, fl.longitude
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
@@ -64,6 +76,8 @@ export async function createInstantQuote(
       location_name: string;
       promise_minutes: number;
       max_concurrent_instant_orders: number;
+      latitude: number;
+      longitude: number;
     }>();
   if (!routing)
     return failure(
@@ -74,19 +88,18 @@ export async function createInstantQuote(
 
   const now = Date.now();
 
-  // Instant serviceability requires an active purchasable fee row.
-  const fee = await database
-    .prepare(
-      "SELECT COALESCE(instant_fee_minor, fee_minor) AS fee_minor FROM delivery_zone_fee WHERE zone_id=? AND location_id=? AND status='active'",
-    )
-    .bind(routing.zone_id, routing.location_id)
-    .first<{ fee_minor: number }>();
-  if (!fee)
-    return failure(
-      "INSTANT_MODE_UNAVAILABLE",
-      "Instant delivery is not purchasable at this address",
-      command.requestId,
-    );
+  let deliveryFee;
+  try {
+    deliveryFee = await quoteDeliveryFee(database, dependencies.routeDistance, {
+      marketId: routing.market_id,
+      locationId: routing.location_id,
+      origin: { latitude: routing.latitude, longitude: routing.longitude },
+      destination: { latitude: address.latitude, longitude: address.longitude },
+      now,
+    });
+  } catch (error) {
+    return deliveryFeeFailure(error, command.requestId);
+  }
 
   // Usable stocked availability per pool: on_hand minus reserved and held.
   const demandByPool = new Map<string, number>();
@@ -100,10 +113,10 @@ export async function createInstantQuote(
   for (const [poolId, baseQuantity] of demandByPool) {
     const balance = await database
       .prepare(
-        `SELECT (b.on_hand - b.reserved - COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=b.inventory_pool_id AND h.location_id=b.location_id AND h.status='HELD'),0)) AS usable
+        `SELECT (b.on_hand - b.reserved - COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=b.inventory_pool_id AND h.location_id=b.location_id AND h.status='HELD' AND h.checkout_attempt_id NOT IN (SELECT id FROM checkout_quote WHERE cart_id=?)),0)) AS usable
          FROM inventory_balance b WHERE b.location_id=? AND b.inventory_pool_id=?`,
       )
-      .bind(routing.location_id, poolId)
+      .bind(command.cartId, routing.location_id, poolId)
       .first<{ usable: number | null }>();
     if (!balance || balance.usable === null || balance.usable < baseQuantity)
       return failure(
@@ -165,6 +178,11 @@ export async function createInstantQuote(
   const expiresAt = Date.now() + QUOTE_TTL_MS;
   try {
     await database.batch([
+      database
+        .prepare(
+          "UPDATE checkout_inventory_holds SET status='EXPIRED', updated_at=? WHERE status='HELD' AND checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?)",
+        )
+        .bind(now, command.cartId),
       repository.insertQuote(
         {
           id: quoteId,
@@ -177,8 +195,8 @@ export async function createInstantQuote(
           currency: "PHP",
           subtotalMinor,
           discountMinor: 0,
-          deliveryFeeMinor: fee.fee_minor,
-          totalMinor: subtotalMinor + fee.fee_minor,
+          deliveryFeeMinor: deliveryFee.feeMinor,
+          totalMinor: subtotalMinor + deliveryFee.feeMinor,
           lines,
           addressSnapshot: address,
           cycleSnapshot: {
@@ -192,6 +210,7 @@ export async function createInstantQuote(
             sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
             poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
           },
+          deliveryFeeSnapshot: deliveryFee.snapshot,
           status: "ACTIVE",
           version: 1,
           expiresAt,

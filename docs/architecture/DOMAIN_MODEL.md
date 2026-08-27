@@ -99,7 +99,7 @@ A recurring membership agreement separate from individual orders. Its canonical 
 
 The introductory free trial is a Promotions-owned grant over the paid membership. It waives only the membership fee for exactly one calendar billing month; merchandise and delivery remain payable according to normal rules. Membership may enter `TRIALING` only after consuming a valid promotion grant/redemption, and only when a recurring-capable payment authorization already exists. Establishing that authorization is not payment success; Core never synthesizes a zero-value payment for the trial, and the first paid charge becomes due at `trialEndsAt`.
 
-Renewal, trial conversion, and dunning are Membership lifecycle behavior driven by canonical Payments outcomes. Paid renewal requires a provider-confirmed canonical `SUCCEEDED` result; a failed renewal moves the subscription to `PAST_DUE`, which carries a 7-calendar-day grace window during which entitlement remains usable. Verified successful recovery returns the subscription to `ACTIVE`; grace exhaustion without verified success transitions `PAST_DUE -> EXPIRED`; customer cancellation while `PAST_DUE` transitions immediately to terminal `CANCELED` and terminates future renewal attempts. Retry ownership prefers provider-native recurring/retry behavior; where the application must drive attempts, approximately +1/+3/+6-day retries inside the grace window are the approved default, finalized by the provider integration specification. Calendar-month subscription semantics and the nominal billing anchor are preserved across short-month clamping.
+Renewal, trial conversion, and dunning are Membership lifecycle behavior driven by canonical Payments outcomes. Paid renewal requires a provider-confirmed canonical `SUCCEEDED` result; an explicit failed-renewal outcome moves the subscription to `PAST_DUE`, which carries a 7-calendar-day grace window during which entitlement remains usable. Verified successful recovery returns the subscription to `ACTIVE`; grace exhaustion without verified success transitions `PAST_DUE -> EXPIRED`; customer cancellation while `PAST_DUE` transitions immediately to terminal `CANCELED` and terminates future renewal attempts. No production automatic charge initiation, retry owner, or retry schedule is approved. Those decisions belong to a future provider integration; current scheduling and authorization behavior is a mock-tested seam only. Calendar-month subscription semantics and the nominal billing anchor are preserved across short-month clamping.
 
 Introductory-trial abuse policy: one introductory trial per application customer; the recurring-capable authorization precondition above; and, where the provider exposes a stable authorization/payment-instrument identity, prevention of repeated introductory grants against the same identity. Address/device/risk signals may support review or risk scoring but are not undocumented identity rules, and SMS/phone verification is not mandatory for trial abuse prevention. Some residual promotional abuse is accepted rather than building a fraud platform before launch.
 
@@ -151,7 +151,7 @@ Authoritative selling price belongs to the sellable SKU and applicable market/lo
 
 ### Cart
 
-An editable pre-commit basket associated with a customer/market. Cart contents are advisory demand only: they do not permanently reserve physical inventory or delivery capacity.
+An editable pre-commit basket associated with a customer/market. Cart contents and displayed prices are advisory only: they do not lock price or reserve physical inventory or delivery capacity. Catalog prices are manually managed through authorized admin commands; customer UI has no time-boxed price guarantee or countdown.
 
 ### Checkout
 
@@ -166,15 +166,18 @@ An application orchestration, not a database entity exposed to UI. The authorita
 - for `INSTANT`, current exact base-unit availability and an expiring checkout inventory hold;
 - for `SCHEDULED`, an eligible cycle/window, cutoff, concurrency-safe capacity, and demand/procurement policy;
 - promotion eligibility/stacking;
+- current provider-neutral road-route distance and the effective versioned market/location delivery-fee configuration;
 - payment readiness.
 
-A quote is time/version-bound and must be revalidated at commitment. Its financial breakdown keeps merchandise subtotal, item discount, order discount, delivery fee, delivery discount, service fee where applicable, tax where applicable, and final total as distinct integer-minor-unit components.
+A quote is time/version-bound and must be recalculated before payment from current prices, discounts, stock, serviceability, route distance, delivery-fee configuration, and mode-specific eligibility. If the current total differs from the customer-accepted total, payment is not created and the customer must explicitly accept the replacement quote. Its financial breakdown keeps merchandise subtotal, item discount, order discount, delivery fee, delivery discount, service fee where applicable, tax where applicable, and final total as distinct integer-minor-unit components.
+
+Delivery pricing is versioned per market/fulfillment location and stores a minimum fee and per-kilometer rate in integer minor units. Core computes `ceil(routeDistanceMeters * perKilometerRateMinor / 1000)` and applies the configured minimum. Route failure or missing configuration fails checkout closed. Domain snapshots store distance meters, rates, calculated fee, configuration version, and provider-neutral road-route/driving metadata; they never store adapter-specific vocabulary.
 
 ### Order
 
 An immutable commercial and fulfillment commitment created after a provider-confirmed canonical Payments outcome satisfies the configured commitment policy and the explicit idempotent Order command completes. It contains human-readable global order number, customer/market/cycle/zone/location context, monetary totals, and historical snapshots.
 
-Every Order snapshots the resolved `fulfillmentMode`, fulfillment location, service area/zone, delivery promise, delivery window, ETA/promised time where applicable, and the cycle/schedule identifiers required only by `SCHEDULED`. Later configuration changes cannot alter those semantics.
+Every Order snapshots the resolved `fulfillmentMode`, fulfillment location, service area/zone, delivery promise, delivery window, ETA/promised time where applicable, cycle/schedule identifiers required only by `SCHEDULED`, and the accepted delivery-fee calculation. Later configuration changes cannot alter those semantics.
 
 `OrderItem` snapshots product/SKU names, sellable label/unit/quantity, exact base-unit consumption, sourcing mode, unit price, item/order discount allocation, and total. The Order also snapshots applied Promotion/redemption identities and the same explicit monetary components as its Quote.
 
@@ -188,7 +191,7 @@ An additive transaction linked to a committed order, available only before cycle
 
 Payments is a bounded context separate from Membership and Orders. `PaymentIntent`/`PaymentAttempt` represent provider-neutral purpose, amount, attempts, and canonical financial state. A membership enrollment, checkout, amendment, or refund may have its own payment purpose and stable application reference; an order may have multiple payments through amendments. Provider customers, methods, references, payloads, and status mappings live behind Payments-owned integration ports.
 
-A provider adapter translates vendor states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; MVP treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state.
+A provider adapter translates provider states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; MVP treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state. If an Order reaction fails after success is observed, Payments preserves that observation and Core retries the same idempotent commitment. Bounded failure creates a reconciliation exception; no second payment/order or automatic refund is inferred.
 
 A `Refund` is an explicit financial adjustment with amount, reason, state, provider identity, and links to affected order/payment/lines where applicable. Refunds never erase the original transaction.
 

@@ -47,9 +47,9 @@ This record resolves implementation ambiguity without replacing the domain speci
 
 ## Payment Boundary
 
-- **Decision:** The current payment boundary is provider-neutral and sandbox-backed.
-- **Legacy behavior preserved:** `commitMockOrder` and its replay behavior remain available.
-- **Migration strategy:** Idempotency, provider event deduplication, recovery, and refund records are added incrementally before production provider integration. No PayMongo, Xendit, or other provider is selected here.
+- **Decision:** The current payment boundary is provider-neutral and backed only by an explicitly selected deterministic mock in development/test.
+- **Legacy behavior:** The former synthetic checkout compatibility RPC is removed; payment success now enters through the canonical signed-event/reaction path.
+- **Migration strategy:** Idempotency, provider event deduplication, recovery, and refund records are added incrementally before any owner-approved production provider integration. No production provider is selected here.
 
 ## Migration Policy
 

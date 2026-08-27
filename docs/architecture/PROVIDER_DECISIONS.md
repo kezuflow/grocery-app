@@ -1,83 +1,46 @@
-# Production Provider Decisions
+# Provider Decisions
 
-Status: RECORDED SELECTIONS (2026-08-26). Selected under the standing authority to choose the
-implementation provider when official documentation shows a clear best fit for the approved
-product requirements (`PRODUCT_FEATURE_PROGRAMS.md` Remaining Decisions 1 and 2). Canonical
-domain vocabulary is unchanged: providers remain adapters behind Payments/Notifications ports.
-Full research evidence (official-doc citations retrieved 2026-08-26) is summarized here;
-re-verify against live vendor docs before go-live.
+Status: OWNER-APPROVED RECONCILIATION (2026-08-27).
 
-## Payment provider: PayMongo
+Provider-specific code remains infrastructure behind Core-owned ports. Domain contracts use
+canonical payment, route-calculation, and notification vocabulary only.
 
-**Selection rationale.** PayMongo is the only evaluated provider that verifies every hard
-requirement of our Payments domain:
+## Payments
 
-- HMAC-SHA256 timestamped webhook signatures (`Paymongo-Signature: t=…,te=…,li=…`) plus stable
-  `evt_` event identities — a clean fit for the `(provider, providerEventId)` inbox.
-- Documented `Idempotency-Key` mechanism on charge/refund creation, matching our
-  client-command idempotency invariant.
-- A real Subscriptions engine (plan/customer/subscription, invoice lifecycle events
-  `subscription.activated/past_due/unpaid`) mapping cleanly onto the membership state machine.
-- PHP-native minor units, test mode without a merchant account, plain REST over HTTP Basic auth
-  (Cloudflare Workers-safe).
+The deterministic `mock` provider is the only approved and registered payment provider. Selection
+is explicit through `PAYMENT_PROVIDER=mock`; registry insertion order is never a selection rule.
+The provider supports deterministic success, failure, expiry, signed event/reaction,
+reconciliation, authorization, and refund simulations for automated tests. It is allowed only in
+explicit `development` and `test` environments and fails closed everywhere else.
 
-**Runner-up / fallback:** Xendit (stronger multi-channel provider-managed dunning, BPI_RECURRING
-debit channel; weaker static-token webhooks, undocumented GET-refund-by-id, no verified
-idempotency header). **Rejected:** direct Maya Business integration (no documented webhook
-signatures — IP allowlisting only; application-owned scheduling required); Stripe (PH not a
-supported merchant country); Dragonpay (merchant onboarding now routed through Xendit).
+No production grocery or recurring payment provider is selected. Production recurring mandates,
+automatic renewal charging, retry ownership, and provider-specific automatic refunds are not
+implemented or approved. Membership state machines, authorization records, and scheduling seams
+remain provider-neutral testable foundations; they are not production-operational claims.
 
-**Recurring-mandate reality (design constraint recorded for Programs 3/5):**
+A successful canonical payment observation is durable even if downstream order commitment fails.
+Core retries the same idempotent commitment, cannot create a second payment or order, and escalates
+bounded failures to a visible reconciliation exception. No automatic real-provider refund policy is
+inferred.
 
-- Recurring-capable authorizations exist today for **vaulted Visa/Mastercard** (Card Vaulting,
-  gated feature) and, per public docs, **Maya wallet on-demand subscriptions** — the exact
-  tokenization/setup semantics are undocumented and MUST be confirmed with PayMongo support in
-  writing during capability activation.
-- **GCash cannot hold a recurring mandate anywhere evaluated.** Consequence: introductory-trial
-  activation (D2/D3: recurring-capable authorization before trial) must accept only
-  mandate-capable instruments at launch (vaulted cards; Maya pending confirmation). GCash
-  remains acceptable for non-recurring purchases. This is a canonical-application note, not a
-  vendor mirror: Payments exposes `recurringCapable` authorization semantics; instruments map
-  into it.
+## Transactional authentication email
 
-**Retry/dunning ownership.** PayMongo owns failed-recurring retries natively (fixed policy:
-once per day, up to 3 attempts, then `unpaid`). Per D2, application-owned +1/+3/+6 retries are
-therefore NOT built on top; Core observes provider outcomes and owns only grace
-(`PAST_DUE`, 7 calendar days), recovery, expiry, and cancellation-during-grace through the
-scheduler. If PayMongo later proves unable to own retries for the chosen instrument, the
-application fallback policy from D2 activates instead.
+Verification and password-reset email uses Cloudflare Email Service through Core's `EMAIL`
+`send_email` binding and the existing auth-email delivery port. Web and domain code never receive
+the binding. `AUTH_EMAIL_FROM` is deployment configuration with no source-controlled production
+default. Missing binding or sender configuration fails closed. Tests inject fake delivery/binding
+adapters, and logs contain neither recipient addresses nor bearer URLs.
 
-**External go-live blockers (not code defects):** Subscriptions + Card Vaulting feature
-enablement (support-gated), production API keys, webhook endpoint registration, written
-confirmation of Maya-wallet subscription and setup-without-payment (`setup_intent`)
-semantics — the last being the authoritative answer for whether a mandate can be established
-before the free trial without synthesizing any charge (D2 invariant).
+External domain onboarding and sender provisioning remain deployment work and are intentionally
+not configured by the repository.
 
-## Transactional email provider: Resend
+## Route distance
 
-**Selection rationale.** For launch-volume transactional email: free tier covers the launch
-phase (3,000/mo); single Bearer-key REST call (`POST https://api.resend.com/emails`) is the
-cleanest Workers integration; an `Idempotency-Key` send header matches repository convention;
-the testing story simulates delivered/bounced/complained/suppressed addresses against live
-webhooks (required by payment-failure and reminder flows); typed events with `svix-id`
-dedupe and a defined retry ladder.
+Delivery pricing uses a provider-neutral Geography route-distance port. The approved Core-only
+adapter calls Mapbox Directions with the stable `mapbox/driving` profile and reads
+`routes[0].distance` in meters. `MAPBOX_ACCESS_TOKEN` is a Core secret. There is no browser token,
+traffic-based profile, straight-line fallback, or fabricated fee.
 
-**Trade-off recorded:** shared-pool deliverability reputation at very low volume is
-unverifiable from documentation. Mitigation: instrument bounce/complaint rates from day one and
-keep the sender port thin — switching to Postmark (runner-up, transactional specialist, $15/mo)
-is a one-module adapter change.
-
-**External go-live blockers:** sending-domain DNS verification (SPF/DKIM records), production
-API key secret, from-address provisioning. The Notifications adapter fails closed when
-configuration is absent, exactly like the existing auth-email port.
-
-## Binding consequences
-
-- Program 4 implements the PayMongo adapter behind `ports/payment-provider.ts`; sandbox/test
-  keys drive automated contract tests; nothing hardcodes provider vocabulary outside the
-  adapter.
-- Program 3 consumes PayMongo-native subscription retry behavior as the provider-native path
-  sanctioned by D2; the scheduler owns grace timing, recovery verification, expiry, and
-  cancellation effects.
-- Program 6 builds the Notifications context on the Resend adapter behind its delivery port;
-  domain events remain the only triggers.
+Missing configuration, timeout, non-success HTTP response, `NoRoute`, empty routes, invalid
+coordinates, and malformed responses fail checkout with stable application errors. Persisted quote
+and order snapshots contain provider-neutral road-route/driving metadata, never vendor vocabulary.

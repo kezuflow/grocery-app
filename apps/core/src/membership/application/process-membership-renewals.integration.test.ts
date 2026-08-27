@@ -4,7 +4,7 @@ import { processMembershipRenewals } from "./process-membership-renewals";
 import { startPromotionalTrial } from "./start-promotional-trial";
 import { getSubscriptionEligibility } from "./subscription-eligibility";
 import { addCalendarDays } from "../domain/billing-calendar";
-import { createFakePaymentProvider } from "../../payments/infrastructure/providers/fake-payment-provider";
+import { createMockPaymentProvider } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 
 const DAY = 86_400_000;
@@ -19,13 +19,13 @@ async function seededTrial(options: { trialEnded?: boolean } = {}): Promise<stri
     .bind(customerId, `auth-${customerId}`, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
   )
     .bind(
       `authz-${customerId}`,
       customerId,
-      `fake_auth_${customerId}`,
-      `fake_method_${customerId}`,
+      `mock_auth_${customerId}`,
+      `mock_method_${customerId}`,
       now,
       now,
       now,
@@ -48,7 +48,7 @@ async function seededTrial(options: { trialEnded?: boolean } = {}): Promise<stri
 }
 
 function testRegistry(): ProviderRegistry {
-  return new ProviderRegistry("test", [createFakePaymentProvider()]);
+  return new ProviderRegistry("test", [createMockPaymentProvider()]);
 }
 
 function eligibilityQuery(customerIdOfRow: { customer_id: string }) {

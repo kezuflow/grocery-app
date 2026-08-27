@@ -21,9 +21,9 @@ async function seedAuthorization(customerId: string, methodRef?: string): Promis
   const id = `authz-${++authorizationCounter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
   await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'fake', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
   )
-    .bind(id, customerId, `fake_auth_${id}`, methodRef ?? `fake_method_${id}`, now, now, now)
+    .bind(id, customerId, `mock_auth_${id}`, methodRef ?? `mock_method_${id}`, now, now, now)
     .run();
   return id;
 }
@@ -101,7 +101,7 @@ describe("promotions-owned introductory trial", () => {
 
   it("refuses a trial on an instrument identity that already consumed one", async () => {
     const firstCustomer = await seedCustomer();
-    const sharedMethod = `fake_method_shared_${crypto.randomUUID().slice(0, 8)}`;
+    const sharedMethod = `mock_method_shared_${crypto.randomUUID().slice(0, 8)}`;
     const firstAuthorization = await seedAuthorization(firstCustomer, sharedMethod);
     const first = await startPromotionalTrial(env.DB, command(firstCustomer));
     expect(first.ok).toBe(true);

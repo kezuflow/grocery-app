@@ -78,11 +78,6 @@ describe("domain-grouped core services", () => {
     // assignable to the full binding (structural composition).
     const binding = {
       ...({} as ImplementedCoreService),
-      requestCancellation: async () => ({
-        ok: true,
-        value: { orderId: "", cancellationRequestedAt: "" },
-        requestId: "",
-      }),
       createCheckoutQuote: async () => ({
         ok: true,
         value: {
