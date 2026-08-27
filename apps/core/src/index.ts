@@ -109,6 +109,12 @@ import {
 import { setAdminStaffRoles as setAdminStaffRolesCommand } from "./admin/application/set-admin-staff-roles";
 import { setAdminStaffScopes as setAdminStaffScopesCommand } from "./admin/application/set-admin-staff-scopes";
 import { revokeAdminStaffSessions as revokeAdminStaffSessionsCommand } from "./admin/application/revoke-admin-staff-sessions";
+import { listAdminRoles as listAdminRolesQuery } from "./admin/application/list-admin-roles";
+import { getAdminRole as getAdminRoleQuery } from "./admin/application/get-admin-role";
+import { createAdminRole as createAdminRoleCommand } from "./admin/application/create-admin-role";
+import { updateAdminRole as updateAdminRoleCommand, setAdminRoleCapabilities as setAdminRoleCapabilitiesCommand } from "./admin/application/update-admin-role";
+import { archiveAdminRole as archiveAdminRoleCommand } from "./admin/application/archive-admin-role";
+import { listCapabilityDefinitions as listCapabilityDefinitionsQuery } from "./admin/application/list-capability-definitions";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -204,6 +210,52 @@ const staffScopesRequestSchema = authenticatedRequestSchema.extend({
 const staffSessionRevocationRequestSchema = authenticatedRequestSchema.extend({
   staffId: validationSchema.string().trim().min(1).max(200),
   reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const roleListRequestSchema = authenticatedRequestSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const roleDetailRequestSchema = authenticatedRequestSchema.extend({
+  roleId: validationSchema.string().trim().min(1).max(200),
+});
+
+const roleCodeSchema = validationSchema
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z][a-z0-9_.-]*$/, "expected a role code");
+
+const roleCreateRequestSchema = authenticatedRequestSchema.extend({
+  code: roleCodeSchema,
+  name: validationSchema.string().trim().min(1).max(120),
+  description: validationSchema.string().trim().max(300),
+  capabilityCodes: validationSchema.array(validationSchema.string().trim().min(1).max(100)).max(50),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const roleUpdateRequestSchema = authenticatedRequestSchema.extend({
+  roleId: validationSchema.string().trim().min(1).max(200),
+  name: validationSchema.string().trim().min(1).max(120),
+  description: validationSchema.string().trim().max(300),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const roleCapabilitiesRequestSchema = authenticatedRequestSchema.extend({
+  roleId: validationSchema.string().trim().min(1).max(200),
+  capabilityCodes: validationSchema.array(validationSchema.string().trim().min(1).max(100)).max(50),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const roleArchiveRequestSchema = authenticatedRequestSchema.extend({
+  roleId: validationSchema.string().trim().min(1).max(200),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });
 
@@ -408,6 +460,71 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return revokeAdminStaffSessionsCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminRoles(input: import("@freshmarkets/contracts").AdminRoleListRequest) {
+    const validation = roleListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminRolesQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminRole(input: import("@freshmarkets/contracts").AdminRoleDetailRequest) {
+    const validation = roleDetailRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminRoleQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async createAdminRole(input: import("@freshmarkets/contracts").AdminRoleCreateRequest) {
+    const validation = roleCreateRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return createAdminRoleCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async updateAdminRole(input: import("@freshmarkets/contracts").AdminRoleUpdateRequest) {
+    const validation = roleUpdateRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateAdminRoleCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminRoleCapabilities(
+    input: import("@freshmarkets/contracts").AdminRoleCapabilitiesRequest,
+  ) {
+    const validation = roleCapabilitiesRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminRoleCapabilitiesCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async archiveAdminRole(input: import("@freshmarkets/contracts").AdminRoleArchiveRequest) {
+    const validation = roleArchiveRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return archiveAdminRoleCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listCapabilityDefinitions(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listCapabilityDefinitionsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
