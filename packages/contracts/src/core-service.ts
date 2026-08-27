@@ -1,5 +1,6 @@
 import type { RpcResult } from "./common";
 import type { AdminFoundationService } from "./admin-foundation";
+import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
@@ -27,7 +28,8 @@ export interface ImplementedCoreService
     Pick<OrdersService, "listCustomerOrders">,
     OperationsReadService,
     OperationsService,
-    AdminFoundationService {}
+    AdminFoundationService,
+    AdminStaffAccessService {}
 
 /**
  * The full Worker binding surface. Every member is a canonical typed domain
@@ -43,6 +45,7 @@ export interface CoreServiceBinding extends ImplementedCoreService {
 }
 
 export type { AdminFoundationService } from "./admin-foundation";
+export type { AdminStaffAccessService } from "./admin-staff-access";
 export type { AuthService } from "./auth";
 export type { CatalogService } from "./catalog";
 export type { CheckoutService } from "./checkout";
