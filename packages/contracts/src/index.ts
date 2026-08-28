@@ -4,6 +4,7 @@ export * from "./common";
 export * from "./admin-foundation";
 export * from "./admin-staff-access";
 export * from "./admin-customers";
+export * from "./admin-promotions";
 export * from "./states";
 export type * from "./auth";
 export type * from "./catalog";
