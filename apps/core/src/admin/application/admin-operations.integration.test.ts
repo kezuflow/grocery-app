@@ -171,6 +171,51 @@ describe("admin operations reads", () => {
     ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 
+  it("resolves a real fulfillment exception and records its audit evidence", async () => {
+    const suffix = crypto.randomUUID();
+    const customerId = `resolve-customer-${suffix}`;
+    const paymentId = `resolve-payment-${suffix}`;
+    const orderId = `resolve-order-${suffix}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+      ).bind(customerId, `auth-${suffix}`, Date.now(), Date.now()),
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at, version) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, 1)",
+      ).bind(paymentId, customerId, `payment-${suffix}`, Date.now(), Date.now()),
+      env.DB.prepare(
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, 'cycle-next-cebu', '{}', 'PAID', 100, 'PHP', ?, ?, 1)",
+      ).bind(orderId, customerId, paymentId, Date.now()),
+      env.DB.prepare(
+        "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTAGE', ?, 1)",
+      ).bind(`fulfillment-${suffix}`, orderId, Date.now()),
+    ]);
+    const cookie = await seedStaff("fulfillment.manage", "location");
+    const idempotencyKey = `resolve-${suffix}`;
+    const result = await core.resolveAdminOperationalException({
+      requestId: crypto.randomUUID(),
+      headers: { cookie },
+      locationId: "location-cebu-central",
+      kind: "FULFILLMENT_SHORTAGE",
+      action: "RETRY_FULFILLMENT",
+      orderId,
+      expectedVersion: 1,
+      idempotencyKey,
+      reason: "retry shortage after replenishment",
+    });
+    expect(result).toMatchObject({ ok: true, value: { orderId, status: "PICKING" } });
+    const audit = await env.DB.prepare(
+      "SELECT reason, idempotency_key, correlation_id FROM audit_event WHERE action='OPERATIONS.FULFILLMENT_ADVANCED' AND aggregate_id=? ORDER BY occurred_at DESC LIMIT 1",
+    )
+      .bind(orderId)
+      .first<{ reason: string; idempotency_key: string; correlation_id: string }>();
+    expect(audit).toMatchObject({
+      reason: "retry shortage after replenishment",
+      idempotency_key: idempotencyKey,
+    });
+    expect(audit?.correlation_id).toBeTruthy();
+  });
+
   it("applies cycle filtering before keyset pagination and returns a real next cursor", async () => {
     const reader = await seedStaff("procurement.read", "location");
     const cycleId = `cycle-page-${crypto.randomUUID().slice(0, 8)}`;
