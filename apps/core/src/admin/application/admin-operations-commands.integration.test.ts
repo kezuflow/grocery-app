@@ -60,7 +60,7 @@ async function manager(capabilities: string[]) {
     );
   }
   await env.DB.batch(statements);
-  return cookie;
+  return { cookie, userId: body.user.id };
 }
 
 describe("admin operations commands", () => {
@@ -76,7 +76,7 @@ describe("admin operations commands", () => {
         idempotencyKey: "aggregate-none",
       }),
     ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
-    const cookie = await manager(["fulfillment.manage"]);
+    const { cookie } = await manager(["fulfillment.manage"]);
     expect(
       await core.activateFulfillmentMode({
         requestId: crypto.randomUUID(),
@@ -91,7 +91,7 @@ describe("admin operations commands", () => {
   });
 
   it("records accepted/rejected base-unit deltas through the guarded receiving command", async () => {
-    const cookie = await manager(["receiving.manage"]),
+    const { cookie } = await manager(["receiving.manage"]),
       id = crypto.randomUUID();
     await env.DB.batch([
       env.DB.prepare(
@@ -117,5 +117,67 @@ describe("admin operations commands", () => {
       "SELECT COUNT(*) AS count FROM audit_event WHERE action='OPERATIONS.RECEIVING_LINE_RECORDED'",
     ).first<{ count: number }>();
     expect(audit?.count).toBeGreaterThan(0);
+  });
+
+  it("derives procurement from committed demand and replays without a second audit", async () => {
+    const principal = await manager(["procurement.manage"]);
+    const { cookie } = principal;
+    const customerPrincipal = await env.DB.prepare(
+      "SELECT id FROM customer_principal WHERE auth_user_id=?",
+    )
+      .bind(principal.userId)
+      .first<{ id: string }>();
+    expect(customerPrincipal).toBeTruthy();
+    if (!customerPrincipal) return;
+    const customer = { id: crypto.randomUUID() };
+    await env.DB.prepare(
+      "INSERT INTO customer (id, auth_user_id, principal_id, status, version, created_at, updated_at) VALUES (?, ?, ?, 'active', 1, ?, ?)",
+    )
+      .bind(customer.id, principal.userId, customerPrincipal.id, Date.now(), Date.now())
+      .run();
+    const orderId = crypto.randomUUID(),
+      paymentId = crypto.randomUUID(),
+      cycleId = "cycle-next-cebu",
+      key = `aggregate-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE inventory_balance SET on_hand=0, reserved=0 WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 1, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
+      ).bind(paymentId, customer.id, `payment-${crypto.randomUUID()}`, Date.now(), Date.now()),
+      env.DB.prepare(
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, ?, '{}', 'COMMITTED', 1, 'PHP', ?, ?, 1)",
+      ).bind(orderId, customer.id, cycleId, paymentId, Date.now()),
+      env.DB.prepare(
+        "INSERT INTO committed_demand (id, order_id, delivery_cycle_id, location_id, inventory_pool_id, quantity, status, version) VALUES (?, ?, ?, 'location-cebu-central', 'pool-red-onion', 9, 'OPEN', 1)",
+      ).bind(crypto.randomUUID(), orderId, cycleId),
+    ]);
+    const input = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie },
+      locationId: "location-cebu-central",
+      cycleId,
+      inventoryPoolId: "pool-red-onion",
+      expectedVersion: 0,
+      idempotencyKey: key,
+      reason: "cutoff",
+    };
+    const first = await core.aggregateAdminProcurementDemand(input);
+    expect(first).toMatchObject({ ok: true, value: { requiredQuantityBase: 9 } });
+    const replay = await core.aggregateAdminProcurementDemand({
+      ...input,
+      requestId: crypto.randomUUID(),
+    });
+    expect(replay).toMatchObject({
+      ok: true,
+      value: { requirementId: first.ok ? first.value.requirementId : "" },
+    });
+    const audit = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action='OPERATIONS.PROCUREMENT_DEMAND_AGGREGATED' AND idempotency_key=?",
+    )
+      .bind(key)
+      .first<{ count: number }>();
+    expect(audit?.count).toBe(1);
   });
 });

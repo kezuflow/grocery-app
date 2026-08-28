@@ -46,6 +46,13 @@ async function audit(
   locationId: string,
   after: Record<string, unknown>,
 ) {
+  if (input.idempotencyKey) {
+    const existing = await deps.db
+      .prepare("SELECT id FROM audit_event WHERE action=? AND idempotency_key=? LIMIT 1")
+      .bind(action, input.idempotencyKey)
+      .first<{ id: string }>();
+    if (existing) return;
+  }
   const appended = await appendAuditEvent(deps.db, {
     actorUserId,
     action,
@@ -166,6 +173,37 @@ export async function aggregateAdminProcurementDemand(
 ): Promise<RpcResult<ProcurementRequirementView>> {
   const permitted = await access(deps, request, "procurement.manage");
   if (!permitted.ok) return permitted;
+  // The canonical requirement command owns this idempotency record. Resolve
+  // its successful replay before deriving availability, which now includes the
+  // requirement created by the original invocation.
+  const replay = await deps.db
+    .prepare(
+      "SELECT status, result_reference FROM idempotency_records WHERE scope='procurement.createRequirement' AND idempotency_key=?",
+    )
+    .bind(request.idempotencyKey)
+    .first<{ status: string; result_reference: string | null }>();
+  if (replay?.status === "SUCCEEDED" && replay.result_reference) {
+    const prior = await deps.db
+      .prepare("SELECT required_quantity, status, version FROM procurement_requirement WHERE id=?")
+      .bind(replay.result_reference)
+      .first<{ required_quantity: number; status: string; version: number }>();
+    if (prior)
+      return {
+        ok: true,
+        value: {
+          requirementId: replay.result_reference,
+          cycleId: request.cycleId,
+          locationId: request.locationId,
+          inventoryPoolId: request.inventoryPoolId,
+          requiredQuantityBase: prior.required_quantity,
+          acceptedBase: 0,
+          rejectedBase: 0,
+          status: prior.status,
+          version: prior.version,
+        },
+        requestId: request.requestId,
+      };
+  }
   const totals = await deps.db
     .prepare(`SELECT
       COALESCE((SELECT SUM(quantity) FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND status='OPEN'), 0) AS demand,
