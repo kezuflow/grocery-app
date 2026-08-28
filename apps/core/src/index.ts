@@ -125,6 +125,14 @@ import {
   listPrivacyRequests as listPrivacyRequestsQuery,
   applyPrivacyAction as applyPrivacyActionCommand,
 } from "./admin/application/customer-commands";
+import { listAdminPromotions as listAdminPromotionsQuery, getAdminPromotion as getAdminPromotionQuery, previewAdminPromotion as previewAdminPromotionQuery, listPromotionRedemptions as listPromotionRedemptionsQuery } from "./admin/application/promotion-reads";
+import {
+  createAdminPromotion as createAdminPromotionCommand,
+  updateAdminPromotion as updateAdminPromotionCommand,
+  changeAdminPromotionStatus as changeAdminPromotionStatusCommand,
+  grantAdminPromotion as grantAdminPromotionCommand,
+  listPromotionGrants as listPromotionGrantsQuery,
+} from "./admin/application/promotion-commands";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -318,6 +326,70 @@ const privacyActionRequestSchema = authenticatedRequestSchema.extend({
   action: validationSchema.enum(["VERIFY", "APPROVE", "REJECT", "BEGIN_PROCESSING", "COMPLETE", "ESCALATE"]),
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const promotionListRequestSchema = authenticatedRequestSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const promotionDetailRequestSchema = authenticatedRequestSchema.extend({
+  promotionId: validationSchema.string().trim().min(1).max(200),
+});
+
+const promotionCreateRequestSchema = authenticatedRequestSchema.extend({
+  code: validationSchema
+    .string()
+    .trim()
+    .min(2)
+    .max(60)
+    .regex(/^[A-Z][A-Z0-9_]*$/, "expected UPPER_SNAKE_CASE code"),
+  name: validationSchema.string().trim().min(1).max(120),
+  description: validationSchema.string().trim().max(300),
+  benefitType: validationSchema.enum(["ORDER_FIXED_DISCOUNT", "ORDER_PERCENT_DISCOUNT"]),
+  discountMinor: validationSchema.number().int().min(1).optional(),
+  percent: validationSchema.number().int().min(1).max(100).optional(),
+  minimumMinor: validationSchema.number().int().min(0),
+  startsAt: validationSchema.string().trim().min(4).max(40),
+  endsAt: validationSchema.string().trim().min(4).max(40).nullable().optional(),
+  globalUsageLimit: validationSchema.number().int().min(1).nullable().optional(),
+  perCustomerUsageLimit: validationSchema.number().int().min(1).nullable().optional(),
+  automatic: validationSchema.boolean().optional(),
+  priority: validationSchema.number().int().min(0).max(10000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const promotionUpdateRequestSchema = authenticatedRequestSchema.extend({
+  promotionId: validationSchema.string().trim().min(1).max(200),
+  name: validationSchema.string().trim().min(1).max(120),
+  description: validationSchema.string().trim().max(300),
+  discountMinor: validationSchema.number().int().min(1).optional(),
+  percent: validationSchema.number().int().min(1).max(100).optional(),
+  minimumMinor: validationSchema.number().int().min(0),
+  startsAt: validationSchema.string().trim().min(4).max(40),
+  endsAt: validationSchema.string().trim().min(4).max(40).nullable().optional(),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const promotionStatusChangeRequestSchema = authenticatedRequestSchema.extend({
+  promotionId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["ACTIVATE", "DEACTIVATE", "ARCHIVE"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const promotionPreviewRequestSchema = authenticatedRequestSchema.extend({
+  promotionId: validationSchema.string().trim().min(1).max(200),
+  subtotalMinor: validationSchema.number().int().min(0),
+});
+
+const promotionGrantRequestSchema = authenticatedRequestSchema.extend({
+  promotionId: validationSchema.string().trim().min(1).max(200),
+  customerId: validationSchema.string().trim().min(1).max(200),
+  maxRedemptions: validationSchema.number().int().min(1).max(1000),
   idempotencyKey: idempotencyKeySchema,
 });
 
@@ -674,6 +746,99 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return applyPrivacyActionCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminPromotions(input: import("@freshmarkets/contracts").AdminPromotionListRequest) {
+    const validation = promotionListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminPromotionsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionDetailRequest) {
+    const validation = promotionDetailRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminPromotionQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async createAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionCreateRequest) {
+    const validation = promotionCreateRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return createAdminPromotionCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async updateAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionUpdateRequest) {
+    const validation = promotionUpdateRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateAdminPromotionCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async changeAdminPromotionStatus(
+    input: import("@freshmarkets/contracts").AdminPromotionStatusChangeRequest,
+  ) {
+    const validation = promotionStatusChangeRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return changeAdminPromotionStatusCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async previewAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionPreviewRequest) {
+    const validation = promotionPreviewRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return previewAdminPromotionQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async grantAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionGrantRequest) {
+    const validation = promotionGrantRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return grantAdminPromotionCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listPromotionGrants(
+    input: import("@freshmarkets/contracts").AdminPromotionDetailRequest & {
+      cursor?: string;
+      limit?: number;
+    },
+  ) {
+    const validation = promotionListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listPromotionGrantsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listPromotionRedemptions(
+    input: import("@freshmarkets/contracts").AdminPromotionDetailRequest & {
+      cursor?: string;
+      limit?: number;
+    },
+  ) {
+    const validation = promotionListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listPromotionRedemptionsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
