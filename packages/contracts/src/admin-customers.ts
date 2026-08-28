@@ -89,6 +89,7 @@ export type PrivacyRequestView = {
   assignedStaffId: string | null;
   reason: string | null;
   resolution: string | null;
+  version: number;
 };
 
 export type PrivacyRequestPage = {

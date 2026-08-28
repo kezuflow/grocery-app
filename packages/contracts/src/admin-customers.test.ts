@@ -67,6 +67,7 @@ describe("customer crm contracts", () => {
       assignedStaffId: null,
       reason: "customer request",
       resolution: null,
+      version: 1,
     } satisfies PrivacyRequestView);
   });
 });
