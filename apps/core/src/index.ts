@@ -91,6 +91,16 @@ import { listRiderJobs } from "./delivery/application/list-rider-jobs";
 import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
+import {
+  getAdminFulfillmentMode,
+  listAdminDeliveryOperations,
+  listAdminFulfillmentQueue,
+  listAdminOperationalExceptions,
+  listAdminProcurementRequirements,
+  listAdminReceivingSessions,
+} from "./admin/application/operations-reads";
+import { resolveOperationsAdministrationAccess } from "./admin/application/operations-administration-access";
+import { setFulfillmentLocationMode } from "./fulfillment/application/location-mode";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
 import { listAdminAuditEvents as listAdminAuditEventsQuery } from "./audit/application/list-audit-events";
@@ -553,6 +563,20 @@ const inventoryLedgerSchema = authenticatedRequestSchema.extend({
   inventoryPoolId: validationSchema.string().trim().min(1).max(200),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+const adminOperationsLocationSchema = authenticatedRequestSchema.extend({
+  locationId: validationSchema.string().trim().min(1).max(200),
+});
+const adminOperationsCycleSchema = adminOperationsLocationSchema.extend({
+  cycleId: validationSchema.string().trim().min(1).max(200).optional(),
+});
+const activateFulfillmentModeSchema = adminOperationsLocationSchema.extend({
+  fulfillmentMode: validationSchema.enum(["INSTANT", "SCHEDULED"]),
+  cadence: validationSchema.enum(["WEEKLY"]).nullable().optional(),
+  promiseMinutes: validationSchema.number().int().min(1).nullable().optional(),
+  maxConcurrentInstantOrders: validationSchema.number().int().min(1).nullable().optional(),
+  expectedVersion: validationSchema.number().int().min(0).nullable(),
+  idempotencyKey: idempotencyKeySchema,
 });
 
 const orderListSchema = authenticatedRequestSchema.extend({
@@ -1218,6 +1242,102 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminInventoryLedgerQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getFulfillmentMode(
+    input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
+  ) {
+    const validation = adminOperationsLocationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminFulfillmentMode(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async activateFulfillmentMode(
+    input: import("@freshmarkets/contracts").ActivateFulfillmentModeRequest,
+  ) {
+    const validation = activateFulfillmentModeSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const deps = { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB };
+    const access = await resolveOperationsAdministrationAccess(
+      deps,
+      input,
+      "fulfillment.manage",
+      input.locationId,
+    );
+    if (!access.ok) return access;
+    const result = await setFulfillmentLocationMode(this.env.DB, {
+      locationId: input.locationId,
+      activeMode: input.fulfillmentMode,
+      promiseMinutes: input.promiseMinutes ?? null,
+      maxConcurrentInstantOrders: input.maxConcurrentInstantOrders ?? null,
+      expectedVersion: input.expectedVersion,
+      idempotencyKey: input.idempotencyKey,
+      requestId: input.requestId,
+    });
+    if (!result.ok) return result;
+    return {
+      ok: true as const,
+      value: { ...result.value, cadence: null },
+      requestId: input.requestId,
+    };
+  }
+  async listProcurementRequirements(
+    input: import("@freshmarkets/contracts").AdminProcurementRequirementsRequest,
+  ) {
+    const validation = adminOperationsCycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminProcurementRequirements(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listReceivingSessions(
+    input: import("@freshmarkets/contracts").AdminReceivingSessionsRequest,
+  ) {
+    const validation = adminOperationsCycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminReceivingSessions(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listFulfillmentQueue(
+    input: import("@freshmarkets/contracts").AdminFulfillmentQueueRequest,
+  ) {
+    const validation = adminOperationsCycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminFulfillmentQueue(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listDeliveryOperations(
+    input: import("@freshmarkets/contracts").AdminDeliveryOperationsRequest,
+  ) {
+    const validation = adminOperationsCycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminDeliveryOperations(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listOperationalExceptions(
+    input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
+  ) {
+    const validation = adminOperationsLocationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminOperationalExceptions(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

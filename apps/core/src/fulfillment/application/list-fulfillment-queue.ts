@@ -31,17 +31,24 @@ export function legalFulfillmentTransitions(): StateMap {
 export async function listFulfillmentQueue(
   database: D1Database,
   query: { locationId: string },
-): Promise<Array<Omit<FulfillmentQueueItem, "allowedActions">>> {
+): Promise<Array<Omit<FulfillmentQueueItem, "allowedActions"> & { cycleId: string | null }>> {
   const rows = await database
     .prepare(
-      "SELECT order_id, status, location_id, version FROM fulfillment_record WHERE location_id=? AND status NOT IN ('CANCELED') ORDER BY updated_at ASC, rowid ASC LIMIT 200",
+      "SELECT f.order_id, f.status, f.location_id, f.version, o.cycle_id FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE f.location_id=? AND f.status NOT IN ('CANCELED') ORDER BY f.updated_at ASC, f.rowid ASC LIMIT 200",
     )
     .bind(query.locationId)
-    .all<{ order_id: string; status: string; location_id: string; version: number }>();
+    .all<{
+      order_id: string;
+      status: string;
+      location_id: string;
+      version: number;
+      cycle_id: string | null;
+    }>();
   return rows.results.map((r) => ({
     orderId: r.order_id,
     status: r.status,
     locationId: r.location_id,
     version: r.version,
+    cycleId: r.cycle_id,
   }));
 }
