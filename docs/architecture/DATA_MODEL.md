@@ -226,6 +226,8 @@ Migration `0027_staff_administration.sql` adds the application-owned `staff_invi
 
 Migration `0028_customer_crm.sql` adds the application-owned `customer_invitation` table (one `PENDING` invitation per normalized email, unique idempotency keys, acceptance reference) and the `privacy_request` queue (closed `ACCESS|CORRECTION|CLOSURE|ANONYMIZATION` request types and the seven-status lifecycle, staff assignment, resolution recording). Privacy/closure completion records resolution only; it never cascades deletion into commercial or audit history.
 
+Migration `0029_promotion_administration.sql` rebuilds the historical fixed-discount `promotion` seam into the canonical definition shape: closed order/delivery benefit types, `DRAFT|ACTIVE|INACTIVE|ARCHIVED` lifecycle, usage limits, priority/automatic flags, and optimistic `version` (legacy rows copy forward as active fixed-discount definitions). It also adds `promotion_grant.customer_id` so targeted grants persist their customer on the canonical grant row. The introductory-trial authority (`INTRO_TRIAL`) is untouched.
+
 ## Pagination and Read Models
 
 High-volume lists use keyset pagination with stable compound sort keys, commonly `(created_at, id)` or domain deadline plus ID. Admin read models may query normalized tables directly using selected joins and indexes. Materialized projection tables are added only when measured query shape/latency warrants them and remain rebuildable from transactional truth.

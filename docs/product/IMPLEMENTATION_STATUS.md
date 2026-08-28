@@ -89,6 +89,26 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
   an unmet gate.
 
+## Admin Promotions Slice 4 (2026-08-27)
+
+- Migration `0029_promotion_administration.sql` rebuilds the `promotion` seam into the canonical
+  definition shape (closed order/delivery benefit types, DRAFT/ACTIVE/INACTIVE/ARCHIVED lifecycle,
+  usage limits, version) and adds `promotion_grant.customer_id`. Legacy WELCOME50 copies forward as
+  an active fixed-discount definition. No delete path exists.
+- Core implements `AdminPromotionsService`: list/get, draft-only definition updates, lifecycle
+  transitions with `ILLEGAL_TRANSITION` rejection, read-only deterministic preview, targeted grants
+  through the canonical grant table (ACTIVE promotions only), and redemption inspection joined by
+  promotion code with `INTRO_TRIAL` excluded. Authorization is `promotions.read`/`promotions.manage`
+  plus a global scope; commands are idempotent, version-guarded, reason-gated, and audited.
+- Deferred: membership fee waivers (owned by the introductory-trial authority), delivery benefits
+  and non-MINIMUM_SUBTOTAL rule types (until Quote consumes them), and redemption application at
+  checkout (owned by the checkout/Quote domain, not this admin slice).
+- Web adds seven thin BFF adapters and the Promotions workspace (list + draft creation, detail with
+  lifecycle actions, read-only preview, grants, redemptions).
+- Verification evidence: full workspace gate passes with fresh counts in the task report;
+  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
+  an unmet gate.
+
 ## Reconciled implementation state
 
 ### Payments and paid-order recovery

@@ -63,5 +63,9 @@ invitation acceptance/provisioning is explicitly deferred. Slice 3 (Customer CRM
 `docs/superpowers/plans/ADMIN_CUSTOMER_CRM_SLICE_3_IMPLEMENTATION_PLAN.md`; its authenticated
 browser journeys remain an unmet gate behind the unprovisioned auth-email transport,
 `admin.customers.update`/notes/segments are explicitly deferred, and invitation
-acceptance/provisioning remains deferred. Slice 4 is not authorized for implementation and
-requires its own plan produced from the then-current repository per the plan production rule.
+acceptance/provisioning remains deferred. Slice 4 (Promotions) is implemented per
+`docs/superpowers/plans/ADMIN_PROMOTIONS_SLICE_4_IMPLEMENTATION_PLAN.md`; its authenticated
+browser journeys remain an unmet gate behind the unprovisioned auth-email transport, and
+membership fee waivers, delivery benefits, and checkout redemption application are explicitly
+deferred to their owning domains. Slice 5 is not authorized for implementation and requires its
+own plan produced from the then-current repository per the plan production rule.

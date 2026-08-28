@@ -260,6 +260,16 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - Customer invitations mirror the staff invitation lifecycle (one `PENDING` record per normalized email, 14-day expiry, no password input); acceptance/provisioning is deferred with the staff deferral.
 - Material commands are idempotent, version-guarded where concurrent mutation is possible, reason-gated, and audited (`CUSTOMER.*`/`PRIVACY.*` closed vocabulary).
 
+### Implemented Promotions service (Slice 4, 2026-08-27)
+
+`packages/contracts/src/admin-promotions.ts` publishes `AdminPromotionsService` (`listAdminPromotions`, `getAdminPromotion`, `createAdminPromotion`, `updateAdminPromotion`, `changeAdminPromotionStatus`, `previewAdminPromotion`, `grantAdminPromotion`, `listPromotionGrants`, `listPromotionRedemptions`).
+
+- Authorization: `promotions.read` (reads/preview) or `promotions.manage` (commands) **plus a global scope** in Core.
+- Manageable benefits in this slice are exactly `ORDER_FIXED_DISCOUNT` and `ORDER_PERCENT_DISCOUNT` over the rebuilt `promotion` definition table (`DRAFT -> ACTIVE -> INACTIVE`, `DRAFT|INACTIVE -> ARCHIVED` terminal, `ILLEGAL_TRANSITION` otherwise; only `DRAFT` definitions change). `MEMBERSHIP_FEE_WAIVER` stays exclusively owned by the introductory-trial authority; delivery benefits are schema-ready but deferred until Quote consumes them. No delete path exists.
+- Preview is read-only and deterministic (status/window/minimum-subtotal policy, fixed or `ceil(subtotal x percent / 100)` computation capped at the subtotal) and never claims usage or writes a redemption.
+- Grants create targeted `promotion_grant` rows (`benefit_code` = promotion code, `customer_id` persisted, `max_redemptions >= 1`) for ACTIVE promotions only; `INTRO_TRIAL` is excluded from this surface. Redemptions are read-only inspections joined by promotion code.
+- Material commands are idempotent, version-guarded, reason-gated, and audited (`PROMOTION.CREATED/UPDATED/ACTIVATED/DEACTIVATED/ARCHIVED/GRANTED`).
+
 ## Admin Orders and Payments
 
 - `admin.orders.list(filters, page) -> AdminOrderListPage`
