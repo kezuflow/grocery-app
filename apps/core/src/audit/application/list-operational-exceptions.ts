@@ -126,5 +126,6 @@ export async function listOperationalExceptions(
       detail: "Failed delivery; retry from the delivery queue.",
     })),
   ];
-  return rows.sort((a, b) => (b.queueKey ?? "").localeCompare(a.queueKey ?? ""));
+  // Match SQLite's binary TEXT comparison used by the cursor predicates.
+  return rows.sort((a, b) => (a.queueKey === b.queueKey ? 0 : a.queueKey < b.queueKey ? 1 : -1));
 }

@@ -158,6 +158,10 @@ describe("admin operations reads", () => {
       cursor: first.value.nextCursor!,
     });
     expect(second).toMatchObject({ ok: true });
+    if (!second.ok) return;
+    expect(second.value.items).toHaveLength(1);
+    expect(second.value.items[0]!.referenceId).not.toBe(first.value.items[0]!.referenceId);
+    expect(second.value.nextCursor).toBeNull();
   });
 
   it("applies cycle filtering before keyset pagination and returns a real next cursor", async () => {
