@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   adminOperationsReadCapabilities,
   type DeliveryOperationsSummary,
+  type AdminDeliveryOperationView,
   type FulfillmentModeConfigurationView,
   type FulfillmentQueueView,
   type OperationalExceptionPage,
@@ -66,7 +67,19 @@ describe("admin operations contracts", () => {
       totalOpenJobs: 2,
       assignedJobs: 1,
       items: [],
+      nextCursor: "cursor-1",
     } satisfies DeliveryOperationsSummary);
+    void ({
+      jobId: "job-1",
+      orderId: "order-1",
+      cycleId: "cycle-1",
+      locationId: "location-cebu-central",
+      status: "PENDING",
+      riderAssigned: false,
+      deliveredAtIso: null,
+      version: 1,
+      allowedActions: [],
+    } satisfies AdminDeliveryOperationView);
     void ({ items: [], nextCursor: null } satisfies OperationalExceptionPage);
   });
 });

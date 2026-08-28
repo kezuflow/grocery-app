@@ -24,13 +24,24 @@ export function allowedDeliveryActions(
  */
 export async function listDeliveryDispatch(
   database: D1Database,
-  query: { locationId: string },
+  query: { locationId: string; cycleId?: string; cursorId?: string; limit?: number },
 ): Promise<Array<DispatchRow>> {
+  const limit = query.limit ?? 200;
+  const clauses = ["f.location_id=?", "d.status NOT IN ('CANCELED','DELIVERED')"];
+  const binds: unknown[] = [query.locationId];
+  if (query.cycleId) {
+    clauses.push("o.cycle_id=?");
+    binds.push(query.cycleId);
+  }
+  if (query.cursorId) {
+    clauses.push("d.id<?");
+    binds.push(query.cursorId);
+  }
   const rows = await database
     .prepare(
-      "SELECT d.id AS job_id, d.order_id, d.status, d.rider_user_id, d.address_snapshot_json, d.delivered_at, d.version, o.cycle_id FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id LEFT JOIN grocery_order o ON o.id=d.order_id WHERE f.location_id=? AND d.status NOT IN ('CANCELED','DELIVERED') ORDER BY d.status ASC, d.version ASC, d.rowid ASC LIMIT 200",
+      `SELECT d.id AS job_id, d.order_id, d.status, d.rider_user_id, d.address_snapshot_json, d.delivered_at, d.version, o.cycle_id FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id LEFT JOIN grocery_order o ON o.id=d.order_id WHERE ${clauses.join(" AND ")} ORDER BY d.id DESC LIMIT ?`,
     )
-    .bind(query.locationId)
+    .bind(...binds, limit)
     .all<{
       job_id: string;
       order_id: string;

@@ -569,6 +569,12 @@ const adminOperationsLocationSchema = authenticatedRequestSchema.extend({
 });
 const adminOperationsCycleSchema = adminOperationsLocationSchema.extend({
   cycleId: validationSchema.string().trim().min(1).max(200).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+const adminOperationalExceptionsSchema = adminOperationsLocationSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 const activateFulfillmentModeSchema = adminOperationsLocationSchema.extend({
   fulfillmentMode: validationSchema.enum(["INSTANT", "SCHEDULED"]),
@@ -1274,6 +1280,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const result = await setFulfillmentLocationMode(this.env.DB, {
       locationId: input.locationId,
       activeMode: input.fulfillmentMode,
+      cadence: input.cadence ?? null,
       promiseMinutes: input.promiseMinutes ?? null,
       maxConcurrentInstantOrders: input.maxConcurrentInstantOrders ?? null,
       expectedVersion: input.expectedVersion,
@@ -1332,9 +1339,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     );
   }
   async listOperationalExceptions(
-    input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
+    input: import("@freshmarkets/contracts").AdminOperationalExceptionsRequest,
   ) {
-    const validation = adminOperationsLocationSchema.safeParse(input);
+    const validation = adminOperationalExceptionsSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminOperationalExceptions(

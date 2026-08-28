@@ -82,6 +82,7 @@ async function configureInstant(): Promise<void> {
     locationId: LOCATION,
     requestId: crypto.randomUUID(),
   });
+  if (!current.ok) throw new Error("default location was not found");
   const result = await setFulfillmentLocationMode(
     env.DB,
     current.value.version === 0
@@ -238,9 +239,11 @@ describe("instant checkout quotes", () => {
       locationId: LOCATION,
       requestId: crypto.randomUUID(),
     });
+    if (!current.ok) throw new Error("default location was not found");
     await setFulfillmentLocationMode(env.DB, {
       locationId: LOCATION,
       activeMode: "SCHEDULED",
+      cadence: "WEEKLY",
       promiseMinutes: null,
       maxConcurrentInstantOrders: null,
       expectedVersion: current.value.version || null,

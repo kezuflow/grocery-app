@@ -24,6 +24,7 @@ async function configureInstant(maxOrders = 25): Promise<void> {
     locationId: LOCATION,
     requestId: crypto.randomUUID(),
   });
+  if (!current.ok) throw new Error("default location was not found");
   const result = await setFulfillmentLocationMode(env.DB, {
     locationId: LOCATION,
     activeMode: "INSTANT",

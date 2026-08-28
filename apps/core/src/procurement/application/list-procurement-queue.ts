@@ -20,13 +20,31 @@ export type ProcurementWorkbenchItem = {
 
 export async function listProcurementQueue(
   database: D1Database,
-  query: { locationId: string },
+  query: {
+    locationId: string;
+    cycleId?: string;
+    cursorId?: string;
+    limit?: number;
+    receivingOnly?: boolean;
+  },
 ): Promise<Array<ProcurementWorkbenchItem>> {
+  const limit = query.limit ?? 200;
+  const clauses = ["pr.location_id=?"];
+  const binds: unknown[] = [query.locationId];
+  if (query.cycleId) {
+    clauses.push("pr.delivery_cycle_id=?");
+    binds.push(query.cycleId);
+  }
+  if (query.cursorId) {
+    clauses.push("pr.id<?");
+    binds.push(query.cursorId);
+  }
+  if (query.receivingOnly) clauses.push("rr.id IS NOT NULL");
   const rows = await database
     .prepare(
-      "SELECT pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id, pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version, rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity, rr.status AS receiving_status, rr.version AS receiving_version FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id WHERE pr.location_id=? ORDER BY pr.rowid DESC LIMIT 200",
+      `SELECT pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id, pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version, rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity, rr.status AS receiving_status, rr.version AS receiving_version FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id WHERE ${clauses.join(" AND ")} ORDER BY pr.id DESC LIMIT ?`,
     )
-    .bind(query.locationId)
+    .bind(...binds, limit)
     .all<{
       requirement_id: string;
       delivery_cycle_id: string;

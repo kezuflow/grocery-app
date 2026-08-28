@@ -66,6 +66,16 @@ async function seedStaff(capability: string, scope: "global" | "location") {
   return principal.cookie;
 }
 
+async function seedProcurementRequirement(cycleId: string, suffix: string): Promise<string> {
+  const id = `requirement-page-${suffix}-${crypto.randomUUID().slice(0, 8)}`;
+  await env.DB.prepare(
+    "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 100, 'ORDERED', 1)",
+  )
+    .bind(id, cycleId)
+    .run();
+  return id;
+}
+
 describe("admin operations reads", () => {
   it("requires the named capability and operational scope instead of global scope", async () => {
     expect(
@@ -90,5 +100,49 @@ describe("admin operations reads", () => {
         locationId: "location-not-allowed",
       }),
     ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+
+  it("returns NOT_FOUND for an unknown location even to a globally scoped reader", async () => {
+    const globalReader = await seedStaff("fulfillment.read", "global");
+    expect(
+      await core.getFulfillmentMode({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: globalReader },
+        locationId: `location-missing-${crypto.randomUUID()}`,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  });
+
+  it("applies cycle filtering before keyset pagination and returns a real next cursor", async () => {
+    const reader = await seedStaff("procurement.read", "location");
+    const cycleId = `cycle-page-${crypto.randomUUID().slice(0, 8)}`;
+    await seedProcurementRequirement(cycleId, "a");
+    await seedProcurementRequirement(cycleId, "b");
+
+    const first = await core.listProcurementRequirements({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader },
+      locationId: "location-cebu-central",
+      cycleId,
+      limit: 1,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.items).toHaveLength(1);
+    expect(first.value.nextCursor).toBeTruthy();
+
+    const second = await core.listProcurementRequirements({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader },
+      locationId: "location-cebu-central",
+      cycleId,
+      limit: 1,
+      cursor: first.value.nextCursor!,
+    });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.items).toHaveLength(1);
+    expect(second.value.items[0]!.requirementId).not.toBe(first.value.items[0]!.requirementId);
+    expect(second.value.nextCursor).toBeNull();
   });
 });

@@ -1,14 +1,16 @@
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
 
 export type LocationModeView = {
   locationId: string;
   activeMode: "INSTANT" | "SCHEDULED";
+  cadence: "WEEKLY" | null;
   promiseMinutes: number | null;
   maxConcurrentInstantOrders: number | null;
   version: number;
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
@@ -16,15 +18,22 @@ function failure(code: string, message: string, requestId: string) {
 export async function getLocationMode(
   database: D1Database,
   query: { locationId: string; requestId: string },
-): Promise<{ ok: true; value: LocationModeView; requestId: string }> {
+): Promise<{ ok: true; value: LocationModeView; requestId: string } | ReturnType<typeof failure>> {
+  const location = await database
+    .prepare("SELECT id FROM fulfillment_location WHERE id=? AND status='active'")
+    .bind(query.locationId)
+    .first<{ id: string }>();
+  if (!location)
+    return failure("NOT_FOUND", "Active fulfillment location not found", query.requestId);
   const row = await database
     .prepare(
-      "SELECT location_id, active_mode, promise_minutes, max_concurrent_instant_orders, version FROM fulfillment_location_mode WHERE location_id=?",
+      "SELECT location_id, active_mode, cadence, promise_minutes, max_concurrent_instant_orders, version FROM fulfillment_location_mode WHERE location_id=?",
     )
     .bind(query.locationId)
     .first<{
       location_id: string;
       active_mode: "INSTANT" | "SCHEDULED";
+      cadence: "WEEKLY" | null;
       promise_minutes: number | null;
       max_concurrent_instant_orders: number | null;
       version: number;
@@ -35,6 +44,7 @@ export async function getLocationMode(
       ? {
           locationId: row.location_id,
           activeMode: row.active_mode,
+          cadence: row.cadence,
           promiseMinutes: row.promise_minutes,
           maxConcurrentInstantOrders: row.max_concurrent_instant_orders,
           version: row.version,
@@ -43,6 +53,7 @@ export async function getLocationMode(
         {
           locationId: query.locationId,
           activeMode: "SCHEDULED",
+          cadence: "WEEKLY",
           promiseMinutes: null,
           maxConcurrentInstantOrders: null,
           version: 0,
@@ -92,6 +103,7 @@ export async function resolveCheckoutMode(
 export type SetLocationModeCommand = {
   locationId: string;
   activeMode: "INSTANT" | "SCHEDULED";
+  cadence?: "WEEKLY" | null;
   promiseMinutes: number | null;
   maxConcurrentInstantOrders: number | null;
   expectedVersion: number | null;
@@ -110,6 +122,7 @@ export async function setFulfillmentLocationMode(
   database: D1Database,
   command: SetLocationModeCommand,
 ): Promise<{ ok: true; value: LocationModeView; requestId: string } | ReturnType<typeof failure>> {
+  const cadence = command.cadence ?? null;
   if (command.activeMode === "INSTANT") {
     if (
       command.promiseMinutes === null ||
@@ -124,11 +137,16 @@ export async function setFulfillmentLocationMode(
         "INSTANT requires promiseMinutes and maxConcurrentInstantOrders",
         command.requestId,
       );
+    if (cadence !== null)
+      return failure("VALIDATION_FAILED", "INSTANT cannot have a cadence", command.requestId);
+  } else if (cadence !== "WEEKLY") {
+    return failure("VALIDATION_FAILED", "SCHEDULED requires WEEKLY cadence", command.requestId);
   }
 
   const hash = await requestHash({
     locationId: command.locationId,
     activeMode: command.activeMode,
+    cadence,
     promiseMinutes: command.promiseMinutes,
     maxConcurrentInstantOrders: command.maxConcurrentInstantOrders,
   });
@@ -175,7 +193,7 @@ export async function setFulfillmentLocationMode(
       // concurrent-command conflict, resolved by retrying with its version.
       applied = await database
         .prepare(
-          "INSERT INTO fulfillment_location_mode (location_id, active_mode, promise_minutes, max_concurrent_instant_orders, version, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)",
+          "INSERT INTO fulfillment_location_mode (location_id, active_mode, cadence, promise_minutes, max_concurrent_instant_orders, version, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, 1, ?, ?)",
         )
         .bind(
           command.locationId,
@@ -191,9 +209,9 @@ export async function setFulfillmentLocationMode(
     } else {
       applied = await database
         .prepare(
-          "INSERT INTO fulfillment_location_mode (location_id, active_mode, promise_minutes, max_concurrent_instant_orders, version, created_at, updated_at) VALUES (?, 'SCHEDULED', NULL, NULL, 1, ?, ?)",
+          "INSERT INTO fulfillment_location_mode (location_id, active_mode, cadence, promise_minutes, max_concurrent_instant_orders, version, created_at, updated_at) VALUES (?, 'SCHEDULED', ?, NULL, NULL, 1, ?, ?)",
         )
-        .bind(command.locationId, now, now)
+        .bind(command.locationId, cadence, now, now)
         .run()
         .then((result) => (result.meta?.changes ?? 0) === 1)
         .catch(() => false);
@@ -201,10 +219,11 @@ export async function setFulfillmentLocationMode(
   } else {
     applied = await database
       .prepare(
-        "UPDATE fulfillment_location_mode SET active_mode=?, promise_minutes=?, max_concurrent_instant_orders=?, version=version+1, updated_at=? WHERE location_id=? AND version=?",
+        "UPDATE fulfillment_location_mode SET active_mode=?, cadence=?, promise_minutes=?, max_concurrent_instant_orders=?, version=version+1, updated_at=? WHERE location_id=? AND version=?",
       )
       .bind(
         command.activeMode,
+        cadence,
         command.promiseMinutes,
         command.maxConcurrentInstantOrders,
         now,

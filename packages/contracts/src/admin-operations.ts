@@ -1,6 +1,6 @@
 import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./index";
-import type { DeliveryDispatchItem, OperationalExceptionItem } from "./operations";
+import type { OperationalExceptionItem } from "./operations";
 
 export const adminOperationsReadCapabilities = [
   "procurement.read",
@@ -74,7 +74,21 @@ export type DeliveryOperationsSummary = {
   status: "OPEN" | "EMPTY";
   totalOpenJobs: number;
   assignedJobs: number;
-  items: ReadonlyArray<DeliveryDispatchItem>;
+  items: ReadonlyArray<AdminDeliveryOperationView>;
+  nextCursor: string | null;
+};
+
+/** Delivery queue fields safe for Admin decisions; customer address snapshots stay internal. */
+export type AdminDeliveryOperationView = {
+  jobId: string;
+  orderId: string;
+  cycleId: string | null;
+  locationId: string;
+  status: string;
+  riderAssigned: boolean;
+  deliveredAtIso: string | null;
+  version: number;
+  allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;
 };
 
 export type OperationalExceptionPage = {
@@ -88,18 +102,31 @@ export type AdminOperationsLocationRequest = AuthenticatedRequest & {
 
 export type AdminProcurementRequirementsRequest = AdminOperationsLocationRequest & {
   cycleId?: string;
+  cursor?: string;
+  limit?: number;
 };
 
 export type AdminReceivingSessionsRequest = AdminOperationsLocationRequest & {
   cycleId?: string;
+  cursor?: string;
+  limit?: number;
 };
 
 export type AdminFulfillmentQueueRequest = AdminOperationsLocationRequest & {
   cycleId?: string;
+  cursor?: string;
+  limit?: number;
 };
 
 export type AdminDeliveryOperationsRequest = AdminOperationsLocationRequest & {
   cycleId?: string;
+  cursor?: string;
+  limit?: number;
+};
+
+export type AdminOperationalExceptionsRequest = AdminOperationsLocationRequest & {
+  cursor?: string;
+  limit?: number;
 };
 
 export type ActivateFulfillmentModeRequest = AdminOperationsLocationRequest & {
@@ -132,6 +159,6 @@ export type AdminOperationsService = {
     request: AdminDeliveryOperationsRequest,
   ): Promise<RpcResult<DeliveryOperationsSummary>>;
   listOperationalExceptions(
-    request: AdminOperationsLocationRequest,
+    request: AdminOperationalExceptionsRequest,
   ): Promise<RpcResult<OperationalExceptionPage>>;
 };

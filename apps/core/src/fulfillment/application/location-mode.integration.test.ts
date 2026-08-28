@@ -31,7 +31,8 @@ describe("fulfillment location mode configuration", () => {
   it("defaults an unconfigured location to Scheduled and resolves it for checkout", async () => {
     const locationId = await seedLocation();
     const view = await getLocationMode(env.DB, { locationId, requestId: crypto.randomUUID() });
-    expect(view.value).toMatchObject({ activeMode: "SCHEDULED", version: 0 });
+    if (!view.ok) throw new Error("seeded location was not found");
+    expect(view.value).toMatchObject({ activeMode: "SCHEDULED", cadence: "WEEKLY", version: 0 });
     const resolved = await resolveCheckoutMode(env.DB, locationId);
     expect(resolved).toMatchObject({ ok: true, mode: "SCHEDULED" });
   });
@@ -75,12 +76,13 @@ describe("fulfillment location mode configuration", () => {
         activeMode: "SCHEDULED",
         promiseMinutes: null,
         maxConcurrentInstantOrders: null,
+        cadence: "WEEKLY",
         expectedVersion: 1,
       }),
     );
     expect(updated.ok).toBe(true);
     if (!updated.ok) return;
-    expect(updated.value).toMatchObject({ activeMode: "SCHEDULED", version: 2 });
+    expect(updated.value).toMatchObject({ activeMode: "SCHEDULED", cadence: "WEEKLY", version: 2 });
     const resolved = await resolveCheckoutMode(env.DB, locationId);
     expect(resolved).toMatchObject({ ok: true, mode: "SCHEDULED" });
     // A stale version cannot rewrite the retired configuration.
@@ -102,11 +104,37 @@ describe("fulfillment location mode configuration", () => {
     expect(resolved).toMatchObject({ ok: true, mode: "SCHEDULED" });
   });
 
+  it("rejects a cadence for INSTANT and missing Scheduled cadence", async () => {
+    const locationId = await seedLocation();
+    expect(
+      await setFulfillmentLocationMode(env.DB, command(locationId, { cadence: "WEEKLY" })),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await setFulfillmentLocationMode(
+        env.DB,
+        command(locationId, {
+          activeMode: "SCHEDULED",
+          promiseMinutes: null,
+          maxConcurrentInstantOrders: null,
+          cadence: null,
+        }),
+      ),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
   it("refuses an unknown or inactive location", async () => {
     const result = await setFulfillmentLocationMode(
       env.DB,
       command(`location-missing-${crypto.randomUUID().slice(0, 8)}`),
     );
     expect(result).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  });
+
+  it("does not fabricate a Scheduled configuration for an unknown location", async () => {
+    const mode = await getLocationMode(env.DB, {
+      locationId: `missing-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    });
+    expect(mode).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 });

@@ -30,13 +30,24 @@ export function legalFulfillmentTransitions(): StateMap {
  */
 export async function listFulfillmentQueue(
   database: D1Database,
-  query: { locationId: string },
+  query: { locationId: string; cycleId?: string; cursorId?: string; limit?: number },
 ): Promise<Array<Omit<FulfillmentQueueItem, "allowedActions"> & { cycleId: string | null }>> {
+  const limit = query.limit ?? 200;
+  const clauses = ["f.location_id=?", "f.status NOT IN ('CANCELED')"];
+  const binds: unknown[] = [query.locationId];
+  if (query.cycleId) {
+    clauses.push("o.cycle_id=?");
+    binds.push(query.cycleId);
+  }
+  if (query.cursorId) {
+    clauses.push("f.order_id<?");
+    binds.push(query.cursorId);
+  }
   const rows = await database
     .prepare(
-      "SELECT f.order_id, f.status, f.location_id, f.version, o.cycle_id FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE f.location_id=? AND f.status NOT IN ('CANCELED') ORDER BY f.updated_at ASC, f.rowid ASC LIMIT 200",
+      `SELECT f.order_id, f.status, f.location_id, f.version, o.cycle_id FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE ${clauses.join(" AND ")} ORDER BY f.order_id DESC LIMIT ?`,
     )
-    .bind(query.locationId)
+    .bind(...binds, limit)
     .all<{
       order_id: string;
       status: string;

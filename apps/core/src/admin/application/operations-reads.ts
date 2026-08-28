@@ -2,6 +2,7 @@ import type {
   AdminDeliveryOperationsRequest,
   AdminFulfillmentQueueRequest,
   AdminOperationsLocationRequest,
+  AdminOperationalExceptionsRequest,
   AdminProcurementRequirementsRequest,
   AdminReceivingSessionsRequest,
   DeliveryOperationsSummary,
@@ -21,17 +22,62 @@ import {
   allowedFulfillmentActions,
   listFulfillmentQueue as listFulfillmentRows,
 } from "../../fulfillment/application/list-fulfillment-queue";
-import { getLocationMode } from "../../fulfillment/application/location-mode";
+import {
+  getLocationMode,
+  type LocationModeView,
+} from "../../fulfillment/application/location-mode";
 import { listProcurementQueue } from "../../procurement/application/list-procurement-queue";
 import {
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
+import {
+  boundListLimit,
+  decodeStaffCursor,
+  encodeStaffCursor,
+} from "./staff-administration-access";
 
-function modeView(
-  value: Awaited<ReturnType<typeof getLocationMode>>["value"],
-): FulfillmentModeConfigurationView {
-  return { ...value, cadence: null };
+function modeView(value: LocationModeView): FulfillmentModeConfigurationView {
+  return value;
+}
+
+function pageRequest(request: {
+  cursor?: string;
+  limit?: number;
+  requestId: string;
+}): { limit: number; cursorId?: string } | RpcResult<never> {
+  const limit = boundListLimit(request.limit);
+  if (limit === "invalid")
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "limit must be an integer between 1 and 100",
+        requestId: request.requestId,
+      },
+    };
+  if (!request.cursor) return { limit };
+  const cursor = decodeStaffCursor(request.cursor);
+  if (!cursor)
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "cursor is malformed",
+        requestId: request.requestId,
+      },
+    };
+  return { limit, cursorId: cursor.id };
+}
+
+function isPageError(
+  value: { limit: number; cursorId?: string } | RpcResult<never>,
+): value is RpcResult<never> {
+  return "ok" in value;
+}
+
+function nextCursor(hasMore: boolean, id: string | undefined): string | null {
+  return hasMore && id ? encodeStaffCursor({ createdAt: 0, id }) : null;
 }
 
 export async function getAdminFulfillmentMode(
@@ -46,6 +92,7 @@ export async function getAdminFulfillmentMode(
   );
   if (!access.ok) return access;
   const mode = await getLocationMode(deps.db, request);
+  if (!mode.ok) return mode;
   return { ok: true, value: modeView(mode.value), requestId: request.requestId };
 }
 
@@ -60,24 +107,30 @@ export async function listAdminProcurementRequirements(
     request.locationId,
   );
   if (!access.ok) return access;
-  const rows = await listProcurementQueue(deps.db, { locationId: request.locationId });
+  const page = pageRequest(request);
+  if (isPageError(page)) return page;
+  const rows = await listProcurementQueue(deps.db, {
+    locationId: request.locationId,
+    cycleId: request.cycleId,
+    cursorId: page.cursorId,
+    limit: page.limit + 1,
+  });
+  const pageRows = rows.slice(0, page.limit);
   return {
     ok: true,
     value: {
-      items: rows
-        .filter((row) => !request.cycleId || row.cycleId === request.cycleId)
-        .map((row) => ({
-          requirementId: row.requirementId,
-          cycleId: row.cycleId,
-          locationId: row.locationId,
-          inventoryPoolId: row.inventoryPoolId,
-          requiredQuantityBase: row.requiredQuantityBase,
-          acceptedBase: row.acceptedBase,
-          rejectedBase: row.rejectedBase,
-          status: row.requirementStatus,
-          version: row.requirementVersion,
-        })),
-      nextCursor: null,
+      items: pageRows.map((row) => ({
+        requirementId: row.requirementId,
+        cycleId: row.cycleId,
+        locationId: row.locationId,
+        inventoryPoolId: row.inventoryPoolId,
+        requiredQuantityBase: row.requiredQuantityBase,
+        acceptedBase: row.acceptedBase,
+        rejectedBase: row.rejectedBase,
+        status: row.requirementStatus,
+        version: row.requirementVersion,
+      })),
+      nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.requirementId),
     },
     requestId: request.requestId,
   };
@@ -94,27 +147,34 @@ export async function listAdminReceivingSessions(
     request.locationId,
   );
   if (!access.ok) return access;
-  const rows = await listProcurementQueue(deps.db, { locationId: request.locationId });
+  const page = pageRequest(request);
+  if (isPageError(page)) return page;
+  const rows = await listProcurementQueue(deps.db, {
+    locationId: request.locationId,
+    cycleId: request.cycleId,
+    cursorId: page.cursorId,
+    limit: page.limit + 1,
+    receivingOnly: true,
+  });
+  const pageRows = rows.slice(0, page.limit);
   return {
     ok: true,
     value: {
-      items: rows
-        .filter(
-          (row) =>
-            row.receivingRecordId !== null && (!request.cycleId || row.cycleId === request.cycleId),
-        )
-        .map((row) => ({
-          receivingSessionId: row.receivingRecordId!,
-          requirementId: row.requirementId,
-          cycleId: row.cycleId,
-          locationId: row.locationId,
-          expectedBase: row.requiredQuantityBase,
-          acceptedBase: row.acceptedBase,
-          rejectedBase: row.rejectedBase,
-          status: row.receivingStatus!,
-          version: row.receivingVersion!,
-        })),
-      nextCursor: null,
+      items: pageRows.map((row) => ({
+        receivingSessionId: row.receivingRecordId!,
+        requirementId: row.requirementId,
+        cycleId: row.cycleId,
+        locationId: row.locationId,
+        expectedBase: row.requiredQuantityBase,
+        acceptedBase: row.acceptedBase,
+        rejectedBase: row.rejectedBase,
+        status: row.receivingStatus!,
+        version: row.receivingVersion!,
+      })),
+      nextCursor: nextCursor(
+        rows.length > page.limit,
+        pageRows.at(-1)?.receivingRecordId ?? undefined,
+      ),
     },
     requestId: request.requestId,
   };
@@ -131,21 +191,27 @@ export async function listAdminFulfillmentQueue(
     request.locationId,
   );
   if (!access.ok) return access;
-  const rows = await listFulfillmentRows(deps.db, { locationId: request.locationId });
+  const page = pageRequest(request);
+  if (isPageError(page)) return page;
+  const rows = await listFulfillmentRows(deps.db, {
+    locationId: request.locationId,
+    cycleId: request.cycleId,
+    cursorId: page.cursorId,
+    limit: page.limit + 1,
+  });
+  const pageRows = rows.slice(0, page.limit);
   return {
     ok: true,
     value: {
-      items: rows
-        .filter((row) => !request.cycleId || row.cycleId === request.cycleId)
-        .map((row) => ({
-          orderId: row.orderId,
-          cycleId: row.cycleId,
-          locationId: row.locationId,
-          status: row.status,
-          version: row.version,
-          allowedActions: allowedFulfillmentActions(row.status),
-        })),
-      nextCursor: null,
+      items: pageRows.map((row) => ({
+        orderId: row.orderId,
+        cycleId: row.cycleId,
+        locationId: row.locationId,
+        status: row.status,
+        version: row.version,
+        allowedActions: allowedFulfillmentActions(row.status),
+      })),
+      nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.orderId),
     },
     requestId: request.requestId,
   };
@@ -162,22 +228,36 @@ export async function listAdminDeliveryOperations(
     request.locationId,
   );
   if (!access.ok) return access;
-  const rows = await listDeliveryDispatch(deps.db, { locationId: request.locationId });
-  const filtered = rows
-    .filter((row) => !request.cycleId || row.cycleId === request.cycleId)
-    .map((row) => ({
-      ...row,
-      allowedActions: allowedDeliveryActions(row.status, row.riderAuthUserId !== null),
-    }));
+  const page = pageRequest(request);
+  if (isPageError(page)) return page;
+  const rows = await listDeliveryDispatch(deps.db, {
+    locationId: request.locationId,
+    cycleId: request.cycleId,
+    cursorId: page.cursorId,
+    limit: page.limit + 1,
+  });
+  const pageRows = rows.slice(0, page.limit);
+  const items = pageRows.map((row) => ({
+    jobId: row.jobId,
+    orderId: row.orderId,
+    cycleId: row.cycleId,
+    locationId: request.locationId,
+    status: row.status,
+    riderAssigned: row.riderAuthUserId !== null,
+    deliveredAtIso: row.deliveredAtIso,
+    version: row.version,
+    allowedActions: allowedDeliveryActions(row.status, row.riderAuthUserId !== null),
+  }));
   return {
     ok: true,
     value: {
       locationId: request.locationId,
       cycleId: request.cycleId ?? null,
-      status: filtered.length ? "OPEN" : "EMPTY",
-      totalOpenJobs: filtered.length,
-      assignedJobs: filtered.filter((item) => item.riderAuthUserId !== null).length,
-      items: filtered,
+      status: items.length ? "OPEN" : "EMPTY",
+      totalOpenJobs: items.length,
+      assignedJobs: items.filter((item) => item.riderAssigned).length,
+      items,
+      nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.jobId),
     },
     requestId: request.requestId,
   };
@@ -185,7 +265,7 @@ export async function listAdminDeliveryOperations(
 
 export async function listAdminOperationalExceptions(
   deps: OperationsAdministrationDeps,
-  request: AdminOperationsLocationRequest,
+  request: AdminOperationalExceptionsRequest,
 ): Promise<RpcResult<OperationalExceptionPage>> {
   const access = await resolveOperationsAdministrationAccess(
     deps,
@@ -194,11 +274,17 @@ export async function listAdminOperationalExceptions(
     request.locationId,
   );
   if (!access.ok) return access;
+  const page = pageRequest(request);
+  if (isPageError(page)) return page;
+  const all = (await listExceptionRows(deps.db, { locationId: request.locationId }))
+    .filter((item) => !page.cursorId || item.referenceId < page.cursorId)
+    .sort((left, right) => right.referenceId.localeCompare(left.referenceId));
+  const items = all.slice(0, page.limit);
   return {
     ok: true,
     value: {
-      items: await listExceptionRows(deps.db, { locationId: request.locationId }),
-      nextCursor: null,
+      items,
+      nextCursor: nextCursor(all.length > page.limit, items.at(-1)?.referenceId),
     },
     requestId: request.requestId,
   };
