@@ -8,6 +8,7 @@ export * from "./admin-promotions";
 export * from "./admin-catalog";
 export * from "./admin-finance";
 export * from "./admin-operations";
+export * from "./admin-analytics";
 export * from "./states";
 export type * from "./auth";
 export type * from "./catalog";
