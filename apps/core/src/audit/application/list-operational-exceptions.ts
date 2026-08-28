@@ -1,7 +1,7 @@
 import type { OperationalExceptionItem } from "@freshmarkets/contracts";
 
-function ageMinutes(at: number | null, now: number): number {
-  if (at === null || !Number.isFinite(at)) return 0;
+function ageMinutes(at: number | null, now: number): number | null {
+  if (at === null || !Number.isFinite(at)) return null;
   return Math.max(0, Math.floor((now - at) / 60_000));
 }
 
@@ -20,7 +20,7 @@ export async function listOperationalExceptions(
   const [procurement, shortages, deliveries, receiving] = await Promise.all([
     database
       .prepare(
-        "SELECT se.id, se.kind, se.affected_quantity, se.created_at, pr.location_id FROM supply_exception se JOIN procurement_requirement pr ON pr.id=se.requirement_id WHERE pr.location_id=? AND se.status NOT IN ('RESOLVED','CLOSED') ORDER BY se.created_at ASC LIMIT 50",
+        "SELECT se.id, se.kind, se.affected_quantity, se.created_at, pr.location_id FROM supply_exception se JOIN procurement_requirement pr ON pr.id=se.requirement_id WHERE pr.location_id=? AND se.status NOT IN ('RESOLVED','CLOSED') ORDER BY se.created_at ASC",
       )
       .bind(query.locationId)
       .all<{
@@ -32,13 +32,13 @@ export async function listOperationalExceptions(
       }>(),
     database
       .prepare(
-        "SELECT id, order_id, status, updated_at FROM fulfillment_record WHERE location_id=? AND status='SHORTAGE' ORDER BY updated_at ASC LIMIT 50",
+        "SELECT id, order_id, status, updated_at FROM fulfillment_record WHERE location_id=? AND status='SHORTAGE' ORDER BY updated_at ASC",
       )
       .bind(query.locationId)
       .all<{ id: string; order_id: string; status: string; updated_at: number }>(),
     database
       .prepare(
-        "SELECT d.id, d.order_id, d.status, d.rider_user_id, f.updated_at FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE f.location_id=? AND d.status='FAILED' ORDER BY f.updated_at ASC LIMIT 50",
+        "SELECT d.id, d.order_id, d.status, d.rider_user_id, f.updated_at FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE f.location_id=? AND d.status='FAILED' ORDER BY f.updated_at ASC",
       )
       .bind(query.locationId)
       .all<{
@@ -50,7 +50,7 @@ export async function listOperationalExceptions(
       }>(),
     database
       .prepare(
-        "SELECT rr.id, rr.expected_quantity, rr.accepted_quantity, rr.rejected_quantity, pr.location_id FROM receiving_record rr JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id WHERE pr.location_id=? AND (rr.rejected_quantity>0 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity)) AND rr.status!='PENDING' ORDER BY rr.rowid ASC LIMIT 50",
+        "SELECT rr.id, rr.expected_quantity, rr.accepted_quantity, rr.rejected_quantity, pr.location_id FROM receiving_record rr JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id WHERE pr.location_id=? AND (rr.rejected_quantity>0 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity)) AND rr.status!='PENDING' ORDER BY rr.rowid ASC",
       )
       .bind(query.locationId)
       .all<{
@@ -72,20 +72,20 @@ export async function listOperationalExceptions(
       orderId: null,
       locationId: r.location_id,
       reason: r.kind,
-      permittedActions: ["ALTERNATE_SOURCE", "ESCALATE"] as const,
+      permittedActions: [],
       detail: `Procurement shortage (${r.kind}); ${r.affected_quantity} base units affected.`,
     })),
     ...receiving.results.map((r) => ({
       kind: "RECEIVING_DISCREPANCY" as const,
       source: "RECEIVING" as const,
       severity: r.rejected_quantity > 0 ? ("HIGH" as const) : ("MEDIUM" as const),
-      ageMinutes: 0,
+      ageMinutes: null,
       ownerId: null,
       referenceId: r.id,
       orderId: null,
       locationId: r.location_id,
       reason: "RECEIVING_DISCREPANCY",
-      permittedActions: ["ACKNOWLEDGE", "ESCALATE"] as const,
+      permittedActions: [],
       detail: `Expected ${r.expected_quantity}, accepted ${r.accepted_quantity}, rejected ${r.rejected_quantity}.`,
     })),
     ...shortages.results.map((r) => ({
@@ -116,6 +116,7 @@ export async function listOperationalExceptions(
     })),
   ];
   return rows.sort(
-    (a, b) => b.ageMinutes - a.ageMinutes || a.referenceId.localeCompare(b.referenceId),
+    (a, b) =>
+      (b.ageMinutes ?? -1) - (a.ageMinutes ?? -1) || a.referenceId.localeCompare(b.referenceId),
   );
 }

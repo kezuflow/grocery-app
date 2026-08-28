@@ -106,9 +106,13 @@ export default function OperationalExceptionsPage() {
                       <TableCell className="font-mono text-xs">{item.referenceId}</TableCell>
                       <TableCell>{item.locationId ?? "—"}</TableCell>
                       <TableCell className="text-xs">
-                        {item.ageMinutes}m old · {item.ownerId ?? "Unassigned"}
+                        {item.ageMinutes === null ? "Age unavailable" : `${item.ageMinutes}m old`} ·{" "}
+                        {item.ownerId ?? "Unassigned"}
                       </TableCell>
-                      <TableCell>{item.detail}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{item.reason}</div>
+                        <div>{item.detail}</div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {item.permittedActions.map((action) => (

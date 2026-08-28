@@ -23,7 +23,7 @@ describe("converged operational exceptions", () => {
       severity: "CRITICAL",
       locationId: "location-cebu-central",
       reason: "SHORTAGE",
-      permittedActions: ["ALTERNATE_SOURCE", "ESCALATE"],
+      permittedActions: [],
       ownerId: null,
     });
     expect(item?.ageMinutes).toBeGreaterThanOrEqual(1);

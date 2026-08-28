@@ -229,9 +229,10 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
 ### Operations exception convergence
 
 - Admin operational exceptions converge procurement, receiving, fulfillment, and delivery source
-  records into a typed, location-scoped queue exposing severity, age, owner, reason, and
-  source-derived permitted actions. Resolution remains owned by each source command and its
-  immutable audit event; unsupported actions are not synthesized by the queue.
+  records into a typed, location-scoped queue exposing policy-derived severity, source age where
+  timestamps exist, owner, reason, and source-derived permitted actions. Resolution remains owned
+  by each source command and its immutable audit event; unsupported actions are explicitly
+  unavailable in the convergence view.
 
 ## Maturity by area
 

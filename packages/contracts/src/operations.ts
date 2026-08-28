@@ -86,7 +86,7 @@ export type OperationalExceptionItem = {
   source: "PROCUREMENT" | "RECEIVING" | "FULFILLMENT" | "DELIVERY";
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   /** Age in whole minutes, computed from the source record's creation/update instant. */
-  ageMinutes: number;
+  ageMinutes: number | null;
   /** Current source-assigned operator, when the source provides one. */
   ownerId: string | null;
   referenceId: string;
