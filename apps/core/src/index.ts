@@ -101,6 +101,16 @@ import {
 } from "./admin/application/operations-reads";
 import { resolveOperationsAdministrationAccess } from "./admin/application/operations-administration-access";
 import { setFulfillmentLocationMode } from "./fulfillment/application/location-mode";
+import {
+  activateAdminFulfillmentMode,
+  aggregateAdminProcurementDemand,
+  startAdminReceiving,
+  recordAdminReceivedLine,
+  completeAdminReceiving,
+  advanceAdminFulfillment,
+  advanceAdminDelivery,
+  resolveAdminOperationalException,
+} from "./admin/application/operations-commands";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
 import { listAdminAuditEvents as listAdminAuditEventsQuery } from "./audit/application/list-audit-events";
@@ -583,6 +593,55 @@ const activateFulfillmentModeSchema = adminOperationsLocationSchema.extend({
   maxConcurrentInstantOrders: validationSchema.number().int().min(1).nullable().optional(),
   expectedVersion: validationSchema.number().int().min(0).nullable(),
   idempotencyKey: idempotencyKeySchema,
+});
+const adminProcurementAggregateSchema = adminOperationsLocationSchema.extend({
+  cycleId: validationSchema.string().trim().min(1).max(200),
+  inventoryPoolId: validationSchema.string().trim().min(1).max(200),
+  quantityBase: validationSchema.number().int().min(1),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+});
+const adminReceivingStartSchema = adminOperationsLocationSchema.extend({
+  requirementId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+});
+const adminReceivingLineSchema = adminOperationsLocationSchema.extend({
+  receivingSessionId: validationSchema.string().trim().min(1).max(200),
+  acceptedBase: validationSchema.number().int().min(0),
+  rejectedBase: validationSchema.number().int().min(0),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+});
+const adminReceivingCompleteSchema = adminOperationsLocationSchema.extend({
+  receivingSessionId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+});
+const adminFulfillmentAdvanceSchema = adminOperationsLocationSchema.extend({
+  orderId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["START", "PACK", "SHORTAGE"]),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+});
+const adminDeliveryAdvanceSchema = adminOperationsLocationSchema.extend({
+  orderId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["DISPATCH", "DELIVER", "FAIL"]),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+});
+const adminOperationalExceptionResolveSchema = adminOperationsLocationSchema.extend({
+  kind: validationSchema.enum(["FULFILLMENT_SHORTAGE", "DELIVERY_FAILED"]),
+  orderId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500),
 });
 
 const orderListSchema = authenticatedRequestSchema.extend({
@@ -1269,30 +1328,83 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = activateFulfillmentModeSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const deps = { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB };
-    const access = await resolveOperationsAdministrationAccess(
-      deps,
+    return activateAdminFulfillmentMode(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
-      "fulfillment.manage",
-      input.locationId,
     );
-    if (!access.ok) return access;
-    const result = await setFulfillmentLocationMode(this.env.DB, {
-      locationId: input.locationId,
-      activeMode: input.fulfillmentMode,
-      cadence: input.cadence ?? null,
-      promiseMinutes: input.promiseMinutes ?? null,
-      maxConcurrentInstantOrders: input.maxConcurrentInstantOrders ?? null,
-      expectedVersion: input.expectedVersion,
-      idempotencyKey: input.idempotencyKey,
-      requestId: input.requestId,
-    });
-    if (!result.ok) return result;
-    return {
-      ok: true as const,
-      value: result.value,
-      requestId: input.requestId,
-    };
+  }
+  async aggregateAdminProcurementDemand(
+    input: import("@freshmarkets/contracts").AggregateAdminProcurementDemandRequest,
+  ) {
+    const validation = adminProcurementAggregateSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return aggregateAdminProcurementDemand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async startAdminReceiving(input: import("@freshmarkets/contracts").StartAdminReceivingRequest) {
+    const validation = adminReceivingStartSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return startAdminReceiving(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async recordAdminReceivedLine(
+    input: import("@freshmarkets/contracts").RecordAdminReceivedLineRequest,
+  ) {
+    const validation = adminReceivingLineSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return recordAdminReceivedLine(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async completeAdminReceiving(
+    input: import("@freshmarkets/contracts").CompleteAdminReceivingRequest,
+  ) {
+    const validation = adminReceivingCompleteSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return completeAdminReceiving(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async advanceAdminFulfillment(
+    input: import("@freshmarkets/contracts").AdvanceAdminFulfillmentRequest,
+  ) {
+    const validation = adminFulfillmentAdvanceSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return advanceAdminFulfillment(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async advanceAdminDelivery(input: import("@freshmarkets/contracts").AdvanceAdminDeliveryRequest) {
+    const validation = adminDeliveryAdvanceSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return advanceAdminDelivery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async resolveAdminOperationalException(
+    input: import("@freshmarkets/contracts").ResolveAdminOperationalExceptionRequest,
+  ) {
+    const validation = adminOperationalExceptionResolveSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return resolveAdminOperationalException(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
   }
   async listProcurementRequirements(
     input: import("@freshmarkets/contracts").AdminProcurementRequirementsRequest,

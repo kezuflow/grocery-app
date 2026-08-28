@@ -138,6 +138,62 @@ export type ActivateFulfillmentModeRequest = AdminOperationsLocationRequest & {
   idempotencyKey: string;
 };
 
+export type AggregateAdminProcurementDemandRequest = AdminOperationsLocationRequest & {
+  cycleId: string;
+  inventoryPoolId: string;
+  quantityBase: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+};
+
+export type StartAdminReceivingRequest = AdminOperationsLocationRequest & {
+  requirementId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+};
+
+export type RecordAdminReceivedLineRequest = AdminOperationsLocationRequest & {
+  receivingSessionId: string;
+  acceptedBase: number;
+  rejectedBase: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+};
+
+export type CompleteAdminReceivingRequest = AdminOperationsLocationRequest & {
+  receivingSessionId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+};
+
+export type AdvanceAdminFulfillmentRequest = AdminOperationsLocationRequest & {
+  orderId: string;
+  action: "START" | "PACK" | "SHORTAGE";
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+};
+
+export type AdvanceAdminDeliveryRequest = AdminOperationsLocationRequest & {
+  orderId: string;
+  action: "DISPATCH" | "DELIVER" | "FAIL";
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+};
+
+export type ResolveAdminOperationalExceptionRequest = AdminOperationsLocationRequest & {
+  kind: "FULFILLMENT_SHORTAGE" | "DELIVERY_FAILED";
+  orderId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+};
+
 /** Scoped operational administration read and configuration surface. */
 export type AdminOperationsService = {
   getFulfillmentMode(
@@ -146,6 +202,27 @@ export type AdminOperationsService = {
   activateFulfillmentMode(
     request: ActivateFulfillmentModeRequest,
   ): Promise<RpcResult<FulfillmentModeConfigurationView>>;
+  aggregateAdminProcurementDemand(
+    request: AggregateAdminProcurementDemandRequest,
+  ): Promise<RpcResult<ProcurementRequirementView>>;
+  startAdminReceiving(
+    request: StartAdminReceivingRequest,
+  ): Promise<RpcResult<ReceivingSessionView>>;
+  recordAdminReceivedLine(
+    request: RecordAdminReceivedLineRequest,
+  ): Promise<RpcResult<ReceivingSessionView>>;
+  completeAdminReceiving(
+    request: CompleteAdminReceivingRequest,
+  ): Promise<RpcResult<ReceivingSessionView>>;
+  advanceAdminFulfillment(
+    request: AdvanceAdminFulfillmentRequest,
+  ): Promise<RpcResult<FulfillmentQueueView>>;
+  advanceAdminDelivery(
+    request: AdvanceAdminDeliveryRequest,
+  ): Promise<RpcResult<AdminDeliveryOperationView>>;
+  resolveAdminOperationalException(
+    request: ResolveAdminOperationalExceptionRequest,
+  ): Promise<RpcResult<FulfillmentQueueView | AdminDeliveryOperationView>>;
   listProcurementRequirements(
     request: AdminProcurementRequirementsRequest,
   ): Promise<RpcResult<ProcurementRequirementPage>>;
