@@ -141,7 +141,6 @@ export type ActivateFulfillmentModeRequest = AdminOperationsLocationRequest & {
 export type AggregateAdminProcurementDemandRequest = AdminOperationsLocationRequest & {
   cycleId: string;
   inventoryPoolId: string;
-  quantityBase: number;
   expectedVersion: number;
   idempotencyKey: string;
   reason?: string;
@@ -188,6 +187,7 @@ export type AdvanceAdminDeliveryRequest = AdminOperationsLocationRequest & {
 
 export type ResolveAdminOperationalExceptionRequest = AdminOperationsLocationRequest & {
   kind: "FULFILLMENT_SHORTAGE" | "DELIVERY_FAILED";
+  action: "RETRY_FULFILLMENT" | "RETRY_DELIVERY";
   orderId: string;
   expectedVersion: number;
   idempotencyKey: string;

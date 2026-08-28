@@ -10,6 +10,7 @@ export type AuditEventAppend = {
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   correlationId: string;
+  idempotencyKey?: string | null;
   occurredAt: number;
 };
 
@@ -19,8 +20,8 @@ export type AuditAppendGuard = {
 };
 
 const AUDIT_COLUMNS =
-  "(id, actor_user_id, action, aggregate_type, aggregate_id, details_json, before_json, after_json, reason, market_id, location_id, correlation_id, occurred_at)";
-const AUDIT_VALUES = "(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)";
+  "(id, actor_user_id, action, aggregate_type, aggregate_id, details_json, idempotency_key, before_json, after_json, reason, market_id, location_id, correlation_id, occurred_at)";
+const AUDIT_VALUES = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)";
 
 function auditBinds(event: AuditEventAppend): unknown[] {
   return [
@@ -30,6 +31,7 @@ function auditBinds(event: AuditEventAppend): unknown[] {
     event.resourceType,
     event.resourceId,
     JSON.stringify(event.details ?? {}),
+    event.idempotencyKey ?? null,
     event.before === undefined || event.before === null ? null : JSON.stringify(event.before),
     event.after === undefined || event.after === null ? null : JSON.stringify(event.after),
     event.reason ?? null,
@@ -52,10 +54,14 @@ export function auditEventStatement(
 ): D1PreparedStatement {
   const binds = auditBinds(event);
   if (!guard) {
-    return database.prepare(`INSERT INTO audit_event ${AUDIT_COLUMNS} VALUES ${AUDIT_VALUES}`).bind(...binds);
+    return database
+      .prepare(`INSERT INTO audit_event ${AUDIT_COLUMNS} VALUES ${AUDIT_VALUES}`)
+      .bind(...binds);
   }
   return database
-    .prepare(`INSERT INTO audit_event ${AUDIT_COLUMNS} SELECT ${AUDIT_VALUES.slice(1, -1)} WHERE ${guard.clause}`)
+    .prepare(
+      `INSERT INTO audit_event ${AUDIT_COLUMNS} SELECT ${AUDIT_VALUES.slice(1, -1)} WHERE ${guard.clause}`,
+    )
     .bind(...binds, ...guard.binds);
 }
 

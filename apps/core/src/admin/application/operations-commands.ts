@@ -46,31 +46,19 @@ async function audit(
   locationId: string,
   after: Record<string, unknown>,
 ) {
-  // Canonical commands own their replay records.  This guard prevents an
-  // Admin retry from appending a second evidence row after a successful replay.
-  const existing = await deps.db
-    .prepare(
-      "SELECT id FROM audit_event WHERE action=? AND aggregate_type=? AND aggregate_id=? AND details_json LIKE ? LIMIT 1",
-    )
-    .bind(
-      action,
-      resourceType,
-      resourceId,
-      `%\"idempotencyKey\":\"${input.idempotencyKey ?? ""}\"%`,
-    )
-    .first<{ id: string }>();
-  if (existing) return;
-  await appendAuditEvent(deps.db, {
+  const appended = await appendAuditEvent(deps.db, {
     actorUserId,
     action,
     resourceType,
     resourceId,
     reason: input.reason?.trim() || null,
-    details: { locationId, idempotencyKey: input.idempotencyKey ?? null },
+    details: { locationId },
+    idempotencyKey: input.idempotencyKey ?? null,
     after,
     correlationId: input.requestId,
     occurredAt: Date.now(),
   });
+  if (!appended) throw new Error(`Audit append failed for ${action}`);
 }
 
 async function access(
@@ -178,19 +166,48 @@ export async function aggregateAdminProcurementDemand(
 ): Promise<RpcResult<ProcurementRequirementView>> {
   const permitted = await access(deps, request, "procurement.manage");
   if (!permitted.ok) return permitted;
-  if (!Number.isInteger(request.quantityBase) || request.quantityBase <= 0)
-    return failed(
-      "VALIDATION_FAILED",
-      "quantityBase must be a positive integer",
-      request.requestId,
-    );
+  const totals = await deps.db
+    .prepare(`SELECT
+      COALESCE((SELECT SUM(quantity) FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND status='OPEN'), 0) AS demand,
+      COALESCE((SELECT on_hand-reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?), 0) AS available,
+      COALESCE((SELECT SUM(pr.required_quantity-rr.accepted_quantity) FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id WHERE pr.delivery_cycle_id=? AND pr.location_id=? AND pr.inventory_pool_id=? AND pr.status IN ('DRAFT','APPROVED','ORDERED','PARTIALLY_RECEIVED')), 0) AS incoming`)
+    .bind(
+      request.cycleId,
+      request.locationId,
+      request.inventoryPoolId,
+      request.locationId,
+      request.inventoryPoolId,
+      request.cycleId,
+      request.locationId,
+      request.inventoryPoolId,
+    )
+    .first<{ demand: number; available: number; incoming: number }>();
+  if (!totals)
+    return {
+      ok: false,
+      error: {
+        code: "CONFIGURATION_ERROR",
+        message: "Committed-demand aggregation is unavailable",
+        requestId: request.requestId,
+      },
+    };
+  const quantity = Math.max(0, totals.demand - totals.available - totals.incoming);
+  if (quantity === 0)
+    return {
+      ok: false,
+      error: {
+        code: "CONFIGURATION_ERROR",
+        message: "No additional procurement requirement is derived from committed demand",
+        requestId: request.requestId,
+      },
+    };
   const result = await createProcurementRequirement(deps.db, {
     requestId: request.requestId,
     headers: request.headers,
     deliveryCycleId: request.cycleId,
     locationId: request.locationId,
     inventoryPoolId: request.inventoryPoolId,
-    quantity: request.quantityBase,
+    quantity,
     expectedVersion: request.expectedVersion,
     idempotencyKey: request.idempotencyKey,
   });
@@ -504,7 +521,13 @@ export async function resolveAdminOperationalException(
 ): Promise<RpcResult<FulfillmentQueueView | AdminDeliveryOperationView>> {
   if (request.reason.trim() === "")
     return failed("VALIDATION_FAILED", "A resolution reason is required", request.requestId);
-  if (request.kind === "FULFILLMENT_SHORTAGE")
+  if (request.kind === "FULFILLMENT_SHORTAGE" && request.action === "RETRY_FULFILLMENT")
     return advanceAdminFulfillment(deps, { ...request, action: "START" });
-  return advanceAdminDelivery(deps, { ...request, action: "DISPATCH" });
+  if (request.kind === "DELIVERY_FAILED" && request.action === "RETRY_DELIVERY")
+    return advanceAdminDelivery(deps, { ...request, action: "DISPATCH" });
+  return failed(
+    "VALIDATION_FAILED",
+    "Exception action is not supported for this source",
+    request.requestId,
+  );
 }

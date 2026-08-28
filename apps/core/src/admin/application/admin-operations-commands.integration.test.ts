@@ -72,7 +72,6 @@ describe("admin operations commands", () => {
         locationId: "location-cebu-central",
         cycleId: "cycle",
         inventoryPoolId: "pool-red-onion",
-        quantityBase: 1,
         expectedVersion: 0,
         idempotencyKey: "aggregate-none",
       }),

@@ -597,7 +597,6 @@ const activateFulfillmentModeSchema = adminOperationsLocationSchema.extend({
 const adminProcurementAggregateSchema = adminOperationsLocationSchema.extend({
   cycleId: validationSchema.string().trim().min(1).max(200),
   inventoryPoolId: validationSchema.string().trim().min(1).max(200),
-  quantityBase: validationSchema.number().int().min(1),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
   reason: validationSchema.string().trim().min(1).max(500).optional(),
@@ -638,6 +637,7 @@ const adminDeliveryAdvanceSchema = adminOperationsLocationSchema.extend({
 });
 const adminOperationalExceptionResolveSchema = adminOperationsLocationSchema.extend({
   kind: validationSchema.enum(["FULFILLMENT_SHORTAGE", "DELIVERY_FAILED"]),
+  action: validationSchema.enum(["RETRY_FULFILLMENT", "RETRY_DELIVERY"]),
   orderId: validationSchema.string().trim().min(1).max(200),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
