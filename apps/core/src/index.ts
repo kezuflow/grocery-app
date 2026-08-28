@@ -115,6 +115,16 @@ import { createAdminRole as createAdminRoleCommand } from "./admin/application/c
 import { updateAdminRole as updateAdminRoleCommand, setAdminRoleCapabilities as setAdminRoleCapabilitiesCommand } from "./admin/application/update-admin-role";
 import { archiveAdminRole as archiveAdminRoleCommand } from "./admin/application/archive-admin-role";
 import { listCapabilityDefinitions as listCapabilityDefinitionsQuery } from "./admin/application/list-capability-definitions";
+import { listAdminCustomers as listAdminCustomersQuery, getAdminCustomer as getAdminCustomerQuery } from "./admin/application/list-admin-customers";
+import {
+  listCustomerInvitations as listCustomerInvitationsQuery,
+  inviteCustomer as inviteCustomerCommand,
+  changeCustomerAccess as changeCustomerAccessCommand,
+  revokeCustomerSessions as revokeCustomerSessionsCommand,
+  requestCustomerClosure as requestCustomerClosureCommand,
+  listPrivacyRequests as listPrivacyRequestsQuery,
+  applyPrivacyAction as applyPrivacyActionCommand,
+} from "./admin/application/customer-commands";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -254,6 +264,58 @@ const roleCapabilitiesRequestSchema = authenticatedRequestSchema.extend({
 
 const roleArchiveRequestSchema = authenticatedRequestSchema.extend({
   roleId: validationSchema.string().trim().min(1).max(200),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const customerListRequestSchema = authenticatedRequestSchema.extend({
+  query: validationSchema.string().trim().min(1).max(100).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const customerDetailRequestSchema = authenticatedRequestSchema.extend({
+  customerId: validationSchema.string().trim().min(1).max(200),
+});
+
+const customerInviteRequestSchema = authenticatedRequestSchema.extend({
+  email: emailTextSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const customerAccessChangeRequestSchema = authenticatedRequestSchema.extend({
+  customerId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["DISABLE", "RESTORE"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const customerSessionRevocationRequestSchema = authenticatedRequestSchema.extend({
+  customerId: validationSchema.string().trim().min(1).max(200),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const closureRequestSchema = authenticatedRequestSchema.extend({
+  customerId: validationSchema.string().trim().min(1).max(200),
+  requestType: validationSchema.enum(["ACCESS", "CORRECTION", "CLOSURE", "ANONYMIZATION"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const privacyListRequestSchema = authenticatedRequestSchema.extend({
+  status: validationSchema
+    .enum(["SUBMITTED", "VERIFYING", "APPROVED", "REJECTED", "PROCESSING", "COMPLETED", "ESCALATED"])
+    .optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const privacyActionRequestSchema = authenticatedRequestSchema.extend({
+  privacyRequestId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["VERIFY", "APPROVE", "REJECT", "BEGIN_PROCESSING", "COMPLETE", "ESCALATE"]),
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
@@ -525,6 +587,93 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listCapabilityDefinitionsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminCustomers(input: import("@freshmarkets/contracts").AdminCustomerListRequest) {
+    const validation = customerListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminCustomersQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminCustomer(input: import("@freshmarkets/contracts").AdminCustomerDetailRequest) {
+    const validation = customerDetailRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminCustomerQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listCustomerInvitations(
+    input: import("@freshmarkets/contracts").AdminCustomerInvitationListRequest,
+  ) {
+    const validation = customerListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listCustomerInvitationsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async inviteCustomer(input: import("@freshmarkets/contracts").AdminCustomerInviteRequest) {
+    const validation = customerInviteRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return inviteCustomerCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async changeCustomerAccess(
+    input: import("@freshmarkets/contracts").AdminCustomerAccessChangeRequest,
+  ) {
+    const validation = customerAccessChangeRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return changeCustomerAccessCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async revokeCustomerSessions(
+    input: import("@freshmarkets/contracts").AdminCustomerSessionRevocationRequest,
+  ) {
+    const validation = customerSessionRevocationRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return revokeCustomerSessionsCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async requestCustomerClosure(input: import("@freshmarkets/contracts").AdminClosureRequestCommand) {
+    const validation = closureRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return requestCustomerClosureCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listPrivacyRequests(input: import("@freshmarkets/contracts").AdminPrivacyListRequest) {
+    const validation = privacyListRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listPrivacyRequestsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async applyPrivacyAction(input: import("@freshmarkets/contracts").AdminPrivacyActionRequest) {
+    const validation = privacyActionRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return applyPrivacyActionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
