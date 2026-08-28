@@ -170,9 +170,9 @@ export type AdminPromotionsService = {
     request: AdminPromotionGrantRequest,
   ): Promise<RpcResult<AdminPromotionGrantView>>;
   listPromotionGrants(
-    request: AdminPromotionDetailRequest,
+    request: AdminPromotionDetailRequest & { cursor?: string; limit?: number },
   ): Promise<RpcResult<AdminPromotionGrantPage>>;
   listPromotionRedemptions(
-    request: AdminPromotionDetailRequest,
+    request: AdminPromotionDetailRequest & { cursor?: string; limit?: number },
   ): Promise<RpcResult<AdminPromotionRedemptionPage>>;
 };
