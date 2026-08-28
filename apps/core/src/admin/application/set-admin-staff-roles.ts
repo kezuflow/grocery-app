@@ -88,28 +88,33 @@ export async function setAdminStaffRoles(
         .prepare(`INSERT INTO staff_role (staff_id, role_id) SELECT ?, ? WHERE ${guard}`)
         .bind(request.staffId, roleId, ...guardBinds),
     ),
-    deps.db
-      .prepare(
-        `UPDATE staff_identity SET updated_at = ?, version = version + 1 WHERE id = ? AND version = ?`,
-      )
-      .bind(now, request.staffId, request.expectedVersion),
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "STAFF.ROLES_SET",
-      resourceType: "staff_identity",
-      resourceId: request.staffId,
-      before: { roleCodes: [...before.roleCodes].sort() },
-      after: { roleCodes: afterCodes },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
+    auditEventStatement(
+      deps.db,
+      {
+        actorUserId: access.value.authUserId,
+        action: "STAFF.ROLES_SET",
+        resourceType: "staff_identity",
+        resourceId: request.staffId,
+        before: { roleCodes: [...before.roleCodes].sort() },
+        after: { roleCodes: afterCodes },
+        correlationId: request.requestId,
+        occurredAt: now,
+      },
+      { clause: guard, binds: guardBinds },
+    ),
     deps.db
       .prepare(
         `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
          WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard}`,
       )
       .bind(request.staffId, now, SCOPE, request.idempotencyKey, ...guardBinds),
-  ];
+  
+    deps.db
+      .prepare(
+        `UPDATE staff_identity SET updated_at = ?, version = version + 1 WHERE id = ? AND version = ?`,
+      )
+      .bind(now, request.staffId, request.expectedVersion),
+];
 
   await deps.db.batch(statements);
   const after = await deps.db

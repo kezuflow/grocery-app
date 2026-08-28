@@ -193,25 +193,29 @@ export async function setAdminRoleCapabilities(
         )
         .bind(request.roleId, capability, ...guardBinds),
     ),
-    deps.db
-      .prepare("UPDATE role SET version = version + 1 WHERE id = ? AND version = ?")
-      .bind(request.roleId, request.expectedVersion),
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "ROLE.CAPABILITIES_SET",
-      resourceType: "role",
-      resourceId: request.roleId,
-      before: { capabilityCodes: [...before].sort() },
-      after: { capabilityCodes: [...capabilityCodes].sort() },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
+    auditEventStatement(
+      deps.db,
+      {
+        actorUserId: access.value.authUserId,
+        action: "ROLE.CAPABILITIES_SET",
+        resourceType: "role",
+        resourceId: request.roleId,
+        before: { capabilityCodes: [...before].sort() },
+        after: { capabilityCodes: [...capabilityCodes].sort() },
+        correlationId: request.requestId,
+        occurredAt: now,
+      },
+      { clause: guard, binds: guardBinds },
+    ),
     deps.db
       .prepare(
         `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
          WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard}`,
       )
       .bind(request.roleId, now, CAPABILITIES_SCOPE, request.idempotencyKey, ...guardBinds),
+    deps.db
+      .prepare("UPDATE role SET version = version + 1 WHERE id = ? AND version = ?")
+      .bind(request.roleId, request.expectedVersion),
   ]);
 
   const after = await deps.db
