@@ -184,10 +184,32 @@ export async function aggregateAdminProcurementDemand(
     .first<{ status: string; result_reference: string | null }>();
   if (replay?.status === "SUCCEEDED" && replay.result_reference) {
     const prior = await deps.db
-      .prepare("SELECT required_quantity, status, version FROM procurement_requirement WHERE id=?")
+      .prepare(
+        "SELECT delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version FROM procurement_requirement WHERE id=?",
+      )
       .bind(replay.result_reference)
-      .first<{ required_quantity: number; status: string; version: number }>();
-    if (prior)
+      .first<{
+        delivery_cycle_id: string;
+        location_id: string;
+        inventory_pool_id: string;
+        required_quantity: number;
+        status: string;
+        version: number;
+      }>();
+    if (prior) {
+      if (
+        prior.delivery_cycle_id !== request.cycleId ||
+        prior.location_id !== request.locationId ||
+        prior.inventory_pool_id !== request.inventoryPoolId
+      )
+        return {
+          ok: false,
+          error: {
+            code: "IDEMPOTENCY_CONFLICT",
+            message: "Idempotency key was used with a different procurement aggregation",
+            requestId: request.requestId,
+          },
+        };
       return {
         ok: true,
         value: {
@@ -203,6 +225,7 @@ export async function aggregateAdminProcurementDemand(
         },
         requestId: request.requestId,
       };
+    }
   }
   const totals = await deps.db
     .prepare(`SELECT

@@ -101,7 +101,8 @@ describe("admin operations commands", () => {
         "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version) VALUES (?, ?, 10, 0, 0, 'IN_PROGRESS', 1)",
       ).bind(`receipt-${id}`, id),
     ]);
-    const recorded = await core.recordAdminReceivedLine({
+    const lineKey = `line-${crypto.randomUUID()}`;
+    const lineInput = {
       requestId: crypto.randomUUID(),
       headers: { cookie },
       locationId: "location-cebu-central",
@@ -109,14 +110,20 @@ describe("admin operations commands", () => {
       acceptedBase: 7,
       rejectedBase: 3,
       expectedVersion: 1,
-      idempotencyKey: `line-${crypto.randomUUID()}`,
+      idempotencyKey: lineKey,
       reason: "quality rejection",
-    });
+    };
+    const recorded = await core.recordAdminReceivedLine(lineInput);
     expect(recorded).toMatchObject({ ok: true, value: { acceptedBase: 7, rejectedBase: 3 } });
+    expect(
+      await core.recordAdminReceivedLine({ ...lineInput, requestId: crypto.randomUUID() }),
+    ).toMatchObject({ ok: true });
     const audit = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM audit_event WHERE action='OPERATIONS.RECEIVING_LINE_RECORDED'",
-    ).first<{ count: number }>();
-    expect(audit?.count).toBeGreaterThan(0);
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action='OPERATIONS.RECEIVING_LINE_RECORDED' AND idempotency_key=?",
+    )
+      .bind(lineKey)
+      .first<{ count: number }>();
+    expect(audit?.count).toBe(1);
   });
 
   it("derives procurement from committed demand and replays without a second audit", async () => {
@@ -173,6 +180,13 @@ describe("admin operations commands", () => {
       ok: true,
       value: { requirementId: first.ok ? first.value.requirementId : "" },
     });
+    expect(
+      await core.aggregateAdminProcurementDemand({
+        ...input,
+        cycleId: "cycle-conflict",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
     const audit = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM audit_event WHERE action='OPERATIONS.PROCUREMENT_DEMAND_AGGREGATED' AND idempotency_key=?",
     )
