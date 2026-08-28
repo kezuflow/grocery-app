@@ -163,6 +163,22 @@ import {
   listAdminInventory as listAdminInventoryQuery,
   getAdminInventoryLedger as getAdminInventoryLedgerQuery,
 } from "./admin/application/catalog-reads";
+import {
+  listAdminOrders as listAdminOrdersQuery,
+  getAdminOrder as getAdminOrderQuery,
+  listAdminPayments as listAdminPaymentsQuery,
+  listAdminReconciliationCases as listAdminReconciliationCasesQuery,
+  listAdminMemberships as listAdminMembershipsQuery,
+  getAdminMembership as getAdminMembershipQuery,
+  listAdminOrderIssues as listAdminOrderIssuesQuery,
+} from "./admin/application/finance-reads";
+import {
+  cancelAdminOrder as cancelAdminOrderCommand,
+  requestAdminRefund as requestAdminRefundCommand,
+  resolveAdminReconciliationCase as resolveAdminReconciliationCaseCommand,
+  changeAdminMembership as changeAdminMembershipCommand,
+  applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
+} from "./admin/application/finance-commands";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -536,6 +552,92 @@ const inventoryLedgerSchema = authenticatedRequestSchema.extend({
   inventoryPoolId: validationSchema.string().trim().min(1).max(200),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const orderListSchema = authenticatedRequestSchema.extend({
+  status: validationSchema.string().trim().min(1).max(60).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const orderDetailSchema = authenticatedRequestSchema.extend({
+  orderId: validationSchema.string().trim().min(1).max(200),
+});
+
+const orderCancelSchema = authenticatedRequestSchema.extend({
+  orderId: validationSchema.string().trim().min(1).max(200),
+  reasonCode: validationSchema.string().trim().min(1).max(120),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const paymentListSchema = authenticatedRequestSchema.extend({
+  status: validationSchema
+    .enum([
+      "INITIATED",
+      "REQUIRES_ACTION",
+      "PROCESSING",
+      "SUCCEEDED",
+      "FAILED",
+      "EXPIRED",
+      "PARTIALLY_REFUNDED",
+      "REFUNDED",
+    ])
+    .optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const refundRequestSchema = authenticatedRequestSchema.extend({
+  paymentIntentId: validationSchema.string().trim().min(1).max(200),
+  amountMinor: validationSchema.number().int().min(1),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const reconciliationListSchema = authenticatedRequestSchema.extend({
+  status: validationSchema.enum(["OPEN", "RESOLVED"]).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const reconciliationResolveSchema = authenticatedRequestSchema.extend({
+  caseId: validationSchema.string().trim().min(1).max(200),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const membershipListSchema = authenticatedRequestSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const membershipDetailSchema = authenticatedRequestSchema.extend({
+  subscriptionId: validationSchema.string().trim().min(1).max(200),
+});
+
+const membershipLifecycleSchema = authenticatedRequestSchema.extend({
+  subscriptionId: validationSchema.string().trim().min(1).max(200),
+  timing: validationSchema.enum(["IMMEDIATE", "PERIOD_END"]).optional(),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const issueListSchema = authenticatedRequestSchema.extend({
+  status: validationSchema
+    .enum(["SUBMITTED", "CLAIMED", "INVESTIGATING", "RESOLVED", "ESCALATED"])
+    .optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const issueActionSchema = authenticatedRequestSchema.extend({
+  issueId: validationSchema.string().trim().min(1).max(200),
+  action: validationSchema.enum(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE", "REOPEN"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
 });
 
 export function buildHealthResponse(env: Env): CoreHealthResponse {
@@ -1109,6 +1211,147 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminInventoryLedgerQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminOrders(input: import("@freshmarkets/contracts").AdminOrderListRequest) {
+    const validation = orderListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminOrdersQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminOrder(input: import("@freshmarkets/contracts").AdminOrderDetailRequest) {
+    const validation = orderDetailSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminOrderQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async cancelAdminOrder(input: import("@freshmarkets/contracts").AdminOrderCancelRequest) {
+    const validation = orderCancelSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return cancelAdminOrderCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminPayments(input: import("@freshmarkets/contracts").AdminPaymentListRequest) {
+    const validation = paymentListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminPaymentsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async requestAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRequest) {
+    const validation = refundRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return requestAdminRefundCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminReconciliationCases(
+    input: import("@freshmarkets/contracts").AdminReconciliationListRequest,
+  ) {
+    const validation = reconciliationListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminReconciliationCasesQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async resolveAdminReconciliationCase(
+    input: import("@freshmarkets/contracts").AdminReconciliationResolveRequest,
+  ) {
+    const validation = reconciliationResolveSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return resolveAdminReconciliationCaseCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminMemberships(input: import("@freshmarkets/contracts").AdminMembershipListRequest) {
+    const validation = membershipListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminMembershipsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminMembership(input: import("@freshmarkets/contracts").AdminMembershipDetailRequest) {
+    const validation = membershipDetailSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminMembershipQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async pauseAdminMembership(
+    input: import("@freshmarkets/contracts").AdminMembershipLifecycleRequest,
+  ) {
+    const validation = membershipLifecycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return changeAdminMembershipCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+      "PAUSE",
+    );
+  }
+  async resumeAdminMembership(
+    input: import("@freshmarkets/contracts").AdminMembershipLifecycleRequest,
+  ) {
+    const validation = membershipLifecycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return changeAdminMembershipCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+      "RESUME",
+    );
+  }
+  async cancelAdminMembership(
+    input: import("@freshmarkets/contracts").AdminMembershipLifecycleRequest,
+  ) {
+    const validation = membershipLifecycleSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return changeAdminMembershipCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+      "CANCEL",
+    );
+  }
+  async listAdminOrderIssues(input: import("@freshmarkets/contracts").AdminOrderIssueListRequest) {
+    const validation = issueListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminOrderIssuesQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async applyAdminOrderIssueAction(
+    input: import("@freshmarkets/contracts").AdminOrderIssueActionRequest,
+  ) {
+    const validation = issueActionSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return applyAdminOrderIssueActionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
