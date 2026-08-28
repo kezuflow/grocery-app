@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { listOperationalExceptions } from "../../audit/application/list-operational-exceptions";
+import { appendAuditEvent } from "../../audit/application/append-audit-event";
 
 describe("converged operational exceptions", () => {
   it("projects source ownership, scope, severity, age, and legal actions", async () => {
@@ -27,5 +28,40 @@ describe("converged operational exceptions", () => {
       ownerId: null,
     });
     expect(item?.ageMinutes).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps the source action vocabulary explicit and records resolution evidence", async () => {
+    const actions = [
+      { source: "PROCUREMENT", permittedActions: [] },
+      { source: "RECEIVING", permittedActions: [] },
+      { source: "FULFILLMENT", permittedActions: ["RETRY_FULFILLMENT"] },
+      { source: "DELIVERY", permittedActions: ["RETRY_DELIVERY"] },
+    ] as const;
+    expect(actions.map((item) => item.permittedActions)).toEqual([
+      [],
+      [],
+      ["RETRY_FULFILLMENT"],
+      ["RETRY_DELIVERY"],
+    ]);
+    const idempotencyKey = `exception-resolution-${crypto.randomUUID()}`;
+    expect(
+      await appendAuditEvent(env.DB, {
+        actorUserId: null,
+        action: "OPERATIONS.FULFILLMENT_EXCEPTION_RESOLVED",
+        resourceType: "fulfillment_record",
+        resourceId: `fulfillment-${crypto.randomUUID()}`,
+        reason: "retry approved",
+        details: { source: "FULFILLMENT" },
+        idempotencyKey,
+        correlationId: crypto.randomUUID(),
+        occurredAt: Date.now(),
+      }),
+    ).toBe(true);
+    const audit = await env.DB.prepare(
+      "SELECT reason FROM audit_event WHERE action=? AND idempotency_key=?",
+    )
+      .bind("OPERATIONS.FULFILLMENT_EXCEPTION_RESOLVED", idempotencyKey)
+      .first<{ reason: string }>();
+    expect(audit?.reason).toBe("retry approved");
   });
 });

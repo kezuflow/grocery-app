@@ -162,6 +162,13 @@ describe("admin operations reads", () => {
     expect(second.value.items).toHaveLength(1);
     expect(second.value.items[0]!.referenceId).not.toBe(first.value.items[0]!.referenceId);
     expect(second.value.nextCursor).toBeNull();
+    expect(
+      await core.listOperationalExceptions({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader },
+        locationId: "location-not-allowed",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 
   it("applies cycle filtering before keyset pagination and returns a real next cursor", async () => {
