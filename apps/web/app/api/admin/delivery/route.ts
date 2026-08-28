@@ -57,16 +57,19 @@ export async function POST(request: Request) {
         headers: requestHeaders(request),
         idempotencyKey: requireIdempotencyKey(request),
         expectedVersion,
+        locationId: new URL(request.url).searchParams.get("locationId") ?? "",
       };
+      if (!common.locationId) return invalid("LOCATION_REQUIRED");
       if (
         legacy.data.command === "fulfillment" &&
         ["START", "PACK", "SHORTAGE"].includes(legacy.data.action)
       ) {
         return Response.json(
-          await coreClient(env.CORE).advanceFulfillment({
+          await coreClient(env.CORE).advanceAdminFulfillment({
             ...common,
             orderId: legacy.data.orderId,
             action: legacy.data.action as "START" | "PACK" | "SHORTAGE",
+            reason: "Legacy admin delivery compatibility command",
           }),
         );
       }
@@ -75,10 +78,11 @@ export async function POST(request: Request) {
         ["DISPATCH", "DELIVER", "FAIL"].includes(legacy.data.action)
       ) {
         return Response.json(
-          await coreClient(env.CORE).advanceDelivery({
+          await coreClient(env.CORE).advanceAdminDelivery({
             ...common,
             orderId: legacy.data.orderId,
             action: legacy.data.action as "DISPATCH" | "DELIVER" | "FAIL",
+            reason: "Legacy admin delivery compatibility command",
           }),
         );
       }

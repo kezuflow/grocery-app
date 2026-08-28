@@ -7,7 +7,7 @@ export type AdminOperationalExceptionView = OperationalExceptionItem;
 
 export const adminOperationsReadCapabilities = [
   "procurement.read",
-  "receiving.manage",
+  "procurement.manage",
   "fulfillment.read",
   "delivery.read",
   "fulfillment.manage",

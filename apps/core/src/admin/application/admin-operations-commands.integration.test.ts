@@ -91,7 +91,7 @@ describe("admin operations commands", () => {
   });
 
   it("records accepted/rejected base-unit deltas through the guarded receiving command", async () => {
-    const { cookie } = await manager(["receiving.manage"]),
+    const { cookie } = await manager(["procurement.manage"]),
       id = crypto.randomUUID();
     await env.DB.batch([
       env.DB.prepare(

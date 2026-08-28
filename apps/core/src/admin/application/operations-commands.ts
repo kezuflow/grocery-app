@@ -71,7 +71,7 @@ async function audit(
 async function access(
   deps: OperationsAdministrationDeps,
   request: AuthenticatedRequest & { locationId: string },
-  capability: "procurement.manage" | "receiving.manage" | "fulfillment.manage" | "delivery.manage",
+  capability: "procurement.manage" | "fulfillment.manage" | "delivery.manage",
 ) {
   return resolveOperationsAdministrationAccess(
     deps,
@@ -317,7 +317,7 @@ export async function startAdminReceiving(
   deps: OperationsAdministrationDeps,
   request: StartAdminReceivingRequest,
 ): Promise<RpcResult<ReceivingSessionView>> {
-  const permitted = await access(deps, request, "receiving.manage");
+  const permitted = await access(deps, request, "procurement.manage");
   if (!permitted.ok) return permitted;
   const owner = await deps.db
     .prepare("SELECT location_id FROM procurement_requirement WHERE id=?")
@@ -364,7 +364,7 @@ export async function recordAdminReceivedLine(
   deps: OperationsAdministrationDeps,
   request: RecordAdminReceivedLineRequest,
 ): Promise<RpcResult<ReceivingSessionView>> {
-  const permitted = await access(deps, request, "receiving.manage");
+  const permitted = await access(deps, request, "procurement.manage");
   if (!permitted.ok) return permitted;
   const before = await loadReceiving(deps.db, request.receivingSessionId);
   if (!before || before.location_id !== request.locationId)
@@ -412,7 +412,7 @@ export async function completeAdminReceiving(
   deps: OperationsAdministrationDeps,
   request: CompleteAdminReceivingRequest,
 ): Promise<RpcResult<ReceivingSessionView>> {
-  const permitted = await access(deps, request, "receiving.manage");
+  const permitted = await access(deps, request, "procurement.manage");
   if (!permitted.ok) return permitted;
   const row = await loadReceiving(deps.db, request.receivingSessionId);
   if (!row || row.location_id !== request.locationId)

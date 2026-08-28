@@ -250,7 +250,7 @@ describe("admin operations reads", () => {
   });
 
   it("uses the procurement requirement identity for receiving keyset cursors", async () => {
-    const reader = await seedStaff("receiving.manage", "location");
+    const reader = await seedStaff("procurement.manage", "location");
     const cycleId = `cycle-receiving-${crypto.randomUUID().slice(0, 8)}`;
     const firstRequirement = await seedProcurementRequirement(cycleId, "receiving-a");
     const secondRequirement = await seedProcurementRequirement(cycleId, "receiving-b");

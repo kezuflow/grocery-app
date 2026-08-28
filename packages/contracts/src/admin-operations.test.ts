@@ -14,7 +14,7 @@ describe("admin operations contracts", () => {
   it("publishes the closed capabilities for location-scoped operational reads", () => {
     expect(adminOperationsReadCapabilities).toEqual([
       "procurement.read",
-      "receiving.manage",
+      "procurement.manage",
       "fulfillment.read",
       "delivery.read",
       "fulfillment.manage",

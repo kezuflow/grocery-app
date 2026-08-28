@@ -11,7 +11,6 @@ export type OperationsAdministrationAccess = { staffId: string; authUserId: stri
 export type OperationsAdministrationCapability =
   | "procurement.read"
   | "procurement.manage"
-  | "receiving.manage"
   | "fulfillment.read"
   | "delivery.read"
   | "delivery.manage"

@@ -40,7 +40,6 @@ import {
 function modeView(value: LocationModeView): FulfillmentModeConfigurationView {
   return value;
 }
-
 function pageRequest(request: {
   cursor?: string;
   limit?: number;
@@ -143,7 +142,7 @@ export async function listAdminReceivingSessions(
   const access = await resolveOperationsAdministrationAccess(
     deps,
     request,
-    "receiving.manage",
+    "procurement.manage",
     request.locationId,
   );
   if (!access.ok) return access;
@@ -302,3 +301,4 @@ export async function listAdminOperationalExceptions(
     requestId: request.requestId,
   };
 }
+

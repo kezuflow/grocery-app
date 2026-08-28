@@ -28,7 +28,6 @@ export const adminCapabilityCodes = [
   "delivery.manage",
   "procurement.read",
   "procurement.manage",
-  "receiving.manage",
   "analytics.read",
   "staff.read",
   "staff.manage",
