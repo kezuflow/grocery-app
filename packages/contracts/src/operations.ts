@@ -77,10 +77,31 @@ export type ProcurementQueueItem = {
 };
 
 export type OperationalExceptionItem = {
-  kind: "FULFILLMENT_SHORTAGE" | "DELIVERY_FAILED" | "RECEIVING_DISCREPANCY";
+  kind:
+    | "PROCUREMENT_SHORTAGE"
+    | "FULFILLMENT_SHORTAGE"
+    | "DELIVERY_FAILED"
+    | "RECEIVING_DISCREPANCY";
+  /** Owning bounded context; the convergence queue never owns this state. */
+  source: "PROCUREMENT" | "RECEIVING" | "FULFILLMENT" | "DELIVERY";
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  /** Age in whole minutes, computed from the source record's creation/update instant. */
+  ageMinutes: number;
+  /** Current source-assigned operator, when the source provides one. */
+  ownerId: string | null;
   referenceId: string;
   orderId: string | null;
   locationId: string | null;
+  reason: string;
+  permittedActions: ReadonlyArray<
+    | "ALTERNATE_SOURCE"
+    | "ACKNOWLEDGE"
+    | "RETRY_FULFILLMENT"
+    | "RETRY_DELIVERY"
+    | "RESCHEDULE"
+    | "REFUND"
+    | "ESCALATE"
+  >;
   detail: string;
 };
 

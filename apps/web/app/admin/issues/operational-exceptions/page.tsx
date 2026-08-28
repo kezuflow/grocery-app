@@ -86,9 +86,10 @@ export default function OperationalExceptionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Source</TableHead>
+                    <TableHead>Source / severity</TableHead>
                     <TableHead>Resource</TableHead>
                     <TableHead>Location</TableHead>
+                    <TableHead>Age / owner</TableHead>
                     <TableHead>Reason</TableHead>
                     <TableHead>Resolution</TableHead>
                   </TableRow>
@@ -97,17 +98,23 @@ export default function OperationalExceptionsPage() {
                   {page.items.map((item) => (
                     <TableRow key={`${item.kind}-${item.referenceId}`}>
                       <TableCell>
-                        <StatusBadge>{item.kind}</StatusBadge>
+                        <div className="space-y-1">
+                          <StatusBadge>{item.source}</StatusBadge>
+                          <div className="text-xs text-[var(--fm-text-muted)]">{item.severity}</div>
+                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{item.referenceId}</TableCell>
                       <TableCell>{item.locationId ?? "—"}</TableCell>
+                      <TableCell className="text-xs">
+                        {item.ageMinutes}m old · {item.ownerId ?? "Unassigned"}
+                      </TableCell>
                       <TableCell>{item.detail}</TableCell>
                       <TableCell>
-                        {item.kind === "FULFILLMENT_SHORTAGE"
-                          ? "Fulfillment queue"
-                          : item.kind === "DELIVERY_FAILED"
-                            ? "Delivery queue"
-                            : "Receiving session"}
+                        <div className="flex flex-wrap gap-1">
+                          {item.permittedActions.map((action) => (
+                            <StatusBadge key={action}>{action}</StatusBadge>
+                          ))}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

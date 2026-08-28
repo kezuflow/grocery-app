@@ -2,6 +2,9 @@ import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./index";
 import type { OperationalExceptionItem } from "./operations";
 
+/** Converged queue item; source context remains authoritative for mutations. */
+export type AdminOperationalExceptionView = OperationalExceptionItem;
+
 export const adminOperationsReadCapabilities = [
   "procurement.read",
   "receiving.manage",
@@ -92,7 +95,7 @@ export type AdminDeliveryOperationView = {
 };
 
 export type OperationalExceptionPage = {
-  items: ReadonlyArray<OperationalExceptionItem>;
+  items: ReadonlyArray<AdminOperationalExceptionView>;
   nextCursor: string | null;
 };
 
