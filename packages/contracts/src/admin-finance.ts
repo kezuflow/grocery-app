@@ -48,6 +48,7 @@ export type AdminOrderSummary = {
   fulfillmentStatus: string | null;
   deliveryStatus: string | null;
   committedAt: string | null;
+  version: number;
 };
 
 export type AdminOrderPage = {
@@ -84,7 +85,11 @@ export type AdminOrderDetailRequest = AuthenticatedRequest & {
 
 export type AdminOrderCancelRequest = AuthenticatedRequest & {
   orderId: string;
-  reasonCode: string;
+  /** Canonical cancellation reason. reasonCode is retained for older clients. */
+  reason?: string;
+  reasonCode?: string;
+  /** Operational resolution captured with the cancellation decision. */
+  resolution?: string;
   expectedVersion: number;
   idempotencyKey: string;
 };
@@ -198,6 +203,8 @@ export type AdminOrderIssueView = {
   createdAt: string;
 };
 
+export type AdminOrderIssueDetail = AdminOrderIssueView;
+
 export type AdminOrderIssuePage = {
   items: ReadonlyArray<AdminOrderIssueView>;
   nextCursor: string | null;
@@ -217,6 +224,8 @@ export type AdminOrderIssueActionRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type AdminOrderIssueDetailRequest = AuthenticatedRequest & { issueId: string };
+
 /**
  * Finance and lifecycle administration. Every method derives the caller from
  * the forwarded session, requires the named capability plus a global scope in
@@ -225,7 +234,7 @@ export type AdminOrderIssueActionRequest = AuthenticatedRequest & {
 export type AdminOrdersService = {
   listAdminOrders(request: AdminOrderListRequest): Promise<RpcResult<AdminOrderPage>>;
   getAdminOrder(request: AdminOrderDetailRequest): Promise<RpcResult<AdminOrderDetail>>;
-  cancelAdminOrder(request: AdminOrderCancelRequest): Promise<RpcResult<AdminOrderSummary>>;
+  cancelAdminOrder(request: AdminOrderCancelRequest): Promise<RpcResult<AdminOrderDetail>>;
 };
 
 export type AdminPaymentsService = {
@@ -261,6 +270,9 @@ export type AdminOrderIssuesService = {
   listAdminOrderIssues(
     request: AdminOrderIssueListRequest,
   ): Promise<RpcResult<AdminOrderIssuePage>>;
+  getAdminOrderIssue(
+    request: AdminOrderIssueDetailRequest,
+  ): Promise<RpcResult<AdminOrderIssueDetail>>;
   applyAdminOrderIssueAction(
     request: AdminOrderIssueActionRequest,
   ): Promise<RpcResult<AdminOrderIssueView>>;

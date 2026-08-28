@@ -13,6 +13,7 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { cancelOrder } from "../../orders/application/cancel-order";
+import { requestRefund } from "../../payments/application/request-refund";
 import {
   cancelSubscription,
   pauseSubscription,
@@ -57,20 +58,38 @@ function idempotencyFailed(database: D1Database, scope: string, key: string): Pr
 export async function cancelAdminOrder(
   deps: FinanceAdministrationDeps,
   request: AdminOrderCancelRequest,
-): Promise<RpcResult<AdminOrderSummary>> {
+): Promise<RpcResult<import("@freshmarkets/contracts").AdminOrderDetail>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "orders.manage");
   if (!access.ok) return access;
-  if (request.reasonCode.trim() === "") {
+  const reason = (request.reason ?? request.reasonCode ?? "").trim();
+  if (reason === "") {
     return failure("VALIDATION_FAILED", "A reason code is required", request.requestId);
   }
 
-  const result = await cancelOrder(deps.db, {
-    orderId: request.orderId,
-    expectedVersion: request.expectedVersion,
-    reasonCode: request.reasonCode.trim(),
-    idempotencyKey: request.idempotencyKey,
-    requestId: request.requestId,
-  });
+  const result = await cancelOrder(
+    deps.db,
+    {
+      orderId: request.orderId,
+      expectedVersion: request.expectedVersion,
+      reasonCode: reason,
+      idempotencyKey: request.idempotencyKey,
+      requestId: request.requestId,
+    },
+    {
+      requestRefund: deps.payments
+        ? async (input) => {
+            const refund = await requestRefund(deps.db, deps.payments!, {
+              ...input,
+              actorId: access.value.authUserId,
+              requestId: request.requestId,
+            });
+            return refund.ok
+              ? { ok: true, refundState: "PROCESSING" as const }
+              : { ok: false, refundState: "REJECTED" as const };
+          }
+        : undefined,
+    },
+  );
   if (!result.ok) {
     const allowed: ReadonlyArray<AppErrorCode> = [
       "NOT_FOUND",
@@ -97,19 +116,21 @@ export async function cancelAdminOrder(
       action: "ORDER.CANCELED",
       resourceType: "order",
       resourceId: request.orderId,
-      reason: request.reasonCode.trim(),
-      details: { outcome: result.value.state },
+      reason,
+      details: { outcome: result.value.state, resolution: request.resolution ?? null },
       correlationId: request.requestId,
       occurredAt: Date.now(),
     }),
   ]);
 
-  const summary = await deps.db
+  const row = await deps.db
     .prepare(
       `SELECT o.id AS orderId, u.email AS customerEmail, o.status, o.total_minor AS totalMinor,
-              o.currency, o.created_at AS committedAt
-       FROM grocery_order o JOIN customer c ON c.id = o.customer_id
-       JOIN user u ON u.id = c.auth_user_id WHERE o.id = ?`,
+              o.currency, o.created_at AS committedAt, o.version,
+              (SELECT pi.status FROM order_payment_reaction opr JOIN payment_intent pi ON pi.id = opr.payment_intent_id WHERE opr.order_id=o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
+              (SELECT f.status FROM fulfillment_record f WHERE f.order_id=o.id LIMIT 1) AS fulfillmentStatus,
+              (SELECT d.status FROM delivery_job d WHERE d.order_id=o.id LIMIT 1) AS deliveryStatus
+       FROM grocery_order o JOIN customer c ON c.id=o.customer_id JOIN user u ON u.id=c.auth_user_id WHERE o.id=?`,
     )
     .bind(request.orderId)
     .first<{
@@ -119,20 +140,42 @@ export async function cancelAdminOrder(
       totalMinor: number;
       currency: string;
       committedAt: number;
+      version: number;
+      paymentStatus: string | null;
+      fulfillmentStatus: string | null;
+      deliveryStatus: string | null;
     }>();
-  if (!summary) return failure("NOT_FOUND", "Order not found", request.requestId);
+  if (!row) return failure("NOT_FOUND", "Order not found", request.requestId);
+  const items = await deps.db
+    .prepare(
+      `SELECT product_name_snapshot AS skuName, quantity, unit_price_minor AS unitPriceMinor, line_total_minor AS lineTotalMinor FROM order_item WHERE order_id=?`,
+    )
+    .bind(request.orderId)
+    .all<{ skuName: string; quantity: number; unitPriceMinor: number; lineTotalMinor: number }>();
+  const audits = await deps.db
+    .prepare(
+      `SELECT id AS auditEventId, occurred_at AS occurredAt, action, reason FROM audit_event WHERE aggregate_type='order' AND aggregate_id=? ORDER BY occurred_at DESC, id DESC LIMIT 10`,
+    )
+    .bind(request.orderId)
+    .all<{ auditEventId: string; occurredAt: number; action: string; reason: string | null }>();
   return {
     ok: true,
     value: {
-      orderId: summary.orderId,
-      customerEmail: summary.customerEmail,
-      status: summary.status,
-      totalMinor: summary.totalMinor,
-      currency: summary.currency,
-      paymentStatus: null,
-      fulfillmentStatus: null,
-      deliveryStatus: null,
-      committedAt: new Date(summary.committedAt).toISOString(),
+      orderId: row.orderId,
+      customerEmail: row.customerEmail,
+      status: row.status,
+      totalMinor: row.totalMinor,
+      currency: row.currency,
+      paymentStatus: row.paymentStatus,
+      fulfillmentStatus: row.fulfillmentStatus,
+      deliveryStatus: row.deliveryStatus,
+      committedAt: new Date(row.committedAt).toISOString(),
+      version: row.version,
+      items: items.results,
+      recentAudit: audits.results.map((audit) => ({
+        ...audit,
+        occurredAt: new Date(audit.occurredAt).toISOString(),
+      })),
     },
     requestId: request.requestId,
   };
@@ -175,7 +218,7 @@ export async function requestAdminRefund(
   }
   const refundedRow = await deps.db
     .prepare(
-      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status = 'SUCCEEDED'",
+      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status IN ('REQUESTED', 'PROCESSING', 'SUCCEEDED')",
     )
     .bind(request.paymentIntentId)
     .first<{ refunded: number }>();
@@ -240,20 +283,24 @@ export async function requestAdminRefund(
 
   const refundId = crypto.randomUUID();
   try {
-    await deps.db.batch([
+    const batchResult = await deps.db.batch([
       deps.db
         .prepare(
-          "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, 'REQUESTED', ?, ?, 1, ?, ?)",
+          `INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at)
+           SELECT ?, i.id, ?, i.currency, 'REQUESTED', ?, ?, 1, ?, ?
+           FROM payment_intent i
+           WHERE i.id = ? AND i.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
+             AND ? <= i.amount_minor - COALESCE((SELECT SUM(amount_minor) FROM payment_refund r WHERE r.payment_intent_id=i.id AND r.status IN ('REQUESTED','PROCESSING','SUCCEEDED')), 0)`,
         )
         .bind(
           refundId,
-          request.paymentIntentId,
           request.amountMinor,
-          intent.currency,
           reason,
           request.idempotencyKey,
           now,
           now,
+          request.paymentIntentId,
+          request.amountMinor,
         ),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
@@ -267,6 +314,14 @@ export async function requestAdminRefund(
       }),
       idempotencyComplete(deps.db, "admin.payments.refund", request.idempotencyKey, refundId, now),
     ]);
+    if ((batchResult[0]?.meta?.changes ?? 0) !== 1) {
+      await idempotencyFailed(deps.db, "admin.payments.refund", request.idempotencyKey);
+      return failure(
+        "VALIDATION_FAILED",
+        "Refund exceeds the refundable amount",
+        request.requestId,
+      );
+    }
   } catch (error) {
     log("error", "admin.payments.refund_failed", {
       message: error instanceof Error ? error.message : String(error),
@@ -356,36 +411,47 @@ export async function resolveAdminReconciliationCase(
     return failure("CONFLICT", "The resolve command is still processing", request.requestId);
   }
 
-  const updated = await deps.db
-    .prepare(
-      "UPDATE payment_reconciliation_case SET status='RESOLVED', resolved_at=?, details_json=details_json WHERE id=? AND status='OPEN'",
-    )
-    .bind(now, request.caseId)
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
+  const reconciliationGuard =
+    "EXISTS (SELECT 1 FROM payment_reconciliation_case WHERE id = ? AND status = 'RESOLVED' AND resolved_at = ?)";
+  const batchResult = await deps.db.batch([
+    deps.db
+      .prepare(
+        "UPDATE payment_reconciliation_case SET status='RESOLVED', resolved_at=?, details_json=details_json WHERE id=? AND status='OPEN'",
+      )
+      .bind(now, request.caseId),
+    auditEventStatement(
+      deps.db,
+      {
+        actorUserId: access.value.authUserId,
+        action: "PAYMENT.RECONCILIATION_RESOLVED",
+        resourceType: "payment_reconciliation_case",
+        resourceId: request.caseId,
+        reason,
+        before: { status: "OPEN" },
+        after: { status: "RESOLVED" },
+        correlationId: request.requestId,
+        occurredAt: now,
+      },
+      { clause: reconciliationGuard, binds: [request.caseId, now] },
+    ),
+    deps.db
+      .prepare(
+        `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+       WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${reconciliationGuard}`,
+      )
+      .bind(
+        request.caseId,
+        now,
+        "admin.payments.reconcile",
+        request.idempotencyKey,
+        request.caseId,
+        now,
+      ),
+  ]);
+  if ((batchResult[0]?.meta?.changes ?? 0) !== 1) {
     await idempotencyFailed(deps.db, "admin.payments.reconcile", request.idempotencyKey);
     return failure("VALIDATION_FAILED", "Only open cases can be resolved", request.requestId);
   }
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "PAYMENT.RECONCILIATION_RESOLVED",
-      resourceType: "payment_reconciliation_case",
-      resourceId: request.caseId,
-      reason,
-      before: { status: "OPEN" },
-      after: { status: "RESOLVED" },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-    idempotencyComplete(
-      deps.db,
-      "admin.payments.reconcile",
-      request.idempotencyKey,
-      request.caseId,
-      now,
-    ),
-  ]);
 
   const resolved = await deps.db
     .prepare(
@@ -438,6 +504,58 @@ export async function changeAdminMembership(
     return failure("VALIDATION_FAILED", "A reason is required", request.requestId);
   }
 
+  // Canonical membership commands own the lifecycle idempotency record. On a
+  // successful replay, return the current projection without appending a
+  // second admin audit event.
+  const lifecycleScope =
+    action === "PAUSE"
+      ? "membership.pause"
+      : action === "RESUME"
+        ? "membership.resume"
+        : "membership.cancel";
+  const replay = await deps.db
+    .prepare(
+      "SELECT status, result_reference FROM idempotency_records WHERE scope=? AND idempotency_key=?",
+    )
+    .bind(lifecycleScope, request.idempotencyKey)
+    .first<{ status: string; result_reference: string | null }>();
+  if (replay?.status === "SUCCEEDED" && replay.result_reference) {
+    const existing = await deps.db
+      .prepare(
+        `SELECT s.id AS subscriptionId, u.email AS customerEmail, s.status AS state,
+                s.cancel_at_period_end AS cancelAtPeriodEnd,
+                s.current_period_ends_at AS currentPeriodEndsAt, s.version
+         FROM subscription s JOIN customer c ON c.id = s.customer_id
+         JOIN user u ON u.id = c.auth_user_id WHERE s.id = ?`,
+      )
+      .bind(replay.result_reference)
+      .first<{
+        subscriptionId: string;
+        customerEmail: string;
+        state: string;
+        cancelAtPeriodEnd: number;
+        currentPeriodEndsAt: number | null;
+        version: number;
+      }>();
+    if (existing) {
+      return {
+        ok: true,
+        value: {
+          subscriptionId: existing.subscriptionId,
+          customerEmail: existing.customerEmail,
+          state: existing.state,
+          cancelAtPeriodEnd: existing.cancelAtPeriodEnd === 1,
+          currentPeriodEndsAt:
+            existing.currentPeriodEndsAt === null
+              ? null
+              : new Date(existing.currentPeriodEndsAt).toISOString(),
+          version: existing.version,
+        },
+        requestId: request.requestId,
+      };
+    }
+  }
+
   const command = {
     subscriptionId: request.subscriptionId,
     reason,
@@ -471,10 +589,16 @@ export async function changeAdminMembership(
     };
   }
 
+  const membershipAuditAction =
+    action === "PAUSE"
+      ? "MEMBERSHIP.PAUSED"
+      : action === "RESUME"
+        ? "MEMBERSHIP.RESUMED"
+        : "MEMBERSHIP.CANCELED";
   await deps.db.batch([
     auditEventStatement(deps.db, {
       actorUserId: access.value.authUserId,
-      action: `MEMBERSHIP.${action}ED`,
+      action: membershipAuditAction,
       resourceType: "subscription",
       resourceId: request.subscriptionId,
       reason,
@@ -483,15 +607,36 @@ export async function changeAdminMembership(
       occurredAt: Date.now(),
     }),
   ]);
+  const membership = await deps.db
+    .prepare(
+      `SELECT s.id AS subscriptionId, u.email AS customerEmail, s.status AS state,
+              s.cancel_at_period_end AS cancelAtPeriodEnd,
+              s.current_period_ends_at AS currentPeriodEndsAt, s.version
+       FROM subscription s JOIN customer c ON c.id = s.customer_id
+       JOIN user u ON u.id = c.auth_user_id WHERE s.id = ?`,
+    )
+    .bind(request.subscriptionId)
+    .first<{
+      subscriptionId: string;
+      customerEmail: string;
+      state: string;
+      cancelAtPeriodEnd: number;
+      currentPeriodEndsAt: number | null;
+      version: number;
+    }>();
+  if (!membership) return failure("NOT_FOUND", "Membership not found", request.requestId);
   return {
     ok: true,
     value: {
-      subscriptionId: result.value.subscriptionId,
-      customerEmail: "",
-      state: result.value.state,
-      cancelAtPeriodEnd: result.value.cancelAtPeriodEnd,
-      currentPeriodEndsAt: result.value.trialEndsAt,
-      version: result.value.version,
+      subscriptionId: membership.subscriptionId,
+      customerEmail: membership.customerEmail,
+      state: membership.state,
+      cancelAtPeriodEnd: membership.cancelAtPeriodEnd === 1,
+      currentPeriodEndsAt:
+        membership.currentPeriodEndsAt === null
+          ? null
+          : new Date(membership.currentPeriodEndsAt).toISOString(),
+      version: membership.version,
     },
     requestId: request.requestId,
   };
@@ -537,15 +682,6 @@ export async function applyAdminOrderIssueAction(
       created_at: number;
     }>();
   if (!row) return failure("NOT_FOUND", "Order issue not found", request.requestId);
-
-  const transition = ISSUE_TRANSITIONS[request.action];
-  if (!transition.from.includes(row.status)) {
-    return failure(
-      "ILLEGAL_TRANSITION",
-      `${request.action} is not legal from ${row.status}`,
-      request.requestId,
-    );
-  }
 
   const now = Date.now();
   const claim = await claimCommandIdempotency(
@@ -596,9 +732,19 @@ export async function applyAdminOrderIssueAction(
     return failure("CONFLICT", "The issue action is still processing", request.requestId);
   }
 
+  const transition = ISSUE_TRANSITIONS[request.action];
+  if (!transition.from.includes(row.status)) {
+    await idempotencyFailed(deps.db, "admin.issues.action", request.idempotencyKey);
+    return failure(
+      "ILLEGAL_TRANSITION",
+      `${request.action} is not legal from ${row.status}`,
+      request.requestId,
+    );
+  }
+
   const resolution = transition.terminal ? reason : row.resolution;
   try {
-    await deps.db.batch([
+    const batchResult = await deps.db.batch([
       auditEventStatement(
         deps.db,
         {
@@ -630,7 +776,26 @@ export async function applyAdminOrderIssueAction(
           row.status,
           request.expectedVersion,
         ),
+      deps.db
+        .prepare(
+          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+           WHERE scope=? AND idempotency_key=? AND status='PROCESSING'
+             AND EXISTS (SELECT 1 FROM order_issue WHERE id=? AND status=? AND version=?)`,
+        )
+        .bind(
+          request.issueId,
+          now,
+          "admin.issues.action",
+          request.idempotencyKey,
+          request.issueId,
+          transition.to,
+          request.expectedVersion + 1,
+        ),
     ]);
+    if ((batchResult[1]?.meta?.changes ?? 0) !== 1) {
+      await idempotencyFailed(deps.db, "admin.issues.action", request.idempotencyKey);
+      return failure("STALE_VERSION", "Issue changed; refresh before retrying", request.requestId);
+    }
   } catch (error) {
     log("error", "admin.issues.action_failed", {
       message: error instanceof Error ? error.message : String(error),

@@ -4,6 +4,7 @@ import type { AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
 import { applicationContext } from "../../auth/authorization";
 import type { AuthInstance } from "../../auth/service";
 import { iamSchema } from "../../iam/schema";
+import type { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 import {
   boundListLimit,
   decodeStaffCursor,
@@ -13,6 +14,7 @@ import {
 export type FinanceAdministrationDeps = {
   auth: AuthInstance;
   db: D1Database;
+  payments?: ProviderRegistry;
 };
 
 export type FinanceAdministrationAccess = {

@@ -28,7 +28,13 @@ describe("finance contracts", () => {
       "RESOLVED",
       "ESCALATED",
     ]);
-    expect(orderIssueActions).toEqual(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE", "REOPEN"]);
+    expect(orderIssueActions).toEqual([
+      "CLAIM",
+      "BEGIN_INVESTIGATION",
+      "RESOLVE",
+      "ESCALATE",
+      "REOPEN",
+    ]);
     expect(reconciliationCaseCategories).toEqual([
       "UNMAPPED_PROVIDER_REFERENCE",
       "AMBIGUOUS_OUTCOME",
@@ -49,6 +55,7 @@ describe("finance contracts", () => {
       fulfillmentStatus: "PENDING",
       deliveryStatus: null,
       committedAt: "2026-08-20T00:00:00.000Z",
+      version: 1,
     } satisfies AdminOrderSummary);
     void ({
       paymentIntentId: "pi-1",

@@ -6,6 +6,8 @@ import type {
   AdminOrderDetail,
   AdminOrderDetailRequest,
   AdminOrderIssuePage,
+  AdminOrderIssueDetail,
+  AdminOrderIssueDetailRequest,
   AdminOrderIssueListRequest,
   AdminOrderIssueView,
   AdminOrderListRequest,
@@ -29,7 +31,7 @@ import {
 
 const ORDER_SELECT = `
   SELECT o.id AS orderId, u.email AS customerEmail, o.status, o.total_minor AS totalMinor,
-         o.currency, o.created_at AS committedAt,
+         o.currency, o.created_at AS committedAt, o.version,
          (SELECT pi.status FROM order_payment_reaction opr
           JOIN payment_intent pi ON pi.id = opr.payment_intent_id
           WHERE opr.order_id = o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
@@ -47,6 +49,7 @@ function toOrderSummary(row: {
   fulfillmentStatus: string | null;
   deliveryStatus: string | null;
   committedAt: number;
+  version: number;
 }): AdminOrderSummary {
   return {
     orderId: row.orderId,
@@ -58,6 +61,7 @@ function toOrderSummary(row: {
     fulfillmentStatus: row.fulfillmentStatus,
     deliveryStatus: row.deliveryStatus,
     committedAt: new Date(row.committedAt).toISOString(),
+    version: row.version,
   };
 }
 
@@ -119,6 +123,7 @@ export async function listAdminOrders(
       fulfillmentStatus: string | null;
       deliveryStatus: string | null;
       committedAt: number;
+      version: number;
     }>();
   const hasMore = rows.results.length > limit;
   const pageRows = rows.results.slice(0, limit);
@@ -147,6 +152,7 @@ export async function getAdminOrder(
     fulfillmentStatus: string | null;
     deliveryStatus: string | null;
     committedAt: number;
+    version: number;
   }>();
   if (!row) {
     return {
@@ -354,7 +360,8 @@ export async function listAdminReconciliationCases(
 const MEMBERSHIP_SELECT = `
   SELECT s.id AS subscriptionId, u.email AS customerEmail, s.status AS state,
          s.cancel_at_period_end AS cancelAtPeriodEnd,
-         s.current_period_ends_at AS currentPeriodEndsAt, s.version
+         s.current_period_ends_at AS currentPeriodEndsAt, s.version,
+         s.created_at AS created_at
   FROM subscription s JOIN customer c ON c.id = s.customer_id
   JOIN user u ON u.id = c.auth_user_id`;
 
@@ -528,4 +535,52 @@ export async function listAdminOrderIssues(
   const nextCursor =
     hasMore && last ? encodeStaffCursor({ createdAt: last.createdAt, id: last.id }) : null;
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
+}
+
+/** One order issue detail by id. */
+export async function getAdminOrderIssue(
+  deps: FinanceAdministrationDeps,
+  request: AdminOrderIssueDetailRequest,
+): Promise<RpcResult<AdminOrderIssueDetail>> {
+  const access = await resolveFinanceAdministrationAccess(deps, request, "orders.read");
+  if (!access.ok) return access;
+  const row = await deps.db
+    .prepare(
+      `SELECT id, order_id AS orderId, category, status, details,
+              assigned_staff_id AS assignedStaffId, resolution, version, created_at AS createdAt
+       FROM order_issue WHERE id = ?`,
+    )
+    .bind(request.issueId)
+    .first<{
+      id: string;
+      orderId: string;
+      category: AdminOrderIssueDetail["category"];
+      status: AdminOrderIssueDetail["status"];
+      details: string | null;
+      assignedStaffId: string | null;
+      resolution: string | null;
+      version: number;
+      createdAt: number;
+    }>();
+  if (!row) {
+    return {
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Order issue not found", requestId: request.requestId },
+    };
+  }
+  return {
+    ok: true,
+    value: {
+      issueId: row.id,
+      orderId: row.orderId,
+      category: row.category,
+      status: row.status,
+      details: row.details,
+      assignedStaffId: row.assignedStaffId,
+      resolution: row.resolution,
+      version: row.version,
+      createdAt: new Date(row.createdAt).toISOString(),
+    },
+    requestId: request.requestId,
+  };
 }

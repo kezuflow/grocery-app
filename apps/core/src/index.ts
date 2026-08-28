@@ -171,6 +171,7 @@ import {
   listAdminMemberships as listAdminMembershipsQuery,
   getAdminMembership as getAdminMembershipQuery,
   listAdminOrderIssues as listAdminOrderIssuesQuery,
+  getAdminOrderIssue as getAdminOrderIssueQuery,
 } from "./admin/application/finance-reads";
 import {
   cancelAdminOrder as cancelAdminOrderCommand,
@@ -566,7 +567,9 @@ const orderDetailSchema = authenticatedRequestSchema.extend({
 
 const orderCancelSchema = authenticatedRequestSchema.extend({
   orderId: validationSchema.string().trim().min(1).max(200),
-  reasonCode: validationSchema.string().trim().min(1).max(120),
+  reason: validationSchema.string().trim().min(1).max(500).optional(),
+  reasonCode: validationSchema.string().trim().min(1).max(120).optional(),
+  resolution: validationSchema.string().trim().min(1).max(500).optional(),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });
@@ -630,6 +633,10 @@ const issueListSchema = authenticatedRequestSchema.extend({
     .optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const issueDetailSchema = authenticatedRequestSchema.extend({
+  issueId: validationSchema.string().trim().min(1).max(200),
 });
 
 const issueActionSchema = authenticatedRequestSchema.extend({
@@ -1238,7 +1245,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return cancelAdminOrderCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        payments: buildProviderRegistry(this.env),
+      },
       input,
     );
   }
@@ -1341,6 +1352,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminOrderIssuesQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminOrderIssue(input: import("@freshmarkets/contracts").AdminOrderIssueDetailRequest) {
+    const validation = issueDetailSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminOrderIssueQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

@@ -149,6 +149,19 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
 
 ## Reconciled implementation state
 
+### Admin finance and lifecycle administration Slice 6 (2026-08-28)
+
+- Core exposes global-scope Orders, Payments/Refunds, reconciliation, Membership lifecycle, and
+  customer order-issue read models and commands. Order cancellation delegates to the canonical
+  command; refunds remain `REQUESTED` until provider confirmation; Membership recovery remains
+  deferred.
+- Migration `0030_order_issues.sql` and its integration coverage are present. Issue actions use a
+  closed lifecycle and never authorize refunds.
+- Web provides thin BFF adapters plus Orders/detail, Payments, Memberships/detail, and Issues
+  workspaces with loading, empty, error, retry, and command-result states.
+- Focused contracts, Core integration, Web route tests, typechecks, and builds pass. Authenticated
+  Playwright finance journeys remain an unmet gate until staff test identity provisioning exists.
+
 ### Payments and paid-order recovery
 
 - The deterministic `mock` provider is the only runtime payment adapter. It is selected explicitly
