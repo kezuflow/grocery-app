@@ -67,9 +67,44 @@ test("a signed-in account without operational capability sees the denied state",
 test("exception workspace renders typed source fields and unavailable actions", async ({
   page,
 }) => {
-  test.skip(
-    !authEmailConfigured,
-    "Authenticated exception workspace needs provisioned staff access.",
+  await page.route("**/api/admin/context", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "e2e",
+        value: {
+          staffId: "staff-e2e",
+          displayName: "E2E",
+          email: "e2e@example.com",
+          capabilities: ["fulfillment.manage"],
+          scopes: [],
+          navigation: [],
+          environment: "test",
+        },
+      }),
+    }),
+  );
+  await page.route("**/api/admin/scopes", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "e2e",
+        value: [
+          {
+            kind: "location",
+            marketId: "market-e2e",
+            marketCode: "CEBU",
+            locationId: "location-cebu-central",
+            locationCode: "CENTRAL",
+            locationName: "Cebu Central",
+            currency: "PHP",
+            timezone: "Asia/Manila",
+          },
+        ],
+      }),
+    }),
   );
   await page.route("**/api/admin/exceptions**", async (route) =>
     route.fulfill({
