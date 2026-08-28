@@ -1,0 +1,97 @@
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import type { AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
+import { applicationContext, hasOperationalScope } from "../../auth/authorization";
+import type { AuthInstance } from "../../auth/service";
+import { iamSchema } from "../../iam/schema";
+import {
+  boundListLimit,
+  decodeStaffCursor,
+  encodeStaffCursor,
+} from "./staff-administration-access";
+
+export type CatalogAdministrationDeps = {
+  auth: AuthInstance;
+  db: D1Database;
+};
+
+export type CatalogAdministrationAccess = {
+  staffId: string;
+  authUserId: string;
+};
+
+type CapabilityPair = "catalog.read" | "catalog.manage" | "inventory.read";
+
+/**
+ * Catalog administration is global: callers need the named capability plus a
+ * global scope. Inventory reads are operational-location scoped instead — the
+ * caller needs `inventory.read` and global scope, the location's market, or
+ * that exact location.
+ */
+export async function resolveCatalogAdministrationAccess(
+  deps: CatalogAdministrationDeps,
+  request: AuthenticatedRequest,
+  capability: CapabilityPair,
+  inventoryLocationId?: string,
+): Promise<RpcResult<CatalogAdministrationAccess>> {
+  const database = drizzle(deps.db, { schema: iamSchema });
+  const context = await applicationContext(deps.auth, database, request);
+  if (!context.ok) return context;
+  if (!context.value.authenticated || !context.value.principal) {
+    return {
+      ok: false,
+      error: {
+        code: "UNAUTHENTICATED",
+        message: "Authentication is required",
+        requestId: request.requestId,
+      },
+    };
+  }
+  const holdsCapability = context.value.capabilities.includes(capability);
+  const globalScope = context.value.scopes.some((scope) => scope.kind === "global");
+  let locationAuthorized = true;
+  if (capability === "inventory.read" && inventoryLocationId !== undefined) {
+    const marketRow = await deps.db
+      .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
+      .bind(inventoryLocationId)
+      .first<{ market_id: string }>();
+    locationAuthorized = hasOperationalScope(
+      context.value.scopes,
+      inventoryLocationId,
+      marketRow?.market_id,
+    );
+  }
+  if (!holdsCapability || (!globalScope && !locationAuthorized)) {
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: `Global-scope ${capability} is required`,
+        requestId: request.requestId,
+      },
+    };
+  }
+  const staff = await database
+    .select({ id: iamSchema.staffIdentity.id })
+    .from(iamSchema.staffIdentity)
+    .where(eq(iamSchema.staffIdentity.authUserId, context.value.principal.userId))
+    .limit(1);
+  const staffRecord = staff[0];
+  if (!staffRecord) {
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: "Staff access is required",
+        requestId: request.requestId,
+      },
+    };
+  }
+  return {
+    ok: true,
+    value: { staffId: staffRecord.id, authUserId: context.value.principal.userId },
+    requestId: request.requestId,
+  };
+}
+
+export { boundListLimit, decodeStaffCursor, encodeStaffCursor };
