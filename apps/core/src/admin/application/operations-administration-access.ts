@@ -36,12 +36,22 @@ export async function resolveOperationsAdministrationAccess(
     };
   }
   const location = await deps.db
-    .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
+    .prepare("SELECT market_id FROM fulfillment_location WHERE id = ? AND status='active'")
     .bind(locationId)
     .first<{ market_id: string }>();
+  if (!location) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_FOUND",
+        message: "Active fulfillment location not found",
+        requestId: request.requestId,
+      },
+    };
+  }
   if (
     !context.value.capabilities.includes(capability) ||
-    !hasOperationalScope(context.value.scopes, locationId, location?.market_id)
+    !hasOperationalScope(context.value.scopes, locationId, location.market_id)
   ) {
     return {
       ok: false,

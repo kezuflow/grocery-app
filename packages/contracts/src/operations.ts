@@ -59,7 +59,6 @@ export type DeliveryDispatchItem = {
   orderId: string;
   status: string;
   riderAuthUserId: string | null;
-  addressSnapshotJson: string;
   deliveredAtIso: string | null;
   version: number;
   allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;

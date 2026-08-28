@@ -127,6 +127,7 @@ describe("scoped operational read models", () => {
     expect(shortage?.allowedActions).toEqual(["START"]);
     const failedDelivery = value.delivery.find((d) => d.status === "FAILED");
     expect(failedDelivery?.allowedActions).toContain("DISPATCH");
+    expect(failedDelivery).not.toHaveProperty("addressSnapshotJson");
     expect(value.exceptions.map((e) => e.kind)).toContain("FULFILLMENT_SHORTAGE");
 
     // Cross-location staff sees nothing from the other location.

@@ -1290,7 +1290,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!result.ok) return result;
     return {
       ok: true as const,
-      value: { ...result.value, cadence: null },
+      value: result.value,
       requestId: input.requestId,
     };
   }
@@ -1889,10 +1889,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         name: "delivery",
         capability: "delivery.manage",
         load: async () => ({
-          items: (await listDeliveryDispatch(this.env.DB, { locationId })).map((item) => ({
-            ...item,
-            allowedActions: allowedDeliveryActions(item.status, item.riderAuthUserId !== null),
-          })),
+          items: (await listDeliveryDispatch(this.env.DB, { locationId })).map(
+            ({ addressSnapshotJson: _, ...item }) => ({
+              ...item,
+              allowedActions: allowedDeliveryActions(item.status, item.riderAuthUserId !== null),
+            }),
+          ),
         }),
       },
       {

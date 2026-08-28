@@ -76,6 +76,14 @@ async function seedProcurementRequirement(cycleId: string, suffix: string): Prom
   return id;
 }
 
+async function seedReceivingRecord(requirementId: string): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version) VALUES (?, ?, 100, 0, 0, 'IN_PROGRESS', 1)",
+  )
+    .bind(`receiving-${crypto.randomUUID()}`, requirementId)
+    .run();
+}
+
 describe("admin operations reads", () => {
   it("requires the named capability and operational scope instead of global scope", async () => {
     expect(
@@ -99,7 +107,7 @@ describe("admin operations reads", () => {
         headers: { cookie: scopedReader },
         locationId: "location-not-allowed",
       }),
-    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 
   it("returns NOT_FOUND for an unknown location even to a globally scoped reader", async () => {
@@ -144,5 +152,53 @@ describe("admin operations reads", () => {
     expect(second.value.items).toHaveLength(1);
     expect(second.value.items[0]!.requirementId).not.toBe(first.value.items[0]!.requirementId);
     expect(second.value.nextCursor).toBeNull();
+  });
+
+  it("uses the procurement requirement identity for receiving keyset cursors", async () => {
+    const reader = await seedStaff("receiving.manage", "location");
+    const cycleId = `cycle-receiving-${crypto.randomUUID().slice(0, 8)}`;
+    const firstRequirement = await seedProcurementRequirement(cycleId, "receiving-a");
+    const secondRequirement = await seedProcurementRequirement(cycleId, "receiving-b");
+    await seedReceivingRecord(firstRequirement);
+    await seedReceivingRecord(secondRequirement);
+    const first = await core.listReceivingSessions({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader },
+      locationId: "location-cebu-central",
+      cycleId,
+      limit: 1,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const second = await core.listReceivingSessions({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader },
+      locationId: "location-cebu-central",
+      cycleId,
+      limit: 1,
+      cursor: first.value.nextCursor!,
+    });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.items[0]!.requirementId).not.toBe(first.value.items[0]!.requirementId);
+  });
+
+  it("returns the persisted Scheduled cadence from mode activation", async () => {
+    const manager = await seedStaff("fulfillment.manage", "location");
+    const result = await core.activateFulfillmentMode({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager },
+      locationId: "location-cebu-central",
+      fulfillmentMode: "SCHEDULED",
+      cadence: "WEEKLY",
+      promiseMinutes: null,
+      maxConcurrentInstantOrders: null,
+      expectedVersion: null,
+      idempotencyKey: `mode-${crypto.randomUUID()}`,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { activeMode: "SCHEDULED", cadence: "WEEKLY" },
+    });
   });
 });

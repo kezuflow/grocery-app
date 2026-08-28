@@ -1,6 +1,9 @@
 import type { DeliveryDispatchItem } from "@freshmarkets/contracts";
 
-type DispatchRow = Omit<DeliveryDispatchItem, "allowedActions"> & { cycleId: string | null };
+type DispatchRow = Omit<DeliveryDispatchItem, "allowedActions"> & {
+  cycleId: string | null;
+  addressSnapshotJson: string;
+};
 
 export function allowedDeliveryActions(
   status: string,

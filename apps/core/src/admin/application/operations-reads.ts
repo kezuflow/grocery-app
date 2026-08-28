@@ -171,10 +171,7 @@ export async function listAdminReceivingSessions(
         status: row.receivingStatus!,
         version: row.receivingVersion!,
       })),
-      nextCursor: nextCursor(
-        rows.length > page.limit,
-        pageRows.at(-1)?.receivingRecordId ?? undefined,
-      ),
+      nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.requirementId),
     },
     requestId: request.requestId,
   };
@@ -248,14 +245,26 @@ export async function listAdminDeliveryOperations(
     version: row.version,
     allowedActions: allowedDeliveryActions(row.status, row.riderAuthUserId !== null),
   }));
+  const clauses = ["f.location_id=?", "d.status NOT IN ('CANCELED','DELIVERED')"];
+  const binds: unknown[] = [request.locationId];
+  if (request.cycleId) {
+    clauses.push("o.cycle_id=?");
+    binds.push(request.cycleId);
+  }
+  const totals = await deps.db
+    .prepare(
+      `SELECT COUNT(*) AS totalOpenJobs, SUM(CASE WHEN d.rider_user_id IS NOT NULL THEN 1 ELSE 0 END) AS assignedJobs FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id LEFT JOIN grocery_order o ON o.id=d.order_id WHERE ${clauses.join(" AND ")}`,
+    )
+    .bind(...binds)
+    .first<{ totalOpenJobs: number; assignedJobs: number | null }>();
   return {
     ok: true,
     value: {
       locationId: request.locationId,
       cycleId: request.cycleId ?? null,
-      status: items.length ? "OPEN" : "EMPTY",
-      totalOpenJobs: items.length,
-      assignedJobs: items.filter((item) => item.riderAssigned).length,
+      status: (totals?.totalOpenJobs ?? 0) > 0 ? "OPEN" : "EMPTY",
+      totalOpenJobs: totals?.totalOpenJobs ?? 0,
+      assignedJobs: totals?.assignedJobs ?? 0,
       items,
       nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.jobId),
     },
