@@ -11,6 +11,8 @@ const coreMocks = vi.hoisted(() => ({
   advanceAdminFulfillment: vi.fn(),
   listDeliveryOperations: vi.fn(),
   advanceAdminDelivery: vi.fn(),
+  advanceFulfillment: vi.fn(),
+  advanceDelivery: vi.fn(),
   getFulfillmentMode: vi.fn(),
   activateFulfillmentMode: vi.fn(),
   listOperationalExceptions: vi.fn(),
@@ -197,5 +199,32 @@ describe("admin operations BFF routes", () => {
     );
     expect(response.status).toBe(400);
     expect(coreMocks.advanceAdminFulfillment).not.toHaveBeenCalled();
+  });
+
+  it("preserves the operations-board delivery adapter with its query version", async () => {
+    coreMocks.advanceFulfillment.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.advanceDelivery.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+
+    await advanceDelivery(
+      command(
+        "https://app/delivery?v=12",
+        { orderId: "o1", command: "fulfillment", action: "PACK" },
+        "legacy-command",
+      ),
+    );
+    await advanceDelivery(
+      command(
+        "https://app/delivery?v=13",
+        { orderId: "o1", command: "delivery", action: "DISPATCH" },
+        "legacy-command-2",
+      ),
+    );
+
+    expect(coreMocks.advanceFulfillment).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: "o1", action: "PACK", expectedVersion: 12 }),
+    );
+    expect(coreMocks.advanceDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: "o1", action: "DISPATCH", expectedVersion: 13 }),
+    );
   });
 });

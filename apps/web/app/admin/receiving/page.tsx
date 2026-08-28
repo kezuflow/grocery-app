@@ -14,18 +14,23 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
-const location = "location-cebu-central";
+import { useAdminLocation } from "../../../components/admin/use-admin-location";
 export default function ReceivingPage() {
+  const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<ReceivingSessionPage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [requirementId, setRequirementId] = useState("");
   const [startVersion, setStartVersion] = useState("");
+  const [lineValues, setLineValues] = useState<
+    Record<string, { accepted: string; rejected: string; reason: string }>
+  >({});
+  const [pending, setPending] = useState(false);
   const load = useCallback(async () => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/receiving?locationId=${location}&limit=50`)
+        await fetch(`/api/admin/receiving?locationId=${locationId ?? ""}&limit=50`)
       ).json()) as RpcResult<ReceivingSessionPage>;
       if (!payload.ok) {
         setNotice(
@@ -42,9 +47,9 @@ export default function ReceivingPage() {
       setNotice("Network error loading receiving sessions.");
       setState("error");
     }
-  }, []);
+  }, [locationId]);
   useEffect(() => {
-    void load();
+    if (locationId) void load();
   }, [load]);
   async function start() {
     const expectedVersion = Number(startVersion);
@@ -52,38 +57,88 @@ export default function ReceivingPage() {
       setNotice("Requirement ID and current version are required.");
       return;
     }
+    if (!locationId || pending) return;
+    setPending(true);
     const response = await fetch("/api/admin/receiving/start", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({
-        locationId: location,
+        locationId,
         requirementId: requirementId.trim(),
         expectedVersion,
       }),
     });
     const payload = (await response.json()) as RpcResult<unknown>;
     setNotice(payload.ok ? "Receiving session started." : payload.error.message);
-    if (payload.ok) void load();
+    if (
+      payload.ok ||
+      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
+    )
+      void load();
+    setPending(false);
+  }
+  async function recordLine(sessionId: string, expectedVersion: number) {
+    if (!locationId || pending) return;
+    const values = lineValues[sessionId] ?? { accepted: "", rejected: "", reason: "" };
+    const acceptedBase = Number(values.accepted);
+    const rejectedBase = Number(values.rejected);
+    if (
+      !Number.isInteger(acceptedBase) ||
+      acceptedBase < 0 ||
+      !Number.isInteger(rejectedBase) ||
+      rejectedBase < 0
+    ) {
+      setNotice("Accepted and rejected quantities must be non-negative integers.");
+      return;
+    }
+    setPending(true);
+    const response = await fetch("/api/admin/receiving/record-line", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      body: JSON.stringify({
+        locationId,
+        receivingSessionId: sessionId,
+        acceptedBase,
+        rejectedBase,
+        expectedVersion,
+        reason: values.reason.trim() || undefined,
+      }),
+    });
+    const payload = (await response.json()) as RpcResult<unknown>;
+    setNotice(payload.ok ? "Receiving line recorded." : payload.error.message);
+    if (
+      payload.ok ||
+      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
+    )
+      void load();
+    setPending(false);
   }
   async function complete(sessionId: string, expectedVersion: number) {
+    if (!locationId || pending) return;
+    setPending(true);
     const response = await fetch("/api/admin/receiving/complete", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({
-        locationId: location,
+        locationId,
         receivingSessionId: sessionId,
         expectedVersion,
       }),
     });
     const payload = (await response.json()) as RpcResult<unknown>;
     setNotice(payload.ok ? "Receiving session completed." : payload.error.message);
-    if (payload.ok) void load();
+    if (
+      payload.ok ||
+      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
+    )
+      void load();
+    setPending(false);
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Receiving"
-        description="Record accepted and rejected base-unit quantities through a scoped receiving session."
+        description={`Record accepted and rejected base-unit quantities for ${label}.`}
       />
       {state === "loading" ? (
         <div role="status" aria-label="Loading receiving">
@@ -119,7 +174,9 @@ export default function ReceivingPage() {
                 value={startVersion}
                 onChange={(event) => setStartVersion(event.target.value)}
               />
-              <Button onClick={() => void start()}>Start receiving</Button>
+              <Button disabled={pending || !locationId} onClick={() => void start()}>
+                {pending ? "Working…" : "Start receiving"}
+              </Button>
             </div>
           </ListPageSection>
           <ListPageSection title="Receiving sessions">
@@ -158,9 +215,78 @@ export default function ReceivingPage() {
                           <StatusBadge>{item.status}</StatusBadge>
                         </TableCell>
                         <TableCell>
+                          <div className="grid gap-1 sm:grid-cols-3">
+                            <Input
+                              aria-label={`Accepted quantity ${item.receivingSessionId}`}
+                              inputMode="numeric"
+                              placeholder="accepted"
+                              value={lineValues[item.receivingSessionId]?.accepted ?? ""}
+                              onChange={(event) =>
+                                setLineValues((current) => ({
+                                  ...current,
+                                  [item.receivingSessionId]: {
+                                    ...(current[item.receivingSessionId] ?? {
+                                      accepted: "",
+                                      rejected: "",
+                                      reason: "",
+                                    }),
+                                    accepted: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                            <Input
+                              aria-label={`Rejected quantity ${item.receivingSessionId}`}
+                              inputMode="numeric"
+                              placeholder="rejected"
+                              value={lineValues[item.receivingSessionId]?.rejected ?? ""}
+                              onChange={(event) =>
+                                setLineValues((current) => ({
+                                  ...current,
+                                  [item.receivingSessionId]: {
+                                    ...(current[item.receivingSessionId] ?? {
+                                      accepted: "",
+                                      rejected: "",
+                                      reason: "",
+                                    }),
+                                    rejected: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                            <Input
+                              aria-label={`Receiving reason ${item.receivingSessionId}`}
+                              placeholder="reason"
+                              value={lineValues[item.receivingSessionId]?.reason ?? ""}
+                              onChange={(event) =>
+                                setLineValues((current) => ({
+                                  ...current,
+                                  [item.receivingSessionId]: {
+                                    ...(current[item.receivingSessionId] ?? {
+                                      accepted: "",
+                                      rejected: "",
+                                      reason: "",
+                                    }),
+                                    reason: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={pending}
+                              onClick={() => void recordLine(item.receivingSessionId, item.version)}
+                            >
+                              Record line
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <Button
                             size="sm"
                             variant="outline"
+                            disabled={pending}
                             onClick={() => void complete(item.receivingSessionId, item.version)}
                           >
                             Complete

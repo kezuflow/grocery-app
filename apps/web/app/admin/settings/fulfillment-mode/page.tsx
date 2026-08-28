@@ -6,19 +6,21 @@ import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
-const location = "location-cebu-central";
+import { useAdminLocation } from "../../../../components/admin/use-admin-location";
 export default function FulfillmentModePage() {
+  const { locationId, label } = useAdminLocation();
   const [configuration, setConfiguration] = useState<FulfillmentModeConfigurationView | null>(null);
   const [state, setState] = useState("loading");
   const [mode, setMode] = useState<"INSTANT" | "SCHEDULED">("SCHEDULED");
   const [promiseMinutes, setPromiseMinutes] = useState("");
   const [capacity, setCapacity] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const load = useCallback(async () => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/fulfillment-mode?locationId=${location}`)
+        await fetch(`/api/admin/fulfillment-mode?locationId=${locationId ?? ""}`)
       ).json()) as RpcResult<FulfillmentModeConfigurationView>;
       if (!payload.ok) {
         setNotice(
@@ -38,9 +40,9 @@ export default function FulfillmentModePage() {
       setNotice("Network error loading fulfillment configuration.");
       setState("error");
     }
-  }, []);
+  }, [locationId]);
   useEffect(() => {
-    void load();
+    if (locationId) void load();
   }, [load]);
   async function save() {
     if (!configuration) return;
@@ -53,11 +55,13 @@ export default function FulfillmentModePage() {
       setNotice("Promise and capacity must be positive integers when supplied.");
       return;
     }
+    if (!locationId || pending) return;
+    setPending(true);
     const response = await fetch("/api/admin/fulfillment-mode", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({
-        locationId: location,
+        locationId,
         fulfillmentMode: mode,
         cadence: mode === "SCHEDULED" ? "WEEKLY" : null,
         promiseMinutes: promise,
@@ -71,6 +75,12 @@ export default function FulfillmentModePage() {
       setConfiguration(payload.value);
       setMode(payload.value.activeMode);
     }
+    if (
+      !payload.ok &&
+      (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT")
+    )
+      void load();
+    setPending(false);
   }
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
@@ -97,7 +107,7 @@ export default function FulfillmentModePage() {
       ) : null}
       {state === "ready" && configuration ? (
         <ListPageSection
-          title="Cebu Central configuration"
+          title={`${label} configuration`}
           description={`Current version ${configuration.version}. Changes never rewrite committed order snapshots.`}
         >
           {notice ? (
@@ -144,7 +154,9 @@ export default function FulfillmentModePage() {
             </label>
           </div>
           <div className="border-t border-[var(--fm-border)] p-4">
-            <Button onClick={() => void save()}>Save configuration</Button>
+            <Button disabled={pending || !locationId} onClick={() => void save()}>
+              {pending ? "Saving…" : "Save configuration"}
+            </Button>
           </div>
         </ListPageSection>
       ) : null}

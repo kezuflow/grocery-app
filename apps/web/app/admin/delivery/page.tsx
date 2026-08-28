@@ -14,17 +14,19 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
-const location = "location-cebu-central";
+import { useAdminLocation } from "../../../components/admin/use-admin-location";
 export default function DeliveryPage() {
+  const { locationId, label } = useAdminLocation();
   const [data, setData] = useState<DeliveryOperationsSummary | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
   const load = useCallback(async () => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/delivery?locationId=${location}&limit=50`)
+        await fetch(`/api/admin/delivery?locationId=${locationId ?? ""}&limit=50`)
       ).json()) as RpcResult<DeliveryOperationsSummary>;
       if (!payload.ok) {
         setNotice(
@@ -41,16 +43,18 @@ export default function DeliveryPage() {
       setNotice("Network error loading delivery operations.");
       setState("error");
     }
-  }, []);
+  }, [locationId]);
   useEffect(() => {
-    void load();
+    if (locationId) void load();
   }, [load]);
   async function act(orderId: string, action: string, expectedVersion: number) {
+    if (!locationId || pending) return;
+    setPending(true);
     const response = await fetch("/api/admin/delivery", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({
-        locationId: location,
+        locationId,
         orderId,
         action,
         expectedVersion,
@@ -61,13 +65,18 @@ export default function DeliveryPage() {
     setNotice(
       payload.ok ? `Delivery action ${action.toLowerCase()} completed.` : payload.error.message,
     );
-    if (payload.ok) void load();
+    if (
+      payload.ok ||
+      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
+    )
+      void load();
+    setPending(false);
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Delivery"
-        description="Dispatch work by location and committed fulfillment promise."
+        description={`Dispatch work by location (${label}) and committed fulfillment promise.`}
       />
       {state === "loading" ? (
         <div role="status" aria-label="Loading delivery">
@@ -135,6 +144,7 @@ export default function DeliveryPage() {
                             key={action}
                             size="sm"
                             variant={action === "DELIVER" ? "default" : "outline"}
+                            disabled={pending}
                             onClick={() => void act(item.orderId, action, item.version)}
                           >
                             {action}

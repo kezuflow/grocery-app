@@ -14,19 +14,21 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
-const location = "location-cebu-central";
+import { useAdminLocation } from "../../../components/admin/use-admin-location";
 export default function ProcurementPage() {
+  const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<ProcurementRequirementPage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [cycleId, setCycleId] = useState("");
   const [inventoryPoolId, setInventoryPoolId] = useState("");
   const [version, setVersion] = useState("");
+  const [pending, setPending] = useState(false);
   const load = useCallback(async () => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/procurement?locationId=${location}&limit=50`)
+        await fetch(`/api/admin/procurement?locationId=${locationId ?? ""}&limit=50`)
       ).json()) as RpcResult<ProcurementRequirementPage>;
       if (!payload.ok) {
         setNotice(
@@ -43,9 +45,9 @@ export default function ProcurementPage() {
       setNotice("Network error loading procurement requirements.");
       setState("error");
     }
-  }, []);
+  }, [locationId]);
   useEffect(() => {
-    void load();
+    if (locationId) void load();
   }, [load]);
   async function aggregate() {
     const expectedVersion = Number(version);
@@ -58,11 +60,13 @@ export default function ProcurementPage() {
       setNotice("Cycle, inventory pool, and current version are required.");
       return;
     }
+    if (!locationId) return;
+    setPending(true);
     const response = await fetch("/api/admin/procurement/aggregate", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({
-        locationId: location,
+        locationId,
         cycleId: cycleId.trim(),
         inventoryPoolId: inventoryPoolId.trim(),
         expectedVersion,
@@ -70,13 +74,15 @@ export default function ProcurementPage() {
     });
     const payload = (await response.json()) as RpcResult<unknown>;
     setNotice(payload.ok ? "Procurement demand aggregated." : payload.error.message);
-    if (payload.ok) void load();
+    if (payload.ok || payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT")
+      void load();
+    setPending(false);
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Procurement"
-        description="Turn committed location demand into explicit procurement requirements."
+        description={`Turn committed demand into explicit procurement requirements for ${label}.`}
       />
       {state === "loading" ? (
         <div role="status" aria-label="Loading procurement">
@@ -121,7 +127,9 @@ export default function ProcurementPage() {
                 value={version}
                 onChange={(event) => setVersion(event.target.value)}
               />
-              <Button onClick={() => void aggregate()}>Aggregate</Button>
+              <Button disabled={pending || !locationId} onClick={() => void aggregate()}>
+                {pending ? "Working…" : "Aggregate"}
+              </Button>
             </div>
           </ListPageSection>
           <ListPageSection

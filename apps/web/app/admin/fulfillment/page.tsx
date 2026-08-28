@@ -14,18 +14,20 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminLocation } from "../../../components/admin/use-admin-location";
 
-const location = "location-cebu-central";
 export default function FulfillmentPage() {
+  const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<FulfillmentQueuePage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
   const load = useCallback(async () => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/fulfillment?locationId=${location}&limit=50`)
+        await fetch(`/api/admin/fulfillment?locationId=${locationId ?? ""}&limit=50`)
       ).json()) as RpcResult<FulfillmentQueuePage>;
       if (!payload.ok) {
         setNotice(
@@ -42,16 +44,18 @@ export default function FulfillmentPage() {
       setNotice("Network error loading fulfillment.");
       setState("error");
     }
-  }, []);
+  }, [locationId]);
   useEffect(() => {
-    void load();
+    if (locationId) void load();
   }, [load]);
   async function act(orderId: string, action: string, expectedVersion: number) {
+    if (!locationId || pending) return;
+    setPending(true);
     const response = await fetch("/api/admin/fulfillment", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({
-        locationId: location,
+        locationId,
         orderId,
         action,
         expectedVersion,
@@ -62,7 +66,12 @@ export default function FulfillmentPage() {
     setNotice(
       payload.ok ? `Fulfillment action ${action.toLowerCase()} completed.` : payload.error.message,
     );
-    if (payload.ok) void load();
+    if (
+      payload.ok ||
+      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
+    )
+      void load();
+    setPending(false);
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
@@ -90,7 +99,7 @@ export default function FulfillmentPage() {
       {state === "ready" && page ? (
         <ListPageSection
           title="Work queue"
-          description="Current location: Cebu Central. Refresh after a stale-version response."
+          description={`Current location: ${label}. Refresh after a stale-version response.`}
         >
           <div className="p-4">
             <Input
@@ -136,6 +145,7 @@ export default function FulfillmentPage() {
                             key={action}
                             size="sm"
                             variant={action === "PACK" ? "default" : "outline"}
+                            disabled={pending}
                             onClick={() => void act(item.orderId, action, item.version)}
                           >
                             {action}

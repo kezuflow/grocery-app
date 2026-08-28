@@ -13,8 +13,9 @@ import {
   TableRow,
 } from "../../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
-const location = "location-cebu-central";
+import { useAdminLocation } from "../../../../components/admin/use-admin-location";
 export default function OperationalExceptionsPage() {
+  const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<OperationalExceptionPage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export default function OperationalExceptionsPage() {
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/exceptions?locationId=${location}&limit=50`)
+        await fetch(`/api/admin/exceptions?locationId=${locationId ?? ""}&limit=50`)
       ).json()) as RpcResult<OperationalExceptionPage>;
       if (!payload.ok) {
         setNotice(
@@ -39,15 +40,15 @@ export default function OperationalExceptionsPage() {
       setNotice("Network error loading operational exceptions.");
       setState("error");
     }
-  }, []);
+  }, [locationId]);
   useEffect(() => {
-    void load();
+    if (locationId) void load();
   }, [load]);
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Operational exceptions"
-        description="Cross-domain exception visibility with source-owned resolution commands."
+        description={`Cross-domain exception visibility for ${label}, with source-owned resolution commands.`}
       />
       {state === "loading" ? (
         <div role="status" aria-label="Loading operational exceptions">
