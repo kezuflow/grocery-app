@@ -64,6 +64,12 @@ export const STAFF_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [
   { code: "staff-roles", label: "Roles", href: "/admin/staff/roles" },
 ];
 
+/** Workspace-scoped sub-navigation for the Customers section. */
+export const CUSTOMER_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [
+  { code: "customers", label: "Customers", href: "/admin/customers" },
+  { code: "customers-privacy", label: "Privacy queue", href: "/admin/customers/privacy" },
+];
+
 export function adminNavigationFromContext(
   items: ReadonlyArray<AdminNavigationItem>,
 ): ReadonlyArray<AdminNavigationEntry> {
