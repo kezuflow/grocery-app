@@ -63,3 +63,43 @@ test("a signed-in account without operational capability sees the denied state",
     page.getByText(/no operational capability|denied|sections not permitted/i).first(),
   ).toBeVisible();
 });
+
+test("exception workspace renders typed source fields and unavailable actions", async ({
+  page,
+}) => {
+  test.skip(
+    !authEmailConfigured,
+    "Authenticated exception workspace needs provisioned staff access.",
+  );
+  await page.route("**/api/admin/exceptions**", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "e2e",
+        value: {
+          nextCursor: null,
+          items: [
+            {
+              kind: "RECEIVING_DISCREPANCY",
+              source: "RECEIVING",
+              severity: "HIGH",
+              ageMinutes: null,
+              ownerId: null,
+              referenceId: "receiving-e2e",
+              orderId: null,
+              locationId: "location-cebu-central",
+              reason: "RECEIVING_DISCREPANCY",
+              permittedActions: [],
+              detail: "Expected 10, accepted 8, rejected 2.",
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  await page.goto("/admin/issues/operational-exceptions");
+  await expect(page.getByText("RECEIVING").first()).toBeVisible();
+  await expect(page.getByText("Source-owned; unavailable here")).toBeVisible();
+  await expect(page.getByText("Age unavailable")).toBeVisible();
+});

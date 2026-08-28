@@ -1,5 +1,7 @@
 import type { OperationalExceptionItem } from "@freshmarkets/contracts";
 
+export type OperationalExceptionProjection = OperationalExceptionItem & { queueKey: string };
+
 function ageMinutes(at: number | null, now: number): number | null {
   if (at === null || !Number.isFinite(at)) return null;
   return Math.max(0, Math.floor((now - at) / 60_000));
@@ -19,7 +21,7 @@ function queueKey(at: number | null, source: string, id: string): string {
 export async function listOperationalExceptions(
   database: D1Database,
   query: { locationId: string },
-): Promise<Array<OperationalExceptionItem>> {
+): Promise<Array<OperationalExceptionProjection>> {
   const now = Date.now();
   const [procurement, shortages, deliveries, receiving] = await Promise.all([
     database
@@ -65,7 +67,7 @@ export async function listOperationalExceptions(
         location_id: string;
       }>(),
   ]);
-  const rows: OperationalExceptionItem[] = [
+  const rows: OperationalExceptionProjection[] = [
     ...procurement.results.map((r) => ({
       kind: "PROCUREMENT_SHORTAGE" as const,
       source: "PROCUREMENT" as const,

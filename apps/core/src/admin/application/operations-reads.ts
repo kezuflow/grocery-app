@@ -285,21 +285,17 @@ export async function listAdminOperationalExceptions(
   if (!access.ok) return access;
   const page = pageRequest(request);
   if (isPageError(page)) return page;
-  const all = (await listExceptionRows(deps.db, { locationId: request.locationId }))
-    .filter((item) => !page.cursorId || item.referenceId < page.cursorId)
-    .sort((left, right) => right.referenceId.localeCompare(left.referenceId));
+  const all = await listExceptionRows(deps.db, { locationId: request.locationId });
   const ordered = all.filter(
     (item) => !page.cursorId || (item.queueKey ?? item.referenceId) < page.cursorId,
   );
-  const items = ordered.slice(0, page.limit);
+  const pageRows = ordered.slice(0, page.limit);
+  const items = pageRows.map(({ queueKey: _queueKey, ...item }) => item);
   return {
     ok: true,
     value: {
       items,
-      nextCursor: nextCursor(
-        ordered.length > page.limit,
-        items.at(-1)?.queueKey ?? items.at(-1)?.referenceId,
-      ),
+      nextCursor: nextCursor(ordered.length > page.limit, pageRows.at(-1)?.queueKey),
     },
     requestId: request.requestId,
   };

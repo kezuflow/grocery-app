@@ -121,6 +121,45 @@ describe("admin operations reads", () => {
     ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 
+  it("scopes the converged exception queue and honors its cursor contract", async () => {
+    expect(
+      await core.listOperationalExceptions({
+        requestId: crypto.randomUUID(),
+        headers: {},
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
+    const reader = await seedStaff("fulfillment.manage", "location");
+    const requirementId = await seedProcurementRequirement("cycle-next-cebu", "exceptions");
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO supply_exception (id, requirement_id, kind, affected_quantity, status, created_at, version) VALUES (?, ?, 'SHORTAGE', 10, 'OPEN', ?, 1)",
+      ).bind(`exception-${crypto.randomUUID()}`, requirementId, Date.now() - 60_000),
+      env.DB.prepare(
+        "INSERT INTO supply_exception (id, requirement_id, kind, affected_quantity, status, created_at, version) VALUES (?, ?, 'QUALITY', 5, 'OPEN', ?, 1)",
+      ).bind(`exception-${crypto.randomUUID()}`, requirementId, Date.now() - 30_000),
+    ]);
+    const first = await core.listOperationalExceptions({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader },
+      locationId: "location-cebu-central",
+      limit: 1,
+    });
+    expect(first).toMatchObject({ ok: true });
+    if (!first.ok) return;
+    expect(first.value.items).toHaveLength(1);
+    expect(first.value.items[0]).not.toHaveProperty("queueKey");
+    expect(first.value.nextCursor).toBeTruthy();
+    const second = await core.listOperationalExceptions({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader },
+      locationId: "location-cebu-central",
+      limit: 1,
+      cursor: first.value.nextCursor!,
+    });
+    expect(second).toMatchObject({ ok: true });
+  });
+
   it("applies cycle filtering before keyset pagination and returns a real next cursor", async () => {
     const reader = await seedStaff("procurement.read", "location");
     const cycleId = `cycle-page-${crypto.randomUUID().slice(0, 8)}`;
