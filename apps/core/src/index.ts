@@ -112,10 +112,16 @@ import { revokeAdminStaffSessions as revokeAdminStaffSessionsCommand } from "./a
 import { listAdminRoles as listAdminRolesQuery } from "./admin/application/list-admin-roles";
 import { getAdminRole as getAdminRoleQuery } from "./admin/application/get-admin-role";
 import { createAdminRole as createAdminRoleCommand } from "./admin/application/create-admin-role";
-import { updateAdminRole as updateAdminRoleCommand, setAdminRoleCapabilities as setAdminRoleCapabilitiesCommand } from "./admin/application/update-admin-role";
+import {
+  updateAdminRole as updateAdminRoleCommand,
+  setAdminRoleCapabilities as setAdminRoleCapabilitiesCommand,
+} from "./admin/application/update-admin-role";
 import { archiveAdminRole as archiveAdminRoleCommand } from "./admin/application/archive-admin-role";
 import { listCapabilityDefinitions as listCapabilityDefinitionsQuery } from "./admin/application/list-capability-definitions";
-import { listAdminCustomers as listAdminCustomersQuery, getAdminCustomer as getAdminCustomerQuery } from "./admin/application/list-admin-customers";
+import {
+  listAdminCustomers as listAdminCustomersQuery,
+  getAdminCustomer as getAdminCustomerQuery,
+} from "./admin/application/list-admin-customers";
 import {
   listCustomerInvitations as listCustomerInvitationsQuery,
   inviteCustomer as inviteCustomerCommand,
@@ -125,7 +131,12 @@ import {
   listPrivacyRequests as listPrivacyRequestsQuery,
   applyPrivacyAction as applyPrivacyActionCommand,
 } from "./admin/application/customer-commands";
-import { listAdminPromotions as listAdminPromotionsQuery, getAdminPromotion as getAdminPromotionQuery, previewAdminPromotion as previewAdminPromotionQuery, listPromotionRedemptions as listPromotionRedemptionsQuery } from "./admin/application/promotion-reads";
+import {
+  listAdminPromotions as listAdminPromotionsQuery,
+  getAdminPromotion as getAdminPromotionQuery,
+  previewAdminPromotion as previewAdminPromotionQuery,
+  listPromotionRedemptions as listPromotionRedemptionsQuery,
+} from "./admin/application/promotion-reads";
 import {
   createAdminPromotion as createAdminPromotionCommand,
   updateAdminPromotion as updateAdminPromotionCommand,
@@ -133,6 +144,25 @@ import {
   grantAdminPromotion as grantAdminPromotionCommand,
   listPromotionGrants as listPromotionGrantsQuery,
 } from "./admin/application/promotion-commands";
+import {
+  listAdminCategories as listAdminCategoriesQuery,
+  listAdminUnits as listAdminUnitsQuery,
+  listAdminProducts as listAdminProductsQuery,
+  getAdminProduct as getAdminProductQuery,
+} from "./admin/application/catalog-reads";
+import {
+  createAdminCategory as createAdminCategoryCommand,
+  createAdminUnit as createAdminUnitCommand,
+  setAdminProductStatus as setAdminProductStatusCommand,
+  createAdminSku as createAdminSkuCommand,
+  updateAdminSku as updateAdminSkuCommand,
+  setAdminSkuAvailability as setAdminSkuAvailabilityCommand,
+  setAdminSkuPrice as setAdminSkuPriceCommand,
+} from "./admin/application/catalog-commands";
+import {
+  listAdminInventory as listAdminInventoryQuery,
+  getAdminInventoryLedger as getAdminInventoryLedgerQuery,
+} from "./admin/application/catalog-reads";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 
@@ -315,7 +345,15 @@ const closureRequestSchema = authenticatedRequestSchema.extend({
 
 const privacyListRequestSchema = authenticatedRequestSchema.extend({
   status: validationSchema
-    .enum(["SUBMITTED", "VERIFYING", "APPROVED", "REJECTED", "PROCESSING", "COMPLETED", "ESCALATED"])
+    .enum([
+      "SUBMITTED",
+      "VERIFYING",
+      "APPROVED",
+      "REJECTED",
+      "PROCESSING",
+      "COMPLETED",
+      "ESCALATED",
+    ])
     .optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
@@ -323,7 +361,14 @@ const privacyListRequestSchema = authenticatedRequestSchema.extend({
 
 const privacyActionRequestSchema = authenticatedRequestSchema.extend({
   privacyRequestId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum(["VERIFY", "APPROVE", "REJECT", "BEGIN_PROCESSING", "COMPLETE", "ESCALATE"]),
+  action: validationSchema.enum([
+    "VERIFY",
+    "APPROVE",
+    "REJECT",
+    "BEGIN_PROCESSING",
+    "COMPLETE",
+    "ESCALATE",
+  ]),
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
@@ -391,6 +436,106 @@ const promotionGrantRequestSchema = authenticatedRequestSchema.extend({
   customerId: validationSchema.string().trim().min(1).max(200),
   maxRedemptions: validationSchema.number().int().min(1).max(1000),
   idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogCategoryCreateSchema = authenticatedRequestSchema.extend({
+  code: validationSchema
+    .string()
+    .trim()
+    .min(2)
+    .max(60)
+    .regex(/^[A-Z][A-Z0-9_]*$/, "expected UPPER_SNAKE_CASE code"),
+  name: validationSchema.string().trim().min(1).max(120),
+  slug: validationSchema
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug"),
+  sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogUnitCreateSchema = authenticatedRequestSchema.extend({
+  code: validationSchema
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .regex(/^[A-Z][A-Z0-9_]*$/, "expected UPPER_SNAKE_CASE code"),
+  name: validationSchema.string().trim().min(1).max(60),
+  dimension: validationSchema.enum(["MASS", "COUNT", "VOLUME"]),
+  symbol: validationSchema.string().trim().min(1).max(10),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogProductListSchema = authenticatedRequestSchema.extend({
+  query: validationSchema.string().trim().min(1).max(100).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const catalogProductDetailSchema = authenticatedRequestSchema.extend({
+  productId: validationSchema.string().trim().min(1).max(200),
+});
+
+const catalogProductStatusSchema = authenticatedRequestSchema.extend({
+  productId: validationSchema.string().trim().min(1).max(200),
+  status: validationSchema.enum(["active", "inactive"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogSkuCreateSchema = authenticatedRequestSchema.extend({
+  productId: validationSchema.string().trim().min(1).max(200),
+  code: validationSchema.string().trim().min(1).max(80),
+  name: validationSchema.string().trim().min(1).max(120),
+  sellableUnitId: validationSchema.string().trim().min(1).max(200),
+  consumptionBaseQuantity: validationSchema.number().int().min(1),
+  merchandisingLabel: validationSchema.string().trim().max(60).nullable().optional(),
+  sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogSkuUpdateSchema = authenticatedRequestSchema.extend({
+  skuId: validationSchema.string().trim().min(1).max(200),
+  name: validationSchema.string().trim().min(1).max(120).optional(),
+  merchandisingLabel: validationSchema.string().trim().max(60).nullable().optional(),
+  status: validationSchema.enum(["active", "inactive"]).optional(),
+  sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogSkuAvailabilitySchema = authenticatedRequestSchema.extend({
+  skuId: validationSchema.string().trim().min(1).max(200),
+  locationId: validationSchema.string().trim().min(1).max(200),
+  availabilityStatus: validationSchema.enum(["AVAILABLE", "UNAVAILABLE"]),
+  sourcingMode: validationSchema.enum(["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"]),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogSkuPriceSchema = authenticatedRequestSchema.extend({
+  skuId: validationSchema.string().trim().min(1).max(200),
+  marketId: validationSchema.string().trim().min(1).max(200),
+  currency: validationSchema.string().trim().length(3),
+  amountMinor: validationSchema.number().int().min(1),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const inventoryListSchema = authenticatedRequestSchema.extend({
+  locationId: validationSchema.string().trim().min(1).max(200),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const inventoryLedgerSchema = authenticatedRequestSchema.extend({
+  locationId: validationSchema.string().trim().min(1).max(200),
+  inventoryPoolId: validationSchema.string().trim().min(1).max(200),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 
 export function buildHealthResponse(env: Env): CoreHealthResponse {
@@ -723,7 +868,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       input,
     );
   }
-  async requestCustomerClosure(input: import("@freshmarkets/contracts").AdminClosureRequestCommand) {
+  async requestCustomerClosure(
+    input: import("@freshmarkets/contracts").AdminClosureRequestCommand,
+  ) {
     const validation = closureRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
@@ -797,7 +944,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       input,
     );
   }
-  async previewAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionPreviewRequest) {
+  async previewAdminPromotion(
+    input: import("@freshmarkets/contracts").AdminPromotionPreviewRequest,
+  ) {
     const validation = promotionPreviewRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
@@ -839,6 +988,127 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listPromotionRedemptionsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminCategories(input: import("@freshmarkets/contracts").AdminCategoryListRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminCategoriesQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async createAdminCategory(input: import("@freshmarkets/contracts").AdminCategoryCreateRequest) {
+    const validation = catalogCategoryCreateSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return createAdminCategoryCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminUnits(input: import("@freshmarkets/contracts").AdminUnitListRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminUnitsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async createAdminUnit(input: import("@freshmarkets/contracts").AdminUnitCreateRequest) {
+    const validation = catalogUnitCreateSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return createAdminUnitCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminProducts(input: import("@freshmarkets/contracts").AdminProductListRequest) {
+    const validation = catalogProductListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminProductsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminProduct(input: import("@freshmarkets/contracts").AdminProductDetailRequest) {
+    const validation = catalogProductDetailSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminProductQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminProductStatus(input: import("@freshmarkets/contracts").AdminProductStatusRequest) {
+    const validation = catalogProductStatusSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminProductStatusCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async createAdminSku(input: import("@freshmarkets/contracts").AdminSkuCreateRequest) {
+    const validation = catalogSkuCreateSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return createAdminSkuCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async updateAdminSku(input: import("@freshmarkets/contracts").AdminSkuUpdateRequest) {
+    const validation = catalogSkuUpdateSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateAdminSkuCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminSkuAvailability(
+    input: import("@freshmarkets/contracts").AdminSkuAvailabilityRequest,
+  ) {
+    const validation = catalogSkuAvailabilitySchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminSkuAvailabilityCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminSkuPrice(input: import("@freshmarkets/contracts").AdminSkuPriceRequest) {
+    const validation = catalogSkuPriceSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminSkuPriceCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminInventory(input: import("@freshmarkets/contracts").AdminInventoryListRequest) {
+    const validation = inventoryListSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminInventoryQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminInventoryLedger(
+    input: import("@freshmarkets/contracts").AdminInventoryLedgerRequest,
+  ) {
+    const validation = inventoryLedgerSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminInventoryLedgerQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
