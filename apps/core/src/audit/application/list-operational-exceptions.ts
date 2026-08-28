@@ -11,6 +11,10 @@ function severity(quantity: number): OperationalExceptionItem["severity"] {
   return "MEDIUM";
 }
 
+function queueKey(at: number | null, source: string, id: string): string {
+  return `${String(at ?? 0).padStart(13, "0")}:${source}:${id}`;
+}
+
 /** Derived queue projection; source aggregates remain authoritative for writes. */
 export async function listOperationalExceptions(
   database: D1Database,
@@ -73,6 +77,7 @@ export async function listOperationalExceptions(
       locationId: r.location_id,
       reason: r.kind,
       permittedActions: [],
+      queueKey: queueKey(r.created_at, "PROCUREMENT", r.id),
       detail: `Procurement shortage (${r.kind}); ${r.affected_quantity} base units affected.`,
     })),
     ...receiving.results.map((r) => ({
@@ -86,6 +91,7 @@ export async function listOperationalExceptions(
       locationId: r.location_id,
       reason: "RECEIVING_DISCREPANCY",
       permittedActions: [],
+      queueKey: queueKey(null, "RECEIVING", r.id),
       detail: `Expected ${r.expected_quantity}, accepted ${r.accepted_quantity}, rejected ${r.rejected_quantity}.`,
     })),
     ...shortages.results.map((r) => ({
@@ -98,7 +104,8 @@ export async function listOperationalExceptions(
       orderId: r.order_id,
       locationId: query.locationId,
       reason: "FULFILLMENT_SHORTAGE",
-      permittedActions: ["RETRY_FULFILLMENT", "ESCALATE"] as const,
+      permittedActions: ["RETRY_FULFILLMENT"] as const,
+      queueKey: queueKey(r.updated_at, "FULFILLMENT", r.id),
       detail: `Fulfillment ${r.status}; resolve or restock before packing.`,
     })),
     ...deliveries.results.map((r) => ({
@@ -111,12 +118,10 @@ export async function listOperationalExceptions(
       orderId: r.order_id,
       locationId: query.locationId,
       reason: "DELIVERY_FAILED",
-      permittedActions: ["RETRY_DELIVERY", "RESCHEDULE", "ESCALATE"] as const,
+      permittedActions: ["RETRY_DELIVERY"] as const,
+      queueKey: queueKey(r.updated_at, "DELIVERY", r.id),
       detail: "Failed delivery; retry, reschedule, or escalate.",
     })),
   ];
-  return rows.sort(
-    (a, b) =>
-      (b.ageMinutes ?? -1) - (a.ageMinutes ?? -1) || a.referenceId.localeCompare(b.referenceId),
-  );
+  return rows.sort((a, b) => (b.queueKey ?? "").localeCompare(a.queueKey ?? ""));
 }

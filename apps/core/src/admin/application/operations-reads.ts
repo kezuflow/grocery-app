@@ -288,15 +288,18 @@ export async function listAdminOperationalExceptions(
   const all = (await listExceptionRows(deps.db, { locationId: request.locationId }))
     .filter((item) => !page.cursorId || item.referenceId < page.cursorId)
     .sort((left, right) => right.referenceId.localeCompare(left.referenceId));
-  // The convergence adapter merges independently-owned sources. Until a
-  // shared source timestamp/key is available, expose one bounded snapshot
-  // rather than pretending per-source limits form a coherent keyset page.
-  const items = all.slice(0, 200);
+  const ordered = all.filter(
+    (item) => !page.cursorId || (item.queueKey ?? item.referenceId) < page.cursorId,
+  );
+  const items = ordered.slice(0, page.limit);
   return {
     ok: true,
     value: {
       items,
-      nextCursor: null,
+      nextCursor: nextCursor(
+        ordered.length > page.limit,
+        items.at(-1)?.queueKey ?? items.at(-1)?.referenceId,
+      ),
     },
     requestId: request.requestId,
   };

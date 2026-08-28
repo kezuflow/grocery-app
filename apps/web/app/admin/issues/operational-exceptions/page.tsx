@@ -115,9 +115,15 @@ export default function OperationalExceptionsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {item.permittedActions.map((action) => (
-                            <StatusBadge key={action}>{action}</StatusBadge>
-                          ))}
+                          {item.permittedActions.length > 0 ? (
+                            item.permittedActions.map((action) => (
+                              <StatusBadge key={action}>{action}</StatusBadge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-[var(--fm-text-muted)]">
+                              Source-owned; unavailable here
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

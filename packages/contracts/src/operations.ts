@@ -102,6 +102,7 @@ export type OperationalExceptionItem = {
     | "REFUND"
     | "ESCALATE"
   >;
+  queueKey?: string;
   detail: string;
 };
 
