@@ -4,6 +4,12 @@ import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
 import type { AdminPromotionsService } from "./admin-promotions";
 import type { AdminCatalogService, AdminInventoryReadService } from "./admin-catalog";
+import type {
+  AdminOrdersService,
+  AdminPaymentsService,
+  AdminMembershipsService,
+  AdminOrderIssuesService,
+} from "./admin-finance";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
@@ -37,7 +43,11 @@ export interface ImplementedCoreService
     AdminPrivacyService,
     AdminPromotionsService,
     AdminCatalogService,
-    AdminInventoryReadService {}
+    AdminInventoryReadService,
+    AdminOrdersService,
+    AdminPaymentsService,
+    AdminMembershipsService,
+    AdminOrderIssuesService {}
 
 /**
  * The full Worker binding surface. Every member is a canonical typed domain
@@ -57,6 +67,12 @@ export type { AdminStaffAccessService } from "./admin-staff-access";
 export type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
 export type { AdminPromotionsService } from "./admin-promotions";
 export type { AdminCatalogService, AdminInventoryReadService } from "./admin-catalog";
+export type {
+  AdminOrdersService,
+  AdminPaymentsService,
+  AdminMembershipsService,
+  AdminOrderIssuesService,
+} from "./admin-finance";
 export type { AuthService } from "./auth";
 export type { CatalogService } from "./catalog";
 export type { CheckoutService } from "./checkout";

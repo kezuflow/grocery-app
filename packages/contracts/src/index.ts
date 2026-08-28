@@ -6,6 +6,7 @@ export * from "./admin-staff-access";
 export * from "./admin-customers";
 export * from "./admin-promotions";
 export * from "./admin-catalog";
+export * from "./admin-finance";
 export * from "./states";
 export type * from "./auth";
 export type * from "./catalog";
