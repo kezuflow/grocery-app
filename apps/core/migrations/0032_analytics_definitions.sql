@@ -10,7 +10,6 @@ CREATE TABLE metric_definitions (
     'FULFILLMENT', 'DELIVERY', 'INVENTORY', 'FINANCE'
   )),
   formula_json TEXT NOT NULL CHECK (json_valid(formula_json)),
-  dimensions_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(dimensions_json)),
   source_contract_version TEXT NOT NULL,
   event_time_field TEXT NOT NULL,
   reporting_timezone_policy TEXT NOT NULL,
@@ -18,7 +17,6 @@ CREATE TABLE metric_definitions (
   exclusion_json TEXT NOT NULL CHECK (json_valid(exclusion_json)),
   rounding_policy TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('APPROVED', 'BLOCKED')),
-  unavailable_reason TEXT NULL,
   approved_at INTEGER NULL,
   UNIQUE(code, version)
 );
@@ -26,18 +24,15 @@ CREATE TABLE metric_definitions (
 CREATE INDEX metric_definitions_code_status_version_idx
   ON metric_definitions(code, status, version DESC);
 
-CREATE UNIQUE INDEX metric_definitions_one_approved_code_idx
-  ON metric_definitions(code) WHERE status = 'APPROVED';
-
 INSERT INTO metric_definitions (
   id, code, version, display_name, category, formula_json, source_contract_version,
   event_time_field, reporting_timezone_policy, inclusion_json, exclusion_json,
   rounding_policy, status, approved_at
 ) VALUES
-  ('metric-definition-order-count-v1', 'order_count', 1, 'Order count', 'ORDERS', '{"description":"Count Orders by first successful commitment instant."}', '2026-08-29.admin-analytics-slice-8', 'first_successful_commitment_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"event":"first_successful_commitment"}', '{"amendments":"not additional Orders"}', 'INTEGER', 'APPROVED', 1787961600000),
+  ('metric-definition-order-count-v1', 'order_count', 1, 'Order count', 'ORDERS', '{"description":"Count Orders by first successful commitment instant."}', '2026-08-29.admin-analytics-slice-8', 'first_successful_commitment_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"orderStatus":"COMMITTED"}', '{"amendments":"not additional Orders"}', 'INTEGER', 'APPROVED', 1787961600000),
   ('metric-definition-refund-amount-v1', 'refund_amount', 1, 'Refund amount', 'FINANCE', '{"description":"Sum successful Refund amounts by refund-success instant and currency."}', '2026-08-29.admin-analytics-slice-8', 'refund_succeeded_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"refundStatus":"SUCCEEDED"}', '{"currencies":"never silently combined"}', 'MINOR_UNITS_BY_CURRENCY', 'APPROVED', 1787961600000),
   ('metric-definition-new-customers-v1', 'new_customers', 1, 'New customers', 'CUSTOMERS', '{"description":"Count Customer aggregates created in the reporting window."}', '2026-08-29.admin-analytics-slice-8', 'customer_created_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{}', '{}', 'INTEGER', 'APPROVED', 1787961600000),
-  ('metric-definition-active-customers-v1', 'active_customers', 1, 'Active customers', 'CUSTOMERS', '{"description":"Count distinct Customers with a first Order commitment instant in the reporting window."}', '2026-08-29.admin-analytics-slice-8', 'first_successful_commitment_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"event":"first_successful_commitment"}', '{}', 'INTEGER', 'APPROVED', 1787961600000),
+  ('metric-definition-active-customers-v1', 'active_customers', 1, 'Active customers', 'CUSTOMERS', '{"description":"Count distinct Customers with a first Order commitment instant in the reporting window."}', '2026-08-29.admin-analytics-slice-8', 'first_successful_commitment_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"orderStatus":"COMMITTED"}', '{}', 'INTEGER', 'APPROVED', 1787961600000),
   ('metric-definition-repeat-customer-rate-v1', 'repeat_customer_rate', 1, 'Repeat customer rate', 'CUSTOMERS', '{"description":"Active Customers with a prior committed Order divided by active Customers."}', '2026-08-29.admin-analytics-slice-8', 'first_successful_commitment_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"denominator":"active_customers"}', '{"emptyDenominator":"null"}', 'RATIO', 'APPROVED', 1787961600000),
   ('metric-definition-orders-per-customer-v1', 'orders_per_customer', 1, 'Orders per customer', 'CUSTOMERS', '{"description":"Order count divided by active Customers."}', '2026-08-29.admin-analytics-slice-8', 'first_successful_commitment_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"denominator":"active_customers"}', '{"emptyDenominator":"null"}', 'RATIO', 'APPROVED', 1787961600000),
   ('metric-definition-active-members-v1', 'active_members', 1, 'Active members', 'MEMBERSHIPS', '{"description":"Point-in-time count of effective ACTIVE subscriptions."}', '2026-08-29.admin-analytics-slice-8', 'subscription_effective_at', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{"subscriptionState":"ACTIVE"}', '{}', 'INTEGER', 'APPROVED', 1787961600000),
@@ -64,61 +59,3 @@ INSERT INTO metric_definitions (
   ('metric-definition-promotion-redemption-rate-v1', 'promotion_redemption_rate', 1, 'Promotion redemption rate', 'PROMOTIONS', '{"description":"Promotion redemptions divided by an approved denominator."}', '2026-08-29.admin-analytics-slice-8', 'unresolved', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{}', '{"blocked":true}', 'UNAVAILABLE', 'BLOCKED', NULL),
   ('metric-definition-substitution-rate-v1', 'substitution_rate', 1, 'Substitution rate', 'FULFILLMENT', '{"description":"Substitutions divided by an approved denominator."}', '2026-08-29.admin-analytics-slice-8', 'unresolved', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{}', '{"blocked":true}', 'UNAVAILABLE', 'BLOCKED', NULL),
   ('metric-definition-inventory-turnover-v1', 'inventory_turnover', 1, 'Inventory turnover', 'INVENTORY', '{"description":"Inventory turnover over an approved period basis."}', '2026-08-29.admin-analytics-slice-8', 'unresolved', 'EXPLICIT_IANA_REQUEST_TIMEZONE', '{}', '{"blocked":true}', 'UNAVAILABLE', 'BLOCKED', NULL);
-
-UPDATE metric_definitions
-SET dimensions_json = CASE code
-  WHEN 'order_count' THEN '["marketId","locationId"]'
-  WHEN 'refund_amount' THEN '["marketId","locationId","currency"]'
-  WHEN 'new_customers' THEN '["marketId","locationId"]'
-  WHEN 'active_customers' THEN '["marketId","locationId"]'
-  WHEN 'repeat_customer_rate' THEN '["marketId","locationId"]'
-  WHEN 'orders_per_customer' THEN '["marketId","locationId"]'
-  WHEN 'active_members' THEN '["marketId","locationId"]'
-  WHEN 'trialing_members' THEN '["marketId","locationId"]'
-  WHEN 'promotion_redemptions' THEN '["marketId","locationId","promotionId","promotionBenefitType"]'
-  WHEN 'discount_spend' THEN '["marketId","locationId","currency","promotionBenefitType"]'
-  WHEN 'promotion_influenced_order_revenue' THEN '["marketId","locationId","currency","promotionId"]'
-  WHEN 'fulfillment_time' THEN '["marketId","locationId"]'
-  WHEN 'picking_time' THEN '["marketId","locationId"]'
-  WHEN 'packing_time' THEN '["marketId","locationId"]'
-  WHEN 'delivery_time' THEN '["marketId","locationId"]'
-  WHEN 'late_delivery_rate' THEN '["marketId","locationId"]'
-  WHEN 'cancellation_rate' THEN '["marketId","locationId"]'
-  WHEN 'out_of_stock_rate' THEN '["marketId","locationId"]'
-  WHEN 'stockouts' THEN '["marketId","locationId","baseUnit"]'
-  WHEN 'inventory_adjustments_shrinkage' THEN '["marketId","locationId","baseUnit","inventoryAdjustmentReason"]'
-  WHEN 'gmv' THEN '["marketId","locationId","currency"]'
-  WHEN 'revenue_net_sales' THEN '["marketId","locationId","currency"]'
-  WHEN 'average_order_value' THEN '["marketId","locationId","currency"]'
-  WHEN 'refund_rate' THEN '["marketId","locationId","currency"]'
-  WHEN 'trial_to_paid_conversion' THEN '["marketId","locationId"]'
-  WHEN 'monthly_recurring_revenue' THEN '["marketId","locationId","currency"]'
-  WHEN 'churn' THEN '["marketId","locationId"]'
-  WHEN 'promotion_redemption_rate' THEN '["marketId","locationId","promotionId"]'
-  WHEN 'substitution_rate' THEN '["marketId","locationId"]'
-  WHEN 'inventory_turnover' THEN '["marketId","locationId","baseUnit"]'
-END,
-unavailable_reason = CASE code
-  WHEN 'gmv' THEN 'Requires an approved accounting definition of gross/net components, cancellations, refunds, fees, tax, and event-time recognition.'
-  WHEN 'revenue_net_sales' THEN 'Requires an approved accounting definition of gross/net components, cancellations, refunds, fees, tax, and event-time recognition.'
-  WHEN 'average_order_value' THEN 'Requires an approved accounting definition of gross/net components, cancellations, refunds, fees, tax, and event-time recognition.'
-  WHEN 'refund_rate' THEN 'Requires an approved accounting definition of gross/net components, cancellations, refunds, fees, tax, and event-time recognition.'
-  WHEN 'trial_to_paid_conversion' THEN 'Requires an approved cohort and conversion-window definition.'
-  WHEN 'monthly_recurring_revenue' THEN 'Requires approved renewal, grace/dunning, fee-waiver, and effective-cancellation policy.'
-  WHEN 'churn' THEN 'Requires approved renewal, grace/dunning, fee-waiver, and effective-cancellation policy.'
-  WHEN 'promotion_redemption_rate' THEN 'Requires an approved promotion-redemption denominator.'
-  WHEN 'substitution_rate' THEN 'Unavailable while substitutions are out of scope.'
-  WHEN 'inventory_turnover' THEN 'Deferred until its cost and period basis is approved.'
-END;
-
-CREATE TRIGGER metric_definitions_no_update
-BEFORE UPDATE ON metric_definitions
-BEGIN
-  SELECT RAISE(ABORT, 'metric definitions are immutable');
-END;
-
-CREATE TRIGGER metric_definitions_no_delete
-BEFORE DELETE ON metric_definitions
-BEGIN
-  SELECT RAISE(ABORT, 'metric definitions are immutable');
-END;

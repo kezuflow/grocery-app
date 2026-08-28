@@ -59,9 +59,7 @@ function assertFinalSchema(database) {
   // Catalog detail/availability storage (migration 0024).
   for (const table of ["product_detail", "sku_detail", "sku_location_availability"])
     assert.ok(
-      database
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
-        .get(table),
+      database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table),
       `missing catalog table ${table}`,
     );
   const skuColumns = database
@@ -225,5 +223,83 @@ assert.throws(() =>
   ),
 );
 populated.close();
+
+// A deployed database may already have the original 0032 table and seed rows.
+// Verify that 0033, rather than a rewritten historical migration, applies the
+// Analytics metadata and immutable-publication guard additively.
+const analyticsUpgrade = database();
+apply(
+  analyticsUpgrade,
+  migrations.filter((migration) => migration.name <= "0032_analytics_definitions.sql"),
+);
+const legacyMetricColumns = analyticsUpgrade
+  .prepare("PRAGMA table_info(metric_definitions)")
+  .all()
+  .map((column) => column.name);
+assert.equal(legacyMetricColumns.includes("dimensions_json"), false);
+assert.equal(legacyMetricColumns.includes("unavailable_reason"), false);
+assert.equal(
+  analyticsUpgrade.prepare("SELECT COUNT(*) AS count FROM metric_definitions").get().count,
+  30,
+  "original 0032 must seed the complete metric catalog",
+);
+apply(
+  analyticsUpgrade,
+  migrations.filter((migration) => migration.name === "0033_analytics_definition_guards.sql"),
+);
+const upgradedMetricColumns = analyticsUpgrade
+  .prepare("PRAGMA table_info(metric_definitions)")
+  .all()
+  .map((column) => column.name);
+assert.ok(upgradedMetricColumns.includes("dimensions_json"));
+assert.ok(upgradedMetricColumns.includes("unavailable_reason"));
+assert.deepEqual(
+  {
+    ...analyticsUpgrade
+      .prepare(
+        "SELECT dimensions_json, unavailable_reason, inclusion_json FROM metric_definitions WHERE code='gmv'",
+      )
+      .get(),
+  },
+  {
+    dimensions_json: '["marketId","locationId","currency"]',
+    unavailable_reason:
+      "Requires an approved accounting definition of gross/net components, cancellations, refunds, fees, tax, and event-time recognition.",
+    inclusion_json: "{}",
+  },
+  "0033 must backfill the persisted blocked-metric metadata",
+);
+assert.deepEqual(
+  {
+    ...analyticsUpgrade
+      .prepare("SELECT inclusion_json FROM metric_definitions WHERE code='order_count'")
+      .get(),
+  },
+  { inclusion_json: '{"event":"first_successful_commitment"}' },
+  "0033 must correct first-commitment semantics without rewriting 0032",
+);
+assert.throws(
+  () =>
+    analyticsUpgrade.exec(
+      "UPDATE metric_definitions SET display_name='Changed' WHERE code='order_count'",
+    ),
+  /immutable/,
+);
+assert.throws(
+  () =>
+    analyticsUpgrade.exec(
+      `INSERT INTO metric_definitions (
+      id, code, version, display_name, category, formula_json, source_contract_version,
+      event_time_field, reporting_timezone_policy, dimensions_json, inclusion_json,
+      exclusion_json, rounding_policy, status, unavailable_reason, approved_at
+    ) SELECT
+      'metric-definition-order-count-v2', code, 2, display_name, category, formula_json,
+      source_contract_version, event_time_field, reporting_timezone_policy, dimensions_json,
+      inclusion_json, exclusion_json, rounding_policy, 'APPROVED', NULL, approved_at
+    FROM metric_definitions WHERE code='order_count'`,
+    ),
+  /UNIQUE/,
+);
+analyticsUpgrade.close();
 
 console.log("Migrations verified: fresh apply and populated 0021 -> 0022 upgrade are valid.");
