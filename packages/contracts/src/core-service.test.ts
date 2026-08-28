@@ -5,6 +5,8 @@ import type {
   AdminCustomerService,
   AdminPrivacyService,
   AdminPromotionsService,
+  AdminCatalogService,
+  AdminInventoryReadService,
   CatalogService,
   CheckoutService,
   CoreServiceBinding,
@@ -83,6 +85,8 @@ describe("domain-grouped core services", () => {
     void ({} as AdminCustomerService);
     void ({} as AdminPrivacyService);
     void ({} as AdminPromotionsService);
+    void ({} as AdminCatalogService);
+    void ({} as AdminInventoryReadService);
 
     // The implemented surface plus explicit canonical additions must remain
     // assignable to the full binding (structural composition).
