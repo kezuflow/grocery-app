@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type { AdminOrderIssuePage, OrderIssueAction, RpcResult } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
@@ -72,6 +73,14 @@ export default function IssuesPage() {
       <PageHeader
         title="Order issues"
         description="Customer issue intake and triage. Issue actions never authorize refunds."
+        action={
+          <Link
+            href="/admin/issues/operational-exceptions"
+            className="text-sm font-medium underline"
+          >
+            Operational exceptions feed
+          </Link>
+        }
       />
       {state === "loading" ? (
         <div role="status">
