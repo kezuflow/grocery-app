@@ -224,6 +224,8 @@ Migration `0026_admin_foundation.sql` extends `audit_event` additively with null
 
 Migration `0027_staff_administration.sql` adds the application-owned `staff_invitation` table (status `PENDING|ACCEPTED|EXPIRED|REVOKED`, one `PENDING` invitation per normalized email, unique idempotency keys, invited-by reference), `staff_identity.version` for optimistic concurrency, and role administration metadata (`role.description`, `role.status ACTIVE|ARCHIVED`, `role.version`). Historical rows are backfilled with defaults; roles are archived, never deleted.
 
+Migration `0028_customer_crm.sql` adds the application-owned `customer_invitation` table (one `PENDING` invitation per normalized email, unique idempotency keys, acceptance reference) and the `privacy_request` queue (closed `ACCESS|CORRECTION|CLOSURE|ANONYMIZATION` request types and the seven-status lifecycle, staff assignment, resolution recording). Privacy/closure completion records resolution only; it never cascades deletion into commercial or audit history.
+
 ## Pagination and Read Models
 
 High-volume lists use keyset pagination with stable compound sort keys, commonly `(created_at, id)` or domain deadline plus ID. Admin read models may query normalized tables directly using selected joins and indexes. Materialized projection tables are added only when measured query shape/latency warrants them and remain rebuildable from transactional truth.

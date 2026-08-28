@@ -59,6 +59,9 @@ an unmet gate pending a provisioned local auth-email transport; the unmodified o
 primitives. Slice 2 (Staff & Access) is implemented per
 `docs/superpowers/plans/ADMIN_STAFF_ACCESS_SLICE_2_IMPLEMENTATION_PLAN.md`; its authenticated
 browser journeys remain an unmet gate behind the unprovisioned auth-email transport, and
-invitation acceptance/provisioning is explicitly deferred. Slice 3 is not authorized for
-implementation and requires its own plan produced from the then-current repository per the plan
-production rule.
+invitation acceptance/provisioning is explicitly deferred. Slice 3 (Customer CRM) is implemented per
+`docs/superpowers/plans/ADMIN_CUSTOMER_CRM_SLICE_3_IMPLEMENTATION_PLAN.md`; its authenticated
+browser journeys remain an unmet gate behind the unprovisioned auth-email transport,
+`admin.customers.update`/notes/segments are explicitly deferred, and invitation
+acceptance/provisioning remains deferred. Slice 4 is not authorized for implementation and
+requires its own plan produced from the then-current repository per the plan production rule.

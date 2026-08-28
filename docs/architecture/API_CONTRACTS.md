@@ -248,6 +248,18 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - `revokeAdminStaffSessions` deletes the authentication authority's own session rows for the linked user (the minimal Better Auth build exposes no administrative revoke API), leaving no application-side session state.
 - Invitation lifecycle for MVP: `inviteAdminStaff` creates one durable `PENDING` record per normalized email with 14-day expiry; acceptance/provisioning of a new identity is an explicitly deferred later flow.
 
+### Implemented Customer CRM service (Slice 3, 2026-08-27)
+
+`packages/contracts/src/admin-customers.ts` publishes `AdminCustomerService` (`listAdminCustomers`, `getAdminCustomer`, `listCustomerInvitations`, `inviteCustomer`, `changeCustomerAccess`, `revokeCustomerSessions`, `requestCustomerClosure`) and `AdminPrivacyService` (`listPrivacyRequests`, `applyPrivacyAction`).
+
+- Authorization: `customers.read` (reads) or `customers.manage` (commands) **plus a global scope** in Core; customer identity is global for MVP and scoped principals receive `FORBIDDEN`.
+- `AdminCustomerSummary` composes the display `email`, `phone`, commerce-access status from the `customer_principal` gate, current `subscriptionState`, committed `orderCount`/`lastOrderAt`, aggregate `version`, and `createdAt`. Lifetime spend/AOV are excluded until their canonical metric definitions are approved. `AdminCustomerDetail` adds the ten most recent sanitized Audit summaries for the account.
+- `changeCustomerAccess` disables/restores commerce access through the `customer_principal` gate with the customer aggregate's version guard; `revokeCustomerSessions` deletes the authentication authority's session rows (same mechanism as the Staff service).
+- `requestCustomerClosure` opens an auditable privacy request; `applyPrivacyAction` enforces the closed lifecycle `SUBMITTED -> VERIFYING|APPROVED|REJECTED`, `VERIFYING -> APPROVED|REJECTED|ESCALATED`, `APPROVED -> PROCESSING`, `PROCESSING -> COMPLETED|ESCALATED`, `ESCALATED -> PROCESSING` and returns `ILLEGAL_TRANSITION` otherwise. Completion records resolution only — no order, payment, refund, redemption, ledger, or audit history is ever deleted, and retention-backed anonymization remains gated on approved policy.
+- `admin.customers.update` is explicitly deferred: no application-owned mutable customer profile field is approved in `DATA_MODEL.md` (support notes and segments remain unapproved good-to-haves).
+- Customer invitations mirror the staff invitation lifecycle (one `PENDING` record per normalized email, 14-day expiry, no password input); acceptance/provisioning is deferred with the staff deferral.
+- Material commands are idempotent, version-guarded where concurrent mutation is possible, reason-gated, and audited (`CUSTOMER.*`/`PRIVACY.*` closed vocabulary).
+
 ## Admin Orders and Payments
 
 - `admin.orders.list(filters, page) -> AdminOrderListPage`

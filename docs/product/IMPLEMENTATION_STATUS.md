@@ -68,6 +68,27 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   vinext) passes with fresh counts in the task report; authenticated Playwright journeys for the
   staff workspace remain skipped behind the unprovisioned auth-email transport — an unmet gate.
 
+## Admin Customer CRM Slice 3 (2026-08-27)
+
+- Migration `0028_customer_crm.sql` adds `customer_invitation` and the `privacy_request` queue with
+  closed request-type and status vocabularies. No hard-deletion surface exists; completion records
+  resolution only and retention-backed anonymization stays gated on approved policy.
+- Core implements `AdminCustomerService` and `AdminPrivacyService`: composed customer list/detail
+  (principal access status, membership state, order counts, sanitized recent audit), invitations,
+  commerce access disable/restore through the `customer_principal` gate with the customer version
+  guard, session revocation, closure requests, and the legal privacy lifecycle
+  (`ILLEGAL_TRANSITION` otherwise). Authorization is `customers.read`/`customers.manage` plus a
+  global scope; commands are idempotent, version-guarded, reason-gated, and audited.
+- A cross-cutting fix guards versioned batch audit rows so a stale command can never leave orphaned
+  audit evidence (`fix(admin): guard audit rows against stale versions`).
+- Web adds eight thin BFF adapters and the Customers workspace (list/search + invite, detail with
+  access/session/closure actions and audit table, privacy queue with per-status legal actions).
+- Deferred: `admin.customers.update` (no approved application-owned mutable profile fields),
+  support notes and segments (unapproved good-to-haves), invitation acceptance/provisioning.
+- Verification evidence: full workspace gate passes with fresh counts in the task report;
+  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
+  an unmet gate.
+
 ## Reconciled implementation state
 
 ### Payments and paid-order recovery
