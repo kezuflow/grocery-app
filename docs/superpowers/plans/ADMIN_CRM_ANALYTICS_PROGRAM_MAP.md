@@ -67,5 +67,9 @@ acceptance/provisioning remains deferred. Slice 4 (Promotions) is implemented pe
 `docs/superpowers/plans/ADMIN_PROMOTIONS_SLICE_4_IMPLEMENTATION_PLAN.md`; its authenticated
 browser journeys remain an unmet gate behind the unprovisioned auth-email transport, and
 membership fee waivers, delivery benefits, and checkout redemption application are explicitly
-deferred to their owning domains. Slice 5 is not authorized for implementation and requires its
-own plan produced from the then-current repository per the plan production rule.
+deferred to their owning domains. Slice 5 (Catalog & Inventory) is implemented per
+`docs/superpowers/plans/ADMIN_CATALOG_SLICE_5_IMPLEMENTATION_PLAN.md`; its authenticated browser
+journeys remain an unmet gate behind the unprovisioned auth-email transport, and media
+administration, bulk import, detail authoring, and purchase/receiving are explicitly deferred.
+Slice 6 is not authorized for implementation and requires its own plan produced from the
+then-current repository per the plan production rule.

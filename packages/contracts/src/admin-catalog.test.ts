@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   catalogStatuses,
-  type AdminCatalogProductDetail,
+  type AdminProductDetail,
   type AdminCatalogSkuSummary,
 } from "./admin-catalog";
 
@@ -15,6 +15,7 @@ describe("catalog contracts", () => {
       skuId: "sku-1",
       code: "RED-ONION-250G",
       name: "250 g",
+      merchandisingLabel: null,
       unitSymbol: "g",
       sellQuantity: 250,
       consumptionBaseQuantity: 250,
@@ -30,10 +31,11 @@ describe("catalog contracts", () => {
       productId: "prod-1",
       slug: "red-onion",
       name: "Red Onion",
+      description: null,
       categoryCode: "FRESH_PRODUCE",
       categoryName: "Fresh produce",
       status: "active",
       skus: [],
-    } satisfies AdminCatalogProductDetail);
+    } satisfies AdminProductDetail);
   });
 });

@@ -270,6 +270,15 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - Grants create targeted `promotion_grant` rows (`benefit_code` = promotion code, `customer_id` persisted, `max_redemptions >= 1`) for ACTIVE promotions only; `INTRO_TRIAL` is excluded from this surface. Redemptions are read-only inspections joined by promotion code.
 - Material commands are idempotent, version-guarded, reason-gated, and audited (`PROMOTION.CREATED/UPDATED/ACTIVATED/DEACTIVATED/ARCHIVED/GRANTED`).
 
+### Implemented Catalog and Inventory services (Slice 5, 2026-08-27)
+
+`packages/contracts/src/admin-catalog.ts` publishes `AdminCatalogService` (`listAdminCategories`, `createAdminCategory`, `listAdminUnits`, `createAdminUnit`, `listAdminProducts`, `getAdminProduct`, `setAdminProductStatus`, `createAdminSku`, `updateAdminSku`, `setAdminSkuAvailability`, `setAdminSkuPrice`) and `AdminInventoryReadService` (`listAdminInventory`, `getAdminInventoryLedger`).
+
+- Authorization: catalog surfaces require `catalog.read`/`catalog.manage` plus a global scope; inventory reads require `inventory.read` plus operational scope over the requested location (global, its market, or that exact location). The guarded `inventory.adjust` command keeps its existing capability + scope + idempotency + version guards.
+- No schema change was required: the surface composes the existing catalog/price/availability/inventory tables. Prices are inserted as new `price_version` rows (version increments, market-scoped `STANDARD`, location NULL); history is never rewritten and zero amounts fail closed.
+- SKU creation validates that the sellable unit's dimension matches the product pool's base-unit dimension; SKU updates and availability upserts are version-guarded (`sku_location_availability` inserts use `expectedVersion 0`). Product status toggles are reason-gated, audited, and guarded on current status.
+- Deferred: media administration (canonical R2 `product_media` remains a deferred migration; binaries stay public Web assets), bulk import, product/sku detail authoring, and purchase/receiving surfaces.
+
 ## Admin Orders and Payments
 
 - `admin.orders.list(filters, page) -> AdminOrderListPage`

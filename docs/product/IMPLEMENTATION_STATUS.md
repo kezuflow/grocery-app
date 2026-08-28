@@ -89,6 +89,25 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
   an unmet gate.
 
+## Admin Catalog & Inventory Slice 5 (2026-08-27)
+
+- No schema change was required: the admin surface composes the existing catalog, unit, price
+  version, availability, balance, and ledger tables.
+- Core implements `AdminCatalogService` (category/unit creation, product list/detail/status, SKU
+  create/update with same-dimension validation, version-guarded availability upserts, versioned
+  market `STANDARD` price inserts) and `AdminInventoryReadService` (location balances and bounded
+  keyset ledger). Catalog authorization is `catalog.read`/`catalog.manage` + global scope;
+  inventory reads are `inventory.read` + operational location scope; the existing
+  `inventory.adjust` command keeps its own guards.
+- Deferred: media administration (canonical R2 media remains a deferred migration), bulk import,
+  detail authoring, and purchase/receiving surfaces.
+- Web adds ten thin BFF adapters and the Catalog workspace (categories/units/products + product
+  detail with SKU authoring, versioned pricing, availability toggles) and the Inventory workspace
+  (location balances, guarded adjustments, ledger inspection).
+- Verification evidence: full workspace gate passes with fresh counts in the task report;
+  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
+  an unmet gate.
+
 ## Admin Promotions Slice 4 (2026-08-27)
 
 - Migration `0029_promotion_administration.sql` rebuilds the `promotion` seam into the canonical
@@ -105,6 +124,25 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   checkout (owned by the checkout/Quote domain, not this admin slice).
 - Web adds seven thin BFF adapters and the Promotions workspace (list + draft creation, detail with
   lifecycle actions, read-only preview, grants, redemptions).
+- Verification evidence: full workspace gate passes with fresh counts in the task report;
+  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
+  an unmet gate.
+
+## Admin Catalog & Inventory Slice 5 (2026-08-27)
+
+- No schema change was required: the admin surface composes the existing catalog, unit, price
+  version, availability, balance, and ledger tables.
+- Core implements `AdminCatalogService` (category/unit creation, product list/detail/status, SKU
+  create/update with same-dimension validation, version-guarded availability upserts, versioned
+  market `STANDARD` price inserts) and `AdminInventoryReadService` (location balances and bounded
+  keyset ledger). Catalog authorization is `catalog.read`/`catalog.manage` + global scope;
+  inventory reads are `inventory.read` + operational location scope; the existing
+  `inventory.adjust` command keeps its own guards.
+- Deferred: media administration (canonical R2 media remains a deferred migration), bulk import,
+  detail authoring, and purchase/receiving surfaces.
+- Web adds ten thin BFF adapters and the Catalog workspace (categories/units/products + product
+  detail with SKU authoring, versioned pricing, availability toggles) and the Inventory workspace
+  (location balances, guarded adjustments, ledger inspection).
 - Verification evidence: full workspace gate passes with fresh counts in the task report;
   authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
   an unmet gate.
