@@ -126,4 +126,9 @@ export type AdminAnalyticsService = {
   ): Promise<RpcResult<ReadonlyArray<MetricDefinitionView>>>;
   getOverview(request: AnalyticsOverviewRequest): Promise<RpcResult<AnalyticsOverviewView>>;
   getMetric(request: MetricSeriesRequest): Promise<RpcResult<MetricSeriesView>>;
+  /** Explicit Core-boundary aliases retained alongside the Admin namespace names. */
+  getAnalyticsOverview(
+    request: AnalyticsOverviewRequest,
+  ): Promise<RpcResult<AnalyticsOverviewView>>;
+  getMetricSeries(request: MetricSeriesRequest): Promise<RpcResult<MetricSeriesView>>;
 };

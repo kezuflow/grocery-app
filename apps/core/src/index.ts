@@ -202,6 +202,9 @@ import {
 } from "./admin/application/finance-commands";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
+import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
+import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
+import { getMetricSeries } from "./analytics/application/get-metric-series";
 
 function fail(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -221,6 +224,43 @@ const adminAuditListRequestSchema = authenticatedRequestSchema.extend({
 
 const adminAuditDetailRequestSchema = authenticatedRequestSchema.extend({
   auditEventId: validationSchema.string().trim().min(1).max(200),
+});
+
+const analyticsScopeSchema = validationSchema
+  .union([
+    validationSchema.object({ kind: validationSchema.literal("global") }),
+    validationSchema.object({
+      kind: validationSchema.literal("market"),
+      marketId: validationSchema.string().trim().min(1).max(200),
+    }),
+    validationSchema.object({
+      kind: validationSchema.literal("location"),
+      locationId: validationSchema.string().trim().min(1).max(200),
+    }),
+  ])
+  .optional();
+const analyticsWindowSchema = validationSchema.object({
+  startAt: validationSchema.string().trim().min(1).max(100),
+  endAt: validationSchema.string().trim().min(1).max(100),
+  timezone: validationSchema.string().trim().min(1).max(100),
+});
+const analyticsDimensionsSchema = validationSchema
+  .array(
+    validationSchema.object({
+      key: validationSchema.string().trim().min(1).max(100),
+      value: validationSchema.string().trim().min(1).max(200),
+    }),
+  )
+  .max(4)
+  .optional();
+const analyticsOverviewRequestSchema = authenticatedRequestSchema.extend({
+  window: analyticsWindowSchema,
+  scope: analyticsScopeSchema,
+  dimensions: analyticsDimensionsSchema,
+});
+const metricSeriesRequestSchema = analyticsOverviewRequestSchema.extend({
+  metricCode: validationSchema.string().trim().min(1).max(100),
+  definitionVersion: validationSchema.number().int().min(1).optional(),
 });
 
 const staffListRequestSchema = authenticatedRequestSchema.extend({
@@ -824,6 +864,41 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       },
       input,
     );
+  }
+  async listMetricDefinitions(
+    input: import("@freshmarkets/contracts").ListMetricDefinitionsRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAnalyticsMetricDefinitions(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getOverview(input: import("@freshmarkets/contracts").AnalyticsOverviewRequest) {
+    const validation = analyticsOverviewRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAnalyticsOverview(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAnalyticsOverview(input: import("@freshmarkets/contracts").AnalyticsOverviewRequest) {
+    return this.getOverview(input);
+  }
+  async getMetric(input: import("@freshmarkets/contracts").MetricSeriesRequest) {
+    const validation = metricSeriesRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getMetricSeries(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getMetricSeries(input: import("@freshmarkets/contracts").MetricSeriesRequest) {
+    return this.getMetric(input);
   }
   async listAdminAuditEvents(input: import("@freshmarkets/contracts").AdminAuditListRequest) {
     const validation = adminAuditListRequestSchema.safeParse(input);

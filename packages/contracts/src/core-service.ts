@@ -11,6 +11,7 @@ import type {
   AdminOrderIssuesService,
 } from "./admin-finance";
 import type { AdminOperationsService } from "./admin-operations";
+import type { AdminAnalyticsService } from "./admin-analytics";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CheckoutService } from "./checkout";
@@ -49,7 +50,8 @@ export interface ImplementedCoreService
     AdminPaymentsService,
     AdminMembershipsService,
     AdminOrderIssuesService,
-    AdminOperationsService {}
+    AdminOperationsService,
+    AdminAnalyticsService {}
 
 /**
  * The full Worker binding surface. Every member is a canonical typed domain
@@ -76,6 +78,7 @@ export type {
   AdminOrderIssuesService,
 } from "./admin-finance";
 export type { AdminOperationsService } from "./admin-operations";
+export type { AdminAnalyticsService } from "./admin-analytics";
 export type { AuthService } from "./auth";
 export type { CatalogService } from "./catalog";
 export type { CheckoutService } from "./checkout";
