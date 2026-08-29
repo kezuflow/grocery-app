@@ -28,6 +28,8 @@ export type MetricQueryResult = {
 type ScalarRow = { value: number | null; watermark: number | null };
 
 const INSTRUMENTATION_UNAVAILABLE: Partial<Record<AnalyticsQueryKey, string>> = {
+  refundAmount:
+    "Unavailable because canonical refund success timestamps are not yet instrumented.",
   discountSpend:
     "Unavailable because committed promotion-component snapshots are not yet instrumented.",
   promotionInfluencedOrderRevenue:
@@ -219,12 +221,15 @@ export async function executeMetricQuery(input: MetricQueryInput): Promise<Metri
           input.computedAt,
         );
       const benefitType = selectedDimension(input.dimensions, "promotionBenefitType");
+      const promotionId = selectedDimension(input.dimensions, "promotionId");
+      const promotionClause = promotionId ? " AND promotion.id = ?" : "";
       return available(
         await scalar(
           input.database,
           `SELECT COUNT(*) AS value, MAX(redeemed_at) AS watermark FROM promotion_redemption
-           WHERE redeemed_at >= ? AND redeemed_at < ?${benefitType ? " AND benefit_type = ?" : ""}`,
-          [start, end, ...(benefitType ? [benefitType] : [])],
+           LEFT JOIN promotion ON promotion.code = promotion_redemption.benefit_code
+           WHERE redeemed_at >= ? AND redeemed_at < ?${benefitType ? " AND benefit_type = ?" : ""}${promotionClause}`,
+          [start, end, ...(benefitType ? [benefitType] : []), ...(promotionId ? [promotionId] : [])],
         ),
         input.window,
         input.computedAt,

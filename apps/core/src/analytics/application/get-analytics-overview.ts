@@ -38,7 +38,11 @@ export async function getAnalyticsOverview(
         metricCode: definition.code,
         definitionVersion: definition.version,
       });
-      if (dimensions.some((dimension) => !definition.dimensions.includes(dimension.key))) continue;
+      if (dimensions.some((dimension) => !definition.dimensions.includes(dimension.key))) {
+        throw new AnalyticsDefinitionValidationError(
+          `Analytics dimensions are not valid for metric ${definition.code}`,
+        );
+      }
       const resolved = await resolveMetricDefinition(deps.db, definition.code, definition.version);
       if (resolved.queryKey === null) {
         metrics.push({

@@ -21,6 +21,7 @@ type AnalyticsCore = {
       | { kind: "global" }
       | { kind: "market"; marketId: string }
       | { kind: "location"; locationId: string };
+    dimensions?: ReadonlyArray<{ key: string; value: string }>;
   }): Promise<RpcResult<AnalyticsOverviewView>>;
   getMetricSeries(input: {
     requestId: string;
@@ -272,6 +273,120 @@ describe("Core Analytics reads", () => {
       ok: true,
       value: { definitionVersion: 1, availability: "UNAVAILABLE" },
     });
+  });
+
+  it("fails closed when a metric lacks its canonical event timestamp", async () => {
+    const reader = await seedAnalyticsReader();
+    await expect(
+      core.getMetricSeries({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader.cookie },
+        metricCode: "refund_amount",
+        window,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        availability: "UNAVAILABLE",
+        points: [],
+        unavailableReason:
+          "Unavailable because canonical refund success timestamps are not yet instrumented.",
+      },
+    });
+  });
+
+  it("does not ignore unsupported overview dimensions", async () => {
+    const reader = await seedAnalyticsReader();
+    await expect(
+      core.getAnalyticsOverview({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader.cookie },
+        window,
+        dimensions: [{ key: "currency", value: "PHP" }],
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("does not infer refund success from payment_refund.updated_at", async () => {
+    const reader = await seedAnalyticsReader();
+    await expect(
+      core.getMetricSeries({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader.cookie },
+        metricCode: "refund_amount",
+        window,
+        dimensions: [{ key: "currency", value: "PHP" }],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        availability: "UNAVAILABLE",
+        points: [],
+        unavailableReason:
+          "Unavailable because canonical refund success timestamps are not yet instrumented.",
+      },
+    });
+  });
+
+  it("filters promotion redemptions by the requested promotion", async () => {
+    const reader = await seedAnalyticsReader();
+    const customerPrincipal = await signUp();
+    const customerId = crypto.randomUUID();
+    const now = Date.now();
+    const firstPromotionId = crypto.randomUUID();
+    const secondPromotionId = crypto.randomUUID();
+    const firstCode = `ANALYTICS_${crypto.randomUUID().slice(0, 8)}`;
+    const secondCode = `ANALYTICS_${crypto.randomUUID().slice(0, 8)}`;
+    const firstGrantId = crypto.randomUUID();
+    const secondGrantId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+      ).bind(customerId, customerPrincipal.userId, now, now),
+      env.DB.prepare(
+        "INSERT INTO promotion (id, code, name, description, status, benefit_type, discount_minor, percent, minimum_minor, starts_at, ends_at, global_usage_limit, per_customer_usage_limit, automatic, priority, version, created_at, updated_at) VALUES (?, ?, 'First', '', 'ACTIVE', 'ORDER_FIXED_DISCOUNT', 100, NULL, 0, ?, NULL, NULL, NULL, 0, 0, 1, ?, ?)",
+      ).bind(firstPromotionId, firstCode, now, now, now),
+      env.DB.prepare(
+        "INSERT INTO promotion (id, code, name, description, status, benefit_type, discount_minor, percent, minimum_minor, starts_at, ends_at, global_usage_limit, per_customer_usage_limit, automatic, priority, version, created_at, updated_at) VALUES (?, ?, 'Second', '', 'ACTIVE', 'ORDER_FIXED_DISCOUNT', 100, NULL, 0, ?, NULL, NULL, NULL, 0, 0, 1, ?, ?)",
+      ).bind(secondPromotionId, secondCode, now, now, now),
+      env.DB.prepare(
+        "INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, parameters_json, created_at, updated_at) VALUES (?, ?, 'ORDER_FIXED_DISCOUNT', 1, 'ACTIVE', '{}', ?, ?)",
+      ).bind(firstGrantId, firstCode, now, now),
+      env.DB.prepare(
+        "INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, parameters_json, created_at, updated_at) VALUES (?, ?, 'ORDER_FIXED_DISCOUNT', 1, 'ACTIVE', '{}', ?, ?)",
+      ).bind(secondGrantId, secondCode, now, now),
+      env.DB.prepare(
+        "INSERT INTO promotion_redemption (id, grant_id, benefit_code, benefit_type, customer_id, redeemed_at) VALUES (?, ?, ?, 'ORDER_FIXED_DISCOUNT', ?, ?)",
+      ).bind(crypto.randomUUID(), firstGrantId, firstCode, customerId, now),
+      env.DB.prepare(
+        "INSERT INTO promotion_redemption (id, grant_id, benefit_code, benefit_type, customer_id, redeemed_at) VALUES (?, ?, ?, 'ORDER_FIXED_DISCOUNT', ?, ?)",
+      ).bind(crypto.randomUUID(), secondGrantId, secondCode, customerId, now),
+    ]);
+
+    await expect(
+      core.getMetricSeries({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader.cookie },
+        metricCode: "promotion_redemptions",
+        window,
+        dimensions: [{ key: "promotionId", value: firstPromotionId }],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { availability: "AVAILABLE", points: [{ value: 1 }] },
+    });
+  });
+
+  it("rejects Overview dimensions unsupported by any definition instead of omitting metrics", async () => {
+    const reader = await seedAnalyticsReader();
+    await expect(
+      core.getAnalyticsOverview({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader.cookie },
+        window,
+        dimensions: [{ key: "promotionId", value: "promotion-1" }],
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
   it("keeps source state read-only across Analytics requests", async () => {
