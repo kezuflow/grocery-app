@@ -73,6 +73,12 @@ describe("beginRecurringAuthorization", () => {
       recurring_capable: 0,
     });
     expect(row?.provider_method_ref).toBeNull();
+    const mapping = await env.DB.prepare(
+      "SELECT provider_customer_ref FROM payment_provider_customer WHERE customer_id=? AND provider='mock'",
+    )
+      .bind(command.customerId)
+      .first<{ provider_customer_ref: string }>();
+    expect(mapping?.provider_customer_ref).toBe(`mock_cust_${command.customerId}`);
   });
 
   it("replays the same authorization for the same idempotency key", async () => {

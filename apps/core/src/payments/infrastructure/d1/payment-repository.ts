@@ -123,13 +123,13 @@ export function createPaymentRepository(database: D1Database) {
         )
         .bind(input.toStatus, input.now, input.intentId, input.expectedVersion, input.fromStatus);
     },
-    upsertProviderCustomer(input: {
+    async upsertProviderCustomer(input: {
       customerId: string;
       provider: string;
       providerCustomerRef: string;
       now: number;
-    }): D1PreparedStatement {
-      return database
+    }): Promise<D1Result<unknown>> {
+      const result = await database
         .prepare(
           "INSERT INTO payment_provider_customer (id, customer_id, provider, provider_customer_ref, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(customer_id) DO UPDATE SET provider_customer_ref=excluded.provider_customer_ref, updated_at=excluded.updated_at WHERE payment_provider_customer.provider=excluded.provider",
         )
@@ -140,7 +140,11 @@ export function createPaymentRepository(database: D1Database) {
           input.providerCustomerRef,
           input.now,
           input.now,
-        );
+        )
+        .run();
+      if ((result.meta?.changes ?? 0) !== 1)
+        throw new Error("PROVIDER_CUSTOMER_OWNERSHIP_CONFLICT");
+      return result;
     },
     findProviderCustomer(customerId: string, provider: string): Promise<string | null> {
       return database

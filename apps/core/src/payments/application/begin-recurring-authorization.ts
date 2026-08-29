@@ -91,12 +91,20 @@ export async function beginRecurringAuthorization(
   const providerCustomerRef =
     (await repository.findProviderCustomer(command.customerId, provider.code)) ??
     `${provider.code}_cust_${command.customerId}`;
-  await repository.upsertProviderCustomer({
-    customerId: command.customerId,
-    provider: provider.code,
-    providerCustomerRef,
-    now: Date.now(),
-  });
+  try {
+    await repository.upsertProviderCustomer({
+      customerId: command.customerId,
+      provider: provider.code,
+      providerCustomerRef,
+      now: Date.now(),
+    });
+  } catch {
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Customer payment identity belongs to a different provider",
+      command.requestId,
+    );
+  }
 
   const result = await provider.createAuthorization({
     providerCustomerId: providerCustomerRef,

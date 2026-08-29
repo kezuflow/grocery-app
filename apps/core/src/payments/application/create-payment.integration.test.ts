@@ -70,6 +70,54 @@ describe("payment intent creation", () => {
     expect(attempts).toBe(1);
   });
 
+  it("durably persists the provider customer before creating the payment", async () => {
+    const attempt = await command();
+
+    const result = await createPayment(env.DB, testRegistry(), attempt);
+
+    expect(result.ok).toBe(true);
+    const mapping = await env.DB.prepare(
+      "SELECT provider, provider_customer_ref FROM payment_provider_customer WHERE customer_id=?",
+    )
+      .bind(attempt.customerId)
+      .first<{ provider: string; provider_customer_ref: string }>();
+    expect(mapping).toEqual({
+      provider: "mock",
+      provider_customer_ref: `mock_cust_${attempt.customerId}`,
+    });
+  });
+
+  it("does not let a different provider overwrite an owned customer mapping", async () => {
+    const attempt = await command();
+    await env.DB.prepare(
+      "INSERT INTO payment_provider_customer (id, customer_id, provider, provider_customer_ref, created_at, updated_at) VALUES (?, ?, 'secondary', ?, ?, ?)",
+    )
+      .bind(
+        crypto.randomUUID(),
+        attempt.customerId,
+        `secondary_cust_${attempt.customerId}`,
+        Date.now(),
+        Date.now(),
+      )
+      .run();
+
+    const result = await createPayment(env.DB, testRegistry(), attempt);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFIGURATION_ERROR" } });
+    const mapping = await env.DB.prepare(
+      "SELECT provider, provider_customer_ref FROM payment_provider_customer WHERE customer_id=?",
+    )
+      .bind(attempt.customerId)
+      .first<{ provider: string; provider_customer_ref: string }>();
+    expect(mapping?.provider).toBe("secondary");
+    const attempts = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_attempt WHERE payment_intent_id=(SELECT id FROM payment_intent WHERE idempotency_key=?)",
+    )
+      .bind(attempt.idempotencyKey)
+      .first<{ count: number }>();
+    expect(attempts?.count).toBe(0);
+  });
+
   it("replays the same result for the same key and payload without new side effects", async () => {
     const attempt = await command();
     const first = await createPayment(env.DB, testRegistry(), attempt);
