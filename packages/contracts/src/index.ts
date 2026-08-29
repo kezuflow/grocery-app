@@ -361,6 +361,7 @@ export type CheckoutQuoteView = {
   merchandiseSubtotalMinor: number;
   itemDiscountMinor: number;
   orderDiscountMinor: number;
+  deliverySubtotalMinor: number;
   deliveryDiscountMinor: number;
   serviceFeeMinor: number;
   taxMinor: number;
@@ -368,6 +369,7 @@ export type CheckoutQuoteView = {
   subtotalMinor: number;
   /** Compatibility projection; equals itemDiscountMinor + orderDiscountMinor. */
   discountMinor: number;
+  /** Compatibility projection; use deliverySubtotalMinor. */
   deliveryFeeMinor: number;
   totalMinor: number;
   lines: ReadonlyArray<Record<string, unknown>>;

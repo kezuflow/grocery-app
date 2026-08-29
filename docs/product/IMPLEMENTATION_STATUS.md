@@ -235,6 +235,17 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   order.
 - If payment succeeds and commitment fails, the same reaction is retried. Bounded failures create a
   reconciliation case while preserving the payment. No automatic production refund policy exists.
+- Financial-safety remediation now centralizes exact-instant Membership entitlement, enforces the
+  PHP market minimum on pre-discount merchandise in Instant and Scheduled paths, and persists
+  explicit quote/order monetary components. Payment readiness recalculates without superseding the
+  accepted Quote; identical replay resolves before Quote state checks and returns the same durable
+  unexpired redirect/SDK continuation.
+- Provider-customer mappings are executed before provider calls. Recurring authorization claims its
+  idempotency key before the external call. Thrown/locally ambiguous payment and authorization
+  outcomes remain processing with reconciliation rather than being mislabeled failed.
+- Paid Order commitment aborts atomically on a lost Quote or Scheduled-capacity compare-and-swap,
+  recording stable finance exceptions. Refund requests reserve captured value with one guarded
+  insert across REQUESTED/APPROVED/PROCESSING/ESCALATED/SUCCEEDED states.
 - A production grocery payment provider, production recurring mandates, automatic renewal charging,
   and real-provider retry ownership are not selected or implemented. Existing membership renewal and
   authorization code is a provider-neutral mock-tested seam, not a production billing capability.

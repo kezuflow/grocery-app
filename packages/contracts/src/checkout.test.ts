@@ -16,6 +16,7 @@ describe("checkout contracts", () => {
           | "merchandiseSubtotalMinor"
           | "itemDiscountMinor"
           | "orderDiscountMinor"
+          | "deliverySubtotalMinor"
           | "deliveryFeeMinor"
           | "deliveryDiscountMinor"
           | "serviceFeeMinor"
@@ -26,6 +27,7 @@ describe("checkout contracts", () => {
           merchandiseSubtotalMinor: number;
           itemDiscountMinor: number;
           orderDiscountMinor: number;
+          deliverySubtotalMinor: number;
           deliveryFeeMinor: number;
           deliveryDiscountMinor: number;
           serviceFeeMinor: number;

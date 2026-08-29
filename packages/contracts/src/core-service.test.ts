@@ -23,7 +23,7 @@ import type { SubscriptionSummary } from "./membership";
 import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
 import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
-import type { RpcResult } from "./common";
+import { appErrorCodes, type RpcResult } from "./common";
 import type {
   BatchRoutePreview,
   CreateAndAssignDeliveryBatchRequest,
@@ -58,6 +58,21 @@ type HasGenericStringAction = {
 }[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
+  it("publishes stable financial-safety error codes", () => {
+    expect(appErrorCodes).toEqual(
+      expect.arrayContaining([
+        "TRIAL_ENDED",
+        "SUBSCRIPTION_GRACE_ENDED",
+        "MINIMUM_ORDER_NOT_MET",
+        "CAPACITY_UNAVAILABLE",
+        "PAYMENT_OUTCOME_UNRESOLVED",
+        "AUTHORIZATION_OUTCOME_UNRESOLVED",
+        "PAYMENT_ACTION_EXPIRED",
+        "REFUND_AMOUNT_UNAVAILABLE",
+      ]),
+    );
+  });
+
   it("exposes provider-neutral address search on the Core binding", () => {
     type AddressSearchSignature = Expect<
       Equal<

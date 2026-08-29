@@ -125,6 +125,8 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 26. Cart prices do not lock price or inventory. Before payment, Core recalculates price, discount, stock, serviceability, and route-based delivery fee; a changed total creates no payment until the customer explicitly accepts the new total.
 27. Delivery fee configuration is versioned per market/location using integer minimum and per-kilometer minor-unit values. External route/configuration failure fails closed, and the committed Order snapshots provider-neutral route meters, fee inputs/result, and configuration version.
 28. Customer grocery-order cancellation is absent from the mock-payment MVP. A successful payment followed by commitment failure is retried idempotently against the same payment and escalates visibly after bounded failure without a duplicate payment/order or inferred automatic refund.
+29. The basket minimum is enforced authoritatively against pre-discount merchandise only in both Instant and Scheduled checkout. Payment readiness recalculates without creating a replacement Quote, and identical replay returns the original unexpired provider continuation before Quote-state checks.
+30. Paid commitment atomically guards accepted-Quote consumption and Scheduled capacity. Refund requests atomically reserve outstanding and successful refund value so concurrent requests cannot exceed captured funds.
 
 ## Phase 1.5
 

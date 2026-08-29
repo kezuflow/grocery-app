@@ -77,7 +77,7 @@ async function seededInstantQuote(): Promise<{ quoteId: string; customerId: stri
     .bind(cartId, customerId, LOCATION, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-red-onion-500g', 1)",
+    "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-red-onion-500g', 5)",
   )
     .bind(cartId)
     .run();

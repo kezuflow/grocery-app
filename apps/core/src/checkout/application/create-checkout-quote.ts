@@ -32,6 +32,7 @@ export type CheckoutQuoteView = {
   merchandiseSubtotalMinor: number;
   itemDiscountMinor: number;
   orderDiscountMinor: number;
+  deliverySubtotalMinor: number;
   deliveryDiscountMinor: number;
   serviceFeeMinor: number;
   taxMinor: number;
@@ -440,6 +441,7 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
     merchandiseSubtotalMinor: row.financial.merchandiseSubtotalMinor,
     itemDiscountMinor: row.financial.itemDiscountMinor,
     orderDiscountMinor: row.financial.orderDiscountMinor,
+    deliverySubtotalMinor: row.financial.deliverySubtotalMinor,
     deliveryDiscountMinor: row.financial.deliveryDiscountMinor,
     serviceFeeMinor: row.financial.serviceFeeMinor,
     taxMinor: row.financial.taxMinor,

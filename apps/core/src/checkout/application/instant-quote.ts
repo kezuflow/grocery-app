@@ -301,6 +301,7 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
     merchandiseSubtotalMinor: row.financial.merchandiseSubtotalMinor,
     itemDiscountMinor: row.financial.itemDiscountMinor,
     orderDiscountMinor: row.financial.orderDiscountMinor,
+    deliverySubtotalMinor: row.financial.deliverySubtotalMinor,
     deliveryDiscountMinor: row.financial.deliveryDiscountMinor,
     serviceFeeMinor: row.financial.serviceFeeMinor,
     taxMinor: row.financial.taxMinor,

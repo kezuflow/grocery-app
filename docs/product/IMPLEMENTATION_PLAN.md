@@ -381,6 +381,7 @@ Phase 6; provider integration port from Phase 0.
 ### Tests and acceptance
 
 - Duplicate checkout/application commands, duplicate/out-of-order provider events, signature failure, provider-to-canonical mapping, handler compare-and-swap conflict/retry/reconciliation, lost response after payment, paid-success/order-commitment recovery using the same payment, bounded exception escalation, membership activation replay, price/capacity race, immutable snapshots, amendment payment, and internal refund paths. Provider events do not supply `expectedVersion`.
+- Financial-safety acceptance specifically covers exact-instant Membership entitlement, pre-discount merchandise minimum enforcement, explicit monetary-component equality, replay-before-revalidation, durable payment/authorization continuations, ambiguous-outcome reconciliation, guarded Quote/capacity commitment, and atomic outstanding-refund budget reservation.
 
 ### Not in this phase
 

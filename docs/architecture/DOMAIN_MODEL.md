@@ -207,6 +207,12 @@ Payments is a bounded context separate from Membership and Orders. `PaymentInten
 
 A provider adapter translates provider states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; MVP treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state. If an Order reaction fails after success is observed, Payments preserves that observation and Core retries the same idempotent commitment. Bounded failure creates a reconciliation exception; no second payment/order or automatic refund is inferred.
 
+Checkout entitlement is one executable Membership policy evaluated at an exact instant. `TRIALING` requires an unexpired `trialEndsAt`; `ACTIVE` uses the current paid period and is not invalidated by a historical trial timestamp; `PAST_DUE` requires an unexpired grace timestamp. Quote and commitment share this policy. The market minimum applies to pre-discount merchandise subtotal only: delivery, service fees, and tax never satisfy it.
+
+Provider-side payment and recurring-authorization creation are resumable commands. Core claims application idempotency before an external side effect, durably stores any unexpired redirect/SDK continuation, and returns that same continuation on identical replay. A thrown provider call or a provider-accepted result whose local persistence is uncertain remains `INITIATED`/`PROCESSING` with reconciliation evidence; it is never converted to definitive `FAILED` without authoritative evidence.
+
+Refundable value is reserved atomically when a refund identity enters `REQUESTED`. `REQUESTED`, `APPROVED`, `PROCESSING`, `ESCALATED`, and `SUCCEEDED` consume the captured refund budget; only `REJECTED` and definitively `FAILED` release it. Aggregate payment refund state is derived from canonical `SUCCEEDED` refund totals only.
+
 A `Refund` is an explicit financial adjustment with amount, reason, state, provider identity, and links to affected order/payment/lines where applicable. Refunds never erase the original transaction.
 
 ### Promotion
