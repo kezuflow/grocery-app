@@ -1,3 +1,5 @@
+import { claimCommandIdempotency } from "../../idempotency";
+
 export type CancelOrderCommand = {
   orderId: string;
   expectedVersion: number;
@@ -43,27 +45,44 @@ export async function cancelOrder(
   | { ok: false; error: { code: string; message: string; requestId: string } }
 > {
   const scope = "orders.cancel";
-  const replay = await database
-    .prepare(
-      "SELECT status, result_reference FROM idempotency_records WHERE scope=? AND idempotency_key=?",
-    )
-    .bind(scope, command.idempotencyKey)
-    .first<{ status: string; result_reference: string | null }>();
-  if (replay?.status === "SUCCEEDED") {
-    return {
-      ok: true,
-      value: { state: (replay.result_reference as CancelOrderOutcome["state"]) ?? "CANCELED" },
-      requestId: command.requestId,
-    };
-  }
-  const claimed = await database
-    .prepare(
-      "INSERT OR IGNORE INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES (?, ?, 'cancel', 'order', 'PROCESSING', ?, ?)",
-    )
-    .bind(scope, command.idempotencyKey, Date.now(), Date.now())
-    .run()
-    .then((result) => (result.meta?.changes ?? 0) === 1);
-  if (!claimed)
+  const idempotency = await claimCommandIdempotency(
+    database,
+    Date.now,
+    scope,
+    command.idempotencyKey,
+    {
+      orderId: command.orderId,
+      expectedVersion: command.expectedVersion,
+      reasonCode: command.reasonCode,
+    },
+  );
+  if (!idempotency.claimed) {
+    if (idempotency.existing?.requestHash !== idempotency.hash) {
+      return {
+        ok: false,
+        error: {
+          code: "IDEMPOTENCY_CONFLICT",
+          message: "Idempotency key was used with a different cancellation request",
+          requestId: command.requestId,
+        },
+      };
+    }
+    if (
+      idempotency.existing?.status === "SUCCEEDED" &&
+      idempotency.existing.resultReference === command.orderId
+    ) {
+      const replayed = await database
+        .prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(command.orderId)
+        .first<{ status: string }>();
+      if (replayed) {
+        const state: CancelOrderOutcome["state"] =
+          replayed.status === "CANCELED" || replayed.status === "CANCELLATION_REQUESTED"
+            ? replayed.status
+            : "UNCHANGED";
+        return { ok: true, value: { state }, requestId: command.requestId };
+      }
+    }
     return {
       ok: false,
       error: {
@@ -72,6 +91,7 @@ export async function cancelOrder(
         requestId: command.requestId,
       },
     };
+  }
 
   try {
     const order = await database
@@ -93,7 +113,7 @@ export async function cancelOrder(
       // Pre-payment abandonment: nothing financial to unwind.
       await transitionOrderRow(database, command.orderId, order.status, "CANCELED", now);
       await releaseOperationalEffects(database, command.orderId, now);
-      await completeScope(database, scope, command.idempotencyKey, "CANCELED");
+      await completeScope(database, scope, command.idempotencyKey, command.orderId);
       return { ok: true, value: { state: "CANCELED" }, requestId: command.requestId };
     }
 
@@ -127,7 +147,7 @@ export async function cancelOrder(
       });
       refundState = outcome.ok ? "PROCESSING" : "REJECTED";
     }
-    await completeScope(database, scope, command.idempotencyKey, "CANCELLATION_REQUESTED");
+    await completeScope(database, scope, command.idempotencyKey, command.orderId);
     return {
       ok: true,
       value: { state: "CANCELLATION_REQUESTED", refundState },

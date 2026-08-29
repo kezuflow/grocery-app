@@ -193,6 +193,45 @@ describe("finance administration", () => {
     expect(auditRow?.count ?? 0).toBeGreaterThan(0);
   });
 
+  it("rejects a cancellation idempotency key reused for another order without false audit", async () => {
+    const manager = await seedManager();
+    const first = await seedOrderWithPayment();
+    const second = await seedOrderWithPayment();
+    const idempotencyKey = `cancel-${crypto.randomUUID()}`;
+
+    const initial = await core.cancelAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId: first.orderId,
+      reasonCode: "customer request",
+      expectedVersion: 1,
+      idempotencyKey,
+    });
+    expect(initial.ok).toBe(true);
+
+    const reused = await core.cancelAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId: second.orderId,
+      reasonCode: "different customer request",
+      expectedVersion: 1,
+      idempotencyKey,
+    });
+    expect(reused).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+
+    const secondOrder = await env.DB.prepare("SELECT status, version FROM grocery_order WHERE id=?")
+      .bind(second.orderId)
+      .first<{ status: string; version: number }>();
+    expect(secondOrder).toEqual({ status: "COMMITTED", version: 1 });
+
+    const falseAudit = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action='ORDER.CANCELED' AND aggregate_id=?",
+    )
+      .bind(second.orderId)
+      .first<{ count: number }>();
+    expect(falseAudit?.count).toBe(0);
+  });
+
   it("requests refunds idempotently, validates amounts, and never asserts success", async () => {
     const manager = await seedManager();
     const { paymentIntentId } = await seedOrderWithPayment();
