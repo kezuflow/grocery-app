@@ -13,6 +13,11 @@ import type {
 const POINT_SOURCE = "freshmarkets-points";
 const POLYGON_SOURCE = "freshmarkets-polygons";
 const LINE_SOURCE = "freshmarkets-lines";
+const POINT_LAYER_IDS = [
+  "freshmarkets-point-clusters",
+  "freshmarkets-point-cluster-count",
+  "freshmarkets-points",
+] as const;
 
 type MapboxModule = typeof import("mapbox-gl");
 type MapboxInstance = InstanceType<MapboxModule["Map"]>;
@@ -89,7 +94,7 @@ function setGeoJson(
   if (source && "setData" in source) source.setData(data);
 }
 
-function addSceneLayers(map: MapboxInstance, scene: MapScene): void {
+function addPointLayers(map: MapboxInstance, scene: MapScene): void {
   map.addSource(POINT_SOURCE, {
     type: "geojson",
     data: pointData(scene),
@@ -124,6 +129,16 @@ function addSceneLayers(map: MapboxInstance, scene: MapScene): void {
       "circle-stroke-width": 2,
     },
   });
+}
+
+function replacePointLayers(map: MapboxInstance, scene: MapScene): void {
+  for (const layerId of POINT_LAYER_IDS) map.removeLayer(layerId);
+  map.removeSource(POINT_SOURCE);
+  addPointLayers(map, scene);
+}
+
+function addSceneLayers(map: MapboxInstance, scene: MapScene): void {
+  addPointLayers(map, scene);
 
   map.addSource(POLYGON_SOURCE, { type: "geojson", data: polygonData(scene) });
   map.addLayer({
@@ -198,9 +213,12 @@ function createMapboxAdapter(): MapAdapter {
 
       return {
         updateScene(nextScene): void {
+          const clusterConfigurationChanged =
+            (scene.clusterPoints ?? false) !== (nextScene.clusterPoints ?? false);
           scene = nextScene;
           if (!loaded) return;
-          setGeoJson(map, POINT_SOURCE, pointData(scene));
+          if (clusterConfigurationChanged) replacePointLayers(map, scene);
+          else setGeoJson(map, POINT_SOURCE, pointData(scene));
           setGeoJson(map, POLYGON_SOURCE, polygonData(scene));
           setGeoJson(map, LINE_SOURCE, lineData(scene));
           syncPin();
@@ -239,6 +257,7 @@ export function MapboxMap({
 }: MapboxMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<MapController | undefined>(undefined);
+  const generationRef = useRef(0);
   const sceneRef = useRef(scene);
   const pinMoveRef = useRef(onPinMove);
   const [error, setError] = useState<"configuration" | "load" | null>(null);
@@ -246,6 +265,7 @@ export function MapboxMap({
   pinMoveRef.current = onPinMove;
 
   useEffect(() => {
+    const generation = ++generationRef.current;
     const container = containerRef.current;
     const token = publicAccessToken?.trim();
     if (!container || !token) {
@@ -255,6 +275,8 @@ export function MapboxMap({
 
     let disposed = false;
     let failed = false;
+    let ownedController: MapController | undefined;
+    const initialScene = sceneRef.current;
     setError(null);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     void adapter
@@ -262,28 +284,37 @@ export function MapboxMap({
         container,
         publicAccessToken: token,
         initialView,
-        scene: sceneRef.current,
+        scene: initialScene,
         reducedMotion,
         onPinMove: (position) => pinMoveRef.current?.(position),
         onLoadError: () => {
+          if (disposed || generationRef.current !== generation) return;
           failed = true;
-          controllerRef.current?.destroy();
-          controllerRef.current = undefined;
-          if (!disposed) setError("load");
+          if (ownedController && controllerRef.current === ownedController) {
+            ownedController.destroy();
+            controllerRef.current = undefined;
+          }
+          setError("load");
         },
       })
       .then((controller) => {
-        if (disposed || failed) controller.destroy();
-        else controllerRef.current = controller;
+        ownedController = controller;
+        if (disposed || failed || generationRef.current !== generation) {
+          controller.destroy();
+          return;
+        }
+        controllerRef.current = controller;
+        if (sceneRef.current !== initialScene) controller.updateScene(sceneRef.current);
       })
       .catch(() => {
-        if (!disposed) setError("load");
+        if (!disposed && generationRef.current === generation) setError("load");
       });
 
     return () => {
       disposed = true;
-      controllerRef.current?.destroy();
-      controllerRef.current = undefined;
+      if (ownedController && controllerRef.current === ownedController)
+        controllerRef.current = undefined;
+      ownedController?.destroy();
     };
   }, [
     publicAccessToken,

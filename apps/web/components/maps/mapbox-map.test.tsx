@@ -3,9 +3,87 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeMapAdapter } from "./fake-map-adapter";
+import { FakeMapAdapter, FakeMapController } from "./fake-map-adapter";
 import { MapboxMap } from "./mapbox-map";
-import type { MapScene } from "./map-types";
+import type { MapAdapter, MapAdapterInitialization, MapController, MapScene } from "./map-types";
+
+const provider = vi.hoisted(() => {
+  class ProviderSource {
+    readonly dataUpdates: unknown[] = [];
+
+    setData(data: unknown): void {
+      this.dataUpdates.push(data);
+    }
+  }
+
+  class ProviderMap {
+    readonly sourceOptions: Array<{ id: string; options: Record<string, unknown> }> = [];
+    readonly removedSources: string[] = [];
+    readonly removedLayers: string[] = [];
+    readonly sources = new Map<string, ProviderSource>();
+
+    constructor(_options: unknown) {
+      provider.maps.push(this);
+    }
+
+    on(event: string, handler: () => void): void {
+      if (event === "load") queueMicrotask(handler);
+    }
+
+    addSource(id: string, options: Record<string, unknown>): void {
+      this.sourceOptions.push({ id, options });
+      this.sources.set(id, new ProviderSource());
+    }
+
+    getSource(id: string): ProviderSource | undefined {
+      return this.sources.get(id);
+    }
+
+    removeSource(id: string): void {
+      this.removedSources.push(id);
+      this.sources.delete(id);
+    }
+
+    addLayer(_layer: unknown): void {}
+
+    removeLayer(id: string): void {
+      this.removedLayers.push(id);
+    }
+
+    remove(): void {}
+  }
+
+  class ProviderMarker {
+    on(): this {
+      return this;
+    }
+    setLngLat(): this {
+      return this;
+    }
+    addTo(): this {
+      return this;
+    }
+    remove(): void {}
+    getLngLat(): { lng: number; lat: number } {
+      return { lng: 0, lat: 0 };
+    }
+    getElement(): { setAttribute: () => void } {
+      return { setAttribute: () => undefined };
+    }
+  }
+
+  return { maps: [] as ProviderMap[], ProviderMap, ProviderMarker };
+});
+
+vi.mock("mapbox-gl", () => ({
+  default: {
+    accessToken: "",
+    Map: provider.ProviderMap,
+    Marker: provider.ProviderMarker,
+  },
+  Map: provider.ProviderMap,
+  Marker: provider.ProviderMarker,
+}));
 
 const center = { longitude: 123.8854, latitude: 10.3157 };
 
@@ -35,6 +113,22 @@ async function flushEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+class DeferredMapAdapter implements MapAdapter {
+  initialization?: MapAdapterInitialization;
+  private resolveInitialization?: (controller: MapController) => void;
+
+  initialize(options: MapAdapterInitialization): Promise<MapController> {
+    this.initialization = options;
+    return new Promise((resolve) => {
+      this.resolveInitialization = resolve;
+    });
+  }
+
+  resolve(controller: MapController): void {
+    this.resolveInitialization?.(controller);
+  }
 }
 
 describe("MapboxMap", () => {
@@ -151,6 +245,85 @@ describe("MapboxMap", () => {
     await flushEffects();
 
     expect(adapter.initializations[0]?.reducedMotion).toBe(true);
+    act(() => root.unmount());
+  });
+
+  it("synchronizes the latest scene after deferred initialization resolves", async () => {
+    const adapter = new DeferredMapAdapter();
+    const initialScene: MapScene = { points: [{ id: "old", position: center }] };
+    const latestScene: MapScene = { points: [{ id: "new", position: center }] };
+    const { root } = mountMap({ adapter, scene: initialScene });
+    await flushEffects();
+
+    act(() => {
+      root.render(
+        <MapboxMap
+          publicAccessToken="public-map-token"
+          initialView={{ center, zoom: 13 }}
+          scene={latestScene}
+          adapter={adapter}
+        />,
+      );
+    });
+    const controller = new FakeMapController();
+    adapter.resolve(controller);
+    await flushEffects();
+
+    expect(controller.sceneUpdates).toEqual([latestScene]);
+    act(() => root.unmount());
+  });
+
+  it("ignores a delayed error from a replaced adapter without destroying the newer map", async () => {
+    const staleAdapter = new FakeMapAdapter();
+    const currentAdapter = new FakeMapAdapter();
+    const { root } = mountMap({ adapter: staleAdapter });
+    await flushEffects();
+
+    act(() => {
+      root.render(
+        <MapboxMap
+          publicAccessToken="public-map-token"
+          initialView={{ center, zoom: 13 }}
+          scene={{}}
+          adapter={currentAdapter}
+        />,
+      );
+    });
+    await flushEffects();
+
+    act(() => staleAdapter.emitLoadError());
+
+    expect(currentAdapter.controllers[0]?.destroyed).toBe(false);
+    act(() => root.unmount());
+  });
+
+  it("reconfigures the provider point source when clustering changes", async () => {
+    const unclusteredScene: MapScene = {
+      points: [{ id: "delivery-1", position: center }],
+      clusterPoints: false,
+    };
+    const clusteredScene: MapScene = { ...unclusteredScene, clusterPoints: true };
+    const { root } = mountMap({ adapter: undefined, scene: unclusteredScene });
+    await flushEffects();
+    await flushEffects();
+
+    act(() => {
+      root.render(
+        <MapboxMap
+          publicAccessToken="public-map-token"
+          initialView={{ center, zoom: 13 }}
+          scene={clusteredScene}
+        />,
+      );
+    });
+
+    const map = provider.maps.at(-1);
+    expect(
+      map?.sourceOptions
+        .filter(({ id }) => id === "freshmarkets-points")
+        .map(({ options }) => options.cluster),
+    ).toEqual([false, true]);
+    expect(map?.removedSources).toContain("freshmarkets-points");
     act(() => root.unmount());
   });
 });
