@@ -103,27 +103,27 @@
 - Produces `AdminCategoryDetail` with parent, children, contained product summaries, version, `allowedActions`, and recent Audit.
 - Produces `getAdminCategory`, `updateAdminCategory`, and `setAdminCategoryStatus` commands. Create/update accepts `parentCategoryId`, icon, and sort order; update/status require `expectedVersion`, `idempotencyKey`, and material status changes require `reason`.
 
-- [ ] **Step 1: Write failing migration and contract tests**
+- [x] **Step 1: Write failing migration and contract tests**
 
   Assert forward backfill to `version = 1`, foreign-key-safe hierarchy, self/cycle rejection in Core, exact request validation, and no delete method in `AdminCatalogService`.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
   Run: `pnpm --filter @freshmarkets/contracts test -- src/admin-catalog.test.ts && pnpm --filter @freshmarkets/core test -- src/iam/admin-catalog-authoring-migration.integration.test.ts src/admin/application/admin-catalog.integration.test.ts`
 
-- [ ] **Step 3: Implement migration, DTOs, reads, and guarded commands**
+- [x] **Step 3: Implement migration, DTOs, reads, and guarded commands**
 
   Use global `catalog.read|catalog.manage` authorization, guarded expected-version writes, full canonical request hashes, atomic mutation/Audit/idempotency completion, and stable `STALE_VERSION|IDEMPOTENCY_CONFLICT|VALIDATION_FAILED` responses.
 
-- [ ] **Step 4: Implement BFF routes and Category screens**
+- [x] **Step 4: Implement BFF routes and Category screens**
 
   Build list/add/detail/edit screens using Core data, URL-preserved list filters, breadcrumbs, parent selection, status confirmation, request references, and explicit loading/empty/filtered-empty/permission/error/stale/success states.
 
-- [ ] **Step 5: Run focused route/browser and repository checks**
+- [x] **Step 5: Run focused route/browser and repository checks**
 
   Run: `pnpm --filter @freshmarkets/web test -- app/api/admin/catalog-routes.test.ts && pnpm --filter @freshmarkets/web exec playwright test tests/admin-catalog.spec.ts && pnpm migration:check && pnpm naming:check`.
 
-- [ ] **Step 6: Review, record progress, commit, and push**
+- [x] **Step 6: Review, record progress, commit, and push**
 
   Commit `feat(catalog): add category administration`, then push `origin main`.
 

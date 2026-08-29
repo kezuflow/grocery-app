@@ -170,12 +170,15 @@ import {
 } from "./admin/application/promotion-commands";
 import {
   listAdminCategories as listAdminCategoriesQuery,
+  getAdminCategory as getAdminCategoryQuery,
   listAdminUnits as listAdminUnitsQuery,
   listAdminProducts as listAdminProductsQuery,
   getAdminProduct as getAdminProductQuery,
 } from "./admin/application/catalog-reads";
 import {
   createAdminCategory as createAdminCategoryCommand,
+  updateAdminCategory as updateAdminCategoryCommand,
+  setAdminCategoryStatus as setAdminCategoryStatusCommand,
   createAdminUnit as createAdminUnitCommand,
   setAdminProductStatus as setAdminProductStatusCommand,
   createAdminSku as createAdminSkuCommand,
@@ -545,6 +548,45 @@ const catalogCategoryCreateSchema = authenticatedRequestSchema.extend({
     .max(120)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug"),
   sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
+  parentCategoryId: validationSchema.string().trim().min(1).max(200).nullable().optional(),
+  iconAssetKey: validationSchema
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/)
+    .nullable()
+    .optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogCategoryDetailSchema = authenticatedRequestSchema.extend({
+  categoryId: validationSchema.string().trim().min(1).max(200),
+});
+
+const catalogCategoryUpdateSchema = catalogCategoryDetailSchema.extend({
+  name: validationSchema.string().trim().min(1).max(120),
+  slug: validationSchema
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug"),
+  parentCategoryId: validationSchema.string().trim().min(1).max(200).nullable(),
+  iconAssetKey: validationSchema
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/)
+    .nullable(),
+  sortOrder: validationSchema.number().int().min(0).max(10000),
+  expectedVersion: validationSchema.number().int().min(1),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogCategoryStatusSchema = catalogCategoryDetailSchema.extend({
+  status: validationSchema.enum(["active", "inactive"]),
+  reason: validationSchema.string().trim().min(1).max(500),
+  expectedVersion: validationSchema.number().int().min(1),
   idempotencyKey: idempotencyKeySchema,
 });
 
@@ -1320,6 +1362,35 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return createAdminCategoryCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getAdminCategory(input: import("@freshmarkets/contracts").AdminCategoryDetailRequest) {
+    const validation = catalogCategoryDetailSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminCategoryQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async updateAdminCategory(input: import("@freshmarkets/contracts").AdminCategoryUpdateRequest) {
+    const validation = catalogCategoryUpdateSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateAdminCategoryCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async setAdminCategoryStatus(
+    input: import("@freshmarkets/contracts").AdminCategoryStatusRequest,
+  ) {
+    const validation = catalogCategoryStatusSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminCategoryStatusCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

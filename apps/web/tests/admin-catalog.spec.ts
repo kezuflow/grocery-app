@@ -33,6 +33,37 @@ test("a provisioned Staff reader opens the real Catalog workspace", async ({ adm
   await expect(adminPage.getByRole("heading", { level: 1, name: "Catalog" })).toBeVisible();
 });
 
+test("a provisioned Staff reader can scan the Category workspace", async ({ adminPage }) => {
+  await adminPage.goto("/admin/catalog/categories");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Categories" })).toBeVisible();
+  await expect(
+    adminPage.locator("#main-content").getByRole("link", { name: "Add category" }),
+  ).toBeVisible();
+  await expect(adminPage.getByRole("table", { name: "Categories" })).toBeVisible();
+});
+
+test("a category manager can create and inspect a Category", async ({ adminPage }) => {
+  const suffix = crypto.randomUUID();
+  await adminPage.goto("/admin/catalog/categories/new");
+  await adminPage
+    .getByLabel("Category code")
+    .fill(`E2E_${suffix.replaceAll("-", "_").toUpperCase()}`);
+  await adminPage.getByLabel("Category name").fill("E2E hierarchy category");
+  await adminPage.getByLabel("Category slug").fill(`e2e-hierarchy-${suffix}`);
+  await adminPage.getByRole("button", { name: "Create category" }).click();
+  await expect(adminPage.getByText("Category created.", { exact: true })).toBeVisible();
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "E2E hierarchy category" }),
+  ).toBeVisible();
+  await expect(adminPage.getByText("Recent audit")).toBeVisible();
+  await adminPage.getByLabel("Status change reason").fill("Confirm impact copy");
+  await adminPage.getByRole("button", { name: "Review deactivation" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText(
+    "Products and historical records remain intact",
+  );
+  await adminPage.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("a Staff principal without capability is denied the Catalog workspace", async ({
   deniedAdminPage,
 }) => {

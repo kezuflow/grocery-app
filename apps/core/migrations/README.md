@@ -68,3 +68,5 @@ Email verification and password-reset delivery use the Core auth-email port and 
 `0039_admin_operations_canonical_states.sql` maps compatibility procurement, receiving, fulfillment, and delivery statuses onto their canonical state machines, adds source timestamps used by operational chronology, and enforces one active procurement requirement per cycle/location/inventory-pool context.
 
 `0040_analytics_dimension_safety.sql` preserves the original refund and inventory-adjustment definitions as `SUPERSEDED`, publishes their dimension-safe version 2 definitions, and keeps one current `APPROVED` definition per metric code.
+
+`0041_admin_catalog_authoring.sql` adds the guarded Category hierarchy and optimistic version, creates hierarchy/status indexes, and introduces the canonical Product media attachment metadata with one active primary image per Product. Media bytes remain Core-owned in R2; this table is the authoritative attachment record.

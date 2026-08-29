@@ -1,6 +1,8 @@
 import type {
   AdminCategoryCreateRequest,
+  AdminCategoryStatusRequest,
   AdminCategorySummary,
+  AdminCategoryUpdateRequest,
   AdminCatalogSkuSummary,
   AdminProductStatusRequest,
   AdminProductSummary,
@@ -49,6 +51,30 @@ function idempotencyFailed(database: D1Database, scope: string, key: string): Pr
     .run();
 }
 
+function validCategoryIcon(value: string | null | undefined): boolean {
+  return value == null || /^[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/.test(value);
+}
+
+async function readCategorySummary(
+  deps: CatalogAdministrationDeps,
+  categoryId: string,
+  requestId: string,
+): Promise<RpcResult<AdminCategorySummary>> {
+  const row = await deps.db
+    .prepare(
+      `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
+              c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey,
+              c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
+              (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
+       FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?`,
+    )
+    .bind(categoryId)
+    .first<AdminCategorySummary>();
+  return row
+    ? { ok: true, value: row, requestId }
+    : failure("NOT_FOUND", "Category not found", requestId);
+}
+
 /** Create an active category over the closed status vocabulary. */
 export async function createAdminCategory(
   deps: CatalogAdministrationDeps,
@@ -60,12 +86,27 @@ export async function createAdminCategory(
   const code = request.code.trim().toUpperCase();
   const name = request.name.trim();
   const slug = request.slug.trim();
-  if (!/^[A-Z][A-Z0-9_]*$/.test(code) || name === "" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+  const parentCategoryId = request.parentCategoryId ?? null;
+  const iconAssetKey = request.iconAssetKey ?? null;
+  if (
+    !/^[A-Z][A-Z0-9_]*$/.test(code) ||
+    name === "" ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ||
+    !validCategoryIcon(iconAssetKey)
+  ) {
     return failure(
       "VALIDATION_FAILED",
       "code, name, and kebab-case slug are required",
       request.requestId,
     );
+  }
+  if (parentCategoryId) {
+    const parent = await deps.db
+      .prepare("SELECT id FROM category WHERE id=?")
+      .bind(parentCategoryId)
+      .first<{ id: string }>();
+    if (!parent)
+      return failure("VALIDATION_FAILED", "Parent category does not exist", request.requestId);
   }
 
   const now = Date.now();
@@ -79,6 +120,8 @@ export async function createAdminCategory(
       name,
       slug,
       sortOrder: request.sortOrder ?? 0,
+      parentCategoryId,
+      iconAssetKey,
     },
   );
   if (!claim.claimed) {
@@ -92,7 +135,11 @@ export async function createAdminCategory(
     if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
       const existing = await deps.db
         .prepare(
-          "SELECT id AS categoryId, code, name, slug, status, sort_order AS sortOrder FROM category WHERE id = ?",
+          `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
+                  c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey,
+                  c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
+                  (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
+           FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?`,
         )
         .bind(claim.existing.resultReference)
         .first<AdminCategorySummary>();
@@ -106,15 +153,28 @@ export async function createAdminCategory(
     await deps.db.batch([
       deps.db
         .prepare(
-          "INSERT INTO category (id, code, name, slug, status, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
+          `INSERT INTO category
+             (id, code, name, slug, status, sort_order, icon_asset_key, parent_id, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 1, ?, ?)`,
         )
-        .bind(categoryId, code, name, slug, request.sortOrder ?? 0, now, now),
+        .bind(
+          categoryId,
+          code,
+          name,
+          slug,
+          request.sortOrder ?? 0,
+          iconAssetKey,
+          parentCategoryId,
+          now,
+          now,
+        ),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "CATALOG.CATEGORY_CREATED",
         resourceType: "category",
         resourceId: categoryId,
-        details: { code, slug },
+        details: { code, slug, parentCategoryId, iconAssetKey, sortOrder: request.sortOrder ?? 0 },
+        idempotencyKey: request.idempotencyKey,
         correlationId: request.requestId,
         occurredAt: now,
       }),
@@ -142,16 +202,208 @@ export async function createAdminCategory(
     return failure("CONFLICT", "The category could not be created", request.requestId);
   }
 
-  const created = await deps.db
-    .prepare(
-      "SELECT id AS categoryId, code, name, slug, status, sort_order AS sortOrder FROM category WHERE id = ?",
-    )
-    .bind(categoryId)
-    .first<AdminCategorySummary>();
-  if (!created) {
-    return failure("INTERNAL_ERROR", "The category could not be read back", request.requestId);
+  return readCategorySummary(deps, categoryId, request.requestId);
+}
+
+/** Update category identity and hierarchy under optimistic concurrency. */
+export async function updateAdminCategory(
+  deps: CatalogAdministrationDeps,
+  request: AdminCategoryUpdateRequest,
+): Promise<RpcResult<AdminCategorySummary>> {
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  if (!access.ok) return access;
+  const name = request.name.trim();
+  const slug = request.slug.trim();
+  const iconAssetKey = request.iconAssetKey;
+  if (
+    name === "" ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ||
+    !validCategoryIcon(iconAssetKey) ||
+    !Number.isSafeInteger(request.sortOrder) ||
+    request.sortOrder < 0 ||
+    request.categoryId === request.parentCategoryId
+  ) {
+    return failure("VALIDATION_FAILED", "Category fields or parent are invalid", request.requestId);
   }
-  return { ok: true, value: created, requestId: request.requestId };
+  const current = await deps.db
+    .prepare(
+      "SELECT name, slug, parent_id AS parentCategoryId, icon_asset_key AS iconAssetKey, sort_order AS sortOrder, version FROM category WHERE id=?",
+    )
+    .bind(request.categoryId)
+    .first<{
+      name: string;
+      slug: string;
+      parentCategoryId: string | null;
+      iconAssetKey: string | null;
+      sortOrder: number;
+      version: number;
+    }>();
+  if (!current) return failure("NOT_FOUND", "Category not found", request.requestId);
+  if (request.parentCategoryId) {
+    const descendant = await deps.db
+      .prepare(
+        `WITH RECURSIVE descendants(id) AS (
+           SELECT id FROM category WHERE parent_id=?
+           UNION ALL SELECT c.id FROM category c JOIN descendants d ON c.parent_id=d.id
+         ) SELECT id FROM descendants WHERE id=? LIMIT 1`,
+      )
+      .bind(request.categoryId, request.parentCategoryId)
+      .first<{ id: string }>();
+    if (descendant)
+      return failure(
+        "VALIDATION_FAILED",
+        "Category hierarchy cannot contain a cycle",
+        request.requestId,
+      );
+    const parent = await deps.db
+      .prepare("SELECT id FROM category WHERE id=?")
+      .bind(request.parentCategoryId)
+      .first<{ id: string }>();
+    if (!parent)
+      return failure("VALIDATION_FAILED", "Parent category does not exist", request.requestId);
+  }
+  const now = Date.now();
+  const scope = "admin.catalog.category.update";
+  const claim = await claimCommandIdempotency(deps.db, () => now, scope, request.idempotencyKey, {
+    categoryId: request.categoryId,
+    name,
+    slug,
+    parentCategoryId: request.parentCategoryId,
+    iconAssetKey,
+    sortOrder: request.sortOrder,
+    expectedVersion: request.expectedVersion,
+  });
+  if (!claim.claimed) {
+    if (claim.existing && claim.existing.requestHash !== claim.hash)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
+    if (claim.existing?.status === "SUCCEEDED")
+      return readCategorySummary(deps, request.categoryId, request.requestId);
+    return failure("CONFLICT", "The update command is still processing", request.requestId);
+  }
+  if (current.version !== request.expectedVersion) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    return failure("STALE_VERSION", "Category changed; refresh before retrying", request.requestId);
+  }
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(
+          `UPDATE category SET name=?, slug=?, parent_id=?, icon_asset_key=?, sort_order=?,
+             version=version+1, updated_at=? WHERE id=? AND version=?`,
+        )
+        .bind(
+          name,
+          slug,
+          request.parentCategoryId,
+          iconAssetKey,
+          request.sortOrder,
+          now,
+          request.categoryId,
+          request.expectedVersion,
+        ),
+      deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.CATEGORY_UPDATED",
+        resourceType: "category",
+        resourceId: request.categoryId,
+        before: current,
+        after: {
+          name,
+          slug,
+          parentCategoryId: request.parentCategoryId,
+          iconAssetKey,
+          sortOrder: request.sortOrder,
+          version: current.version + 1,
+        },
+        correlationId: request.requestId,
+        idempotencyKey: request.idempotencyKey,
+        occurredAt: now,
+      }),
+      idempotencyComplete(deps.db, scope, request.idempotencyKey, request.categoryId, now),
+    ]);
+  } catch (error) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("UNIQUE"))
+      return failure("CONFLICT", "Category slug already exists", request.requestId);
+    return failure("STALE_VERSION", "Category changed; refresh before retrying", request.requestId);
+  }
+  return readCategorySummary(deps, request.categoryId, request.requestId);
+}
+
+/** Activate or deactivate a category under optimistic concurrency. */
+export async function setAdminCategoryStatus(
+  deps: CatalogAdministrationDeps,
+  request: AdminCategoryStatusRequest,
+): Promise<RpcResult<AdminCategorySummary>> {
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  if (!access.ok) return access;
+  const reason = request.reason.trim();
+  if (!reason) return failure("VALIDATION_FAILED", "A reason is required", request.requestId);
+  const current = await deps.db
+    .prepare("SELECT status, version FROM category WHERE id=?")
+    .bind(request.categoryId)
+    .first<{ status: "active" | "inactive"; version: number }>();
+  if (!current) return failure("NOT_FOUND", "Category not found", request.requestId);
+  const now = Date.now();
+  const scope = "admin.catalog.category.status";
+  const claim = await claimCommandIdempotency(deps.db, () => now, scope, request.idempotencyKey, {
+    categoryId: request.categoryId,
+    status: request.status,
+    reason,
+    expectedVersion: request.expectedVersion,
+  });
+  if (!claim.claimed) {
+    if (claim.existing && claim.existing.requestHash !== claim.hash)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
+    if (claim.existing?.status === "SUCCEEDED")
+      return readCategorySummary(deps, request.categoryId, request.requestId);
+    return failure("CONFLICT", "The status command is still processing", request.requestId);
+  }
+  if (current.status === request.status) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    return failure("VALIDATION_FAILED", `Category is already ${request.status}`, request.requestId);
+  }
+  if (current.version !== request.expectedVersion) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    return failure("STALE_VERSION", "Category changed; refresh before retrying", request.requestId);
+  }
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(
+          "UPDATE category SET status=?, version=version+1, updated_at=? WHERE id=? AND version=?",
+        )
+        .bind(request.status, now, request.categoryId, request.expectedVersion),
+      deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.CATEGORY_STATUS_CHANGED",
+        resourceType: "category",
+        resourceId: request.categoryId,
+        reason,
+        before: current,
+        after: { status: request.status, version: current.version + 1 },
+        correlationId: request.requestId,
+        idempotencyKey: request.idempotencyKey,
+        occurredAt: now,
+      }),
+      idempotencyComplete(deps.db, scope, request.idempotencyKey, request.categoryId, now),
+    ]);
+  } catch {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    return failure("STALE_VERSION", "Category changed; refresh before retrying", request.requestId);
+  }
+  return readCategorySummary(deps, request.categoryId, request.requestId);
 }
 
 /** Create a controlled unit with an exact conversion to its dimension's canonical base. */

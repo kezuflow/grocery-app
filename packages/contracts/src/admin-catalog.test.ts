@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   catalogStatuses,
   sourcingModes,
+  type AdminCategoryCreateRequest,
+  type AdminCategoryDetail,
+  type AdminCategoryStatusRequest,
+  type AdminCategoryUpdateRequest,
+  type AdminCatalogService,
   type AdminUnitCreateRequest,
   type AdminUnitSummary,
   type AdminProductDetail,
@@ -41,6 +46,53 @@ describe("catalog contracts", () => {
   });
 
   it("keeps catalog payloads as purpose-built DTOs", () => {
+    void ({
+      requestId: "request-category-create",
+      headers: {},
+      code: "ROOTS",
+      name: "Roots",
+      slug: "roots",
+      parentCategoryId: null,
+      iconAssetKey: "roots.svg",
+      sortOrder: 4,
+      idempotencyKey: "category-create-1",
+    } satisfies AdminCategoryCreateRequest);
+    void ({
+      requestId: "request-category-update",
+      headers: {},
+      categoryId: "category-roots",
+      name: "Roots and tubers",
+      slug: "roots-and-tubers",
+      parentCategoryId: "category-produce",
+      iconAssetKey: "roots.svg",
+      sortOrder: 4,
+      expectedVersion: 2,
+      idempotencyKey: "category-update-1",
+    } satisfies AdminCategoryUpdateRequest);
+    void ({
+      requestId: "request-category-status",
+      headers: {},
+      categoryId: "category-roots",
+      status: "inactive",
+      reason: "Seasonal catalog pause",
+      expectedVersion: 3,
+      idempotencyKey: "category-status-1",
+    } satisfies AdminCategoryStatusRequest);
+    void ({
+      categoryId: "category-roots",
+      code: "ROOTS",
+      name: "Roots",
+      slug: "roots",
+      status: "active",
+      sortOrder: 4,
+      iconAssetKey: "roots.svg",
+      parent: null,
+      children: [],
+      products: [],
+      version: 1,
+      allowedActions: ["UPDATE", "SET_STATUS"],
+      recentAudit: [],
+    } satisfies AdminCategoryDetail);
     void ({
       requestId: "request-price",
       headers: {},
@@ -82,5 +134,10 @@ describe("catalog contracts", () => {
       version: 2,
       skus: [],
     } satisfies AdminProductDetail);
+  });
+
+  it("does not publish a category deletion command", () => {
+    const noDelete: "deleteAdminCategory" extends keyof AdminCatalogService ? false : true = true;
+    expect(noDelete).toBe(true);
   });
 });

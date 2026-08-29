@@ -3,6 +3,8 @@ import type {
   AdminInventoryLedgerRequest,
   AdminCategoryListRequest,
   AdminCategoryPage,
+  AdminCategoryDetail,
+  AdminCategoryDetailRequest,
   AdminCategorySummary,
   AdminInventoryItem,
   AdminInventoryLedgerEntry,
@@ -46,12 +48,112 @@ export async function listAdminCategories(
   if (!access.ok) return access;
   const rows = await deps.db
     .prepare(
-      "SELECT id AS categoryId, code, name, slug, status, sort_order AS sortOrder FROM category ORDER BY sort_order, code LIMIT 100",
+      `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
+              c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey,
+              c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
+              (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
+       FROM category c LEFT JOIN category parent ON parent.id=c.parent_id
+       ORDER BY c.sort_order, c.code LIMIT 100`,
     )
     .all<AdminCategorySummary>();
   return {
     ok: true,
     value: { items: rows.results, nextCursor: null },
+    requestId: request.requestId,
+  };
+}
+
+/** Decision-facing Category detail with hierarchy, contained products, permissions, and Audit. */
+export async function getAdminCategory(
+  deps: CatalogAdministrationDeps,
+  request: AdminCategoryDetailRequest,
+): Promise<RpcResult<AdminCategoryDetail>> {
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
+  if (!access.ok) return access;
+  const row = await deps.db
+    .prepare(
+      `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
+              c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey, c.version,
+              parent.id AS parentId, parent.code AS parentCode, parent.name AS parentName
+       FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?`,
+    )
+    .bind(request.categoryId)
+    .first<{
+      categoryId: string;
+      code: string;
+      name: string;
+      slug: string;
+      status: "active" | "inactive";
+      sortOrder: number;
+      iconAssetKey: string | null;
+      version: number;
+      parentId: string | null;
+      parentCode: string | null;
+      parentName: string | null;
+    }>();
+  if (!row) {
+    return {
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Category not found", requestId: request.requestId },
+    };
+  }
+  const [children, products, audits, manage] = await Promise.all([
+    deps.db
+      .prepare(
+        `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
+                c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey,
+                c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
+                (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
+         FROM category c LEFT JOIN category parent ON parent.id=c.parent_id
+         WHERE c.parent_id=? ORDER BY c.sort_order, c.code`,
+      )
+      .bind(request.categoryId)
+      .all<AdminCategoryDetail["children"][number]>(),
+    deps.db
+      .prepare(
+        `SELECT p.id AS productId, p.slug, p.name, p.status, p.version,
+                (SELECT COUNT(*) FROM sku s WHERE s.product_id=p.id) AS skuCount
+         FROM product p WHERE p.category_id=? ORDER BY p.name, p.id LIMIT 100`,
+      )
+      .bind(request.categoryId)
+      .all<AdminCategoryDetail["products"][number]>(),
+    deps.db
+      .prepare(
+        `SELECT id AS auditEventId, occurred_at AS occurredAt, actor_user_id AS actorId,
+                action, aggregate_type AS resourceType, aggregate_id AS resourceId,
+                market_id AS marketId, location_id AS locationId, reason, correlation_id AS correlationId
+         FROM audit_event WHERE aggregate_type='category' AND aggregate_id=?
+         ORDER BY occurred_at DESC, id DESC LIMIT 10`,
+      )
+      .bind(request.categoryId)
+      .all<
+        Omit<AdminCategoryDetail["recentAudit"][number], "occurredAt"> & { occurredAt: number }
+      >(),
+    resolveCatalogAdministrationAccess(deps, request, "catalog.manage"),
+  ]);
+  return {
+    ok: true,
+    value: {
+      categoryId: row.categoryId,
+      code: row.code,
+      name: row.name,
+      slug: row.slug,
+      status: row.status,
+      sortOrder: row.sortOrder,
+      iconAssetKey: row.iconAssetKey,
+      version: row.version,
+      parent:
+        row.parentId && row.parentCode && row.parentName
+          ? { categoryId: row.parentId, code: row.parentCode, name: row.parentName }
+          : null,
+      children: children.results,
+      products: products.results,
+      allowedActions: manage.ok ? ["UPDATE", "SET_STATUS"] : [],
+      recentAudit: audits.results.map((audit) => ({
+        ...audit,
+        occurredAt: new Date(audit.occurredAt).toISOString(),
+      })),
+    },
     requestId: request.requestId,
   };
 }

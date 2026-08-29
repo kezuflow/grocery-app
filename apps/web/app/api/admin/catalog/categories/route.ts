@@ -51,6 +51,8 @@ export async function POST(request: Request) {
     name: body.name,
     slug: body.slug,
     sortOrder: typeof body.sortOrder === "number" ? body.sortOrder : 0,
+    parentCategoryId: typeof body.parentCategoryId === "string" ? body.parentCategoryId : null,
+    iconAssetKey: typeof body.iconAssetKey === "string" ? body.iconAssetKey : null,
     idempotencyKey,
   });
   return Response.json(result);

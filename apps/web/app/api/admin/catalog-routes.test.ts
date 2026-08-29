@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const coreMocks = vi.hoisted(() => ({
   listAdminCategories: vi.fn(),
   createAdminCategory: vi.fn(),
+  getAdminCategory: vi.fn(),
+  updateAdminCategory: vi.fn(),
+  setAdminCategoryStatus: vi.fn(),
   listAdminUnits: vi.fn(),
   createAdminUnit: vi.fn(),
   listAdminProducts: vi.fn(),
@@ -21,6 +24,11 @@ vi.mock("cloudflare:workers", () => ({
 }));
 
 import { GET as listCategories, POST as createCategory } from "./catalog/categories/route";
+import {
+  GET as getCategory,
+  PATCH as updateCategory,
+} from "./catalog/categories/[category-id]/route";
+import { POST as categoryStatus } from "./catalog/categories/[category-id]/status/route";
 import { GET as listUnits, POST as createUnit } from "./catalog/units/route";
 import { GET as listProducts } from "./catalog/products/route";
 import { GET as getProduct } from "./catalog/products/[product-id]/route";
@@ -37,6 +45,7 @@ beforeEach(() => {
 });
 
 const COOKIE = { cookie: "session=abc" };
+const categoryParams = { params: Promise.resolve({ "category-id": "category-1" }) };
 const productParams = { params: Promise.resolve({ "product-id": "prod-1" }) };
 const skuParams = { params: Promise.resolve({ "sku-id": "sku-1" }) };
 const poolParams = { params: Promise.resolve({ "inventory-pool-id": "pool-1" }) };
@@ -45,7 +54,7 @@ function jsonRequest(url: string, body: unknown, method = "POST"): Request {
   return new Request(url, {
     method,
     headers: { "content-type": "application/json", "idempotency-key": "idem-1", ...COOKIE },
-    body: JSON.stringify(body),
+    ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
   });
 }
 
@@ -78,9 +87,56 @@ describe("catalog and inventory BFF routes", () => {
 
     expect(coreMocks.createAdminCategory.mock.calls[0][0]).toMatchObject({
       code: "T_1",
+      parentCategoryId: null,
       idempotencyKey: "idem-1",
     });
     expect(coreMocks.createAdminUnit.mock.calls[0][0]).toMatchObject({ dimension: "MASS" });
+  });
+
+  it("validates and delegates category detail, update, and status commands", async () => {
+    coreMocks.getAdminCategory.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.updateAdminCategory.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.setAdminCategoryStatus.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+
+    await getCategory(
+      new Request("https://x/categories/category-1", { headers: COOKIE }),
+      categoryParams,
+    );
+    await updateCategory(
+      jsonRequest(
+        "https://x/categories/category-1",
+        {
+          name: "Roots",
+          slug: "roots",
+          parentCategoryId: null,
+          iconAssetKey: "roots.svg",
+          sortOrder: 4,
+          expectedVersion: 2,
+        },
+        "PATCH",
+      ),
+      categoryParams,
+    );
+    await categoryStatus(
+      jsonRequest("https://x/categories/category-1/status", {
+        status: "inactive",
+        reason: "Seasonal pause",
+        expectedVersion: 3,
+      }),
+      categoryParams,
+    );
+
+    expect(coreMocks.updateAdminCategory.mock.calls[0][0]).toMatchObject({
+      categoryId: "category-1",
+      parentCategoryId: null,
+      expectedVersion: 2,
+      idempotencyKey: "idem-1",
+    });
+    expect(coreMocks.setAdminCategoryStatus.mock.calls[0][0]).toMatchObject({
+      categoryId: "category-1",
+      reason: "Seasonal pause",
+      expectedVersion: 3,
+    });
   });
 
   it("delegates product list/detail/status", async () => {

@@ -1,4 +1,4 @@
-import type { AuthenticatedRequest, RpcResult } from "./index";
+import type { AdminAuditEventListItem, AuthenticatedRequest, RpcResult } from "./index";
 
 export const catalogStatuses = ["active", "inactive"] as const;
 export type CatalogStatus = (typeof catalogStatuses)[number];
@@ -16,6 +16,27 @@ export type AdminCategorySummary = {
   slug: string;
   status: CatalogStatus;
   sortOrder: number;
+  iconAssetKey: string | null;
+  parentCategoryId: string | null;
+  parentName: string | null;
+  productCount: number;
+  version: number;
+};
+
+export type AdminCategoryProductSummary = Pick<
+  AdminProductSummary,
+  "productId" | "slug" | "name" | "status" | "skuCount" | "version"
+>;
+
+export type AdminCategoryDetail = Omit<
+  AdminCategorySummary,
+  "parentCategoryId" | "parentName" | "productCount"
+> & {
+  parent: Pick<AdminCategorySummary, "categoryId" | "code" | "name"> | null;
+  children: ReadonlyArray<AdminCategorySummary>;
+  products: ReadonlyArray<AdminCategoryProductSummary>;
+  allowedActions: ReadonlyArray<"UPDATE" | "SET_STATUS">;
+  recentAudit: ReadonlyArray<AdminAuditEventListItem>;
 };
 
 export type AdminCategoryPage = {
@@ -118,6 +139,27 @@ export type AdminCategoryCreateRequest = AuthenticatedRequest & {
   name: string;
   slug: string;
   sortOrder?: number;
+  parentCategoryId?: string | null;
+  iconAssetKey?: string | null;
+  idempotencyKey: string;
+};
+
+export type AdminCategoryDetailRequest = AuthenticatedRequest & { categoryId: string };
+export type AdminCategoryUpdateRequest = AuthenticatedRequest & {
+  categoryId: string;
+  name: string;
+  slug: string;
+  parentCategoryId: string | null;
+  iconAssetKey: string | null;
+  sortOrder: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+export type AdminCategoryStatusRequest = AuthenticatedRequest & {
+  categoryId: string;
+  status: CatalogStatus;
+  reason: string;
+  expectedVersion: number;
   idempotencyKey: string;
 };
 
@@ -214,6 +256,13 @@ export type AdminCatalogService = {
   listAdminCategories(request: AdminCategoryListRequest): Promise<RpcResult<AdminCategoryPage>>;
   createAdminCategory(
     request: AdminCategoryCreateRequest,
+  ): Promise<RpcResult<AdminCategorySummary>>;
+  getAdminCategory(request: AdminCategoryDetailRequest): Promise<RpcResult<AdminCategoryDetail>>;
+  updateAdminCategory(
+    request: AdminCategoryUpdateRequest,
+  ): Promise<RpcResult<AdminCategorySummary>>;
+  setAdminCategoryStatus(
+    request: AdminCategoryStatusRequest,
   ): Promise<RpcResult<AdminCategorySummary>>;
   listAdminUnits(request: AdminUnitListRequest): Promise<RpcResult<AdminUnitSummary[]>>;
   createAdminUnit(request: AdminUnitCreateRequest): Promise<RpcResult<AdminUnitSummary>>;

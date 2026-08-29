@@ -133,6 +133,123 @@ async function seedProduct(): Promise<{
 }
 
 describe("catalog administration", () => {
+  it("creates, reads, updates, and deactivates a hierarchy with guarded versions", async () => {
+    const manager = await seedManager();
+    const parent = await core.createAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      code: `PARENT_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
+      name: "Parent category",
+      slug: `parent-${crypto.randomUUID().slice(0, 12)}`,
+      parentCategoryId: null,
+      iconAssetKey: "fruits.svg",
+      sortOrder: 10,
+      idempotencyKey: `category-${crypto.randomUUID()}`,
+    });
+    expect(parent.ok).toBe(true);
+    if (!parent.ok) return;
+    expect(parent.value).toMatchObject({ version: 1, parentCategoryId: null });
+
+    const child = await core.createAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      code: `CHILD_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
+      name: "Child category",
+      slug: `child-${crypto.randomUUID().slice(0, 12)}`,
+      parentCategoryId: parent.value.categoryId,
+      iconAssetKey: null,
+      sortOrder: 11,
+      idempotencyKey: `category-${crypto.randomUUID()}`,
+    });
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+
+    const detail = await core.getAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: parent.value.categoryId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: {
+        children: [{ categoryId: child.value.categoryId }],
+        allowedActions: ["UPDATE", "SET_STATUS"],
+      },
+    });
+
+    const selfParent = await core.updateAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: child.value.categoryId,
+      name: child.value.name,
+      slug: child.value.slug,
+      parentCategoryId: child.value.categoryId,
+      iconAssetKey: null,
+      sortOrder: child.value.sortOrder,
+      expectedVersion: 1,
+      idempotencyKey: `category-${crypto.randomUUID()}`,
+    });
+    expect(selfParent).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const cycle = await core.updateAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: parent.value.categoryId,
+      name: parent.value.name,
+      slug: parent.value.slug,
+      parentCategoryId: child.value.categoryId,
+      iconAssetKey: "fruits.svg",
+      sortOrder: parent.value.sortOrder,
+      expectedVersion: 1,
+      idempotencyKey: `category-${crypto.randomUUID()}`,
+    });
+    expect(cycle).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const updatedKey = `category-${crypto.randomUUID()}`;
+    const updated = await core.updateAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: child.value.categoryId,
+      name: "Updated child",
+      slug: child.value.slug,
+      parentCategoryId: parent.value.categoryId,
+      iconAssetKey: "vegetables.svg",
+      sortOrder: 12,
+      expectedVersion: 1,
+      idempotencyKey: updatedKey,
+    });
+    expect(updated).toMatchObject({ ok: true, value: { name: "Updated child", version: 2 } });
+    const changedReplay = await core.updateAdminCategory({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: child.value.categoryId,
+      name: "Different replay",
+      slug: child.value.slug,
+      parentCategoryId: parent.value.categoryId,
+      iconAssetKey: "vegetables.svg",
+      sortOrder: 12,
+      expectedVersion: 1,
+      idempotencyKey: updatedKey,
+    });
+    expect(changedReplay).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+
+    const deactivated = await core.setAdminCategoryStatus({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: child.value.categoryId,
+      status: "inactive",
+      reason: "Seasonal catalog pause",
+      expectedVersion: 2,
+      idempotencyKey: `category-${crypto.randomUUID()}`,
+    });
+    expect(deactivated).toMatchObject({ ok: true, value: { status: "inactive", version: 3 } });
+    const audit = await env.DB.prepare(
+      "SELECT reason FROM audit_event WHERE action='CATALOG.CATEGORY_STATUS_CHANGED' AND aggregate_id=?",
+    )
+      .bind(child.value.categoryId)
+      .first<{ reason: string | null }>();
+    expect(audit?.reason).toBe("Seasonal catalog pause");
+  });
   it("denies unauthenticated and non-staff readers", async () => {
     expect(await core.listAdminProducts({ requestId: "r1", headers: {} })).toMatchObject({
       ok: false,
