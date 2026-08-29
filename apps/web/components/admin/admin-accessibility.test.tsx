@@ -63,7 +63,7 @@ describe("shared Admin accessibility contract", () => {
       createElement(
         "div",
         null,
-        createElement(StatusBadge, { tone: "warning" }, "SHORTAGE"),
+        createElement(StatusBadge, { tone: "warning", children: "SHORTAGE" }),
         createElement(
           Table,
           { "aria-label": "Order queue" },
