@@ -86,7 +86,7 @@ export async function startReceiving(
       command.requestId,
     );
   }
-  if (record.status !== "PENDING") {
+  if (record.status !== "NOT_STARTED") {
     await repository.markFailed(START_RECEIVING_SCOPE, command.idempotencyKey);
     return failure(
       "ILLEGAL_TRANSITION",

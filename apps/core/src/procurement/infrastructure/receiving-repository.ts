@@ -185,9 +185,9 @@ export function createReceivingRepository(database: D1Database) {
       await database.batch([
         database
           .prepare(
-            "UPDATE receiving_record SET status='IN_PROGRESS', version=version+1 WHERE id=? AND status='PENDING' AND version=?",
+            "UPDATE receiving_record SET status='IN_PROGRESS', updated_at=?, version=version+1 WHERE id=? AND status='NOT_STARTED' AND version=?",
           )
-          .bind(receivingRecordId, expectedVersion),
+          .bind(now, receivingRecordId, expectedVersion),
         database
           .prepare(
             "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND changes()=1",
@@ -202,12 +202,13 @@ export function createReceivingRepository(database: D1Database) {
       await database.batch([
         database
           .prepare(
-            "UPDATE receiving_record SET accepted_quantity=accepted_quantity+?, rejected_quantity=rejected_quantity+?, status=?, version=version+1 WHERE id=? AND version=? AND status IN ('IN_PROGRESS','DISCREPANCY') AND accepted_quantity+rejected_quantity+?<=expected_quantity",
+            "UPDATE receiving_record SET accepted_quantity=accepted_quantity+?, rejected_quantity=rejected_quantity+?, status=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND status IN ('IN_PROGRESS','DISCREPANCY') AND accepted_quantity+rejected_quantity+?<=expected_quantity",
           )
           .bind(
             input.acceptedDelta,
             input.rejectedDelta,
             input.nextRecordStatus,
+            now,
             input.receivingRecordId,
             input.expectedRecordVersion,
             input.acceptedDelta + input.rejectedDelta,
@@ -260,10 +261,11 @@ export function createReceivingRepository(database: D1Database) {
           ),
         database
           .prepare(
-            "UPDATE procurement_requirement SET status=?, version=version+1 WHERE id=? AND version=? AND status IN ('ORDERED','PARTIALLY_RECEIVED') AND EXISTS (SELECT 1 FROM receiving_event WHERE idempotency_key=?)",
+            "UPDATE procurement_requirement SET status=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND status IN ('ORDERED','PARTIALLY_RECEIVED') AND EXISTS (SELECT 1 FROM receiving_event WHERE idempotency_key=?)",
           )
           .bind(
             input.nextRequirementStatus,
+            now,
             input.procurementRequirementId,
             input.expectedRequirementVersion,
             input.idempotencyKey,

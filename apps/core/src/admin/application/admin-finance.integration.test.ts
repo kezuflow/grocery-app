@@ -507,7 +507,7 @@ describe("finance administration", () => {
     expect(illegal).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
 
     async function act(
-      action: "CLAIM" | "BEGIN_INVESTIGATION" | "RESOLVE" | "ESCALATE" | "REOPEN",
+      action: "CLAIM" | "BEGIN_INVESTIGATION" | "RESOLVE" | "ESCALATE",
       version: number,
     ) {
       const result = await core.applyAdminOrderIssueAction({
@@ -531,6 +531,17 @@ describe("finance administration", () => {
     const resolved = await act("RESOLVE", investigating.version);
     expect(resolved.status).toBe("RESOLVED");
     expect(resolved.resolution).toContain("RESOLVE");
+
+    const reopen = await core.applyAdminOrderIssueAction({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      issueId,
+      action: "REOPEN" as never,
+      reason: "must remain terminal",
+      expectedVersion: resolved.version,
+      idempotencyKey: `iss-${crypto.randomUUID()}`,
+    });
+    expect(reopen).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
     const queue = await core.listAdminOrderIssues({
       requestId: crypto.randomUUID(),

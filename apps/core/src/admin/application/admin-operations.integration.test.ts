@@ -69,9 +69,9 @@ async function seedStaff(capability: string, scope: "global" | "location") {
 async function seedProcurementRequirement(cycleId: string, suffix: string): Promise<string> {
   const id = `requirement-page-${suffix}-${crypto.randomUUID().slice(0, 8)}`;
   await env.DB.prepare(
-    "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 100, 'ORDERED', 1)",
+    "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, 'location-cebu-central', ?, 100, 'ORDERED', 1)",
   )
-    .bind(id, cycleId)
+    .bind(id, cycleId, `pool-page-${suffix}`)
     .run();
   return id;
 }
@@ -187,7 +187,7 @@ describe("admin operations reads", () => {
         "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, 'cycle-next-cebu', '{}', 'PAID', 100, 'PHP', ?, ?, 1)",
       ).bind(orderId, customerId, paymentId, Date.now()),
       env.DB.prepare(
-        "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTAGE', ?, 1)",
+        "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTED', ?, 1)",
       ).bind(`fulfillment-${suffix}`, orderId, Date.now()),
     ]);
     const cookie = await seedStaff("fulfillment.manage", "location");
@@ -204,6 +204,18 @@ describe("admin operations reads", () => {
       reason: "retry shortage after replenishment",
     });
     expect(result).toMatchObject({ ok: true, value: { orderId, status: "PICKING" } });
+    const replay = await core.resolveAdminOperationalException({
+      requestId: crypto.randomUUID(),
+      headers: { cookie },
+      locationId: "location-cebu-central",
+      kind: "FULFILLMENT_SHORTAGE",
+      action: "RETRY_FULFILLMENT",
+      orderId,
+      expectedVersion: 1,
+      idempotencyKey,
+      reason: "retry shortage after replenishment",
+    });
+    expect(replay).toMatchObject({ ok: true, value: { orderId, status: "PICKING" } });
     const audit = await env.DB.prepare(
       "SELECT reason, idempotency_key, correlation_id FROM audit_event WHERE action='OPERATIONS.FULFILLMENT_ADVANCED' AND aggregate_id=? ORDER BY occurred_at DESC LIMIT 1",
     )

@@ -28,7 +28,7 @@ export type ReceiveProcurementResult =
 
 /**
  * Record a received line against a requirement's first receiving record,
- * implicitly starting it when still PENDING. Authorization is evaluated
+ * implicitly starting it when still NOT_STARTED. Authorization is evaluated
  * against the requirement's own location; quantities are bounded replay-safe
  * deltas enforced by the receiving commands.
  */
@@ -57,7 +57,7 @@ export async function receiveProcurement(
     .first<{ id: string; status: string; version: number }>();
   if (!record) return failure("NOT_FOUND", "Receiving record not found", command.requestId);
   let lineVersion = record.version;
-  if (record.status === "PENDING") {
+  if (record.status === "NOT_STARTED") {
     const started = await startReceivingCommand(database, {
       requirementId: command.requirementId,
       expectedVersion: record.version,

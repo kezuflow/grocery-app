@@ -199,12 +199,12 @@ describe("operational command authorization and integrity matrix", () => {
       .bind(orderId, `cust-${orderId}`, paymentId, now)
       .run();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'PENDING', ?, 1)",
+      "INSERT OR IGNORE INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'NOT_STARTED', ?, 1)",
     )
       .bind(crypto.randomUUID(), orderId, now)
       .run();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO delivery_job (id, order_id, cycle_id, status, address_snapshot_json, version) SELECT ?, ?, (SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1), 'PENDING', '{}', 1",
+      "INSERT OR IGNORE INTO delivery_job (id, order_id, cycle_id, status, address_snapshot_json, version) SELECT ?, ?, (SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1), 'UNASSIGNED', '{}', 1",
     )
       .bind(crypto.randomUUID(), orderId)
       .run();
@@ -213,7 +213,7 @@ describe("operational command authorization and integrity matrix", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie },
       orderId,
-      action: "START",
+      action: "START_PICKING",
       idempotencyKey: `fulfill-${crypto.randomUUID()}`,
       expectedVersion: 1,
     });
@@ -223,7 +223,7 @@ describe("operational command authorization and integrity matrix", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie },
       orderId,
-      action: "DISPATCH",
+      action: "MARK_EN_ROUTE",
       idempotencyKey: `deliver-${crypto.randomUUID()}`,
       expectedVersion: 1,
     });

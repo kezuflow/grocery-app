@@ -24,7 +24,7 @@ export async function POST(request: Request, context: { params: Promise<{ "issue
     reason?: unknown;
     expectedVersion?: unknown;
   } | null;
-  const actions = ["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE", "REOPEN"] as const;
+  const actions = ["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"] as const;
   const action =
     typeof body?.action === "string" ? actions.find((value) => value === body.action) : undefined;
   if (!action || typeof body?.reason !== "string" || !Number.isInteger(body?.expectedVersion)) {

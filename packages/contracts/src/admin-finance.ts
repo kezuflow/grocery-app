@@ -20,13 +20,7 @@ export const orderIssueStatuses = [
 ] as const;
 export type OrderIssueStatus = (typeof orderIssueStatuses)[number];
 
-export const orderIssueActions = [
-  "CLAIM",
-  "BEGIN_INVESTIGATION",
-  "RESOLVE",
-  "ESCALATE",
-  "REOPEN",
-] as const;
+export const orderIssueActions = ["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"] as const;
 export type OrderIssueAction = (typeof orderIssueActions)[number];
 
 export const reconciliationCaseCategories = [

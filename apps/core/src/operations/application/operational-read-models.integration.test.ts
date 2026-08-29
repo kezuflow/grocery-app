@@ -94,7 +94,7 @@ async function seedOperationalRow(options: {
       crypto.randomUUID(),
       orderId,
       options.locationId ?? "location-cebu-central",
-      options.fulfillmentStatus ?? "PENDING",
+      options.fulfillmentStatus ?? "NOT_STARTED",
       now,
     ),
     env.DB.prepare(
@@ -103,7 +103,7 @@ async function seedOperationalRow(options: {
       crypto.randomUUID(),
       orderId,
       options.riderAuthUserId ?? null,
-      options.deliveryStatus ?? "PENDING",
+      options.deliveryStatus ?? "UNASSIGNED",
     ),
   ]);
   return orderId;
@@ -119,8 +119,8 @@ describe("scoped operational read models", () => {
   });
 
   it("returns only authorized sections with legal allowedActions for the requested location", async () => {
-    await seedOperationalRow({ fulfillmentStatus: "PENDING", deliveryStatus: "PENDING" });
-    await seedOperationalRow({ fulfillmentStatus: "SHORTAGE", deliveryStatus: "FAILED" });
+    await seedOperationalRow({ fulfillmentStatus: "NOT_STARTED", deliveryStatus: "UNASSIGNED" });
+    await seedOperationalRow({ fulfillmentStatus: "SHORTED", deliveryStatus: "FAILED" });
     const fullAccess = await staffCookie({
       permissionCodes: ["fulfillment.manage", "delivery.manage", "procurement.manage"],
     });
@@ -133,19 +133,19 @@ describe("scoped operational read models", () => {
     const value = board.value;
     expect(value.locationId).toBe("location-cebu-central");
     expect(value.sectionsDenied).toEqual([]);
-    const pending = value.fulfillment.find((f) => f.status === "PENDING");
-    expect(pending?.allowedActions).toEqual(["START"]);
-    const shortage = value.fulfillment.find((f) => f.status === "SHORTAGE");
-    expect(shortage?.allowedActions).toEqual(["START"]);
+    const pending = value.fulfillment.find((f) => f.status === "NOT_STARTED");
+    expect(pending?.allowedActions).toEqual(["START_PICKING"]);
+    const shortage = value.fulfillment.find((f) => f.status === "SHORTED");
+    expect(shortage?.allowedActions).toContain("RESUME_PICKING");
     const failedDelivery = value.delivery.find((d) => d.status === "FAILED");
-    expect(failedDelivery?.allowedActions).toContain("DISPATCH");
+    expect(failedDelivery?.allowedActions).toContain("SCHEDULE_RETRY");
     expect(failedDelivery).not.toHaveProperty("addressSnapshotJson");
     expect(value.exceptions.map((e) => e.kind)).toContain("FULFILLMENT_SHORTAGE");
 
     // Cross-location staff sees nothing from the other location.
     const otherLocationRow = await seedOperationalRow({
       locationId: "location-other-empty",
-      fulfillmentStatus: "PENDING",
+      fulfillmentStatus: "NOT_STARTED",
     });
     const scoped = await core.adminOperationsBoard({
       requestId: crypto.randomUUID(),
@@ -178,18 +178,28 @@ describe("scoped operational read models", () => {
       permissionCodes: ["delivery.manage"],
       locationId: "location-other-empty",
     });
-    const jobA = await seedOperationalRow({ deliveryStatus: "PENDING" });
-    const jobB = await seedOperationalRow({ deliveryStatus: "PENDING" });
+    const jobA = await seedOperationalRow({ deliveryStatus: "UNASSIGNED" });
+    const jobB = await seedOperationalRow({ deliveryStatus: "UNASSIGNED" });
 
+    const assignmentKey = `assign-${crypto.randomUUID()}`;
     const assigned = await core.assignRider({
       requestId: crypto.randomUUID(),
       headers: { cookie: supervisor.cookie },
       orderId: jobA,
       riderAuthUserId: riderA.userId,
       expectedVersion: 1,
-      idempotencyKey: `assign-${crypto.randomUUID()}`,
+      idempotencyKey: assignmentKey,
     });
     expect(assigned.ok).toBe(true);
+    const assignmentReplay = await core.assignRider({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: supervisor.cookie },
+      orderId: jobA,
+      riderAuthUserId: riderA.userId,
+      expectedVersion: 1,
+      idempotencyKey: assignmentKey,
+    });
+    expect(assignmentReplay).toMatchObject({ ok: true, value: { status: "ASSIGNED" } });
     const assignedB = await core.assignRider({
       requestId: crypto.randomUUID(),
       headers: { cookie: supervisor.cookie },
@@ -207,10 +217,11 @@ describe("scoped operational read models", () => {
         .run()
         .then(() => u.userId),
     );
+    const unassignedJob = await seedOperationalRow({ deliveryStatus: "UNASSIGNED" });
     const rejected = await core.assignRider({
       requestId: crypto.randomUUID(),
       headers: { cookie: supervisor.cookie },
-      orderId: jobB,
+      orderId: unassignedJob,
       riderAuthUserId: nonStaff,
       expectedVersion: 1,
       idempotencyKey: `assign-${crypto.randomUUID()}`,
@@ -247,7 +258,7 @@ describe("scoped operational read models", () => {
     const supervisor = await staffCookie({ permissionCodes: ["delivery.manage", "orders.manage"] });
     const riderA = await staffCookie({ permissionCodes: ["delivery.manage"] });
     const riderB = await staffCookie({ permissionCodes: ["delivery.manage"] });
-    const jobId = await seedOperationalRow({ deliveryStatus: "PENDING" });
+    const jobId = await seedOperationalRow({ deliveryStatus: "UNASSIGNED" });
     await core.assignRider({
       requestId: crypto.randomUUID(),
       headers: { cookie: supervisor.cookie },
@@ -260,7 +271,7 @@ describe("scoped operational read models", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: riderA.cookie },
       orderId: jobId,
-      action: "DISPATCH",
+      action: "MARK_EN_ROUTE",
       expectedVersion: 1,
       idempotencyKey: `adv-${crypto.randomUUID()}`,
     });
@@ -271,7 +282,7 @@ describe("scoped operational read models", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: riderB.cookie },
       orderId: jobId,
-      action: "DISPATCH",
+      action: "MARK_EN_ROUTE",
       expectedVersion: 2,
       idempotencyKey: `adv-${crypto.randomUUID()}`,
     });

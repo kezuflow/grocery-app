@@ -1,6 +1,14 @@
 import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./index";
 import type { OperationalExceptionItem } from "./operations";
+import type { DeliveryAction, FulfillmentAction } from "./states";
+export {
+  deliveryActions,
+  deliveryJobStates as deliveryStatuses,
+  fulfillmentActions,
+  fulfillmentStates as fulfillmentStatuses,
+  procurementStates,
+} from "./states";
 
 /** Converged queue item; source context remains authoritative for mutations. */
 export type AdminOperationalExceptionView = OperationalExceptionItem;
@@ -63,7 +71,7 @@ export type FulfillmentQueueView = {
   locationId: string;
   status: string;
   version: number;
-  allowedActions: ReadonlyArray<"START" | "PACK" | "SHORTAGE">;
+  allowedActions: ReadonlyArray<FulfillmentAction>;
 };
 
 export type FulfillmentQueuePage = {
@@ -91,7 +99,7 @@ export type AdminDeliveryOperationView = {
   riderAssigned: boolean;
   deliveredAtIso: string | null;
   version: number;
-  allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;
+  allowedActions: ReadonlyArray<DeliveryAction>;
 };
 
 export type OperationalExceptionPage = {
@@ -174,7 +182,7 @@ export type CompleteAdminReceivingRequest = AdminOperationsLocationRequest & {
 
 export type AdvanceAdminFulfillmentRequest = AdminOperationsLocationRequest & {
   orderId: string;
-  action: "START" | "PACK" | "SHORTAGE";
+  action: FulfillmentAction;
   expectedVersion: number;
   idempotencyKey: string;
   reason?: string;
@@ -182,7 +190,7 @@ export type AdvanceAdminFulfillmentRequest = AdminOperationsLocationRequest & {
 
 export type AdvanceAdminDeliveryRequest = AdminOperationsLocationRequest & {
   orderId: string;
-  action: "DISPATCH" | "DELIVER" | "FAIL";
+  action: DeliveryAction;
   expectedVersion: number;
   idempotencyKey: string;
   reason?: string;

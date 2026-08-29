@@ -144,7 +144,7 @@ export default function FulfillmentPage() {
                           <Button
                             key={action}
                             size="sm"
-                            variant={action === "PACK" ? "default" : "outline"}
+                            variant={action === "MARK_PACKED" ? "default" : "outline"}
                             disabled={pending}
                             onClick={() => void act(item.orderId, action, item.version)}
                           >

@@ -1,6 +1,6 @@
 import type { DeliveryCommandRequest } from "@freshmarkets/contracts";
-import { deliveryTransitions, transitionToResult } from "../../commerce/state-machines";
-import { claimCommandIdempotency } from "../../idempotency";
+import { deliveryJobTransitions, transitionToResult } from "../../commerce/state-machines";
+import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
 import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 
 function failure(code: string, message: string, requestId: string) {
@@ -21,9 +21,18 @@ export type AdvanceDeliveryResult =
 
 const SCOPE = "delivery.advance";
 
+const ACTION_TARGET = {
+  MARK_EN_ROUTE: "EN_ROUTE",
+  MARK_ARRIVED: "ARRIVED",
+  MARK_DELIVERED: "DELIVERED",
+  MARK_FAILED: "FAILED",
+  SCHEDULE_RETRY: "RETRY_SCHEDULED",
+  ESCALATE: "ESCALATED",
+  CANCEL: "CANCELED",
+} as const;
+
 /**
- * Advance the delivery job through its guarded machine (DISPATCH/DELIVER/
- * FAIL) with a conditional version update. DELIVERED also moves the order to
+ * Advance the delivery job through its guarded canonical machine. DELIVERED also moves the order to
  * DELIVERED in the same batch and requires that order row to exist;
  * authorization resolves against the fulfillment record's location with the
  * market default as fallback.
@@ -62,14 +71,35 @@ export async function advanceDelivery(
       "Delivery capability and location scope are required",
       command.requestId,
     );
+  const payload = {
+    orderId: command.orderId,
+    action: command.action,
+    expectedVersion: command.expectedVersion,
+  };
+  const hash = await requestHash(payload);
+  const priorCommand = await findIdempotencyRecord(database, SCOPE, command.idempotencyKey);
+  if (priorCommand?.requestHash !== undefined && priorCommand.requestHash !== hash)
+    return failure(
+      "IDEMPOTENCY_CONFLICT",
+      "Idempotency key was used with a different request",
+      command.requestId,
+    );
+  if (priorCommand?.status === "SUCCEEDED")
+    return {
+      ok: true,
+      value: { id: command.orderId, status: row.status },
+      requestId: command.requestId,
+    };
+  if (priorCommand?.status === "PROCESSING")
+    return failure(
+      "CONFLICT",
+      "The original delivery command is still processing",
+      command.requestId,
+    );
   const transitionResult = transitionToResult(
     row.status,
-    command.action === "DISPATCH"
-      ? "DISPATCHED"
-      : command.action === "DELIVER"
-        ? "DELIVERED"
-        : "FAILED",
-    deliveryTransitions,
+    ACTION_TARGET[command.action],
+    deliveryJobTransitions,
     command.requestId,
   );
   if (!transitionResult.ok) return transitionResult;
@@ -79,13 +109,15 @@ export async function advanceDelivery(
     Date.now,
     SCOPE,
     command.idempotencyKey,
-    {
-      orderId: command.orderId,
-      action: command.action,
-      expectedVersion: command.expectedVersion,
-    },
+    payload,
   );
-  if (idempotency.existing) {
+  if (!idempotency.claimed) {
+    if (!idempotency.existing)
+      return failure(
+        "CONFLICT",
+        "The original delivery command is still processing",
+        command.requestId,
+      );
     if (idempotency.existing.requestHash !== idempotency.hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
@@ -104,20 +136,41 @@ export async function advanceDelivery(
       command.requestId,
     );
   }
+  const now = Date.now();
   const deliveryUpdate = database
     .prepare(
-      "UPDATE delivery_job SET status=?, delivered_at=?, version=version+1 WHERE order_id=? AND version=?",
+      "UPDATE delivery_job SET status=?, delivered_at=?, updated_at=?, version=version+1 WHERE order_id=? AND version=?",
     )
-    .bind(next, next === "DELIVERED" ? Date.now() : null, command.orderId, command.expectedVersion);
-  const statements = [deliveryUpdate];
+    .bind(next, next === "DELIVERED" ? now : null, now, command.orderId, command.expectedVersion);
+  const statements = [
+    deliveryUpdate,
+    database
+      .prepare(
+        "INSERT INTO admin_command_abort(id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM delivery_job WHERE order_id=? AND status=? AND version=?)",
+      )
+      .bind(command.orderId, next, command.expectedVersion + 1),
+  ];
   if (next === "DELIVERED")
     statements.push(
       database
         .prepare("UPDATE grocery_order SET status='DELIVERED' WHERE id=?")
         .bind(command.orderId),
+      database
+        .prepare(
+          "INSERT INTO admin_command_abort(id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status='DELIVERED')",
+        )
+        .bind(command.orderId),
     );
-  const results = await database.batch(statements);
-  if ((results[0]?.meta?.changes ?? 0) !== 1) {
+  statements.push(
+    database
+      .prepare(
+        "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
+      )
+      .bind(command.orderId, now, SCOPE, command.idempotencyKey, idempotency.hash),
+  );
+  try {
+    await database.batch(statements);
+  } catch {
     await database
       .prepare(
         "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
@@ -126,14 +179,6 @@ export async function advanceDelivery(
       .run();
     return failure("STALE_VERSION", "Delivery changed; refresh before retrying", command.requestId);
   }
-  if (next === "DELIVERED" && (results[1]?.meta?.changes ?? 0) !== 1)
-    return failure("NOT_FOUND", "Order not found while completing delivery", command.requestId);
-  await database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
-    )
-    .bind(command.orderId, Date.now(), SCOPE, command.idempotencyKey, idempotency.hash)
-    .run();
   return {
     ok: true as const,
     value: { id: command.orderId, status: next },

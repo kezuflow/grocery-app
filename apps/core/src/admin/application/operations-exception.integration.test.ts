@@ -3,6 +3,42 @@ import { env } from "cloudflare:workers";
 import { listOperationalExceptions } from "../../audit/application/list-operational-exceptions";
 
 describe("converged operational exceptions", () => {
+  it("orders and ages receiving discrepancies by persisted UTC timestamps", async () => {
+    const suffix = crypto.randomUUID();
+    const olderAt = Date.now() - 10 * 60_000;
+    const newerAt = Date.now() - 2 * 60_000;
+    const ids = { older: `receiving-older-${suffix}`, newer: `receiving-newer-${suffix}` };
+
+    // Insert newer first to prove row insertion order is irrelevant.
+    for (const [id, at] of [
+      [ids.newer, newerAt],
+      [ids.older, olderAt],
+    ] as const) {
+      const requirementId = `requirement-${id}`;
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version, created_at, updated_at) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1, ?, ?)",
+        ).bind(requirementId, `cycle-${requirementId}`, at, at),
+        env.DB.prepare(
+          "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version, created_at, updated_at) VALUES (?, ?, 10, 8, 2, 'DISCREPANCY', 1, ?, ?)",
+        ).bind(id, requirementId, at, at),
+      ]);
+    }
+
+    const rows = await listOperationalExceptions(env.DB, { locationId: "location-cebu-central" });
+    const receivingRows = rows.filter((row) => [ids.newer, ids.older].includes(row.referenceId));
+    expect(receivingRows.map((row) => row.referenceId)).toEqual([ids.newer, ids.older]);
+    expect(receivingRows[0]?.ageMinutes).toBeGreaterThanOrEqual(1);
+    expect(receivingRows[1]?.ageMinutes).toBeGreaterThan(receivingRows[0]?.ageMinutes ?? 0);
+
+    const afterNewer = await listOperationalExceptions(env.DB, {
+      locationId: "location-cebu-central",
+      cursorKey: receivingRows[0]?.queueKey,
+    });
+    expect(afterNewer.some((row) => row.referenceId === ids.older)).toBe(true);
+    expect(afterNewer.some((row) => row.referenceId === ids.newer)).toBe(false);
+  });
+
   it("projects source ownership, scope, severity, age, and legal actions", async () => {
     const requirementId = `exception-requirement-${crypto.randomUUID()}`;
     const exceptionId = `exception-${crypto.randomUUID()}`;
@@ -49,7 +85,7 @@ describe("converged operational exceptions", () => {
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1)",
-      ).bind(requirementId, "cycle-next-cebu"),
+      ).bind(requirementId, `cycle-${suffix}`),
       env.DB.prepare(
         "INSERT INTO supply_exception (id, requirement_id, kind, affected_quantity, status, created_at, version) VALUES (?, ?, 'SHORTAGE', 5, 'OPEN', ?, 1)",
       ).bind(`supply-${suffix}`, requirementId, Date.now()),
@@ -57,7 +93,7 @@ describe("converged operational exceptions", () => {
         "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version) VALUES (?, ?, 10, 8, 2, 'COMPLETED', 1)",
       ).bind(`receiving-${suffix}`, requirementId),
       env.DB.prepare(
-        "INSERT OR REPLACE INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTAGE', ?, 1)",
+        "INSERT OR REPLACE INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTED', ?, 1)",
       ).bind(`fulfillment-${suffix}`, orderId, Date.now()),
       env.DB.prepare(
         "INSERT OR REPLACE INTO delivery_job (id, order_id, cycle_id, rider_user_id, status, address_snapshot_json, version) VALUES (?, ?, ?, NULL, 'FAILED', '{}', 1)",
@@ -71,6 +107,7 @@ describe("converged operational exceptions", () => {
     ]);
     expect(rows.find((item) => item.source === "DELIVERY")?.permittedActions).toEqual([
       "RETRY_DELIVERY",
+      "ESCALATE",
     ]);
   });
 });

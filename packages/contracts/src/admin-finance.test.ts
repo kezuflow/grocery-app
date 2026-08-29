@@ -28,13 +28,8 @@ describe("finance contracts", () => {
       "RESOLVED",
       "ESCALATED",
     ]);
-    expect(orderIssueActions).toEqual([
-      "CLAIM",
-      "BEGIN_INVESTIGATION",
-      "RESOLVE",
-      "ESCALATE",
-      "REOPEN",
-    ]);
+    expect(orderIssueActions).toEqual(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"]);
+    expect(orderIssueActions).not.toContain("REOPEN");
     expect(reconciliationCaseCategories).toEqual([
       "UNMAPPED_PROVIDER_REFERENCE",
       "AMBIGUOUS_OUTCOME",

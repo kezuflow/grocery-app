@@ -6,7 +6,15 @@ import { requireIdempotencyKey, requireExpectedVersion } from "@/lib/core-client
 
 const bodySchema = z.object({
   orderId: z.string().trim().min(1),
-  action: z.enum(["DISPATCH", "DELIVER", "FAIL"]),
+  action: z.enum([
+    "MARK_EN_ROUTE",
+    "MARK_ARRIVED",
+    "MARK_DELIVERED",
+    "MARK_FAILED",
+    "SCHEDULE_RETRY",
+    "ESCALATE",
+    "CANCEL",
+  ]),
 });
 
 /**

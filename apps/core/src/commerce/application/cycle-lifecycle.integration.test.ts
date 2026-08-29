@@ -53,7 +53,7 @@ async function seedOrderWithJob(cycleId: string, status: OrderStatus): Promise<s
     await env.DB.prepare(
       "INSERT INTO delivery_job (id, order_id, cycle_id, rider_user_id, status, address_snapshot_json) VALUES (?, ?, ?, NULL, ?, '{}')",
     )
-      .bind(`job-${orderId}`, orderId, cycleId, status === "DELIVERED" ? "DELIVERED" : "DISPATCHED")
+      .bind(`job-${orderId}`, orderId, cycleId, status === "DELIVERED" ? "DELIVERED" : "EN_ROUTE")
       .run();
   }
   return orderId;

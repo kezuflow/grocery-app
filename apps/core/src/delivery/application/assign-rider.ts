@@ -39,8 +39,6 @@ export async function assignRider(
       "Delivery capability and location scope are required",
       command.requestId,
     );
-  if (!["PENDING", "FAILED"].includes(row.status))
-    return failure("CONFLICT", "Job is not assignable in its current state", command.requestId);
   const rider = await database
     .prepare("SELECT id FROM staff_identity WHERE auth_user_id=? AND status='active'")
     .bind(command.riderAuthUserId)
@@ -58,7 +56,9 @@ export async function assignRider(
       expectedVersion: command.expectedVersion,
     },
   );
-  if (idempotency.existing) {
+  if (!idempotency.claimed) {
+    if (!idempotency.existing)
+      return failure("CONFLICT", "The original assignment is still processing", command.requestId);
     if (idempotency.existing.requestHash !== idempotency.hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
@@ -77,11 +77,7 @@ export async function assignRider(
       };
     return failure("CONFLICT", "The original assignment is still processing", command.requestId);
   }
-  const result = await database
-    .prepare("UPDATE delivery_job SET rider_user_id=?, version=version+1 WHERE id=? AND version=?")
-    .bind(command.riderAuthUserId, row.job_id, command.expectedVersion)
-    .run();
-  if ((result.meta?.changes ?? 0) !== 1) {
+  if (row.version !== command.expectedVersion) {
     await database
       .prepare(
         "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
@@ -90,18 +86,49 @@ export async function assignRider(
       .run();
     return failure("STALE_VERSION", "Job changed; refresh before retrying", command.requestId);
   }
-  await database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
-    )
-    .bind(row.job_id, Date.now(), SCOPE, command.idempotencyKey, idempotency.hash)
-    .run();
+  if (!["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.status)) {
+    await database
+      .prepare(
+        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+      )
+      .bind(Date.now(), SCOPE, command.idempotencyKey)
+      .run();
+    return failure("CONFLICT", "Job is not assignable in its current state", command.requestId);
+  }
+  try {
+    const now = Date.now();
+    await database.batch([
+      database
+        .prepare(
+          "UPDATE delivery_job SET rider_user_id=?, status='ASSIGNED', updated_at=?, version=version+1 WHERE id=? AND version=?",
+        )
+        .bind(command.riderAuthUserId, now, row.job_id, command.expectedVersion),
+      database
+        .prepare(
+          "INSERT INTO admin_command_abort(id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM delivery_job WHERE id=? AND rider_user_id=? AND status='ASSIGNED' AND version=?)",
+        )
+        .bind(row.job_id, command.riderAuthUserId, command.expectedVersion + 1),
+      database
+        .prepare(
+          "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
+        )
+        .bind(row.job_id, now, SCOPE, command.idempotencyKey, idempotency.hash),
+    ]);
+  } catch {
+    await database
+      .prepare(
+        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+      )
+      .bind(Date.now(), SCOPE, command.idempotencyKey)
+      .run();
+    return failure("STALE_VERSION", "Job changed; refresh before retrying", command.requestId);
+  }
   return {
     ok: true as const,
     value: {
       orderId: command.orderId,
       riderAuthUserId: command.riderAuthUserId,
-      status: row.status,
+      status: "ASSIGNED",
     },
     requestId: command.requestId,
   };

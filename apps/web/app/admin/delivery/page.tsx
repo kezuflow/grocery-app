@@ -143,7 +143,7 @@ export default function DeliveryPage() {
                           <Button
                             key={action}
                             size="sm"
-                            variant={action === "DELIVER" ? "default" : "outline"}
+                            variant={action === "MARK_DELIVERED" ? "default" : "outline"}
                             disabled={pending}
                             onClick={() => void act(item.orderId, action, item.version)}
                           >

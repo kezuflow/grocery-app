@@ -12,7 +12,7 @@ export async function listRiderJobs(
 ): Promise<RiderJobsValue["jobs"]> {
   const rows = await database
     .prepare(
-      "SELECT id AS job_id, order_id, status, address_snapshot_json, version FROM delivery_job WHERE rider_user_id=? AND status IN ('PENDING','DISPATCHED','FAILED') ORDER BY CASE status WHEN 'DISPATCHED' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END, version ASC, rowid ASC LIMIT 100",
+      "SELECT id AS job_id, order_id, status, address_snapshot_json, version FROM delivery_job WHERE rider_user_id=? AND status IN ('ASSIGNED','EN_ROUTE','ARRIVED','FAILED') ORDER BY CASE status WHEN 'ARRIVED' THEN 0 WHEN 'EN_ROUTE' THEN 1 WHEN 'ASSIGNED' THEN 2 ELSE 3 END, version ASC, id ASC LIMIT 100",
     )
     .bind(query.riderAuthUserId)
     .all<{

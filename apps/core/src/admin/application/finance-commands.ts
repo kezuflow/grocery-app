@@ -666,7 +666,6 @@ const ISSUE_TRANSITIONS: Record<
   BEGIN_INVESTIGATION: { from: ["CLAIMED", "ESCALATED"], to: "INVESTIGATING", terminal: false },
   RESOLVE: { from: ["CLAIMED", "INVESTIGATING"], to: "RESOLVED", terminal: true },
   ESCALATE: { from: ["CLAIMED", "INVESTIGATING"], to: "ESCALATED", terminal: false },
-  REOPEN: { from: ["RESOLVED"], to: "INVESTIGATING", terminal: false },
 };
 
 /** Apply a closed issue action through the legal transition map. */
@@ -749,7 +748,7 @@ export async function applyAdminOrderIssueAction(
   }
 
   const transition = ISSUE_TRANSITIONS[request.action];
-  if (!transition.from.includes(row.status)) {
+  if (!transition || !transition.from.includes(row.status)) {
     await idempotencyFailed(deps.db, "admin.issues.action", request.idempotencyKey);
     return failure(
       "ILLEGAL_TRANSITION",

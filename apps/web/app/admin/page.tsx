@@ -1,13 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  PackageCheck,
-  Boxes,
-  Truck,
-  ClipboardList,
-  AlertCircle,
-  type LucideIcon,
-} from "lucide-react";
+import { Boxes, Truck, ClipboardList, AlertCircle } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import {
@@ -66,7 +59,7 @@ function useCommandRunner(refresh: () => void) {
       const response = await fetch(`${route}?v=${encodeURIComponent(String(version))}`, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, expectedVersion: version }),
       });
       const payload = (await response.json()) as {
         ok: boolean;
@@ -120,11 +113,11 @@ export default function AdminPage() {
 
   async function fulfillmentAction(
     item: FulfillmentQueueItem,
-    action: "START" | "PACK" | "SHORTAGE",
+    action: FulfillmentQueueItem["allowedActions"][number],
   ) {
     const result = await runCommand(
-      "/api/admin/delivery",
-      { orderId: item.orderId, command: "fulfillment", action },
+      "/api/admin/fulfillment",
+      { locationId: item.locationId, orderId: item.orderId, action },
       item.version,
     );
     setNotice(result.ok ? null : (result.error?.message ?? "Command failed."));
@@ -132,11 +125,15 @@ export default function AdminPage() {
 
   async function deliveryAction(
     item: DeliveryDispatchItem,
-    action: "DISPATCH" | "DELIVER" | "FAIL",
+    action: DeliveryDispatchItem["allowedActions"][number],
   ) {
     const result = await runCommand(
       "/api/admin/delivery",
-      { orderId: item.orderId, command: "delivery", action },
+      {
+        locationId: state.phase === "ready" ? state.board.locationId : "",
+        orderId: item.orderId,
+        action,
+      },
       item.version,
     );
     setNotice(result.ok ? null : (result.error?.message ?? "Command failed."));
@@ -222,7 +219,7 @@ export default function AdminPage() {
                   >
                     <ClipboardList className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
                     <span className="font-mono text-sm">{shortId(item.orderId)}</span>
-                    <StatusBadge tone={item.status === "SHORTAGE" ? "warning" : "info"}>
+                    <StatusBadge tone={item.status === "SHORTED" ? "warning" : "info"}>
                       {item.status}
                     </StatusBadge>
                     <span className="text-xs text-[var(--fm-text-muted)]">v{item.version}</span>
@@ -231,14 +228,10 @@ export default function AdminPage() {
                         <Button
                           key={action}
                           size="sm"
-                          variant={action === "SHORTAGE" ? "outline" : "default"}
+                          variant={action === "RECORD_SHORTAGE" ? "outline" : "default"}
                           onClick={() => fulfillmentAction(item, action)}
                         >
-                          {action === "START"
-                            ? "Start picking"
-                            : action === "PACK"
-                              ? "Mark packed"
-                              : "Report shortage"}
+                          {action.replaceAll("_", " ").toLowerCase()}
                         </Button>
                       ))}
                     </span>
@@ -276,14 +269,10 @@ export default function AdminPage() {
                           <Button
                             key={action}
                             size="sm"
-                            variant={action === "FAIL" ? "outline" : "default"}
+                            variant={action === "MARK_FAILED" ? "outline" : "default"}
                             onClick={() => deliveryAction(item, action)}
                           >
-                            {action === "DISPATCH"
-                              ? "Dispatch"
-                              : action === "DELIVER"
-                                ? "Delivered"
-                                : "Fail"}
+                            {action.replaceAll("_", " ").toLowerCase()}
                           </Button>
                         ))}
                       </span>

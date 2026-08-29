@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   adminOperationsReadCapabilities,
+  fulfillmentActions,
+  fulfillmentStatuses,
+  deliveryActions,
+  deliveryStatuses,
   type DeliveryOperationsSummary,
   type AdminDeliveryOperationView,
   type FulfillmentModeConfigurationView,
@@ -18,6 +22,54 @@ describe("admin operations contracts", () => {
       "fulfillment.read",
       "delivery.read",
       "fulfillment.manage",
+    ]);
+  });
+
+  it("publishes canonical fulfillment and delivery vocabularies", () => {
+    expect(fulfillmentStatuses).toEqual([
+      "NOT_STARTED",
+      "PICKING",
+      "READY_TO_PACK",
+      "PACKING",
+      "PACKED",
+      "HANDED_OFF",
+      "COMPLETED",
+      "SHORTED",
+      "CANCELED",
+      "ESCALATED",
+    ]);
+    expect(fulfillmentActions).toEqual([
+      "START_PICKING",
+      "MARK_READY_TO_PACK",
+      "START_PACKING",
+      "MARK_PACKED",
+      "HAND_OFF",
+      "COMPLETE",
+      "RECORD_SHORTAGE",
+      "RESUME_PICKING",
+      "RESUME_READY_TO_PACK",
+      "CANCEL",
+      "ESCALATE",
+    ]);
+    expect(deliveryStatuses).toEqual([
+      "UNASSIGNED",
+      "ASSIGNED",
+      "EN_ROUTE",
+      "ARRIVED",
+      "DELIVERED",
+      "FAILED",
+      "RETRY_SCHEDULED",
+      "ESCALATED",
+      "CANCELED",
+    ]);
+    expect(deliveryActions).toEqual([
+      "MARK_EN_ROUTE",
+      "MARK_ARRIVED",
+      "MARK_DELIVERED",
+      "MARK_FAILED",
+      "SCHEDULE_RETRY",
+      "ESCALATE",
+      "CANCEL",
     ]);
   });
 
@@ -58,7 +110,7 @@ describe("admin operations contracts", () => {
       locationId: "location-cebu-central",
       status: "PICKING",
       version: 5,
-      allowedActions: ["PACK"],
+      allowedActions: ["MARK_READY_TO_PACK", "RECORD_SHORTAGE"],
     } satisfies FulfillmentQueueView);
     void ({
       locationId: "location-cebu-central",
@@ -74,7 +126,7 @@ describe("admin operations contracts", () => {
       orderId: "order-1",
       cycleId: "cycle-1",
       locationId: "location-cebu-central",
-      status: "PENDING",
+      status: "UNASSIGNED",
       riderAssigned: false,
       deliveredAtIso: null,
       version: 1,

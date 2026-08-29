@@ -10,12 +10,14 @@ export function allowedDeliveryActions(
   assigned: boolean,
 ): DeliveryDispatchItem["allowedActions"] {
   switch (status) {
-    case "PENDING":
-      return assigned ? ["DISPATCH"] : [];
-    case "DISPATCHED":
-      return ["DELIVER", "FAIL"];
+    case "ASSIGNED":
+      return assigned ? ["MARK_EN_ROUTE"] : [];
+    case "EN_ROUTE":
+      return ["MARK_ARRIVED"];
+    case "ARRIVED":
+      return ["MARK_DELIVERED", "MARK_FAILED"];
     case "FAILED":
-      return ["DISPATCH"];
+      return ["SCHEDULE_RETRY", "ESCALATE", "CANCEL"];
     default:
       return [];
   }
@@ -30,7 +32,7 @@ export async function listDeliveryDispatch(
   query: { locationId: string; cycleId?: string; cursorId?: string; limit?: number },
 ): Promise<Array<DispatchRow>> {
   const limit = query.limit ?? 200;
-  const clauses = ["f.location_id=?", "d.status NOT IN ('CANCELED','DELIVERED')"];
+  const clauses = ["f.location_id=?", "d.status NOT IN ('CANCELED','DELIVERED','ESCALATED')"];
   const binds: unknown[] = [query.locationId];
   if (query.cycleId) {
     clauses.push("o.cycle_id=?");

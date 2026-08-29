@@ -10,6 +10,7 @@ import type {
   ReceivingCommandResult,
 } from "./index";
 import type { OperationsCommandState } from "./states";
+import type { DeliveryAction, FulfillmentAction } from "./states";
 
 export type OperationsCommandResult = { id: string; status: OperationsCommandState };
 
@@ -51,7 +52,7 @@ export type FulfillmentQueueItem = {
   status: string;
   locationId: string;
   version: number;
-  allowedActions: ReadonlyArray<"START" | "PACK" | "SHORTAGE">;
+  allowedActions: ReadonlyArray<FulfillmentAction>;
 };
 
 export type DeliveryDispatchItem = {
@@ -61,7 +62,7 @@ export type DeliveryDispatchItem = {
   riderAuthUserId: string | null;
   deliveredAtIso: string | null;
   version: number;
-  allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;
+  allowedActions: ReadonlyArray<DeliveryAction>;
 };
 
 export type ProcurementQueueItem = {
@@ -130,7 +131,7 @@ export type RiderJobsValue = {
     status: string;
     addressSnapshotJson: string;
     version: number;
-    allowedActions: ReadonlyArray<"DISPATCH" | "DELIVER" | "FAIL">;
+    allowedActions: ReadonlyArray<DeliveryAction>;
   }>;
 };
 

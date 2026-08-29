@@ -182,16 +182,16 @@ export async function applyCheckoutPaymentReaction(
             now,
           ),
     // Operational lifecycle records begin here: fulfillment is queued for
-    // picking and the delivery job starts unassigned (PENDING) until a
+    // picking and the delivery job starts UNASSIGNED until a
     // scoped assignment command names its rider.
     database
       .prepare(
-        "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at) VALUES (?, ?, ?, 'PENDING', ?)",
+        "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at) VALUES (?, ?, ?, 'NOT_STARTED', ?)",
       )
       .bind(crypto.randomUUID(), orderId, cycleSnapshot.locationId, now),
     database
       .prepare(
-        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at) VALUES (?, ?, ?, ?, NULL, 'PENDING', ?, NULL)",
+        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 'UNASSIGNED', ?, NULL, ?, ?)",
       )
       .bind(
         crypto.randomUUID(),
@@ -199,6 +199,8 @@ export async function applyCheckoutPaymentReaction(
         instant ? null : quote.deliveryCycleId,
         instant ? "INSTANT" : "SCHEDULED",
         JSON.stringify(quote.addressSnapshot),
+        now,
+        now,
       ),
     database
       .prepare(

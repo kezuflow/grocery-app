@@ -51,7 +51,11 @@ export default function RiderPage() {
     load();
   }, [load]);
 
-  async function act(orderId: string, version: number, action: "DISPATCH" | "DELIVER" | "FAIL") {
+  async function act(
+    orderId: string,
+    version: number,
+    action: RiderJobsValue["jobs"][number]["allowedActions"][number],
+  ) {
     const actionId = `${orderId}:${action}`;
     let key = keys.current.get(actionId);
     if (!key) {
@@ -118,7 +122,7 @@ export default function RiderPage() {
                       className={`rounded px-2 py-0.5 text-xs font-medium ${
                         job.status === "FAILED"
                           ? "bg-red-100 text-red-700"
-                          : job.status === "DISPATCHED"
+                          : job.status === "EN_ROUTE"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-slate-100 text-slate-700"
                       }`}
@@ -134,19 +138,23 @@ export default function RiderPage() {
                     {job.allowedActions.map((action) => (
                       <Button
                         key={action}
-                        variant={action === "FAIL" ? "outline" : "default"}
+                        variant={action === "MARK_FAILED" ? "outline" : "default"}
                         onClick={() => act(job.orderId, job.version, action)}
                       >
-                        {action === "DISPATCH" ? (
+                        {action === "MARK_EN_ROUTE" ? (
                           "Start delivery"
-                        ) : action === "DELIVER" ? (
+                        ) : action === "MARK_ARRIVED" ? (
+                          "Confirm arrival"
+                        ) : action === "MARK_DELIVERED" ? (
                           <>
                             <CheckCircle2 className="mr-2 size-4" /> Confirm delivered
                           </>
-                        ) : (
+                        ) : action === "MARK_FAILED" ? (
                           <>
                             <TriangleAlert className="mr-2 size-4" /> Report failure
                           </>
+                        ) : (
+                          action.replaceAll("_", " ").toLowerCase()
                         )}
                       </Button>
                     ))}

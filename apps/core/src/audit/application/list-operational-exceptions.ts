@@ -38,13 +38,13 @@ export async function listOperationalExceptions(
       }>(),
     database
       .prepare(
-        "SELECT id, order_id, status, updated_at FROM fulfillment_record WHERE location_id=? AND status='SHORTAGE' AND (? IS NULL OR (printf('%013d', updated_at)||':FULFILLMENT:'||id) < ?) ORDER BY updated_at DESC, id DESC LIMIT ?",
+        "SELECT id, order_id, status, updated_at FROM fulfillment_record WHERE location_id=? AND status='SHORTED' AND (? IS NULL OR (printf('%013d', updated_at)||':FULFILLMENT:'||id) < ?) ORDER BY updated_at DESC, id DESC LIMIT ?",
       )
       .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
       .all<{ id: string; order_id: string; status: string; updated_at: number }>(),
     database
       .prepare(
-        "SELECT d.id, d.order_id, d.status, d.rider_user_id, f.updated_at FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE f.location_id=? AND d.status='FAILED' AND (? IS NULL OR (printf('%013d', f.updated_at)||':DELIVERY:'||d.id) < ?) ORDER BY f.updated_at DESC, d.id DESC LIMIT ?",
+        "SELECT d.id, d.order_id, d.status, d.rider_user_id, d.updated_at FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE f.location_id=? AND d.status='FAILED' AND (? IS NULL OR (printf('%013d', d.updated_at)||':DELIVERY:'||d.id) < ?) ORDER BY d.updated_at DESC, d.id DESC LIMIT ?",
       )
       .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
       .all<{
@@ -56,7 +56,7 @@ export async function listOperationalExceptions(
       }>(),
     database
       .prepare(
-        "SELECT rr.id, rr.expected_quantity, rr.accepted_quantity, rr.rejected_quantity, pr.location_id, rr.rowid AS source_rowid FROM receiving_record rr JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id WHERE pr.location_id=? AND (rr.rejected_quantity>0 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity)) AND rr.status!='PENDING' AND (? IS NULL OR (printf('%013d', rr.rowid)||':RECEIVING:'||rr.id) < ?) ORDER BY rr.rowid DESC, rr.id DESC LIMIT ?",
+        "SELECT rr.id, rr.expected_quantity, rr.accepted_quantity, rr.rejected_quantity, rr.updated_at, pr.location_id FROM receiving_record rr JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id WHERE pr.location_id=? AND (rr.rejected_quantity>0 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity)) AND rr.status!='NOT_STARTED' AND (? IS NULL OR (printf('%013d', rr.updated_at)||':RECEIVING:'||rr.id) < ?) ORDER BY rr.updated_at DESC, rr.id DESC LIMIT ?",
       )
       .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
       .all<{
@@ -65,7 +65,7 @@ export async function listOperationalExceptions(
         accepted_quantity: number;
         rejected_quantity: number;
         location_id: string;
-        source_rowid: number;
+        updated_at: number;
       }>(),
   ]);
   const rows: OperationalExceptionProjection[] = [
@@ -87,14 +87,14 @@ export async function listOperationalExceptions(
       kind: "RECEIVING_DISCREPANCY" as const,
       source: "RECEIVING" as const,
       severity: r.rejected_quantity > 0 ? ("HIGH" as const) : ("MEDIUM" as const),
-      ageMinutes: null,
+      ageMinutes: ageMinutes(r.updated_at, now),
       ownerId: null,
       referenceId: r.id,
       orderId: null,
       locationId: r.location_id,
       reason: "RECEIVING_DISCREPANCY",
       permittedActions: [],
-      queueKey: queueKey(r.source_rowid, "RECEIVING", r.id),
+      queueKey: queueKey(r.updated_at, "RECEIVING", r.id),
       detail: `Expected ${r.expected_quantity}, accepted ${r.accepted_quantity}, rejected ${r.rejected_quantity}.`,
     })),
     ...shortages.results.map((r) => ({
@@ -121,7 +121,7 @@ export async function listOperationalExceptions(
       orderId: r.order_id,
       locationId: query.locationId,
       reason: "DELIVERY_FAILED",
-      permittedActions: ["RETRY_DELIVERY"] as const,
+      permittedActions: ["RETRY_DELIVERY", "ESCALATE"] as const,
       queueKey: queueKey(r.updated_at, "DELIVERY", r.id),
       detail: "Failed delivery; retry from the delivery queue.",
     })),

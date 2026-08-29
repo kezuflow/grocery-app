@@ -157,7 +157,7 @@ describe("instant order commitment", () => {
       .first<{ fulfillment_mode: string; status: string; rider_user_id: string | null }>();
     expect(job).toMatchObject({
       fulfillment_mode: "INSTANT",
-      status: "PENDING",
+      status: "UNASSIGNED",
       rider_user_id: null,
     });
     const hold = await env.DB.prepare(

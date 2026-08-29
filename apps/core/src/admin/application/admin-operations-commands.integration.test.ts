@@ -172,6 +172,18 @@ describe("admin operations commands", () => {
     };
     const first = await core.aggregateAdminProcurementDemand(input);
     expect(first).toMatchObject({ ok: true, value: { requiredQuantityBase: 9 } });
+    const competing = await core.aggregateAdminProcurementDemand({
+      ...input,
+      requestId: crypto.randomUUID(),
+      idempotencyKey: `aggregate-${crypto.randomUUID()}`,
+    });
+    expect(competing).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    const activeCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM procurement_requirement WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND status!='CLOSED'",
+    )
+      .bind(cycleId, input.locationId, input.inventoryPoolId)
+      .first<{ count: number }>();
+    expect(activeCount?.count).toBe(1);
     const replay = await core.aggregateAdminProcurementDemand({
       ...input,
       requestId: crypto.randomUUID(),

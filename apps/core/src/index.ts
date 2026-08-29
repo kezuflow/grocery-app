@@ -684,14 +684,34 @@ const adminReceivingCompleteSchema = adminOperationsLocationSchema.extend({
 });
 const adminFulfillmentAdvanceSchema = adminOperationsLocationSchema.extend({
   orderId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum(["START", "PACK", "SHORTAGE"]),
+  action: validationSchema.enum([
+    "START_PICKING",
+    "MARK_READY_TO_PACK",
+    "START_PACKING",
+    "MARK_PACKED",
+    "HAND_OFF",
+    "COMPLETE",
+    "RECORD_SHORTAGE",
+    "RESUME_PICKING",
+    "RESUME_READY_TO_PACK",
+    "CANCEL",
+    "ESCALATE",
+  ]),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
   reason: validationSchema.string().trim().min(1).max(500).optional(),
 });
 const adminDeliveryAdvanceSchema = adminOperationsLocationSchema.extend({
   orderId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum(["DISPATCH", "DELIVER", "FAIL"]),
+  action: validationSchema.enum([
+    "MARK_EN_ROUTE",
+    "MARK_ARRIVED",
+    "MARK_DELIVERED",
+    "MARK_FAILED",
+    "SCHEDULE_RETRY",
+    "ESCALATE",
+    "CANCEL",
+  ]),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
   reason: validationSchema.string().trim().min(1).max(500).optional(),
@@ -791,7 +811,7 @@ const issueDetailSchema = authenticatedRequestSchema.extend({
 
 const issueActionSchema = authenticatedRequestSchema.extend({
   issueId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE", "REOPEN"]),
+  action: validationSchema.enum(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"]),
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,

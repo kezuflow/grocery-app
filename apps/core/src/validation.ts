@@ -109,7 +109,6 @@ export const procurementCommandSchema = headersRequest.extend({
   deliveryCycleId: identifierSchema,
   locationId: identifierSchema,
   inventoryPoolId: identifierSchema,
-  quantity: positiveIntegerSchema,
   idempotencyKey: idempotencyKeySchema,
   expectedVersion: expectedVersionSchema,
 });
@@ -126,14 +125,34 @@ export const receivingCommandSchema = headersRequest.extend({
 
 export const fulfillmentCommandSchema = headersRequest.extend({
   orderId: identifierSchema,
-  action: z.enum(["START", "PACK", "SHORTAGE"]),
+  action: z.enum([
+    "START_PICKING",
+    "MARK_READY_TO_PACK",
+    "START_PACKING",
+    "MARK_PACKED",
+    "HAND_OFF",
+    "COMPLETE",
+    "RECORD_SHORTAGE",
+    "RESUME_PICKING",
+    "RESUME_READY_TO_PACK",
+    "CANCEL",
+    "ESCALATE",
+  ]),
   idempotencyKey: idempotencyKeySchema,
   expectedVersion: expectedVersionSchema,
 });
 
 export const deliveryCommandSchema = headersRequest.extend({
   orderId: identifierSchema,
-  action: z.enum(["DISPATCH", "DELIVER", "FAIL"]),
+  action: z.enum([
+    "MARK_EN_ROUTE",
+    "MARK_ARRIVED",
+    "MARK_DELIVERED",
+    "MARK_FAILED",
+    "SCHEDULE_RETRY",
+    "ESCALATE",
+    "CANCEL",
+  ]),
   idempotencyKey: idempotencyKeySchema,
   expectedVersion: expectedVersionSchema,
 });

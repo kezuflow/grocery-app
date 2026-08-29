@@ -21,7 +21,7 @@ const nextActions: Record<string, OrderIssueAction[]> = {
   CLAIMED: ["BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"],
   INVESTIGATING: ["RESOLVE", "ESCALATE"],
   ESCALATED: ["BEGIN_INVESTIGATION"],
-  RESOLVED: ["REOPEN"],
+  RESOLVED: [],
 };
 export default function IssuesPage() {
   const [page, setPage] = useState<AdminOrderIssuePage | null>(null);

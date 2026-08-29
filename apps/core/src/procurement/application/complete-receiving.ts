@@ -82,9 +82,9 @@ export async function completeReceiving(
   const result = await database.batch([
     database
       .prepare(
-        "UPDATE receiving_record SET status='COMPLETED', version=version+1 WHERE id=? AND status='DISCREPANCY' AND version=?",
+        "UPDATE receiving_record SET status='COMPLETED', updated_at=?, version=version+1 WHERE id=? AND status='DISCREPANCY' AND version=?",
       )
-      .bind(record.id, command.expectedVersion),
+      .bind(Date.now(), record.id, command.expectedVersion),
     database
       .prepare(
         "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND EXISTS (SELECT 1 FROM receiving_record WHERE id=? AND status='COMPLETED' AND version=?)",

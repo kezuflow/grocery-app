@@ -19,7 +19,7 @@ async function insertEvent({
       "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status) VALUES (?, 'cycle-next-cebu', 'location-cebu-central', 'pool-red-onion', 100, 'ORDERED')",
     ).bind(requirementId),
     env.DB.prepare(
-      "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status) VALUES (?, ?, 100, 0, 0, 'PENDING')",
+      "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status) VALUES (?, ?, 100, 0, 0, 'NOT_STARTED')",
     ).bind(receivingRecordId, requirementId),
     env.DB.prepare(
       "INSERT INTO receiving_event (receiving_record_id, procurement_requirement_id, location_id, inventory_pool_id, accepted_delta, rejected_delta, reason, idempotency_key, occurred_at) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', ?, ?, ?, ?, ?)",

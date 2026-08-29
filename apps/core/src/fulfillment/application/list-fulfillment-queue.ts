@@ -4,10 +4,16 @@ import { fulfillmentTransitions, type StateMap } from "../../commerce/state-mach
 const NEXT_ACTION: Readonly<
   Record<string, ReadonlyArray<FulfillmentQueueItem["allowedActions"][number]>>
 > = {
-  PENDING: ["START"],
-  PICKING: ["PACK", "SHORTAGE"],
-  SHORTAGE: ["START"],
-  PACKED: [],
+  NOT_STARTED: ["START_PICKING"],
+  PICKING: ["MARK_READY_TO_PACK", "RECORD_SHORTAGE"],
+  READY_TO_PACK: ["START_PACKING", "RECORD_SHORTAGE"],
+  PACKING: ["MARK_PACKED", "RECORD_SHORTAGE"],
+  PACKED: ["HAND_OFF"],
+  HANDED_OFF: ["COMPLETE"],
+  SHORTED: ["RESUME_PICKING", "RESUME_READY_TO_PACK", "CANCEL", "ESCALATE"],
+  COMPLETED: [],
+  CANCELED: [],
+  ESCALATED: [],
 };
 
 /**
@@ -33,7 +39,7 @@ export async function listFulfillmentQueue(
   query: { locationId: string; cycleId?: string; cursorId?: string; limit?: number },
 ): Promise<Array<Omit<FulfillmentQueueItem, "allowedActions"> & { cycleId: string | null }>> {
   const limit = query.limit ?? 200;
-  const clauses = ["f.location_id=?", "f.status NOT IN ('CANCELED')"];
+  const clauses = ["f.location_id=?", "f.status NOT IN ('CANCELED','COMPLETED')"];
   const binds: unknown[] = [query.locationId];
   if (query.cycleId) {
     clauses.push("o.cycle_id=?");

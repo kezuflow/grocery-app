@@ -30,8 +30,15 @@ async function fixture(
   } = options;
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, 'cycle-next-cebu', ?, ?, ?, ?, 1)",
-    ).bind(requirementId, locationId, inventoryPoolId, expected, requirementStatus),
+      "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, ?, ?, ?, ?, 1)",
+    ).bind(
+      requirementId,
+      `cycle-${requirementId}`,
+      locationId,
+      inventoryPoolId,
+      expected,
+      requirementStatus,
+    ),
     env.DB.prepare(
       "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version) VALUES (?, ?, ?, ?, ?, ?, ?)",
     ).bind(
@@ -127,7 +134,7 @@ function lineCommand(
 
 describe("start receiving", () => {
   it("transitions a pending record to in progress idempotently", async () => {
-    const fx = await fixture({ recordStatus: "PENDING" });
+    const fx = await fixture({ recordStatus: "NOT_STARTED" });
     const attempt = startCommand(fx);
     const first = await startReceiving(env.DB, attempt);
     expect(first).toMatchObject({ ok: true, value: { status: "IN_PROGRESS", version: 2 } });
@@ -136,7 +143,7 @@ describe("start receiving", () => {
   });
 
   it("rejects starting when the requirement is not orderable", async () => {
-    const fx = await fixture({ requirementStatus: "DRAFT", recordStatus: "PENDING" });
+    const fx = await fixture({ requirementStatus: "AGGREGATED", recordStatus: "NOT_STARTED" });
     const result = await startReceiving(env.DB, startCommand(fx));
     expect(result).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
   });
@@ -163,7 +170,7 @@ describe("record received line", () => {
   });
 
   it("rejects illegal procurement states and stale versions", async () => {
-    const illegal = await fixture({ requirementStatus: "DRAFT" });
+    const illegal = await fixture({ requirementStatus: "AGGREGATED" });
     const illegalResult = await recordReceivedLine(env.DB, lineCommand(illegal));
     expect(illegalResult).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
 
