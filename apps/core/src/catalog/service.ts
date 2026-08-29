@@ -171,6 +171,7 @@ function eligibleSkuSubquery(nowMs: number): string {
       JOIN price_version pv
         ON pv.sku_id = candidate_sku.id
        AND pv.market_id = '${MARKET_METRO_CEBU}'
+       AND (pv.location_id = '${LAUNCH_LOCATION_ID}' OR pv.location_id IS NULL)
        AND pv.price_type = 'STANDARD'
        AND pv.amount_minor > 0
        AND pv.valid_from <= ${nowMs}
@@ -310,16 +311,24 @@ async function hydrateProducts(
       ),
       rawAll<PriceRow>(
         database,
-        `SELECT pv.sku_id AS sku_id, pv.amount_minor AS amount_minor, pv.currency AS currency,
-                MAX(pv.version) AS version
-         FROM price_version pv
-         WHERE pv.sku_id IN ${skuIdList}
-           AND pv.market_id = '${MARKET_METRO_CEBU}' AND pv.price_type = 'STANDARD'
-           AND pv.amount_minor > 0
-           AND pv.valid_from <= ${nowMs}
-           AND (pv.valid_to IS NULL OR pv.valid_to > ${nowMs})
-         GROUP BY pv.sku_id`,
-        ids,
+        `WITH ranked_prices AS (
+           SELECT pv.sku_id, pv.amount_minor, pv.currency, pv.version,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY pv.sku_id
+                    ORDER BY CASE WHEN pv.location_id = ? THEN 0 ELSE 1 END,
+                             pv.valid_from DESC, pv.version DESC, pv.id DESC
+                  ) AS winner_rank
+           FROM price_version pv
+           WHERE pv.sku_id IN ${skuIdList}
+             AND pv.market_id = '${MARKET_METRO_CEBU}' AND pv.price_type = 'STANDARD'
+             AND (pv.location_id = ? OR pv.location_id IS NULL)
+             AND pv.amount_minor > 0
+             AND pv.valid_from <= ${nowMs}
+             AND (pv.valid_to IS NULL OR pv.valid_to > ${nowMs})
+         )
+         SELECT sku_id, amount_minor, currency, version
+         FROM ranked_prices WHERE winner_rank = 1`,
+        [locationId, ...ids, locationId],
       ),
       rawAll<{ sku_id: string }>(
         database,

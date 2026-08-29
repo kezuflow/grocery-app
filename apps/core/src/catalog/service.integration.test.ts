@@ -156,6 +156,45 @@ describe("catalog read models (integration)", () => {
     expect(onion?.product.variants[0]?.priceMinor).toBe(12900);
   });
 
+  it("selects one deterministic price row at location precedence", async () => {
+    const skuId = "sku-abiu-1pc";
+    const version = await env.DB.prepare(
+      "SELECT COALESCE(MAX(version), 0) + 1 AS value FROM price_version WHERE sku_id=?",
+    )
+      .bind(skuId)
+      .first<{ value: number }>();
+    const firstVersion = version?.value ?? 1;
+    const now = Date.now() - 1;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO fulfillment_location
+           (id, market_id, code, name, type, latitude, longitude, status, version, created_at, updated_at)
+         VALUES ('location-price-other', 'market-metro-cebu', 'PRICE_OTHER', 'Price Other',
+                 'FULFILLMENT_CENTER', 10.3, 123.9, 'active', 1, 0, 0)`,
+      ),
+      env.DB.prepare(
+        "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, version, created_at, market_id, location_id, price_type) VALUES (?, ?, 'PHP', 7777, ?, ?, ?, 'market-metro-cebu', 'location-cebu-central', 'STANDARD')",
+      ).bind(crypto.randomUUID(), skuId, now, firstVersion, now),
+      env.DB.prepare(
+        "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, version, created_at, market_id, location_id, price_type) VALUES (?, ?, 'PHP', 8888, ?, ?, ?, 'market-metro-cebu', 'location-price-other', 'STANDARD')",
+      ).bind(crypto.randomUUID(), skuId, now, firstVersion + 1, now),
+    ]);
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const detail = await getProduct(db(), "abiu", "location-cebu-central");
+        const variant = detail?.product.variants.find((item) => item.id === skuId);
+        expect(variant).toMatchObject({ priceMinor: 7777, priceVersion: firstVersion });
+      }
+    } finally {
+      await env.DB.prepare(
+        "DELETE FROM price_version WHERE sku_id=? AND location_id IN ('location-cebu-central', 'location-price-other')",
+      )
+        .bind(skuId)
+        .run();
+      await env.DB.prepare("DELETE FROM fulfillment_location WHERE id='location-price-other'").run();
+    }
+  });
+
   it("bounds home rails without materializing the whole catalog", async () => {
     const home = await getMarketplaceHome(db(), { itemsPerRail: 8 });
     expect(home.categories.length).toBeGreaterThanOrEqual(7);

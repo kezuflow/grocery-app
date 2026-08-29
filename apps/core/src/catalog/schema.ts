@@ -86,6 +86,7 @@ export const product = sqliteTable(
     description: text("description"),
     status: text("status", { enum: ["active", "inactive"] }).notNull(),
     imageMetadataJson: text("image_metadata_json"),
+    version: integer("version").notNull().default(1),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
