@@ -291,6 +291,8 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 
 Admin order detail is an operational read model combining order, payment, demand/reservation, fulfillment, delivery, and audit summaries; it is not a raw join response.
 
+Operational command/read contracts publish the canonical Fulfillment (`NOT_STARTED` through `COMPLETED`, with `SHORTED` resolution) and Delivery Job (`UNASSIGNED` through `DELIVERED`, with explicit failure/retry/escalation) states and command actions. Core derives `allowedActions`; the former `START|PACK|SHORTAGE` and `DISPATCH|DELIVER|FAIL` shortcuts are not accepted. Procurement aggregation computes committed demand and usable inventory inside its version-guarded command and permits only one active requirement per cycle/location/pool. Order issues have no `REOPEN` action: `RESOLVED` is terminal and further work requires a new linked issue.
+
 ## Admin Customers, Catalog, Promotions, and Fulfillment Configuration
 
 - `admin.customers.list(filters, page) -> AdminCustomerSummaryPage`

@@ -230,6 +230,8 @@ Migration `0029_promotion_administration.sql` rebuilds the historical fixed-disc
 
 Migration `0038_promotion_grant_uniqueness.sql` reconciles historical duplicate targeted grants to their earliest stable grant, repoints any redemption references, and enforces the canonical unique `(benefit_code, customer_id)` key for non-null customers. System membership authority rows remain customer-neutral grants and are unaffected.
 
+Migration `0039_admin_operations_canonical_states.sql` maps historical simplified operations statuses to the canonical Procurement, Receiving, Fulfillment, and Delivery vocabularies. It adds persisted operational timestamps to compatibility requirement/receipt/delivery rows and enforces one non-`CLOSED` procurement requirement per `(delivery_cycle_id, location_id, inventory_pool_id)` context; historical duplicates remain preserved as `CLOSED` rows.
+
 ## Pagination and Read Models
 
 High-volume lists use keyset pagination with stable compound sort keys, commonly `(created_at, id)` or domain deadline plus ID. Admin read models may query normalized tables directly using selected joins and indexes. Materialized projection tables are added only when measured query shape/latency warrants them and remain rebuildable from transactional truth.

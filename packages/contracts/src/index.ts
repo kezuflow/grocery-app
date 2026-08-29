@@ -25,6 +25,8 @@ import type {
   DeliveryCycleState,
   ImplementedOrderState,
   OperationsCommandState,
+  FulfillmentAction,
+  DeliveryAction,
   ReceivingRecordState,
   SubscriptionState,
 } from "./states";
@@ -381,7 +383,6 @@ export type ProcurementCommandRequest = AuthenticatedRequest & {
   deliveryCycleId: string;
   locationId: string;
   inventoryPoolId: string;
-  quantity: number;
   idempotencyKey: string;
   expectedVersion: number;
 };
@@ -403,13 +404,13 @@ export type ReceivingCommandResult = {
 };
 export type FulfillmentCommandRequest = AuthenticatedRequest & {
   orderId: string;
-  action: "START" | "PACK" | "SHORTAGE";
+  action: FulfillmentAction;
   idempotencyKey: string;
   expectedVersion: number;
 };
 export type DeliveryCommandRequest = AuthenticatedRequest & {
   orderId: string;
-  action: "DISPATCH" | "DELIVER" | "FAIL";
+  action: DeliveryAction;
   idempotencyKey: string;
   expectedVersion: number;
 };
