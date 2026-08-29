@@ -24,11 +24,13 @@ const instructionsSchema = z.object({
   recipientInstruction: z.string().trim().max(1000).nullable(),
 });
 const confirmationSourceSchema = z.enum(["GEOCODER", "USER_PIN", "DEVICE_LOCATION"]);
+const componentsSourceSchema = z.enum(["TEMPORARY_GEOCODER", "FIRST_PARTY", "SAVED_ADDRESS"]);
 const addressBodySchema = z.object({
   label: z.string().trim().min(1),
   recipient: z.string().trim().min(1),
   phone: z.string().trim().min(1),
   components: componentsSchema,
+  componentsSource: componentsSourceSchema.exclude(["SAVED_ADDRESS"]),
   latitude: z.number().finite().min(-90).max(90),
   longitude: z.number().finite().min(-180).max(180),
   confirmationSource: confirmationSourceSchema,
@@ -40,6 +42,7 @@ const updateAddressBodySchema = addressBodySchema
   .extend({
     addressId: z.string().trim().min(1),
     expectedVersion: z.number().int().nonnegative(),
+    componentsSource: componentsSourceSchema.optional(),
   })
   .superRefine((value, context) => {
     const hasLatitude = value.latitude !== undefined;
@@ -55,6 +58,18 @@ const updateAddressBodySchema = addressBodySchema
         code: "custom",
         message: "confirmationSource is required for coordinate edits",
         path: ["confirmationSource"],
+      });
+    if (value.components !== undefined && value.componentsSource === undefined)
+      context.addIssue({
+        code: "custom",
+        message: "componentsSource is required with structured components",
+        path: ["componentsSource"],
+      });
+    if (value.components === undefined && value.componentsSource !== undefined)
+      context.addIssue({
+        code: "custom",
+        message: "components are required with componentsSource",
+        path: ["components"],
       });
   });
 
@@ -93,6 +108,7 @@ export async function POST(request: Request) {
     recipient: body.recipient,
     phone: body.phone,
     components: body.components,
+    componentsSource: body.componentsSource,
     latitude: body.latitude,
     longitude: body.longitude,
     confirmationSource: body.confirmationSource,
@@ -122,6 +138,7 @@ export async function PATCH(request: Request) {
     recipient: body.recipient,
     phone: body.phone,
     components: body.components,
+    componentsSource: body.componentsSource,
     confirmationSource: body.confirmationSource,
     instructions: body.instructions,
     latitude: body.latitude,

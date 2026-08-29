@@ -10,6 +10,7 @@ import {
 } from "react";
 import type {
   AddressComponents,
+  AddressComponentsSource,
   AddressSearchCandidate,
   AppError,
   Coordinate,
@@ -169,6 +170,9 @@ export function AddressEditor({
   const [recipient, setRecipient] = useState(initialAddress?.recipient ?? "");
   const [phone, setPhone] = useState(initialAddress?.phone ?? "");
   const [components, setComponents] = useState(initialAddress?.components ?? emptyComponents);
+  const [componentsSource, setComponentsSource] = useState<AddressComponentsSource>(
+    initialAddress ? "SAVED_ADDRESS" : "FIRST_PARTY",
+  );
   const [instructions, setInstructions] = useState(
     initialAddress?.instructions ?? emptyInstructions,
   );
@@ -302,6 +306,7 @@ export function AddressEditor({
     coordinateActionGenerationRef.current += 1;
     setLocationError("");
     setComponents(candidate.components);
+    setComponentsSource("TEMPORARY_GEOCODER");
     setCoordinate(candidate.coordinate);
     setConfirmationSource("GEOCODER");
     setSelectedDisplayAddress(candidate.displayAddress);
@@ -363,6 +368,17 @@ export function AddressEditor({
     return errors;
   }
 
+  function setFirstPartyComponent<Key extends keyof AddressComponents>(
+    key: Key,
+    value: AddressComponents[Key],
+  ): void {
+    setComponents((current) => ({
+      ...(componentsSource === "TEMPORARY_GEOCODER" ? emptyComponents : current),
+      [key]: value,
+    }));
+    setComponentsSource("FIRST_PARTY");
+  }
+
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (purpose !== "save") return;
@@ -384,6 +400,7 @@ export function AddressEditor({
       recipient: recipient.trim(),
       phone: phone.trim(),
       components,
+      componentsSource,
       ...coordinate,
       confirmationSource,
       instructions,
@@ -593,7 +610,7 @@ export function AddressEditor({
                 error={fieldErrors.addressLine1}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
-                  setComponents((current) => ({ ...current, addressLine1: value }));
+                  setFirstPartyComponent("addressLine1", value);
                 }}
               />
               <TextField
@@ -603,7 +620,7 @@ export function AddressEditor({
                 value={components.addressLine2 ?? ""}
                 onChange={(event) => {
                   const value = nullable(event.currentTarget.value);
-                  setComponents((current) => ({ ...current, addressLine2: value }));
+                  setFirstPartyComponent("addressLine2", value);
                 }}
               />
               <TextField
@@ -613,7 +630,7 @@ export function AddressEditor({
                 value={components.barangay ?? ""}
                 onChange={(event) => {
                   const value = nullable(event.currentTarget.value);
-                  setComponents((current) => ({ ...current, barangay: value }));
+                  setFirstPartyComponent("barangay", value);
                 }}
               />
               <TextField
@@ -624,7 +641,7 @@ export function AddressEditor({
                 error={fieldErrors.city}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
-                  setComponents((current) => ({ ...current, city: value }));
+                  setFirstPartyComponent("city", value);
                 }}
               />
               <TextField
@@ -634,7 +651,7 @@ export function AddressEditor({
                 value={components.region ?? ""}
                 onChange={(event) => {
                   const value = nullable(event.currentTarget.value);
-                  setComponents((current) => ({ ...current, region: value }));
+                  setFirstPartyComponent("region", value);
                 }}
               />
               <TextField
@@ -645,7 +662,7 @@ export function AddressEditor({
                 value={components.postalCode ?? ""}
                 onChange={(event) => {
                   const value = nullable(event.currentTarget.value);
-                  setComponents((current) => ({ ...current, postalCode: value }));
+                  setFirstPartyComponent("postalCode", value);
                 }}
               />
             </div>

@@ -212,7 +212,7 @@ describe("AddressEditor", () => {
     act(() => root.unmount());
   });
 
-  it("selects a candidate, moves the exact pin, and refreshes serviceability", async () => {
+  it("marks candidate components temporary when saving a moved user pin", async () => {
     const moved = { latitude: 10.319, longitude: 123.907 };
     let savedBody: Record<string, unknown> | undefined;
     const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
@@ -255,7 +255,70 @@ describe("AddressEditor", () => {
     if (!save) throw new Error("Missing save action");
     click(save);
     await flush();
-    expect(savedBody).toMatchObject({ ...moved, confirmationSource: "USER_PIN" });
+    expect(savedBody).toMatchObject({
+      ...moved,
+      components: candidate.components,
+      componentsSource: "TEMPORARY_GEOCODER",
+      confirmationSource: "USER_PIN",
+    });
+    act(() => root.unmount());
+  });
+
+  it("marks retained candidate components temporary when saving a delayed device location", async () => {
+    let currentLocationSuccess: PositionCallback | undefined;
+    const geolocation = {
+      getCurrentPosition: vi.fn((success: PositionCallback) => {
+        currentLocationSuccess = success;
+      }),
+    } as unknown as Geolocation;
+    let savedBody: Record<string, unknown> | undefined;
+    const deviceCoordinate = { latitude: 10.34, longitude: 123.91 };
+    const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
+      const path = String(url);
+      if (path === "/api/commerce/address-search")
+        return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+      if (path === "/api/serviceability")
+        return Promise.resolve(
+          response({
+            ok: true,
+            value: { ...serviceable, coordinate: deviceCoordinate },
+            requestId: "svc",
+          }),
+        );
+      if (path === "/api/commerce/address") {
+        savedBody = JSON.parse(String(init?.body));
+        return Promise.resolve(
+          response({ ok: true, value: { id: "address-device" }, requestId: "save" }),
+        );
+      }
+      throw new Error(`Unexpected request ${path}`);
+    }) as unknown as typeof fetch;
+    const { container, root } = mount({ fetchImpl, geolocation });
+
+    await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
+    const locate = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Use current location"),
+    );
+    if (!locate) throw new Error("Missing current-location action");
+    click(locate);
+    act(() => currentLocationSuccess?.({ coords: deviceCoordinate } as GeolocationPosition));
+    await flush();
+    change(input(container, "Address label"), "Home");
+    change(input(container, "Recipient name"), "Ana Santos");
+    change(input(container, "Phone number"), "+639171234567");
+    const save = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save confirmed address"),
+    );
+    if (!save) throw new Error("Missing save action");
+    click(save);
+    await flush();
+
+    expect(savedBody).toMatchObject({
+      ...deviceCoordinate,
+      components: candidate.components,
+      componentsSource: "TEMPORARY_GEOCODER",
+      confirmationSource: "DEVICE_LOCATION",
+    });
     act(() => root.unmount());
   });
 

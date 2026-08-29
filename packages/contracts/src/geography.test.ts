@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type {
   AddressComponents,
+  AddressComponentsSource,
   AddressSearchCandidate,
   AddressSearchRequest,
   CoordinateConfirmationSource,
@@ -113,6 +114,9 @@ describe("provider-neutral geography contracts", () => {
   });
 
   it("keeps confirmation provenance and delivery instructions closed and structured", () => {
+    type ComponentsSourceShape = Expect<
+      Equal<AddressComponentsSource, "TEMPORARY_GEOCODER" | "FIRST_PARTY" | "SAVED_ADDRESS">
+    >;
     type ConfirmationShape = Expect<
       Equal<CoordinateConfirmationSource, "GEOCODER" | "USER_PIN" | "DEVICE_LOCATION">
     >;
@@ -130,6 +134,7 @@ describe("provider-neutral geography contracts", () => {
     >;
 
     const source: CoordinateConfirmationSource = "DEVICE_LOCATION";
+    const componentsSource: AddressComponentsSource = "TEMPORARY_GEOCODER";
     const instructions: DeliveryInstructions = {
       buildingUnit: "Unit 4B",
       landmark: "Across the public market",
@@ -139,8 +144,10 @@ describe("provider-neutral geography contracts", () => {
     };
 
     expect(source).toBe("DEVICE_LOCATION");
+    expect(componentsSource).toBe("TEMPORARY_GEOCODER");
     expect(instructions.buildingUnit).toBe("Unit 4B");
     void (true as ConfirmationShape);
+    void (true as ComponentsSourceShape);
     void (true as InstructionShape);
   });
 
@@ -149,10 +156,11 @@ describe("provider-neutral geography contracts", () => {
       Equal<
         Pick<
           UpdateCustomerAddressRequest,
-          "components" | "confirmationSource" | "instructions" | "addressJson"
+          "components" | "componentsSource" | "confirmationSource" | "instructions" | "addressJson"
         >,
         {
           components?: AddressComponents;
+          componentsSource?: AddressComponentsSource;
           confirmationSource?: CoordinateConfirmationSource;
           instructions?: DeliveryInstructions;
           addressJson?: string;
@@ -192,6 +200,7 @@ describe("provider-neutral geography contracts", () => {
         postalCode: "6000",
         countryCode: "PH",
       },
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions: {
         buildingUnit: null,

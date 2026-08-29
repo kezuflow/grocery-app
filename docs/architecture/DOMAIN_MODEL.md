@@ -71,6 +71,14 @@ rewrite historical order snapshots.
 
 A saved delivery destination with recipient, phone, provider-neutral structured components, coordinates, confirmation provenance, delivery instructions, optional permanently resolved geocoder metadata, and most recently resolved service area/zone. Structured components include address lines, barangay, city, region, postal code, and country code. Delivery instructions separately model building/unit, landmark, gate/guard guidance, delivery note, and recipient guidance. Historical raw address JSON remains only as a compatibility column/input seam and is not returned as the canonical address view. Serviceability is revalidated for checkout.
 
+Structured-component provenance is independent from coordinate-confirmation provenance. Temporary
+provider components must be permanently finalized at the final confirmed coordinate before storage
+or replaced by genuinely first-party structured input. Moving a candidate pin or accepting device
+coordinates keeps `USER_PIN` or `DEVICE_LOCATION` as the coordinate source; it does not make
+temporary provider text first-party. Existing saved provider components are already permanent, and
+manual first-party pin/device addresses may retain null provider metadata when enrichment is
+unavailable.
+
 Orders snapshot addresses. Editing a saved address never rewrites an existing order.
 
 ### Staff

@@ -7,7 +7,10 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 
 - Customer address search now uses a private POST/no-store Web adapter and Core's provider-neutral
   Mapbox Geocoding v6 port. Temporary candidates remain interaction-only; Core performs permanent
-  reverse finalization before persisting provider-derived coordinates or metadata and logs only
+  reverse finalization before persisting provider-derived coordinates, metadata, or structured
+  components. Component provenance is tracked independently from coordinate confirmation, so
+  moving a candidate pin or accepting device coordinates retains `USER_PIN`/`DEVICE_LOCATION`
+  coordinate provenance without treating temporary provider text as first-party. Logs contain only
   operation timing/result categories and stable error codes.
 - Migration `0042_mapbox_address_confirmation.sql` additively preserves legacy addresses while
   adding structured components, geocoder provenance, coordinate-confirmation provenance,

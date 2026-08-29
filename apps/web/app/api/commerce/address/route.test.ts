@@ -70,6 +70,7 @@ describe("customer address route", () => {
         recipient: "Ana Santos",
         phone: "+639171234567",
         components,
+        componentsSource: "FIRST_PARTY",
         latitude: 10.3173,
         longitude: 123.9058,
         confirmationSource: "USER_PIN",
@@ -85,6 +86,7 @@ describe("customer address route", () => {
         recipient: "Ana Santos",
         phone: "+639171234567",
         components,
+        componentsSource: "FIRST_PARTY",
         latitude: 10.3173,
         longitude: 123.9058,
         confirmationSource: "USER_PIN",
@@ -114,6 +116,7 @@ describe("customer address route", () => {
         addressId: "address-1",
         expectedVersion: 2,
         components,
+        componentsSource: "FIRST_PARTY",
         latitude: 10.3174,
         longitude: 123.9059,
         confirmationSource: "USER_PIN",
@@ -124,8 +127,38 @@ describe("customer address route", () => {
       expect.objectContaining({
         addressId: "address-1",
         expectedVersion: 2,
+        componentsSource: "FIRST_PARTY",
         confirmationSource: "USER_PIN",
         headers: expect.objectContaining({ cookie: "freshmarkets.session=secret" }),
+      }),
+    );
+  });
+
+  it("accepts unchanged saved component provenance only on updates", async () => {
+    core.updateCustomerAddress.mockResolvedValue({
+      ok: true,
+      value: { id: "address-1", version: 4 },
+      requestId: "update-saved-1",
+    });
+
+    const response = await PATCH(
+      request("PATCH", {
+        addressId: "address-1",
+        expectedVersion: 3,
+        components,
+        componentsSource: "SAVED_ADDRESS",
+        latitude: 10.3173,
+        longitude: 123.9058,
+        confirmationSource: "USER_PIN",
+        instructions,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(core.updateCustomerAddress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        addressId: "address-1",
+        componentsSource: "SAVED_ADDRESS",
       }),
     );
   });

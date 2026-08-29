@@ -138,6 +138,7 @@ describe("Phase 4B customer addresses", () => {
         latitude: 10.3173,
         longitude: 123.9058,
         components,
+        componentsSource: "TEMPORARY_GEOCODER",
         confirmationSource: "GEOCODER",
         instructions,
         addressJson: JSON.stringify({
@@ -179,6 +180,175 @@ describe("Phase 4B customer addresses", () => {
     });
   });
 
+  it.each(["USER_PIN", "DEVICE_LOCATION"] as const)(
+    "permanently replaces temporary provider components at a final %s coordinate",
+    async (confirmationSource) => {
+      const user = await account();
+      await core.listCustomerAddresses(user.request());
+      const customerId = await customerIdFor(user.userId);
+      const finalCoordinate = { latitude: 10.319, longitude: 123.907 };
+      const permanentComponents = { ...components, addressLine1: "Permanent final entrance" };
+      let reverseCalls = 0;
+      const command = {
+        ...user.request(),
+        customerId,
+        label: "Home",
+        recipient: "Ana",
+        phone: "+639171234567",
+        ...finalCoordinate,
+        components,
+        componentsSource: "TEMPORARY_GEOCODER" as const,
+        confirmationSource,
+        instructions,
+      };
+
+      const result = await createCustomerAddressCommand(
+        env.DB,
+        geocoder({
+          async reversePermanent(input) {
+            reverseCalls += 1;
+            expect(input.coordinate).toEqual(finalCoordinate);
+            return {
+              provider: "MAPBOX",
+              providerReference: `mapbox.permanent.${confirmationSource.toLowerCase()}`,
+              displayAddress: "Permanent final entrance, Cebu City",
+              coordinate: finalCoordinate,
+              components: permanentComponents,
+              accuracy: "rooftop",
+            };
+          },
+        }),
+        command,
+      );
+
+      expect(reverseCalls).toBe(1);
+      expect(result).toMatchObject({
+        ok: true,
+        value: {
+          components: permanentComponents,
+          confirmationSource,
+          ...finalCoordinate,
+        },
+      });
+      if (!result.ok) return;
+      const stored = await env.DB.prepare(
+        "SELECT address_json, geocode_provider, geocode_reference FROM customer_address WHERE id=?",
+      )
+        .bind(result.value.id)
+        .first<{
+          address_json: string;
+          geocode_provider: string | null;
+          geocode_reference: string | null;
+        }>();
+      expect(stored).toEqual({
+        address_json: JSON.stringify(permanentComponents),
+        geocode_provider: "MAPBOX",
+        geocode_reference: `mapbox.permanent.${confirmationSource.toLowerCase()}`,
+      });
+    },
+  );
+
+  it("retains permanent component metadata across saved edits and re-finalizes a later user-pin move", async () => {
+    const user = await account();
+    await core.listCustomerAddresses(user.request());
+    const customerId = await customerIdFor(user.userId);
+    const originalPermanent = { ...components, addressLine1: "Original permanent entrance" };
+    const created = await createCustomerAddressCommand(
+      env.DB,
+      geocoder({
+        async reversePermanent() {
+          return {
+            provider: "MAPBOX",
+            providerReference: "mapbox.permanent.original",
+            displayAddress: "Original permanent entrance, Cebu City",
+            coordinate: { latitude: 10.3173, longitude: 123.9058 },
+            components: originalPermanent,
+            accuracy: "rooftop",
+          };
+        },
+      }),
+      {
+        ...user.request(),
+        customerId,
+        label: "Home",
+        recipient: "Ana",
+        phone: "+639171234567",
+        latitude: 10.3173,
+        longitude: 123.9058,
+        components,
+        componentsSource: "TEMPORARY_GEOCODER",
+        confirmationSource: "USER_PIN",
+        instructions,
+      },
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const edited = await updateCustomerAddressCommand(env.DB, geocoder(), {
+      ...user.request(),
+      customerId,
+      addressId: created.value.id,
+      expectedVersion: created.value.version,
+      recipient: "Ana Updated",
+      latitude: created.value.latitude,
+      longitude: created.value.longitude,
+      components: created.value.components,
+      componentsSource: "SAVED_ADDRESS",
+      confirmationSource: "USER_PIN",
+      instructions,
+    });
+    expect(edited.ok).toBe(true);
+    if (!edited.ok) return;
+    const retained = await env.DB.prepare(
+      "SELECT geocode_provider, geocode_reference FROM customer_address WHERE id=?",
+    )
+      .bind(edited.value.id)
+      .first<{ geocode_provider: string | null; geocode_reference: string | null }>();
+    expect(retained).toEqual({
+      geocode_provider: "MAPBOX",
+      geocode_reference: "mapbox.permanent.original",
+    });
+
+    let movedReverseCalls = 0;
+    const moved = await updateCustomerAddressCommand(
+      env.DB,
+      geocoder({
+        async reversePermanent(input) {
+          movedReverseCalls += 1;
+          expect(input.coordinate).toEqual({ latitude: 10.32, longitude: 123.91 });
+          return {
+            provider: "MAPBOX",
+            providerReference: "mapbox.permanent.moved-user-pin",
+            displayAddress: "Moved permanent entrance, Cebu City",
+            coordinate: input.coordinate,
+            components: { ...originalPermanent, addressLine1: "Moved permanent entrance" },
+            accuracy: "rooftop",
+          };
+        },
+      }),
+      {
+        ...user.request(),
+        customerId,
+        addressId: edited.value.id,
+        expectedVersion: edited.value.version,
+        latitude: 10.32,
+        longitude: 123.91,
+        components: edited.value.components,
+        componentsSource: "SAVED_ADDRESS",
+        confirmationSource: "USER_PIN",
+        instructions,
+      },
+    );
+    expect(movedReverseCalls).toBe(1);
+    expect(moved).toMatchObject({
+      ok: true,
+      value: {
+        components: { addressLine1: "Moved permanent entrance" },
+        confirmationSource: "USER_PIN",
+      },
+    });
+  });
+
   it("saves a user-positioned pin with structured fields and null provider metadata", async () => {
     const user = await account();
     const created = await core.createCustomerAddress({
@@ -189,6 +359,7 @@ describe("Phase 4B customer addresses", () => {
       latitude: 10.3173,
       longitude: 123.9058,
       components,
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions,
       addressJson: JSON.stringify({ candidateKey: "temporary-user-pin-candidate" }),
@@ -229,6 +400,7 @@ describe("Phase 4B customer addresses", () => {
       latitude: 11,
       longitude: 124,
       components: { ...components, city: "Outside Cebu" },
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "DEVICE_LOCATION",
       instructions,
       addressJson: JSON.stringify({ candidateKey: "temporary-device-candidate" }),
@@ -410,6 +582,7 @@ describe("Phase 4B customer addresses", () => {
       latitude: 10.3173,
       longitude: 123.9058,
       components,
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions,
     });
@@ -448,6 +621,7 @@ describe("Phase 4B customer addresses", () => {
       latitude: 10.3173,
       longitude: 123.9058,
       components,
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions,
     });
@@ -518,6 +692,7 @@ describe("Phase 4B customer addresses", () => {
       latitude: 10.3173,
       longitude: 123.9058,
       components,
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions,
     });
@@ -672,6 +847,7 @@ describe("Phase 4B customer addresses", () => {
       latitude: 10.3173,
       longitude: 123.9058,
       components,
+      componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions,
     });

@@ -109,7 +109,7 @@ coordinates under the provider's permanent-storage rules before any saved-addres
 Saved-address commands are customer-boundary operations:
 
 - `addresses.listMine({ headers }) -> CustomerAddressView[]`
-- `addresses.create({ label, recipient, phone, components, latitude, longitude, confirmationSource, instructions, notes?, addressJson? }) -> CustomerAddressView`
+- `addresses.create({ label, recipient, phone, components, componentsSource, latitude, longitude, confirmationSource, instructions, notes?, addressJson? }) -> CustomerAddressView`
 - `addresses.update({ addressId, expectedVersion, changed address fields }) -> CustomerAddressView`
 
 `AddressComponents` contains `addressLine1`, nullable `addressLine2`, nullable `barangay`,
@@ -118,6 +118,14 @@ Saved-address commands are customer-boundary operations:
 `buildingUnit`, `landmark`, `gateGuard`, `deliveryNote`, and `recipientInstruction`. The
 deprecated `addressJson` input is a compatibility seam only; new clients send structured
 fields, and raw address JSON is never returned in `CustomerAddressView`.
+
+Structured writes also carry component provenance independently from coordinate confirmation:
+`TEMPORARY_GEOCODER`, `FIRST_PARTY`, or, for unchanged update data only, `SAVED_ADDRESS`. Core
+permanently reverse-finalizes temporary provider components at the final submitted coordinate even
+when that coordinate was confirmed by a user pin or device location. `USER_PIN` and
+`DEVICE_LOCATION` continue to describe coordinate provenance; they never convert temporary
+provider text into first-party data. Existing saved provider components are already permanent, and
+manual first-party components remain valid without provider enrichment.
 
 Core derives the customer from the Better Auth session, verifies address ownership,
 and never accepts a client-selected customer or principal ID. Address updates require

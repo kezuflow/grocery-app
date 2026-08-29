@@ -78,6 +78,7 @@ const addressComponentsSchema = z.object({
     .regex(/^[A-Za-z]{2}$/),
 });
 const confirmationSourceSchema = z.enum(["GEOCODER", "USER_PIN", "DEVICE_LOCATION"]);
+const componentsSourceSchema = z.enum(["TEMPORARY_GEOCODER", "FIRST_PARTY", "SAVED_ADDRESS"]);
 const deliveryInstructionsSchema = z.object({
   buildingUnit: nullableAddressText,
   landmark: nullableAddressText,
@@ -89,6 +90,7 @@ const deliveryInstructionsSchema = z.object({
 export const addressRequestSchema = z.union([
   addressBaseSchema.extend({
     components: addressComponentsSchema,
+    componentsSource: componentsSourceSchema.exclude(["SAVED_ADDRESS"]),
     confirmationSource: confirmationSourceSchema,
     instructions: deliveryInstructionsSchema,
     addressJson: z.string().min(2).optional(),
@@ -96,6 +98,7 @@ export const addressRequestSchema = z.union([
   addressBaseSchema.extend({
     addressJson: z.string().min(2),
     components: z.never().optional(),
+    componentsSource: z.never().optional(),
     confirmationSource: z.never().optional(),
     instructions: z.never().optional(),
   }),
@@ -109,6 +112,7 @@ export const addressUpdateRequestSchema = headersRequest
     recipient: reasonSchema.optional(),
     phone: reasonSchema.optional(),
     components: addressComponentsSchema.optional(),
+    componentsSource: componentsSourceSchema.optional(),
     confirmationSource: confirmationSourceSchema.optional(),
     instructions: deliveryInstructionsSchema.optional(),
     addressJson: z.string().min(2).optional(),
@@ -120,6 +124,18 @@ export const addressUpdateRequestSchema = headersRequest
     const hasLatitude = input.latitude !== undefined;
     const hasLongitude = input.longitude !== undefined;
     const hasCoordinatePair = hasLatitude && hasLongitude;
+    if (input.components !== undefined && input.componentsSource === undefined)
+      context.addIssue({
+        code: "custom",
+        message: "componentsSource is required with structured components",
+        path: ["componentsSource"],
+      });
+    if (input.components === undefined && input.componentsSource !== undefined)
+      context.addIssue({
+        code: "custom",
+        message: "components are required with componentsSource",
+        path: ["components"],
+      });
     if (hasLatitude !== hasLongitude)
       context.addIssue({
         code: "custom",

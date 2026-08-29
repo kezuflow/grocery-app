@@ -17,6 +17,9 @@ export type AddressComponents = {
 
 export type CoordinateConfirmationSource = "GEOCODER" | "USER_PIN" | "DEVICE_LOCATION";
 
+/** Provenance of structured text, independent from the final coordinate confirmation source. */
+export type AddressComponentsSource = "TEMPORARY_GEOCODER" | "FIRST_PARTY" | "SAVED_ADDRESS";
+
 export type AddressSearchRequest = RequestMeta & {
   query: string;
   proximity?: Coordinate;

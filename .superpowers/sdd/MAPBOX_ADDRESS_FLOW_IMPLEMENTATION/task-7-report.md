@@ -117,3 +117,108 @@ for origin restrictions, secrets, provider entitlement, and production polygons.
 - Because the required status correction and evidence report are justified tracked changes, they
   will be selectively committed with the exact subject
   `docs(maps): record address flow implementation` after fresh post-edit gates are clean.
+
+## Review fix round 1: independent structured-component provenance
+
+### Confirmed defect and root cause
+
+Review found an Important privacy/provenance defect in the verified tree. Candidate selection copied
+temporary provider components into editor state. Moving the pin or accepting a device location
+changed only `confirmationSource` to `USER_PIN`/`DEVICE_LOCATION`; the components remained copied
+from the candidate. Core used that same coordinate source to decide whether to call permanent
+reverse geocoding, so it persisted the temporary text as if it were first-party.
+
+The root cause was one field representing two independent facts: coordinate-confirmation
+provenance and structured-component provenance.
+
+### Genuine focused RED
+
+- `pnpm --filter @freshmarkets/contracts test -- geography.test.ts` — exit 1; 1 failed / 4
+  passed. TypeScript reported that `AddressComponentsSource` and `componentsSource` did not exist.
+- `pnpm --filter @freshmarkets/web test -- components/storefront/address/address-editor.test.tsx`
+  — exit 1; 2 failed / 9 passed. Both candidate-to-pin-save and
+  candidate-to-delayed-device-save payloads omitted `TEMPORARY_GEOCODER` provenance.
+- `pnpm --filter @freshmarkets/core test -- customer-address.integration.test.ts` — exit 1; 2
+  failed / 17 passed. Temporary components submitted with final `USER_PIN` and `DEVICE_LOCATION`
+  coordinates made zero permanent reverse calls instead of one.
+
+### Minimal fix and authoritative ruling
+
+- Shared contracts now carry `AddressComponentsSource` independently from
+  `CoordinateConfirmationSource`: `TEMPORARY_GEOCODER`, `FIRST_PARTY`, or update-only
+  `SAVED_ADDRESS`.
+- Web marks selected candidate components `TEMPORARY_GEOCODER` and retains that provenance across
+  pin/device coordinate changes. If a customer begins entering first-party structured fields after
+  a candidate move, the editor clears the remaining temporary component set before accepting the
+  first-party values, preventing mixed temporary/first-party text from being mislabeled.
+- The Web route and Core validation require component provenance whenever structured components are
+  submitted. New addresses cannot claim `SAVED_ADDRESS`; an update claiming `SAVED_ADDRESS` must
+  match the current persisted component values.
+- Core permanently reverse-finalizes `TEMPORARY_GEOCODER` components at the final submitted
+  coordinate regardless of whether coordinate provenance is `GEOCODER`, `USER_PIN`, or
+  `DEVICE_LOCATION`. The permanent components and provider reference are stored, while the exact
+  coordinate provenance remains unchanged.
+- Existing saved provider components are treated as already permanent. If their coordinate moves,
+  Core re-finalizes them at the new coordinate; it does not destructively clear legitimate saved
+  data. Manual `FIRST_PARTY` pin/device saves still work with null provider metadata when provider
+  enrichment is unavailable. Existing `GEOCODER` permanent finalization remains unchanged.
+- Candidate keys and provider payloads remain absent from save commands, persistence, and logs. No
+  public API, cache, queue, Durable Object, Workflow, or customer-selectable location was added.
+
+Canonical `API_CONTRACTS.md` and `DOMAIN_MODEL.md` were updated in the same change because the
+command contract now explicitly separates component and coordinate provenance. No Data Model,
+state-machine, MVP-scope, sequencing, migration, or Admin decision changed.
+
+### Focused GREEN
+
+- Contracts: `pnpm --filter @freshmarkets/contracts test -- geography.test.ts core-service.test.ts`
+  — exit 0; 2 files, 10 tests passed.
+- Core: focused Plan 1 command — exit 0; 5 files, 59 tests passed.
+- Web: focused Plan 1 command including the address route — exit 0; 8 files, 40 tests passed.
+- Self-review route RED: `pnpm --filter @freshmarkets/web test -- app/api/commerce/address/route.test.ts`
+  — exit 1; 1 failed / 3 passed because PATCH inherited the create-only `SAVED_ADDRESS`
+  exclusion. After overriding component provenance only on the update schema, the same command was
+  GREEN with 4/4 tests.
+- Final Web focused rerun: 8 files, 41 tests passed.
+- Core metadata-retention RED: `pnpm --filter @freshmarkets/core test -- customer-address.integration.test.ts`
+  — exit 1; 1 failed / 19 passed because a non-location `SAVED_ADDRESS` edit cleared the permanent
+  provider/reference metadata from a user-confirmed pin. The minimal fix preserves that metadata
+  only for unchanged saved components, allowing a later pin move to re-finalize them. The same
+  command was GREEN with 20/20 tests.
+- Final focused aggregate: 15 files and 110 tests passed.
+
+### Full Task 7 gate rerun
+
+All commands ran from the isolated `maps-program` worktree after the fix:
+
+1. `pnpm format:check` — exit 0; 636 files.
+2. `pnpm naming:check` — exit 0.
+3. `pnpm migration:check` — exit 0; fresh apply and populated `0021 -> 0022` upgrade valid.
+4. `pnpm lint` — exit 0; the same 19 non-failing pre-existing warnings, 0 errors.
+5. `pnpm typecheck` — exit 0; all six participating workspace projects.
+6. Focused Plan 1 tests — exit 0; 110/110 as detailed above.
+7. `pnpm test` — exit 0; 150 files and 744 tests passed: config 2, contracts 46,
+   domain-shared 2, validation 2, Web 182, Core 510.
+8. `pnpm --filter @freshmarkets/web check:vinext` — exit 0; 100% compatible, 12 supported,
+   0 partial, 0 issues.
+9. `pnpm -r build` — exit 0; Core Wrangler dry-run and Web vinext build completed; the existing
+   non-fatal chunk-size advisory remains.
+10. Managed address Playwright with `E2E_START_STACK=1` — exit 0; 5 tests passed in 1.3 minutes.
+11. `git diff --check` — exit 0 before the report/status append.
+
+Port 3100 was released before the managed run and again after it. Managed persistence stayed inside
+the isolated worktree. No generated E2E state, real token/secret, raw address/contact/coordinate
+value, candidate data, migration, or unrelated Admin file is included by this fix.
+
+### Review-fix files, schema, contracts, and concerns
+
+- Runtime: address editor, thin Web address route, Core address command/finalization, and Core
+  validation.
+- Contracts/tests: geography/index contracts plus focused Web/Core/contract regressions.
+- Canonical docs: `API_CONTRACTS.md` and `DOMAIN_MODEL.md` only, to record the proven contract rule.
+- Descriptive docs: corrected status wording and this appended evidence.
+- Database/schema/migrations: none. `0042` remains the sole Maps migration; no `0043` exists.
+- Admin/Plan 2/Rider/Plan 3: untouched and not started.
+- Remaining external concerns are unchanged: restricted public-token deployment, Core secret,
+  permanent-geocoding entitlement/terms, approved production Cebu polygons, 19 pre-existing lint
+  warnings, and the non-fatal Web chunk-size advisory.

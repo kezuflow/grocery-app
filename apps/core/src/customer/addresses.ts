@@ -1,5 +1,6 @@
 import type {
   AddressComponents,
+  AddressComponentsSource,
   CoordinateConfirmationSource,
   CreateCustomerAddressRequest,
   DeliveryInstructions,
@@ -84,11 +85,20 @@ export async function createCustomerAddress(
   const id = crypto.randomUUID();
   const now = Date.now();
   const structured = "components" in command && command.components !== undefined;
+  const componentsSource = (command as unknown as { componentsSource?: AddressComponentsSource })
+    .componentsSource;
+  if (structured && (!componentsSource || componentsSource === "SAVED_ADDRESS"))
+    return failure(
+      "VALIDATION_FAILED",
+      "New structured address components require valid provenance",
+      command.requestId,
+    );
   const confirmation = structured
     ? await finalizeConfirmation(geocoder, {
         latitude: command.latitude,
         longitude: command.longitude,
         components: command.components!,
+        componentsSource: componentsSource!,
         source: command.confirmationSource!,
         confirmedAt: now,
       })
@@ -244,11 +254,36 @@ export async function updateCustomerAddress(
 
   const now = Date.now();
   const currentComponents = parseComponents(current.address_components_json, current.address_json);
+  if (command.components !== undefined && command.componentsSource === undefined)
+    return failure(
+      "VALIDATION_FAILED",
+      "Structured address components require provenance",
+      command.requestId,
+    );
+  if (command.components === undefined && command.componentsSource !== undefined)
+    return failure(
+      "VALIDATION_FAILED",
+      "Component provenance requires structured address components",
+      command.requestId,
+    );
+  if (
+    command.componentsSource === "SAVED_ADDRESS" &&
+    command.components &&
+    !componentsEqual(command.components, currentComponents)
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Saved address provenance cannot describe changed components",
+      command.requestId,
+    );
   const confirmation = command.confirmationSource
     ? await finalizeConfirmation(geocoder, {
         latitude,
         longitude,
         components: command.components ?? currentComponents,
+        componentsSource: command.componentsSource ?? "SAVED_ADDRESS",
+        persistedProvider: current.geocode_provider,
+        locationChanged,
         source: command.confirmationSource,
         confirmedAt: now,
       })
@@ -261,13 +296,21 @@ export async function updateCustomerAddress(
     command.components !== undefined ||
     command.confirmationSource !== undefined ||
     command.instructions !== undefined;
+  const preserveSavedProvider =
+    command.componentsSource === "SAVED_ADDRESS" &&
+    !locationChanged &&
+    confirmation?.provider === null;
   const geocodeProvider = confirmation
-    ? confirmation.provider
+    ? preserveSavedProvider
+      ? current.geocode_provider
+      : confirmation.provider
     : locationChanged
       ? null
       : current.geocode_provider;
   const geocodeReference = confirmation
-    ? confirmation.providerReference
+    ? preserveSavedProvider
+      ? current.geocode_reference
+      : confirmation.providerReference
     : locationChanged
       ? null
       : current.geocode_reference;
@@ -343,11 +386,21 @@ async function finalizeConfirmation(
     latitude: number;
     longitude: number;
     components: AddressComponents;
+    componentsSource: AddressComponentsSource;
+    persistedProvider?: string | null;
+    locationChanged?: boolean;
     source: CoordinateConfirmationSource;
     confirmedAt: number;
   },
 ): Promise<FinalizedConfirmation> {
-  if (input.source !== "GEOCODER")
+  const requiresPermanentComponents =
+    input.source === "GEOCODER" ||
+    input.componentsSource === "TEMPORARY_GEOCODER" ||
+    (input.componentsSource === "SAVED_ADDRESS" &&
+      input.locationChanged === true &&
+      input.persistedProvider !== null &&
+      input.persistedProvider !== undefined);
+  if (!requiresPermanentComponents)
     return {
       components: input.components,
       provider: null,
@@ -365,6 +418,18 @@ async function finalizeConfirmation(
     source: input.source,
     confirmedAt: input.confirmedAt,
   };
+}
+
+function componentsEqual(left: AddressComponents, right: AddressComponents): boolean {
+  return (
+    left.addressLine1 === right.addressLine1 &&
+    left.addressLine2 === right.addressLine2 &&
+    left.barangay === right.barangay &&
+    left.city === right.city &&
+    left.region === right.region &&
+    left.postalCode === right.postalCode &&
+    left.countryCode === right.countryCode
+  );
 }
 
 function parseComponents(structuredJson: string | null, legacyJson: string): AddressComponents {

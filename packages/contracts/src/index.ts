@@ -23,6 +23,7 @@ import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult
 import type { Capability } from "./admin-foundation";
 import type {
   AddressComponents,
+  AddressComponentsSource,
   Coordinate,
   CoordinateConfirmationSource,
   DeliveryInstructions,
@@ -268,6 +269,7 @@ export type CreateCustomerAddressRequest = CustomerAddressCreateBase &
   (
     | {
         components: AddressComponents;
+        componentsSource: Exclude<AddressComponentsSource, "SAVED_ADDRESS">;
         confirmationSource: CoordinateConfirmationSource;
         instructions: DeliveryInstructions;
         /** Historical compatibility input; new callers omit it. */
@@ -277,6 +279,7 @@ export type CreateCustomerAddressRequest = CustomerAddressCreateBase &
         /** Historical compatibility input for callers not yet migrated to structured fields. */
         addressJson: string;
         components?: never;
+        componentsSource?: never;
         confirmationSource?: never;
         instructions?: never;
       }
@@ -288,6 +291,7 @@ export type UpdateCustomerAddressRequest = AuthenticatedRequest & {
   recipient?: string;
   phone?: string;
   components?: AddressComponents;
+  componentsSource?: AddressComponentsSource;
   confirmationSource?: CoordinateConfirmationSource;
   instructions?: DeliveryInstructions;
   /** Historical compatibility input; new callers use structured components. */
