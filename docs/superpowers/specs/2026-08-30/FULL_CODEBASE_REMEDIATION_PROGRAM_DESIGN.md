@@ -1,6 +1,6 @@
 # Full Codebase Remediation Program Design
 
-**Status:** Approved in chat on 2026-08-30; written specification awaiting final review  
+**Status:** Approved for complete execution on 2026-08-30
 **Repository:** FreshMarkets  
 **Delivery model:** Trunk-based, staged commits intended for `main`  
 **Implementation boundary:** Everything outside the separately active Admin Dashboard and Maps programs
@@ -15,6 +15,17 @@ The work addresses every actionable item from the full-codebase review:
 2. migration, idempotency, inbox, cart, and environment reliability;
 3. Worker, Web, contract, dependency-boundary, and security hardening; and
 4. the non-admin, non-maps customer MVP surfaces already defined by canonical product documents.
+
+## Execution status
+
+| Program | Status | Evidence |
+| --- | --- | --- |
+| 1 — Checkout and financial safety | Implemented and verified in the protective remediation worktree | `docs/superpowers/plans/2026-08-30/CHECKOUT_FINANCIAL_SAFETY_REMEDIATION_IMPLEMENTATION.md` and commit `840dee6` |
+| 2 — Runtime and persistence reliability | Implemented and verified in the protective remediation worktree | `docs/superpowers/plans/2026-08-30/RUNTIME_PERSISTENCE_RELIABILITY_REMEDIATION_IMPLEMENTATION.md` and commit `b287303` |
+| 3 — Architecture and security hardening | Approved implementation plan; execution waits for Maps ownership of shared files to finish | `docs/superpowers/plans/2026-08-30/ARCHITECTURE_SECURITY_HARDENING_IMPLEMENTATION.md` |
+| 4 — Customer MVP completion | Approved implementation plan; executes after Program 3 and the landed Maps address contract | `docs/superpowers/plans/2026-08-30/CUSTOMER_MVP_COMPLETION_IMPLEMENTATION.md` |
+
+Programs 1–2 remain isolated until Maps completes. Their commits will be replayed onto current `main`, preserving the landed Admin and Maps behavior, before Program 3 begins.
 
 ## Canonical inputs
 
