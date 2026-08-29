@@ -150,8 +150,11 @@ describe("catalog and inventory BFF routes", () => {
     await setPrice(
       jsonRequest("https://x/skus/sku-1/price", {
         marketId: "market-metro-cebu",
+        locationId: null,
         currency: "PHP",
         amountMinor: 2500,
+        validFrom: 1000,
+        expectedVersion: 2,
       }),
       skuParams,
     );
@@ -159,6 +162,11 @@ describe("catalog and inventory BFF routes", () => {
     expect(coreMocks.setAdminSkuAvailability.mock.calls[0][0]).toMatchObject({
       skuId: "sku-1",
       sourcingMode: "STOCKED",
+    });
+    expect(coreMocks.setAdminSkuPrice.mock.calls[0][0]).toMatchObject({
+      locationId: null,
+      validFrom: 1000,
+      expectedVersion: 2,
     });
     expect(coreMocks.setAdminSkuPrice.mock.calls[0][0]).toMatchObject({ amountMinor: 2500 });
   });

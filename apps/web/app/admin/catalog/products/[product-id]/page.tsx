@@ -86,10 +86,10 @@ export default function ProductDetailPage({
       body: JSON.stringify(body),
     });
     const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
+      error?: { code?: string; message?: string };
     };
     setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
-    if (payload.ok) load();
+    if (payload.ok || payload.error?.code === "STALE_VERSION") load();
     return payload.ok;
   }
 
@@ -164,7 +164,7 @@ export default function ProductDetailPage({
               void run(`${BASE}/products/${encodeURIComponent(productId)}/status`, "POST", {
                 status: product.status === "active" ? "inactive" : "active",
                 reason: reason.trim(),
-                expectedVersion: 1,
+                expectedVersion: product.version,
               });
             }}
           >
@@ -303,8 +303,11 @@ export default function ProductDetailPage({
                           }
                           void run(`${BASE}/skus/${encodeURIComponent(sku.skuId)}/price`, "POST", {
                             marketId: "market-metro-cebu",
+                            locationId: null,
                             currency: "PHP",
                             amountMinor: Math.round(pesos * 100),
+                            validFrom: Date.now(),
+                            expectedVersion: sku.priceVersion ?? 0,
                           });
                         }}
                       >
@@ -322,7 +325,7 @@ export default function ProductDetailPage({
                               availabilityStatus:
                                 sku.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE",
                               sourcingMode: "STOCKED",
-                              expectedVersion: 1,
+                              expectedVersion: sku.availabilityVersion ?? 0,
                             },
                           );
                         }}

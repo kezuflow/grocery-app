@@ -305,14 +305,10 @@ export async function setAdminProductStatus(
   }
 
   const current = await deps.db
-    .prepare("SELECT id, status FROM product WHERE id = ?")
+    .prepare("SELECT id, status, version FROM product WHERE id = ?")
     .bind(request.productId)
-    .first<{ id: string; status: "active" | "inactive" }>();
+    .first<{ id: string; status: "active" | "inactive"; version: number }>();
   if (!current) return failure("NOT_FOUND", "Product not found", request.requestId);
-  if (current.status === request.status) {
-    return failure("VALIDATION_FAILED", `Product is already ${request.status}`, request.requestId);
-  }
-
   const now = Date.now();
   const claim = await claimCommandIdempotency(
     deps.db,
@@ -323,6 +319,7 @@ export async function setAdminProductStatus(
       productId: request.productId,
       status: request.status,
       reason,
+      expectedVersion: request.expectedVersion,
     },
   );
   if (!claim.claimed) {
@@ -338,35 +335,46 @@ export async function setAdminProductStatus(
     }
     return failure("CONFLICT", "The status command is still processing", request.requestId);
   }
-
-  const updated = await deps.db
-    .prepare("UPDATE product SET status=?, updated_at=? WHERE id=? AND status=?")
-    .bind(request.status, now, request.productId, current.status)
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
+  if (current.status === request.status) {
+    await idempotencyFailed(deps.db, "admin.catalog.product.status", request.idempotencyKey);
+    return failure("VALIDATION_FAILED", `Product is already ${request.status}`, request.requestId);
+  }
+  if (current.version !== request.expectedVersion) {
     await idempotencyFailed(deps.db, "admin.catalog.product.status", request.idempotencyKey);
     return failure("STALE_VERSION", "Product changed; refresh before retrying", request.requestId);
   }
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "CATALOG.PRODUCT_STATUS_CHANGED",
-      resourceType: "product",
-      resourceId: request.productId,
-      reason,
-      before: { status: current.status },
-      after: { status: request.status },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-    idempotencyComplete(
-      deps.db,
-      "admin.catalog.product.status",
-      request.idempotencyKey,
-      request.productId,
-      now,
-    ),
-  ]);
+
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(
+          "UPDATE product SET status=?, updated_at=?, version=version+1 WHERE id=? AND status=? AND version=?",
+        )
+        .bind(request.status, now, request.productId, current.status, request.expectedVersion),
+      deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.PRODUCT_STATUS_CHANGED",
+        resourceType: "product",
+        resourceId: request.productId,
+        reason,
+        before: { status: current.status, version: current.version },
+        after: { status: request.status, version: current.version + 1 },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      idempotencyComplete(
+        deps.db,
+        "admin.catalog.product.status",
+        request.idempotencyKey,
+        request.productId,
+        now,
+      ),
+    ]);
+  } catch {
+    await idempotencyFailed(deps.db, "admin.catalog.product.status", request.idempotencyKey);
+    return failure("STALE_VERSION", "Product changed; refresh before retrying", request.requestId);
+  }
   return readProductSummary(deps, request.productId, request.requestId);
 }
 
@@ -377,7 +385,7 @@ async function readProductSummary(
 ): Promise<RpcResult<AdminProductSummary>> {
   const row = await deps.db
     .prepare(
-      `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status,
+      `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status, p.version,
               (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id) AS skuCount
        FROM product p JOIN category c ON c.id = p.category_id WHERE p.id = ?`,
     )
@@ -583,47 +591,48 @@ export async function updateAdminSku(
     return failure("CONFLICT", "The update command is still processing", request.requestId);
   }
 
-  const updated = await deps.db
-    .prepare(
-      `UPDATE sku SET
-         name = COALESCE(?, name),
-         merchandising_label = COALESCE(?, merchandising_label),
-         status = COALESCE(?, status),
-         sort_order = COALESCE(?, sort_order),
-         updated_at = ?, version = version + 1
-       WHERE id = ? AND version = ?`,
-    )
-    .bind(
-      request.name ?? null,
-      request.merchandisingLabel ?? null,
-      request.status ?? null,
-      request.sortOrder ?? null,
-      now,
-      request.skuId,
-      request.expectedVersion,
-    )
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(
+          `UPDATE sku SET
+             name = COALESCE(?, name),
+             merchandising_label = COALESCE(?, merchandising_label),
+             status = COALESCE(?, status),
+             sort_order = COALESCE(?, sort_order),
+             updated_at = ?, version = version + 1
+           WHERE id = ? AND version = ?`,
+        )
+        .bind(
+          request.name ?? null,
+          request.merchandisingLabel ?? null,
+          request.status ?? null,
+          request.sortOrder ?? null,
+          now,
+          request.skuId,
+          request.expectedVersion,
+        ),
+      deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.SKU_UPDATED",
+        resourceType: "sku",
+        resourceId: request.skuId,
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      idempotencyComplete(
+        deps.db,
+        "admin.catalog.sku.update",
+        request.idempotencyKey,
+        request.skuId,
+        now,
+      ),
+    ]);
+  } catch {
     await idempotencyFailed(deps.db, "admin.catalog.sku.update", request.idempotencyKey);
     return failure("STALE_VERSION", "SKU changed; refresh before retrying", request.requestId);
   }
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "CATALOG.SKU_UPDATED",
-      resourceType: "sku",
-      resourceId: request.skuId,
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-    idempotencyComplete(
-      deps.db,
-      "admin.catalog.sku.update",
-      request.idempotencyKey,
-      request.skuId,
-      now,
-    ),
-  ]);
   return readSkuSummary(deps, request.skuId, request.requestId);
 }
 
@@ -640,6 +649,12 @@ export async function setAdminSkuAvailability(
     .bind(request.skuId)
     .first<{ id: string; version: number }>();
   if (!sku) return failure("NOT_FOUND", "SKU not found", request.requestId);
+  const location = await deps.db
+    .prepare("SELECT id FROM fulfillment_location WHERE id=? AND status='active'")
+    .bind(request.locationId)
+    .first<{ id: string }>();
+  if (!location)
+    return failure("VALIDATION_FAILED", "Unknown or inactive location", request.requestId);
 
   const existing = await deps.db
     .prepare("SELECT version FROM sku_location_availability WHERE sku_id = ? AND location_id = ?")
@@ -674,22 +689,7 @@ export async function setAdminSkuAvailability(
     return failure("CONFLICT", "The availability command is still processing", request.requestId);
   }
 
-  let changes = 0;
-  if (existing) {
-    const updated = await deps.db
-      .prepare(
-        "UPDATE sku_location_availability SET availability_status=?, sourcing_mode=?, version=version+1 WHERE sku_id=? AND location_id=? AND version=?",
-      )
-      .bind(
-        request.availabilityStatus,
-        request.sourcingMode,
-        request.skuId,
-        request.locationId,
-        request.expectedVersion,
-      )
-      .run();
-    changes = updated.meta?.changes ?? 0;
-  } else {
+  if (!existing) {
     if (request.expectedVersion !== 0) {
       await idempotencyFailed(deps.db, "admin.catalog.sku.availability", request.idempotencyKey);
       return failure(
@@ -698,15 +698,57 @@ export async function setAdminSkuAvailability(
         request.requestId,
       );
     }
-    const inserted = await deps.db
-      .prepare(
-        "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, ?, ?, ?, 1)",
-      )
-      .bind(request.skuId, request.locationId, request.availabilityStatus, request.sourcingMode)
-      .run();
-    changes = inserted.meta?.changes ?? 0;
   }
-  if (changes !== 1) {
+  try {
+    const write = existing
+      ? deps.db
+          .prepare(
+            "UPDATE sku_location_availability SET availability_status=?, sourcing_mode=?, version=version+1 WHERE sku_id=? AND location_id=? AND version=?",
+          )
+          .bind(
+            request.availabilityStatus,
+            request.sourcingMode,
+            request.skuId,
+            request.locationId,
+            request.expectedVersion,
+          )
+      : deps.db
+          .prepare(
+            "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, ?, ?, ?, 1)",
+          )
+          .bind(
+            request.skuId,
+            request.locationId,
+            request.availabilityStatus,
+            request.sourcingMode,
+          );
+    await deps.db.batch([
+      write,
+      deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.SKU_AVAILABILITY_SET",
+        resourceType: "sku_location_availability",
+        resourceId: request.skuId,
+        reason: request.locationId,
+        before: existing ? { version: existing.version } : {},
+        after: {
+          availabilityStatus: request.availabilityStatus,
+          sourcingMode: request.sourcingMode,
+          version: (existing?.version ?? 0) + 1,
+        },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      idempotencyComplete(
+        deps.db,
+        "admin.catalog.sku.availability",
+        request.idempotencyKey,
+        request.skuId,
+        now,
+      ),
+    ]);
+  } catch {
     await idempotencyFailed(deps.db, "admin.catalog.sku.availability", request.idempotencyKey);
     return failure(
       "STALE_VERSION",
@@ -714,33 +756,10 @@ export async function setAdminSkuAvailability(
       request.requestId,
     );
   }
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "CATALOG.SKU_AVAILABILITY_SET",
-      resourceType: "sku_location_availability",
-      resourceId: request.skuId,
-      reason: request.locationId,
-      before: {},
-      after: { availabilityStatus: request.availabilityStatus, sourcingMode: request.sourcingMode },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-    idempotencyComplete(
-      deps.db,
-      "admin.catalog.sku.availability",
-      request.idempotencyKey,
-      request.skuId,
-      now,
-    ),
-  ]);
   return readSkuSummary(deps, request.skuId, request.requestId);
 }
 
-/**
- * Insert a new versioned STANDARD market price. History is never rewritten
- * and a zero amount fails closed.
- */
+/** Close the current effective row and insert its guarded STANDARD successor. */
 export async function setAdminSkuPrice(
   deps: CatalogAdministrationDeps,
   request: AdminSkuPriceRequest,
@@ -748,13 +767,21 @@ export async function setAdminSkuPrice(
   const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
   if (!access.ok) return access;
 
-  if (!/^[A-Z]{3}$/.test(request.currency.trim())) {
+  const currency = request.currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
     return failure("VALIDATION_FAILED", "currency must be an ISO 4217 code", request.requestId);
   }
-  if (!Number.isInteger(request.amountMinor) || request.amountMinor <= 0) {
+  if (
+    !Number.isSafeInteger(request.amountMinor) ||
+    request.amountMinor <= 0 ||
+    !Number.isSafeInteger(request.validFrom) ||
+    request.validFrom <= 0 ||
+    !Number.isSafeInteger(request.expectedVersion) ||
+    request.expectedVersion < 0
+  ) {
     return failure(
       "VALIDATION_FAILED",
-      "amountMinor must be a positive integer",
+      "amountMinor, validFrom, and expectedVersion must be valid positive integer values",
       request.requestId,
     );
   }
@@ -764,11 +791,40 @@ export async function setAdminSkuPrice(
     .first<{ id: string }>();
   if (!sku) return failure("NOT_FOUND", "SKU not found", request.requestId);
   const market = await deps.db
-    .prepare("SELECT id FROM market WHERE id = ?")
+    .prepare("SELECT id, currency, status FROM market WHERE id = ?")
     .bind(request.marketId)
-    .first<{ id: string }>();
-  if (!market) return failure("VALIDATION_FAILED", "Unknown market", request.requestId);
+    .first<{ id: string; currency: string; status: "active" | "inactive" }>();
+  if (!market || market.status !== "active")
+    return failure("VALIDATION_FAILED", "Unknown or inactive market", request.requestId);
+  if (currency !== market.currency)
+    return failure(
+      "VALIDATION_FAILED",
+      "currency must match the market currency",
+      request.requestId,
+    );
+  if (request.locationId !== null) {
+    const location = await deps.db
+      .prepare("SELECT id FROM fulfillment_location WHERE id=? AND market_id=? AND status='active'")
+      .bind(request.locationId, request.marketId)
+      .first<{ id: string }>();
+    if (!location)
+      return failure(
+        "VALIDATION_FAILED",
+        "Location must be active and belong to the selected market",
+        request.requestId,
+      );
+  }
 
+  const current = await deps.db
+    .prepare(
+      `SELECT id, version, valid_from AS validFrom
+       FROM price_version
+       WHERE sku_id=? AND market_id=? AND location_id IS ?
+         AND price_type='STANDARD' AND valid_to IS NULL
+       ORDER BY valid_from DESC, version DESC LIMIT 1`,
+    )
+    .bind(request.skuId, request.marketId, request.locationId)
+    .first<{ id: string; version: number; validFrom: number }>();
   const now = Date.now();
   const claim = await claimCommandIdempotency(
     deps.db,
@@ -778,8 +834,11 @@ export async function setAdminSkuPrice(
     {
       skuId: request.skuId,
       marketId: request.marketId,
-      currency: request.currency.trim(),
+      locationId: request.locationId,
+      currency,
       amountMinor: request.amountMinor,
+      validFrom: request.validFrom,
+      expectedVersion: request.expectedVersion,
     },
   );
   if (!claim.claimed) {
@@ -795,6 +854,18 @@ export async function setAdminSkuPrice(
     }
     return failure("CONFLICT", "The price command is still processing", request.requestId);
   }
+  if ((current?.version ?? 0) !== request.expectedVersion) {
+    await idempotencyFailed(deps.db, "admin.catalog.sku.price", request.idempotencyKey);
+    return failure("STALE_VERSION", "Price changed; refresh before retrying", request.requestId);
+  }
+  if (current && request.validFrom <= current.validFrom) {
+    await idempotencyFailed(deps.db, "admin.catalog.sku.price", request.idempotencyKey);
+    return failure(
+      "VALIDATION_FAILED",
+      "validFrom must be later than the current price start",
+      request.requestId,
+    );
+  }
 
   const priceId = crypto.randomUUID();
   const versionRow = await deps.db
@@ -805,20 +876,32 @@ export async function setAdminSkuPrice(
     .first<{ nextVersion: number }>();
   const nextVersion = versionRow?.nextVersion ?? 1;
   try {
-    await deps.db.batch([
+    const statements: D1PreparedStatement[] = [];
+    if (current) {
+      statements.push(
+        deps.db
+          .prepare(
+            "UPDATE price_version SET valid_to=? WHERE id=? AND version=? AND valid_to IS NULL AND valid_from < ?",
+          )
+          .bind(request.validFrom, current.id, request.expectedVersion, request.validFrom),
+        deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      );
+    }
+    statements.push(
       deps.db
         .prepare(
-          "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, valid_to, version, created_at, market_id, location_id, price_type) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, 'STANDARD')",
+          "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, valid_to, version, created_at, market_id, location_id, price_type) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'STANDARD')",
         )
         .bind(
           priceId,
           request.skuId,
-          request.currency.trim(),
+          currency,
           request.amountMinor,
-          now,
+          request.validFrom,
           nextVersion,
           now,
           request.marketId,
+          request.locationId,
         ),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
@@ -828,8 +911,11 @@ export async function setAdminSkuPrice(
         details: {
           skuId: request.skuId,
           marketId: request.marketId,
+          locationId: request.locationId,
           amountMinor: request.amountMinor,
-          currency: request.currency.trim(),
+          currency,
+          validFrom: request.validFrom,
+          previousVersion: current?.version ?? null,
         },
         correlationId: request.requestId,
         occurredAt: now,
@@ -841,12 +927,24 @@ export async function setAdminSkuPrice(
         request.skuId,
         now,
       ),
-    ]);
+    );
+    await deps.db.batch(statements);
   } catch (error) {
     log("error", "admin.catalog.price_failed", {
       message: error instanceof Error ? error.message : String(error),
     });
     await idempotencyFailed(deps.db, "admin.catalog.sku.price", request.idempotencyKey);
+    const winner = await deps.db
+      .prepare(
+        `SELECT version FROM price_version
+         WHERE sku_id=? AND market_id=? AND location_id IS ?
+           AND price_type='STANDARD' AND valid_to IS NULL
+         ORDER BY valid_from DESC, version DESC LIMIT 1`,
+      )
+      .bind(request.skuId, request.marketId, request.locationId)
+      .first<{ version: number }>();
+    if ((winner?.version ?? 0) !== request.expectedVersion)
+      return failure("STALE_VERSION", "Price changed; refresh before retrying", request.requestId);
     return failure("CONFLICT", "The price could not be recorded", request.requestId);
   }
 

@@ -134,7 +134,7 @@ export async function listAdminProducts(
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
     .prepare(
-      `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status,
+      `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status, p.version,
               p.created_at AS createdAt,
               (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id) AS skuCount
        FROM product p JOIN category c ON c.id = p.category_id
@@ -151,6 +151,7 @@ export async function listAdminProducts(
       status: "active" | "inactive";
       createdAt: number;
       skuCount: number;
+      version: number;
     }>();
   const hasMore = rows.results.length > limit;
   const pageRows = rows.results.slice(0, limit);
@@ -161,6 +162,7 @@ export async function listAdminProducts(
     categoryCode: row.categoryCode,
     status: row.status,
     skuCount: row.skuCount,
+    version: row.version,
   }));
   const last = pageRows[pageRows.length - 1];
   const nextCursor =
@@ -183,6 +185,8 @@ type SkuRow = {
   currency: string | null;
   priceVersion: number | null;
   availability: "AVAILABLE" | "UNAVAILABLE" | null;
+  availabilityVersion: number | null;
+  sourcingMode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED" | null;
 };
 
 /** One product's admin detail: identity, category, SKUs with price/availability. */
@@ -197,7 +201,7 @@ export async function getAdminProduct(
   const product = await deps.db
     .prepare(
       `SELECT p.id AS productId, p.slug, p.name, p.description, c.code AS categoryCode,
-              c.name AS categoryName, p.status
+              c.name AS categoryName, p.status, p.version
        FROM product p JOIN category c ON c.id = p.category_id
        WHERE p.id = ?`,
     )
@@ -210,6 +214,7 @@ export async function getAdminProduct(
       categoryCode: string;
       categoryName: string;
       status: "active" | "inactive";
+      version: number;
     }>();
   if (!product) {
     return {
@@ -218,37 +223,33 @@ export async function getAdminProduct(
     };
   }
 
+  const now = Date.now();
   const skus = await deps.db
     .prepare(
       `SELECT s.id AS skuId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
               u.symbol AS unitSymbol, s.sell_quantity AS sellQuantity,
               s.consumption_base_quantity AS consumptionBaseQuantity,
               s.status, s.sort_order AS sortOrder, s.version,
-              (SELECT pv.amount_minor FROM price_version pv
-               WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
-                 AND pv.price_type = 'STANDARD' AND pv.valid_to IS NULL
-               ORDER BY pv.version DESC LIMIT 1) AS priceMinor,
-              (SELECT pv.currency FROM price_version pv
-               WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
-                 AND pv.price_type = 'STANDARD' AND pv.valid_to IS NULL
-               ORDER BY pv.version DESC LIMIT 1) AS currency,
-              (SELECT pv.version FROM price_version pv
-               WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
-                 AND pv.price_type = 'STANDARD' AND pv.valid_to IS NULL
-               ORDER BY pv.version DESC LIMIT 1) AS priceVersion,
-              (SELECT sla.availability_status FROM sku_location_availability sla
-               WHERE sla.sku_id = s.id AND sla.location_id = ?) AS availability
+              current_price.amount_minor AS priceMinor,
+              current_price.currency,
+              current_price.version AS priceVersion,
+              sla.availability_status AS availability,
+              sla.version AS availabilityVersion,
+              sla.sourcing_mode AS sourcingMode
        FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
+       LEFT JOIN price_version current_price ON current_price.id = (
+         SELECT pv.id FROM price_version pv
+         WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
+           AND pv.price_type = 'STANDARD' AND pv.valid_from <= ?
+           AND (pv.valid_to IS NULL OR pv.valid_to > ?)
+         ORDER BY pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
+       )
+       LEFT JOIN sku_location_availability sla
+         ON sla.sku_id = s.id AND sla.location_id = ?
        WHERE s.product_id = ?
        ORDER BY s.sort_order, s.code`,
     )
-    .bind(
-      marketId ?? "",
-      marketId ?? "",
-      marketId ?? "",
-      DEFAULT_FULFILLMENT_LOCATION_ID,
-      request.productId,
-    )
+    .bind(marketId ?? "", now, now, DEFAULT_FULFILLMENT_LOCATION_ID, request.productId)
     .all<SkuRow>();
 
   return {
@@ -307,7 +308,7 @@ export async function listAdminInventory(
     .prepare(
       `SELECT ib.location_id AS locationId, ib.inventory_pool_id AS inventoryPoolId,
               p.id AS productId, p.name AS productName, u.symbol AS baseUnitSymbol,
-              ib.on_hand AS onHandBase, ib.reserved AS reservedBase
+              ib.on_hand AS onHandBase, ib.reserved AS reservedBase, ib.version
        FROM inventory_balance ib
        JOIN inventory_pool ip ON ip.id = ib.inventory_pool_id
        JOIN product p ON p.inventory_pool_id = ip.id
@@ -326,6 +327,7 @@ export async function listAdminInventory(
     baseUnitSymbol: row.baseUnitSymbol,
     onHandBase: row.onHandBase,
     reservedBase: row.reservedBase,
+    version: row.version,
   }));
   const nextCursor =
     hasMore && items.length > 0
@@ -422,30 +424,32 @@ export async function readSkuSummary(
   requestId: string,
 ): Promise<RpcResult<AdminCatalogSkuSummary>> {
   const marketId = await defaultMarketId(deps.db);
+  const now = Date.now();
   const row = await deps.db
     .prepare(
       `SELECT s.id AS skuId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
               u.symbol AS unitSymbol, s.sell_quantity AS sellQuantity,
               s.consumption_base_quantity AS consumptionBaseQuantity,
               s.status, s.sort_order AS sortOrder, s.version,
-              (SELECT pv.amount_minor FROM price_version pv
-               WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
-                 AND pv.price_type = 'STANDARD' AND pv.valid_to IS NULL
-               ORDER BY pv.version DESC LIMIT 1) AS priceMinor,
-              (SELECT pv.currency FROM price_version pv
-               WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
-                 AND pv.price_type = 'STANDARD' AND pv.valid_to IS NULL
-               ORDER BY pv.version DESC LIMIT 1) AS currency,
-              (SELECT pv.version FROM price_version pv
-               WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
-                 AND pv.price_type = 'STANDARD' AND pv.valid_to IS NULL
-               ORDER BY pv.version DESC LIMIT 1) AS priceVersion,
-              (SELECT sla.availability_status FROM sku_location_availability sla
-               WHERE sla.sku_id = s.id AND sla.location_id = ?) AS availability
+              current_price.amount_minor AS priceMinor,
+              current_price.currency,
+              current_price.version AS priceVersion,
+              sla.availability_status AS availability,
+              sla.version AS availabilityVersion,
+              sla.sourcing_mode AS sourcingMode
        FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
+       LEFT JOIN price_version current_price ON current_price.id = (
+         SELECT pv.id FROM price_version pv
+         WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
+           AND pv.price_type = 'STANDARD' AND pv.valid_from <= ?
+           AND (pv.valid_to IS NULL OR pv.valid_to > ?)
+         ORDER BY pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
+       )
+       LEFT JOIN sku_location_availability sla
+         ON sla.sku_id = s.id AND sla.location_id = ?
        WHERE s.id = ?`,
     )
-    .bind(marketId ?? "", marketId ?? "", marketId ?? "", DEFAULT_FULFILLMENT_LOCATION_ID, skuId)
+    .bind(marketId ?? "", now, now, DEFAULT_FULFILLMENT_LOCATION_ID, skuId)
     .first<SkuRow>();
   if (!row) {
     return { ok: false, error: { code: "NOT_FOUND", message: "SKU not found", requestId } };
@@ -465,6 +469,8 @@ export async function readSkuSummary(
     currency: row.currency,
     priceVersion: row.priceVersion,
     availability: row.availability,
+    availabilityVersion: row.availabilityVersion,
+    sourcingMode: row.sourcingMode,
   };
   return { ok: true, value: summary, requestId };
 }

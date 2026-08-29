@@ -22,15 +22,19 @@ export async function POST(request: Request, context: { params: Promise<{ "sku-i
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (
     typeof body?.marketId !== "string" ||
+    (body?.locationId !== null && typeof body?.locationId !== "string") ||
     typeof body?.currency !== "string" ||
-    !Number.isInteger(body?.amountMinor)
+    !Number.isInteger(body?.amountMinor) ||
+    !Number.isInteger(body?.validFrom) ||
+    !Number.isInteger(body?.expectedVersion)
   ) {
     return Response.json(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "marketId, currency, and integer amountMinor are required",
+          message:
+            "marketId, nullable locationId, currency, amountMinor, validFrom, and expectedVersion are required",
           requestId: crypto.randomUUID(),
         },
       },
@@ -42,8 +46,11 @@ export async function POST(request: Request, context: { params: Promise<{ "sku-i
     headers: requestHeaders(request),
     skuId,
     marketId: body.marketId,
+    locationId: body.locationId as string | null,
     currency: body.currency,
     amountMinor: body.amountMinor as number,
+    validFrom: body.validFrom as number,
+    expectedVersion: body.expectedVersion as number,
     idempotencyKey,
   });
   return Response.json(result);

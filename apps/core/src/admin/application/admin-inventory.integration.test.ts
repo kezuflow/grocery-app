@@ -186,7 +186,12 @@ describe("inventory administration reads", () => {
     if (!page.ok) return;
     const item = page.value.items.find((entry) => entry.inventoryPoolId === poolId);
     expect(item).toBeDefined();
-    expect(item).toMatchObject({ onHandBase: 1500, reservedBase: 100, baseUnitSymbol: "g" });
+    expect(item).toMatchObject({
+      onHandBase: 1500,
+      reservedBase: 100,
+      baseUnitSymbol: "g",
+      version: 2,
+    });
 
     const ledger = await core.getAdminInventoryLedger({
       requestId: crypto.randomUUID(),

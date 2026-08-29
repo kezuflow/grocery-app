@@ -6,6 +6,7 @@ import {
   type AdminUnitSummary,
   type AdminProductDetail,
   type AdminCatalogSkuSummary,
+  type AdminSkuPriceRequest,
 } from "./admin-catalog";
 
 describe("catalog contracts", () => {
@@ -41,6 +42,18 @@ describe("catalog contracts", () => {
 
   it("keeps catalog payloads as purpose-built DTOs", () => {
     void ({
+      requestId: "request-price",
+      headers: {},
+      skuId: "sku-1",
+      marketId: "market-metro-cebu",
+      locationId: null,
+      currency: "PHP",
+      amountMinor: 2500,
+      validFrom: 1000,
+      expectedVersion: 3,
+      idempotencyKey: "price-1",
+    } satisfies AdminSkuPriceRequest);
+    void ({
       skuId: "sku-1",
       code: "RED-ONION-250G",
       name: "250 g",
@@ -55,6 +68,8 @@ describe("catalog contracts", () => {
       currency: "PHP",
       priceVersion: 4,
       availability: "AVAILABLE",
+      availabilityVersion: 2,
+      sourcingMode: "STOCKED",
     } satisfies AdminCatalogSkuSummary);
     void ({
       productId: "prod-1",
@@ -64,6 +79,7 @@ describe("catalog contracts", () => {
       categoryCode: "FRESH_PRODUCE",
       categoryName: "Fresh produce",
       status: "active",
+      version: 2,
       skus: [],
     } satisfies AdminProductDetail);
   });

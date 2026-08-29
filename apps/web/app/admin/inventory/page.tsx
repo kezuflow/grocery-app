@@ -74,7 +74,7 @@ export default function InventoryPage() {
     setLedger(payload.ok ? payload.value : { items: [], nextCursor: null });
   }
 
-  async function adjust(poolId: string) {
+  async function adjust(poolId: string, expectedVersion: number) {
     const delta = Number(adjustDelta[poolId]);
     if (adjustReason.trim() === "" || Number.isNaN(delta) || !Number.isInteger(delta)) {
       setNotice("An integer delta and a reason are required.");
@@ -88,7 +88,7 @@ export default function InventoryPage() {
         inventoryPoolId: poolId,
         delta,
         reason: adjustReason.trim(),
-        expectedVersion: 0,
+        expectedVersion,
       }),
     });
     const payload = (await response.json()) as RpcResult<unknown> & {
@@ -100,7 +100,7 @@ export default function InventoryPage() {
           ? "Adjustment applied."
           : (payload.error?.message ?? "Version conflict; refresh."),
       );
-      setAdjustDelta({});
+      if (payload.ok) setAdjustDelta({});
       load(locationId);
     } else {
       setNotice(payload.error?.message ?? "The adjustment failed.");
@@ -204,7 +204,7 @@ export default function InventoryPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => void adjust(item.inventoryPoolId)}
+                              onClick={() => void adjust(item.inventoryPoolId, item.version)}
                             >
                               Apply
                             </Button>

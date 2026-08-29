@@ -615,8 +615,11 @@ const catalogSkuAvailabilitySchema = authenticatedRequestSchema.extend({
 const catalogSkuPriceSchema = authenticatedRequestSchema.extend({
   skuId: validationSchema.string().trim().min(1).max(200),
   marketId: validationSchema.string().trim().min(1).max(200),
+  locationId: validationSchema.string().trim().min(1).max(200).nullable(),
   currency: validationSchema.string().trim().length(3),
   amountMinor: validationSchema.number().int().min(1),
+  validFrom: validationSchema.number().int().min(1),
+  expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });
 

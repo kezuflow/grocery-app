@@ -42,6 +42,7 @@ export type AdminProductSummary = {
   categoryCode: string;
   status: CatalogStatus;
   skuCount: number;
+  version: number;
 };
 
 export type AdminProductPage = {
@@ -64,6 +65,8 @@ export type AdminCatalogSkuSummary = {
   currency: string | null;
   priceVersion: number | null;
   availability: "AVAILABLE" | "UNAVAILABLE" | null;
+  availabilityVersion: number | null;
+  sourcingMode: SourcingMode | null;
 };
 
 export type AdminProductDetail = {
@@ -74,6 +77,7 @@ export type AdminProductDetail = {
   categoryCode: string;
   categoryName: string;
   status: CatalogStatus;
+  version: number;
   skus: ReadonlyArray<AdminCatalogSkuSummary>;
 };
 
@@ -85,6 +89,7 @@ export type AdminInventoryItem = {
   baseUnitSymbol: string;
   onHandBase: number;
   reservedBase: number;
+  version: number;
 };
 
 export type AdminInventoryPage = {
@@ -179,8 +184,11 @@ export type AdminSkuAvailabilityRequest = AuthenticatedRequest & {
 export type AdminSkuPriceRequest = AuthenticatedRequest & {
   skuId: string;
   marketId: string;
+  locationId: string | null;
   currency: string;
   amountMinor: number;
+  validFrom: number;
+  expectedVersion: number;
   idempotencyKey: string;
 };
 

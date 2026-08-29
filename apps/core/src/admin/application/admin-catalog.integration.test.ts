@@ -278,24 +278,112 @@ describe("catalog administration", () => {
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
+      locationId: null,
       currency: "PHP",
       amountMinor: 0,
+      validFrom: Date.now(),
+      expectedVersion: 0,
       idempotencyKey: `price-${crypto.randomUUID()}`,
     });
     expect(zeroPrice).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const wrongCurrency = await core.setAdminSkuPrice({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: sku.value.skuId,
+      marketId: "market-metro-cebu",
+      locationId: null,
+      currency: "USD",
+      amountMinor: 2500,
+      validFrom: Date.now(),
+      expectedVersion: 0,
+      idempotencyKey: `price-${crypto.randomUUID()}`,
+    });
+    expect(wrongCurrency).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
 
     const priced = await core.setAdminSkuPrice({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
+      locationId: null,
       currency: "PHP",
       amountMinor: 2500,
+      validFrom: Date.now(),
+      expectedVersion: 0,
       idempotencyKey: `price-${crypto.randomUUID()}`,
     });
     expect(priced.ok).toBe(true);
     if (!priced.ok) return;
     expect(priced.value).toMatchObject({ priceMinor: 2500, currency: "PHP", priceVersion: 1 });
+
+    const successorAt = Date.now() + 1;
+    const successorKey = `price-${crypto.randomUUID()}`;
+    const successor = await core.setAdminSkuPrice({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: sku.value.skuId,
+      marketId: "market-metro-cebu",
+      locationId: null,
+      currency: "PHP",
+      amountMinor: 2600,
+      validFrom: successorAt,
+      expectedVersion: 1,
+      idempotencyKey: successorKey,
+    });
+    expect(successor).toMatchObject({ ok: true, value: { priceMinor: 2600, priceVersion: 2 } });
+    const predecessor = await env.DB.prepare(
+      "SELECT valid_to FROM price_version WHERE sku_id=? AND version=1",
+    )
+      .bind(sku.value.skuId)
+      .first<{ valid_to: number | null }>();
+    expect(predecessor?.valid_to).toBe(successorAt);
+
+    const racedAt = successorAt + 1;
+    const raced = await Promise.all([
+      core.setAdminSkuPrice({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId: sku.value.skuId,
+        marketId: "market-metro-cebu",
+        locationId: null,
+        currency: "PHP",
+        amountMinor: 2700,
+        validFrom: racedAt,
+        expectedVersion: 2,
+        idempotencyKey: `price-${crypto.randomUUID()}`,
+      }),
+      core.setAdminSkuPrice({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId: sku.value.skuId,
+        marketId: "market-metro-cebu",
+        locationId: null,
+        currency: "PHP",
+        amountMinor: 2800,
+        validFrom: racedAt,
+        expectedVersion: 2,
+        idempotencyKey: `price-${crypto.randomUUID()}`,
+      }),
+    ]);
+    expect(raced.filter((result) => result.ok)).toHaveLength(1);
+    expect(raced.filter((result) => !result.ok)).toHaveLength(1);
+    const successorReplay = await core.setAdminSkuPrice({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: sku.value.skuId,
+      marketId: "market-metro-cebu",
+      locationId: null,
+      currency: "PHP",
+      amountMinor: 2600,
+      validFrom: successorAt,
+      expectedVersion: 1,
+      idempotencyKey: successorKey,
+    });
+    expect(successorReplay.ok).toBe(true);
 
     const available = await core.setAdminSkuAvailability({
       requestId: crypto.randomUUID(),
@@ -338,7 +426,7 @@ describe("catalog administration", () => {
     const auditRow = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'CATALOG.SKU_PRICE_SET'",
     ).first<{ count: number }>();
-    expect(auditRow?.count ?? 0).toBe(1);
+    expect(auditRow?.count ?? 0).toBe(3);
 
     const detail = await core.getAdminProduct({
       requestId: crypto.randomUUID(),
@@ -348,7 +436,12 @@ describe("catalog administration", () => {
     expect(detail.ok).toBe(true);
     if (!detail.ok) return;
     expect(detail.value.skus).toHaveLength(1);
-    expect(detail.value.skus[0]).toMatchObject({ priceMinor: 2500, availability: "AVAILABLE" });
+    expect(detail.value.skus[0]).toMatchObject({
+      priceVersion: 3,
+      availability: "AVAILABLE",
+      availabilityVersion: 1,
+    });
+    expect([2700, 2800]).toContain(detail.value.skus[0]?.priceMinor);
     void unitKgId;
   });
 
@@ -367,6 +460,7 @@ describe("catalog administration", () => {
     });
     expect(sameState).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
+    const statusKey = `prod-${crypto.randomUUID()}`;
     const deactivated = await core.setAdminProductStatus({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
@@ -374,11 +468,21 @@ describe("catalog administration", () => {
       status: "inactive",
       reason: "seasonal pause",
       expectedVersion: 1,
-      idempotencyKey: `prod-${crypto.randomUUID()}`,
+      idempotencyKey: statusKey,
     });
     expect(deactivated.ok).toBe(true);
     if (!deactivated.ok) return;
-    expect(deactivated.value.status).toBe("inactive");
+    expect(deactivated.value).toMatchObject({ status: "inactive", version: 2 });
+    const replay = await core.setAdminProductStatus({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      status: "inactive",
+      reason: "seasonal pause",
+      expectedVersion: 1,
+      idempotencyKey: statusKey,
+    });
+    expect(replay).toMatchObject({ ok: true, value: { status: "inactive", version: 2 } });
 
     const auditRow = await env.DB.prepare(
       "SELECT reason FROM audit_event WHERE action = 'CATALOG.PRODUCT_STATUS_CHANGED' ORDER BY occurred_at DESC LIMIT 1",
