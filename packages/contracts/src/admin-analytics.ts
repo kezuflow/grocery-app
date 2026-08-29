@@ -4,7 +4,7 @@ import type { AdminSelectedScope, AuthenticatedRequest, Scope } from "./index";
 export const metricDefinitionAvailabilities = ["AVAILABLE", "UNAVAILABLE"] as const;
 export type MetricDefinitionAvailability = (typeof metricDefinitionAvailabilities)[number];
 
-export const metricDefinitionStatuses = ["APPROVED", "BLOCKED"] as const;
+export const metricDefinitionStatuses = ["APPROVED", "BLOCKED", "SUPERSEDED"] as const;
 export type MetricDefinitionStatus = (typeof metricDefinitionStatuses)[number];
 
 export const analyticsMetricCategories = [

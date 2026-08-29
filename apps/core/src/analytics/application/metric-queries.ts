@@ -23,13 +23,12 @@ export type MetricQueryResult = {
   unavailableReason: string | null;
   points: ReadonlyArray<AnalyticsSeriesPoint>;
   freshness: AnalyticsFreshness;
+  dimensions: ReadonlyArray<AnalyticsDimension>;
 };
 
 type ScalarRow = { value: number | null; watermark: number | null };
 
 const INSTRUMENTATION_UNAVAILABLE: Partial<Record<AnalyticsQueryKey, string>> = {
-  refundAmount:
-    "Unavailable because canonical refund success timestamps are not yet instrumented.",
   discountSpend:
     "Unavailable because committed promotion-component snapshots are not yet instrumented.",
   promotionInfluencedOrderRevenue:
@@ -56,6 +55,7 @@ function unavailable(reason: string, computedAt: number): MetricQueryResult {
     unavailableReason: reason,
     points: [],
     freshness: { sourceWatermark: null, computedAt: instant(computedAt) },
+    dimensions: [],
   };
 }
 
@@ -98,7 +98,20 @@ function available(row: ScalarRow, window: AnalyticsWindow, computedAt: number):
       sourceWatermark: row.watermark === null ? null : instant(row.watermark),
       computedAt: instant(computedAt),
     },
+    dimensions: [],
   };
+}
+
+async function distinctValues(
+  database: D1Database,
+  sql: string,
+  binds: ReadonlyArray<unknown>,
+): Promise<ReadonlyArray<string>> {
+  const rows = await database
+    .prepare(sql)
+    .bind(...binds)
+    .all<{ value: string }>();
+  return (rows.results ?? []).map((row) => row.value);
 }
 
 /** Executes only closed, persisted-definition-selected SQL read models. */
@@ -179,20 +192,14 @@ export async function executeMetricQuery(input: MetricQueryInput): Promise<Metri
       );
     case "refundAmount": {
       const currency = selectedDimension(input.dimensions, "currency");
-      const refundScope = scopePredicate(input.scope);
-      const currencyClause = currency ? " AND refund.currency = ?" : "";
-      return available(
-        await scalar(
-          input.database,
-          `SELECT COALESCE(SUM(refund.amount_minor), 0) AS value, MAX(refund.updated_at) AS watermark
-           FROM payment_refund refund
-           JOIN payment_intent payment ON payment.id = refund.payment_intent_id
-           LEFT JOIN grocery_order orders ON orders.id = payment.subject_id AND payment.subject_type = 'order'
-           LEFT JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id = orders.id
-           WHERE refund.status='SUCCEEDED' AND refund.updated_at >= ? AND refund.updated_at < ?${currencyClause}${refundScope.clause}`,
-          [start, end, ...(currency ? [currency] : []), ...refundScope.binds],
-        ),
-        input.window,
+      if (!currency) {
+        return unavailable(
+          "Select a currency because Refund amounts cannot be combined across currencies.",
+          input.computedAt,
+        );
+      }
+      return unavailable(
+        "Unavailable because canonical refund success timestamps are not yet instrumented.",
         input.computedAt,
       );
     }
@@ -229,7 +236,12 @@ export async function executeMetricQuery(input: MetricQueryInput): Promise<Metri
           `SELECT COUNT(*) AS value, MAX(redeemed_at) AS watermark FROM promotion_redemption
            LEFT JOIN promotion ON promotion.code = promotion_redemption.benefit_code
            WHERE redeemed_at >= ? AND redeemed_at < ?${benefitType ? " AND benefit_type = ?" : ""}${promotionClause}`,
-          [start, end, ...(benefitType ? [benefitType] : []), ...(promotionId ? [promotionId] : [])],
+          [
+            start,
+            end,
+            ...(benefitType ? [benefitType] : []),
+            ...(promotionId ? [promotionId] : []),
+          ],
         ),
         input.window,
         input.computedAt,
@@ -248,20 +260,45 @@ export async function executeMetricQuery(input: MetricQueryInput): Promise<Metri
     case "inventoryAdjustmentsShrinkage": {
       const adjustmentScope = scopePredicate(input.scope, "ledger");
       const baseUnit = selectedDimension(input.dimensions, "baseUnit");
-      return available(
-        await scalar(
-          input.database,
-          `SELECT COALESCE(SUM(ledger.quantity_delta_base), 0) AS value, MAX(ledger.created_at) AS watermark
+      const reason = selectedDimension(input.dimensions, "inventoryAdjustmentReason");
+      const reasonClause = reason ? " AND ledger.reason_code = ?" : "";
+      const commonSql = `
            FROM inventory_ledger_entries ledger
            JOIN inventory_pool pool ON pool.id=ledger.inventory_pool_id
            JOIN unit base_unit ON base_unit.id=pool.base_unit_id
-           WHERE ledger.movement_type='ADJUSTMENT' AND ledger.created_at >= ? AND ledger.created_at < ?
-             ${baseUnit ? "AND base_unit.code = ?" : ""}${adjustmentScope.clause}`,
-          [start, end, ...(baseUnit ? [baseUnit] : []), ...adjustmentScope.binds],
+           WHERE ledger.movement_type='ADJUSTMENT' AND ledger.created_at >= ? AND ledger.created_at < ?${reasonClause}${adjustmentScope.clause}`;
+      const commonBinds = [start, end, ...(reason ? [reason] : []), ...adjustmentScope.binds];
+      const discoveredBaseUnits = baseUnit
+        ? []
+        : await distinctValues(
+            input.database,
+            `SELECT DISTINCT base_unit.canonical_base_code AS value ${commonSql} ORDER BY value LIMIT 2`,
+            commonBinds,
+          );
+      if (!baseUnit && discoveredBaseUnits.length > 1) {
+        return unavailable(
+          "Select a base unit because this result contains multiple base units.",
+          input.computedAt,
+        );
+      }
+      const effectiveBaseUnit = baseUnit ?? discoveredBaseUnits[0] ?? null;
+      const result = available(
+        await scalar(
+          input.database,
+          `SELECT COALESCE(SUM(ledger.quantity_delta_base), 0) AS value, MAX(ledger.created_at) AS watermark
+           ${commonSql}${effectiveBaseUnit ? " AND base_unit.canonical_base_code = ?" : ""}`,
+          [...commonBinds, ...(effectiveBaseUnit ? [effectiveBaseUnit] : [])],
         ),
         input.window,
         input.computedAt,
       );
+      return {
+        ...result,
+        dimensions: [
+          ...input.dimensions.filter((dimension) => dimension.key !== "baseUnit"),
+          ...(effectiveBaseUnit ? [{ key: "baseUnit" as const, value: effectiveBaseUnit }] : []),
+        ],
+      };
     }
   }
   return unavailable("Metric query is not available.", input.computedAt);

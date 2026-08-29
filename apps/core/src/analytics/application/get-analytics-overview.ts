@@ -38,11 +38,9 @@ export async function getAnalyticsOverview(
         metricCode: definition.code,
         definitionVersion: definition.version,
       });
-      if (dimensions.some((dimension) => !definition.dimensions.includes(dimension.key))) {
-        throw new AnalyticsDefinitionValidationError(
-          `Analytics dimensions are not valid for metric ${definition.code}`,
-        );
-      }
+      const metricDimensions = dimensions.filter((dimension) =>
+        definition.dimensions.includes(dimension.key),
+      );
       const resolved = await resolveMetricDefinition(deps.db, definition.code, definition.version);
       if (resolved.queryKey === null) {
         metrics.push({
@@ -51,7 +49,7 @@ export async function getAnalyticsOverview(
           availability: "UNAVAILABLE",
           value: null,
           unavailableReason: definition.unavailableReason,
-          dimensions,
+          dimensions: metricDimensions,
         });
         continue;
       }
@@ -61,7 +59,7 @@ export async function getAnalyticsOverview(
         definition,
         window,
         scope: access.value.scope,
-        dimensions,
+        dimensions: metricDimensions,
         computedAt: access.value.now,
       });
       const watermark = result.freshness.sourceWatermark;
@@ -72,7 +70,7 @@ export async function getAnalyticsOverview(
         availability: result.availability,
         value: result.availability === "AVAILABLE" ? (result.points[0]?.value ?? null) : null,
         unavailableReason: result.unavailableReason,
-        dimensions,
+        dimensions: result.dimensions.length > 0 ? result.dimensions : metricDimensions,
       });
     }
     return {

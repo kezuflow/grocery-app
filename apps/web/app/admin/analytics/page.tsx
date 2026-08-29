@@ -63,6 +63,8 @@ export default function AnalyticsPage() {
   const { state: adminContext } = useAdminContext();
   const [state, setState] = useState<AnalyticsState>({ phase: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const [currency, setCurrency] = useState("");
+  const [baseUnit, setBaseUnit] = useState("");
   const window = useMemo(currentWindow, []);
 
   const load = useCallback(async () => {
@@ -88,6 +90,11 @@ export default function AnalyticsPage() {
       query.set("marketId", adminContext.selectedScope.marketId);
       query.set("locationId", adminContext.selectedScope.locationId);
     }
+    const dimensions = [
+      ...(currency ? [{ key: "currency", value: currency }] : []),
+      ...(baseUnit ? [{ key: "baseUnit", value: baseUnit }] : []),
+    ];
+    if (dimensions.length > 0) query.set("dimensions", JSON.stringify(dimensions));
     try {
       const [definitionsResponse, overviewResponse] = await Promise.all([
         fetch(`/api/admin/analytics/definitions?${query.toString()}`),
@@ -117,7 +124,7 @@ export default function AnalyticsPage() {
     } catch {
       setState({ phase: "error", message: "Network error loading Analytics.", requestId: null });
     }
-  }, [adminContext, window]);
+  }, [adminContext, baseUnit, currency, window]);
 
   useEffect(() => {
     void load();
@@ -129,9 +136,37 @@ export default function AnalyticsPage() {
         title="Analytics"
         description="Versioned operational metrics from authoritative Core read models. Values remain unavailable when their source policy is unresolved."
         action={
-          <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>
-            Refresh
-          </Button>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
+              Currency
+              <input
+                aria-label="Analytics currency"
+                className="w-24 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1.5 text-sm uppercase text-[var(--fm-text)]"
+                inputMode="text"
+                maxLength={3}
+                placeholder="All"
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value.trim().toUpperCase())}
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
+              Base unit
+              <select
+                aria-label="Analytics base unit"
+                className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1.5 text-sm text-[var(--fm-text)]"
+                value={baseUnit}
+                onChange={(event) => setBaseUnit(event.target.value)}
+              >
+                <option value="">All</option>
+                <option value="GRAM">Gram</option>
+                <option value="MILLILITER">Milliliter</option>
+                <option value="PIECE">Piece</option>
+              </select>
+            </label>
+            <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -227,6 +262,13 @@ function AnalyticsReady({
                 <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
                   Definition v{metric.definitionVersion}
                 </p>
+                {metric.dimensions.length > 0 ? (
+                  <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                    {metric.dimensions
+                      .map((dimension) => `${dimension.key}: ${dimension.value}`)
+                      .join(" · ")}
+                  </p>
+                ) : null}
                 {metric.unavailableReason ? (
                   <p className="mt-2 text-xs text-[var(--fm-warning)]">
                     {metric.unavailableReason}

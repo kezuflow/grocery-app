@@ -174,9 +174,10 @@ function mapDefinitionRow(row: MetricDefinitionRow): MetricDefinitionView {
   const queryKey = metricQueryKeyByCode[row.code];
   if (
     (queryKey === null && status !== "BLOCKED") ||
-    (queryKey !== null && status !== "APPROVED") ||
+    (queryKey !== null && status === "BLOCKED") ||
     (status === "APPROVED" && row.unavailableReason !== null) ||
-    (status === "BLOCKED" && (!row.unavailableReason || row.approvedAt !== null))
+    (status === "BLOCKED" && (!row.unavailableReason || row.approvedAt !== null)) ||
+    (status === "SUPERSEDED" && (!row.unavailableReason || row.approvedAt === null))
   ) {
     throw new AnalyticsDefinitionValidationError("Stored metric definition is invalid");
   }
@@ -223,6 +224,10 @@ export async function listMetricDefinitions(
   if (filters.status !== undefined) {
     where.push("status = ?");
     parameters.push(filters.status);
+  } else {
+    where.push(
+      "version = (SELECT MAX(version) FROM metric_definitions versioned WHERE versioned.code = metric_definitions.code)",
+    );
   }
   const rows = await database
     .prepare(
@@ -258,13 +263,17 @@ export async function resolveMetricDefinition(
       `SELECT code, version, display_name AS displayName, category, formula_json AS formulaJson,
         dimensions_json AS dimensionsJson, status, unavailable_reason AS unavailableReason,
         approved_at AS approvedAt
-       FROM metric_definitions WHERE ${where}`,
+       FROM metric_definitions WHERE ${where} ORDER BY version DESC`,
     )
     .bind(...parameters)
     .all<MetricDefinitionRow>();
   const row = rows.results?.[0];
-  if (!row || rows.results?.length !== 1) {
+  if (!row) {
     throw new AnalyticsDefinitionValidationError("Unknown metric definition or version");
   }
-  return { definition: mapDefinitionRow(row), queryKey: metricQueryKeyByCode[metricCode] };
+  const definition = mapDefinitionRow(row);
+  return {
+    definition,
+    queryKey: definition.availability === "AVAILABLE" ? metricQueryKeyByCode[metricCode] : null,
+  };
 }

@@ -16,7 +16,7 @@ type HasDatabaseHandle<T> = "database" extends keyof T ? true : false;
 describe("admin analytics contracts", () => {
   it("publishes closed vocabulary for availability, category, status, and dimensions", () => {
     expect(metricDefinitionAvailabilities).toEqual(["AVAILABLE", "UNAVAILABLE"]);
-    expect(metricDefinitionStatuses).toEqual(["APPROVED", "BLOCKED"]);
+    expect(metricDefinitionStatuses).toEqual(["APPROVED", "BLOCKED", "SUPERSEDED"]);
     expect(analyticsMetricCategories).toEqual([
       "CUSTOMERS",
       "ORDERS",

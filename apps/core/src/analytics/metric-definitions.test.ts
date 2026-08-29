@@ -92,6 +92,22 @@ describe("Analytics metric definition registry", () => {
     expect(definition).not.toHaveProperty("formulaJson");
   });
 
+  it("publishes dimension-safe definitions as version 2 while preserving version 1", async () => {
+    for (const code of ["refund_amount", "inventory_adjustments_shrinkage"]) {
+      const current = await resolveMetricDefinition(env.DB, code);
+      expect(current.definition).toMatchObject({ version: 2, availability: "AVAILABLE" });
+      expect(current.queryKey).not.toBeNull();
+
+      const historical = await resolveMetricDefinition(env.DB, code, 1);
+      expect(historical.definition).toMatchObject({
+        version: 1,
+        availability: "UNAVAILABLE",
+        unavailableReason: "Superseded by dimension-safe definition version 2.",
+      });
+      expect(historical.queryKey).toBeNull();
+    }
+  });
+
   it("rejects unknown codes and non-approved definition versions", async () => {
     await expect(resolveMetricDefinition(env.DB, "made_up_metric")).rejects.toThrow(
       AnalyticsDefinitionValidationError,
@@ -188,6 +204,12 @@ describe("Analytics metric definition registry", () => {
       dimensions: ["marketId", "locationId"],
       availability: "AVAILABLE",
     });
+    expect(definitions.find((definition) => definition.code === "refund_amount")).toMatchObject({
+      version: 2,
+    });
+    expect(
+      definitions.find((definition) => definition.code === "inventory_adjustments_shrinkage"),
+    ).toMatchObject({ version: 2 });
     expect(
       definitions
         .filter((definition) => definition.availability === "UNAVAILABLE")

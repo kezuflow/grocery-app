@@ -38,7 +38,7 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
       body: JSON.stringify({ ok: true, requestId: "analytics-e2e", value: [] }),
     }),
   );
-  await page.route("**/api/admin/analytics/definitions", (route) =>
+  await page.route("**/api/admin/analytics/definitions**", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -125,4 +125,15 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
   ).toBeVisible();
   await expect(page.getByText("Source freshness", { exact: true })).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true }).first()).toBeVisible();
+  const dimensionedRequest = page.waitForRequest((request) => {
+    const dimensions = new URL(request.url()).searchParams.get("dimensions");
+    return (
+      request.url().includes("/api/admin/analytics/overview") &&
+      Boolean(dimensions?.includes('"currency":"PHP"')) &&
+      Boolean(dimensions?.includes('"baseUnit":"GRAM"'))
+    );
+  });
+  await page.getByLabel("Analytics currency").fill("php");
+  await page.getByLabel("Analytics base unit").selectOption("GRAM");
+  await dimensionedRequest;
 });

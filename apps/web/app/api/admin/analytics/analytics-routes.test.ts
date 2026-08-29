@@ -72,9 +72,15 @@ describe("admin analytics BFF routes", () => {
       requestId: "core-overview",
     });
     const response = await getOverview(
-      new Request(`https://freshmarkets.ph/api/admin/analytics/overview?${WINDOW}&${SCOPE}`, {
-        headers: COOKIE,
-      }),
+      new Request(
+        `https://freshmarkets.ph/api/admin/analytics/overview?${WINDOW}&${SCOPE}&dimensions=${encodeURIComponent(
+          JSON.stringify([
+            { key: "currency", value: "PHP" },
+            { key: "baseUnit", value: "GRAM" },
+          ]),
+        )}`,
+        { headers: COOKIE },
+      ),
     );
     expect(response.status).toBe(200);
     expect(getAnalyticsOverview).toHaveBeenCalledTimes(1);
@@ -89,6 +95,10 @@ describe("admin analytics BFF routes", () => {
         marketId: "market-metro-cebu",
         locationId: "location-cebu-central",
       },
+      dimensions: [
+        { key: "currency", value: "PHP" },
+        { key: "baseUnit", value: "GRAM" },
+      ],
       headers: { cookie: "session=analytics" },
     });
   });

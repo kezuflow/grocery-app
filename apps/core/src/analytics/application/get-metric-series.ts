@@ -69,7 +69,7 @@ export async function getMetricSeries(
         metricCode: resolved.definition.code,
         definitionVersion: resolved.definition.version,
         window,
-        dimensions,
+        dimensions: result.dimensions.length > 0 ? result.dimensions : dimensions,
         availability: result.availability,
         unavailableReason: result.unavailableReason,
         freshness: result.freshness,

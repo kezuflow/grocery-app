@@ -342,21 +342,28 @@ describe("Core Analytics reads", () => {
         availability: "UNAVAILABLE",
         points: [],
         unavailableReason:
-          "Unavailable because canonical refund success timestamps are not yet instrumented.",
+          "Select a currency because Refund amounts cannot be combined across currencies.",
       },
     });
   });
 
-  it("does not ignore unsupported overview dimensions", async () => {
+  it("applies an Overview currency only to metrics that support it", async () => {
     const reader = await seedAnalyticsReader();
-    await expect(
-      core.getAnalyticsOverview({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: reader.cookie },
-        window,
-        dimensions: [{ key: "currency", value: "PHP" }],
-      }),
-    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    const result = await core.getAnalyticsOverview({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+      window,
+      dimensions: [{ key: "currency", value: "PHP" }],
+    });
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.value.metrics).toHaveLength(30);
+    expect(
+      result.value.metrics.find((metric) => metric.metricCode === "order_count")?.dimensions,
+    ).toEqual([]);
+    expect(
+      result.value.metrics.find((metric) => metric.metricCode === "refund_amount")?.dimensions,
+    ).toEqual([{ key: "currency", value: "PHP" }]);
   });
 
   it("does not infer refund success from payment_refund.updated_at", async () => {
@@ -376,6 +383,129 @@ describe("Core Analytics reads", () => {
         points: [],
         unavailableReason:
           "Unavailable because canonical refund success timestamps are not yet instrumented.",
+      },
+    });
+  });
+
+  it("never combines incompatible inventory base units and returns the effective unit", async () => {
+    const reader = await seedAnalyticsReader();
+    const now = Date.parse("2026-08-15T12:00:00.000Z");
+    const categoryId = crypto.randomUUID();
+    const seeds = [
+      { suffix: "gram", dimension: "MASS", baseUnit: "GRAM", quantity: 100 },
+      {
+        suffix: "milliliter",
+        dimension: "VOLUME",
+        baseUnit: "MILLILITER",
+        quantity: 200,
+      },
+      { suffix: "piece", dimension: "COUNT", baseUnit: "PIECE", quantity: 3 },
+    ] as const;
+    await env.DB.prepare(
+      "INSERT INTO category (id, code, name, slug, status, sort_order, created_at, updated_at) VALUES (?, ?, 'Analytics units', ?, 'active', 99, ?, ?)",
+    )
+      .bind(
+        categoryId,
+        `AN_${crypto.randomUUID().slice(0, 8)}`,
+        `an-${crypto.randomUUID()}`,
+        now,
+        now,
+      )
+      .run();
+    for (const seed of seeds) {
+      const unitId = crypto.randomUUID();
+      const poolId = crypto.randomUUID();
+      const productId = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO unit (id, code, name, dimension, symbol, created_at, canonical_base_code, conversion_numerator, conversion_denominator, status, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', 1, ?)",
+        ).bind(
+          unitId,
+          `AN_${seed.suffix.toUpperCase()}_${crypto.randomUUID().slice(0, 6)}`,
+          seed.suffix,
+          seed.dimension,
+          seed.suffix,
+          now,
+          seed.baseUnit,
+          now,
+        ),
+        env.DB.prepare(
+          "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', 'STOCKED', ?, ?)",
+        ).bind(poolId, productId, unitId, now, now),
+        env.DB.prepare(
+          "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
+        ).bind(
+          productId,
+          categoryId,
+          poolId,
+          `analytics-${seed.suffix}-${crypto.randomUUID()}`,
+          seed.suffix,
+          now,
+          now,
+        ),
+        env.DB.prepare(
+          "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at) VALUES (?, ?, 'location-cebu-central', 'ADJUSTMENT', ?, 0, 'analytics-test', ?, 'staff', 'COUNT', '{}', ?)",
+        ).bind(crypto.randomUUID(), poolId, seed.quantity, crypto.randomUUID(), now),
+      ]);
+    }
+
+    const common = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+      metricCode: "inventory_adjustments_shrinkage",
+      window,
+    };
+    await expect(core.getMetricSeries(common)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        definitionVersion: 2,
+        availability: "UNAVAILABLE",
+        unavailableReason: "Select a base unit because this result contains multiple base units.",
+        dimensions: [],
+        points: [],
+      },
+    });
+    await expect(
+      core.getMetricSeries({
+        ...common,
+        dimensions: [{ key: "baseUnit", value: "GRAM" }],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        availability: "AVAILABLE",
+        dimensions: [{ key: "baseUnit", value: "GRAM" }],
+        points: [{ value: 100 }],
+      },
+    });
+  });
+
+  it("adds a single discovered inventory base unit to result metadata", async () => {
+    const reader = await seedAnalyticsReader();
+    const now = Date.parse("2026-08-16T12:00:00.000Z");
+    await env.DB.prepare(
+      "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at) VALUES (?, 'pool-red-onion', 'location-cebu-central', 'ADJUSTMENT', 25, 0, 'analytics-test', ?, 'staff', 'COUNT', '{}', ?)",
+    )
+      .bind(crypto.randomUUID(), crypto.randomUUID(), now)
+      .run();
+
+    await expect(
+      core.getMetricSeries({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: reader.cookie },
+        metricCode: "inventory_adjustments_shrinkage",
+        window: {
+          startAt: "2026-08-16T00:00:00.000Z",
+          endAt: "2026-08-17T00:00:00.000Z",
+          timezone: "Asia/Manila",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        availability: "AVAILABLE",
+        dimensions: [{ key: "baseUnit", value: "GRAM" }],
+        points: [{ value: 25 }],
       },
     });
   });
@@ -429,16 +559,24 @@ describe("Core Analytics reads", () => {
     });
   });
 
-  it("rejects Overview dimensions unsupported by any definition instead of omitting metrics", async () => {
+  it("applies an Overview promotion filter without omitting unrelated metrics", async () => {
     const reader = await seedAnalyticsReader();
-    await expect(
-      core.getAnalyticsOverview({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: reader.cookie },
-        window,
-        dimensions: [{ key: "promotionId", value: "promotion-1" }],
-      }),
-    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    const result = await core.getAnalyticsOverview({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+      window,
+      dimensions: [{ key: "promotionId", value: "promotion-1" }],
+    });
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.value.metrics).toHaveLength(30);
+    expect(
+      result.value.metrics.find((metric) => metric.metricCode === "promotion_redemptions")
+        ?.dimensions,
+    ).toEqual([{ key: "promotionId", value: "promotion-1" }]);
+    expect(
+      result.value.metrics.find((metric) => metric.metricCode === "order_count")?.dimensions,
+    ).toEqual([]);
   });
 
   it("keeps every blocked catalog metric explicitly unavailable with a stable reason", async () => {
