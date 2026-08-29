@@ -101,20 +101,53 @@ export const addressRequestSchema = z.union([
   }),
 ]);
 
-export const addressUpdateRequestSchema = headersRequest.extend({
-  addressId: identifierSchema,
-  expectedVersion: z.number().int().safe().nonnegative(),
-  label: reasonSchema.optional(),
-  recipient: reasonSchema.optional(),
-  phone: reasonSchema.optional(),
-  components: addressComponentsSchema.optional(),
-  confirmationSource: confirmationSourceSchema.optional(),
-  instructions: deliveryInstructionsSchema.optional(),
-  addressJson: z.string().min(2).optional(),
-  latitude: coordinateSchema.optional(),
-  longitude: coordinateSchema.optional(),
-  notes: z.string().max(1000).nullable().optional(),
-});
+export const addressUpdateRequestSchema = headersRequest
+  .extend({
+    addressId: identifierSchema,
+    expectedVersion: z.number().int().safe().nonnegative(),
+    label: reasonSchema.optional(),
+    recipient: reasonSchema.optional(),
+    phone: reasonSchema.optional(),
+    components: addressComponentsSchema.optional(),
+    confirmationSource: confirmationSourceSchema.optional(),
+    instructions: deliveryInstructionsSchema.optional(),
+    addressJson: z.string().min(2).optional(),
+    latitude: coordinateSchema.optional(),
+    longitude: coordinateSchema.optional(),
+    notes: z.string().max(1000).nullable().optional(),
+  })
+  .superRefine((input, context) => {
+    const hasLatitude = input.latitude !== undefined;
+    const hasLongitude = input.longitude !== undefined;
+    const hasCoordinatePair = hasLatitude && hasLongitude;
+    if (hasLatitude !== hasLongitude)
+      context.addIssue({
+        code: "custom",
+        message: "latitude and longitude must be provided together",
+        path: hasLatitude ? ["longitude"] : ["latitude"],
+      });
+    if (input.confirmationSource !== undefined && !hasCoordinatePair)
+      context.addIssue({
+        code: "custom",
+        message: "confirmationSource requires latitude and longitude",
+        path: ["confirmationSource"],
+      });
+    const explicitLegacyCoordinateEdit =
+      hasCoordinatePair &&
+      input.addressJson !== undefined &&
+      input.components === undefined &&
+      input.instructions === undefined;
+    if (
+      hasCoordinatePair &&
+      input.confirmationSource === undefined &&
+      !explicitLegacyCoordinateEdit
+    )
+      context.addIssue({
+        code: "custom",
+        message: "structured coordinate edits require confirmationSource",
+        path: ["confirmationSource"],
+      });
+  });
 
 export const checkoutRequestSchema = headersRequest.extend({
   addressId: identifierSchema,

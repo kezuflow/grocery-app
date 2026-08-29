@@ -140,6 +140,10 @@ describe("Phase 4B customer addresses", () => {
         components,
         confirmationSource: "GEOCODER",
         instructions,
+        addressJson: JSON.stringify({
+          candidateKey: "temporary-candidate-must-not-persist",
+          rawProviderPayload: "temporary-mapbox-content",
+        }),
       },
     );
 
@@ -156,16 +160,18 @@ describe("Phase 4B customer addresses", () => {
     if (!result.ok) return;
     expect(Date.parse(result.value.confirmedAt!)).not.toBeNaN();
     const stored = await env.DB.prepare(
-      "SELECT geocode_provider, geocode_reference, latitude, longitude FROM customer_address WHERE id=?",
+      "SELECT address_json, geocode_provider, geocode_reference, latitude, longitude FROM customer_address WHERE id=?",
     )
       .bind(result.value.id)
       .first<{
+        address_json: string;
         geocode_provider: string | null;
         geocode_reference: string | null;
         latitude: number;
         longitude: number;
       }>();
     expect(stored).toEqual({
+      address_json: JSON.stringify(permanentComponents),
       geocode_provider: "MAPBOX",
       geocode_reference: "mapbox.permanent.entrance",
       latitude: 10.3173,
@@ -185,6 +191,7 @@ describe("Phase 4B customer addresses", () => {
       components,
       confirmationSource: "USER_PIN",
       instructions,
+      addressJson: JSON.stringify({ candidateKey: "temporary-user-pin-candidate" }),
     });
     expect(created).toMatchObject({
       ok: true,
@@ -198,15 +205,17 @@ describe("Phase 4B customer addresses", () => {
     });
     if (!created.ok) return;
     const stored = await env.DB.prepare(
-      "SELECT geocode_provider, geocode_reference, user_confirmed_at FROM customer_address WHERE id=?",
+      "SELECT address_json, geocode_provider, geocode_reference, user_confirmed_at FROM customer_address WHERE id=?",
     )
       .bind(created.value.id)
       .first<{
+        address_json: string;
         geocode_provider: string | null;
         geocode_reference: string | null;
         user_confirmed_at: number | null;
       }>();
     expect(stored).toMatchObject({ geocode_provider: null, geocode_reference: null });
+    expect(stored?.address_json).toBe(JSON.stringify(components));
     expect(stored?.user_confirmed_at).toBeTypeOf("number");
   });
 
@@ -222,6 +231,7 @@ describe("Phase 4B customer addresses", () => {
       components: { ...components, city: "Outside Cebu" },
       confirmationSource: "DEVICE_LOCATION",
       instructions,
+      addressJson: JSON.stringify({ candidateKey: "temporary-device-candidate" }),
     });
     expect(created).toMatchObject({
       ok: true,
@@ -230,6 +240,21 @@ describe("Phase 4B customer addresses", () => {
         serviceable: false,
         serviceabilityReason: "OUTSIDE_SERVICE_AREA",
       },
+    });
+    if (!created.ok) return;
+    const stored = await env.DB.prepare(
+      "SELECT address_json, geocode_provider, geocode_reference FROM customer_address WHERE id=?",
+    )
+      .bind(created.value.id)
+      .first<{
+        address_json: string;
+        geocode_provider: string | null;
+        geocode_reference: string | null;
+      }>();
+    expect(stored).toEqual({
+      address_json: JSON.stringify({ ...components, city: "Outside Cebu" }),
+      geocode_provider: null,
+      geocode_reference: null,
     });
   });
 
@@ -375,6 +400,71 @@ describe("Phase 4B customer addresses", () => {
       ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 
+  it("rejects partial or unconfirmed structured coordinate edits at the RPC boundary", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Home",
+      recipient: "Ana",
+      phone: "+639171234567",
+      latitude: 10.3173,
+      longitude: 123.9058,
+      components,
+      confirmationSource: "USER_PIN",
+      instructions,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const invalidUpdates = [
+      { latitude: 11, confirmationSource: "USER_PIN" },
+      { longitude: 124, confirmationSource: "USER_PIN" },
+      { latitude: 11, longitude: 124 },
+      { confirmationSource: "USER_PIN" },
+      {
+        latitude: 11,
+        longitude: 124,
+        addressJson: JSON.stringify({ line1: "Forged legacy exception" }),
+      },
+    ] as const;
+    for (const invalidUpdate of invalidUpdates) {
+      const result = await core.updateCustomerAddress({
+        ...user.request(),
+        addressId: created.value.id,
+        expectedVersion: created.value.version,
+        ...invalidUpdate,
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    }
+  });
+
+  it("rejects an unconfirmed structured coordinate edit inside the address application", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Home",
+      recipient: "Ana",
+      phone: "+639171234567",
+      latitude: 10.3173,
+      longitude: 123.9058,
+      components,
+      confirmationSource: "USER_PIN",
+      instructions,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const result = await updateCustomerAddressCommand(env.DB, geocoder(), {
+      ...user.request(),
+      customerId: await customerIdFor(user.userId),
+      addressId: created.value.id,
+      expectedVersion: created.value.version,
+      latitude: 11,
+      longitude: 124,
+      addressJson: JSON.stringify({ line1: "Forged legacy exception" }),
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
   it("re-resolves serviceability for location changes and preserves it for unrelated edits", async () => {
     const user = await account();
     const created = await createAddress(user.request());
@@ -386,6 +476,7 @@ describe("Phase 4B customer addresses", () => {
       expectedVersion: created.value.version,
       latitude: 11,
       longitude: 124,
+      addressJson: JSON.stringify({ line1: "Outside legacy destination" }),
     });
     expect(moved).toMatchObject({
       ok: true,

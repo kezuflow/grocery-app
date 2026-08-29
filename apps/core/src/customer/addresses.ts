@@ -93,8 +93,7 @@ export async function createCustomerAddress(
         confirmedAt: now,
       })
     : null;
-  const addressJson =
-    command.addressJson ?? JSON.stringify(confirmation?.components ?? emptyLegacyComponents());
+  const addressJson = structured ? JSON.stringify(confirmation!.components) : command.addressJson;
 
   await database
     .prepare(
@@ -176,6 +175,38 @@ export async function updateCustomerAddress(
     .first<CustomerAddressRow>();
   if (!current) return failure("NOT_FOUND", "Customer address not found", command.requestId);
 
+  const hasLatitude = command.latitude !== undefined;
+  const hasLongitude = command.longitude !== undefined;
+  const hasCoordinatePair = hasLatitude && hasLongitude;
+  if (hasLatitude !== hasLongitude)
+    return failure(
+      "VALIDATION_FAILED",
+      "Latitude and longitude must be provided together",
+      command.requestId,
+    );
+  if (command.confirmationSource !== undefined && !hasCoordinatePair)
+    return failure(
+      "VALIDATION_FAILED",
+      "Confirmation source requires latitude and longitude",
+      command.requestId,
+    );
+  const explicitLegacyCoordinateEdit =
+    hasCoordinatePair &&
+    current.address_components_json === null &&
+    command.addressJson !== undefined &&
+    command.components === undefined &&
+    command.instructions === undefined;
+  if (
+    hasCoordinatePair &&
+    command.confirmationSource === undefined &&
+    !explicitLegacyCoordinateEdit
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Structured coordinate edits require confirmation source",
+      command.requestId,
+    );
+
   const latitude = command.latitude ?? current.latitude;
   const longitude = command.longitude ?? current.longitude;
   const locationChanged = latitude !== current.latitude || longitude !== current.longitude;
@@ -250,7 +281,9 @@ export async function updateCustomerAddress(
     : locationChanged
       ? null
       : current.user_confirmed_at;
-  const addressJson = command.addressJson ?? current.address_json ?? JSON.stringify(components);
+  const addressJson = canonicalFieldsPresent
+    ? JSON.stringify(components)
+    : (command.addressJson ?? current.address_json);
 
   const updated = await database
     .prepare(
@@ -359,18 +392,6 @@ function parseInstructions(value: string | null): DeliveryInstructions {
     gateGuard: stringField(parsed, "gateGuard"),
     deliveryNote: stringField(parsed, "deliveryNote"),
     recipientInstruction: stringField(parsed, "recipientInstruction"),
-  };
-}
-
-function emptyLegacyComponents(): AddressComponents {
-  return {
-    addressLine1: "",
-    addressLine2: null,
-    barangay: null,
-    city: "",
-    region: null,
-    postalCode: null,
-    countryCode: "PH",
   };
 }
 
