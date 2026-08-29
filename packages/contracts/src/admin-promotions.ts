@@ -3,6 +3,10 @@ import type { AuthenticatedRequest, RpcResult } from "./index";
 export const promotionStatuses = ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 export type PromotionStatus = (typeof promotionStatuses)[number];
 
+/** Codes owned by the membership trial authority and never manageable by Admin. */
+export const reservedPromotionCodes = ["INTRO_TRIAL", "LEGACY_TRIAL_HISTORY"] as const;
+export type ReservedPromotionCode = (typeof reservedPromotionCodes)[number];
+
 /**
  * The order-benefit subset manageable by this admin surface. The membership
  * fee waiver stays exclusively owned by the introductory-trial authority;

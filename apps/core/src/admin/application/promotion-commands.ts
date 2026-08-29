@@ -11,7 +11,7 @@ import type {
   ManageableBenefitType,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { manageableBenefitTypes } from "@freshmarkets/contracts";
+import { manageableBenefitTypes, reservedPromotionCodes } from "@freshmarkets/contracts";
 import { claimCommandIdempotency } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { log } from "../../observability";
@@ -67,6 +67,9 @@ export async function createAdminPromotion(
   const code = request.code.trim();
   if (!/^[A-Z][A-Z0-9_]*$/.test(code)) {
     return failure("VALIDATION_FAILED", "code must be UPPER_SNAKE_CASE", request.requestId);
+  }
+  if ((reservedPromotionCodes as readonly string[]).includes(code)) {
+    return failure("VALIDATION_FAILED", "Promotion code is reserved", request.requestId);
   }
   const name = request.name.trim();
   if (name === "") {
@@ -531,6 +534,21 @@ export async function grantAdminPromotion(
     return failure("CONFLICT", "The grant command is still processing", request.requestId);
   }
 
+  const existingGrant = await deps.db
+    .prepare(
+      "SELECT id FROM promotion_grant WHERE benefit_code = ? AND customer_id = ? LIMIT 1",
+    )
+    .bind(promotion.code, request.customerId)
+    .first<{ id: string }>();
+  if (existingGrant) {
+    await idempotencyFailed(deps.db, GRANT_SCOPE, request.idempotencyKey);
+    return failure(
+      "CONFLICT",
+      "This promotion is already granted to the customer",
+      request.requestId,
+    );
+  }
+
   const grantId = crypto.randomUUID();
   let batchResults: D1Result[];
   try {
@@ -565,6 +583,14 @@ export async function grantAdminPromotion(
       message: error instanceof Error ? error.message : String(error),
     });
     await idempotencyFailed(deps.db, GRANT_SCOPE, request.idempotencyKey);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("promotion_grant_promotion_customer_unique") || message.includes("UNIQUE")) {
+      return failure(
+        "CONFLICT",
+        "This promotion is already granted to the customer",
+        request.requestId,
+      );
+    }
     return failure("CONFLICT", "The grant could not be recorded", request.requestId);
   }
   if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {

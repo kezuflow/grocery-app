@@ -188,6 +188,30 @@ describe("promotion administration", () => {
     expect(duplicate).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
   });
 
+  it("rejects every system-owned membership promotion code", async () => {
+    const manager = await seedManager();
+
+    for (const code of ["INTRO_TRIAL", "LEGACY_TRIAL_HISTORY"]) {
+      const result = await core.createAdminPromotion({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        code,
+        name: "Reserved promotion",
+        description: "",
+        benefitType: "ORDER_FIXED_DISCOUNT",
+        discountMinor: 100,
+        minimumMinor: 0,
+        startsAt: new Date().toISOString(),
+        idempotencyKey: `reserved-${crypto.randomUUID()}`,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "VALIDATION_FAILED", message: "Promotion code is reserved" },
+      });
+    }
+  });
+
   it("updates only drafts with version guards and audits the change", async () => {
     const manager = await seedManager();
     const created = await core.createAdminPromotion({
@@ -306,7 +330,32 @@ describe("promotion administration", () => {
     expect(active.status).toBe("ACTIVE");
 
     // Grant requires ACTIVE; replay returns the same grant.
+    const grantKey = `grant-${crypto.randomUUID()}`;
     const grant = await core.grantAdminPromotion({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      promotionId,
+      customerId,
+      maxRedemptions: 1,
+      idempotencyKey: grantKey,
+    });
+    expect(grant.ok).toBe(true);
+    if (!grant.ok) return;
+    expect(grant.value).toMatchObject({ customerId, benefitType: "ORDER_FIXED_DISCOUNT" });
+
+    const replay = await core.grantAdminPromotion({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      promotionId,
+      customerId,
+      maxRedemptions: 1,
+      idempotencyKey: grantKey,
+    });
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    expect(replay.value.grantId).toBe(grant.value.grantId);
+
+    const duplicate = await core.grantAdminPromotion({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       promotionId,
@@ -314,9 +363,17 @@ describe("promotion administration", () => {
       maxRedemptions: 1,
       idempotencyKey: `grant-${crypto.randomUUID()}`,
     });
-    expect(grant.ok).toBe(true);
-    if (!grant.ok) return;
-    expect(grant.value).toMatchObject({ customerId, benefitType: "ORDER_FIXED_DISCOUNT" });
+    expect(duplicate).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT", message: "This promotion is already granted to the customer" },
+    });
+
+    const grantCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM promotion_grant WHERE benefit_code=? AND customer_id=?",
+    )
+      .bind(created.value.code, customerId)
+      .first<{ count: number }>();
+    expect(grantCount?.count).toBe(1);
 
     const eligible = await core.previewAdminPromotion({
       requestId: crypto.randomUUID(),

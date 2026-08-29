@@ -80,8 +80,14 @@ describe("promotion BFF routes", () => {
       promoParams,
     );
     await preview(jsonRequest("https://x/p1/preview", { subtotalMinor: 5000 }), promoParams);
-    await listGrants(new Request("https://x/p1/grants", { headers: COOKIE }), promoParams);
-    await listRedemptions(new Request("https://x/p1/redemptions", { headers: COOKIE }), promoParams);
+    await listGrants(
+      new Request("https://x/p1/grants?cursor=grant-next&limit=25", { headers: COOKIE }),
+      promoParams,
+    );
+    await listRedemptions(
+      new Request("https://x/p1/redemptions?cursor=redemption-next&limit=10", { headers: COOKIE }),
+      promoParams,
+    );
 
     for (const mock of [
       coreMocks.getAdminPromotion,
@@ -92,6 +98,14 @@ describe("promotion BFF routes", () => {
     ]) {
       expect((mock.mock.calls[0][0] as Record<string, unknown>).promotionId).toBe("promo-1");
     }
+    expect(coreMocks.listPromotionGrants.mock.calls[0][0]).toMatchObject({
+      cursor: "grant-next",
+      limit: 25,
+    });
+    expect(coreMocks.listPromotionRedemptions.mock.calls[0][0]).toMatchObject({
+      cursor: "redemption-next",
+      limit: 10,
+    });
   });
 
   it("delegates updates and grants with the idempotency key", async () => {

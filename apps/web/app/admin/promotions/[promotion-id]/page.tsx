@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import type {
   AdminPromotionDetail,
   AdminPromotionGrantPage,
@@ -45,6 +45,7 @@ export default function PromotionDetailPage({
   const [previewResult, setPreviewResult] = useState<AdminPromotionPreviewView | null>(null);
   const [grantCustomerId, setGrantCustomerId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const commandKeys = useRef(new Map<string, string>());
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -89,17 +90,61 @@ export default function PromotionDetailPage({
   useEffect(() => load(), [load]);
 
   async function run(url: string, method: "POST" | "PATCH", body: unknown) {
+    const intent = `${method}:${url}:${JSON.stringify(body)}`;
+    const idempotencyKey = commandKeys.current.get(intent) ?? crypto.randomUUID();
+    commandKeys.current.set(intent, idempotencyKey);
     const response = await fetch(url, {
       method,
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
       body: JSON.stringify(body),
     });
     const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
+      error?: { code?: string; message?: string };
     };
-    setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
-    if (payload.ok) load();
+    setNotice(
+      payload.ok
+        ? "Applied."
+        : payload.error?.code === "CONFLICT" && url.endsWith("/grants")
+          ? "This customer already has a grant for this promotion."
+          : (payload.error?.message ?? "The command failed."),
+    );
+    if (payload.ok) {
+      commandKeys.current.delete(intent);
+      if (url.endsWith("/grants")) setGrantCustomerId("");
+      load();
+    }
     return payload.ok;
+  }
+
+  async function loadHistory(kind: "grants" | "redemptions", cursor: string) {
+    const response = await fetch(
+      `${BASE}/${encodeURIComponent(promotionId)}/${kind}?cursor=${encodeURIComponent(cursor)}`,
+    );
+    const payload = (await response.json()) as RpcResult<
+      AdminPromotionGrantPage | AdminPromotionRedemptionPage
+    >;
+    if (!payload.ok) {
+      setNotice(payload.error.message);
+      return;
+    }
+    setState((current) => {
+      if (current.phase !== "ready") return current;
+      if (kind === "grants") {
+        const next = payload.value as AdminPromotionGrantPage;
+        return {
+          ...current,
+          grants: { items: [...current.grants.items, ...next.items], nextCursor: next.nextCursor },
+        };
+      }
+      const next = payload.value as AdminPromotionRedemptionPage;
+      return {
+        ...current,
+        redemptions: {
+          items: [...current.redemptions.items, ...next.items],
+          nextCursor: next.nextCursor,
+        },
+      };
+    });
   }
 
   if (state.phase === "loading") {
@@ -331,6 +376,17 @@ export default function PromotionDetailPage({
             ))}
           </ul>
         )}
+        {grants.nextCursor ? (
+          <div className="border-t border-[var(--fm-border)] p-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void loadHistory("grants", grants.nextCursor!)}
+            >
+              Load more grants
+            </Button>
+          </div>
+        ) : null}
       </ListPageSection>
 
       <ListPageSection title="Redemptions" description="Recorded at checkout; read-only here.">
@@ -351,6 +407,17 @@ export default function PromotionDetailPage({
             ))}
           </ul>
         )}
+        {redemptions.nextCursor ? (
+          <div className="border-t border-[var(--fm-border)] p-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void loadHistory("redemptions", redemptions.nextCursor!)}
+            >
+              Load more redemptions
+            </Button>
+          </div>
+        ) : null}
       </ListPageSection>
     </div>
   );

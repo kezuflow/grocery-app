@@ -33,6 +33,25 @@ describe("promotion administration migration 0029", () => {
     expect(columns.results.map((row) => row.name)).toContain("customer_id");
   });
 
+  it("enforces one customer grant per promotion code", async () => {
+    const indexes = await env.DB.prepare("PRAGMA index_list(promotion_grant)").all<{
+      name: string;
+      unique: number;
+      partial: number;
+    }>();
+    expect(indexes.results).toContainEqual(
+      expect.objectContaining({
+        name: "promotion_grant_promotion_customer_unique",
+        unique: 1,
+        partial: 1,
+      }),
+    );
+    const columns = await env.DB.prepare(
+      "PRAGMA index_info(promotion_grant_promotion_customer_unique)",
+    ).all<{ name: string }>();
+    expect(columns.results.map((row) => row.name)).toEqual(["benefit_code", "customer_id"]);
+  });
+
   it("copies legacy promotions as active fixed-discount definitions", async () => {
     const legacy = await env.DB.prepare(
       "SELECT code, status, benefit_type, discount_minor, minimum_minor, version FROM promotion WHERE code = 'WELCOME50'",

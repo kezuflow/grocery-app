@@ -3,6 +3,7 @@ import {
   promotionStatuses,
   manageableBenefitTypes,
   previewReasonCodes,
+  reservedPromotionCodes,
   type AdminPromotionDetail,
   type AdminPromotionPreviewView,
 } from "./admin-promotions";
@@ -11,6 +12,7 @@ describe("promotions contracts", () => {
   it("publishes the closed lifecycle, benefit, and preview vocabularies", () => {
     expect(promotionStatuses).toEqual(["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"]);
     expect(manageableBenefitTypes).toEqual(["ORDER_FIXED_DISCOUNT", "ORDER_PERCENT_DISCOUNT"]);
+    expect(reservedPromotionCodes).toEqual(["INTRO_TRIAL", "LEGACY_TRIAL_HISTORY"]);
     expect(previewReasonCodes).toEqual([
       "PROMOTION_INACTIVE",
       "PROMOTION_NOT_STARTED",

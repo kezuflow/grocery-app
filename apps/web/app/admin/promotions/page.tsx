@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { AdminPromotionPage, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
@@ -28,6 +28,7 @@ export default function PromotionsPage() {
   const [name, setName] = useState("");
   const [discount, setDiscount] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const commandKeys = useRef(new Map<string, string>());
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -62,9 +63,16 @@ export default function PromotionsPage() {
       setNotice("A code, name, and numeric discount are required.");
       return;
     }
+    const intent = JSON.stringify({
+      code: code.trim().toUpperCase(),
+      name: name.trim(),
+      discountMinor: Math.round(Number(discount) * 100),
+    });
+    const idempotencyKey = commandKeys.current.get(intent) ?? crypto.randomUUID();
+    commandKeys.current.set(intent, idempotencyKey);
     const response = await fetch("/api/admin/promotions", {
       method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
       body: JSON.stringify({
         code: code.trim().toUpperCase(),
         name: name.trim(),
@@ -81,6 +89,7 @@ export default function PromotionsPage() {
       payload.ok ? "Promotion created as DRAFT." : (payload.error?.message ?? "Creation failed."),
     );
     if (payload.ok) {
+      commandKeys.current.delete(intent);
       setCode("");
       setName("");
       setDiscount("");
