@@ -20,7 +20,12 @@ function lineNumber(content, index) {
 }
 
 for (const file of files) {
-  if (!isSource(file) || file.includes("worker-configuration.d.ts")) continue;
+  if (
+    !isSource(file) ||
+    file.includes("worker-configuration.d.ts") ||
+    file === "scripts/verify-readiness-security.mjs"
+  )
+    continue;
   const content = await readFile(`${root}/${file}`, "utf8");
 
   const secretPatterns = [
