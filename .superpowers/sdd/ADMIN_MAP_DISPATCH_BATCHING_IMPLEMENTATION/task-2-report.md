@@ -137,3 +137,50 @@ Tasks 3–5 may rely on canonical Rider/batch/job/stop/event/proof tables, manua
 cycle constraints, immutable destination snapshots, append-only events, optimistic versions, and
 the active-context/Rider indexes. They may not rely on any runtime query, route provider, command,
 or Web behavior from this task.
+
+## Review fix round 1
+
+All four review findings were confirmed with new pre-fix tests before implementation. The
+full-chain migration fixture first failed while applying 0043 to schema-valid historical
+`LEGACY_OPEN` / `MYSTERY` batch statuses. The Instant and Scheduled paid-commitment tests first
+failed because the transaction created a delivery job without its required canonical stop; after
+stop insertion was added, they remained red until authoritative location/zone context was also
+written to the delivery job.
+
+The migration is now rollout-safe for the complete requested pre-0043 input space: empty batches,
+cycles without capacity, unbatched stops with sequences, batched stops without sequences,
+duplicate stops for one job, duplicate/zero/negative sequences, and unconstrained batch/stop
+statuses. It deterministically chooses one canonical stop per job and normalizes assigned
+sequences, while `delivery_batch_compatibility_history` and
+`delivery_stop_compatibility_history` retain every original row and the exact original status,
+sequence, proof, Rider, version, timestamp, and snapshot bytes. Both history tables are indexed
+and append-only. Empty or otherwise unresolvable historical batches use the constrained
+`LEGACY_UNRESOLVED` + `EXCEPTION` path with null location/zone rather than an invented hub; newly
+created resolved batches still require a valid location/context.
+
+Canonical instruction snapshots now prefer structured `delivery_instructions_json` and fall back
+deterministically to legacy pre-0042 `notes`. The source `address_snapshot_json` is copied
+byte-for-byte. The full-chain test covers both paths. `rider_identity.staff_id` and
+`auth_user_id` are nullable optional unique links; auth is deliberately not a lifecycle-owning
+foreign key. Valid historical staff/auth links are backfilled, unmappable `rider_user_id` values
+remain losslessly represented in compatibility history, and an application-owned Rider with
+neither link is accepted.
+
+The paid-order commitment transaction now allocates job and stop IDs before its D1 batch and
+atomically inserts exactly one unbatched canonical stop immediately after every new Instant or
+Scheduled delivery job. The stop snapshots coordinates, address, contact, and instructions; the
+job receives the same authoritative fulfillment location/zone context. The existing rollback
+test now also proves that a later transaction failure leaves neither job nor stop behind.
+
+Review-fix verification:
+
+- Focused migration and both paid-commitment suites: exit 0; 3 files, 8 tests.
+- Full Core suite: exit 0; 95 files, 514 tests.
+- The final format, naming, migration, lint, typecheck, Core build, and diff gates were rerun after
+  this report was appended and before the separate fix commit.
+
+No Task 3+ command, query, route, provider, contract, or UI work was added. A deliberately mixed
+location/zone legacy batch remains outside the confirmed fixture set; 0043 deterministically uses
+the first ranked stop context and retains every source row in compatibility history, so rollout
+does not abort or erase the conflicting evidence. Later operational reads must continue to treat
+legacy `EXCEPTION` work as non-assignable until explicitly reconciled.

@@ -66,7 +66,7 @@ async function seededInstantQuote(): Promise<{ quoteId: string; customerId: stri
   if (!trial.ok) throw new Error("fixture failed");
   const addressId = `addr-${customerId}`;
   await env.DB.prepare(
-    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'C', '09', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'active', 1, ?, ?)",
+    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'C', '09', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'Call on arrival', 'active', 1, ?, ?)",
   )
     .bind(addressId, customerId, ZONE_CODE, now, now)
     .run();
@@ -151,14 +151,46 @@ describe("instant order commitment", () => {
     expect(snapshot?.cycle_id).toBeNull();
     expect(snapshot?.promised_at).toBeGreaterThan(Date.now());
     const job = await env.DB.prepare(
-      "SELECT fulfillment_mode, status, rider_user_id FROM delivery_job WHERE order_id=?",
+      "SELECT fulfillment_mode, cycle_id, location_id, zone_id, promised_at, status, rider_user_id FROM delivery_job WHERE order_id=?",
     )
       .bind(orderId)
-      .first<{ fulfillment_mode: string; status: string; rider_user_id: string | null }>();
+      .first<{
+        fulfillment_mode: string;
+        cycle_id: string | null;
+        location_id: string | null;
+        zone_id: string | null;
+        promised_at: number | null;
+        status: string;
+        rider_user_id: string | null;
+      }>();
     expect(job).toMatchObject({
       fulfillment_mode: "INSTANT",
+      cycle_id: null,
+      location_id: LOCATION,
+      zone_id: "zone-cebu-city-core",
       status: "UNASSIGNED",
       rider_user_id: null,
+    });
+    expect(Number(job?.promised_at)).toBeGreaterThan(Date.now());
+    const stop = await env.DB.prepare(
+      "SELECT ds.batch_id, ds.sequence, ds.latitude, ds.longitude, ds.address_snapshot_json, ds.contact_snapshot_json, ds.instructions_snapshot, ds.status FROM delivery_stop ds JOIN delivery_job dj ON dj.id=ds.delivery_job_id WHERE dj.order_id=?",
+    )
+      .bind(orderId)
+      .first<Record<string, unknown>>();
+    expect(stop).toMatchObject({
+      batch_id: null,
+      sequence: null,
+      latitude: 10.32,
+      longitude: 123.9,
+      contact_snapshot_json: '{"recipient":"C","phone":"09"}',
+      instructions_snapshot: '{"deliveryNote":"Call on arrival"}',
+      status: "UNASSIGNED",
+    });
+    expect(JSON.parse(String(stop?.address_snapshot_json))).toMatchObject({
+      recipient: "C",
+      phone: "09",
+      latitude: 10.32,
+      longitude: 123.9,
     });
     const hold = await env.DB.prepare(
       "SELECT status FROM checkout_inventory_holds WHERE checkout_attempt_id=?",
@@ -180,6 +212,11 @@ describe("instant order commitment", () => {
       "SELECT id FROM grocery_order WHERE fulfillment_mode='INSTANT'",
     ).all<{ id: string }>();
     for (const row of prior.results ?? []) {
+      await env.DB.prepare(
+        "DELETE FROM delivery_stop WHERE delivery_job_id=(SELECT id FROM delivery_job WHERE order_id=?)",
+      )
+        .bind(row.id)
+        .run();
       await env.DB.prepare("DELETE FROM delivery_job WHERE order_id=?").bind(row.id).run();
       await env.DB.prepare("DELETE FROM inventory_reservation WHERE order_id=?").bind(row.id).run();
       await env.DB.prepare("DELETE FROM order_item WHERE order_id=?").bind(row.id).run();

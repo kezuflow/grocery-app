@@ -127,6 +127,23 @@ export async function applyCheckoutPaymentReaction(
   }
 
   const orderId = crypto.randomUUID();
+  const deliveryJobId = crypto.randomUUID();
+  const deliveryStopId = crypto.randomUUID();
+  const addressSnapshot = (quote.addressSnapshot ?? {}) as Record<string, unknown>;
+  const addressSnapshotJson = JSON.stringify(addressSnapshot);
+  const latitude = typeof addressSnapshot.latitude === "number" ? addressSnapshot.latitude : null;
+  const longitude =
+    typeof addressSnapshot.longitude === "number" ? addressSnapshot.longitude : null;
+  const contactSnapshotJson = JSON.stringify({
+    recipient: typeof addressSnapshot.recipient === "string" ? addressSnapshot.recipient : null,
+    phone: typeof addressSnapshot.phone === "string" ? addressSnapshot.phone : null,
+  });
+  const instructionsSnapshot = deliveryInstructionsSnapshot(addressSnapshot);
+  const promisedAt = instant
+    ? Date.parse(
+        (fulfillment as { promisedAt?: string } | null)?.promisedAt ?? new Date(now).toISOString(),
+      )
+    : null;
   const statements: D1PreparedStatement[] = [
     // Unique payment-intent identity claims the entire commitment.
     database
@@ -143,7 +160,7 @@ export async function applyCheckoutPaymentReaction(
         quote.customerId,
         instant ? null : quote.deliveryCycleId,
         instant ? "INSTANT" : "SCHEDULED",
-        JSON.stringify(quote.addressSnapshot),
+        addressSnapshotJson,
         quote.totalMinor,
         quote.currency,
         now,
@@ -158,10 +175,7 @@ export async function applyCheckoutPaymentReaction(
             orderId,
             cycleSnapshot.locationId,
             cycleSnapshot.zoneId,
-            Date.parse(
-              (fulfillment as { promisedAt?: string } | null)?.promisedAt ??
-                new Date(now).toISOString(),
-            ),
+            promisedAt,
             JSON.stringify(fulfillment?.sourcingModes ?? []),
             JSON.stringify(quote.deliveryFeeSnapshot),
             now,
@@ -191,14 +205,32 @@ export async function applyCheckoutPaymentReaction(
       .bind(crypto.randomUUID(), orderId, cycleSnapshot.locationId, now),
     database
       .prepare(
-        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 'UNASSIGNED', ?, NULL, ?, ?)",
+        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, promised_at, rider_user_id, status, address_snapshot_json, delivered_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'UNASSIGNED', ?, NULL, ?, ?)",
       )
       .bind(
-        crypto.randomUUID(),
+        deliveryJobId,
         orderId,
         instant ? null : quote.deliveryCycleId,
         instant ? "INSTANT" : "SCHEDULED",
-        JSON.stringify(quote.addressSnapshot),
+        cycleSnapshot.locationId,
+        cycleSnapshot.zoneId,
+        promisedAt,
+        addressSnapshotJson,
+        now,
+        now,
+      ),
+    database
+      .prepare(
+        "INSERT INTO delivery_stop (id, delivery_job_id, batch_id, sequence, latitude, longitude, address_snapshot_json, contact_snapshot_json, instructions_snapshot, status, proof_json, arrived_at, delivered_at, failure_reason_code, failure_notes, version, created_at, updated_at) VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, 'UNASSIGNED', NULL, NULL, NULL, NULL, NULL, 1, ?, ?)",
+      )
+      .bind(
+        deliveryStopId,
+        deliveryJobId,
+        latitude,
+        longitude,
+        addressSnapshotJson,
+        contactSnapshotJson,
+        instructionsSnapshot,
         now,
         now,
       ),
@@ -380,6 +412,14 @@ export async function applyCheckoutPaymentReaction(
     await recordFinanceExceptionRow(database, input, "TRANSIENT_FAILURE", message, now);
     return { applied: false, reason: "CAS_CONFLICT" };
   }
+}
+
+function deliveryInstructionsSnapshot(addressSnapshot: Record<string, unknown>): string | null {
+  const structured = addressSnapshot.delivery_instructions_json;
+  if (typeof structured === "string") return structured;
+  if (structured !== null && typeof structured === "object") return JSON.stringify(structured);
+  const notes = addressSnapshot.notes;
+  return typeof notes === "string" ? JSON.stringify({ deliveryNote: notes }) : null;
 }
 
 async function recordFinanceExceptionRow(

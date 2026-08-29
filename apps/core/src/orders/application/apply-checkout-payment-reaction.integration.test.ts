@@ -35,9 +35,9 @@ async function seededCheckout(
     .run();
   const addressId = `addr-co-${n}`;
   await env.DB.prepare(
-    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, delivery_zone_code, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'R', '09', '{}', 10.3, 123.9, 'CEBU_CITY_CORE', 'active', 1, ?, ?)",
+    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, delivery_zone_code, delivery_instructions_json, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'R', '09', '{}', 10.3, 123.9, 'CEBU_CITY_CORE', ?, 'Legacy note must not win', 'active', 1, ?, ?)",
   )
-    .bind(addressId, customerId, now, now)
+    .bind(addressId, customerId, '{"gateGuard":"Ask guard"}', now, now)
     .run();
 
   // Dedicated product/pool/sku so sourcing and stock are test-controlled.
@@ -203,6 +203,36 @@ describe("order commitment from canonical payment reactions", () => {
       .bind(outcome.orderId)
       .first<{ count: number }>();
     expect(demand?.count).toBe(0);
+    const delivery = await env.DB.prepare(
+      `SELECT dj.id AS job_id, dj.location_id, dj.zone_id, dj.cycle_id,
+              ds.id AS stop_id, ds.batch_id, ds.sequence,
+              ds.latitude, ds.longitude, ds.address_snapshot_json,
+              ds.contact_snapshot_json, ds.instructions_snapshot, ds.status
+       FROM delivery_job dj
+       JOIN delivery_stop ds ON ds.delivery_job_id=dj.id
+       WHERE dj.order_id=?`,
+    )
+      .bind(outcome.orderId)
+      .first<Record<string, unknown>>();
+    expect(delivery).toMatchObject({
+      batch_id: null,
+      sequence: null,
+      location_id: "location-cebu-central",
+      zone_id: "zone-cebu-city-core",
+      latitude: 10.3,
+      longitude: 123.9,
+      contact_snapshot_json: '{"recipient":"R","phone":"09"}',
+      instructions_snapshot: '{"gateGuard":"Ask guard"}',
+      status: "UNASSIGNED",
+    });
+    expect(delivery?.job_id).toBeTypeOf("string");
+    expect(delivery?.stop_id).toBeTypeOf("string");
+    expect(JSON.parse(String(delivery?.address_snapshot_json))).toMatchObject({
+      recipient: "R",
+      phone: "09",
+      latitude: 10.3,
+      longitude: 123.9,
+    });
 
     // Duplicate reaction replay returns the same order without new effects.
     const replay = await applyCheckoutPaymentReaction(env.DB, {
@@ -306,6 +336,14 @@ describe("order commitment from canonical payment reactions", () => {
       canonicalPaymentState: "SUCCEEDED",
     });
     expect(failed).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+    const failedDeliveryRows = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM delivery_job dj JOIN grocery_order go ON go.id=dj.order_id JOIN payment_attempt pa ON pa.id=go.payment_id WHERE pa.payment_intent_id=?) AS jobs,
+         (SELECT COUNT(*) FROM delivery_stop ds JOIN delivery_job dj ON dj.id=ds.delivery_job_id JOIN grocery_order go ON go.id=dj.order_id JOIN payment_attempt pa ON pa.id=go.payment_id WHERE pa.payment_intent_id=?) AS stops`,
+    )
+      .bind(intentId, intentId)
+      .first<{ jobs: number; stops: number }>();
+    expect(failedDeliveryRows).toEqual({ jobs: 0, stops: 0 });
     await env.DB.prepare(
       "UPDATE inventory_balance SET on_hand=100000 WHERE location_id='location-cebu-central' AND inventory_pool_id=?",
     )
