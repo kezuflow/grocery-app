@@ -73,3 +73,8 @@ journeys remain an unmet gate behind the unprovisioned auth-email transport, and
 administration, bulk import, detail authoring, and purchase/receiving are explicitly deferred.
 Slice 6 is not authorized for implementation and requires its own plan produced from the
 then-current repository per the plan production rule.
+Slice 8 (Analytics) is implemented per
+`docs/superpowers/plans/ADMIN_ANALYTICS_SLICE_8_IMPLEMENTATION_PLAN.md`; metric definitions,
+scoped read models, BFF routes, and the Analytics workspace are complete, while authenticated
+browser execution remains environment-gated by the unprovisioned auth-email transport. Slice 9
+readiness work has not begun.

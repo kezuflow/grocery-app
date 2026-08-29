@@ -19,6 +19,19 @@ Status date: 2026-08-27. This file is descriptive evidence only. The canonical d
   databases containing pre-existing grocery orders because of its unconditional `DROP TABLE
 grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
 
+## Admin Analytics Slice 8 (2026-08-29)
+
+- Versioned Analytics definitions are persisted in Core through migrations `0032` and additive
+  `0033`; formula metadata is descriptive and dispatch is a closed named-query registry.
+- Core exposes capability- and scope-checked definition, Overview, and metric-series reads. It
+  returns typed `UNAVAILABLE` results whenever canonical event timestamps, accounting policy, or
+  source attribution are not instrumented; no inferred timestamps or client formulas are used.
+- Web adds thin same-origin Analytics BFF routes and an `/admin/analytics` workspace with numeric,
+  unavailable, freshness, loading, empty, permission, validation, and error states.
+- Reconciliation coverage verifies all blocked catalog metrics remain unavailable and source reads
+  are read-only. Authenticated Playwright execution remains environment-gated by the existing
+  unprovisioned auth-email transport.
+
 ## Admin Foundation Slice 1 (2026-08-27)
 
 - Canonical dot-form admin capabilities are seeded by `0026_admin_foundation.sql` with additive
