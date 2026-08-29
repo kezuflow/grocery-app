@@ -123,10 +123,10 @@ imported or exposed.
   `0042_mapbox_address_confirmation.sql` are unchanged; no `0043` exists.
 - The four pre-existing untracked Maps plan/spec inputs remain preserved and unstaged. No Admin
   application/design file or Plan 1 runtime file changed.
-- TypeScript cannot encode the runtime 1–24 array bound or the relational rule
-  `SCHEDULED => cycleId` / `INSTANT => cycleId null` while preserving the plan-mandated exact flat
-  command shape. Task 5 must enforce both at the Core boundary and transaction preflight; the
-  canonical API/domain/state documents make those runtime rules explicit.
+- TypeScript cannot encode the runtime 1–24 array bound or encode the relational rule
+  `SCHEDULED => cycleId` / `INSTANT => cycleId null` on the plan-mandated exact flat
+  `CreateAndAssignDeliveryBatchRequest`. Task 5 must enforce both at the Core boundary and
+  transaction preflight; the read/preview requests encode the relation as a discriminated union.
 - `DeliveryMapPin.status` remains `string` because the approved plan requires that exact shape;
   request filters and the other new purpose-built status fields use closed canonical vocabularies
   where the exact-shape lock does not apply.
@@ -138,3 +138,41 @@ imported or exposed.
 
 Task 2 may rely on the canonical persistence ownership/rulings and all later tasks may rely only on
 the DTOs and binding methods above, not on any runtime implementation.
+
+## Review fix round 1: discriminate read and preview dispatch context
+
+### Confirmed defect and ruling
+
+Review found that the shared `DeliveryDispatchContext` was flat:
+`fulfillmentMode: "INSTANT" | "SCHEDULED"` plus `cycleId: string | null`. Consequently,
+`SCHEDULED + null` and `INSTANT + string` compiled for `DeliveryMapRequest`,
+`DeliveryMapDetailRequest`, `EligibleRidersRequest`, and `PreviewDeliveryBatchRouteRequest`, even
+though the canonical contract requires a cycle only for Scheduled operations.
+
+The read/preview context is now the discriminated union
+`{ fulfillmentMode: "INSTANT"; cycleId: null } | { fulfillmentMode: "SCHEDULED"; cycleId: string }`
+intersected with required `locationId`. Its intersections with `AuthenticatedRequest` retain
+headers/request metadata, and detail/preview retain `jobId`/`expectedVersion` and ordered
+job/version pairs respectively. The exact mandated flat `CreateAndAssignDeliveryBatchRequest` is
+unchanged; Task 5 remains responsible for its runtime mode/cycle relation and 1–24 bounds.
+
+### Genuine focused RED
+
+- `pnpm --filter @freshmarkets/contracts typecheck` — exit 1.
+- TypeScript reported eight unused `@ts-expect-error` directives: both invalid mode/cycle
+  combinations compiled for each of map, detail, eligible-rider, and route-preview requests.
+
+### Focused and full GREEN
+
+- `pnpm --filter @freshmarkets/contracts typecheck` — exit 0.
+- `pnpm --filter @freshmarkets/contracts test -- delivery-maps.test.ts core-service.test.ts` —
+  exit 0; 2 files, 10 tests.
+- `pnpm --filter @freshmarkets/contracts test` — exit 0; 15 files, 51 tests.
+- `pnpm format:check` — exit 0; 638 files matched.
+- `pnpm naming:check` — exit 0.
+- `git diff --check` — exit 0 before this report append and is rerun before commit.
+
+Review-fix files are exactly `packages/contracts/src/delivery-maps.ts`,
+`packages/contracts/src/delivery-maps.test.ts`, and this appended report. There is no migration,
+Core/Web implementation, canonical-document change, Task 2 work, or disturbance to the four
+untracked plan/spec inputs.

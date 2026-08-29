@@ -115,12 +115,10 @@ export type DeliveryBatchView = {
   completedAt: string | null;
 };
 
-type DeliveryDispatchContext = {
-  locationId: string;
-  fulfillmentMode: FulfillmentMode;
-  /** Required for Scheduled and null for Instant; Core validates this relation. */
-  cycleId: string | null;
-};
+type DeliveryDispatchContext = { locationId: string } & (
+  | { fulfillmentMode: "INSTANT"; cycleId: null }
+  | { fulfillmentMode: "SCHEDULED"; cycleId: string }
+);
 
 export type DeliveryMapRequest = AuthenticatedRequest &
   DeliveryDispatchContext & {

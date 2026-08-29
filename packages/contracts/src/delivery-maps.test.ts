@@ -208,6 +208,69 @@ describe("delivery map and atomic dispatch contracts", () => {
       ...auth,
       locationId: "location-1",
       fulfillmentMode: "SCHEDULED",
+      cycleId: null,
+      // @ts-expect-error Scheduled map requests require a cycle identity.
+    } satisfies DeliveryMapRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "INSTANT",
+      cycleId: "cycle-1",
+      // @ts-expect-error Instant map requests cannot carry a cycle identity.
+    } satisfies DeliveryMapRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "SCHEDULED",
+      cycleId: null,
+      jobId: "job-1",
+      expectedVersion: 3,
+      // @ts-expect-error Scheduled detail requests require a cycle identity.
+    } satisfies DeliveryMapDetailRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "INSTANT",
+      cycleId: "cycle-1",
+      jobId: "job-1",
+      expectedVersion: 3,
+      // @ts-expect-error Instant detail requests cannot carry a cycle identity.
+    } satisfies DeliveryMapDetailRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "SCHEDULED",
+      cycleId: null,
+      // @ts-expect-error Scheduled rider requests require a cycle identity.
+    } satisfies EligibleRidersRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "INSTANT",
+      cycleId: "cycle-1",
+      // @ts-expect-error Instant rider requests cannot carry a cycle identity.
+    } satisfies EligibleRidersRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "SCHEDULED",
+      cycleId: null,
+      orderedDeliveries: [{ jobId: "job-1", expectedVersion: 3 }],
+      // @ts-expect-error Scheduled preview requests require a cycle identity.
+    } satisfies PreviewDeliveryBatchRouteRequest);
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "INSTANT",
+      cycleId: "cycle-1",
+      orderedDeliveries: [{ jobId: "job-1", expectedVersion: 3 }],
+      // @ts-expect-error Instant preview requests cannot carry a cycle identity.
+    } satisfies PreviewDeliveryBatchRouteRequest);
+
+    void ({
+      ...auth,
+      locationId: "location-1",
+      fulfillmentMode: "SCHEDULED",
       // @ts-expect-error A Scheduled map request cannot omit its cycle context.
     } satisfies DeliveryMapRequest);
     void ({
