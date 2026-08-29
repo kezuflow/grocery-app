@@ -10,10 +10,7 @@ export function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">)
 export function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
   return (
     <ol
-      className={cn(
-        "flex flex-wrap items-center gap-1.5 text-[var(--fm-text-muted)]",
-        className,
-      )}
+      className={cn("flex flex-wrap items-center gap-1.5 text-[var(--fm-text-muted)]", className)}
       {...props}
     />
   );

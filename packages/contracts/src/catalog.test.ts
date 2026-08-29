@@ -84,7 +84,12 @@ describe("catalog contracts", () => {
   it("describes marketplace home rails bounded by category", () => {
     const home: MarketplaceHomeView = {
       categories: [
-        { code: "AROMATICS_SPICES", name: "Aromatics & Spices", slug: "aromatics-spices" },
+        {
+          code: "AROMATICS_SPICES",
+          name: "Aromatics & Spices",
+          slug: "aromatics-spices",
+          iconSrc: "/category-icons/aromatics-spices.svg",
+        },
       ],
       rails: [
         {
@@ -97,6 +102,7 @@ describe("catalog contracts", () => {
     };
     expect(home.rails[0]?.items).toHaveLength(1);
     expect(home.rails[0]?.categorySlug).toBe("aromatics-spices");
+    expect(home.categories[0]?.iconSrc).toBe("/category-icons/aromatics-spices.svg");
   });
 
   it("accepts category, cursor, limit, and location filters on catalog search requests", () => {

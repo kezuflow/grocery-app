@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Leaf } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Leaf } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import { formatMoney } from "../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../lib/storefront/catalog-presentation";
@@ -47,10 +48,10 @@ export function ProductMedia({
 }
 
 /**
- * Low-chrome product card: media tile, price, name, fixed variant, and
- * availability with a compact add control in a stable footprint. The card
- * opens the quick-view overlay without losing browse position; the real href
- * keeps deep links and no-JS navigation working.
+ * Low-chrome product card: media tile, price, name, and a compact add control
+ * in a stable footprint. Variant and availability details remain available in
+ * quick view and on the product page. The real href keeps deep links and no-JS
+ * navigation working.
  */
 export function ProductCard({ product }: { product: PresentationProduct }) {
   const quickView = useQuickView();
@@ -65,7 +66,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
             quickView.openProduct(product.slug);
           }}
           aria-label={`${product.name} details`}
-          className="block rounded-[var(--fm-radius-surface)] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
+          className="block rounded-[var(--fm-radius-surface)] p-[7px] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
         >
           <ProductMedia media={product.media} name={product.name} />
         </Link>
@@ -86,30 +87,14 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
           event.preventDefault();
           quickView.openProduct(product.slug);
         }}
-        className="block pt-3 focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
+        className="block pt-2 focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
       >
-        <p className="text-base font-bold tabular-nums">
+        <p className="text-sm leading-[22px] font-semibold tabular-nums">
           {variant && variant.priceMinor !== null && variant.currency !== null
             ? formatMoney(variant.priceMinor, variant.currency)
             : "Unavailable"}
         </p>
-        <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5">{product.name}</h3>
-        <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
-          {variant
-            ? variant.merchandisingLabel
-              ? `${variant.label} · ${variant.merchandisingLabel.toLowerCase()}`
-              : variant.label
-            : "Fixed variant unavailable"}
-        </p>
-        <p
-          className={cn(
-            "mt-1.5 flex items-center gap-1.5 text-xs font-medium",
-            product.available ? "text-[var(--fm-success)]" : "text-[var(--fm-destructive)]",
-          )}
-        >
-          <span className="inline-block size-1.5 rounded-full bg-current" aria-hidden="true" />
-          {product.available ? "Available for delivery" : "Currently unavailable"}
-        </p>
+        <h3 className="mt-0.5 line-clamp-2 text-base leading-6 font-bold">{product.name}</h3>
       </Link>
     </article>
   );
@@ -157,27 +142,83 @@ export function ProductRail({
   href?: string;
   products: ReadonlyArray<PresentationProduct>;
 }) {
+  const railRef = useRef<HTMLDivElement>(null);
+  const [canScrollBack, setCanScrollBack] = useState(false);
+  const [canScrollForward, setCanScrollForward] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const maximumScroll = rail.scrollWidth - rail.clientWidth;
+    setCanScrollBack(rail.scrollLeft > 1);
+    setCanScrollForward(rail.scrollLeft < maximumScroll - 1);
+  }, []);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    updateScrollState();
+    rail.addEventListener("scroll", updateScrollState, { passive: true });
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(rail);
+    return () => {
+      rail.removeEventListener("scroll", updateScrollState);
+      observer.disconnect();
+    };
+  }, [products.length, updateScrollState]);
+
+  const moveRail = (direction: -1 | 1) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    rail.scrollBy({
+      left: direction * Math.max(160, rail.clientWidth - 160),
+      behavior: "smooth",
+    });
+  };
+
   if (products.length === 0) return null;
   return (
     <section aria-labelledby={`rail-${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}>
-      <div className="mb-4 flex items-end justify-between gap-4">
+      <div className="mb-3 flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-[-0.02em]">{title}</h2>
+          <h2 className="text-[32px] leading-[42px] font-semibold">{title}</h2>
           {subtitle ? (
             <p className="mt-0.5 text-sm text-[var(--fm-text-muted)]">{subtitle}</p>
           ) : null}
         </div>
-        {href ? (
-          <Link
-            href={href}
-            className="shrink-0 inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[var(--fm-primary-dark)] hover:underline"
+        <div className="flex shrink-0 items-center gap-2">
+          {href ? (
+            <Link
+              href={href}
+              className="inline-flex min-h-10 items-center px-1 text-sm font-semibold text-[var(--fm-text)] hover:underline"
+            >
+              See all
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            aria-label={`Previous ${title} products`}
+            disabled={!canScrollBack}
+            onClick={() => moveRail(-1)}
+            className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-text)] transition-colors hover:bg-[var(--fm-hover)] disabled:text-[var(--fm-text-subtle)] disabled:opacity-50"
           >
-            See all
-            <ArrowRight className="size-3.5" aria-hidden="true" />
-          </Link>
-        ) : null}
+            <ChevronLeft className="size-5" strokeWidth={2.5} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Next ${title} products`}
+            disabled={!canScrollForward}
+            onClick={() => moveRail(1)}
+            className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-text)] transition-colors hover:bg-[var(--fm-hover)] disabled:text-[var(--fm-text-subtle)] disabled:opacity-50"
+          >
+            <ChevronRight className="size-5" strokeWidth={2.5} aria-hidden="true" />
+          </button>
+        </div>
       </div>
-      <div className="fm-scrollbar-none grid auto-cols-[minmax(150px,190px)] grid-flow-col gap-4 overflow-x-auto pb-3">
+      <div
+        ref={railRef}
+        className="fm-scrollbar-none grid auto-cols-[144px] grid-flow-col gap-4 overflow-x-auto pb-2"
+      >
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}

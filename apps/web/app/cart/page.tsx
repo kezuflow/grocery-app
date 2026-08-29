@@ -6,6 +6,7 @@ import type { CartView } from "@freshmarkets/contracts";
 import { addToCart, cartCountFromView, fetchCart } from "../../lib/storefront/cart-client";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 import { OrderSummary } from "../../components/storefront/marketplace/order-summary";
+import { CheckoutAuthDialog } from "../../components/storefront/marketplace/checkout-auth-dialog";
 
 const money = (value: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
@@ -14,6 +15,7 @@ export default function CartPage() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [authOpen, setAuthOpen] = useState(false);
   async function load() {
     setLoading(true);
     try {
@@ -143,14 +145,14 @@ export default function CartPage() {
               actionLabel={
                 !canCheckout ? "Continue shopping" : guest ? "Sign in to checkout" : "Checkout"
               }
-              actionHref={
-                !canCheckout ? "/" : guest ? "/auth/login?returnTo=/checkout" : "/checkout"
-              }
+              actionHref={!canCheckout ? "/" : guest ? undefined : "/checkout"}
+              onAction={guest && canCheckout ? () => setAuthOpen(true) : undefined}
               disabled={loading}
               note="Minimum order, availability, and delivery are confirmed at checkout."
             />
           </div>
         </div>
+        {authOpen ? <CheckoutAuthDialog onClose={() => setAuthOpen(false)} /> : null}
       </div>
     </StorefrontShell>
   );

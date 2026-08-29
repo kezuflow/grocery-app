@@ -107,21 +107,21 @@ export function ProductView({ slug }: { slug: string }) {
   return (
     <div className="grid gap-8 md:grid-cols-[1fr_1.1fr]">
       <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-6">
-        <ProductMedia
-          media={toPresentationProduct(view.product).media}
-          name={view.product.name}
-        />
+        <ProductMedia media={toPresentationProduct(view.product).media} name={view.product.name} />
       </div>
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-[var(--fm-primary-dark)]">
           {view.product.category.name}
         </p>
         <h1 className="mt-2 text-4xl font-bold tracking-[-0.03em]">{view.product.name}</h1>
-        <p className="mt-3 text-[var(--fm-text-muted)]">{view.product.description}</p>
+        <p className="mt-3 leading-6 text-[var(--fm-text-muted)]">{view.product.description}</p>
         {view.product.details.length > 0 ? (
           <dl className="mt-4 space-y-1.5">
             {view.product.details.map((detail) => (
-              <div key={`${detail.sortOrder}-${detail.label}`} className="flex gap-2 text-sm leading-6">
+              <div
+                key={`${detail.sortOrder}-${detail.label}`}
+                className="flex gap-2 text-sm leading-6"
+              >
                 <dt className="shrink-0 font-semibold">{detail.label}</dt>
                 <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>
               </div>
@@ -154,7 +154,7 @@ export function ProductView({ slug }: { slug: string }) {
                   </span>
                 </span>
               </span>
-              <span className="shrink-0 text-right font-semibold">
+              <span className="fm-font-display shrink-0 text-right text-base font-bold">
                 {variant.priceMinor === null
                   ? "Unavailable"
                   : new Intl.NumberFormat("en-PH", {

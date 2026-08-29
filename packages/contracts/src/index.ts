@@ -22,11 +22,11 @@ import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult
 import type { Capability } from "./admin-foundation";
 import type {
   CustomerAddressStatus,
+  DeliveryAction,
   DeliveryCycleState,
+  FulfillmentAction,
   ImplementedOrderState,
   OperationsCommandState,
-  FulfillmentAction,
-  DeliveryAction,
   ReceivingRecordState,
   SubscriptionState,
 } from "./states";
@@ -204,7 +204,13 @@ export type CatalogSearchPage = {
 };
 
 export type CategoryNavigationView = {
-  categories: ReadonlyArray<{ code: string; name: string; slug: string }>;
+  categories: ReadonlyArray<{
+    code: string;
+    name: string;
+    slug: string;
+    /** Core-resolved public SVG path; null renders the Web fallback icon. */
+    iconSrc: string | null;
+  }>;
 };
 
 export type MarketplaceHomeRail = {

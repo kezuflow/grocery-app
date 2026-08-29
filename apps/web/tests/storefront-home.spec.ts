@@ -19,18 +19,30 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("the marketplace home server-renders hero, categories, rails, and membership context", async ({
+test("the marketplace home server-renders categories, rails, and membership context", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Shop fresh, live well" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Fresh this week" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shop fresh, live well" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Daily deals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fresh this week" })).toHaveCount(0);
   await expect(page.getByText("Membership eligibility is checked at checkout.")).toBeVisible();
   // Seeded catalog content renders with prices and fixed-variant labels.
   const strawberries = page.getByRole("heading", { name: "Baguio Strawberries" }).first();
   await expect(strawberries).toBeVisible();
   await expect(page.getByText("₱179.00").first()).toBeVisible();
   await expect(page.getByText("500 g").first()).toBeVisible();
+});
+
+test("daily deals advances with gallery controls", async ({ page }) => {
+  await page.goto("/");
+  const gallery = page.getByTestId("daily-deals-gallery");
+  const before = await gallery.evaluate((element) => element.scrollLeft);
+
+  await page.getByRole("button", { name: "Next deal" }).click();
+  await expect
+    .poll(() => gallery.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(before);
 });
 
 test("category navigation filters the catalog server-side", async ({ page }) => {

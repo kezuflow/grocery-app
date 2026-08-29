@@ -147,7 +147,14 @@ export function parseProduceMedia(raw: string | null): CatalogMedia | null {
 /* ------------------------------------------------------------------ */
 
 async function rawAll<T>(database: Database, query: string, parameters: unknown[]): Promise<T[]> {
-  return (await database.prepare(query).bind(...parameters).all<T>()).results ?? [];
+  return (
+    (
+      await database
+        .prepare(query)
+        .bind(...parameters)
+        .all<T>()
+    ).results ?? []
+  );
 }
 
 function sqlPlaceholders(count: number): string {
@@ -422,13 +429,31 @@ async function hydrateProducts(
 /* Public read models                                                  */
 /* ------------------------------------------------------------------ */
 
+const SAFE_CATEGORY_ICON_ASSET_KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/;
+
 export async function listCategories(database: Database): Promise<CategoryNavigationView> {
-  const rows = await rawAll<{ code: string; name: string; slug: string }>(
+  const rows = await rawAll<{
+    code: string;
+    name: string;
+    slug: string;
+    iconAssetKey: string | null;
+  }>(
     database,
-    `SELECT code, name, slug FROM category WHERE status = 'active' ORDER BY sort_order ASC, id ASC`,
+    `SELECT code, name, slug, icon_asset_key AS iconAssetKey
+       FROM category
+      WHERE status = 'active'
+      ORDER BY sort_order ASC, id ASC`,
     [],
   );
-  return { categories: rows };
+  return {
+    categories: rows.map(({ iconAssetKey, ...category }) => ({
+      ...category,
+      iconSrc:
+        iconAssetKey && SAFE_CATEGORY_ICON_ASSET_KEY.test(iconAssetKey)
+          ? `/category-icons/${iconAssetKey}`
+          : null,
+    })),
+  };
 }
 
 export async function searchCatalog(
@@ -491,12 +516,7 @@ export async function getProduct(
   const rows = await selectProductRows(database, { nowMs, slug, limit: 1 });
   const row = rows[0];
   if (!row || row.slug !== slug) return null;
-  const hydrated = await hydrateProducts(
-    database,
-    [row],
-    locationId ?? LAUNCH_LOCATION_ID,
-    nowMs,
-  );
+  const hydrated = await hydrateProducts(database, [row], locationId ?? LAUNCH_LOCATION_ID, nowMs);
   const product = hydrated.get(row.productId);
   if (!product) return null;
   return { product, deliveryContext: { locationAware: Boolean(locationId) } };

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { CartIndicator } from "./marketplace/cart-indicator";
 import { CartDrawer } from "./marketplace/cart-drawer";
+import { MembershipCtaBar } from "./marketplace/membership-cta-bar";
 import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront-navigation";
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 
@@ -12,12 +13,13 @@ export { storefrontNavigation } from "./marketplace/storefront-navigation";
 
 export function StorefrontShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-[var(--fm-background)] text-[var(--fm-text)]">
+    <div className="fm-storefront min-h-[100dvh] bg-[var(--fm-background)] text-[var(--fm-text)]">
       <StorefrontHeader />
       <div className="flex w-full">
         <StorefrontSidebar />
         <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
       </div>
+      <MembershipCtaBar />
       <MobileNavigation />
       <CartDrawer />
       <ToastAnnouncer />
@@ -31,13 +33,13 @@ export function StorefrontHeader() {
       <div className="flex h-16 w-full items-center gap-3 px-4 sm:px-6 lg:gap-5 lg:px-8">
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)] lg:text-xl"
+          className="fm-font-display flex shrink-0 items-center gap-2 text-lg font-bold text-[var(--fm-primary-dark)] lg:text-xl"
         >
           <span
             aria-hidden="true"
             className="inline-block size-6 rounded-[6px] bg-[var(--fm-primary-lime)]"
           />
-          FreshMarkets
+          freshmarkets
         </Link>
         <form action="/" className="hidden min-w-0 flex-1 md:block">
           <label className="sr-only" htmlFor="storefront-search">
@@ -97,11 +99,8 @@ export function StorefrontHeader() {
 
 export function StorefrontSidebar() {
   return (
-    <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-52 shrink-0 overflow-y-auto border-r border-[var(--fm-border)] bg-white px-3 py-6 lg:block">
+    <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[184px] shrink-0 overflow-y-auto border-r border-[var(--fm-border)] bg-white px-3 py-6 lg:block">
       <nav aria-label="Storefront navigation" className="space-y-1">
-        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--fm-text-muted)]">
-          Shop
-        </p>
         {storefrontNavigation.map((item) => {
           const Icon = item.icon;
           return (

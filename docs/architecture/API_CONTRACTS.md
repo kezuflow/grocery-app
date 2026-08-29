@@ -89,6 +89,8 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 
 `catalog.search` applies query/category/activity/availability/price predicates database-side before keyset pagination over `(category sort order, product name, product id)`; results are bounded (`limit` 1–50) and `nextCursor` is an opaque token whose malformed values return `VALIDATION_FAILED`. The complete launch catalog (226 produce products at seed time) is reachable through cursors without truncation. `marketplace.getHome` returns active categories plus bounded category rails (default 8 items per rail, capped at 12) built from one windowed scan and the same eligibility rules as search, never materializing the full catalog into one response.
 
+`CategoryNavigationView` returns each active category's `code`, `name`, `slug`, and Core-resolved `iconSrc`. `iconSrc` is either a safe `/category-icons/<asset-key>.svg` Web path derived from database configuration or `null`; Web renders its local fallback for null and never reconstructs category taxonomy from hard-coded navigation metadata.
+
 `FulfillmentOptionView` exposes an opaque option ID, `fulfillmentMode: "INSTANT" | "SCHEDULED"`, customer-facing promise/window/ETA, fee context, and for Scheduled only its configured cadence and selectable cycle/window identity. `WEEKLY` may appear as Scheduled cadence but never as `fulfillmentMode`. It exposes no customer-selectable fulfillment location.
 
 ## Serviceability

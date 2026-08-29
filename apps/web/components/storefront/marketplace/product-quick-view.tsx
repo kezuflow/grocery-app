@@ -178,10 +178,10 @@ export function ProductQuickView({
               )}
             </div>
             <div>
-              <h2 className="text-2xl font-bold tracking-[-0.02em]">{presentation.name}</h2>
+              <h2 className="text-[32px] leading-[42px] font-semibold">{presentation.name}</h2>
               <p
                 className={cn(
-                  "mt-1 flex items-center gap-1.5 text-xs font-medium",
+                  "mt-1 flex items-center gap-1.5 text-sm leading-[22px] font-semibold",
                   presentation.available
                     ? "text-[var(--fm-success)]"
                     : "text-[var(--fm-destructive)]",
@@ -194,7 +194,7 @@ export function ProductQuickView({
                 {presentation.available ? "Available for delivery" : "Currently unavailable"}
               </p>
               {presentation.description ? (
-                <p className="mt-3 text-sm leading-6 text-[var(--fm-text-muted)]">
+                <p className="mt-3 text-sm leading-[22px] text-[var(--fm-text-muted)]">
                   {presentation.description}
                 </p>
               ) : null}
@@ -226,7 +226,7 @@ export function ProductQuickView({
                         />
                         <span className="font-semibold">{variant.label}</span>
                       </span>
-                      <span className="font-semibold tabular-nums">
+                      <span className="fm-font-display text-base font-bold tabular-nums">
                         {variant.priceMinor === null || variant.currency === null
                           ? "Unavailable"
                           : formatMoney(variant.priceMinor, variant.currency)}
@@ -279,7 +279,7 @@ export function ProductQuickView({
                         </span>
                         {product.defaultVariant?.priceMinor != null &&
                         product.defaultVariant.currency ? (
-                          <span className="block text-xs tabular-nums text-[var(--fm-text-muted)]">
+                          <span className="fm-font-display block text-xs font-semibold tabular-nums text-[var(--fm-text-muted)]">
                             {formatMoney(
                               product.defaultVariant.priceMinor,
                               product.defaultVariant.currency,

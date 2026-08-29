@@ -15,6 +15,7 @@ export const category = sqliteTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    iconAssetKey: text("icon_asset_key"),
     status: text("status", { enum: ["active", "inactive"] }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),

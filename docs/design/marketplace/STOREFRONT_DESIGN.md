@@ -94,7 +94,7 @@ Initial tokens are CSS variables, not repeated literals:
 | `success`      | `#238636` | in-stock/valid states with text/icon |
 | `danger`       | `#D92D20` | errors and destructive actions       |
 
-Typography uses **Inter** as the legally usable existing system font choice: it is already installed in the web surface, has strong numeric clarity, and supports compact commerce metadata. Tokens: display 40/44 700; h1 32/36 700; h2 24/30 700; h3 18/24 700; body 16/24 400; body-sm 14/20 400; caption 12/16 500; micro 11/14 600. Letter spacing remains 0.
+Typography uses the licensed, self-hosted **Helvena** webfont for the customer storefront. Regular supports body copy and metadata; Medium supports secondary controls; Semibold supports navigation, categories, and product names; Bold supports section headings; Black is reserved for major promotional headings. Tokens: display 40/44 900; h1 32/42 800; h2 24/32 700; h3 18/28 600; body 16/26 400; body-sm 14/22 400; caption 12/18 500; micro 11/16 600. Letter spacing remains 0. Admin typography remains independent.
 
 Spacing follows a 4px base scale (4, 8, 12, 16, 24, 32, 40, 48). Radii are 4px for controls, 8px for product/promo framing, and 12px only for sheets/dialogs. Shadows are limited to elevation for sheets/dialogs; product cards and page sections are unframed by default.
 

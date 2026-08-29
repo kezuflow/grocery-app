@@ -63,6 +63,8 @@ Email verification and password-reset delivery use the Core auth-email port and 
 
 `0036_admin_catalog_canonicalization.sql` adds versioned, dimension-safe catalog conversion configuration and a canonical sourcing-mode compatibility seam. `0037_price_version_guards.sql` adds product versions, deterministic non-overlapping market/location price windows, and database command guards. `0038_promotion_grant_uniqueness.sql` reconciles historical duplicate targeted grants and enforces one grant per promotion code and customer while leaving system membership grants unaffected.
 
+`0035_category_navigation_icons.sql` adds optional, validated bare SVG asset keys to Catalog categories and configures the seven launch taxonomy icons. Core resolves these keys into safe purpose-built category navigation paths; the version-controlled SVG binaries remain Web-owned public assets.
+
 `0039_admin_operations_canonical_states.sql` maps compatibility procurement, receiving, fulfillment, and delivery statuses onto their canonical state machines, adds source timestamps used by operational chronology, and enforces one active procurement requirement per cycle/location/inventory-pool context.
 
 `0040_analytics_dimension_safety.sql` preserves the original refund and inventory-adjustment definitions as `SUPERSEDED`, publishes their dimension-safe version 2 definitions, and keeps one current `APPROVED` definition per metric code.

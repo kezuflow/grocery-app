@@ -5,6 +5,7 @@ import {
   encodeCatalogCursor,
   getMarketplaceHome,
   getProduct,
+  listCategories,
   searchCatalog,
 } from "./service";
 
@@ -34,6 +35,42 @@ async function eligibleCount(categorySlug?: string): Promise<number> {
 }
 
 describe("catalog read models (integration)", () => {
+  it("returns safe database-backed category icon paths", async () => {
+    const view = await listCategories(db());
+    expect(view.categories.map(({ code, iconSrc }) => ({ code, iconSrc }))).toEqual([
+      { code: "FRUITS", iconSrc: "/category-icons/fruits.svg" },
+      { code: "VEGETABLES", iconSrc: "/category-icons/vegetables.svg" },
+      {
+        code: "LEAFY_GREENS_HERBS",
+        iconSrc: "/category-icons/leafy-greens-herbs.svg",
+      },
+      {
+        code: "ROOTS_TUBERS_BULBS",
+        iconSrc: "/category-icons/roots-tubers-bulbs.svg",
+      },
+      { code: "BEANS_PEAS_SEEDS", iconSrc: "/category-icons/beans-peas-seeds.svg" },
+      { code: "AROMATICS_SPICES", iconSrc: "/category-icons/aromatics-spices.svg" },
+      {
+        code: "NATIVE_SPECIALTY_PRODUCE",
+        iconSrc: "/category-icons/native-specialty-produce.svg",
+      },
+    ]);
+  });
+
+  it("returns null instead of publishing a category icon key outside the Core allow-list", async () => {
+    await env.DB.prepare(
+      "UPDATE category SET icon_asset_key='bad_name.svg' WHERE code='FRUITS'",
+    ).run();
+    try {
+      const view = await listCategories(db());
+      expect(view.categories.find((category) => category.code === "FRUITS")?.iconSrc).toBeNull();
+    } finally {
+      await env.DB.prepare(
+        "UPDATE category SET icon_asset_key='fruits.svg' WHERE code='FRUITS'",
+      ).run();
+    }
+  });
+
   it("paginates the full catalog with stable cursors and no duplicates", async () => {
     let cursor: string | null = null;
     const ids: string[] = [];
@@ -101,9 +138,7 @@ describe("catalog read models (integration)", () => {
       productName: "Mangoes",
       productId: "product-mango",
     });
-    expect(() => decodeCatalogCursor("@@not-a-cursor@@")).toThrowError(
-      /cursor/i,
-    );
+    expect(() => decodeCatalogCursor("@@not-a-cursor@@")).toThrowError(/cursor/i);
   });
 
   it("excludes unavailable SKUs from sellable results but keeps detail visible", async () => {
@@ -191,7 +226,9 @@ describe("catalog read models (integration)", () => {
       )
         .bind(skuId)
         .run();
-      await env.DB.prepare("DELETE FROM fulfillment_location WHERE id='location-price-other'").run();
+      await env.DB.prepare(
+        "DELETE FROM fulfillment_location WHERE id='location-price-other'",
+      ).run();
     }
   });
 
@@ -225,7 +262,9 @@ describe("catalog read models (integration)", () => {
   });
 
   it("falls back to null media for invalid stored media payloads", async () => {
-    await env.DB.prepare("UPDATE product SET image_metadata_json='{ broken json' WHERE slug='abiu'").run();
+    await env.DB.prepare(
+      "UPDATE product SET image_metadata_json='{ broken json' WHERE slug='abiu'",
+    ).run();
     try {
       const listed = await searchCatalog(db(), { query: "abiu", limit: 50 });
       const abiu = listed.items.find((item) => item.slug === "abiu");

@@ -100,7 +100,7 @@ Indexes: customer/state, next billing, trial end, scheduled cancellation, and on
 
 ## Catalog, Units, and Prices
 
-- `categories(id PK, parent_id FK NULL, slug UNIQUE, name, status, sort_order)`
+- `categories(id PK, parent_id FK NULL, slug UNIQUE, name, icon_asset_key NULL, status, sort_order)`
 - `products(id PK, slug UNIQUE, name, description, category_id FK, status, version)`
 - `unit_definitions(id PK, code UNIQUE, display_name, dimension MASS|VOLUME|COUNT, canonical_base_code GRAM|MILLILITER|PIECE, conversion_numerator, conversion_denominator, status, version)` with positive integer conversion factors and same-dimension conversion only.
 - `inventory_pools(id PK, product_id FK, base_unit_id FK, code, UNIQUE(product_id, code))` where the referenced unit is the dimension's canonical base unit.
@@ -119,6 +119,8 @@ The launch implementation adds normalized detail and SKU-level availability stor
 - `sku.merchandising_label NULL`, `sku.sell_quantity`, `sku.version` extend persisted variant configuration; merchandising labels such as `Pack`/`Bunch` remain customer copy, never conversion units. Staff-assembled packs persist one exact gram recipe (`sell_quantity = inventory_quantity_base`) while customers see only approximate contents notes.
 
 Until the deferred R2 migration, `product.image_metadata_json` holds a validated versioned `{version:1, assetKey, altText}` record pointing at Web's public produce assets; it is a compatibility attachment, not the canonical `product_media` table, and Core rejects malformed or unsafe payloads to public consumers.
+
+`category.icon_asset_key` is optional constrained presentation metadata containing a bare `.svg` filename. The SVG binaries are version-controlled Web assets under `public/category-icons`; Core applies its stricter lowercase kebab-case allow-list before resolving a public `iconSrc` and returns `null` for missing or invalid metadata. Category names remain the accessible labels, so decorative icons do not duplicate spoken text.
 
 `inventory_pools` makes shared physical inventory explicit where multiple SKUs consume one product pool. `sourcing_mode` is constrained to `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED`; it never encodes `INSTANT`/`SCHEDULED`. Packaging labels have no global conversion row: each SKU records its exact `inventory_quantity_base`. Core verifies the sell-unit conversion is dimension-compatible but uses the persisted SKU consumption for inventory, Quote, and Order effects.
 

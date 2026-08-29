@@ -5,11 +5,8 @@ import { ProductGridEmpty, ProductRail } from "../components/storefront/catalog-
 import { CatalogResults } from "../components/storefront/marketplace/catalog-results";
 import { CategoryStrip } from "../components/storefront/marketplace/category-strip";
 import { QuickViewProvider } from "../components/storefront/marketplace/quick-view-provider";
-import { MarketplaceHero } from "../components/storefront/marketplace/marketplace-hero";
 import { MembershipStrip, PromoBanners } from "../components/storefront/marketplace/promo-banners";
 import { railEligible, toPresentationProducts } from "../lib/storefront/catalog-presentation";
-
-type CategoryLink = { slug: string; name: string };
 
 const PAGE_SIZE = 24;
 
@@ -60,22 +57,19 @@ export default async function MarketplaceHome({
       products: railEligible(toPresentationProducts(rail.items)),
     }));
     const providerProducts = rails.flatMap((rail) => rail.products);
-    const featured = rails[0]?.products ?? [];
 
     return (
       <StorefrontShell>
         <QuickViewProvider products={providerProducts}>
           <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-            <MarketplaceHero />
-            <CategoryStrip activeCategory={category} className="-mx-4 px-4 sm:mx-0 sm:px-0" />
+            <CategoryStrip
+              categories={home.value.categories}
+              activeCategory={category}
+              className="-mx-4 px-4 sm:mx-0 sm:px-0"
+            />
 
-            <div className="mt-6 space-y-8">
+            <div className="mt-6 space-y-7">
               <PromoBanners />
-              <ProductRail
-                title="Fresh this week"
-                subtitle="Everyday produce picks, packed fresh."
-                products={featured}
-              />
               {rails.map((rail) => (
                 <ProductRail
                   key={rail.slug}
@@ -111,25 +105,26 @@ export default async function MarketplaceHome({
   }
 
   const firstPage = toPresentationProducts(results.value.items);
-  const categoryLinks: ReadonlyArray<CategoryLink> = categories.ok
-    ? categories.value.categories
-    : [];
+  const categoryLinks = categories.ok ? categories.value.categories : [];
   const activeCategory = categoryLinks.find((entry) => entry.slug === category);
 
   return (
     <StorefrontShell>
       <QuickViewProvider products={firstPage}>
         <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-          <MarketplaceHero />
-          <CategoryStrip activeCategory={category} className="-mx-4 px-4 sm:mx-0 sm:px-0" />
+          <CategoryStrip
+            categories={categoryLinks}
+            activeCategory={category}
+            className="-mx-4 px-4 sm:mx-0 sm:px-0"
+          />
 
-          <div className="mt-6 space-y-8">
+          <div className="mt-6 space-y-7">
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
                   {query ? "Search results" : "Category"}
                 </p>
-                <h2 className="mt-1 text-2xl font-bold tracking-[-0.02em]">
+                <h2 className="mt-1 text-[32px] leading-[42px] font-semibold">
                   {query ? `Results for “${query}”` : (activeCategory?.name ?? "Browse groceries")}
                 </h2>
               </div>

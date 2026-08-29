@@ -113,6 +113,10 @@ A subscription is not bound permanently to a fulfillment location. Any future su
 
 ## Catalog, Units, Availability, and Pricing
 
+### Category
+
+A global, ordered catalog classification used for marketplace discovery and product assignment. Category identity, name, slug, active state, order, and optional icon asset key are persisted Catalog configuration. Web consumes Core's category navigation read model and does not maintain a second hard-coded taxonomy. The icon is decorative presentation metadata; the category name remains the accessible navigation label.
+
 ### Product
 
 A global catalog concept such as Red Onion or Eggs. Products are not duplicated per location. They contain customer-facing identity, categorization, and descriptive content.

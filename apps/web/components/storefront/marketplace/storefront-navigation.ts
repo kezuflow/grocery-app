@@ -1,17 +1,4 @@
-import {
-  Apple,
-  CakeSlice,
-  Beef,
-  Boxes,
-  ClipboardList,
-  Home,
-  Milk,
-  ShoppingBasket,
-  Tag,
-  UserRound,
-  Wheat,
-  type LucideIcon,
-} from "lucide-react";
+import { ClipboardList, Home, ShoppingBasket, Tag, UserRound, type LucideIcon } from "lucide-react";
 
 export type StorefrontNavigationItem = {
   label: string;
@@ -22,14 +9,13 @@ export type StorefrontNavigationItem = {
 
 export const storefrontNavigation: ReadonlyArray<StorefrontNavigationItem> = [
   { label: "Home", href: "/", icon: Home, tone: "home" },
-  { label: "Produce", href: "/?category=produce", icon: ShoppingBasket, tone: "produce" },
-  { label: "Fruits", href: "/?category=fruits", icon: Apple, tone: "fruits" },
-  { label: "Meat & Seafood", href: "/?category=meat-seafood", icon: Beef, tone: "meat" },
-  { label: "Dairy & Eggs", href: "/?category=dairy-eggs", icon: Milk, tone: "dairy" },
-  { label: "Pantry", href: "/?category=pantry", icon: Wheat, tone: "pantry" },
-  { label: "Bakery", href: "/?category=bakery", icon: CakeSlice, tone: "bakery" },
-  { label: "Boxes", href: "/?category=boxes", icon: Boxes, tone: "boxes" },
-  { label: "Deals", href: "/?category=deals", icon: Tag, tone: "deals" },
+  {
+    label: "All groceries",
+    href: "/?category=all",
+    icon: ShoppingBasket,
+    tone: "groceries",
+  },
+  { label: "Deals", href: "/#daily-deals", icon: Tag, tone: "deals" },
 ];
 
 export const mobileNavigation = [

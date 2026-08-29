@@ -1,15 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 
-type Mode = "login" | "register" | "forgot";
-
-function safeReturnTo(value: string | null): string {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
-}
+type Mode = "register" | "forgot";
 
 export function AuthForm({ mode }: { mode: Mode }) {
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -17,23 +13,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setBusy(true);
     setStatus("");
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const returnTo = safeReturnTo(
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("returnTo"),
-    );
-    const path =
-      mode === "login"
-        ? "sign-in/email"
-        : mode === "register"
-          ? "sign-up/email"
-          : "request-password-reset";
+    const path = mode === "register" ? "sign-up/email" : "request-password-reset";
     const body =
       mode === "register"
         ? { name: data.name, email: data.email, password: data.password }
-        : mode === "login"
-          ? { email: data.email, password: data.password, callbackURL: returnTo }
-          : { email: data.email, redirectTo: "/auth/reset-password" };
+        : { email: data.email, redirectTo: "/auth/reset-password" };
     const response = await fetch(`/api/auth/${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -52,25 +36,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
           : "Request completed."
         : (payload?.message ?? payload?.error ?? "Request failed."),
     );
-    if (response.ok && mode === "login") window.location.assign(returnTo);
-  }
-
-  async function signInWithGoogle() {
-    setBusy(true);
-    setStatus("");
-    const response = await fetch("/api/auth/sign-in/social", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ provider: "google", callbackURL: "/" }),
-    });
-    const payload = (await response.json().catch(() => null)) as {
-      url?: string;
-      message?: string;
-    } | null;
-    setBusy(false);
-    if (response.ok && payload?.url) window.location.assign(payload.url);
-    else setStatus(payload?.message ?? "Google sign-in is not configured.");
   }
 
   return (
@@ -88,7 +53,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         Email
         <input name="email" type="email" required className="rounded border p-2" />
       </label>
-      {mode !== "forgot" ? (
+      {mode === "register" ? (
         <label className="flex flex-col gap-1 text-sm">
           Password
           <input
@@ -104,24 +69,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
         disabled={busy}
         className="rounded bg-slate-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
-        {busy
-          ? "Working..."
-          : mode === "login"
-            ? "Log in"
-            : mode === "register"
-              ? "Create account"
-              : "Send reset instructions"}
+        {busy ? "Working..." : mode === "register" ? "Create account" : "Send reset instructions"}
       </button>
-      {mode === "login" ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={signInWithGoogle}
-          className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50"
-        >
-          Continue with Google
-        </button>
-      ) : null}
       {status ? (
         <p role="status" className="text-sm text-slate-600">
           {status}
