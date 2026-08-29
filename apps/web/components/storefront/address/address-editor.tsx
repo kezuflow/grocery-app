@@ -192,6 +192,9 @@ export function AddressEditor({
   const [locationError, setLocationError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const serviceabilityAbortRef = useRef<AbortController | null>(null);
+  const serviceabilityGenerationRef = useRef(0);
+  const coordinateActionGenerationRef = useRef(0);
+  const providerResolvedComponents = confirmationSource === "GEOCODER";
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -205,7 +208,11 @@ export function AddressEditor({
     const timeout = window.setTimeout(() => {
       setSearchState("searching");
       setSearchError("");
-      void fetchImpl(`/api/commerce/address-search?query=${encodeURIComponent(trimmed)}`, {
+      void fetchImpl("/api/commerce/address-search", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query: trimmed }),
+        cache: "no-store",
         signal: controller.signal,
         credentials: "same-origin",
       })
@@ -243,6 +250,8 @@ export function AddressEditor({
 
   useEffect(
     () => () => {
+      coordinateActionGenerationRef.current += 1;
+      serviceabilityGenerationRef.current += 1;
       serviceabilityAbortRef.current?.abort();
     },
     [],
@@ -252,9 +261,14 @@ export function AddressEditor({
     nextCoordinate: Coordinate,
     nextComponents: AddressComponents,
   ): Promise<void> {
+    const generation = ++serviceabilityGenerationRef.current;
     serviceabilityAbortRef.current?.abort();
     const controller = new AbortController();
     serviceabilityAbortRef.current = controller;
+    const isCurrent = (): boolean =>
+      generation === serviceabilityGenerationRef.current &&
+      serviceabilityAbortRef.current === controller &&
+      !controller.signal.aborted;
     setServiceabilityState("checking");
     setServiceability(null);
     try {
@@ -269,6 +283,7 @@ export function AddressEditor({
         signal: controller.signal,
       });
       const result = (await response.json()) as RpcResult<ServiceabilityResult>;
+      if (!isCurrent()) return;
       if (!response.ok || !result.ok) {
         setServiceabilityState("error");
         return;
@@ -276,16 +291,14 @@ export function AddressEditor({
       setServiceability(result.value);
       setServiceabilityState("ready");
     } catch (error) {
-      if (
-        controller.signal.aborted ||
-        (error instanceof DOMException && error.name === "AbortError")
-      )
-        return;
+      if (!isCurrent() || (error instanceof DOMException && error.name === "AbortError")) return;
       setServiceabilityState("error");
     }
   }
 
   function chooseCandidate(candidate: AddressSearchCandidate): void {
+    coordinateActionGenerationRef.current += 1;
+    setLocationError("");
     setComponents(candidate.components);
     setCoordinate(candidate.coordinate);
     setConfirmationSource("GEOCODER");
@@ -296,6 +309,8 @@ export function AddressEditor({
   }
 
   function movePin(nextCoordinate: Coordinate): void {
+    coordinateActionGenerationRef.current += 1;
+    setLocationError("");
     setCoordinate(nextCoordinate);
     setConfirmationSource("USER_PIN");
     setCoordinateAnnouncement("Pin location updated.");
@@ -303,6 +318,7 @@ export function AddressEditor({
   }
 
   function useCurrentLocation(): void {
+    const generation = ++coordinateActionGenerationRef.current;
     setLocationError("");
     if (!geolocation) {
       setLocationError(
@@ -312,6 +328,7 @@ export function AddressEditor({
     }
     geolocation.getCurrentPosition(
       (position) => {
+        if (generation !== coordinateActionGenerationRef.current) return;
         const nextCoordinate = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
@@ -325,6 +342,7 @@ export function AddressEditor({
         void resolveCoordinate(nextCoordinate, components);
       },
       () => {
+        if (generation !== coordinateActionGenerationRef.current) return;
         setLocationError(
           "Location permission was not granted. Search for an address or enable location access and try again.",
         );
@@ -366,7 +384,7 @@ export function AddressEditor({
       ...coordinate,
       confirmationSource,
       instructions,
-      notes: nullable(notes),
+      ...(!initialAddress ? { notes: nullable(notes) } : {}),
     };
     try {
       const response = await fetchImpl("/api/commerce/address", {
@@ -522,6 +540,13 @@ export function AddressEditor({
         <h2 id="address-details-heading" className="text-lg font-semibold text-slate-950">
           Address and recipient details
         </h2>
+        {providerResolvedComponents ? (
+          <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+            Search-result address fields are provider-resolved when saved. Move the pin to establish
+            a first-party location before changing them; add unit, entrance, landmark, and rider
+            guidance under Delivery instructions.
+          </p>
+        ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             id="address-label"
@@ -551,6 +576,7 @@ export function AddressEditor({
           <TextField
             id="address-line-1"
             label="Street, building, or place"
+            readOnly={providerResolvedComponents}
             value={components.addressLine1}
             error={fieldErrors.addressLine1}
             onChange={(event) => {
@@ -561,6 +587,7 @@ export function AddressEditor({
           <TextField
             id="address-line-2"
             label="Additional address line"
+            readOnly={providerResolvedComponents}
             value={components.addressLine2 ?? ""}
             onChange={(event) => {
               const value = nullable(event.currentTarget.value);
@@ -570,6 +597,7 @@ export function AddressEditor({
           <TextField
             id="address-barangay"
             label="Barangay"
+            readOnly={providerResolvedComponents}
             value={components.barangay ?? ""}
             onChange={(event) => {
               const value = nullable(event.currentTarget.value);
@@ -579,6 +607,7 @@ export function AddressEditor({
           <TextField
             id="address-city"
             label="City"
+            readOnly={providerResolvedComponents}
             value={components.city}
             error={fieldErrors.city}
             onChange={(event) => {
@@ -589,6 +618,7 @@ export function AddressEditor({
           <TextField
             id="address-region"
             label="Region or province"
+            readOnly={providerResolvedComponents}
             value={components.region ?? ""}
             onChange={(event) => {
               const value = nullable(event.currentTarget.value);
@@ -598,6 +628,7 @@ export function AddressEditor({
           <TextField
             id="address-postal-code"
             label="Postal code"
+            readOnly={providerResolvedComponents}
             inputMode="numeric"
             value={components.postalCode ?? ""}
             onChange={(event) => {
@@ -667,14 +698,16 @@ export function AddressEditor({
             setInstructions((current) => ({ ...current, recipientInstruction: value }));
           }}
         />
-        <TextAreaField
-          id="address-notes"
-          label="Private address note"
-          description="Optional account note. Delivery instructions belong in the fields above."
-          maxLength={1000}
-          value={notes}
-          onChange={(event) => setNotes(event.currentTarget.value)}
-        />
+        {!initialAddress ? (
+          <TextAreaField
+            id="address-notes"
+            label="Private address note"
+            description="Optional account note. Delivery instructions belong in the fields above."
+            maxLength={1000}
+            value={notes}
+            onChange={(event) => setNotes(event.currentTarget.value)}
+          />
+        ) : null}
       </section>
 
       {saveError ? (

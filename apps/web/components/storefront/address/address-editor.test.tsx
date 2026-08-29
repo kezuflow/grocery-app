@@ -3,7 +3,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AddressSearchCandidate, ServiceabilityResult } from "@freshmarkets/contracts";
+import type {
+  AddressSearchCandidate,
+  CustomerAddressView,
+  ServiceabilityResult,
+} from "@freshmarkets/contracts";
 import { FakeMapAdapter } from "../../maps/fake-map-adapter";
 import { AddressEditor } from "./address-editor";
 
@@ -38,6 +42,32 @@ const serviceable: ServiceabilityResult = {
   fulfillmentEligibility: { eligible: true, candidateCount: 1 },
   resolutionChanged: false,
   evaluatedAt: "2026-08-30T00:00:00.000Z",
+};
+
+const savedAddress: CustomerAddressView = {
+  id: "address-saved",
+  label: "Home",
+  recipient: "Ana Santos",
+  phone: "+639171234567",
+  components: candidate.components,
+  confirmationSource: "GEOCODER",
+  confirmedAt: "2026-08-30T00:00:00.000Z",
+  instructions: {
+    buildingUnit: "Unit 4",
+    landmark: null,
+    gateGuard: null,
+    deliveryNote: null,
+    recipientInstruction: null,
+  },
+  latitude: candidate.coordinate.latitude,
+  longitude: candidate.coordinate.longitude,
+  serviceable: true,
+  serviceabilityReason: null,
+  serviceAreaCode: "CEBU_CITY",
+  deliveryZoneCode: "CEBU_CITY_CORE",
+  resolutionVersion: 1,
+  status: "active",
+  version: 3,
 };
 
 type Mounted = { container: HTMLDivElement; root: Root };
@@ -136,7 +166,7 @@ describe("AddressEditor", () => {
     let firstSignal: AbortSignal | undefined;
     let resolveFirst: ((response: Response) => void) | undefined;
     let fetchCount = 0;
-    const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
+    const fetchMock = vi.fn((url: string | URL | Request, init?: RequestInit) => {
       fetchCount += 1;
       if (fetchCount === 1) {
         firstSignal = init?.signal as AbortSignal;
@@ -145,7 +175,8 @@ describe("AddressEditor", () => {
         });
       }
       return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search-2" }));
-    }) as unknown as typeof fetch;
+    });
+    const fetchImpl = fetchMock as unknown as typeof fetch;
     const { container, root } = mount({ fetchImpl });
     const search = input(container, "Search for an address");
 
@@ -161,6 +192,11 @@ describe("AddressEditor", () => {
 
     expect(firstSignal?.aborted).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/commerce/address-search");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "POST", cache: "no-store" });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      query: "Ayala Cebu",
+    });
     expect(container.textContent).toContain(candidate.displayAddress);
 
     resolveFirst?.(
@@ -223,6 +259,71 @@ describe("AddressEditor", () => {
     act(() => root.unmount());
   });
 
+  it("distinguishes provider-resolved address fields from editable delivery details", async () => {
+    const fetchImpl = vi.fn((url: string | URL | Request) => {
+      const path = String(url);
+      if (path === "/api/commerce/address-search")
+        return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+      if (path === "/api/serviceability")
+        return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
+      throw new Error(`Unexpected request ${path}`);
+    }) as unknown as typeof fetch;
+    const adapter = new FakeMapAdapter();
+    const { container, root } = mount({ fetchImpl, mapAdapter: adapter });
+    await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
+
+    expect(container.textContent).toContain(
+      "Search-result address fields are provider-resolved when saved",
+    );
+    expect(input(container, "Street, building, or place")).toHaveProperty("readOnly", true);
+    expect(input(container, "Building or unit")).toHaveProperty("readOnly", false);
+
+    act(() => adapter.emitPinMove({ latitude: 10.319, longitude: 123.907 }));
+    await flush();
+    expect(input(container, "Street, building, or place")).toHaveProperty("readOnly", false);
+    act(() => root.unmount());
+  });
+
+  it("ignores an older serviceability response that resolves after the current pin", async () => {
+    const serviceabilityResolvers: Array<(response: Response) => void> = [];
+    const fetchImpl = vi.fn((url: string | URL | Request) => {
+      const path = String(url);
+      if (path === "/api/commerce/address-search")
+        return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+      if (path === "/api/serviceability")
+        return new Promise<Response>((resolve) => serviceabilityResolvers.push(resolve));
+      throw new Error(`Unexpected request ${path}`);
+    }) as unknown as typeof fetch;
+    const adapter = new FakeMapAdapter();
+    const { container, root } = mount({ fetchImpl, mapAdapter: adapter });
+    await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
+    act(() => adapter.emitPinMove({ latitude: 10.319, longitude: 123.907 }));
+
+    serviceabilityResolvers[1]?.(
+      response({ ok: true, value: serviceable, requestId: "serviceability-current" }),
+    );
+    await flush();
+    expect(container.textContent).toContain("Delivery is available");
+
+    serviceabilityResolvers[0]?.(
+      response({
+        ok: true,
+        value: {
+          ...serviceable,
+          serviceable: false,
+          reason: "OUTSIDE_SERVICE_AREA",
+          fulfillmentEligibility: { eligible: false, candidateCount: 0 },
+        },
+        requestId: "serviceability-stale",
+      }),
+    );
+    await flush();
+
+    expect(container.textContent).toContain("Delivery is available");
+    expect(container.textContent).not.toContain("Delivery is unavailable");
+    act(() => root.unmount());
+  });
+
   it("uses device location on success and provides safe recovery on denial", async () => {
     const geolocation = {
       getCurrentPosition: vi.fn((success: PositionCallback) =>
@@ -258,6 +359,49 @@ describe("AddressEditor", () => {
     );
     expect(deniedMount.container.textContent).not.toContain("private browser detail");
     act(() => deniedMount.root.unmount());
+  });
+
+  it("ignores delayed geolocation callbacks after a newer candidate selection", async () => {
+    let delayedSuccess: PositionCallback | undefined;
+    let delayedFailure: PositionErrorCallback | undefined;
+    const geolocation = {
+      getCurrentPosition: vi.fn((success: PositionCallback, failure: PositionErrorCallback) => {
+        delayedSuccess = success;
+        delayedFailure = failure;
+      }),
+    } as unknown as Geolocation;
+    const fetchImpl = vi.fn((url: string | URL | Request) => {
+      const path = String(url);
+      if (path === "/api/commerce/address-search")
+        return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+      if (path === "/api/serviceability")
+        return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
+      throw new Error(`Unexpected request ${path}`);
+    }) as unknown as typeof fetch;
+    const adapter = new FakeMapAdapter();
+    const { container, root } = mount({ fetchImpl, geolocation, mapAdapter: adapter });
+    const locate = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Use current location"),
+    );
+    if (!locate) throw new Error("Missing current-location action");
+    click(locate);
+    await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
+
+    act(() => {
+      delayedSuccess?.({
+        coords: { latitude: 10.4, longitude: 123.8 },
+      } as GeolocationPosition);
+      delayedFailure?.({ code: 1, message: "private browser detail" } as GeolocationPositionError);
+    });
+    await flush();
+
+    expect(container.textContent).toContain(`Selected address: ${candidate.displayAddress}`);
+    expect(container.textContent).not.toContain("Current location selected");
+    expect(container.textContent).not.toContain("Location permission was not granted");
+    expect(adapter.initializations.at(-1)?.scene.draggablePin?.position).toEqual(
+      candidate.coordinate,
+    );
+    act(() => root.unmount());
   });
 
   it("submits structured instructions and confirms an unavailable saved address", async () => {
@@ -324,6 +468,29 @@ describe("AddressEditor", () => {
     });
     expect(savedBody).not.toHaveProperty("candidateKey");
     expect(onConfirmed).toHaveBeenCalledWith("address-unavailable");
+    act(() => root.unmount());
+  });
+
+  it("does not clear an existing note that the address read model did not load", async () => {
+    let updateBody: Record<string, unknown> | undefined;
+    const fetchImpl = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      updateBody = JSON.parse(String(init?.body));
+      return Promise.resolve(
+        response({ ok: true, value: { id: savedAddress.id }, requestId: "update" }),
+      );
+    }) as unknown as typeof fetch;
+    const { container, root } = mount({ fetchImpl, initialAddress: savedAddress });
+
+    expect(container.textContent).not.toContain("Private address note");
+    const update = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Update confirmed address"),
+    );
+    if (!update) throw new Error("Missing update action");
+    click(update);
+    await flush();
+
+    expect(updateBody).not.toHaveProperty("notes");
+    expect(updateBody).toMatchObject({ addressId: savedAddress.id, expectedVersion: 3 });
     act(() => root.unmount());
   });
 
