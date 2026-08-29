@@ -1,13 +1,14 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-08-27. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-08-29. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
 ## Admin and Platform Readiness Slice 9 (2026-08-29)
 
-- Shared Admin accessibility/state hardening, Web/Core boundary regression coverage, static security verification, Worker-local smoke checks, performance evidence, and deployment/recovery/auth-email runbooks are complete.
-- Final evidence is recorded in `docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`. No migration, runtime readiness endpoint, infrastructure binding, public API, or product feature was added.
-- Authenticated browser journeys remain environment-gated by the unprovisioned local auth-email transport. The pre-existing Slice 7 non-atomic operations/audit concern remains parked with Operations/Core.
+- Shared Admin accessibility/state hardening, Web/Core boundary regression coverage, static security verification, Worker-local smoke checks, and deployment/recovery/auth-email runbooks are implemented.
+- The deterministic Playwright fixture starts an isolated port-3100 Web/Core stack, uses Core's existing test-only email adapter, provisions verified Better Auth accounts and application-owned Staff access in local D1, and exercises real authorized and capability-denied routes. No production auth bypass or public test endpoint exists.
+- The Slice 7 atomicity finding and the complete Slices 1–9 review set are remediated. Final evidence is recorded in `docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`.
+- Browser performance is not release-ready evidence yet: Chrome DevTools tracing is unavailable in the current session, so LCP/INP/CLS remain explicitly blocked rather than passed.
 
 ## Produce catalog storefront rollout
 
@@ -35,8 +36,8 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
 - Web adds thin same-origin Analytics BFF routes and an `/admin/analytics` workspace with numeric,
   unavailable, freshness, loading, empty, permission, validation, and error states.
 - Reconciliation coverage verifies all blocked catalog metrics remain unavailable and source reads
-  are read-only. Authenticated Playwright execution remains environment-gated by the existing
-  unprovisioned auth-email transport.
+  are read-only. Deterministic authenticated Playwright coverage exercises the real Analytics route
+  and its capability-denial path through Web and Core.
 
 ## Admin Foundation Slice 1 (2026-08-27)
 
@@ -60,11 +61,8 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   not modified and no owner-owned file was staged.
 - Route-segment deviation: the Audit detail path uses kebab-case `[audit-event-id]` because
   repository naming conventions reject uppercase route directories.
-- Verification evidence: contracts, Core unit/integration, and web suites pass; root naming,
-  migration, lint, typecheck, test, build, and vinext gates pass (fresh counts in the task
-  report). Authenticated Playwright journeys (staff shell, permission-filtered navigation, mobile
-  trigger, Audit rows/filtered-empty) remain skipped because the local stack has no configured
-  auth-email transport; they are an unmet acceptance gate, not satisfied evidence.
+- Deterministic authenticated Playwright journeys exercise the real Staff shell, non-Staff state,
+  permission-filtered navigation, and responsive keyboard behavior through Web/Core and local D1.
 
 ## Admin Staff & Access Slice 2 (2026-08-27)
 
@@ -83,9 +81,8 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   destructive actions, and loading/empty/permission/error states with request references.
 - Invitation acceptance/provisioning of a new identity is explicitly deferred to the slice that
   implements the public acceptance flow; no password input exists anywhere.
-- Verification evidence: full workspace gate (naming, migration, lint, typecheck, tests, builds,
-  vinext) passes with fresh counts in the task report; authenticated Playwright journeys for the
-  staff workspace remain skipped behind the unprovisioned auth-email transport — an unmet gate.
+- Deterministic authenticated Playwright coverage exercises the real Staff workspace plus a real
+  invitation command under both authorized and capability-denied principals.
 
 ## Admin Customer CRM Slice 3 (2026-08-27)
 
@@ -104,9 +101,8 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   access/session/closure actions and audit table, privacy queue with per-status legal actions).
 - Deferred: `admin.customers.update` (no approved application-owned mutable profile fields),
   support notes and segments (unapproved good-to-haves), invitation acceptance/provisioning.
-- Verification evidence: full workspace gate passes with fresh counts in the task report;
-  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
-  an unmet gate.
+- Deterministic authenticated Playwright coverage exercises the real Customer workspace plus a
+  real invitation command under both authorized and capability-denied principals.
 
 ## Admin Catalog & Inventory Slice 5 (2026-08-27)
 
@@ -123,9 +119,8 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
 - Web adds ten thin BFF adapters and the Catalog workspace (categories/units/products + product
   detail with SKU authoring, versioned pricing, availability toggles) and the Inventory workspace
   (location balances, guarded adjustments, ledger inspection).
-- Verification evidence: full workspace gate passes with fresh counts in the task report;
-  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
-  an unmet gate.
+- Deterministic authenticated Playwright coverage exercises the real Catalog workspace plus a
+  real category command under both authorized and capability-denied principals.
 
 ## Admin Promotions Slice 4 (2026-08-27)
 
@@ -143,28 +138,8 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   checkout (owned by the checkout/Quote domain, not this admin slice).
 - Web adds seven thin BFF adapters and the Promotions workspace (list + draft creation, detail with
   lifecycle actions, read-only preview, grants, redemptions).
-- Verification evidence: full workspace gate passes with fresh counts in the task report;
-  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
-  an unmet gate.
-
-## Admin Catalog & Inventory Slice 5 (2026-08-27)
-
-- No schema change was required: the admin surface composes the existing catalog, unit, price
-  version, availability, balance, and ledger tables.
-- Core implements `AdminCatalogService` (category/unit creation, product list/detail/status, SKU
-  create/update with same-dimension validation, version-guarded availability upserts, versioned
-  market `STANDARD` price inserts) and `AdminInventoryReadService` (location balances and bounded
-  keyset ledger). Catalog authorization is `catalog.read`/`catalog.manage` + global scope;
-  inventory reads are `inventory.read` + operational location scope; the existing
-  `inventory.adjust` command keeps its own guards.
-- Deferred: media administration (canonical R2 media remains a deferred migration), bulk import,
-  detail authoring, and purchase/receiving surfaces.
-- Web adds ten thin BFF adapters and the Catalog workspace (categories/units/products + product
-  detail with SKU authoring, versioned pricing, availability toggles) and the Inventory workspace
-  (location balances, guarded adjustments, ledger inspection).
-- Verification evidence: full workspace gate passes with fresh counts in the task report;
-  authenticated Playwright journeys remain skipped behind the unprovisioned auth-email transport —
-  an unmet gate.
+- Deterministic authenticated Playwright coverage exercises the real Promotions workspace plus a
+  real promotion command under both authorized and capability-denied principals.
 
 ## Reconciled implementation state
 
@@ -178,8 +153,9 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   closed lifecycle and never authorize refunds.
 - Web provides thin BFF adapters plus Orders/detail, Payments, Memberships/detail, and Issues
   workspaces with loading, empty, error, retry, and command-result states.
-- Focused contracts, Core integration, Web route tests, typechecks, and builds pass. Authenticated
-  Playwright finance journeys remain an unmet gate until staff test identity provisioning exists.
+- Focused contracts, Core integration, Web route tests, typechecks, and builds pass. Deterministic
+  authenticated Playwright covers a real order cancellation under both authorized and
+  capability-denied principals.
 
 ### Payments and paid-order recovery
 

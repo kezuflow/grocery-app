@@ -135,7 +135,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
           >
             <div className="p-4">
               <Button
-                disabled={cancelIntent.pending || order.status === "CANCELED"}
+                disabled={cancelIntent.pending || !order.allowedActions.includes("CANCEL")}
                 variant="destructive"
                 onClick={() => setConfirming(true)}
               >

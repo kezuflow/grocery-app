@@ -1,4 +1,9 @@
 import { claimCommandIdempotency } from "../../idempotency";
+import {
+  canTransitionOrder,
+  orderLifecycleStates,
+  type OrderLifecycleState,
+} from "../domain/order-state-machine";
 
 export type CancelOrderCommand = {
   orderId: string;
@@ -116,6 +121,7 @@ export async function cancelOrder(
 
     if (!reaction) {
       // Pre-payment abandonment: nothing financial to unwind.
+      assertLegalTransition(order.status, "CANCELED");
       const guard = orderTransitionGuard(command.orderId, "CANCELED", command.expectedVersion + 1);
       const results = await database.batch([
         transitionOrderStatement(
@@ -125,7 +131,7 @@ export async function cancelOrder(
           "CANCELED",
           command.expectedVersion,
         ),
-        ...releaseOperationalEffectStatements(database, command.orderId),
+        ...releaseOperationalEffectStatements(database, command.orderId, guard),
         ...(ports?.evidence?.({ ...guard, outcome: "CANCELED" }) ?? []),
         completeScopeStatement(database, scope, command.idempotencyKey, command.orderId, guard),
       ]);
@@ -145,6 +151,7 @@ export async function cancelOrder(
         "Post-cutoff cancellation requires manual review",
       );
 
+    assertLegalTransition(order.status, "CANCELLATION_REQUESTED");
     const guard = orderTransitionGuard(
       command.orderId,
       "CANCELLATION_REQUESTED",
@@ -256,24 +263,36 @@ async function releaseOperationalEffects(
 function releaseOperationalEffectStatements(
   database: D1Database,
   orderId: string,
+  guard?: { clause: string; binds: ReadonlyArray<unknown> },
 ): D1PreparedStatement[] {
+  const guardClause = guard ? ` AND ${guard.clause}` : "";
+  const guardBinds = guard?.binds ?? [];
   return [
     database
       .prepare(
-        "UPDATE inventory_balance SET reserved=MAX(0,reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED')), version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND r.location_id=inventory_balance.location_id)",
+        `UPDATE inventory_balance SET reserved=MAX(0,reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED')), version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND r.location_id=inventory_balance.location_id)${guardClause}`,
       )
-      .bind(orderId, orderId),
+      .bind(orderId, orderId, ...guardBinds),
     database
       .prepare(
-        "UPDATE inventory_reservation SET status='RELEASED', version=version+1 WHERE order_id=? AND status='RESERVED'",
+        `UPDATE inventory_reservation SET status='RELEASED', version=version+1 WHERE order_id=? AND status='RESERVED'${guardClause}`,
       )
-      .bind(orderId),
+      .bind(orderId, ...guardBinds),
     database
       .prepare(
-        "UPDATE committed_demand SET status='CANCELED', version=version+1 WHERE order_id=? AND status='OPEN'",
+        `UPDATE committed_demand SET status='CANCELED', version=version+1 WHERE order_id=? AND status='OPEN'${guardClause}`,
       )
-      .bind(orderId),
+      .bind(orderId, ...guardBinds),
   ];
+}
+
+function assertLegalTransition(from: string, to: OrderLifecycleState): void {
+  if (
+    !orderLifecycleStates.includes(from as OrderLifecycleState) ||
+    !canTransitionOrder(from as OrderLifecycleState, to)
+  ) {
+    throw httpError("ILLEGAL_TRANSITION", `Order cannot transition from ${from} to ${to}`);
+  }
 }
 
 function completeScope(

@@ -1,13 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./admin-authenticated-fixture";
 
 /**
  * Catalog and Inventory workspace flows against a provisioned local stack.
- * Skips when the app is unreachable. Authenticated journeys require a
- * configured development auth-email transport (E2E_AUTH_EMAIL_CONFIGURED=1)
- * and remain explicitly unmet gates until that provisioning exists.
+ * Skips when the app is unreachable. Authenticated journeys use the
+ * deterministic local Staff fixture configured by Playwright.
  */
-const authEmailConfigured = process.env.E2E_AUTH_EMAIL_CONFIGURED === "1";
-
 let stackUp = false;
 test.beforeAll(async ({ request }) => {
   try {
@@ -29,4 +26,39 @@ test("an unauthenticated visitor cannot open the catalog workspace", async ({ pa
 test("an unauthenticated visitor cannot open the inventory workspace", async ({ page }) => {
   await page.goto("/admin/inventory");
   await expect(page.getByRole("alert")).toContainText("staff account");
+});
+
+test("a provisioned Staff reader opens the real Catalog workspace", async ({ adminPage }) => {
+  await adminPage.goto("/admin/catalog");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Catalog" })).toBeVisible();
+});
+
+test("a Staff principal without capability is denied the Catalog workspace", async ({
+  deniedAdminPage,
+}) => {
+  await deniedAdminPage.goto("/admin/catalog");
+  await expect(deniedAdminPage.getByRole("alert")).toContainText(/requires.*catalog\.read/i);
+});
+
+test("category creation succeeds with capability and is denied without it", async ({
+  adminPage,
+  deniedAdminPage,
+}) => {
+  const suffix = crypto.randomUUID();
+  const codeSuffix = suffix.replaceAll("-", "_").toUpperCase();
+  const data = { code: `E2E_${codeSuffix}`, name: "E2E Category", slug: `e2e-${suffix}` };
+  const allowed = await adminPage.request.post("/api/admin/catalog/categories", {
+    data,
+    headers: { "idempotency-key": crypto.randomUUID() },
+  });
+  const allowedBody = await allowed.json();
+  expect(allowedBody, JSON.stringify(allowedBody)).toMatchObject({
+    ok: true,
+    value: { code: data.code },
+  });
+  const denied = await deniedAdminPage.request.post("/api/admin/catalog/categories", {
+    data: { ...data, code: `DENIED_${codeSuffix}`, slug: `denied-${suffix}` },
+    headers: { "idempotency-key": crypto.randomUUID() },
+  });
+  expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
 });

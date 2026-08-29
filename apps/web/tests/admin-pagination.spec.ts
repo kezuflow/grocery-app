@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./admin-authenticated-fixture";
 
 let stackUp = false;
 test.beforeAll(async ({ request }) => {

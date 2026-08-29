@@ -5,7 +5,6 @@ import type {
   AdminOrderIssueActionRequest,
   OrderIssueStatus,
   AdminOrderIssueView,
-  AdminOrderSummary,
   AdminReconciliationCaseView,
   AdminRefundRequest,
   AdminRefundView,
@@ -111,6 +110,7 @@ export async function cancelAdminOrder(
       "NOT_FOUND",
       "VALIDATION_FAILED",
       "STALE_VERSION",
+      "ILLEGAL_TRANSITION",
       "IDEMPOTENCY_CONFLICT",
       "CONFLICT",
     ];
@@ -174,6 +174,7 @@ export async function cancelAdminOrder(
       deliveryStatus: row.deliveryStatus,
       committedAt: new Date(row.committedAt).toISOString(),
       version: row.version,
+      allowedActions: [],
       items: items.results,
       recentAudit: audits.results.map((audit) => ({
         ...audit,

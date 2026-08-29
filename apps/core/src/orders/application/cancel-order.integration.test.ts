@@ -152,4 +152,54 @@ describe("explicit cancellation and refund orchestration", () => {
       expect(replayed.value.refundState ?? first.value.refundState).toBeTruthy();
     }
   });
+
+  it.each(["OUT_FOR_DELIVERY", "DELIVERED", "CANCELED", "EXPIRED"])(
+    "rejects cancellation from the terminal or late lifecycle state %s",
+    async (status) => {
+      const fixture = await paidOrderFixture();
+      await env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?")
+        .bind(status, fixture.orderId)
+        .run();
+
+      const outcome = await cancelOrder(env.DB, command(fixture.orderId));
+
+      expect(outcome).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+      const row = await env.DB.prepare("SELECT status, version FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first<{ status: string; version: number }>();
+      expect(row).toEqual({ status, version: 1 });
+    },
+  );
+
+  it("leaves operational commitments untouched when the cancellation CAS loses", async () => {
+    const fixture = await paidOrderFixture();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM order_payment_reaction WHERE order_id=?").bind(fixture.orderId),
+      env.DB.prepare("UPDATE grocery_order SET status='PENDING_PAYMENT' WHERE id=?").bind(
+        fixture.orderId,
+      ),
+    ]);
+    await env.DB.prepare(
+      `CREATE TRIGGER ignore_stale_cancel BEFORE UPDATE OF status ON grocery_order
+       WHEN OLD.id='${fixture.orderId}' AND NEW.status='CANCELED'
+       BEGIN SELECT RAISE(IGNORE); END`,
+    ).run();
+    const balanceBefore = await env.DB.prepare(
+      "SELECT reserved, version FROM inventory_balance WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
+    ).first<{ reserved: number; version: number }>();
+
+    const outcome = await cancelOrder(env.DB, command(fixture.orderId));
+
+    expect(outcome).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    const reservation = await env.DB.prepare(
+      "SELECT status FROM inventory_reservation WHERE order_id=?",
+    )
+      .bind(fixture.orderId)
+      .first<{ status: string }>();
+    const balance = await env.DB.prepare(
+      "SELECT reserved, version FROM inventory_balance WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
+    ).first<{ reserved: number; version: number }>();
+    expect(reservation?.status).toBe("RESERVED");
+    expect(balance).toEqual(balanceBefore);
+  });
 });

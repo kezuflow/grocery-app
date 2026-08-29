@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./admin-authenticated-fixture";
 
 let stackUp = false;
 test.beforeAll(async ({ request }) => {
@@ -126,14 +126,28 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
   await expect(page.getByText("Source freshness", { exact: true })).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true }).first()).toBeVisible();
   const dimensionedRequest = page.waitForRequest((request) => {
+    if (!request.url().includes("/api/admin/analytics/overview")) return false;
     const dimensions = new URL(request.url()).searchParams.get("dimensions");
+    if (!dimensions) return false;
+    const parsed = JSON.parse(dimensions) as Array<{ key: string; value: string }>;
     return (
-      request.url().includes("/api/admin/analytics/overview") &&
-      Boolean(dimensions?.includes('"currency":"PHP"')) &&
-      Boolean(dimensions?.includes('"baseUnit":"GRAM"'))
+      parsed.some(({ key, value }) => key === "currency" && value === "PHP") &&
+      parsed.some(({ key, value }) => key === "baseUnit" && value === "GRAM")
     );
   });
   await page.getByLabel("Analytics currency").fill("php");
   await page.getByLabel("Analytics base unit").selectOption("GRAM");
   await dimensionedRequest;
+});
+
+test("a provisioned Staff reader opens the real Analytics workspace", async ({ adminPage }) => {
+  await adminPage.goto("/admin/analytics");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
+});
+
+test("a Staff principal without capability is denied the Analytics workspace", async ({
+  deniedAdminPage,
+}) => {
+  await deniedAdminPage.goto("/admin/analytics");
+  await expect(deniedAdminPage.getByRole("alert")).toContainText(/requires.*analytics\.read/i);
 });

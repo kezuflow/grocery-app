@@ -9,6 +9,45 @@
 
 The program is not release-ready. Automated unit/integration suites and type checks pass, but the review found **3 critical**, **22 important**, and **5 minor** problems. The first remediation pass should address cancellation idempotency, active-price integrity, procurement concurrency, and catalog unit/SKU truth before expanding the Admin surface.
 
+## Remediation disposition (2026-08-29)
+
+The verdict above is retained as the original review baseline. The authorized remediation is now
+implemented. “Fixed” below means the reported defect has a code or documentation correction plus
+focused automated coverage; final release evidence remains subject to the readiness matrix.
+
+| Finding | Status | Remediation evidence                                                                    |
+| ------- | ------ | --------------------------------------------------------------------------------------- |
+| C1      | Fixed  | Cancellation replay is aggregate-bound and regression-tested.                           |
+| C2      | Fixed  | Price writes close prior active intervals atomically and reject overlap.                |
+| C3      | Fixed  | Procurement generation uses guarded uniqueness/CAS with concurrency coverage.           |
+| I1      | Fixed  | Privacy mutation, Audit, and idempotency share one guarded transaction.                 |
+| I2      | Fixed  | Material Admin writes use the guarded atomic command pattern.                           |
+| I3      | Fixed  | Invitation revocation calls its purpose-built route.                                    |
+| I4      | Fixed  | Staff detail exposes profile, access, role, scope, and session commands.                |
+| I5      | Fixed  | Staff scopes validate authoritative geography.                                          |
+| I6      | Fixed  | Customer summaries count only committed Orders.                                         |
+| I7      | Fixed  | Scope selection is explicit and scope-load failure is visible.                          |
+| I8      | Fixed  | Audit links resolve to an implemented detail read model.                                |
+| I9      | Fixed  | BFF handlers delegate validated normalized input.                                       |
+| I10     | Fixed  | System Membership/Promotion codes are reserved.                                         |
+| I11     | Fixed  | Promotion grants and command completion are transaction/uniqueness guarded.             |
+| I12     | Fixed  | Unit creation persists exact canonical integer conversion ratios.                       |
+| I13     | Fixed  | SKU creation requires authoritative integer sell/base quantities.                       |
+| I14     | Fixed  | Sourcing uses only the locked canonical vocabulary.                                     |
+| I15     | Fixed  | UI commands use Core-returned aggregate versions.                                       |
+| I16     | Fixed  | Resolved issues are terminal; reopen is removed and tested illegal.                     |
+| I17     | Fixed  | Fulfillment and Delivery expose canonical guarded actions.                              |
+| I18     | Fixed  | Analytics refuses mixed currency/base-unit scalar results.                              |
+| I19     | Fixed  | Cursor pagination reaches later records across Admin lists.                             |
+| I20     | Fixed  | Stable command intent coalesces submits and survives ambiguous failures.                |
+| I21     | Fixed  | Deterministic authenticated Web/Core/D1 coverage supplements command integration tests. |
+| I22     | Fixed  | Reports distinguish PASS, FAIL, and BLOCKED; unavailable metrics are not passed.        |
+| M1      | Fixed  | Invalid privacy filters fail validation instead of widening results.                    |
+| M2      | Fixed  | Material destructive actions require consequence/reason confirmation.                   |
+| M3      | Fixed  | Receiving exceptions use stable ordering and canonical age.                             |
+| M4      | Fixed  | Readiness child processes use `shell: false`; Windows shim behavior is tested.          |
+| M5      | Fixed  | Program map, implementation status, and readiness reports are reconciled.               |
+
 ## Critical findings
 
 ### C1 — Slice 6: an idempotency key can cancel one order and falsely report/audit another

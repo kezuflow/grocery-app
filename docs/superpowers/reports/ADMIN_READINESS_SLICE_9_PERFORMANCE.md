@@ -1,37 +1,37 @@
 # Admin and Platform Readiness Slice 9 Performance Evidence
 
-Recorded 2026-08-29 from the Slice 9 working tree. These are repository-native
-measurements only; they are not production latency claims.
+Recorded 2026-08-29. This report intentionally separates build/renderability evidence from browser
+performance measurements.
 
-## Measurement method
+## Measurement status
 
-| Route / surface | Environment | Sample size | LCP | INP | CLS | Evidence |
-|---|---|---:|---|---|---|---|
-| Marketplace home (`/`) | local build command | 1 build | unavailable | unavailable | unavailable | `pnpm --filter @freshmarkets/web build` completed; no browser trace was available |
-| Admin context (`/admin`) | local build command | 1 build | unavailable | unavailable | unavailable | Vinext compatibility/build completed; authenticated render requires local auth email |
-| Admin Analytics (`/admin/analytics`) | local build command | 1 build | unavailable | unavailable | unavailable | Route included in the Web build; authenticated data path requires local auth email |
-| Operational queue (`/admin/operations`) | local build command | 1 build | unavailable | unavailable | unavailable | Route included in the Web build; authenticated data path requires local auth email |
+| Route / surface                         |         LCP |         INP |         CLS | Status  |
+| --------------------------------------- | ----------: | ----------: | ----------: | ------- |
+| Admin list (`/admin/customers`)         | unavailable | unavailable | unavailable | BLOCKED |
+| Admin detail (`/admin/staff/:staff-id`) | unavailable | unavailable | unavailable | BLOCKED |
+| Procurement (`/admin/procurement`)      | unavailable | unavailable | unavailable | BLOCKED |
+| Receiving (`/admin/receiving`)          | unavailable | unavailable | unavailable | BLOCKED |
+| Fulfillment (`/admin/fulfillment`)      | unavailable | unavailable | unavailable | BLOCKED |
+| Delivery (`/admin/delivery`)            | unavailable | unavailable | unavailable | BLOCKED |
+| Analytics (`/admin/analytics`)          | unavailable | unavailable | unavailable | BLOCKED |
 
-Chrome DevTools MCP is unavailable in this session, so LCP, INP, and CLS were
-not measured. A local Worker probe is available through
-`node scripts/verify-worker-readiness.mjs --probe-local` when the Web/Core
-stack is running. It verifies structured JSON and request-reference headers;
-it does not claim a latency percentile or production performance.
+Chrome DevTools MCP tracing is not configured in the current Codex session. Under the Web
+Performance skill, missing trace tooling is a hard measurement blocker. A successful Vinext build,
+route discovery, or Playwright functional run is not substituted for LCP, INP, CLS, request-chain,
+or accessibility-trace evidence.
 
-## Repository-native observations
+## Available evidence
 
-- Vinext check completed with the current route surface and no compatibility
-  issue in the baseline.
-- Production Web/Core builds use the existing dry-run/build scripts and are the
-  reproducible artifact-size/renderability gate for this slice.
-- Core health is a small structured response and does not read business data.
-- No cache, queue, projection, new binding, or client-side business work was
-  added for readiness. No demonstrated low-risk performance fix was warranted
-  by the available measurements.
+- The deterministic Playwright stack builds Web, migrates local D1, and runs Web plus Core through
+  the production Service Binding topology on port 3100.
+- Authenticated functional tests exercise real list and operational routes with an application-owned
+  Staff identity; mocked tests remain only for controlled rendering/pagination edge cases.
+- `verify-worker-readiness.mjs --probe-local` can validate structured health/BFF envelopes when a
+  stack is running, but it is not a performance measurement.
 
-## Follow-up measurement
+## Unblock procedure
 
-When a local stack and browser tooling are available, capture at least three
-cold and three warm navigations for each surface, record the browser/build
-version, and attach route-level Core timings from structured logs. Keep
-production measurements separate from this local evidence.
+Configure a local `chrome-devtools` MCP server using `npx -y chrome-devtools-mcp@latest`. Then
+capture cold-load traces, interaction traces, network requests, and accessibility snapshots for
+every route above. Record browser/build versions and measured values here before changing this gate
+from BLOCKED.

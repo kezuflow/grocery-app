@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { probe, runReadinessChecks } from "./verify-worker-readiness.mjs";
+import { probe, runCommand, runReadinessChecks } from "./verify-worker-readiness.mjs";
+
+test("Windows pnpm launcher uses its JavaScript entrypoint without a shell and preserves output", () => {
+  let invocation;
+  const result = runCommand("C:/repo", "pnpm", ["test"], {
+    platform: "win32",
+    pnpmEntrypoint: () => "C:/tools/pnpm/bin/pnpm.mjs",
+    spawn(command, args, options) {
+      invocation = { command, args, options };
+      return { status: 7, signal: null, stdout: "partial output", stderr: "failure detail" };
+    },
+  });
+
+  assert.equal(invocation.command, process.execPath);
+  assert.deepEqual(invocation.args, ["C:/tools/pnpm/bin/pnpm.mjs", "test"]);
+  assert.equal(invocation.options.shell, false);
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 7);
+  assert.equal(result.stdout, "partial output");
+  assert.equal(result.stderr, "failure detail");
+});
 
 test("readiness verifier reports local configuration checks without secrets", async () => {
   const result = await runReadinessChecks({ root: process.cwd(), probeLocal: false });

@@ -22,6 +22,11 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import {
+  canTransitionOrder,
+  orderLifecycleStates,
+  type OrderLifecycleState,
+} from "../../orders/domain/order-state-machine";
+import {
   boundListLimit,
   decodeStaffCursor,
   encodeStaffCursor,
@@ -36,7 +41,9 @@ const ORDER_SELECT = `
           JOIN payment_intent pi ON pi.id = opr.payment_intent_id
           WHERE opr.order_id = o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
          (SELECT f.status FROM fulfillment_record f WHERE f.order_id = o.id LIMIT 1) AS fulfillmentStatus,
-          (SELECT d.status FROM delivery_job d WHERE d.order_id = o.id LIMIT 1) AS deliveryStatus
+         (SELECT d.status FROM delivery_job d WHERE d.order_id = o.id LIMIT 1) AS deliveryStatus,
+         EXISTS (SELECT 1 FROM order_payment_reaction opr WHERE opr.order_id = o.id) AS hasPaymentReaction,
+         (SELECT ofs.cutoff_at FROM order_fulfillment_snapshot ofs WHERE ofs.order_id = o.id LIMIT 1) AS cutoffAt
   FROM grocery_order o JOIN customer c ON c.id = o.customer_id JOIN user u ON u.id = c.auth_user_id`;
 
 function toOrderSummary(row: {
@@ -153,6 +160,8 @@ export async function getAdminOrder(
     deliveryStatus: string | null;
     committedAt: number;
     version: number;
+    hasPaymentReaction: number;
+    cutoffAt: number | null;
   }>();
   if (!row) {
     return {
@@ -181,6 +190,7 @@ export async function getAdminOrder(
 
   const detail: AdminOrderDetail = {
     ...toOrderSummary(row),
+    allowedActions: allowedOrderActions(row, Date.now()),
     items: items.results,
     recentAudit: auditRows.results.map((audit) => ({
       auditEventId: audit.id,
@@ -190,6 +200,17 @@ export async function getAdminOrder(
     })),
   };
   return { ok: true, value: detail, requestId: request.requestId };
+}
+
+function allowedOrderActions(
+  order: { status: string; hasPaymentReaction: number; cutoffAt: number | null },
+  now: number,
+): AdminOrderDetail["allowedActions"] {
+  if (!orderLifecycleStates.includes(order.status as OrderLifecycleState)) return [];
+  const current = order.status as OrderLifecycleState;
+  if (!order.hasPaymentReaction) return canTransitionOrder(current, "CANCELED") ? ["CANCEL"] : [];
+  if (order.cutoffAt !== null && order.cutoffAt <= now) return [];
+  return canTransitionOrder(current, "CANCELLATION_REQUESTED") ? ["CANCEL"] : [];
 }
 
 const PAYMENT_SELECT = `

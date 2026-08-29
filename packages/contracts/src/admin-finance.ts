@@ -58,6 +58,7 @@ export type AdminOrderItemView = {
 };
 
 export type AdminOrderDetail = AdminOrderSummary & {
+  allowedActions: ReadonlyArray<"CANCEL">;
   items: ReadonlyArray<AdminOrderItemView>;
   recentAudit: ReadonlyArray<{
     auditEventId: string;

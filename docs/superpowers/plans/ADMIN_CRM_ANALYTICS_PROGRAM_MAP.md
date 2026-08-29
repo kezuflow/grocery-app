@@ -51,36 +51,21 @@ reuse stale file inventories from this program map.
 
 ## Active plan
 
-Slice 1 is implemented per
-`docs/superpowers/plans/ADMIN_FOUNDATION_SLICE_1_IMPLEMENTATION_PLAN.md` (commits `5af8f2a`
-through the foundation-slice documentation commit). Its authenticated Playwright journeys remain
-an unmet gate pending a provisioned local auth-email transport; the unmodified owner-owned
-`apps/web/app/globals.css` deferred the shadcn CLI in favor of hand-themed shadcn-source
-primitives. Slice 2 (Staff & Access) is implemented per
-`docs/superpowers/plans/ADMIN_STAFF_ACCESS_SLICE_2_IMPLEMENTATION_PLAN.md`; its authenticated
-browser journeys remain an unmet gate behind the unprovisioned auth-email transport, and
-invitation acceptance/provisioning is explicitly deferred. Slice 3 (Customer CRM) is implemented per
-`docs/superpowers/plans/ADMIN_CUSTOMER_CRM_SLICE_3_IMPLEMENTATION_PLAN.md`; its authenticated
-browser journeys remain an unmet gate behind the unprovisioned auth-email transport,
-`admin.customers.update`/notes/segments are explicitly deferred, and invitation
-acceptance/provisioning remains deferred. Slice 4 (Promotions) is implemented per
-`docs/superpowers/plans/ADMIN_PROMOTIONS_SLICE_4_IMPLEMENTATION_PLAN.md`; its authenticated
-browser journeys remain an unmet gate behind the unprovisioned auth-email transport, and
-membership fee waivers, delivery benefits, and checkout redemption application are explicitly
-deferred to their owning domains. Slice 5 (Catalog & Inventory) is implemented per
-`docs/superpowers/plans/ADMIN_CATALOG_SLICE_5_IMPLEMENTATION_PLAN.md`; its authenticated browser
-journeys remain an unmet gate behind the unprovisioned auth-email transport, and media
-administration, bulk import, detail authoring, and purchase/receiving are explicitly deferred.
-Slice 6 is not authorized for implementation and requires its own plan produced from the
-then-current repository per the plan production rule.
-Slice 8 (Analytics) is implemented per
-`docs/superpowers/plans/ADMIN_ANALYTICS_SLICE_8_IMPLEMENTATION_PLAN.md`; metric definitions,
-scoped read models, BFF routes, and the Analytics workspace are complete, while authenticated
-browser execution remains environment-gated by the unprovisioned auth-email transport. Slice 9
-(cross-workspace readiness) is implemented per
-`docs/superpowers/plans/ADMIN_READINESS_SLICE_9_IMPLEMENTATION_PLAN.md`; accessibility,
-boundary/security, Worker-local checks, performance evidence, and operational runbooks are
-complete. Its final gate is recorded in
-`docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`. Authenticated browser execution
-remains environment-gated by the unprovisioned auth-email transport, the pre-existing Slice 7
-non-atomic operations/audit concern remains parked, and Slice 10 has not begun.
+Slices 1–9 are implemented and have completed the remediation program recorded in
+`docs/reviews/ADMIN_SLICES_1_9_REVIEW.md`. The remediation closes the critical consistency defects,
+standardizes guarded atomic command execution, restores canonical catalog/operations/analytics
+semantics, completes missing Admin workflows and cursor pagination, and supplies stable command
+retry/confirmation behavior.
+
+Authenticated browser coverage no longer depends on an external email transport. Playwright can
+start an isolated Web/Core stack on port 3100 with Core's existing test-only no-op email adapter,
+provision verified Better Auth users plus application-owned Staff roles/capabilities/scopes in a
+fresh dedicated E2E D1 directory, and exercise real authorized and denied routes. Command-bearing
+slices also execute real successful and capability-denied mutations. Production and normal
+development auth email remain fail-closed.
+
+Slice 9 readiness evidence is maintained in
+`docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`. Browser performance evidence remains
+blocked until Chrome DevTools tracing is configured; unavailable LCP/INP/CLS values are not a pass.
+Approved product deferrals listed in the individual slice plans remain deferrals rather than review
+defects. No Slice 10 is authorized by this program.

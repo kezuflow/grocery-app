@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 function check(name, ok, detail) {
@@ -15,16 +16,49 @@ function parseJsonc(source) {
   return JSON.parse(source.replace(/^\s*\/\/.*$/gm, "").replace(/,\s*([}\]])/g, "$1"));
 }
 
-function runCommand(root, command, args) {
-  const result = spawnSync(command, args, {
+function resolvePnpmEntrypoint() {
+  const corepackEntrypoint = join(
+    dirname(process.execPath),
+    "node_modules",
+    "corepack",
+    "dist",
+    "pnpm.js",
+  );
+  if (existsSync(corepackEntrypoint)) return corepackEntrypoint;
+  const located = spawnSync("where.exe", ["pnpm.cmd"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: false,
+  });
+  for (const shim of (located.stdout ?? "").split(/\r?\n/).filter(Boolean)) {
+    const entrypoint = join(dirname(shim), "node_modules", "pnpm", "bin", "pnpm.mjs");
+    if (existsSync(entrypoint)) return entrypoint;
+  }
+  throw new Error("PNPM_JAVASCRIPT_ENTRYPOINT_NOT_FOUND");
+}
+
+export function runCommand(
+  root,
+  command,
+  args,
+  { platform = process.platform, spawn = spawnSync, pnpmEntrypoint = resolvePnpmEntrypoint } = {},
+) {
+  const windowsPnpm = platform === "win32" && command === "pnpm";
+  const executable = windowsPnpm ? process.execPath : command;
+  const executableArgs = windowsPnpm ? [pnpmEntrypoint(), ...args] : args;
+  const result = spawn(executable, executableArgs, {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 120_000,
-    shell: command.endsWith(".cmd"),
+    shell: false,
   });
   return {
     ok: result.status === 0,
+    status: result.status,
+    signal: result.signal,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
     detail:
       result.status === 0
         ? "completed"
@@ -94,12 +128,7 @@ export async function runReadinessChecks({
   checks.push(check("migration verifier", migration.ok, migration.detail));
 
   if (dryRun) {
-    const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-    const workerBuild = runCommand(root, packageManager, [
-      "--filter",
-      "@freshmarkets/core",
-      "build",
-    ]);
+    const workerBuild = runCommand(root, "pnpm", ["--filter", "@freshmarkets/core", "build"]);
     checks.push(check("Core Wrangler dry-run", workerBuild.ok, workerBuild.detail));
   }
 

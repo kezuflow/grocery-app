@@ -164,11 +164,23 @@ describe("finance administration", () => {
     expect(detail.ok).toBe(true);
     if (!detail.ok) return;
     expect(detail.value.orderId).toBe(orderId);
+    expect(detail.value.allowedActions).toEqual(["CANCEL"]);
+
+    await env.DB.prepare("UPDATE grocery_order SET status='DELIVERED' WHERE id=?")
+      .bind(orderId)
+      .run();
+    const terminalDetail = await core.getAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId,
+    });
+    expect(terminalDetail.ok).toBe(true);
+    if (terminalDetail.ok) expect(terminalDetail.value.allowedActions).toEqual([]);
   });
 
   it("cancels an order through the canonical command with reason and audit", async () => {
     const manager = await seedManager();
-    const { orderId } = await seedOrderWithPayment({ status: "CANCELLATION_REQUESTED" });
+    const { orderId } = await seedOrderWithPayment({ status: "COMMITTED" });
 
     const canceled = await core.cancelAdminOrder({
       requestId: crypto.randomUUID(),
@@ -191,6 +203,20 @@ describe("finance administration", () => {
       "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'ORDER.CANCELED'",
     ).first<{ count: number }>();
     expect(auditRow?.count ?? 0).toBeGreaterThan(0);
+  });
+
+  it("preserves the canonical illegal-transition error for terminal order cancellation", async () => {
+    const manager = await seedManager();
+    const { orderId } = await seedOrderWithPayment({ status: "DELIVERED" });
+    const result = await core.cancelAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId,
+      reason: "terminal order",
+      expectedVersion: 1,
+      idempotencyKey: `cancel-${crypto.randomUUID()}`,
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
   });
 
   it("rejects a cancellation idempotency key reused for another order without false audit", async () => {

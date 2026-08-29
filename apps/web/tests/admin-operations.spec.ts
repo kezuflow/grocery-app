@@ -1,13 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./admin-authenticated-fixture";
 
 /**
  * Admin operations board flow against a provisioned local stack. Skips when
  * the app is unreachable so repository verification stays environment-safe.
- * Authenticated journeys additionally require a configured development
- * auth-email transport (E2E_AUTH_EMAIL_CONFIGURED=1); the delivery port is
- * fail-closed by design until that provisioning exists.
+ * Authenticated journeys use the deterministic local Staff fixture.
  */
-const authEmailConfigured = process.env.E2E_AUTH_EMAIL_CONFIGURED === "1";
 
 let stackUp = false;
 test.beforeAll(async ({ request }) => {
@@ -21,18 +18,6 @@ test.beforeAll(async ({ request }) => {
 test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
-
-async function signUpStaff(request: import("@playwright/test").APIRequestContext): Promise<void> {
-  const email = `admin-e2e-${crypto.randomUUID().slice(0, 8)}@example.com`;
-  const signUp = await request.post("/api/auth/sign-up/email", {
-    headers: {
-      "content-type": "application/json",
-      origin: process.env.APP_BASE_URL ?? "http://localhost:3000",
-    },
-    data: { name: "Admin E2E", email, password: "correct-horse-battery-staple" },
-  });
-  expect([200, 201]).toContain(signUp.status());
-}
 
 test("an unauthenticated visitor is told to sign in with a staff account", async ({ page }) => {
   await page.goto("/admin");
@@ -54,14 +39,48 @@ test("operational workspaces retain the protected admin boundary", async ({ page
 });
 
 test("a signed-in account without operational capability sees the denied state", async ({
-  page,
+  deniedAdminPage,
 }) => {
-  test.skip(!authEmailConfigured, "Signup verification needs a configured auth-email transport.");
-  await signUpStaff(page.request);
-  await page.goto("/admin");
-  await expect(
-    page.getByText(/no operational capability|denied|sections not permitted/i).first(),
-  ).toBeVisible();
+  await deniedAdminPage.goto("/admin/procurement");
+  await deniedAdminPage.getByRole("combobox", { name: "Active admin scope" }).selectOption({
+    label: "Cebu Central",
+  });
+  await expect(deniedAdminPage.getByRole("alert")).toContainText(
+    "Procurement access is not permitted for this scope.",
+  );
+});
+
+test("a provisioned Staff reader opens the real Procurement workspace", async ({ adminPage }) => {
+  await adminPage.goto("/admin/procurement");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Procurement" })).toBeVisible();
+});
+
+test("fulfillment-mode activation succeeds with capability and is denied without it", async ({
+  adminPage,
+  deniedAdminPage,
+}) => {
+  const data = {
+    locationId: "location-cebu-central",
+    fulfillmentMode: "SCHEDULED",
+    cadence: "WEEKLY",
+    promiseMinutes: null,
+    maxConcurrentInstantOrders: null,
+    expectedVersion: null,
+  };
+  const allowed = await adminPage.request.post("/api/admin/fulfillment-mode", {
+    data,
+    headers: { "idempotency-key": crypto.randomUUID() },
+  });
+  const allowedBody = await allowed.json();
+  expect(allowedBody, JSON.stringify(allowedBody)).toMatchObject({
+    ok: true,
+    value: { locationId: data.locationId, activeMode: "SCHEDULED" },
+  });
+  const denied = await deniedAdminPage.request.post("/api/admin/fulfillment-mode", {
+    data: { ...data, expectedVersion: 1 },
+    headers: { "idempotency-key": crypto.randomUUID() },
+  });
+  expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
 });
 
 test("exception workspace renders typed source fields and unavailable actions", async ({
@@ -134,6 +153,9 @@ test("exception workspace renders typed source fields and unavailable actions", 
     }),
   );
   await page.goto("/admin/issues/operational-exceptions");
+  await page.getByRole("combobox", { name: "Active admin scope" }).selectOption({
+    label: "Cebu Central",
+  });
   await expect(page.getByText("RECEIVING").first()).toBeVisible();
   await expect(page.getByText("Source-owned; unavailable here")).toBeVisible();
   await expect(page.getByText("Age unavailable")).toBeVisible();
