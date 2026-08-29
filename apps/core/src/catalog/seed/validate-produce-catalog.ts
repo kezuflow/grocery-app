@@ -81,7 +81,9 @@ export function validateProduceCatalog(input: ProduceCatalogInput): ValidatedPro
     }
     const categorySlug = slugOfCategoryCode(product.categoryCode);
     if (!categorySlug) {
-      violations.push(`${context}: category "${String(product.categoryCode)}" is not in the controlled taxonomy`);
+      violations.push(
+        `${context}: category "${String(product.categoryCode)}" is not in the controlled taxonomy`,
+      );
     }
     if (!product.description || !product.description.trim()) {
       violations.push(`${context}: missing description`);
@@ -155,7 +157,10 @@ export function validateProduceCatalog(input: ProduceCatalogInput): ValidatedPro
       if (!isPositiveInteger(variant.priceMinor)) {
         violations.push(`${variantContext}: price must be a positive integer minor unit`);
       }
-      if (!isPositiveInteger(variant.sellQuantity) || !isPositiveInteger(variant.inventoryQuantityBase)) {
+      if (
+        !isPositiveInteger(variant.sellQuantity) ||
+        !isPositiveInteger(variant.inventoryQuantityBase)
+      ) {
         violations.push(`${variantContext}: quantities must be positive integers`);
       }
       const expectedBaseUnit =
@@ -168,7 +173,10 @@ export function validateProduceCatalog(input: ProduceCatalogInput): ValidatedPro
         violations.push(
           `${variantContext}: controlled sell unit must be G, KG, or PC; no universal PACK/BUNCH unit exists`,
         );
-      } else if (expectedBaseUnit !== product.inventoryBaseUnit || variant.baseUnit !== expectedBaseUnit) {
+      } else if (
+        expectedBaseUnit !== product.inventoryBaseUnit ||
+        variant.baseUnit !== expectedBaseUnit
+      ) {
         violations.push(
           `${variantContext}: dimension mismatch between sell unit "${variant.sellUnitCode}" and base unit`,
         );
@@ -234,7 +242,8 @@ function summarize(
   for (const product of products) {
     byCategory[product.categoryCode] = (byCategory[product.categoryCode] ?? 0) + 1;
     byBaseUnit[product.inventoryBaseUnit] = (byBaseUnit[product.inventoryBaseUnit] ?? 0) + 1;
-    let categoryMin = priceRangeByCategory[product.categoryCode]?.minPriceMinor ?? Number.MAX_SAFE_INTEGER;
+    let categoryMin =
+      priceRangeByCategory[product.categoryCode]?.minPriceMinor ?? Number.MAX_SAFE_INTEGER;
     let categoryMax = priceRangeByCategory[product.categoryCode]?.maxPriceMinor ?? 0;
     for (const variant of product.variants) {
       variantCount += 1;
@@ -244,8 +253,10 @@ function summarize(
       }
       categoryMin = Math.min(categoryMin, variant.priceMinor);
       categoryMax = Math.max(categoryMax, variant.priceMinor);
-      minPriceMinor = minPriceMinor === null ? variant.priceMinor : Math.min(minPriceMinor, variant.priceMinor);
-      maxPriceMinor = maxPriceMinor === null ? variant.priceMinor : Math.max(maxPriceMinor, variant.priceMinor);
+      minPriceMinor =
+        minPriceMinor === null ? variant.priceMinor : Math.min(minPriceMinor, variant.priceMinor);
+      maxPriceMinor =
+        maxPriceMinor === null ? variant.priceMinor : Math.max(maxPriceMinor, variant.priceMinor);
     }
     priceRangeByCategory[product.categoryCode] = {
       minPriceMinor: categoryMin,

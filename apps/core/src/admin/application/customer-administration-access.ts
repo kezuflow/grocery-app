@@ -80,11 +80,7 @@ export async function resolveCustomerAdministrationAccess(
   };
 }
 
-export {
-  boundListLimit,
-  decodeStaffCursor,
-  encodeStaffCursor,
-};
+export { boundListLimit, decodeStaffCursor, encodeStaffCursor };
 
 export function customerListLimit(limit: number | undefined): number | "invalid" {
   return boundListLimit(limit);

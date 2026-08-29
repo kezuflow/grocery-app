@@ -46,11 +46,9 @@ async function staffCookie(options: {
     env.DB.prepare(
       "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'Audit Reader', 'active', ?, ?)",
     ).bind(staffId, user.userId, now, now),
-    env.DB.prepare("INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Audit Role', ?)").bind(
-      roleId,
-      `audit-${crypto.randomUUID().slice(0, 8)}`,
-      now,
-    ),
+    env.DB.prepare(
+      "INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Audit Role', ?)",
+    ).bind(roleId, `audit-${crypto.randomUUID().slice(0, 8)}`, now),
     env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(
       staffId,
       roleId,
@@ -94,24 +92,27 @@ async function insertAuditRow(options: {
   const id = options.id ?? `audit-${++auditCounter}-${crypto.randomUUID().slice(0, 8)}`;
   await env.DB.prepare(
     "INSERT INTO audit_event (id, actor_user_id, action, aggregate_type, aggregate_id, details_json, before_json, after_json, reason, market_id, location_id, correlation_id, occurred_at) VALUES (?, NULL, ?, 'order', 'order-1', ?, ?, ?, ?, NULL, ?, 'corr-1', ?)",
-  ).bind(
-    id,
-    options.action ?? "ORDER.ADJUSTED",
-    JSON.stringify(options.details ?? {}),
-    options.before === undefined ? null : JSON.stringify(options.before),
-    options.after === undefined ? null : JSON.stringify(options.after),
-    options.reason ?? null,
-    options.locationId ?? null,
-    options.occurredAt,
-  ).run();
+  )
+    .bind(
+      id,
+      options.action ?? "ORDER.ADJUSTED",
+      JSON.stringify(options.details ?? {}),
+      options.before === undefined ? null : JSON.stringify(options.before),
+      options.after === undefined ? null : JSON.stringify(options.after),
+      options.reason ?? null,
+      options.locationId ?? null,
+      options.occurredAt,
+    )
+    .run();
   return id;
 }
 
 describe("admin audit reads", () => {
   it("denies unauthenticated list and detail requests", async () => {
-    expect(
-      await core.listAdminAuditEvents({ requestId: "r1", headers: {} }),
-    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
+    expect(await core.listAdminAuditEvents({ requestId: "r1", headers: {} })).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED" },
+    });
     expect(
       await core.getAdminAuditEvent({ requestId: "r2", headers: {}, auditEventId: "missing" }),
     ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
@@ -137,7 +138,10 @@ describe("admin audit reads", () => {
 
   it("isolates location-scoped principals from other locations and global rows", async () => {
     const now = Date.now();
-    const centralId = await insertAuditRow({ occurredAt: now - 1_000, locationId: "location-cebu-central" });
+    const centralId = await insertAuditRow({
+      occurredAt: now - 1_000,
+      locationId: "location-cebu-central",
+    });
     await insertAuditRow({ occurredAt: now - 2_000, locationId: "location-other-empty" });
     await insertAuditRow({ occurredAt: now - 3_000 });
 

@@ -56,7 +56,11 @@ export async function resolveAdminAuditAccess(
   if (!staffRecord || staffRecord.status !== "active") {
     return {
       ok: false,
-      error: { code: "FORBIDDEN", message: "Staff access is required", requestId: request.requestId },
+      error: {
+        code: "FORBIDDEN",
+        message: "Staff access is required",
+        requestId: request.requestId,
+      },
     };
   }
   if (!context.value.capabilities.includes("audit.read")) {
@@ -299,7 +303,12 @@ export async function listAdminAuditEvents(
   const last = items[items.length - 1];
   const nextCursor =
     hasMore && last
-      ? toBase64Url(JSON.stringify({ occurredAt: new Date(last.occurredAt).getTime(), id: last.auditEventId }))
+      ? toBase64Url(
+          JSON.stringify({
+            occurredAt: new Date(last.occurredAt).getTime(),
+            id: last.auditEventId,
+          }),
+        )
       : null;
 
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };

@@ -29,7 +29,9 @@ describe("promotion administration migration 0029", () => {
   });
 
   it("adds customer targeting to promotion grants", async () => {
-    const columns = await env.DB.prepare("PRAGMA table_info(promotion_grant)").all<{ name: string }>();
+    const columns = await env.DB.prepare("PRAGMA table_info(promotion_grant)").all<{
+      name: string;
+    }>();
     expect(columns.results.map((row) => row.name)).toContain("customer_id");
   });
 

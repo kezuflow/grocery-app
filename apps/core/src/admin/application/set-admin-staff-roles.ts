@@ -108,13 +108,13 @@ export async function setAdminStaffRoles(
          WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard}`,
       )
       .bind(request.staffId, now, SCOPE, request.idempotencyKey, ...guardBinds),
-  
+
     deps.db
       .prepare(
         `UPDATE staff_identity SET updated_at = ?, version = version + 1 WHERE id = ? AND version = ?`,
       )
       .bind(now, request.staffId, request.expectedVersion),
-];
+  ];
 
   await deps.db.batch(statements);
   const after = await deps.db

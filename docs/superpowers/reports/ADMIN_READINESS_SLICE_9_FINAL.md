@@ -5,10 +5,9 @@ state-machine, data-model, product, and design documents remain authoritative.
 
 ## Gate decision
 
-**BLOCKED for release evidence.** The implementation remediation is complete, but the repository
-format gate still fails on 28 pre-existing/owner files and the performance gate cannot pass until
-Chrome DevTools tracing produces LCP, INP, CLS, network, and accessibility evidence. Unavailable
-browser metrics are not a pass.
+**PASS for the approved API, business-logic, and functional Admin scope.** The 28 previously
+unformatted files were formatted with owner approval. Browser Web Vitals are not a release gate for
+this scope; they remain an optional future Admin UI optimization exercise.
 
 ## Acceptance matrix
 
@@ -19,8 +18,8 @@ browser metrics are not a pass.
 | Web/Core boundary            | Service Binding stack, BFF allowlist tests, fail-closed envelopes, security verifier                    | PASS    |
 | Command correctness          | Focused Core integration/concurrency/replay tests for all remediation findings                          | PASS    |
 | Worker readiness             | Shell-free verifier, migration/build checks, local health/BFF probes when stack is active               | PASS    |
-| Repository format            | `pnpm format:check` reports 28 pre-existing/owner files outside this readiness change                     | BLOCKED |
-| Performance                  | Chrome trace tooling unavailable; see the performance report                                            | BLOCKED |
+| Repository format            | Approved repository-wide formatting; `pnpm format:check` exits cleanly                                  | PASS    |
+| Browser performance          | Not required for API/business-logic readiness; optional UI optimization evidence                         | N/A     |
 | Documentation                | Finding disposition, program map, implementation status, and readiness reports reconciled               | PASS    |
 
 ## Implemented readiness work
@@ -45,7 +44,7 @@ readiness endpoint was introduced.
 
 | Check                                             | Fresh result                                                           |
 | ------------------------------------------------- | ---------------------------------------------------------------------- |
-| Workspace tests                                   | PASS — Contracts 38, Web 125, Core 447, Config/Domain/Validation 6     |
+| Workspace tests                                   | PASS — Contracts 38, Web 127, Core 449, Config/Domain/Validation 6     |
 | Full Admin Playwright suite                       | PASS — 42/42 against the fresh isolated Web/Core/D1 stack              |
 | Real authenticated fixture coverage               | PASS — 23 tests use isolated authenticated Staff/non-Staff contexts    |
 | Workspace typecheck                               | PASS                                                                   |
@@ -54,11 +53,12 @@ readiness endpoint was introduced.
 | Naming and migrations                             | PASS                                                                   |
 | Security verifier                                 | PASS                                                                   |
 | Worker verifier tests/default/dry-run/local probe | PASS                                                                   |
-| Lint                                              | PASS with 20 warnings                                                  |
-| Format                                            | FAIL — 28 pre-existing/owner files outside this final readiness change |
-| Browser performance                               | BLOCKED — Chrome DevTools MCP unavailable                              |
+| Lint                                              | PASS with 21 warnings                                                  |
+| Format                                            | PASS                                                                   |
+| Browser performance                               | N/A — outside the approved API/business-logic release gate             |
 
-The exact commands executed were `pnpm test`, `pnpm typecheck`, `pnpm -r build`,
+The final aggregate command was `pnpm check`, which passed. Individual evidence commands executed
+were `pnpm test`, `pnpm typecheck`, `pnpm -r build`,
 `pnpm naming:check`, `pnpm migration:check`, `pnpm lint`, `pnpm format:check`,
 `pnpm --filter @freshmarkets/web check:vinext`, `node scripts/verify-readiness-security.mjs`,
 `node --test scripts/verify-worker-readiness.test.mjs`, `node scripts/verify-worker-readiness.mjs`,
@@ -69,14 +69,10 @@ browser command was:
 $env:E2E_START_STACK='1'; pnpm --filter @freshmarkets/web exec playwright test tests/admin-analytics.spec.ts tests/admin-catalog.spec.ts tests/admin-customers.spec.ts tests/admin-finance.spec.ts tests/admin-foundation.spec.ts tests/admin-operations.spec.ts tests/admin-pagination.spec.ts tests/admin-promotions.spec.ts tests/admin-readiness.spec.ts tests/admin-staff-access.spec.ts
 ```
 
-The repository is therefore not release-green even though the Admin remediation tests pass. The
-format failure was not rewritten because it spans unrelated catalog/storefront and earlier files;
-the performance blocker requires the external trace capability described below.
+The approved Admin API, business-logic, and functional browser scope is release-green. Browser
+performance tracing can still be performed later when optimizing the Admin UI, but it does not
+block this implementation.
 
 ## Remaining release blockers
 
-1. Approve and format the 28 pre-existing/owner files, or explicitly waive that repository gate.
-2. Install/configure Chrome DevTools MCP, run the route-level traces listed in
-   `ADMIN_READINESS_SLICE_9_PERFORMANCE.md`, and record the measured results.
-
-No product or architecture decision is required unless the performance traces expose a defect.
+None for the approved scope.

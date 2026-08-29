@@ -10,7 +10,12 @@ import {
 
 describe("customer crm contracts", () => {
   it("publishes the closed closure, privacy status, and action vocabularies", () => {
-    expect(customerClosureRequestTypes).toEqual(["ACCESS", "CORRECTION", "CLOSURE", "ANONYMIZATION"]);
+    expect(customerClosureRequestTypes).toEqual([
+      "ACCESS",
+      "CORRECTION",
+      "CLOSURE",
+      "ANONYMIZATION",
+    ]);
     expect(privacyRequestStatuses).toEqual([
       "SUBMITTED",
       "VERIFYING",

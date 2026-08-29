@@ -8,7 +8,9 @@ const ignoredDirectories = new Set([
   "node_modules",
   "dist",
   ".next",
+  ".worktrees",
   "coverage",
+  "test-results",
 ]);
 const allowedDirectoryNames = new Set([
   ".github",

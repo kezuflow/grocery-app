@@ -52,10 +52,15 @@ export function CatalogResults({
         | { ok: true; value: CatalogSearchPage }
         | { ok: false };
       if (!payload.ok) throw new Error("catalog request failed");
-      const converted = toPresentationProducts(payload.value.items as ReadonlyArray<CatalogProduct>);
+      const converted = toPresentationProducts(
+        payload.value.items as ReadonlyArray<CatalogProduct>,
+      );
       setItems((current) => appendUniqueProducts(current, converted));
       setAnnouncement(
-        loadMoreAnnouncement({ added: converted.length, totalShown: items.length + converted.length }),
+        loadMoreAnnouncement({
+          added: converted.length,
+          totalShown: items.length + converted.length,
+        }),
       );
       setCursor(payload.value.nextCursor);
     } catch {

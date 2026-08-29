@@ -41,7 +41,7 @@ focused automated coverage; final release evidence remains subject to the readin
 | I19     | Fixed  | Cursor pagination reaches later records across Admin lists.                             |
 | I20     | Fixed  | Stable command intent coalesces submits and survives ambiguous failures.                |
 | I21     | Fixed  | Deterministic authenticated Web/Core/D1 coverage supplements command integration tests. |
-| I22     | Fixed  | Reports distinguish PASS, FAIL, and BLOCKED; unavailable metrics are not passed.        |
+| I22     | Fixed  | Reports make no unsupported performance claim; Web Vitals are explicitly non-gating.   |
 | M1      | Fixed  | Invalid privacy filters fail validation instead of widening results.                    |
 | M2      | Fixed  | Material destructive actions require consequence/reason confirmation.                   |
 | M3      | Fixed  | Receiving exceptions use stable ordering and canonical age.                             |
@@ -201,6 +201,8 @@ The Admin Playwright inventory lists 21 Admin tests, mostly unauthenticated or m
 The readiness report contains no usable LCP/INP/CLS measurements, references a nonexistent `/admin/operations` route, and reports the format gate as failed on 44 files while still presenting overall readiness as pass. This does not meet the measured-evidence acceptance criterion.
 
 **Recommended fix:** rerun the gate against real representative routes with authenticated data, record reproducible Web Vitals/network evidence, require every mandatory command to exit cleanly, and label unexecuted gates as blocked—not passed.
+
+**Final decision:** browser performance is not part of the approved API/business-logic release gate. The readiness report makes no Web Vitals claim; functional Admin browser coverage remains mandatory and passes.
 
 ## Minor findings
 

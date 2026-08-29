@@ -1,8 +1,4 @@
-import type {
-  AdminAuditEventListItem,
-  AuthenticatedRequest,
-  RpcResult,
-} from "./index";
+import type { AdminAuditEventListItem, AuthenticatedRequest, RpcResult } from "./index";
 
 export const customerClosureRequestTypes = [
   "ACCESS",

@@ -152,12 +152,8 @@ export type AdminPromotionRedemptionPage = {
  * in Core. Preview never mutates state; redemptions are read-only here.
  */
 export type AdminPromotionsService = {
-  listAdminPromotions(
-    request: AdminPromotionListRequest,
-  ): Promise<RpcResult<AdminPromotionPage>>;
-  getAdminPromotion(
-    request: AdminPromotionDetailRequest,
-  ): Promise<RpcResult<AdminPromotionDetail>>;
+  listAdminPromotions(request: AdminPromotionListRequest): Promise<RpcResult<AdminPromotionPage>>;
+  getAdminPromotion(request: AdminPromotionDetailRequest): Promise<RpcResult<AdminPromotionDetail>>;
   createAdminPromotion(
     request: AdminPromotionCreateRequest,
   ): Promise<RpcResult<AdminPromotionDetail>>;

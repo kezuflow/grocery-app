@@ -32,7 +32,7 @@ sequence. Completing one slice does not authorize the next.
 | 6     | Orders, issues, Payments, Refunds, Memberships, reconciliation exceptions                       | Slices 1–5       | Finance and lifecycle flows pass; no operations convergence begins |
 | 7     | Procurement, Receiving, Fulfillment, Delivery, mode configuration, exception convergence        | Slices 1–6       | Operational flows pass; no Analytics definitions begin             |
 | 8     | Metric definitions, Analytics queries, Overview, approved exports                               | Slices 1–7       | Metric reconciliation passes; blocked metrics remain unavailable   |
-| 9     | Cross-workspace accessibility, security, performance, Worker-local and production readiness     | Slices 1–8       | All required non-skipped acceptance gates pass                     |
+| 9     | Cross-workspace accessibility, security, Worker-local and production readiness                  | Slices 1–8       | All required non-skipped functional acceptance gates pass          |
 
 ## Slice-owned migrations
 
@@ -65,7 +65,7 @@ slices also execute real successful and capability-denied mutations. Production 
 development auth email remain fail-closed.
 
 Slice 9 readiness evidence is maintained in
-`docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`. Browser performance evidence remains
-blocked until Chrome DevTools tracing is configured; unavailable LCP/INP/CLS values are not a pass.
+`docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`. Browser performance evidence is outside
+the approved API/business-logic release gate and remains optional for future Admin UI optimization.
 Approved product deferrals listed in the individual slice plans remain deferrals rather than review
 defects. No Slice 10 is authorized by this program.

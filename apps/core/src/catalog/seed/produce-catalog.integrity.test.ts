@@ -11,9 +11,7 @@ import { produceCatalog } from "./produce-catalog.ts";
  */
 describe("produce catalog manifest integrity", () => {
   const assetKeys = (
-    JSON.parse(
-      (env as unknown as { PRODUCE_ASSET_KEYS: string }).PRODUCE_ASSET_KEYS,
-    ) as string[]
+    JSON.parse((env as unknown as { PRODUCE_ASSET_KEYS: string }).PRODUCE_ASSET_KEYS) as string[]
   ).sort();
 
   it("covers exactly the 226 public produce assets", () => {

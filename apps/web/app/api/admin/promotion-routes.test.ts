@@ -40,7 +40,11 @@ function jsonRequest(url: string, body: unknown): Request {
 
 describe("promotion BFF routes", () => {
   it("delegates the promotion list with query parameters and cookies", async () => {
-    coreMocks.listAdminPromotions.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.listAdminPromotions.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
     const response = await listPromotions(
       new Request("https://freshmarkets.ph/api/admin/promotions?limit=25", { headers: COOKIE }),
     );
@@ -51,7 +55,11 @@ describe("promotion BFF routes", () => {
   });
 
   it("delegates creation with the idempotency key and closed fields", async () => {
-    coreMocks.createAdminPromotion.mockResolvedValue({ ok: true, value: { promotionId: "p1" }, requestId: "r" });
+    coreMocks.createAdminPromotion.mockResolvedValue({
+      ok: true,
+      value: { promotionId: "p1" },
+      requestId: "r",
+    });
     const response = await createPromotion(
       jsonRequest("https://freshmarkets.ph/api/admin/promotions", {
         code: "TEST_1",
@@ -70,9 +78,21 @@ describe("promotion BFF routes", () => {
   it("forwards the promotion path id for detail, status, preview, grants, and redemptions", async () => {
     coreMocks.getAdminPromotion.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
     coreMocks.changeAdminPromotionStatus.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-    coreMocks.previewAdminPromotion.mockResolvedValue({ ok: true, value: { eligible: true }, requestId: "r" });
-    coreMocks.listPromotionGrants.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
-    coreMocks.listPromotionRedemptions.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.previewAdminPromotion.mockResolvedValue({
+      ok: true,
+      value: { eligible: true },
+      requestId: "r",
+    });
+    coreMocks.listPromotionGrants.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
+    coreMocks.listPromotionRedemptions.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
 
     await getPromotion(new Request("https://x/p1", { headers: COOKIE }), promoParams);
     await changeStatus(
@@ -110,7 +130,11 @@ describe("promotion BFF routes", () => {
 
   it("delegates updates and grants with the idempotency key", async () => {
     coreMocks.updateAdminPromotion.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-    coreMocks.grantAdminPromotion.mockResolvedValue({ ok: true, value: { grantId: "g1" }, requestId: "r" });
+    coreMocks.grantAdminPromotion.mockResolvedValue({
+      ok: true,
+      value: { grantId: "g1" },
+      requestId: "r",
+    });
 
     await updatePromotion(
       new Request("https://x/p1", {

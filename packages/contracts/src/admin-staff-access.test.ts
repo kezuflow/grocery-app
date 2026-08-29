@@ -48,7 +48,10 @@ describe("staff access contracts", () => {
       expiresAt: "2026-09-10T00:00:00.000Z",
       createdAt: "2026-08-27T00:00:00.000Z",
     } satisfies AdminStaffInvitationView);
-    void ({ code: "audit.read", description: "Read the audit log" } satisfies CapabilityDefinitionView);
+    void ({
+      code: "audit.read",
+      description: "Read the audit log",
+    } satisfies CapabilityDefinitionView);
     void ({ revokedSessionCount: 2 } satisfies SessionRevocationResult);
   });
 });

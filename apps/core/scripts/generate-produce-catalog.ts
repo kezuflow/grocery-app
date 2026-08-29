@@ -39,10 +39,16 @@ for (const name of migrationFiles.filter((name) => name !== outputName)) {
 }
 
 const existingProductIds = new Set(
-  database.prepare("SELECT id FROM product").all().map((row) => String(row.id)),
+  database
+    .prepare("SELECT id FROM product")
+    .all()
+    .map((row) => String(row.id)),
 );
 const existingSkuIds = new Set(
-  database.prepare("SELECT id FROM sku").all().map((row) => String(row.id)),
+  database
+    .prepare("SELECT id FROM sku")
+    .all()
+    .map((row) => String(row.id)),
 );
 database.close();
 

@@ -55,7 +55,15 @@ describe("order issue migration 0030", () => {
     let badCategoryRejected = false;
     try {
       await env.DB.prepare(insertSql)
-        .bind(crypto.randomUUID(), parents.orderId, parents.customerId, "NOT_A_CATEGORY", `k-${crypto.randomUUID()}`, now, now)
+        .bind(
+          crypto.randomUUID(),
+          parents.orderId,
+          parents.customerId,
+          "NOT_A_CATEGORY",
+          `k-${crypto.randomUUID()}`,
+          now,
+          now,
+        )
         .run();
     } catch {
       badCategoryRejected = true;
@@ -65,7 +73,16 @@ describe("order issue migration 0030", () => {
     let badStatusRejected = false;
     try {
       await env.DB.prepare(insertSql)
-        .bind(crypto.randomUUID(), parents.orderId, parents.customerId, "MISSING_ITEM", "MAYBE", `k-${crypto.randomUUID()}`, now, now)
+        .bind(
+          crypto.randomUUID(),
+          parents.orderId,
+          parents.customerId,
+          "MISSING_ITEM",
+          "MAYBE",
+          `k-${crypto.randomUUID()}`,
+          now,
+          now,
+        )
         .run();
     } catch {
       badStatusRejected = true;
@@ -74,14 +91,30 @@ describe("order issue migration 0030", () => {
 
     const fixedKey = `k-fixed-${crypto.randomUUID()}`;
     const inserted = await env.DB.prepare(insertSql)
-      .bind(crypto.randomUUID(), parents.orderId, parents.customerId, "MISSING_ITEM", fixedKey, now, now)
+      .bind(
+        crypto.randomUUID(),
+        parents.orderId,
+        parents.customerId,
+        "MISSING_ITEM",
+        fixedKey,
+        now,
+        now,
+      )
       .run();
     expect(inserted.meta?.changes).toBe(1);
 
     let duplicateKeyRejected = false;
     try {
       await env.DB.prepare(insertSql)
-        .bind(crypto.randomUUID(), parents.orderId, parents.customerId, "MISSING_ITEM", fixedKey, now, now)
+        .bind(
+          crypto.randomUUID(),
+          parents.orderId,
+          parents.customerId,
+          "MISSING_ITEM",
+          fixedKey,
+          now,
+          now,
+        )
         .run();
     } catch {
       duplicateKeyRejected = true;

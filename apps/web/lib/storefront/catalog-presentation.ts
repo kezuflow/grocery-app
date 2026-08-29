@@ -1,4 +1,9 @@
-import type { CatalogDetail, CatalogMedia, CatalogProduct, CatalogVariant } from "@freshmarkets/contracts";
+import type {
+  CatalogDetail,
+  CatalogMedia,
+  CatalogProduct,
+  CatalogVariant,
+} from "@freshmarkets/contracts";
 
 /**
  * Presentation view-models for marketplace surfaces. Contract DTOs stay the
@@ -88,8 +93,7 @@ export function pickDefaultVariant(
   const massSizes = priced.filter((variant) => variant.sellUnitCode !== "PC");
   if (massSizes.length > 0) {
     const closest = massSizes.reduce((best, variant) =>
-      Math.abs(variant.consumptionBaseQuantity - 500) <
-      Math.abs(best.consumptionBaseQuantity - 500)
+      Math.abs(variant.consumptionBaseQuantity - 500) < Math.abs(best.consumptionBaseQuantity - 500)
         ? variant
         : best,
     );

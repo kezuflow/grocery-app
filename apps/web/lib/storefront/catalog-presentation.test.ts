@@ -34,8 +34,15 @@ function product(overrides: Partial<CatalogProduct> = {}): CatalogProduct {
     slug: "red-onion",
     name: "Red onion",
     description: "Fresh red onions.",
-    category: { code: "ROOTS_TUBERS_BULBS", name: "Roots, Tubers & Bulbs", slug: "roots-tubers-bulbs" },
-    media: { src: "/produce/onion-red-creole-bermuda-red.webp", alt: "Fresh red onions in a basket" },
+    category: {
+      code: "ROOTS_TUBERS_BULBS",
+      name: "Roots, Tubers & Bulbs",
+      slug: "roots-tubers-bulbs",
+    },
+    media: {
+      src: "/produce/onion-red-creole-bermuda-red.webp",
+      alt: "Fresh red onions in a basket",
+    },
     details: [
       { label: "Contents", value: "Fixed sizes: 250 g, 500 g, 1 kg.", sortOrder: 1 },
       { label: "Storage", value: "Store in a cool, dry place.", sortOrder: 2 },
@@ -75,7 +82,10 @@ describe("pickDefaultVariant", () => {
   });
 
   it("ignores unpriced variants even when larger", () => {
-    const variants = [variant({ id: "v-250", priceMinor: null, currency: null }), variant({ id: "v-500" })];
+    const variants = [
+      variant({ id: "v-250", priceMinor: null, currency: null }),
+      variant({ id: "v-500" }),
+    ];
     expect(pickDefaultVariant(variants)?.id).toBe("v-500");
   });
 
@@ -155,7 +165,10 @@ describe("railEligible", () => {
       toPresentationProduct(product()),
       toPresentationProduct(product({ id: "p-2", available: false })),
       toPresentationProduct(
-        product({ id: "p-3", variants: [variant({ id: "v-500", priceMinor: null, currency: null })] }),
+        product({
+          id: "p-3",
+          variants: [variant({ id: "v-500", priceMinor: null, currency: null })],
+        }),
       ),
     ];
     const eligible = railEligible(items);

@@ -94,8 +94,7 @@ type VariantDisplayAndPrice = {
   sortOrder: number;
 };
 
-export type ProduceSeedVariant = (MassVariantRecipe | CountVariantRecipe) &
-  VariantDisplayAndPrice;
+export type ProduceSeedVariant = (MassVariantRecipe | CountVariantRecipe) & VariantDisplayAndPrice;
 
 export type ProduceSeedDetail = {
   label: string;

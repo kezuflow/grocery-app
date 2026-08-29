@@ -1,11 +1,6 @@
 import type { AuthenticatedRequest, Capability, RpcResult, Scope } from "./index";
 
-export const adminStaffInvitationStatuses = [
-  "PENDING",
-  "ACCEPTED",
-  "EXPIRED",
-  "REVOKED",
-] as const;
+export const adminStaffInvitationStatuses = ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"] as const;
 export type AdminStaffInvitationStatus = (typeof adminStaffInvitationStatuses)[number];
 
 export const adminRoleStatuses = ["ACTIVE", "ARCHIVED"] as const;

@@ -29,7 +29,9 @@ describe("admin foundation migration 0026", () => {
     const legacyPermission = await env.DB.prepare(
       "SELECT id, code FROM permission WHERE code = 'inventory:manage'",
     ).all<{ id: string; code: string }>();
-    expect(legacyPermission.results).toEqual([{ id: "perm_inventory_manage", code: "inventory:manage" }]);
+    expect(legacyPermission.results).toEqual([
+      { id: "perm_inventory_manage", code: "inventory:manage" },
+    ]);
 
     const legacyAssignment = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM role_permission WHERE role_id = 'role_operations_admin' AND permission_id = 'perm_inventory_manage'",

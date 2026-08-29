@@ -8,7 +8,7 @@ Status date: 2026-08-29. This file is descriptive evidence only. The canonical d
 - Shared Admin accessibility/state hardening, Web/Core boundary regression coverage, static security verification, Worker-local smoke checks, and deployment/recovery/auth-email runbooks are implemented.
 - The deterministic Playwright fixture starts an isolated port-3100 Web/Core stack, uses Core's existing test-only email adapter, provisions verified Better Auth accounts and application-owned Staff access in local D1, and exercises real authorized and capability-denied routes. No production auth bypass or public test endpoint exists.
 - The Slice 7 atomicity finding and the complete Slices 1–9 review set are remediated. Final evidence is recorded in `docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`.
-- Browser performance is not release-ready evidence yet: Chrome DevTools tracing is unavailable in the current session, so LCP/INP/CLS remain explicitly blocked rather than passed.
+- Browser Web Vitals are outside the approved API/business-logic release gate. They remain optional evidence for a future Admin UI optimization pass; no performance claim is made here.
 
 ## Produce catalog storefront rollout
 

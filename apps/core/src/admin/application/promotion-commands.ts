@@ -535,9 +535,7 @@ export async function grantAdminPromotion(
   }
 
   const existingGrant = await deps.db
-    .prepare(
-      "SELECT id FROM promotion_grant WHERE benefit_code = ? AND customer_id = ? LIMIT 1",
-    )
+    .prepare("SELECT id FROM promotion_grant WHERE benefit_code = ? AND customer_id = ? LIMIT 1")
     .bind(promotion.code, request.customerId)
     .first<{ id: string }>();
   if (existingGrant) {
@@ -584,7 +582,10 @@ export async function grantAdminPromotion(
     });
     await idempotencyFailed(deps.db, GRANT_SCOPE, request.idempotencyKey);
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("promotion_grant_promotion_customer_unique") || message.includes("UNIQUE")) {
+    if (
+      message.includes("promotion_grant_promotion_customer_unique") ||
+      message.includes("UNIQUE")
+    ) {
       return failure(
         "CONFLICT",
         "This promotion is already granted to the customer",

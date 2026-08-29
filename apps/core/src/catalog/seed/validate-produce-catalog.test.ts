@@ -14,7 +14,10 @@ function chiliPack(overrides: Partial<ProduceSeedProduct> = {}): ProduceSeedProd
     name: "Siling Labuyo",
     categoryCode: "AROMATICS_SPICES",
     description: "Fresh local chili peppers commonly used to season Filipino dishes.",
-    media: { assetKey: "chili-pepper-fruit-siling-labuyo.webp", altText: "Siling labuyo chili peppers" },
+    media: {
+      assetKey: "chili-pepper-fruit-siling-labuyo.webp",
+      altText: "Siling labuyo chili peppers",
+    },
     details: [
       { label: "Contents", value: "Approximately 10–15 peppers per pack.", sortOrder: 1 },
       { label: "Storage", value: "Keep refrigerated and use within a few days.", sortOrder: 2 },
@@ -188,7 +191,10 @@ describe("validateProduceCatalog", () => {
   it("rejects duplicate identifiers, slugs, codes, bad naming, and incomplete metadata", () => {
     const cases: Array<{ products: ProduceSeedProduct[]; pattern: RegExp }> = [
       {
-        products: [chiliPack(), chiliPack({ id: "product-other", slug: "chili-pepper-fruit-siling-labuyo" })],
+        products: [
+          chiliPack(),
+          chiliPack({ id: "product-other", slug: "chili-pepper-fruit-siling-labuyo" }),
+        ],
         pattern: /duplicate slug/,
       },
       {

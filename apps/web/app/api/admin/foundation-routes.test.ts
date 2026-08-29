@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getAdminContext, listAdminScopes, listAdminAuditEvents, getAdminAuditEvent } =
-  vi.hoisted(() => ({
+const { getAdminContext, listAdminScopes, listAdminAuditEvents, getAdminAuditEvent } = vi.hoisted(
+  () => ({
     getAdminContext: vi.fn(),
     listAdminScopes: vi.fn(),
     listAdminAuditEvents: vi.fn(),
     getAdminAuditEvent: vi.fn(),
-  }));
+  }),
+);
 
 vi.mock("cloudflare:workers", () => ({
   env: {
@@ -69,7 +70,11 @@ describe("admin foundation BFF routes", () => {
   });
 
   it("maps validated audit query parameters and delegates once", async () => {
-    listAdminAuditEvents.mockResolvedValue({ ok: true, value: { items: [], nextCursor: null }, requestId: "core-3" });
+    listAdminAuditEvents.mockResolvedValue({
+      ok: true,
+      value: { items: [], nextCursor: null },
+      requestId: "core-3",
+    });
     const response = await listAudit(
       new Request(
         "https://freshmarkets.ph/api/admin/audit?action=ORDER.ADJUSTED&resourceType=order&actorId=u1&marketId=m1&locationId=l1&from=2026-08-01T00:00:00.000Z&to=2026-08-27T00:00:00.000Z&cursor=abc&limit=25",
@@ -106,7 +111,11 @@ describe("admin foundation BFF routes", () => {
   });
 
   it("forwards the audit event path id to Core", async () => {
-    getAdminAuditEvent.mockResolvedValue({ ok: true, value: { auditEventId: "ev-1" }, requestId: "core-4" });
+    getAdminAuditEvent.mockResolvedValue({
+      ok: true,
+      value: { auditEventId: "ev-1" },
+      requestId: "core-4",
+    });
     const response = await getAuditDetail(
       new Request("https://freshmarkets.ph/api/admin/audit/ev-1", {
         headers: { cookie: "session=abc" },
