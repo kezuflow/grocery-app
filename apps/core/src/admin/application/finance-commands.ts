@@ -31,20 +31,6 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
-function idempotencyComplete(
-  database: D1Database,
-  scope: string,
-  key: string,
-  reference: string,
-  now: number,
-): D1PreparedStatement {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(reference, now, scope, key);
-}
-
 function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
   return database
     .prepare(
@@ -167,7 +153,7 @@ export async function requestAdminRefund(
   }
   const refundedRow = await deps.db
     .prepare(
-      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status IN ('REQUESTED', 'PROCESSING', 'SUCCEEDED')",
+      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status IN ('REQUESTED', 'APPROVED', 'PROCESSING', 'SUCCEEDED')",
     )
     .bind(request.paymentIntentId)
     .first<{ refunded: number }>();
@@ -241,7 +227,7 @@ export async function requestAdminRefund(
            SELECT ?, i.id, ?, i.currency, 'REQUESTED', ?, ?, 1, ?, ?
            FROM payment_intent i
            WHERE i.id = ? AND i.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
-             AND ? <= i.amount_minor - COALESCE((SELECT SUM(amount_minor) FROM payment_refund r WHERE r.payment_intent_id=i.id AND r.status IN ('REQUESTED','PROCESSING','SUCCEEDED')), 0)`,
+             AND ? <= i.amount_minor - COALESCE((SELECT SUM(amount_minor) FROM payment_refund r WHERE r.payment_intent_id=i.id AND r.status IN ('REQUESTED','APPROVED','PROCESSING','SUCCEEDED')), 0)`,
         )
         .bind(
           refundId,

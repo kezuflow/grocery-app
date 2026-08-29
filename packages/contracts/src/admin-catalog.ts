@@ -103,6 +103,11 @@ export type AdminProductDetail = {
   customerDetails: ReadonlyArray<AdminProductCustomerDetail>;
   media: ReadonlyArray<AdminProductMediaView>;
   inventoryPool: AdminProductInventoryPoolView;
+  pricingContext: {
+    marketId: string;
+    locationId: string | null;
+    currency: string;
+  };
   allowedActions: ReadonlyArray<"UPDATE" | "SET_STATUS">;
   recentAudit: ReadonlyArray<AdminAuditEventListItem>;
   skus: ReadonlyArray<AdminCatalogSkuSummary>;
@@ -167,7 +172,12 @@ export type AdminInventoryLedgerPage = {
   nextCursor: string | null;
 };
 
-export type AdminCategoryListRequest = AuthenticatedRequest;
+export type AdminCategoryListRequest = AuthenticatedRequest & {
+  query?: string;
+  status?: CatalogStatus;
+  cursor?: string;
+  limit?: number;
+};
 export type AdminCategoryCreateRequest = AuthenticatedRequest & {
   code: string;
   name: string;
@@ -210,6 +220,7 @@ export type AdminUnitCreateRequest = AuthenticatedRequest & {
 
 export type AdminProductListRequest = AuthenticatedRequest & {
   query?: string;
+  status?: CatalogStatus;
   cursor?: string;
   limit?: number;
 };
@@ -243,6 +254,8 @@ export type AdminProductUpdateRequest = AuthenticatedRequest & {
 
 export type AdminProductDetailRequest = AuthenticatedRequest & {
   productId: string;
+  marketId?: string;
+  locationId?: string;
 };
 
 export type AdminProductStatusRequest = AuthenticatedRequest & {

@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 export function AdminCursorPagination({
   pageNumber,
@@ -45,20 +52,38 @@ export function AdminCursorPagination({
   );
 }
 
-export function useAdminPagination() {
-  const [cursors, setCursors] = useState<ReadonlyArray<string | null>>([null]);
+export function useAdminPagination(resetKey: string | null = null) {
+  const [pagination, setPagination] = useState<{
+    key: string | null;
+    cursors: ReadonlyArray<string | null>;
+  }>({ key: resetKey, cursors: [null] });
+  const cursors = pagination.key === resetKey ? pagination.cursors : [null];
   const cursor = cursors.at(-1) ?? null;
+  useEffect(() => {
+    setPagination((current) =>
+      current.key === resetKey ? current : { key: resetKey, cursors: [null] },
+    );
+  }, [resetKey]);
   return {
     cursor,
     pageNumber: cursors.length,
     next(nextCursor: string) {
-      setCursors((current) => [...current, nextCursor]);
+      setPagination((current) => ({
+        key: resetKey,
+        cursors: current.key === resetKey ? [...current.cursors, nextCursor] : [null, nextCursor],
+      }));
     },
     previous() {
-      setCursors((current) => (current.length > 1 ? current.slice(0, -1) : current));
+      setPagination((current) => {
+        const currentCursors = current.key === resetKey ? current.cursors : [null];
+        return {
+          key: resetKey,
+          cursors: currentCursors.length > 1 ? currentCursors.slice(0, -1) : currentCursors,
+        };
+      });
     },
     reset() {
-      setCursors([null]);
+      setPagination({ key: resetKey, cursors: [null] });
     },
   };
 }
@@ -69,6 +94,11 @@ export function AdminConfirmationDialog({
   resource,
   scope,
   consequence,
+  initialReason = "",
+  reasonRequired = true,
+  confirmLabel = "Confirm",
+  cancelLabel = "Keep unchanged",
+  restoreFocusRef,
   pending,
   onCancel,
   onConfirm,
@@ -78,60 +108,67 @@ export function AdminConfirmationDialog({
   resource: string;
   scope: string;
   consequence: string;
+  initialReason?: string;
+  reasonRequired?: boolean;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
   pending?: boolean;
   onCancel(): void;
   onConfirm(reason: string): void;
 }) {
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(initialReason);
   useEffect(() => {
-    if (!open) setReason("");
-  }, [open]);
-  if (!open) return null;
+    setReason(open ? initialReason : "");
+  }, [initialReason, open]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
-      <section
-        aria-describedby="admin-confirmation-impact"
-        aria-labelledby="admin-confirmation-title"
-        aria-modal="true"
+    <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
+      <AlertDialogContent
         role="alertdialog"
-        className="w-full max-w-lg space-y-4 rounded-[var(--fm-radius-surface)] bg-white p-5 shadow-xl"
+        onCloseAutoFocus={(event) => {
+          if (!restoreFocusRef?.current) return;
+          event.preventDefault();
+          restoreFocusRef.current.focus();
+        }}
       >
-        <h2 id="admin-confirmation-title" className="text-lg font-semibold">
-          {title}
-        </h2>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
         <dl className="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
           <dt className="font-medium">Resource</dt>
           <dd>{resource}</dd>
           <dt className="font-medium">Scope</dt>
           <dd>{scope}</dd>
         </dl>
-        <p id="admin-confirmation-impact" className="text-sm text-[var(--fm-destructive)]">
+        <AlertDialogDescription className="text-[var(--fm-destructive)]">
           {consequence}
-        </p>
-        <label className="grid gap-1 text-sm font-medium">
-          Reason
-          <Input
-            aria-label="Confirmation reason"
-            autoFocus
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </label>
+        </AlertDialogDescription>
+        {reasonRequired ? (
+          <label className="grid gap-1 text-sm font-medium">
+            Reason
+            <Input
+              aria-label="Confirmation reason"
+              autoFocus
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </label>
+        ) : null}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
-            Keep unchanged
-          </Button>
+          <AlertDialogCancel asChild>
+            <Button type="button" variant="outline" disabled={pending}>
+              {cancelLabel}
+            </Button>
+          </AlertDialogCancel>
           <Button
             type="button"
             variant="destructive"
-            disabled={pending || reason.trim() === ""}
+            disabled={pending || (reasonRequired && reason.trim() === "")}
             onClick={() => onConfirm(reason.trim())}
           >
-            {pending ? "Submitting…" : "Confirm"}
+            {pending ? "Submitting…" : confirmLabel}
           </Button>
         </div>
-      </section>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
+import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
 import { ListPageSection, PageHeader, StatusBadge } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ export default function CategoryDetailPage() {
   const [result, setResult] = useState<RpcResult<AdminCategoryDetail> | null>(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const statusTrigger = useRef<HTMLButtonElement>(null);
   const [notice, setNotice] = useState(
     searchParams.get("created")
       ? "Category created."
@@ -43,11 +44,8 @@ export default function CategoryDetailPage() {
         );
   }, [categoryId]);
   useEffect(load, [load]);
-  useEffect(() => {
-    if (confirming) cancelRef.current?.focus();
-  }, [confirming]);
-  async function changeStatus() {
-    if (!result?.ok || !reason.trim()) {
+  async function changeStatus(confirmedReason: string) {
+    if (!result?.ok || !confirmedReason.trim()) {
       setNotice("A reason is required.");
       return;
     }
@@ -60,7 +58,11 @@ export default function CategoryDetailPage() {
             await fetch(`/api/admin/catalog/categories/${categoryId}/status`, {
               method: "POST",
               headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-              body: JSON.stringify({ status, reason, expectedVersion: result.value.version }),
+              body: JSON.stringify({
+                status,
+                reason: confirmedReason,
+                expectedVersion: result.value.version,
+              }),
             })
           ).json() as Promise<RpcResult<AdminCategorySummary>>,
       );
@@ -167,6 +169,7 @@ export default function CategoryDetailPage() {
               placeholder="Reason required"
             />
             <Button
+              ref={statusTrigger}
               className="mt-3"
               variant={category.status === "active" ? "destructive" : "default"}
               disabled={intent.pending}
@@ -235,47 +238,24 @@ export default function CategoryDetailPage() {
           <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
         )}
       </ListPageSection>
-      {confirming ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setConfirming(false);
-          }}
-        >
-          <section
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="category-status-confirmation-title"
-            aria-describedby="category-status-confirmation-description"
-            className="w-full max-w-md rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6 shadow-xl"
-          >
-            <h2 id="category-status-confirmation-title" className="text-lg font-semibold">
-              {category.status === "active" ? "Deactivate category?" : "Activate category?"}
-            </h2>
-            <p
-              id="category-status-confirmation-description"
-              className="mt-2 text-sm text-[var(--fm-text-muted)]"
-            >
-              {category.status === "active"
-                ? "Products and historical records remain intact. This category becomes inactive until explicitly reactivated."
-                : "This category becomes active in the global Catalog hierarchy. Products retain their own lifecycle state."}
-            </p>
-            <p className="mt-3 rounded bg-[var(--fm-surface-soft)] p-3 text-sm">Reason: {reason}</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button ref={cancelRef} variant="outline" onClick={() => setConfirming(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant={category.status === "active" ? "destructive" : "default"}
-                disabled={intent.pending}
-                onClick={() => void changeStatus()}
-              >
-                {category.status === "active" ? "Confirm deactivation" : "Confirm activation"}
-              </Button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <ConfirmCommandDialog
+        open={confirming}
+        title={category.status === "active" ? "Deactivate category?" : "Activate category?"}
+        resource={`${category.name} · version ${category.version}`}
+        scope="Global Catalog"
+        consequence={
+          category.status === "active"
+            ? "Products and historical records remain intact. This category becomes inactive until explicitly reactivated."
+            : "This category becomes active in the global Catalog hierarchy. Products retain their own lifecycle state."
+        }
+        initialReason={reason}
+        confirmLabel={category.status === "active" ? "Confirm deactivation" : "Confirm activation"}
+        cancelLabel="Cancel"
+        pending={intent.pending}
+        restoreFocusRef={statusTrigger}
+        onCancel={() => setConfirming(false)}
+        onConfirm={(confirmedReason) => void changeStatus(confirmedReason)}
+      />
     </div>
   );
 }

@@ -39,13 +39,64 @@ export async function defaultMarketId(database: D1Database): Promise<string | nu
   return row?.id ?? null;
 }
 
-/** Bounded category list ordered by sort order. */
+/** Bounded keyset category list ordered by sort order and stable identity. */
 export async function listAdminCategories(
   deps: CatalogAdministrationDeps,
   request: AdminCategoryListRequest,
 ): Promise<RpcResult<AdminCategoryPage>> {
   const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
   if (!access.ok) return access;
+  const limit = boundListLimit(request.limit);
+  if (limit === "invalid") {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "limit must be an integer between 1 and 100",
+        requestId: request.requestId,
+      },
+    };
+  }
+  const query = request.query?.trim() ?? "";
+  if (query.length > 100) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "query is too long",
+        requestId: request.requestId,
+      },
+    };
+  }
+  let cursor: { createdAt: number; id: string } | null = null;
+  if (request.cursor !== undefined) {
+    cursor = decodeStaffCursor(request.cursor);
+    if (!cursor) {
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "cursor is malformed",
+          requestId: request.requestId,
+        },
+      };
+    }
+  }
+  const clauses: string[] = [];
+  const binds: unknown[] = [];
+  if (query !== "") {
+    clauses.push("(c.name LIKE ? OR c.code LIKE ?)");
+    binds.push(`%${query}%`, `%${query}%`);
+  }
+  if (request.status !== undefined) {
+    clauses.push("c.status=?");
+    binds.push(request.status);
+  }
+  if (cursor) {
+    clauses.push("(c.sort_order > ? OR (c.sort_order=? AND c.id>?))");
+    binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
     .prepare(
       `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
@@ -53,12 +104,22 @@ export async function listAdminCategories(
               c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
               (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
        FROM category c LEFT JOIN category parent ON parent.id=c.parent_id
-       ORDER BY c.sort_order, c.code LIMIT 100`,
+       ${where} ORDER BY c.sort_order, c.id LIMIT ?`,
     )
+    .bind(...binds, limit + 1)
     .all<AdminCategorySummary>();
+  const hasMore = rows.results.length > limit;
+  const items = rows.results.slice(0, limit);
+  const last = items[items.length - 1];
   return {
     ok: true,
-    value: { items: rows.results, nextCursor: null },
+    value: {
+      items,
+      nextCursor:
+        hasMore && last
+          ? encodeStaffCursor({ createdAt: last.sortOrder, id: last.categoryId })
+          : null,
+    },
     requestId: request.requestId,
   };
 }
@@ -233,6 +294,10 @@ export async function listAdminProducts(
     clauses.push("(p.name LIKE ? OR p.slug LIKE ?)");
     binds.push(`%${query}%`, `%${query}%`);
   }
+  if (request.status !== undefined) {
+    clauses.push("p.status = ?");
+    binds.push(request.status);
+  }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
     .prepare(
@@ -299,7 +364,39 @@ export async function getAdminProduct(
   const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
   if (!access.ok) return access;
 
-  const marketId = await defaultMarketId(deps.db);
+  const defaultMarket = await defaultMarketId(deps.db);
+  const marketId = request.marketId ?? defaultMarket;
+  if (!marketId || (request.locationId && !request.marketId)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "A valid market is required for the selected Catalog target",
+        requestId: request.requestId,
+      },
+    };
+  }
+  const locationId =
+    request.locationId ?? (request.marketId ? null : DEFAULT_FULFILLMENT_LOCATION_ID);
+  const target = await deps.db
+    .prepare(
+      `SELECT m.id AS marketId, m.currency, fl.id AS locationId
+       FROM market m LEFT JOIN fulfillment_location fl
+         ON fl.market_id=m.id AND fl.id=?
+       WHERE m.id=?`,
+    )
+    .bind(locationId, marketId)
+    .first<{ marketId: string; currency: string; locationId: string | null }>();
+  if (!target || (locationId && target.locationId !== locationId)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "The selected market/location target does not exist",
+        requestId: request.requestId,
+      },
+    };
+  }
   const product = await deps.db
     .prepare(
       `SELECT p.id AS productId, p.category_id AS categoryId, p.slug, p.name, p.description,
@@ -350,17 +447,30 @@ export async function getAdminProduct(
        FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
        LEFT JOIN price_version current_price ON current_price.id = (
          SELECT pv.id FROM price_version pv
-         WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
+         WHERE pv.sku_id = s.id AND pv.market_id = ?
+           AND ((? IS NULL AND pv.location_id IS NULL)
+             OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
            AND pv.price_type = 'STANDARD' AND pv.valid_from <= ?
            AND (pv.valid_to IS NULL OR pv.valid_to > ?)
-         ORDER BY pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
+         ORDER BY CASE WHEN pv.location_id=? THEN 0 ELSE 1 END,
+                  pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
        )
        LEFT JOIN sku_location_availability sla
          ON sla.sku_id = s.id AND sla.location_id = ?
        WHERE s.product_id = ?
        ORDER BY s.sort_order, s.code`,
     )
-    .bind(marketId ?? "", now, now, DEFAULT_FULFILLMENT_LOCATION_ID, request.productId)
+    .bind(
+      marketId,
+      locationId,
+      locationId,
+      locationId,
+      now,
+      now,
+      locationId,
+      locationId ?? "",
+      request.productId,
+    )
     .all<SkuRow>();
 
   const [details, media, audits, manage] = await Promise.all([
@@ -412,6 +522,11 @@ export async function getAdminProduct(
         baseUnitId: product.baseUnitId,
         baseUnitCode: product.baseUnitCode,
         baseUnitSymbol: product.baseUnitSymbol,
+      },
+      pricingContext: {
+        marketId: target.marketId,
+        locationId,
+        currency: target.currency,
       },
       allowedActions: manage.ok ? ["UPDATE", "SET_STATUS"] : [],
       recentAudit: audits.results.map((audit) => ({

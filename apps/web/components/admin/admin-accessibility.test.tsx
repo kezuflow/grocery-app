@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
-import { AdminConfirmationDialog, AdminCursorPagination } from "./admin-controls";
+import { AdminCursorPagination } from "./admin-controls";
 import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
 import { AdminPageState, AdminLiveRegion } from "./admin-page-state";
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
@@ -28,6 +28,16 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
 const shell = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
 const sheet = readFileSync(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
 const table = readFileSync(new URL("../ui/table.tsx", import.meta.url), "utf8");
+const alertDialog = readFileSync(new URL("../ui/alert-dialog.tsx", import.meta.url), "utf8");
+const controls = readFileSync(new URL("./admin-controls.tsx", import.meta.url), "utf8");
+const productDetail = readFileSync(
+  new URL("../../app/admin/catalog/products/[product-id]/page.tsx", import.meta.url),
+  "utf8",
+);
+const inventoryPage = readFileSync(
+  new URL("../../app/admin/inventory/page.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("shared Admin accessibility contract", () => {
   it("exposes labelled main content, active navigation, and a focusable mobile menu", () => {
@@ -162,7 +172,7 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("Location Two");
   });
 
-  it("renders labelled cursor controls and requires a reason for destructive confirmation", () => {
+  it("renders labelled cursor controls and uses a focus-managed reason confirmation", () => {
     const pagination = renderToStaticMarkup(
       createElement(AdminCursorPagination, {
         pageNumber: 2,
@@ -171,24 +181,13 @@ describe("shared Admin accessibility contract", () => {
         onNext: vi.fn(),
       }),
     );
-    const confirmation = renderToStaticMarkup(
-      createElement(AdminConfirmationDialog, {
-        open: true,
-        title: "Confirm inventory adjustment",
-        resource: "Tomatoes · -10 GRAM",
-        scope: "Cebu Central",
-        consequence: "This writes an immutable inventory ledger movement.",
-        onCancel: vi.fn(),
-        onConfirm: vi.fn(),
-      }),
-    );
     expect(pagination).toContain('aria-label="Results pagination"');
     expect(pagination).toContain("Page 2");
-    expect(confirmation).toContain('role="alertdialog"');
-    expect(confirmation).toContain('aria-label="Confirmation reason"');
-    expect(confirmation).toContain("disabled");
-    expect(confirmation).toContain("Tomatoes · -10 GRAM");
-    expect(confirmation).toContain("Cebu Central");
+    expect(alertDialog).toContain("@radix-ui/react-dialog");
+    expect(alertDialog).toContain("AlertDialogPrimitive.Content");
+    expect(controls).toContain('role="alertdialog"');
+    expect(controls).toContain('aria-label="Confirmation reason"');
+    expect(controls).toContain("reasonRequired && reason.trim()");
   });
 
   it("renders all distinct shared page states with recoverable semantics", () => {
@@ -243,5 +242,17 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain('data-label="Name"');
     expect(markup).toContain('aria-live="polite"');
     expect(markup).toContain("Order updated");
+  });
+
+  it("rejects stale scoped responses and renders target currencies dynamically", () => {
+    expect(productDetail).toContain("loadRequest.current !== requestNumber");
+    expect(productDetail).toContain("currency: sku.currency");
+    expect(productDetail).not.toContain("`₱${(sku.priceMinor");
+    expect(inventoryPage).toContain("loadRequest.current !== requestNumber");
+    expect(inventoryPage).toContain("ledgerRequest.current === requestNumber");
+    expect(inventoryPage).toContain('phase: "error"');
+    expect(inventoryPage).toContain("ledgerState.key === ledgerKey");
+    expect(inventoryPage).toContain("Network error loading the inventory ledger.");
+    expect(inventoryPage).toContain("useAdminPagination(locationId)");
   });
 });

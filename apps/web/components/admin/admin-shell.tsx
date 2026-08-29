@@ -9,7 +9,14 @@ import { adminSelectableScopes, useAdminContext } from "../../app/admin/admin-co
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../ui/sheet";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
@@ -182,6 +189,8 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
 
 function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const pathname = usePathname();
+  const active = mostSpecificActiveNavigation(items, pathname);
   const groups = groupAdminNavigation(items);
   return (
     <Sheet>
@@ -213,7 +222,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
               ) : null}
               <div className="space-y-1">
                 {group.items.map((item) => (
-                  <MobileNavigationParent key={item.code} item={item} />
+                  <MobileNavigationParent key={item.code} item={item} activeCode={active?.code} />
                 ))}
               </div>
             </div>
@@ -224,27 +233,48 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
   );
 }
 
-function MobileNavigationParent({ item }: { item: AdminNavigationParent }) {
+function MobileNavigationParent({
+  item,
+  activeCode,
+}: {
+  item: AdminNavigationParent;
+  activeCode?: string;
+}) {
+  const parentActive = activeCode === item.code;
   return (
     <div>
-      <Link
-        href={item.href}
-        className="flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-semibold hover:bg-[var(--fm-hover)]"
-      >
-        <item.icon className="size-4" aria-hidden="true" />
-        {item.label}
-      </Link>
+      <SheetClose asChild>
+        <Link
+          href={item.href}
+          aria-current={parentActive ? "page" : undefined}
+          className={cn(
+            "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-semibold hover:bg-[var(--fm-hover)]",
+            parentActive && "bg-[var(--fm-active)] text-[var(--fm-active-text)]",
+          )}
+        >
+          <item.icon className="size-4" aria-hidden="true" />
+          {item.label}
+        </Link>
+      </SheetClose>
       {item.children.length > 0 ? (
         <div className="ml-8 border-l border-[var(--fm-border)] pl-2">
-          {item.children.map((child) => (
-            <Link
-              key={child.code}
-              href={child.href}
-              className="block min-h-10 rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]"
-            >
-              {child.label}
-            </Link>
-          ))}
+          {item.children.map((child) => {
+            const childActive = activeCode === child.code;
+            return (
+              <SheetClose key={child.code} asChild>
+                <Link
+                  href={child.href}
+                  aria-current={childActive ? "page" : undefined}
+                  className={cn(
+                    "block min-h-10 rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
+                    childActive && "bg-[var(--fm-active)] font-medium text-[var(--fm-active-text)]",
+                  )}
+                >
+                  {child.label}
+                </Link>
+              </SheetClose>
+            );
+          })}
         </div>
       ) : null}
     </div>

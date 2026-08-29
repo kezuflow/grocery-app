@@ -27,10 +27,25 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const limit = parseLimit(params);
   if (limit instanceof Response) return limit;
+  const status = params.get("status");
+  if (status !== null && status !== "active" && status !== "inactive") {
+    return Response.json(
+      {
+        ok: false as const,
+        error: {
+          code: "VALIDATION_FAILED" as const,
+          message: "status must be active or inactive",
+          requestId: crypto.randomUUID(),
+        },
+      },
+      { status: 400 },
+    );
+  }
   const result = await coreClient(env.CORE).listAdminProducts({
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
     query: params.get("query") ?? undefined,
+    status: status ?? undefined,
     cursor: params.get("cursor") ?? undefined,
     limit,
   });

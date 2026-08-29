@@ -1,10 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { AdminReconciliationPage, RpcResult } from "@freshmarkets/contracts";
+import type {
+  AdminReconciliationCaseView,
+  AdminReconciliationPage,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import {
   Table,
@@ -17,6 +20,7 @@ import {
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import {
   AdminCursorPagination,
+  ConfirmCommandDialog,
   useAdminPagination,
 } from "../../../../components/admin/admin-controls";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
@@ -24,7 +28,7 @@ import { PaymentNavigation } from "../../../../components/admin/payment-navigati
 
 export default function PaymentReconciliationPage() {
   const [page, setPage] = useState<AdminReconciliationPage | null>(null);
-  const [reason, setReason] = useState("");
+  const [selectedCase, setSelectedCase] = useState<AdminReconciliationCaseView | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const pagination = useAdminPagination();
   const command = useAdminCommandIntent();
@@ -44,14 +48,13 @@ export default function PaymentReconciliationPage() {
   useEffect(() => {
     void load(pagination.cursor);
   }, [load, pagination.cursor]);
-  async function resolve(caseId: string) {
-    if (!reason.trim()) return setNotice("A resolution reason is required.");
+  async function resolve(item: AdminReconciliationCaseView, reason: string) {
     try {
       const result = await command.submit(
         async (idempotencyKey) =>
           (await (
             await fetch(
-              `/api/admin/payments/reconciliation/${encodeURIComponent(caseId)}/resolve`,
+              `/api/admin/payments/reconciliation/${encodeURIComponent(item.caseId)}/resolve`,
               {
                 method: "POST",
                 headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
@@ -62,7 +65,6 @@ export default function PaymentReconciliationPage() {
       );
       setNotice(result.ok ? "Reconciliation case resolved." : result.error.message);
       if (result.ok) {
-        setReason("");
         await load(pagination.cursor);
       }
     } catch {
@@ -88,14 +90,6 @@ export default function PaymentReconciliationPage() {
         </div>
       ) : (
         <ListPageSection title="Open cases">
-          <div className="p-4">
-            <Input
-              aria-label="Resolution reason"
-              placeholder="resolution reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </div>
           {page.items.length === 0 ? (
             <p className="p-4 text-sm text-[var(--fm-text-muted)]">No open reconciliation cases.</p>
           ) : (
@@ -133,9 +127,9 @@ export default function PaymentReconciliationPage() {
                       <Button
                         size="sm"
                         disabled={command.pending}
-                        onClick={() => void resolve(item.caseId)}
+                        onClick={() => setSelectedCase(item)}
                       >
-                        Resolve
+                        Review resolution
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -151,6 +145,21 @@ export default function PaymentReconciliationPage() {
           />
         </ListPageSection>
       )}
+      <ConfirmCommandDialog
+        open={selectedCase !== null}
+        title="Resolve reconciliation case?"
+        resource={`${selectedCase?.category ?? "Payment reconciliation"} · ${selectedCase?.caseId ?? ""}`}
+        scope={selectedCase?.paymentIntentId ?? "No linked payment intent"}
+        consequence="This records the exception as resolved with an immutable audit event. It does not alter provider payment state."
+        confirmLabel="Confirm resolution"
+        pending={command.pending}
+        onCancel={() => setSelectedCase(null)}
+        onConfirm={(reason) => {
+          const item = selectedCase;
+          setSelectedCase(null);
+          if (item) void resolve(item, reason);
+        }}
+      />
     </div>
   );
 }

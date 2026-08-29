@@ -8,10 +8,13 @@ export async function GET(
   context: { params: Promise<{ "product-id": string }> },
 ) {
   const { "product-id": productId } = await context.params;
+  const params = new URL(request.url).searchParams;
   const result = await coreClient(env.CORE).getAdminProduct({
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
     productId,
+    marketId: params.get("marketId") ?? undefined,
+    locationId: params.get("locationId") ?? undefined,
   });
   return Response.json(result);
 }

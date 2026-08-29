@@ -142,6 +142,11 @@ export function mostSpecificActiveNavigation(
       (item) =>
         pathname === item.href || (item.href !== "/admin" && pathname.startsWith(`${item.href}/`)),
     )
-    .sort((left, right) => right.href.length - left.href.length)[0];
+    .sort((left, right) => {
+      const specificity = right.href.length - left.href.length;
+      if (specificity !== 0) return specificity;
+      if (left.kind === right.kind) return 0;
+      return left.kind === "destination" ? -1 : 1;
+    })[0];
   return active ? { code: active.code, parentCode: active.parentCode } : null;
 }

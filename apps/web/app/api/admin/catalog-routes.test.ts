@@ -82,7 +82,11 @@ describe("catalog and inventory BFF routes", () => {
     coreMocks.listAdminUnits.mockResolvedValue({ ok: true, value: [], requestId: "r" });
     coreMocks.createAdminUnit.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
-    await listCategories(new Request("https://x/categories", { headers: COOKIE }));
+    await listCategories(
+      new Request("https://x/categories?query=roots&status=active&limit=25&cursor=next", {
+        headers: COOKIE,
+      }),
+    );
     await createCategory(
       jsonRequest("https://x/categories", { code: "T_1", name: "T", slug: "t-1" }),
     );
@@ -102,6 +106,12 @@ describe("catalog and inventory BFF routes", () => {
       code: "T_1",
       parentCategoryId: null,
       idempotencyKey: "idem-1",
+    });
+    expect(coreMocks.listAdminCategories.mock.calls[0][0]).toMatchObject({
+      query: "roots",
+      status: "active",
+      limit: 25,
+      cursor: "next",
     });
     expect(coreMocks.createAdminUnit.mock.calls[0][0]).toMatchObject({ dimension: "MASS" });
   });
@@ -161,8 +171,17 @@ describe("catalog and inventory BFF routes", () => {
     coreMocks.getAdminProduct.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
     coreMocks.setAdminProductStatus.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
-    await listProducts(new Request("https://x/products?query=onion", { headers: COOKIE }));
-    await getProduct(new Request("https://x/products/p1", { headers: COOKIE }), productParams);
+    await listProducts(
+      new Request("https://x/products?query=onion&status=inactive&limit=25&cursor=next", {
+        headers: COOKIE,
+      }),
+    );
+    await getProduct(
+      new Request("https://x/products/p1?marketId=market-2&locationId=location-2", {
+        headers: COOKIE,
+      }),
+      productParams,
+    );
     await productStatus(
       jsonRequest("https://x/products/p1/status", {
         status: "inactive",
@@ -172,10 +191,20 @@ describe("catalog and inventory BFF routes", () => {
       productParams,
     );
 
-    expect(coreMocks.listAdminProducts.mock.calls[0][0].query).toBe("onion");
+    expect(coreMocks.listAdminProducts.mock.calls[0][0]).toMatchObject({
+      query: "onion",
+      status: "inactive",
+      limit: 25,
+      cursor: "next",
+    });
     expect(coreMocks.setAdminProductStatus.mock.calls[0][0]).toMatchObject({
       productId: "prod-1",
       status: "inactive",
+    });
+    expect(coreMocks.getAdminProduct.mock.calls[0][0]).toMatchObject({
+      productId: "prod-1",
+      marketId: "market-2",
+      locationId: "location-2",
     });
   });
 

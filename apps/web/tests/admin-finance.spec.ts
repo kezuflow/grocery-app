@@ -42,6 +42,7 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   const principalId = `payment-principal-${suffix}`;
   const customerId = `payment-customer-${suffix}`;
   const paymentIntentId = `payment-intent-${suffix}`;
+  const reconciliationCaseId = `reconciliation-${suffix}`;
   executeAdminE2eSql(`
     INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
       VALUES ('${userId}', 'Payment Customer', 'payment-${suffix}@example.com', 1, ${now}, ${now});
@@ -54,6 +55,9 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
        idempotency_key, version, created_at, updated_at)
       VALUES ('${paymentIntentId}', 'GROCERY_CHECKOUT', 'checkout_quote', 'quote-${suffix}',
               '${customerId}', 12500, 'PHP', 'SUCCEEDED', 'intent-${suffix}', 1, ${now}, ${now});
+    INSERT INTO payment_reconciliation_case
+      (id, payment_intent_id, category, status, details_json, created_at)
+      VALUES ('${reconciliationCaseId}', '${paymentIntentId}', 'AMBIGUOUS_OUTCOME', 'OPEN', '{}', ${now});
   `);
 
   await adminPage.goto("/admin/payments");
@@ -83,6 +87,13 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   await expect(
     adminPage.getByRole("heading", { level: 1, name: "Payment reconciliation" }),
   ).toBeVisible();
+  await adminPage.getByRole("button", { name: "Review resolution" }).click();
+  const reconciliationDialog = adminPage.getByRole("alertdialog");
+  await expect(reconciliationDialog).toContainText(reconciliationCaseId);
+  await expect(reconciliationDialog).toContainText(paymentIntentId);
+  await reconciliationDialog.getByLabel("Confirmation reason").fill("Matched provider evidence");
+  await reconciliationDialog.getByRole("button", { name: "Confirm resolution" }).click();
+  await expect(adminPage.getByText("Reconciliation case resolved.")).toBeVisible();
 });
 
 test("a Staff principal without capability is denied the Orders workspace", async ({

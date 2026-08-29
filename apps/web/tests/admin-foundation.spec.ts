@@ -41,7 +41,20 @@ test("the authenticated mobile navigation is keyboard and screen-reader accessib
   await trigger.focus();
   await expect(trigger).toBeFocused();
   await trigger.press("Enter");
-  await expect(adminPage.getByRole("dialog", { name: "Admin navigation" })).toBeVisible();
+  const navigation = adminPage.getByRole("dialog", { name: "Admin navigation" });
+  await expect(navigation).toBeVisible();
+  const overview = navigation.locator('a[href="/admin"]');
+  await expect(overview).toHaveAttribute("aria-current", "page");
+  await navigation.getByRole("link", { name: "Product list" }).click();
+  await expect(navigation).toBeHidden();
+  await expect(adminPage).toHaveURL(/\/admin\/catalog\/products$/);
+  await trigger.focus();
+  await trigger.press("Enter");
+  await expect(
+    adminPage.getByRole("dialog", { name: "Admin navigation" }).getByRole("link", {
+      name: "Product list",
+    }),
+  ).toHaveAttribute("aria-current", "page");
   await adminPage.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
 });

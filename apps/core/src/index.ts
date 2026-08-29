@@ -571,6 +571,13 @@ const catalogCategoryCreateSchema = authenticatedRequestSchema.extend({
   idempotencyKey: idempotencyKeySchema,
 });
 
+const catalogCategoryListSchema = authenticatedRequestSchema.extend({
+  query: validationSchema.string().trim().min(1).max(100).optional(),
+  status: validationSchema.enum(["active", "inactive"]).optional(),
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
 const catalogCategoryDetailSchema = authenticatedRequestSchema.extend({
   categoryId: validationSchema.string().trim().min(1).max(200),
 });
@@ -619,6 +626,7 @@ const catalogUnitCreateSchema = authenticatedRequestSchema.extend({
 
 const catalogProductListSchema = authenticatedRequestSchema.extend({
   query: validationSchema.string().trim().min(1).max(100).optional(),
+  status: validationSchema.enum(["active", "inactive"]).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
@@ -653,6 +661,8 @@ const catalogProductUpdateSchema = catalogProductCreateSchema
 
 const catalogProductDetailSchema = authenticatedRequestSchema.extend({
   productId: validationSchema.string().trim().min(1).max(200),
+  marketId: validationSchema.string().trim().min(1).max(200).optional(),
+  locationId: validationSchema.string().trim().min(1).max(200).optional(),
 });
 
 const catalogProductStatusSchema = authenticatedRequestSchema.extend({
@@ -1419,7 +1429,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     );
   }
   async listAdminCategories(input: import("@freshmarkets/contracts").AdminCategoryListRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
+    const validation = catalogCategoryListSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminCategoriesQuery(

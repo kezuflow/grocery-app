@@ -452,7 +452,9 @@ describe("catalog administration", () => {
     ]);
 
     expect([leftToRight, rightToLeft].filter((result) => result.ok)).toHaveLength(1);
-    const rows = await env.DB.prepare("SELECT id, parent_id AS parentId FROM category WHERE id IN (?, ?)")
+    const rows = await env.DB.prepare(
+      "SELECT id, parent_id AS parentId FROM category WHERE id IN (?, ?)",
+    )
       .bind(left.value.categoryId, right.value.categoryId)
       .all<{ id: string; parentId: string | null }>();
     const parentById = new Map(rows.results.map((row) => [row.id, row.parentId]));
@@ -473,6 +475,96 @@ describe("catalog administration", () => {
         headers: { cookie: nonStaff.cookie },
       }),
     ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+
+  it("paginates and server-filters more than one hundred categories and products", async () => {
+    const manager = await seedManager();
+    const seeded = await seedProduct();
+    const now = Date.now();
+    const categoryStatements: D1PreparedStatement[] = [];
+    const productStatements: D1PreparedStatement[] = [];
+    for (let index = 0; index < 105; index += 1) {
+      const categoryId = crypto.randomUUID();
+      categoryStatements.push(
+        env.DB.prepare(
+          "INSERT INTO category (id, code, name, slug, status, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ).bind(
+          categoryId,
+          `PAGE_${index}_${crypto.randomUUID().slice(0, 6)}`,
+          `Paged category ${index}`,
+          `paged-category-${index}-${crypto.randomUUID().slice(0, 6)}`,
+          index % 2 === 0 ? "active" : "inactive",
+          1000 + index,
+          now + index,
+          now + index,
+        ),
+      );
+      const productId = crypto.randomUUID();
+      const poolId = crypto.randomUUID();
+      productStatements.push(
+        env.DB.prepare(
+          "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
+        ).bind(poolId, productId, seeded.unitGramId, now + index, now + index),
+        env.DB.prepare(
+          "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ).bind(
+          productId,
+          seeded.categoryId,
+          poolId,
+          `paged-product-${index}-${crypto.randomUUID().slice(0, 6)}`,
+          `Paged product ${index}`,
+          index % 2 === 0 ? "active" : "inactive",
+          now + index,
+          now + index,
+        ),
+      );
+    }
+    await env.DB.batch(categoryStatements);
+    await env.DB.batch(productStatements);
+
+    const categoryFirst = await core.listAdminCategories({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: "Paged category",
+      status: "active",
+      limit: 20,
+    });
+    expect(categoryFirst.ok).toBe(true);
+    if (!categoryFirst.ok) return;
+    expect(categoryFirst.value.items).toHaveLength(20);
+    expect(categoryFirst.value.items.every((item) => item.status === "active")).toBe(true);
+    expect(categoryFirst.value.nextCursor).toBeTruthy();
+    const categorySecond = await core.listAdminCategories({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: "Paged category",
+      status: "active",
+      limit: 20,
+      cursor: categoryFirst.value.nextCursor!,
+    });
+    expect(categorySecond).toMatchObject({ ok: true, value: { items: { length: 20 } } });
+
+    const productFirst = await core.listAdminProducts({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: "Paged product",
+      status: "inactive",
+      limit: 20,
+    });
+    expect(productFirst.ok).toBe(true);
+    if (!productFirst.ok) return;
+    expect(productFirst.value.items).toHaveLength(20);
+    expect(productFirst.value.items.every((item) => item.status === "inactive")).toBe(true);
+    expect(productFirst.value.nextCursor).toBeTruthy();
+    const productSecond = await core.listAdminProducts({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: "Paged product",
+      status: "inactive",
+      limit: 20,
+      cursor: productFirst.value.nextCursor!,
+    });
+    expect(productSecond).toMatchObject({ ok: true, value: { items: { length: 20 } } });
   });
 
   it("creates a category and a unit idempotently with conflicts on duplicates", async () => {
@@ -770,6 +862,72 @@ describe("catalog administration", () => {
       availabilityVersion: 1,
     });
     expect([2700, 2800]).toContain(detail.value.skus[0]?.priceMinor);
+
+    const secondMarketId = `market-${crypto.randomUUID()}`;
+    const secondLocationId = `location-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO market (id, organization_id, code, name, currency, timezone, status, created_at, updated_at) SELECT ?, organization_id, ?, 'Second market', 'USD', 'UTC', 'active', ?, ? FROM market LIMIT 1",
+      ).bind(secondMarketId, `SECOND_${crypto.randomUUID().slice(0, 8)}`, Date.now(), Date.now()),
+      env.DB.prepare(
+        "INSERT INTO fulfillment_location (id, market_id, code, name, type, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, 'Second location', 'FULFILLMENT_CENTER', 1, 1, 'active', ?, ?)",
+      ).bind(
+        secondLocationId,
+        secondMarketId,
+        `SECOND_${crypto.randomUUID().slice(0, 8)}`,
+        Date.now(),
+        Date.now(),
+      ),
+    ]);
+    const secondPrice = await core.setAdminSkuPrice({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: sku.value.skuId,
+      marketId: secondMarketId,
+      locationId: secondLocationId,
+      currency: "USD",
+      amountMinor: 999,
+      validFrom: Date.now() - 1_000,
+      expectedVersion: 0,
+      idempotencyKey: `price-${crypto.randomUUID()}`,
+    });
+    expect(secondPrice.ok).toBe(true);
+    const secondAvailability = await core.setAdminSkuAvailability({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: sku.value.skuId,
+      locationId: secondLocationId,
+      availabilityStatus: "UNAVAILABLE",
+      sourcingMode: "ON_DEMAND",
+      expectedVersion: 0,
+      idempotencyKey: `avail-${crypto.randomUUID()}`,
+    });
+    expect(secondAvailability.ok).toBe(true);
+    const targetedDetail = await core.getAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      marketId: secondMarketId,
+      locationId: secondLocationId,
+    });
+    expect(targetedDetail).toMatchObject({
+      ok: true,
+      value: {
+        pricingContext: {
+          marketId: secondMarketId,
+          locationId: secondLocationId,
+          currency: "USD",
+        },
+        skus: [
+          {
+            priceMinor: 999,
+            currency: "USD",
+            availability: "UNAVAILABLE",
+            sourcingMode: "ON_DEMAND",
+          },
+        ],
+      },
+    });
     void unitKgId;
   });
 

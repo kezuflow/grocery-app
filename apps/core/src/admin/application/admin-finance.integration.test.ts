@@ -592,7 +592,39 @@ describe("finance administration", () => {
       .all<{ status: string; resultReference: string | null }>();
     expect(claims.results.filter((claim) => claim.status === "SUCCEEDED")).toHaveLength(1);
     expect(claims.results.filter((claim) => claim.status === "PROCESSING")).toHaveLength(0);
-    expect(claims.results.find((claim) => claim.status === "SUCCEEDED")?.resultReference).toBeTruthy();
+    expect(
+      claims.results.find((claim) => claim.status === "SUCCEEDED")?.resultReference,
+    ).toBeTruthy();
+  });
+
+  it("reserves an approved refund before accepting another request", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 50000, 'PHP', 'APPROVED', 'provider approved', ?, 1, ?, ?)",
+    )
+      .bind(crypto.randomUUID(), paymentIntentId, `approved-${crypto.randomUUID()}`, now, now)
+      .run();
+
+    const detail = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      paymentIntentId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: { remainingRefundableMinor: 0, allowedActions: [] },
+    });
+    const request = await core.requestAdminRefund({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      paymentIntentId,
+      amountMinor: 1,
+      reason: "must not over-reserve",
+      idempotencyKey: `ref-${crypto.randomUUID()}`,
+    });
+    expect(request).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
   it("resolves an open reconciliation case once", async () => {

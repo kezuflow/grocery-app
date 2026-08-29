@@ -3,7 +3,7 @@
 import type { AdminCategoryPage, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,15 +17,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader, StatusBadge } from "@/components/admin/admin-shell";
+import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
+import { useAdminContext } from "../../admin-context-provider";
 
 export default function CategoriesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [payload, setPayload] = useState<RpcResult<AdminCategoryPage> | null>(null);
+  const pagination = useAdminPagination();
+  const adminContext = useAdminContext();
   const query = searchParams.get("query") ?? "";
   const status = searchParams.get("status") ?? "all";
+  const canManage =
+    adminContext.state.phase === "ready" &&
+    adminContext.state.context.capabilities.includes("catalog.manage");
   useEffect(() => {
-    void fetch("/api/admin/catalog/categories")
+    setPayload(null);
+    const params = new URLSearchParams({ limit: "50" });
+    if (query.trim()) params.set("query", query.trim());
+    if (status !== "all") params.set("status", status);
+    if (pagination.cursor) params.set("cursor", pagination.cursor);
+    void fetch(`/api/admin/catalog/categories?${params}`)
       .then((response) => response.json() as Promise<RpcResult<AdminCategoryPage>>)
       .then(setPayload)
       .catch(() =>
@@ -38,22 +50,13 @@ export default function CategoriesPage() {
           },
         }),
       );
-  }, []);
-  const items = useMemo(() => {
-    if (!payload?.ok) return [];
-    const normalized = query.trim().toLowerCase();
-    return payload.value.items.filter(
-      (item) =>
-        (status === "all" || item.status === status) &&
-        (!normalized ||
-          item.name.toLowerCase().includes(normalized) ||
-          item.code.toLowerCase().includes(normalized)),
-    );
-  }, [payload, query, status]);
+  }, [pagination.cursor, query, status]);
+  const items = payload?.ok ? payload.value.items : [];
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") next.set(key, value);
     else next.delete(key);
+    pagination.reset();
     router.replace(`/admin/catalog/categories${next.size ? `?${next}` : ""}`);
   }
   return (
@@ -62,9 +65,11 @@ export default function CategoriesPage() {
         title="Categories"
         description="Manage the global customer-facing hierarchy and contained products."
         action={
-          <Button asChild>
-            <Link href="/admin/catalog/categories/new">Add category</Link>
-          </Button>
+          canManage ? (
+            <Button asChild>
+              <Link href="/admin/catalog/categories/new">Add category</Link>
+            </Button>
+          ) : null
         }
       />
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
@@ -140,10 +145,18 @@ export default function CategoriesPage() {
           {items.length === 0 ? (
             <p role="status" className="p-6 text-sm text-[var(--fm-text-muted)]">
               {payload.value.items.length === 0
-                ? "No categories have been created."
+                ? query.trim() || status !== "all"
+                  ? "No categories match these filters."
+                  : "No categories have been created."
                 : "No categories match these filters."}
             </p>
           ) : null}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={payload.value.nextCursor}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </section>
       ) : null}
     </div>

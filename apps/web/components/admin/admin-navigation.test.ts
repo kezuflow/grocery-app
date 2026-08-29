@@ -111,4 +111,30 @@ describe("admin navigation mapping", () => {
       parentCode: "products",
     });
   });
+
+  it("prefers an exact destination over its equal-href workspace parent", () => {
+    const items = adminNavigationFromContext([
+      {
+        code: "products",
+        label: "Products",
+        href: "/admin/catalog/products",
+        section: "commerce",
+        parentCode: null,
+        kind: "workspace",
+      },
+      {
+        code: "products-list",
+        label: "Product list",
+        href: "/admin/catalog/products",
+        section: "commerce",
+        parentCode: "products",
+        kind: "destination",
+      },
+    ]);
+
+    expect(mostSpecificActiveNavigation(items, "/admin/catalog/products")).toEqual({
+      code: "products-list",
+      parentCode: "products",
+    });
+  });
 });

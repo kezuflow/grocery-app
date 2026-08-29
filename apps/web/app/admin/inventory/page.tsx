@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   AdminInventoryLedgerPage,
@@ -20,6 +20,7 @@ import {
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import {
   AdminConfirmationDialog,
   AdminCursorPagination,
@@ -31,13 +32,19 @@ type LoadState =
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready"; page: AdminInventoryPage };
 
-const DEFAULT_LOCATION = "location-cebu-central";
+type LedgerLoadState =
+  | { phase: "idle" }
+  | { phase: "loading"; key: string }
+  | { phase: "error"; key: string; message: string; requestId: string | null }
+  | { phase: "ready"; key: string; page: AdminInventoryLedgerPage };
 
 export default function InventoryPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
-  const [locationId, setLocationId] = useState(DEFAULT_LOCATION);
+  const loadRequest = useRef(0);
+  const ledgerRequest = useRef(0);
+  const { locationId, label: locationLabel } = useAdminLocation();
   const [ledgerFor, setLedgerFor] = useState<{ poolId: string; name: string } | null>(null);
-  const [ledger, setLedger] = useState<AdminInventoryLedgerPage | null>(null);
+  const [ledgerState, setLedgerState] = useState<LedgerLoadState>({ phase: "idle" });
   const [adjustDelta, setAdjustDelta] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<{
     poolId: string;
@@ -47,10 +54,14 @@ export default function InventoryPage() {
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adjustmentIntent = useAdminCommandIntent();
-  const pagination = useAdminPagination();
-  const ledgerPagination = useAdminPagination();
+  const pagination = useAdminPagination(locationId);
+  const ledgerPagination = useAdminPagination(
+    `${locationId ?? "no-location"}:${ledgerFor?.poolId ?? "no-pool"}`,
+  );
 
   const load = useCallback((location: string, cursor: string | null) => {
+    const requestNumber = loadRequest.current + 1;
+    loadRequest.current = requestNumber;
     setState({ phase: "loading" });
     void (async () => {
       try {
@@ -58,6 +69,7 @@ export default function InventoryPage() {
           `/api/admin/inventory?locationId=${encodeURIComponent(location)}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
         );
         const payload = (await response.json()) as RpcResult<AdminInventoryPage>;
+        if (loadRequest.current !== requestNumber) return;
         if (!payload.ok) {
           setState({
             phase: "error",
@@ -71,31 +83,74 @@ export default function InventoryPage() {
         }
         setState({ phase: "ready", page: payload.value });
       } catch {
+        if (loadRequest.current !== requestNumber) return;
         setState({ phase: "error", message: "Network error loading inventory.", requestId: null });
       }
     })();
   }, []);
 
-  useEffect(() => load(locationId, pagination.cursor), [load, locationId, pagination.cursor]);
+  useEffect(() => {
+    if (locationId) load(locationId, pagination.cursor);
+  }, [load, locationId, pagination.cursor]);
 
   function loadLedger(poolId: string, name: string) {
     setLedgerFor({ poolId, name });
-    setLedger(null);
+    setLedgerState({ phase: "idle" });
     ledgerPagination.reset();
   }
 
   useEffect(() => {
-    if (!ledgerFor) return;
+    if (!ledgerFor || !locationId) return;
+    const key = `${locationId}:${ledgerFor.poolId}:${ledgerPagination.cursor ?? ""}`;
+    const requestNumber = ledgerRequest.current + 1;
+    ledgerRequest.current = requestNumber;
+    setLedgerState({ phase: "loading", key });
     void (async () => {
-      const response = await fetch(
-        `/api/admin/inventory/${encodeURIComponent(ledgerFor.poolId)}/ledger?locationId=${encodeURIComponent(locationId)}&limit=20${ledgerPagination.cursor ? `&cursor=${encodeURIComponent(ledgerPagination.cursor)}` : ""}`,
-      );
-      const payload = (await response.json()) as RpcResult<AdminInventoryLedgerPage>;
-      setLedger(payload.ok ? payload.value : { items: [], nextCursor: null });
+      try {
+        const response = await fetch(
+          `/api/admin/inventory/${encodeURIComponent(ledgerFor.poolId)}/ledger?locationId=${encodeURIComponent(locationId)}&limit=20${ledgerPagination.cursor ? `&cursor=${encodeURIComponent(ledgerPagination.cursor)}` : ""}`,
+        );
+        const payload = (await response.json()) as RpcResult<AdminInventoryLedgerPage>;
+        if (ledgerRequest.current !== requestNumber) return;
+        if (!payload.ok) {
+          setLedgerState({
+            phase: "error",
+            key,
+            message: payload.error.message,
+            requestId: payload.error.requestId,
+          });
+          return;
+        }
+        setLedgerState({ phase: "ready", key, page: payload.value });
+      } catch {
+        if (ledgerRequest.current === requestNumber) {
+          setLedgerState({
+            phase: "error",
+            key,
+            message: "Network error loading the inventory ledger.",
+            requestId: null,
+          });
+        }
+      }
     })();
   }, [ledgerFor, ledgerPagination.cursor, locationId]);
 
+  const ledgerKey =
+    ledgerFor && locationId
+      ? `${locationId}:${ledgerFor.poolId}:${ledgerPagination.cursor ?? ""}`
+      : null;
+  const visibleLedgerState: LedgerLoadState =
+    ledgerKey && "key" in ledgerState && ledgerState.key === ledgerKey
+      ? ledgerState
+      : ledgerKey
+        ? { phase: "loading", key: ledgerKey }
+        : { phase: "idle" };
+
   async function adjust(poolId: string, expectedVersion: number, reason: string) {
+    if (!locationId) {
+      setNotice("Select an explicit location scope before adjusting inventory.");
+      return;
+    }
     const delta = Number(adjustDelta[poolId]);
     if (Number.isNaN(delta) || !Number.isInteger(delta)) {
       setNotice("An integer delta and a reason are required.");
@@ -147,14 +202,23 @@ export default function InventoryPage() {
         description="Location balances in base units. Adjustments are guarded, idempotent, and write ledger evidence."
       />
 
-      {state.phase === "loading" ? (
+      {!locationId ? (
+        <Alert>
+          <AlertTitle>Location scope required</AlertTitle>
+          <AlertDescription>
+            {locationLabel} in the Admin header to inspect inventory.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {locationId && state.phase === "loading" ? (
         <div className="space-y-3" role="status" aria-label="Loading inventory">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-12 w-full" />
         </div>
       ) : null}
 
-      {state.phase === "error" ? (
+      {locationId && state.phase === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Inventory could not be loaded</AlertTitle>
           <AlertDescription>
@@ -169,7 +233,7 @@ export default function InventoryPage() {
         </Alert>
       ) : null}
 
-      {state.phase === "ready" ? (
+      {locationId && state.phase === "ready" ? (
         <>
           {notice ? (
             <p
@@ -181,21 +245,7 @@ export default function InventoryPage() {
           ) : null}
 
           <ListPageSection title="Location">
-            <div className="flex gap-2 p-4">
-              <Input
-                aria-label="Location ID"
-                value={locationId}
-                onChange={(event) => setLocationId(event.target.value)}
-                className="sm:w-72"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => load(locationId, pagination.cursor)}
-              >
-                Load
-              </Button>
-            </div>
+            <p className="p-4 text-sm">{locationLabel}</p>
           </ListPageSection>
 
           <ListPageSection title="Balances" description="On-hand minus reserved is sellable stock.">
@@ -292,13 +342,29 @@ export default function InventoryPage() {
               title={`Ledger — ${ledgerFor.name}`}
               description="Append-only movement evidence for this pool at this location."
             >
-              {ledger === null ? (
+              {visibleLedgerState.phase === "loading" ? (
                 <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
                   Loading ledger…
                 </p>
-              ) : ledger.items.length === 0 ? (
+              ) : visibleLedgerState.phase === "error" ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Ledger could not be loaded</AlertTitle>
+                  <AlertDescription>
+                    {visibleLedgerState.message}
+                    {visibleLedgerState.requestId ? (
+                      <>
+                        <br />
+                        <span className="font-mono text-xs">
+                          Request reference: {visibleLedgerState.requestId}
+                        </span>
+                      </>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
+              ) : visibleLedgerState.phase === "ready" &&
+                visibleLedgerState.page.items.length === 0 ? (
                 <p className="p-5 text-sm text-[var(--fm-text-muted)]">No ledger entries yet.</p>
-              ) : (
+              ) : visibleLedgerState.phase === "ready" ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -310,7 +376,7 @@ export default function InventoryPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {ledger.items.map((entry) => (
+                    {visibleLedgerState.page.items.map((entry) => (
                       <TableRow key={entry.entryId}>
                         <TableCell className="whitespace-nowrap font-mono text-xs">
                           {entry.createdAt.replace("T", " ").replace(/\.\d+Z$/, "Z")}
@@ -327,10 +393,12 @@ export default function InventoryPage() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
+              ) : null}
               <AdminCursorPagination
                 pageNumber={ledgerPagination.pageNumber}
-                nextCursor={ledger?.nextCursor ?? null}
+                nextCursor={
+                  visibleLedgerState.phase === "ready" ? visibleLedgerState.page.nextCursor : null
+                }
                 onPrevious={ledgerPagination.previous}
                 onNext={ledgerPagination.next}
               />
@@ -349,7 +417,7 @@ export default function InventoryPage() {
                 ? `${confirming.productName} · ${adjustDelta[confirming.poolId] ?? ""} ${confirming.baseUnitSymbol}`
                 : "Inventory balance"
             }
-            scope={locationId}
+            scope={locationLabel}
             consequence="This writes an immutable inventory ledger movement and changes sellable stock."
             pending={adjustmentIntent.pending}
             onCancel={() => setConfirming(null)}

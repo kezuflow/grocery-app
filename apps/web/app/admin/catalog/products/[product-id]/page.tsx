@@ -7,6 +7,7 @@ import type {
   AdminProductMediaView,
   AdminUnitSummary,
   RpcResult,
+  SourcingMode,
 } from "@freshmarkets/contracts";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
@@ -26,6 +27,8 @@ import {
   StatusBadge,
 } from "../../../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
+import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
+import { useAdminContext } from "../../../admin-context-provider";
 
 type LoadState =
   | { phase: "loading" }
@@ -34,6 +37,29 @@ type LoadState =
 
 const BASE = "/api/admin/catalog";
 
+type SkuCommandConfirmation =
+  | {
+      kind: "PRICE";
+      skuId: string;
+      skuCode: string;
+      amountMinor: number;
+      expectedVersion: number;
+      marketId: string;
+      locationId: string | null;
+      currency: string;
+      targetLabel: string;
+    }
+  | {
+      kind: "AVAILABILITY";
+      skuId: string;
+      skuCode: string;
+      availabilityStatus: "AVAILABLE" | "UNAVAILABLE";
+      sourcingMode: SourcingMode;
+      expectedVersion: number;
+      locationId: string;
+      targetLabel: string;
+    };
+
 export default function ProductDetailPage({
   params,
 }: {
@@ -41,12 +67,15 @@ export default function ProductDetailPage({
 }) {
   const { "product-id": productId } = use(params);
   const searchParams = useSearchParams();
+  const adminContext = useAdminContext();
   const [state, setState] = useState<LoadState>({ phase: "loading" });
+  const loadRequest = useRef(0);
+  const [catalogTarget, setCatalogTarget] = useState("");
   const [reason, setReason] = useState("");
   const [confirmingStatus, setConfirmingStatus] = useState(false);
+  const statusTrigger = useRef<HTMLButtonElement>(null);
+  const mediaTrigger = useRef<HTMLButtonElement | null>(null);
   const [mediaToRemove, setMediaToRemove] = useState<AdminProductMediaView | null>(null);
-  const statusCancelRef = useRef<HTMLButtonElement>(null);
-  const mediaRemoveCancelRef = useRef<HTMLButtonElement>(null);
   const [newSku, setNewSku] = useState({
     code: "",
     name: "",
@@ -55,6 +84,8 @@ export default function ProductDetailPage({
     consumption: "",
   });
   const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
+  const [sourcingBySku, setSourcingBySku] = useState<Record<string, SourcingMode>>({});
+  const [skuCommand, setSkuCommand] = useState<SkuCommandConfirmation | null>(null);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
       ? "Product created."
@@ -63,16 +94,44 @@ export default function ProductDetailPage({
         : null,
   );
   const commandIntent = useAdminCommandIntent();
+  const targetOptions = adminContext.state.phase === "ready" ? adminContext.state.scopes : [];
+  const selectedTarget = targetOptions.find((option) =>
+    option.kind === "market"
+      ? catalogTarget === `market:${option.marketId}`
+      : catalogTarget === `location:${option.locationId}`,
+  );
+  const selectedMarketId = selectedTarget?.marketId;
+  const selectedLocationId = selectedTarget?.kind === "location" ? selectedTarget.locationId : null;
+
+  useEffect(() => {
+    if (adminContext.state.phase !== "ready") return;
+    const selected = adminContext.state.selectedScope;
+    if (selected?.kind === "MARKET") setCatalogTarget(`market:${selected.marketId}`);
+    else if (selected?.kind === "LOCATION") setCatalogTarget(`location:${selected.locationId}`);
+  }, [adminContext.state]);
 
   const load = useCallback(() => {
+    const requestNumber = loadRequest.current + 1;
+    loadRequest.current = requestNumber;
     setState({ phase: "loading" });
     void (async () => {
       try {
         const [productResponse, unitsResponse] = await Promise.all([
-          fetch(`${BASE}/products/${encodeURIComponent(productId)}`),
+          fetch(
+            `${BASE}/products/${encodeURIComponent(productId)}${
+              selectedMarketId
+                ? `?marketId=${encodeURIComponent(selectedMarketId)}${
+                    selectedLocationId
+                      ? `&locationId=${encodeURIComponent(selectedLocationId)}`
+                      : ""
+                  }`
+                : ""
+            }`,
+          ),
           fetch(`${BASE}/units`),
         ]);
         const productPayload = (await productResponse.json()) as RpcResult<AdminProductDetail>;
+        if (loadRequest.current !== requestNumber) return;
         if (!productPayload.ok) {
           setState({
             phase: "error",
@@ -88,6 +147,7 @@ export default function ProductDetailPage({
           units: unitsPayload.ok ? unitsPayload.value : [],
         });
       } catch {
+        if (loadRequest.current !== requestNumber) return;
         setState({
           phase: "error",
           message: "Network error loading the product.",
@@ -95,15 +155,9 @@ export default function ProductDetailPage({
         });
       }
     })();
-  }, [productId]);
+  }, [productId, selectedLocationId, selectedMarketId]);
 
   useEffect(() => load(), [load]);
-  useEffect(() => {
-    if (confirmingStatus) statusCancelRef.current?.focus();
-  }, [confirmingStatus]);
-  useEffect(() => {
-    if (mediaToRemove) mediaRemoveCancelRef.current?.focus();
-  }, [mediaToRemove]);
 
   async function run(
     url: string,
@@ -345,7 +399,10 @@ export default function ProductDetailPage({
                       variant="destructive"
                       disabled={commandIntent.pending}
                       aria-label={`Review remove ${media.altText}`}
-                      onClick={() => setMediaToRemove(media)}
+                      onClick={(event) => {
+                        mediaTrigger.current = event.currentTarget;
+                        setMediaToRemove(media);
+                      }}
                     >
                       Remove
                     </Button>
@@ -367,55 +424,30 @@ export default function ProductDetailPage({
           <p className="p-5 text-sm text-[var(--fm-text-muted)]">No canonical media attached.</p>
         )}
       </ListPageSection>
-      {mediaToRemove ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setMediaToRemove(null);
-          }}
-        >
-          <section
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="media-removal-title"
-            aria-describedby="media-removal-description"
-            className="w-full max-w-md rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6 shadow-xl"
-          >
-            <h2 id="media-removal-title" className="text-lg font-semibold">
-              Remove {mediaToRemove.altText}?
-            </h2>
-            <p id="media-removal-description" className="mt-2 text-sm text-[var(--fm-text-muted)]">
-              This deactivates the canonical attachment before deleting its stored image. The image
-              disappears from active Product media and cannot be edited afterward.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                ref={mediaRemoveCancelRef}
-                variant="outline"
-                onClick={() => setMediaToRemove(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={commandIntent.pending}
-                onClick={() => {
-                  const media = mediaToRemove;
-                  setMediaToRemove(null);
-                  void run(
-                    `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
-                    "DELETE",
-                    { expectedProductVersion: product.version },
-                    "Media removed.",
-                  );
-                }}
-              >
-                Confirm media removal
-              </Button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <ConfirmCommandDialog
+        open={mediaToRemove !== null}
+        title={`Remove ${mediaToRemove?.altText ?? "media"}?`}
+        resource={mediaToRemove?.altText ?? "Product media"}
+        scope={`${product.name} · canonical media`}
+        consequence="This deactivates the canonical attachment before deleting its stored image. The image disappears from active Product media and cannot be edited afterward."
+        reasonRequired={false}
+        confirmLabel="Confirm media removal"
+        cancelLabel="Cancel"
+        pending={commandIntent.pending}
+        restoreFocusRef={mediaTrigger}
+        onCancel={() => setMediaToRemove(null)}
+        onConfirm={() => {
+          const media = mediaToRemove;
+          setMediaToRemove(null);
+          if (!media) return;
+          void run(
+            `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
+            "DELETE",
+            { expectedProductVersion: product.version },
+            "Media removed.",
+          );
+        }}
+      />
 
       {product.allowedActions.includes("SET_STATUS") ? (
         <ListPageSection
@@ -431,6 +463,7 @@ export default function ProductDetailPage({
               className="sm:w-72"
             />
             <Button
+              ref={statusTrigger}
               size="sm"
               variant={product.status === "active" ? "destructive" : "default"}
               onClick={() => {
@@ -451,76 +484,112 @@ export default function ProductDetailPage({
         title="SKUs"
         description="Fixed variants with exact base-unit consumption. Prices are versioned; availability is per location."
       >
-        <form
-          className="flex flex-col gap-2 border-b border-[var(--fm-border)] p-4 sm:flex-row sm:items-center"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const unit = units.find((candidate) => candidate.unitId === newSku.unitId);
-            if (
-              newSku.code.trim() === "" ||
-              newSku.name.trim() === "" ||
-              !unit ||
-              Number.isNaN(Number(newSku.sellQuantity)) ||
-              Number.isNaN(Number(newSku.consumption))
-            ) {
-              setNotice("Code, name, unit, sell quantity, and base consumption are required.");
-              return;
-            }
-            void run(`${BASE}/skus`, "POST", {
-              productId,
-              code: newSku.code.trim().toUpperCase(),
-              name: newSku.name.trim(),
-              sellableUnitId: unit.unitId,
-              sellQuantity: Math.round(Number(newSku.sellQuantity)),
-              consumptionBaseQuantity: Math.round(Number(newSku.consumption)),
-            });
-          }}
-        >
-          <Input
-            aria-label="SKU code"
-            placeholder="CODE"
-            value={newSku.code}
-            onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
-            className="sm:w-40"
-          />
-          <Input
-            aria-label="SKU name"
-            placeholder="e.g. 250 g"
-            value={newSku.name}
-            onChange={(event) => setNewSku({ ...newSku, name: event.target.value })}
-            className="sm:w-32"
-          />
-          <select
-            aria-label="Sellable unit"
-            value={newSku.unitId}
-            onChange={(event) => setNewSku({ ...newSku, unitId: event.target.value })}
-            className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+        {canManageProduct ? (
+          <div className="grid gap-1 border-b border-[var(--fm-border)] p-4 text-sm font-medium sm:max-w-md">
+            <label htmlFor="catalog-command-target">Catalog command target</label>
+            <select
+              id="catalog-command-target"
+              value={catalogTarget}
+              onChange={(event) => setCatalogTarget(event.target.value)}
+              className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+            >
+              <option value="">Select a market or location…</option>
+              {targetOptions.map((option) => (
+                <option
+                  key={
+                    option.kind === "market"
+                      ? `market:${option.marketId}`
+                      : `location:${option.locationId}`
+                  }
+                  value={
+                    option.kind === "market"
+                      ? `market:${option.marketId}`
+                      : `location:${option.locationId}`
+                  }
+                >
+                  {option.kind === "market"
+                    ? `${option.marketName} · market prices`
+                    : `${option.locationName} · location prices and availability`}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+              Price and availability commands apply only to this explicit Core-authorized target.
+            </span>
+          </div>
+        ) : null}
+        {canManageProduct ? (
+          <form
+            className="flex flex-col gap-2 border-b border-[var(--fm-border)] p-4 sm:flex-row sm:items-center"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const unit = units.find((candidate) => candidate.unitId === newSku.unitId);
+              if (
+                newSku.code.trim() === "" ||
+                newSku.name.trim() === "" ||
+                !unit ||
+                Number.isNaN(Number(newSku.sellQuantity)) ||
+                Number.isNaN(Number(newSku.consumption))
+              ) {
+                setNotice("Code, name, unit, sell quantity, and base consumption are required.");
+                return;
+              }
+              void run(`${BASE}/skus`, "POST", {
+                productId,
+                code: newSku.code.trim().toUpperCase(),
+                name: newSku.name.trim(),
+                sellableUnitId: unit.unitId,
+                sellQuantity: Math.round(Number(newSku.sellQuantity)),
+                consumptionBaseQuantity: Math.round(Number(newSku.consumption)),
+              });
+            }}
           >
-            <option value="">unit…</option>
-            {units.map((unit) => (
-              <option key={unit.unitId} value={unit.unitId}>
-                {unit.code} ({unit.dimension})
-              </option>
-            ))}
-          </select>
-          <Input
-            aria-label="Sell quantity"
-            placeholder="sell qty"
-            value={newSku.sellQuantity}
-            onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
-            className="sm:w-24"
-          />
-          <Input
-            aria-label="Base consumption"
-            placeholder="base qty"
-            value={newSku.consumption}
-            onChange={(event) => setNewSku({ ...newSku, consumption: event.target.value })}
-            className="sm:w-28"
-          />
-          <Button type="submit" size="sm">
-            Add SKU
-          </Button>
-        </form>
+            <Input
+              aria-label="SKU code"
+              placeholder="CODE"
+              value={newSku.code}
+              onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
+              className="sm:w-40"
+            />
+            <Input
+              aria-label="SKU name"
+              placeholder="e.g. 250 g"
+              value={newSku.name}
+              onChange={(event) => setNewSku({ ...newSku, name: event.target.value })}
+              className="sm:w-32"
+            />
+            <select
+              aria-label="Sellable unit"
+              value={newSku.unitId}
+              onChange={(event) => setNewSku({ ...newSku, unitId: event.target.value })}
+              className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+            >
+              <option value="">unit…</option>
+              {units.map((unit) => (
+                <option key={unit.unitId} value={unit.unitId}>
+                  {unit.code} ({unit.dimension})
+                </option>
+              ))}
+            </select>
+            <Input
+              aria-label="Sell quantity"
+              placeholder="sell qty"
+              value={newSku.sellQuantity}
+              onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
+              className="sm:w-24"
+            />
+            <Input
+              aria-label="Base consumption"
+              placeholder="base qty"
+              value={newSku.consumption}
+              onChange={(event) => setNewSku({ ...newSku, consumption: event.target.value })}
+              className="sm:w-28"
+            />
+            <Button type="submit" size="sm">
+              Add SKU
+            </Button>
+          </form>
+        ) : null}
         {product.skus.length === 0 ? (
           <p className="p-5 text-sm text-[var(--fm-text-muted)]">No SKUs defined.</p>
         ) : (
@@ -530,8 +599,8 @@ export default function ProductDetailPage({
                 <TableHead>SKU</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Price</TableHead>
-                <TableHead>Availability (Cebu Central)</TableHead>
-                <TableHead>Set price ₱</TableHead>
+                <TableHead>Availability</TableHead>
+                <TableHead>Targeted commands</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -547,66 +616,112 @@ export default function ProductDetailPage({
                     ) : null}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {sku.priceMinor === null
+                    {sku.priceMinor === null || !sku.currency
                       ? "—"
-                      : `₱${(sku.priceMinor / 100).toFixed(2)} (v${sku.priceVersion})`}
+                      : `${new Intl.NumberFormat(undefined, {
+                          style: "currency",
+                          currency: sku.currency,
+                        }).format(sku.priceMinor / 100)} (v${sku.priceVersion})`}
                   </TableCell>
                   <TableCell>
                     <StatusBadge tone={sku.availability === "AVAILABLE" ? "success" : "neutral"}>
                       {sku.availability ?? "unset"}
                     </StatusBadge>
+                    {product.pricingContext.locationId ? (
+                      <span className="block text-xs text-[var(--fm-text-muted)]">
+                        {product.pricingContext.locationId}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell>
-                    <span className="flex items-center gap-1">
-                      <Input
-                        aria-label={`New price for ${sku.code}`}
-                        value={priceBySku[sku.skuId] ?? ""}
-                        onChange={(event) =>
-                          setPriceBySku({ ...priceBySku, [sku.skuId]: event.target.value })
-                        }
-                        className="w-24"
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const pesos = Number(priceBySku[sku.skuId]);
-                          if (Number.isNaN(pesos) || pesos <= 0) {
-                            setNotice("Enter a positive price.");
-                            return;
+                    {canManageProduct ? (
+                      <span className="flex flex-wrap items-center gap-1">
+                        <Input
+                          aria-label={`New price for ${sku.code}`}
+                          value={priceBySku[sku.skuId] ?? ""}
+                          onChange={(event) =>
+                            setPriceBySku({ ...priceBySku, [sku.skuId]: event.target.value })
                           }
-                          void run(`${BASE}/skus/${encodeURIComponent(sku.skuId)}/price`, "POST", {
-                            marketId: "market-metro-cebu",
-                            locationId: null,
-                            currency: "PHP",
-                            amountMinor: Math.round(pesos * 100),
-                            validFrom: Date.now(),
-                            expectedVersion: sku.priceVersion ?? 0,
-                          });
-                        }}
-                      >
-                        Set
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          void run(
-                            `${BASE}/skus/${encodeURIComponent(sku.skuId)}/availability`,
-                            "PUT",
-                            {
-                              locationId: "location-cebu-central",
+                          className="w-24"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const pesos = Number(priceBySku[sku.skuId]);
+                            if (Number.isNaN(pesos) || pesos <= 0) {
+                              setNotice("Enter a positive price.");
+                              return;
+                            }
+                            if (!selectedTarget || !selectedMarketId) {
+                              setNotice("Select an explicit market or location target.");
+                              return;
+                            }
+                            setSkuCommand({
+                              kind: "PRICE",
+                              skuId: sku.skuId,
+                              skuCode: sku.code,
+                              marketId: selectedMarketId,
+                              locationId: selectedLocationId,
+                              currency: selectedTarget.currency,
+                              amountMinor: Math.round(pesos * 100),
+                              expectedVersion: sku.priceVersion ?? 0,
+                              targetLabel:
+                                selectedTarget.kind === "market"
+                                  ? selectedTarget.marketName
+                                  : selectedTarget.locationName,
+                            });
+                          }}
+                        >
+                          Review price
+                        </Button>
+                        <select
+                          aria-label={`Sourcing mode for ${sku.code}`}
+                          value={sourcingBySku[sku.skuId] ?? sku.sourcingMode ?? "STOCKED"}
+                          onChange={(event) =>
+                            setSourcingBySku({
+                              ...sourcingBySku,
+                              [sku.skuId]: event.target.value as SourcingMode,
+                            })
+                          }
+                          className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 text-xs"
+                        >
+                          <option value="STOCKED">Stocked</option>
+                          <option value="PLANNED">Planned</option>
+                          <option value="ON_DEMAND">On demand</option>
+                          <option value="MIXED">Mixed</option>
+                        </select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={selectedTarget?.kind !== "location"}
+                          onClick={() => {
+                            if (selectedTarget?.kind !== "location") {
+                              setNotice("Select a location target for availability.");
+                              return;
+                            }
+                            setSkuCommand({
+                              kind: "AVAILABILITY",
+                              skuId: sku.skuId,
+                              skuCode: sku.code,
+                              locationId: selectedTarget.locationId,
                               availabilityStatus:
                                 sku.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE",
-                              sourcingMode: "STOCKED",
+                              sourcingMode:
+                                sourcingBySku[sku.skuId] ?? sku.sourcingMode ?? "STOCKED",
                               expectedVersion: sku.availabilityVersion ?? 0,
-                            },
-                          );
-                        }}
-                      >
-                        {sku.availability === "AVAILABLE" ? "Unset" : "Set available"}
-                      </Button>
-                    </span>
+                              targetLabel: selectedTarget.locationName,
+                            });
+                          }}
+                        >
+                          {sku.availability === "AVAILABLE"
+                            ? "Review unavailable"
+                            : "Review available"}
+                        </Button>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[var(--fm-text-muted)]">Read only</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -631,58 +746,78 @@ export default function ProductDetailPage({
           <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
         )}
       </ListPageSection>
-      {confirmingStatus ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setConfirmingStatus(false);
-          }}
-        >
-          <section
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="product-status-confirmation-title"
-            aria-describedby="product-status-confirmation-description"
-            className="w-full max-w-md rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6 shadow-xl"
-          >
-            <h2 id="product-status-confirmation-title" className="text-lg font-semibold">
-              {product.status === "active" ? "Deactivate product?" : "Activate product?"}
-            </h2>
-            <p
-              id="product-status-confirmation-description"
-              className="mt-2 text-sm text-[var(--fm-text-muted)]"
-            >
-              {product.status === "active"
-                ? "The Product leaves storefront availability. Variants, prices, inventory history, and committed order snapshots remain intact."
-                : "The Product becomes active, while each SKU price and location availability remains independently authoritative."}
-            </p>
-            <p className="mt-3 rounded bg-[var(--fm-surface-soft)] p-3 text-sm">Reason: {reason}</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                ref={statusCancelRef}
-                variant="outline"
-                onClick={() => setConfirmingStatus(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant={product.status === "active" ? "destructive" : "default"}
-                disabled={commandIntent.pending}
-                onClick={() => {
-                  setConfirmingStatus(false);
-                  void run(`${BASE}/products/${encodeURIComponent(productId)}/status`, "POST", {
-                    status: product.status === "active" ? "inactive" : "active",
-                    reason: reason.trim(),
-                    expectedVersion: product.version,
-                  });
-                }}
-              >
-                {product.status === "active" ? "Confirm deactivation" : "Confirm activation"}
-              </Button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <ConfirmCommandDialog
+        open={confirmingStatus}
+        title={product.status === "active" ? "Deactivate product?" : "Activate product?"}
+        resource={`${product.name} · version ${product.version}`}
+        scope="Global Catalog"
+        consequence={
+          product.status === "active"
+            ? "The Product leaves storefront availability. Variants, prices, inventory history, and committed order snapshots remain intact."
+            : "The Product becomes active, while each SKU price and location availability remains independently authoritative."
+        }
+        initialReason={reason}
+        confirmLabel={product.status === "active" ? "Confirm deactivation" : "Confirm activation"}
+        cancelLabel="Cancel"
+        pending={commandIntent.pending}
+        restoreFocusRef={statusTrigger}
+        onCancel={() => setConfirmingStatus(false)}
+        onConfirm={(confirmedReason) => {
+          setConfirmingStatus(false);
+          void run(`${BASE}/products/${encodeURIComponent(productId)}/status`, "POST", {
+            status: product.status === "active" ? "inactive" : "active",
+            reason: confirmedReason,
+            expectedVersion: product.version,
+          });
+        }}
+      />
+      <ConfirmCommandDialog
+        open={skuCommand !== null}
+        title={skuCommand?.kind === "PRICE" ? "Set SKU price?" : "Change SKU availability?"}
+        resource={skuCommand?.skuCode ?? "SKU"}
+        scope={skuCommand?.targetLabel ?? "Catalog target"}
+        consequence={
+          skuCommand?.kind === "PRICE"
+            ? `This creates a new ${skuCommand.currency} price version for exactly ${skuCommand.amountMinor} minor units.`
+            : `This sets ${skuCommand?.availabilityStatus ?? "availability"} with ${skuCommand?.sourcingMode ?? "the selected"} sourcing at this location.`
+        }
+        reasonRequired={false}
+        confirmLabel={skuCommand?.kind === "PRICE" ? "Confirm price" : "Confirm availability"}
+        pending={commandIntent.pending}
+        onCancel={() => setSkuCommand(null)}
+        onConfirm={() => {
+          const pendingCommand = skuCommand;
+          setSkuCommand(null);
+          if (!pendingCommand) return;
+          if (pendingCommand.kind === "PRICE") {
+            void run(
+              `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/price`,
+              "POST",
+              {
+                marketId: pendingCommand.marketId,
+                locationId: pendingCommand.locationId,
+                currency: pendingCommand.currency,
+                amountMinor: pendingCommand.amountMinor,
+                validFrom: Date.now(),
+                expectedVersion: pendingCommand.expectedVersion,
+              },
+              "Price version created.",
+            );
+          } else {
+            void run(
+              `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/availability`,
+              "PUT",
+              {
+                locationId: pendingCommand.locationId,
+                availabilityStatus: pendingCommand.availabilityStatus,
+                sourcingMode: pendingCommand.sourcingMode,
+                expectedVersion: pendingCommand.expectedVersion,
+              },
+              "Availability updated.",
+            );
+          }
+        }}
+      />
     </div>
   );
 }

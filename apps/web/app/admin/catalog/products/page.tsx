@@ -4,6 +4,8 @@ import type { AdminProductPage, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
+import { useAdminContext } from "../../admin-context-provider";
 import { PageHeader, StatusBadge } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -24,9 +26,17 @@ export default function ProductsPage() {
   const query = searchParams.get("query") ?? "";
   const status = searchParams.get("status") ?? "all";
   const [payload, setPayload] = useState<RpcResult<AdminProductPage> | null>(null);
+  const pagination = useAdminPagination();
+  const adminContext = useAdminContext();
+  const canManage =
+    adminContext.state.phase === "ready" &&
+    adminContext.state.context.capabilities.includes("catalog.manage");
   useEffect(() => {
-    const params = new URLSearchParams({ limit: "100" });
+    setPayload(null);
+    const params = new URLSearchParams({ limit: "50" });
     if (query.trim()) params.set("query", query.trim());
+    if (status !== "all") params.set("status", status);
+    if (pagination.cursor) params.set("cursor", pagination.cursor);
     void fetch(`/api/admin/catalog/products?${params}`)
       .then((response) => response.json() as Promise<RpcResult<AdminProductPage>>)
       .then(setPayload)
@@ -40,25 +50,26 @@ export default function ProductsPage() {
           },
         }),
       );
-  }, [query]);
+  }, [pagination.cursor, query, status]);
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") next.set(key, value);
     else next.delete(key);
+    pagination.reset();
     router.replace(`/admin/catalog/products${next.size ? `?${next}` : ""}`);
   }
-  const items = payload?.ok
-    ? payload.value.items.filter((item) => status === "all" || item.status === status)
-    : [];
+  const items = payload?.ok ? payload.value.items : [];
   return (
     <div className="space-y-6">
       <PageHeader
         title="Products"
         description="Manage global Product identity, customer details, variants, media, pricing, and availability."
         action={
-          <Button asChild>
-            <Link href="/admin/catalog/products/new">Add product</Link>
-          </Button>
+          canManage ? (
+            <Button asChild>
+              <Link href="/admin/catalog/products/new">Add product</Link>
+            </Button>
+          ) : null
         }
       />
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
@@ -136,10 +147,18 @@ export default function ProductsPage() {
           {items.length === 0 ? (
             <p role="status" className="p-6 text-sm text-[var(--fm-text-muted)]">
               {payload.value.items.length === 0
-                ? "No products have been created."
+                ? query.trim() || status !== "all"
+                  ? "No products match these filters."
+                  : "No products have been created."
                 : "No products match these filters."}
             </p>
           ) : null}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={payload.value.nextCursor}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </section>
       ) : null}
     </div>

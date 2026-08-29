@@ -208,6 +208,11 @@ describe("catalog contracts", () => {
         baseUnitCode: "GRAM",
         baseUnitSymbol: "g",
       },
+      pricingContext: {
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+        currency: "PHP",
+      },
       allowedActions: ["UPDATE", "SET_STATUS"],
       recentAudit: [],
       skus: [],
