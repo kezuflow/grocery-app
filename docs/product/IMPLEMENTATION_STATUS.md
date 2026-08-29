@@ -3,6 +3,26 @@
 Status date: 2026-08-30. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
+## Mapbox Customer Address Flow (2026-08-30)
+
+- Customer address search now uses a private POST/no-store Web adapter and Core's provider-neutral
+  Mapbox Geocoding v6 port. Temporary candidates remain interaction-only; Core performs permanent
+  reverse finalization before persisting provider-derived coordinates or metadata and logs only
+  operation timing/result categories and stable error codes.
+- Migration `0042_mapbox_address_confirmation.sql` additively preserves legacy addresses while
+  adding structured components, geocoder provenance, coordinate-confirmation provenance,
+  delivery instructions, and resolver indexes. Owner scoping, optimistic address versions,
+  authoritative serviceability, and immutable committed Order snapshots remain enforced in Core.
+- The reusable accessible address editor supports search, current location, exact draggable-pin
+  confirmation, textual map fallback, and unavailable-address correction without raw coordinate
+  inputs. It now powers the saved-address book, serviceable-only Checkout selection, and anonymous
+  non-persisting public Serviceability flow; customers never select a fulfillment hub.
+- Local fixture verification covers provider mapping/finalization, migration preservation,
+  ownership and serviceability, map/editor lifecycle, address-book and Checkout integration, and
+  the managed vinext + Core/D1 Playwright journey. Production still requires origin-restricted Web
+  token configuration, the Core Mapbox secret, permanent-geocoding entitlement, and approved
+  production serviceability polygons outside source.
+
 ## Admin Operations UI Phase 12 (2026-08-30)
 
 - The approved Admin screen inventory is implemented through the typed Web-to-Core Service Binding: Core-authorized hierarchical navigation; Catalog Product and Category list/create/detail/edit/lifecycle; canonical R2-backed Product media administration; complete Order and Payment workspaces; and the existing Customer/Privacy, Membership, Promotion, Inventory, Procurement/Receiving, Fulfillment, Delivery, exception, Analytics, Staff/Role, Audit, and fulfillment-mode surfaces.
