@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
+import { AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
+
+const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
+vi.mock("../../app/admin/admin-context-provider", () => ({ useAdminContext }));
+vi.mock("next/link", () => ({ default: ({ children }: { children: unknown }) => children }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
 
 const shell = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
 const sheet = readFileSync(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
@@ -22,39 +29,25 @@ describe("shared Admin accessibility contract", () => {
     expect(shell).toMatch(/aria-live="polite"/);
   });
 
-  it("renders loading, empty, unavailable, and error states with DOM semantics", () => {
-    const loading = renderToStaticMarkup(
-      createElement(
-        "div",
-        { role: "status", "aria-label": "Loading orders" },
-        createElement("div", { className: "h-10 w-full" }),
-      ),
+  it("renders production loading, unauthenticated, forbidden, and error states", () => {
+    useAdminContext.mockReturnValue({ state: { phase: "loading" }, retry: vi.fn() });
+    const loading = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
+    useAdminContext.mockReturnValue({ state: { phase: "unauthenticated" }, retry: vi.fn() });
+    const unauthenticated = renderToStaticMarkup(
+      createElement(AdminShellBoundary, { children: null }),
     );
-    const empty = renderToStaticMarkup(
-      createElement("p", { role: "status" }, "No orders match this filter."),
-    );
-    const unavailable = renderToStaticMarkup(
-      createElement(
-        "div",
-        { role: "alert" },
-        createElement("h2", null, "Analytics unavailable"),
-        createElement("div", null, "Source freshness is unavailable."),
-      ),
-    );
-    const error = renderToStaticMarkup(
-      createElement(
-        "div",
-        { role: "alert" },
-        createElement("h2", null, "Orders could not be loaded"),
-        createElement("div", null, "Request reference: req-1"),
-      ),
-    );
+    useAdminContext.mockReturnValue({ state: { phase: "forbidden" }, retry: vi.fn() });
+    const forbidden = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
+    useAdminContext.mockReturnValue({
+      state: { phase: "error", message: "Core unavailable", requestId: "req-1" },
+      retry: vi.fn(),
+    });
+    const error = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
     expect(loading).toContain('role="status"');
-    expect(loading).toContain("Loading orders");
-    expect(empty).toContain('role="status"');
-    expect(empty).toContain("No orders match this filter.");
-    expect(unavailable).toContain('role="alert"');
-    expect(unavailable).toContain("Analytics unavailable");
+    expect(loading).toContain("Loading admin shell");
+    expect(unauthenticated).toContain('id="admin-page-title"');
+    expect(unauthenticated).toContain("Sign in required");
+    expect(forbidden).toContain("Staff access required");
     expect(error).toContain('role="alert"');
     expect(error).toContain("Request reference: req-1");
   });
@@ -65,27 +58,32 @@ describe("shared Admin accessibility contract", () => {
     expect(table).toMatch(/scope="col"/);
   });
 
-  it("renders status text and a scoped table header in the actual DOM", () => {
+  it("renders production status, table, and page-header output", () => {
     const markup = renderToStaticMarkup(
       createElement(
         "div",
         null,
-        createElement("span", { role: "status", "aria-live": "polite" }, "SHORTAGE"),
+        createElement(StatusBadge, { tone: "warning" }, "SHORTAGE"),
         createElement(
-          "div",
+          Table,
           { "aria-label": "Order queue" },
           createElement(
-            "thead",
+            TableHeader,
             null,
-            createElement("tr", null, createElement("th", { scope: "col" }, "Status")),
+            createElement(TableRow, null, createElement(TableHead, null, "Status")),
           ),
+          createElement(TableBody, null),
         ),
+        createElement(PageHeader, { title: "Orders", description: "Committed orders." }),
       ),
     );
     expect(markup).toContain('role="status"');
     expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain('role="region"');
     expect(markup).toContain('aria-label="Order queue"');
     expect(markup).toContain('scope="col"');
+    expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain('id="admin-page-title"');
   });
 
   it("names the mobile dialog close action", () => {
