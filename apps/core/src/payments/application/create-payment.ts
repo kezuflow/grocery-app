@@ -338,9 +338,7 @@ export async function createPayment(
       actionType: providerResult.actionType,
       redirectUrl: providerResult.redirectUrl,
       clientToken: providerResult.clientToken,
-      expiresAt: providerResult.expiresAt
-        ? new Date(providerResult.expiresAt).toISOString()
-        : null,
+      expiresAt: providerResult.expiresAt ? new Date(providerResult.expiresAt).toISOString() : null,
     },
     requestId: command.requestId,
   };

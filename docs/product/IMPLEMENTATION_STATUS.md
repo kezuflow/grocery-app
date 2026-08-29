@@ -67,6 +67,15 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 - Order detail composes immutable quote/order financial and item snapshots, Payments, amendments, fulfillment, delivery, exceptions, timeline, Core-derived actions, and Audit. Payment overview/detail composes canonical intent, attempt, refund, provider-safe event, reaction, and reconciliation projections; provider references, provider-event identifiers, hashes/payloads, and reconciliation JSON do not leave Core.
 - Shared Admin compositions provide Core-derived breadcrumbs, typed responsive tables, explicit loading/empty/filtered/scope/error states, cursor controls, exact-impact confirmations, detail/timeline layouts, and live command results. The complete deterministic Admin Playwright set passed against the managed vinext + Core/D1 stack; exact final evidence is recorded in `docs/superpowers/reports/ADMIN_DASHBOARD_PHASE_12_FINAL.md`.
 
+## Runtime and persistence reliability remediation (2026-08-30)
+
+- The populated `0020 -> 0021 -> current` migration path now preserves commerce history and foreign-key integrity; the verifier exercises that real pre-`0021` boundary as well as fresh, Analytics, and cart/inbox upgrade paths. Retired inventory triggers remain absent.
+- Core and Web parse one closed typed runtime configuration. Unknown deployed environments, insecure origins, weak/missing auth secrets, incomplete OAuth pairs, unapproved payment adapters, and renewal ownership without a provider fail closed.
+- Migration `0045` deterministically reconciles duplicate active carts, enforces one active cart per customer, and adds provider-inbox normalized observations, retry availability, and conditional leases. Cart mutation is idempotent and version guarded; missing SKU/price is explicit and never displayed as zero.
+- Provider events persist no raw webhook body. Webhook delivery and scheduled redrive share one normalized, leased application path; expired leases are reclaimable, bounded exhaustion creates one reconciliation case, and resumable provider actions have an every-minute expiry sweep.
+- Renewal initiation is disabled by default behind the explicit runtime ownership gate. Confirmed outcome application, dunning, and grace expiry continue while initiation is disabled.
+- Catalog generation is owned by its pre-`0025` schema boundary and reproduces the committed migration byte-for-byte. Storefront card assertions cover identity/price while quick view owns fixed-variant assertions. A parent-scoped pnpm override replaces the vulnerable legacy esbuild with `0.25.12`; `pnpm audit` reports no advisories.
+
 ## Admin and Platform Readiness Slice 9 (2026-08-29)
 
 - Shared Admin accessibility/state hardening, Web/Core boundary regression coverage, static security verification, Worker-local smoke checks, and deployment/recovery/auth-email runbooks are implemented.
@@ -86,9 +95,6 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 - Storefront browsing uses Core's bounded `getMarketplaceHome` rails and database-side cursor
   pagination; Web renders Core media/details with no slug-image map and placeholder fallback.
 - Launch storefront binaries remain version-controlled Web assets as a compatibility path; canonical Admin-managed Product media now uses the Core-owned R2 `product_media` association from migration `0041`.
-- Known local-stack limitation: committed migration `0021_instant_mode.sql` cannot apply to dev
-  databases containing pre-existing grocery orders because of its unconditional `DROP TABLE
-grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
 
 ## Admin Analytics Slice 8 (2026-08-29)
 

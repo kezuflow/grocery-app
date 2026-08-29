@@ -165,7 +165,7 @@ Authoritative selling price belongs to the sellable SKU and applicable market/lo
 
 ### Cart
 
-An editable pre-commit basket associated with a customer/market. Cart contents and displayed prices are advisory only: they do not lock price or reserve physical inventory or delivery capacity. Catalog prices are manually managed through authorized admin commands; customer UI has no time-boxed price guarantee or countdown.
+An editable pre-commit basket associated with a customer/market. A customer has at most one `ACTIVE` cart; concurrent first-touch creation resolves to that same cart. Mutations are explicit, idempotent, and expected-version guarded. Cart contents and displayed prices are advisory only: they do not lock price or reserve physical inventory or delivery capacity. SKU or authoritative-price loss is an explicit unavailable state that blocks checkout but still permits decrement/removal; it is never represented as a zero price. Catalog prices are manually managed through authorized admin commands; customer UI has no time-boxed price guarantee or countdown.
 
 ### Checkout
 

@@ -97,8 +97,7 @@ async function checkoutFixture(quantity: number) {
   expect(item.ok).toBe(true);
   const cycles = await core.listDeliveryCycles({ requestId: requestId() });
   expect(cycles.ok).toBe(true);
-  if (!address.ok || !cycles.ok || cycles.value.length === 0)
-    throw new Error("fixture incomplete");
+  if (!address.ok || !cycles.ok || cycles.value.length === 0) throw new Error("fixture incomplete");
   return {
     headers,
     addressId: address.value.id,

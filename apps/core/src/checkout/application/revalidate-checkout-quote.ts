@@ -221,7 +221,10 @@ export async function revalidateCheckoutQuote(
     },
   });
   if (!decision.eligible)
-    return rejected(decision.failures[0] ?? "CONFIGURATION_ERROR", "Checkout is no longer eligible");
+    return rejected(
+      decision.failures[0] ?? "CONFIGURATION_ERROR",
+      "Checkout is no longer eligible",
+    );
   if (JSON.stringify(currentFinancial) !== JSON.stringify(quote.financial))
     return rejected("PRICE_CHANGED", "Order total changed; accept a new quote");
   return { ok: true };

@@ -30,9 +30,9 @@ describe("parseWebRuntimeConfiguration", () => {
   );
 
   it("rejects missing, malformed, path-bearing, and unknown-environment values", () => {
-    expect(() =>
-      parseWebRuntimeConfiguration({ ENVIRONMENT: "development" }),
-    ).toThrow("PUBLIC_APP_ORIGIN_REQUIRED");
+    expect(() => parseWebRuntimeConfiguration({ ENVIRONMENT: "development" })).toThrow(
+      "PUBLIC_APP_ORIGIN_REQUIRED",
+    );
     expect(() =>
       parseWebRuntimeConfiguration({
         ENVIRONMENT: "development",

@@ -1,8 +1,4 @@
-import type {
-  AuthenticatedRequest,
-  CartView,
-  SetCartItemRequest,
-} from "@freshmarkets/contracts";
+import type { AuthenticatedRequest, CartView, SetCartItemRequest } from "@freshmarkets/contracts";
 import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 

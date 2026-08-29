@@ -97,8 +97,16 @@ describe("provider inbox leases and redrive", () => {
       "SELECT processing_status, lease_owner, lease_expires_at FROM payment_provider_event_inbox WHERE id=?",
     )
       .bind(fixture.inboxId)
-      .first<{ processing_status: string; lease_owner: string | null; lease_expires_at: number | null }>();
-    expect(inbox).toEqual({ processing_status: "APPLIED", lease_owner: null, lease_expires_at: null });
+      .first<{
+        processing_status: string;
+        lease_owner: string | null;
+        lease_expires_at: number | null;
+      }>();
+    expect(inbox).toEqual({
+      processing_status: "APPLIED",
+      lease_owner: null,
+      lease_expires_at: null,
+    });
   });
 
   it("reclaims an expired lease", async () => {

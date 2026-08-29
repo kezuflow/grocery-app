@@ -39,8 +39,7 @@ export function createAuth(
 ): Auth<any> {
   const betterAuthDatabase = createBetterAuthDatabase(env);
   const iamDatabase = drizzle(env.DB, { schema: iamSchema });
-  const runtime =
-    dependencies?.runtimeConfiguration ?? coreRuntimeConfiguration(env);
+  const runtime = dependencies?.runtimeConfiguration ?? coreRuntimeConfiguration(env);
   const authEmailDelivery = dependencies?.authEmailDelivery ?? createRuntimeAuthEmailDelivery(env);
   const deliverAuthEmail = (
     data: { user: { email: string }; url: string },

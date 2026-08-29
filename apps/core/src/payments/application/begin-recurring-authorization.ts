@@ -321,9 +321,7 @@ export async function beginRecurringAuthorization(
       actionType: result.action.actionType,
       redirectUrl: result.action.redirectUrl,
       clientToken: result.action.clientToken,
-      expiresAt: result.action.expiresAt
-        ? new Date(result.action.expiresAt).toISOString()
-        : null,
+      expiresAt: result.action.expiresAt ? new Date(result.action.expiresAt).toISOString() : null,
     },
     requestId: command.requestId,
   };

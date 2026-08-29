@@ -1,9 +1,4 @@
-export type WebRuntimeEnvironment =
-  | "development"
-  | "test"
-  | "preview"
-  | "staging"
-  | "production";
+export type WebRuntimeEnvironment = "development" | "test" | "preview" | "staging" | "production";
 
 const environments = new Set<WebRuntimeEnvironment>([
   "development",

@@ -54,9 +54,7 @@ async function cloneSku(options: { available: boolean; priced: boolean; location
 describe("cart aggregate", () => {
   it("returns one identity under concurrent first touch", async () => {
     const principal = await customer();
-    const results = await Promise.all(
-      Array.from({ length: 4 }, () => getCart(env.DB, principal)),
-    );
+    const results = await Promise.all(Array.from({ length: 4 }, () => getCart(env.DB, principal)));
     const ids = results.map((result) => (result.ok ? result.value.id : null));
     expect(new Set(ids).size).toBe(1);
     const count = await env.DB.prepare(

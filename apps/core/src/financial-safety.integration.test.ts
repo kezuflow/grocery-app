@@ -40,13 +40,16 @@ async function authenticatedCookie() {
 }
 
 function entrypointWith(environment: string, paymentMode: string) {
+  const deployed =
+    environment === "preview" || environment === "staging" || environment === "production";
   return new CoreEntrypoint(
     {} as never,
     {
       DB: env.DB,
       ENVIRONMENT: environment,
       PAYMENT_PROVIDER: paymentMode,
-      BETTER_AUTH_URL: "http://127.0.0.1:8788",
+      BETTER_AUTH_SECRET: deployed ? "financial-safety-deployed-secret-32-chars" : undefined,
+      BETTER_AUTH_URL: deployed ? "https://freshmarkets.ph" : "http://127.0.0.1:8788",
       TRUSTED_ORIGINS: "https://core.example.invalid",
     } as unknown as never,
   );
@@ -121,33 +124,8 @@ describe("financial safety containment", () => {
 
   it("fails closed on canonical payment intents outside the test environment", async () => {
     const before = await writeGuardCounts();
-    const cookie = await authenticatedCookie();
-    const production = entrypointWith("production", "mock");
-    const rejected = await production.createPaymentIntent({
-      headers: { cookie },
-      requestId: requestId(),
-      checkoutAttemptId: `quote-${crypto.randomUUID()}`,
-      expectedTotalMinor: 100,
-      returnUrl: "https://freshmarkets.ph/orders",
-      idempotencyKey: `safety-${crypto.randomUUID()}`,
-    });
-    expect(rejected).toMatchObject({
-      ok: false,
-      error: { code: "PAYMENT_PROVIDER_UNAVAILABLE" },
-    });
-    const preview = entrypointWith("preview", "mock");
-    const previewRejected = await preview.createPaymentIntent({
-      headers: { cookie },
-      requestId: requestId(),
-      checkoutAttemptId: `quote-${crypto.randomUUID()}`,
-      expectedTotalMinor: 100,
-      returnUrl: "https://freshmarkets.ph/orders",
-      idempotencyKey: `safety-${crypto.randomUUID()}`,
-    });
-    expect(previewRejected).toMatchObject({
-      ok: false,
-      error: { code: "PAYMENT_PROVIDER_UNAVAILABLE" },
-    });
+    expect(() => entrypointWith("production", "mock")).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+    expect(() => entrypointWith("preview", "mock")).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
     expect(await writeGuardCounts()).toEqual(before);
   });
 

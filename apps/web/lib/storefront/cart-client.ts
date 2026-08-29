@@ -85,10 +85,8 @@ function guestCartView(): CartView | null {
       .map((item) => ({
         ...item,
         availability:
-          item.availability ??
-          (item.unitPriceMinor === null ? "PRICE_UNAVAILABLE" : "AVAILABLE"),
-        lineTotalMinor:
-          item.unitPriceMinor === null ? null : item.quantity * item.unitPriceMinor,
+          item.availability ?? (item.unitPriceMinor === null ? "PRICE_UNAVAILABLE" : "AVAILABLE"),
+        lineTotalMinor: item.unitPriceMinor === null ? null : item.quantity * item.unitPriceMinor,
       }));
     if (items.length === 0) return null;
     return {

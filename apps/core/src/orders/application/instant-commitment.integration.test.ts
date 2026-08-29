@@ -207,28 +207,18 @@ describe("instant order commitment", () => {
   });
 
   it("enforces the location concurrent-order capacity", async () => {
-    // Isolate capacity counting from earlier tests in this file.
+    // Capacity is asserted relative to shared test state; never delete another
+    // aggregate merely to isolate this fixture.
     const prior = await env.DB.prepare(
-      "SELECT id FROM grocery_order WHERE fulfillment_mode='INSTANT'",
-    ).all<{ id: string }>();
-    for (const row of prior.results ?? []) {
-      await env.DB.prepare(
-        "DELETE FROM delivery_stop WHERE delivery_job_id=(SELECT id FROM delivery_job WHERE order_id=?)",
-      )
-        .bind(row.id)
-        .run();
-      await env.DB.prepare("DELETE FROM delivery_job WHERE order_id=?").bind(row.id).run();
-      await env.DB.prepare("DELETE FROM inventory_reservation WHERE order_id=?").bind(row.id).run();
-      await env.DB.prepare("DELETE FROM order_item WHERE order_id=?").bind(row.id).run();
-      await env.DB.prepare("DELETE FROM order_payment_reaction WHERE order_id=?")
-        .bind(row.id)
-        .run();
-      await env.DB.prepare("DELETE FROM order_fulfillment_snapshot WHERE order_id=?")
-        .bind(row.id)
-        .run();
-      await env.DB.prepare("DELETE FROM grocery_order WHERE id=?").bind(row.id).run();
-    }
-    await configureInstant(1);
+      `SELECT COUNT(*) AS count FROM grocery_order go
+       JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=go.id
+       WHERE snapshot.location_id=? AND snapshot.fulfillment_mode='INSTANT'
+         AND go.status NOT IN ('CANCELED','REFUNDED')`,
+    )
+      .bind(LOCATION)
+      .first<{ count: number }>();
+    const initialCount = prior?.count ?? 0;
+    await configureInstant(initialCount + 1);
     const first = await seededInstantQuote();
     const firstReaction = await seedReaction(first.quoteId);
     const ok = await applyCheckoutPaymentReaction(env.DB, {
@@ -251,7 +241,7 @@ describe("instant order commitment", () => {
     const orders = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM grocery_order WHERE fulfillment_mode='INSTANT'",
     ).first<{ count: number }>();
-    expect(orders?.count).toBe(1);
+    expect(orders?.count).toBe(initialCount + 1);
     await configureInstant(25);
   });
 });

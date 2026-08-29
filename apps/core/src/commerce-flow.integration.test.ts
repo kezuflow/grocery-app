@@ -191,9 +191,7 @@ describe("customer checkout flow", () => {
       value: { state: "REQUIRES_ACTION", actionType: "REDIRECT" },
     });
     if (!payment.ok) return;
-    const paymentSubject = await env.DB.prepare(
-      "SELECT subject_id FROM payment_intent WHERE id=?",
-    )
+    const paymentSubject = await env.DB.prepare("SELECT subject_id FROM payment_intent WHERE id=?")
       .bind(payment.value.paymentIntentId)
       .first<{ subject_id: string }>();
     const quotesAfterPayment = await env.DB.prepare(

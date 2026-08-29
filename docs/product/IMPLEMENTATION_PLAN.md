@@ -653,9 +653,10 @@ Unapproved scope expansion or a general promotion engine by default.
 ## Cross-Phase Definition of Done
 
 - Core is the only business authority.
+- Deployed runtime configuration is a closed, typed decision set that fails on unknown environments, insecure origins, incomplete credentials, or forbidden adapters; production capabilities are never inferred from local defaults.
 - Contracts are typed, validated, versioned, and tested from both apps.
 - Client/application/admin lifecycle commands have legal transitions, authorization, stable idempotency where replayable, expected-version checks where concurrent mutation is possible, and audit where material. Provider events instead have unique provider-event inbox identity, handler-side compare-and-swap, and safe retry/reconciliation.
-- D1 changes are migration-based and tested against local/preview environments.
+- D1 changes are migration-based and tested as both fresh installs and populated upgrades across every destructive/rebuild boundary relevant to the change.
 - Web UI handles loading, empty, unavailable, permission, cutoff, payment pending, and recovery states.
 - Structured logs and correlation IDs make the critical flow traceable.
 - Documentation is updated when behavior or contracts change.

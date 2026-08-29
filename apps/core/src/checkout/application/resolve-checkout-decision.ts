@@ -1,7 +1,4 @@
-import {
-  assertQuoteFinancialSnapshot,
-  type QuoteFinancialSnapshot,
-} from "../domain/quote";
+import { assertQuoteFinancialSnapshot, type QuoteFinancialSnapshot } from "../domain/quote";
 
 export type CheckoutDecisionFailure = "CONFIGURATION_ERROR" | "MINIMUM_ORDER_NOT_MET";
 

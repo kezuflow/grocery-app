@@ -64,10 +64,7 @@ export async function applyVerifiedProviderEvent(
   now = Date.now(),
 ): Promise<{ ok: true; value: ProviderEventResult }> {
   const repository = extendPaymentRepository(database);
-  const finish = (
-    processingStatus: ProviderEventProcessingStatus,
-    errorCode?: string,
-  ) =>
+  const finish = (processingStatus: ProviderEventProcessingStatus, errorCode?: string) =>
     repository.setInboxStatus({
       id: inboxId,
       processingStatus,

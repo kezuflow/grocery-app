@@ -146,8 +146,7 @@ export async function evaluateCheckout(
   for (const decisionFailure of decision?.failures ?? ["CONFIGURATION_ERROR" as const]) {
     if (!failures.includes(decisionFailure)) failures.push(decisionFailure);
   }
-  if (!cart && !failures.includes("MINIMUM_ORDER_NOT_MET"))
-    failures.push("MINIMUM_ORDER_NOT_MET");
+  if (!cart && !failures.includes("MINIMUM_ORDER_NOT_MET")) failures.push("MINIMUM_ORDER_NOT_MET");
   const totalMinor = (cart?.total_minor ?? 0) + (fee?.fee_minor ?? 0);
   return {
     ok: true as const,
@@ -156,7 +155,11 @@ export async function evaluateCheckout(
       failures,
       totalMinor,
       currency:
-        decision?.currency || policy?.currency || fee?.currency || (await defaultCurrency(database)) || "",
+        decision?.currency ||
+        policy?.currency ||
+        fee?.currency ||
+        (await defaultCurrency(database)) ||
+        "",
     },
     requestId: command.requestId,
   };

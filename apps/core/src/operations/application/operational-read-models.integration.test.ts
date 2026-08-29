@@ -86,6 +86,8 @@ async function seedOperationalRow(options: {
 }) {
   const unique = ++queueCounter;
   const orderId = `ord-board-${unique}-${crypto.randomUUID().slice(0, 6)}`;
+  const customerId = `cust-${orderId}`;
+  const paymentId = `payment-${orderId}`;
   const now = Date.now();
   const locationId = options.locationId ?? "location-cebu-central";
   if (locationId === "location-other-empty") {
@@ -100,6 +102,15 @@ async function seedOperationalRow(options: {
       .run();
   }
   await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+    ).bind(customerId, `auth-${customerId}`, now, now),
+    env.DB.prepare(
+      "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
+    ).bind(paymentId, customerId, `mock-${paymentId}`, `idem-${paymentId}`, now, now),
+    env.DB.prepare(
+      "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, version, created_at) VALUES (?, ?, 'cycle-next-cebu', 'SCHEDULED', '{}', 'PAID', 100, 'PHP', ?, 1, ?)",
+    ).bind(orderId, customerId, paymentId, now),
     env.DB.prepare(
       "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, ?, ?, ?, 1)",
     ).bind(

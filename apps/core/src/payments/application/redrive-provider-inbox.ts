@@ -109,7 +109,10 @@ export async function redriveProviderInbox(
       continue;
     }
     const applied = await applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now);
-    if (applied.value.processingStatus === "APPLIED" || applied.value.processingStatus === "DUPLICATE")
+    if (
+      applied.value.processingStatus === "APPLIED" ||
+      applied.value.processingStatus === "DUPLICATE"
+    )
       outcome.applied += 1;
     else if (applied.value.processingStatus === "RETRY_REQUIRED") outcome.retryRequired += 1;
     else outcome.escalated += 1;

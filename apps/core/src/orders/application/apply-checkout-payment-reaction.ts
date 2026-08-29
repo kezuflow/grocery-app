@@ -258,8 +258,7 @@ export async function applyCheckoutPaymentReaction(
       .bind(now, quote.id, quote.version),
     // `changes()` is scoped to the immediately preceding statement. A lost
     // quote CAS aborts the whole batch before any dependent order survives.
-    database
-      .prepare("INSERT INTO commitment_abort (id) SELECT -3 WHERE changes()=0"),
+    database.prepare("INSERT INTO commitment_abort (id) SELECT -3 WHERE changes()=0"),
     ...quote.lines.map((line) =>
       database
         .prepare(
@@ -457,7 +456,8 @@ export async function applyCheckoutPaymentReaction(
             )
             .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId)
             .first<{ allocated: number; capacity: number }>();
-      const capacityUnavailable = !instant && (!capacity || capacity.allocated >= capacity.capacity);
+      const capacityUnavailable =
+        !instant && (!capacity || capacity.allocated >= capacity.capacity);
       await recordFinanceExceptionRow(
         database,
         input,

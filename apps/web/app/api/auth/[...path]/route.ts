@@ -6,11 +6,7 @@ import { parseWebRuntimeConfiguration } from "@/lib/runtime/runtime-configuratio
 const runtime = parseWebRuntimeConfiguration(env);
 
 async function proxy(request: Request): Promise<Response> {
-  return proxyAuthRequest(
-    request,
-    coreClient(env.CORE),
-    runtime.publicAppOrigin,
-  );
+  return proxyAuthRequest(request, coreClient(env.CORE), runtime.publicAppOrigin);
 }
 
 export const GET = proxy;

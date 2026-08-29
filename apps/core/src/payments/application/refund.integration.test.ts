@@ -121,12 +121,18 @@ describe("non-synthetic refunds", () => {
       requestRefund(
         env.DB,
         testRegistry(),
-        refundCommand(intentId, { amountMinor: 20000, idempotencyKey: `full-a-${crypto.randomUUID()}` }),
+        refundCommand(intentId, {
+          amountMinor: 20000,
+          idempotencyKey: `full-a-${crypto.randomUUID()}`,
+        }),
       ),
       requestRefund(
         env.DB,
         testRegistry(),
-        refundCommand(intentId, { amountMinor: 20000, idempotencyKey: `full-b-${crypto.randomUUID()}` }),
+        refundCommand(intentId, {
+          amountMinor: 20000,
+          idempotencyKey: `full-b-${crypto.randomUUID()}`,
+        }),
       ),
     ]);
 
