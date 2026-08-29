@@ -124,8 +124,12 @@ Structured writes also carry component provenance independently from coordinate 
 permanently reverse-finalizes temporary provider components at the final submitted coordinate even
 when that coordinate was confirmed by a user pin or device location. `USER_PIN` and
 `DEVICE_LOCATION` continue to describe coordinate provenance; they never convert temporary
-provider text into first-party data. Existing saved provider components are already permanent, and
-manual first-party components remain valid without provider enrichment.
+provider text into first-party data. An update that submits `TEMPORARY_GEOCODER` components must
+therefore also submit the exact latitude/longitude pair and `confirmationSource`. Existing saved
+provider components are already permanent: an unchanged `SAVED_ADDRESS` edit preserves their exact
+provider reference and components without another provider call, while a location change
+re-finalizes them at the new coordinate. Manual first-party components remain valid without
+provider enrichment.
 
 Core derives the customer from the Better Auth session, verifies address ownership,
 and never accepts a client-selected customer or principal ID. Address updates require

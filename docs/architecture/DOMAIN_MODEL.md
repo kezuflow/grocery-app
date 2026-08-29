@@ -76,8 +76,10 @@ provider components must be permanently finalized at the final confirmed coordin
 or replaced by genuinely first-party structured input. Moving a candidate pin or accepting device
 coordinates keeps `USER_PIN` or `DEVICE_LOCATION` as the coordinate source; it does not make
 temporary provider text first-party. Existing saved provider components are already permanent, and
-manual first-party pin/device addresses may retain null provider metadata when enrichment is
-unavailable.
+unchanged edits preserve their provider reference and structured values without a provider call.
+Changing their location requires permanent finalization at the new coordinate. Temporary component
+updates must include that exact coordinate pair and its confirmation source. Manual first-party
+pin/device addresses may retain null provider metadata when enrichment is unavailable.
 
 Orders snapshot addresses. Editing a saved address never rewrites an existing order.
 

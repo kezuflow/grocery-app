@@ -2,11 +2,10 @@
 
 ## Status
 
-Plan 1 verification is clean on the isolated `maps-program` tracked tree. No Maps defect was found,
-so no TDD fix cycle was required. The only implementation record change is the descriptive
-`IMPLEMENTATION_STATUS.md` addition required to replace its stale provider/geocoder status; no
-canonical document, Admin behavior, Admin documentation, schema, RPC, or production configuration
-was changed by Task 7.
+The initial Plan 1 verification was clean on the isolated `maps-program` tracked tree and found no
+defect. Two later review rounds identified address-component provenance defects; both were resolved
+with focused RED/GREEN cycles and complete Task 7 gate reruns documented below. No Admin behavior,
+Admin documentation, schema, public API, or production configuration was changed by Task 7.
 
 ## Fresh required-gate evidence
 
@@ -222,3 +221,69 @@ value, candidate data, migration, or unrelated Admin file is included by this fi
 - Remaining external concerns are unchanged: restricted public-token deployment, Core secret,
   permanent-geocoding entitlement/terms, approved production Cebu polygons, 19 pre-existing lint
   warnings, and the non-fatal Web chunk-size advisory.
+
+## Review fix round 2: close update bypass and preserve unchanged saved geocodes
+
+### Confirmed defects and authoritative ruling
+
+Review found two Important defects. First, PATCH validation and the direct Core command allowed
+`TEMPORARY_GEOCODER` components without a latitude/longitude pair or `confirmationSource`. Because
+that update had no confirmation to finalize, temporary provider text could be persisted unchanged.
+Second, permanent-finalization precedence checked coordinate source before component provenance, so
+an unchanged saved address whose stored coordinate source was `GEOCODER` made an unnecessary
+provider call and could fail or replace already-permanent provider metadata.
+
+The authoritative rule is now enforced at the Web schema, Core RPC schema, and direct application
+command: temporary components on update require the exact final coordinate pair and confirmation
+source. A valid update makes one permanent reverse call at that exact coordinate while preserving
+the submitted `USER_PIN`, `DEVICE_LOCATION`, or `GEOCODER` coordinate provenance. Unchanged
+`SAVED_ADDRESS` values are already permanent and preserve their exact components, provider, and
+reference without any reverse call regardless of stored coordinate source. A moved saved provider
+address is re-finalized once at the new coordinate. Manual first-party pin/device saves remain valid
+with null provider metadata, and an explicit moved GEOCODER edit still permanently resolves.
+
+### Genuine focused RED and minimal fix
+
+- `pnpm --filter @freshmarkets/web exec vitest run app/api/commerce/address/route.test.ts` — exit 1;
+  1 failed / 4 passed. The route forwarded the incomplete temporary update, reaching an unconfigured
+  Core mock instead of returning 400.
+- `pnpm --filter @freshmarkets/core exec vitest run src/customer-address.integration.test.ts` —
+  exit 1; 2 failed / 20 passed. Core RPC returned success for the incomplete temporary update, and
+  the unchanged saved GEOCODER edit invoked the geocoder stub that was required not to run.
+- The minimal fix added the same temporary-update invariant to both schemas and duplicated it in
+  `updateCustomerAddress` for defense in depth. Permanent-finalization precedence now consults
+  `SAVED_ADDRESS` and location change before coordinate source.
+- The first focused rerun exposed an existing moved-GEOCODER regression: exit 1; 1 failed / 21
+  passed because the initial precedence expression skipped a moved explicit GEOCODER edit with no
+  persisted provider. The corrected expression permanently resolves a moved saved address when it
+  is provider-backed or explicitly GEOCODER, while still avoiding calls for unchanged saved data.
+- Final focused GREEN: Web 5/5 and Core 22/22.
+
+### Full Task 7 gate rerun
+
+All commands ran from the isolated `maps-program` worktree, and their terminal output and exit
+codes were inspected directly:
+
+1. `pnpm format:check` — exit 0; 636 files.
+2. `pnpm naming:check` — exit 0.
+3. `pnpm migration:check` — exit 0; fresh apply and populated `0021 -> 0022` upgrade valid.
+4. `pnpm lint` — exit 0; the same 19 non-failing pre-existing warnings, 0 errors.
+5. `pnpm typecheck` — exit 0; all six participating workspace projects.
+6. Focused Plan 1 tests — exit 0: contracts 10/10, Core 61/61, Web 42/42; aggregate
+   15 files and 113 tests.
+7. `pnpm test` — exit 0; 150 files and 746 tests: config 2, contracts 46, domain-shared 2,
+   validation 2, Web 183, Core 512.
+8. `pnpm --filter @freshmarkets/web check:vinext` — exit 0; 100% compatible, 12 supported,
+   0 partial, 0 issues; 55 pages, 2 layouts, 99 route handlers.
+9. `pnpm -r build` — exit 0; Core Wrangler dry-run and Web vinext build completed; only the
+   existing non-fatal chunk-size advisory remains.
+10. Managed `E2E_START_STACK=1` address-map Playwright — exit 0; 5 tests passed in 1.3 minutes.
+11. `git diff --check` — exit 0 before the descriptive status/report append.
+
+Port 3100 was confirmed released immediately before and after Playwright. Managed state stayed in
+the isolated worktree. The privacy/security scan found candidate keys and provider payload markers
+only in existing negative test fixtures; the runtime changes add no candidate data, address/contact
+text, coordinates, provider payloads, secrets, or tokens to persistence or logs. There is no schema
+or migration change, no new public API, and no Admin, Plan 2, or Rider/Plan 3 work. The four untracked
+Maps artifacts remain preserved and unstaged. External deployment concerns and the 19 pre-existing
+lint warnings remain unchanged.

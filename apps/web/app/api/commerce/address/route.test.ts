@@ -162,4 +162,19 @@ describe("customer address route", () => {
       }),
     );
   });
+
+  it("rejects temporary geocoder components without their final confirmed coordinate", async () => {
+    const response = await PATCH(
+      request("PATCH", {
+        addressId: "address-1",
+        expectedVersion: 3,
+        components,
+        componentsSource: "TEMPORARY_GEOCODER",
+        instructions,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(core.updateCustomerAddress).not.toHaveBeenCalled();
+  });
 });

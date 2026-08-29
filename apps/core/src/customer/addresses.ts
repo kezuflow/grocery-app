@@ -200,6 +200,15 @@ export async function updateCustomerAddress(
       "Confirmation source requires latitude and longitude",
       command.requestId,
     );
+  if (
+    command.componentsSource === "TEMPORARY_GEOCODER" &&
+    (!hasCoordinatePair || command.confirmationSource === undefined)
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Temporary geocoder components require a final confirmed coordinate",
+      command.requestId,
+    );
   const explicitLegacyCoordinateEdit =
     hasCoordinatePair &&
     current.address_components_json === null &&
@@ -394,12 +403,12 @@ async function finalizeConfirmation(
   },
 ): Promise<FinalizedConfirmation> {
   const requiresPermanentComponents =
-    input.source === "GEOCODER" ||
     input.componentsSource === "TEMPORARY_GEOCODER" ||
-    (input.componentsSource === "SAVED_ADDRESS" &&
-      input.locationChanged === true &&
-      input.persistedProvider !== null &&
-      input.persistedProvider !== undefined);
+    (input.componentsSource === "SAVED_ADDRESS"
+      ? input.locationChanged === true &&
+        (input.source === "GEOCODER" ||
+          (input.persistedProvider !== null && input.persistedProvider !== undefined))
+      : input.source === "GEOCODER");
   if (!requiresPermanentComponents)
     return {
       components: input.components,

@@ -71,6 +71,15 @@ const updateAddressBodySchema = addressBodySchema
         message: "components are required with componentsSource",
         path: ["components"],
       });
+    if (
+      value.componentsSource === "TEMPORARY_GEOCODER" &&
+      (!hasLatitude || !hasLongitude || value.confirmationSource === undefined)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "temporary geocoder components require a final confirmed coordinate",
+        path: ["componentsSource"],
+      });
   });
 
 function resultStatus(result: { ok: boolean; error?: { code: string } }): number {

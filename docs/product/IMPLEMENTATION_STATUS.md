@@ -10,8 +10,11 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
   reverse finalization before persisting provider-derived coordinates, metadata, or structured
   components. Component provenance is tracked independently from coordinate confirmation, so
   moving a candidate pin or accepting device coordinates retains `USER_PIN`/`DEVICE_LOCATION`
-  coordinate provenance without treating temporary provider text as first-party. Logs contain only
-  operation timing/result categories and stable error codes.
+  coordinate provenance without treating temporary provider text as first-party. Updates carrying
+  temporary provider components require the exact final coordinate pair and confirmation source.
+  Unchanged saved provider components preserve their exact permanent metadata without another
+  provider call; moving them re-finalizes at the new coordinate. Logs contain only operation
+  timing/result categories and stable error codes.
 - Migration `0042_mapbox_address_confirmation.sql` additively preserves legacy addresses while
   adding structured components, geocoder provenance, coordinate-confirmation provenance,
   delivery instructions, and resolver indexes. Owner scoping, optimistic address versions,

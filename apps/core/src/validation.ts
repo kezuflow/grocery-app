@@ -136,6 +136,15 @@ export const addressUpdateRequestSchema = headersRequest
         message: "components are required with componentsSource",
         path: ["components"],
       });
+    if (
+      input.componentsSource === "TEMPORARY_GEOCODER" &&
+      (!hasCoordinatePair || input.confirmationSource === undefined)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "temporary geocoder components require a final confirmed coordinate",
+        path: ["componentsSource"],
+      });
     if (hasLatitude !== hasLongitude)
       context.addIssue({
         code: "custom",
