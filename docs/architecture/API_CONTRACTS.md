@@ -402,6 +402,8 @@ Core verifies that the rider is assigned to the job. Client-supplied timestamps 
 
 Analytics contracts return definition code/version, formula description, source watermark/freshness, currency/base-unit dimensions, and null/unavailable reason when a required accounting or renewal policy is unresolved. They never expose a metric under an unapproved formula, mix currencies or quantity dimensions silently, or provide mutation methods for source context state. `analytics.read` is required.
 
+Metric-definition lifecycle filters use `APPROVED|BLOCKED|SUPERSEDED`; unversioned reads resolve the latest definition, while an explicitly requested superseded version returns a typed unavailable result. Overview dimensions apply only to metrics declaring that dimension and never remove unrelated metrics. Dimension-sensitive scalar reads return the effective currency/base unit in their DTO or a stable unavailable reason when the source window contains more than one.
+
 ## Contract Testing
 
 - Compile both deployments against the shared contract package.

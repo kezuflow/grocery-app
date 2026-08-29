@@ -239,6 +239,8 @@ High-volume lists use keyset pagination with stable compound sort keys, commonly
 - `metric_definitions(id PK, code, version, display_name, formula_json, source_contract_version, event_time_field, reporting_timezone_policy, inclusion_json, exclusion_json, rounding_policy, status, approved_at NULL, UNIQUE(code, version))`
 - Optional `analytics_projection_*` tables contain rebuildable aggregates/checkpoints only; every row records definition version and projection watermark. They have no foreign-key ownership semantics that permit source-state mutation.
 
+Migration `0040_analytics_dimension_safety.sql` extends the immutable definition lifecycle with `SUPERSEDED`, preserves replaced versions, and publishes version 2 of `refund_amount` and `inventory_adjustments_shrinkage`. A partial unique index continues to enforce one `APPROVED` row per metric code.
+
 Admin customer, operational, and Analytics DTOs are query projections over source tables with capability/scope filtering. Better Auth tables are joined only for narrowly permitted authentication display needs and never replace Customer/Application IAM ownership.
 
 ## Concurrency and Transaction Boundaries

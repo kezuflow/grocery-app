@@ -304,6 +304,8 @@ Analytics is a derived read-side concern inside the Core modular monolith for MV
 
 Every published metric name has exactly one versioned `MetricDefinition` containing formula, source records/events, event-time field, reporting timezone, dimensions, inclusion/exclusion rules, and rounding/empty-denominator behavior. A metric without an approved definition is unavailable rather than calculated differently by separate dashboards.
 
+Exactly one version per metric code is current and `APPROVED`. Replaced definitions remain immutable as `SUPERSEDED` history and are unavailable for new computation. A currency or canonical base-unit aggregate must resolve to exactly one effective dimension: explicit filters select it, a single discovered dimension is returned in result metadata, and ambiguous multi-dimension requests are unavailable rather than combined.
+
 The initial metric catalog is:
 
 | Metric | Canonical formula or required status |
