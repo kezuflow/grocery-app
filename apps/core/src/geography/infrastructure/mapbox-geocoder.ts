@@ -152,6 +152,8 @@ export class MapboxGeocoder implements GeocoderPort {
 }
 
 function mapFeature(feature: MapboxFeature): MappedFeature | null {
+  const featureType = nonEmptyString(feature.properties?.feature_type);
+  if (featureType !== "address" && featureType !== "street") return null;
   const providerReference = nonEmptyString(feature.properties?.mapbox_id ?? feature.id);
   const displayAddress = nonEmptyString(feature.properties?.full_address);
   const coordinates = feature.geometry?.coordinates;
@@ -168,8 +170,7 @@ function mapFeature(feature: MapboxFeature): MappedFeature | null {
   const context = feature.properties?.context;
   const featureName = nonEmptyString(feature.properties?.name);
   const addressLine1 = contextName(context?.address) ?? featureName;
-  const featureType = nonEmptyString(feature.properties?.feature_type);
-  const city = contextName(context?.place) ?? (featureType === "place" ? featureName : null);
+  const city = contextName(context?.place);
   const countryCode = nonEmptyString(context?.country?.country_code)?.toUpperCase() ?? null;
   if (!addressLine1 || !city || !countryCode) return null;
 

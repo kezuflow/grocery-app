@@ -32,6 +32,28 @@ const CEBU_ADDRESS_FEATURE = {
   },
 };
 
+const CEBU_PLACE_FEATURE = {
+  type: "Feature",
+  id: "place.cebu-city",
+  geometry: { type: "Point", coordinates: [123.8854, 10.3157] },
+  properties: {
+    mapbox_id: "place.cebu-city",
+    feature_type: "place",
+    full_address: "Cebu City, Cebu, Philippines",
+    name: "Cebu City",
+    coordinates: { longitude: 123.8854, latitude: 10.3157 },
+    context: {
+      region: { mapbox_id: "region.cebu", name: "Cebu" },
+      country: {
+        mapbox_id: "country.ph",
+        name: "Philippines",
+        country_code: "PH",
+        country_code_alpha_3: "PHL",
+      },
+    },
+  },
+};
+
 describe("Mapbox geocoder adapter", () => {
   it("uses temporary Cebu-biased Philippines forward search and maps provider-neutral candidates", async () => {
     let requested: Request | undefined;
@@ -221,6 +243,50 @@ describe("Mapbox geocoder adapter", () => {
       }),
     ).rejects.toMatchObject({ code: "GEOCODER_NO_RESULTS" });
   });
+
+  it.each(["place", "locality", "neighborhood", "postcode"])(
+    "discards well-formed %s-only forward results as non-deliverable",
+    async (featureType) => {
+      const feature = {
+        ...CEBU_PLACE_FEATURE,
+        id: `${featureType}.cebu-test`,
+        properties: {
+          ...CEBU_PLACE_FEATURE.properties,
+          mapbox_id: `${featureType}.cebu-test`,
+          feature_type: featureType,
+        },
+      };
+      const adapter = new MapboxGeocoder("test-token", async () =>
+        Response.json({ type: "FeatureCollection", features: [feature] }),
+      );
+
+      await expect(adapter.search({ query: "Cebu City" })).resolves.toEqual([]);
+    },
+  );
+
+  it.each(["place", "locality", "neighborhood", "postcode"])(
+    "rejects well-formed %s-only permanent reverse results as non-deliverable",
+    async (featureType) => {
+      const feature = {
+        ...CEBU_PLACE_FEATURE,
+        id: `${featureType}.cebu-test`,
+        properties: {
+          ...CEBU_PLACE_FEATURE.properties,
+          mapbox_id: `${featureType}.cebu-test`,
+          feature_type: featureType,
+        },
+      };
+      const adapter = new MapboxGeocoder("test-token", async () =>
+        Response.json({ type: "FeatureCollection", features: [feature] }),
+      );
+
+      await expect(
+        adapter.reversePermanent({
+          coordinate: { latitude: 10.3157, longitude: 123.8854 },
+        }),
+      ).rejects.toMatchObject({ code: "GEOCODER_NO_RESULTS" });
+    },
+  );
 
   it("maps non-JSON provider bodies to an invalid-response error", async () => {
     const adapter = new MapboxGeocoder("test-token", async () => new Response("not-json"));
