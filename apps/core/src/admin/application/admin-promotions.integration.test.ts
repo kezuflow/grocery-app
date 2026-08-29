@@ -43,19 +43,28 @@ async function seedManager(): Promise<{ cookie: string }> {
     env.DB.prepare(
       "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'Promo Mgr', 'active', ?, ?)",
     ).bind(staffId, principal.userId, now, now),
-    env.DB.prepare("INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Promo Role', ?)").bind(
+    env.DB.prepare(
+      "INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'Promo Role', ?)",
+    ).bind(roleId, `promo-${crypto.randomUUID().slice(0, 8)}`, now),
+    env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(
+      staffId,
       roleId,
-      `promo-${crypto.randomUUID().slice(0, 8)}`,
-      now,
     ),
-    env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(staffId, roleId),
     env.DB.prepare(
       "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'global', NULL, NULL)",
     ).bind(crypto.randomUUID(), staffId),
-    env.DB.prepare("INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'promotions.manage', 'p', ?)").bind(crypto.randomUUID(), now),
-    env.DB.prepare("INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='promotions.manage'").bind(roleId),
-    env.DB.prepare("INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'promotions.read', 'p', ?)").bind(crypto.randomUUID(), now),
-    env.DB.prepare("INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='promotions.read'").bind(roleId),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'promotions.manage', 'p', ?)",
+    ).bind(crypto.randomUUID(), now),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='promotions.manage'",
+    ).bind(roleId),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'promotions.read', 'p', ?)",
+    ).bind(crypto.randomUUID(), now),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='promotions.read'",
+    ).bind(roleId),
   ]);
   return { cookie: principal.cookie };
 }
@@ -69,7 +78,9 @@ async function seedCustomer(): Promise<string> {
   const customerId = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO customer (id, auth_user_id, principal_id, status, version, created_at, updated_at) VALUES (?, ?, ?, 'active', 1, ?, ?)",
-  ).bind(customerId, principal.userId, existing!.id, now, now).run();
+  )
+    .bind(customerId, principal.userId, existing!.id, now, now)
+    .run();
   return customerId;
 }
 
@@ -276,10 +287,7 @@ describe("promotion administration", () => {
     });
     expect(illegal).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
 
-    async function change(
-      action: "ACTIVATE" | "DEACTIVATE" | "ARCHIVE",
-      version: number,
-    ) {
+    async function change(action: "ACTIVATE" | "DEACTIVATE" | "ARCHIVE", version: number) {
       const result = await core.changeAdminPromotionStatus({
         requestId: crypto.randomUUID(),
         headers: { cookie: manager.cookie },
@@ -351,7 +359,9 @@ describe("promotion administration", () => {
 
     const auditRow = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM audit_event WHERE action IN ('PROMOTION.ACTIVATED','PROMOTION.DEACTIVATED','PROMOTION.ARCHIVED') AND aggregate_id = ?",
-    ).bind(promotionId).first<{ count: number }>();
+    )
+      .bind(promotionId)
+      .first<{ count: number }>();
     expect(auditRow?.count ?? 0).toBe(3);
   });
 
@@ -411,5 +421,60 @@ describe("promotion administration", () => {
     expect(redemptions.ok).toBe(true);
     if (!redemptions.ok) return;
     expect(redemptions.value.items).toEqual([]);
+  });
+
+  it("rolls back a promotion grant when required audit evidence fails", async () => {
+    const manager = await seedManager();
+    const customerId = await seedCustomer();
+    const created = await core.createAdminPromotion({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      code: `ATOM_${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+      name: "Atomic grant",
+      description: "",
+      benefitType: "ORDER_FIXED_DISCOUNT",
+      discountMinor: 1000,
+      minimumMinor: 1000,
+      startsAt: new Date().toISOString(),
+      idempotencyKey: `promo-${crypto.randomUUID()}`,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const active = await core.changeAdminPromotionStatus({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      promotionId: created.value.promotionId,
+      action: "ACTIVATE",
+      reason: "activate atomic grant",
+      expectedVersion: 1,
+      idempotencyKey: `life-${crypto.randomUUID()}`,
+    });
+    expect(active.ok).toBe(true);
+    await env.DB.prepare(
+      `CREATE TRIGGER fail_promotion_grant_audit
+       BEFORE INSERT ON audit_event
+       WHEN NEW.action = 'PROMOTION.GRANTED'
+       BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END`,
+    ).run();
+
+    try {
+      await core.grantAdminPromotion({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        promotionId: created.value.promotionId,
+        customerId,
+        maxRedemptions: 1,
+        idempotencyKey: `grant-${crypto.randomUUID()}`,
+      });
+    } catch {
+      // The observable invariant is rollback, independent of RPC error transport.
+    }
+
+    const grants = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM promotion_grant WHERE customer_id=? AND benefit_code=?",
+    )
+      .bind(customerId, created.value.code)
+      .first<{ count: number }>();
+    expect(grants?.count).toBe(0);
   });
 });

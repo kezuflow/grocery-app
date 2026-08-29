@@ -43,19 +43,28 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
     env.DB.prepare(
       "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'CRM Mgr', 'active', ?, ?)",
     ).bind(staffId, principal.userId, now, now),
-    env.DB.prepare("INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'CRM Role', ?)").bind(
+    env.DB.prepare(
+      "INSERT INTO role (id, code, name, created_at) VALUES (?, ?, 'CRM Role', ?)",
+    ).bind(roleId, `crm-${crypto.randomUUID().slice(0, 8)}`, now),
+    env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(
+      staffId,
       roleId,
-      `crm-${crypto.randomUUID().slice(0, 8)}`,
-      now,
     ),
-    env.DB.prepare("INSERT INTO staff_role (staff_id, role_id) VALUES (?, ?)").bind(staffId, roleId),
     env.DB.prepare(
       "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'global', NULL, NULL)",
     ).bind(crypto.randomUUID(), staffId),
-    env.DB.prepare("INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'customers.manage', 'crm', ?)").bind(crypto.randomUUID(), now),
-    env.DB.prepare("INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='customers.manage'").bind(roleId),
-    env.DB.prepare("INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'customers.read', 'crm', ?)").bind(crypto.randomUUID(), now),
-    env.DB.prepare("INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='customers.read'").bind(roleId),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'customers.manage', 'crm', ?)",
+    ).bind(crypto.randomUUID(), now),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='customers.manage'",
+    ).bind(roleId),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, 'customers.read', 'crm', ?)",
+    ).bind(crypto.randomUUID(), now),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code='customers.read'",
+    ).bind(roleId),
   ]);
   return { cookie: principal.cookie, staffId };
 }
@@ -66,19 +75,23 @@ async function seedCustomer(principal: { userId: string }): Promise<string> {
   const customerId = crypto.randomUUID();
   // The Better Auth user-create hook already provisions the principal
   // eagerly; reuse its id instead of inventing one.
-  const existing = await env.DB.prepare(
-    "SELECT id FROM customer_principal WHERE auth_user_id = ?",
-  ).bind(principal.userId).first<{ id: string }>();
+  const existing = await env.DB.prepare("SELECT id FROM customer_principal WHERE auth_user_id = ?")
+    .bind(principal.userId)
+    .first<{ id: string }>();
   let principalId = existing?.id ?? null;
   if (!principalId) {
     principalId = crypto.randomUUID();
     await env.DB.prepare(
       "INSERT INTO customer_principal (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
-    ).bind(principalId, principal.userId, now, now).run();
+    )
+      .bind(principalId, principal.userId, now, now)
+      .run();
   }
   await env.DB.prepare(
     "INSERT INTO customer (id, auth_user_id, principal_id, status, version, created_at, updated_at) VALUES (?, ?, ?, 'active', 1, ?, ?)",
-  ).bind(customerId, principal.userId, principalId, now, now).run();
+  )
+    .bind(customerId, principal.userId, principalId, now, now)
+    .run();
   return customerId;
 }
 
@@ -185,7 +198,9 @@ describe("customer crm commands", () => {
     });
     expect(queue.ok).toBe(true);
     if (!queue.ok) return;
-    expect(queue.value.items.some((item) => item.invitationId === created.value.invitationId)).toBe(true);
+    expect(queue.value.items.some((item) => item.invitationId === created.value.invitationId)).toBe(
+      true,
+    );
   });
 
   it("disables and restores commerce access through the principal gate", async () => {
@@ -231,7 +246,9 @@ describe("customer crm commands", () => {
     // A disabled principal cannot resolve commerce access.
     const disabledCustomerAuth = await env.DB.prepare(
       "SELECT cp.auth_user_id AS authUserId FROM customer c JOIN customer_principal cp ON cp.id = c.principal_id WHERE c.id = ?",
-    ).bind(customerId).first<{ authUserId: string }>();
+    )
+      .bind(customerId)
+      .first<{ authUserId: string }>();
     expect(disabledCustomerAuth?.authUserId).toBeTruthy();
 
     const restored = await core.changeCustomerAccess({
@@ -270,9 +287,9 @@ describe("customer crm commands", () => {
     if (!revoked.ok) return;
     expect(revoked.value.revokedSessionCount).toBeGreaterThan(0);
 
-    const after = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM session WHERE user_id = ?",
-    ).bind(principal.userId).first<{ count: number }>();
+    const after = await env.DB.prepare("SELECT COUNT(*) AS count FROM session WHERE user_id = ?")
+      .bind(principal.userId)
+      .first<{ count: number }>();
     expect(after?.count ?? 0).toBe(0);
   });
 
@@ -292,6 +309,26 @@ describe("customer crm commands", () => {
     if (!requested.ok) return;
     expect(requested.value).toMatchObject({ status: "SUBMITTED", requestType: "CLOSURE" });
     const privacyRequestId = requested.value.privacyRequestId;
+
+    const staleKey = `priv-${crypto.randomUUID()}`;
+    const stale = await core.applyPrivacyAction({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      privacyRequestId,
+      action: "VERIFY",
+      reason: "stale privacy action",
+      expectedVersion: 99,
+      idempotencyKey: staleKey,
+    });
+    expect(stale).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    const staleEvidence = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM audit_event WHERE action='PRIVACY.ACTION_APPLIED' AND aggregate_id=?) AS audit_count,
+         (SELECT status FROM idempotency_records WHERE scope='admin.privacy.action' AND idempotency_key=?) AS idempotency_status`,
+    )
+      .bind(privacyRequestId, staleKey)
+      .first<{ audit_count: number; idempotency_status: string | null }>();
+    expect(staleEvidence).toEqual({ audit_count: 0, idempotency_status: "FAILED" });
 
     const illegal = await core.applyPrivacyAction({
       requestId: crypto.randomUUID(),
@@ -340,6 +377,8 @@ describe("customer crm commands", () => {
     });
     expect(queue.ok).toBe(true);
     if (!queue.ok) return;
-    expect(queue.value.items.some((item) => item.privacyRequestId === requested.value!.privacyRequestId)).toBe(true);
+    expect(
+      queue.value.items.some((item) => item.privacyRequestId === requested.value!.privacyRequestId),
+    ).toBe(true);
   });
 });

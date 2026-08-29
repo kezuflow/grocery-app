@@ -38,20 +38,6 @@ async function readRoleRow(database: D1Database, roleId: string): Promise<RoleRo
     .first<RoleRow>();
 }
 
-function idempotencyComplete(
-  database: D1Database,
-  scope: string,
-  key: string,
-  reference: string,
-  now: number,
-): D1PreparedStatement {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(reference, now, scope, key);
-}
-
 function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
   return database
     .prepare(
@@ -102,27 +88,46 @@ export async function updateAdminRole(
     return failure("CONFLICT", "The update command is still processing", request.requestId);
   }
 
-  const updated = await deps.db
-    .prepare("UPDATE role SET name=?, description=?, version=version+1 WHERE id=? AND version=?")
-    .bind(name, description, request.roleId, request.expectedVersion)
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
+  const appliedGuard =
+    "EXISTS (SELECT 1 FROM role WHERE id=? AND name=? AND description=? AND version=?)";
+  const appliedGuardBinds = [request.roleId, name, description, request.expectedVersion + 1];
+  let batchResults: D1Result[];
+  try {
+    batchResults = await deps.db.batch([
+      deps.db
+        .prepare(
+          "UPDATE role SET name=?, description=?, version=version+1 WHERE id=? AND version=?",
+        )
+        .bind(name, description, request.roleId, request.expectedVersion),
+      auditEventStatement(
+        deps.db,
+        {
+          actorUserId: access.value.authUserId,
+          action: "ROLE.UPDATED",
+          resourceType: "role",
+          resourceId: request.roleId,
+          before: { name: current.name, description: current.description },
+          after: { name, description },
+          correlationId: request.requestId,
+          occurredAt: now,
+        },
+        { clause: appliedGuard, binds: appliedGuardBinds },
+      ),
+      deps.db
+        .prepare(
+          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
+        )
+        .bind(request.roleId, now, UPDATE_SCOPE, request.idempotencyKey, ...appliedGuardBinds),
+    ]);
+  } catch {
+    await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
+    return failure("CONFLICT", "The role update could not be recorded", request.requestId);
+  }
+  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
     await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
     return failure("STALE_VERSION", "Role changed; refresh before retrying", request.requestId);
   }
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "ROLE.UPDATED",
-      resourceType: "role",
-      resourceId: request.roleId,
-      before: { name: current.name, description: current.description },
-      after: { name, description },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-    idempotencyComplete(deps.db, UPDATE_SCOPE, request.idempotencyKey, request.roleId, now),
-  ]);
   return readRoleDetail(deps, request.roleId, request.requestId);
 }
 

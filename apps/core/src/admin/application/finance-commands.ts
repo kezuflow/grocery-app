@@ -88,6 +88,22 @@ export async function cancelAdminOrder(
               : { ok: false, refundState: "REJECTED" as const };
           }
         : undefined,
+      evidence: (guard) => [
+        auditEventStatement(
+          deps.db,
+          {
+            actorUserId: access.value.authUserId,
+            action: "ORDER.CANCELED",
+            resourceType: "order",
+            resourceId: request.orderId,
+            reason,
+            details: { outcome: guard.outcome, resolution: request.resolution ?? null },
+            correlationId: request.requestId,
+            occurredAt: Date.now(),
+          },
+          guard,
+        ),
+      ],
     },
   );
   if (!result.ok) {
@@ -109,19 +125,6 @@ export async function cancelAdminOrder(
   if (result.value.state === "UNCHANGED") {
     return failure("VALIDATION_FAILED", "Order is not in a cancellable state", request.requestId);
   }
-
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "ORDER.CANCELED",
-      resourceType: "order",
-      resourceId: request.orderId,
-      reason,
-      details: { outcome: result.value.state, resolution: request.resolution ?? null },
-      correlationId: request.requestId,
-      occurredAt: Date.now(),
-    }),
-  ]);
 
   const row = await deps.db
     .prepare(
@@ -563,15 +566,46 @@ export async function changeAdminMembership(
     expectedVersion: request.expectedVersion,
     requestId: request.requestId,
   };
+  const membershipAuditAction =
+    action === "PAUSE"
+      ? "MEMBERSHIP.PAUSED"
+      : action === "RESUME"
+        ? "MEMBERSHIP.RESUMED"
+        : "MEMBERSHIP.CANCELED";
+  const transitionOptions = {
+    actorType: "ADMIN" as const,
+    evidence: (guard: { clause: string; binds: ReadonlyArray<unknown> }) => [
+      auditEventStatement(
+        deps.db,
+        {
+          actorUserId: access.value.authUserId,
+          action: membershipAuditAction,
+          resourceType: "subscription",
+          resourceId: request.subscriptionId,
+          reason,
+          after: {
+            state: action === "PAUSE" ? "PAUSED" : action === "RESUME" ? "ACTIVE" : "CANCELED",
+          },
+          correlationId: request.requestId,
+          occurredAt: Date.now(),
+        },
+        guard,
+      ),
+    ],
+  };
   const result =
     action === "PAUSE"
-      ? await pauseSubscription(deps.db, command)
+      ? await pauseSubscription(deps.db, command, transitionOptions)
       : action === "RESUME"
-        ? await resumeSubscription(deps.db, command)
-        : await cancelSubscription(deps.db, {
-            ...command,
-            timing: request.timing ?? "IMMEDIATE",
-          });
+        ? await resumeSubscription(deps.db, command, transitionOptions)
+        : await cancelSubscription(
+            deps.db,
+            {
+              ...command,
+              timing: request.timing ?? "IMMEDIATE",
+            },
+            transitionOptions,
+          );
   if (!result.ok) {
     const allowed: ReadonlyArray<AppErrorCode> = [
       "NOT_FOUND",
@@ -589,24 +623,6 @@ export async function changeAdminMembership(
     };
   }
 
-  const membershipAuditAction =
-    action === "PAUSE"
-      ? "MEMBERSHIP.PAUSED"
-      : action === "RESUME"
-        ? "MEMBERSHIP.RESUMED"
-        : "MEMBERSHIP.CANCELED";
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: membershipAuditAction,
-      resourceType: "subscription",
-      resourceId: request.subscriptionId,
-      reason,
-      after: { state: result.value.state },
-      correlationId: request.requestId,
-      occurredAt: Date.now(),
-    }),
-  ]);
   const membership = await deps.db
     .prepare(
       `SELECT s.id AS subscriptionId, u.email AS customerEmail, s.status AS state,

@@ -39,6 +39,11 @@ export async function cancelOrder(
       reason: string;
       idempotencyKey: string;
     }) => Promise<{ ok: boolean; refundState?: "PROCESSING" | "REJECTED" }>;
+    evidence?: (guard: {
+      clause: string;
+      binds: ReadonlyArray<unknown>;
+      outcome: CancelOrderOutcome["state"];
+    }) => ReadonlyArray<D1PreparedStatement>;
   },
 ): Promise<
   | { ok: true; value: CancelOrderOutcome; requestId: string }
@@ -111,9 +116,21 @@ export async function cancelOrder(
 
     if (!reaction) {
       // Pre-payment abandonment: nothing financial to unwind.
-      await transitionOrderRow(database, command.orderId, order.status, "CANCELED", now);
-      await releaseOperationalEffects(database, command.orderId, now);
-      await completeScope(database, scope, command.idempotencyKey, command.orderId);
+      const guard = orderTransitionGuard(command.orderId, "CANCELED", command.expectedVersion + 1);
+      const results = await database.batch([
+        transitionOrderStatement(
+          database,
+          command.orderId,
+          order.status,
+          "CANCELED",
+          command.expectedVersion,
+        ),
+        ...releaseOperationalEffectStatements(database, command.orderId),
+        ...(ports?.evidence?.({ ...guard, outcome: "CANCELED" }) ?? []),
+        completeScopeStatement(database, scope, command.idempotencyKey, command.orderId, guard),
+      ]);
+      if ((results[0]?.meta?.changes ?? 0) !== 1)
+        throw httpError("STALE_VERSION", "Order changed; refresh");
       return { ok: true, value: { state: "CANCELED" }, requestId: command.requestId };
     }
 
@@ -128,14 +145,23 @@ export async function cancelOrder(
         "Post-cutoff cancellation requires manual review",
       );
 
-    const requested = await transitionOrderRow(
-      database,
+    const guard = orderTransitionGuard(
       command.orderId,
-      order.status,
       "CANCELLATION_REQUESTED",
-      now,
+      command.expectedVersion + 1,
     );
-    if (!requested) throw httpError("STALE_VERSION", "Order changed; refresh");
+    const results = await database.batch([
+      transitionOrderStatement(
+        database,
+        command.orderId,
+        order.status,
+        "CANCELLATION_REQUESTED",
+        command.expectedVersion,
+      ),
+      ...(ports?.evidence?.({ ...guard, outcome: "CANCELLATION_REQUESTED" }) ?? []),
+    ]);
+    if ((results[0]?.meta?.changes ?? 0) !== 1)
+      throw httpError("STALE_VERSION", "Order changed; refresh");
 
     let refundState: "PROCESSING" | "REJECTED" | null = null;
     if (ports?.requestRefund) {
@@ -197,18 +223,25 @@ export async function applyOrderRefundObservation(
   return { applied };
 }
 
-async function transitionOrderRow(
+function transitionOrderStatement(
   database: D1Database,
   orderId: string,
   fromStatus: string,
   toStatus: string,
-  now: number,
-): Promise<boolean> {
+  expectedVersion: number,
+): D1PreparedStatement {
   return database
-    .prepare("UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=?")
-    .bind(toStatus, orderId, fromStatus)
-    .run()
-    .then((result) => (result.meta?.changes ?? 0) === 1);
+    .prepare(
+      "UPDATE grocery_order SET status=?, version=version+1 WHERE id=? AND status=? AND version=?",
+    )
+    .bind(toStatus, orderId, fromStatus, expectedVersion);
+}
+
+function orderTransitionGuard(orderId: string, status: string, version: number) {
+  return {
+    clause: "EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
+    binds: [orderId, status, version] as const,
+  };
 }
 
 async function releaseOperationalEffects(
@@ -216,7 +249,15 @@ async function releaseOperationalEffects(
   orderId: string,
   now: number,
 ): Promise<void> {
-  await database.batch([
+  await database.batch(releaseOperationalEffectStatements(database, orderId));
+  void now;
+}
+
+function releaseOperationalEffectStatements(
+  database: D1Database,
+  orderId: string,
+): D1PreparedStatement[] {
+  return [
     database
       .prepare(
         "UPDATE inventory_balance SET reserved=MAX(0,reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED')), version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND r.location_id=inventory_balance.location_id)",
@@ -232,8 +273,7 @@ async function releaseOperationalEffects(
         "UPDATE committed_demand SET status='CANCELED', version=version+1 WHERE order_id=? AND status='OPEN'",
       )
       .bind(orderId),
-  ]);
-  void now;
+  ];
 }
 
 function completeScope(
@@ -248,6 +288,21 @@ function completeScope(
     )
     .bind(reference, Date.now(), scope, key)
     .run();
+}
+
+function completeScopeStatement(
+  database: D1Database,
+  scope: string,
+  key: string,
+  reference: string,
+  guard: { clause: string; binds: ReadonlyArray<unknown> },
+): D1PreparedStatement {
+  return database
+    .prepare(
+      `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+       WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard.clause}`,
+    )
+    .bind(reference, Date.now(), scope, key, ...guard.binds);
 }
 
 function httpError(code: string, message: string): Error & { code: string } {

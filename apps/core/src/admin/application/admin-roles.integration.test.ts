@@ -249,6 +249,63 @@ describe("role administration", () => {
     expect(updateArchived).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
+  it("rolls back role updates and archives when required audit evidence fails", async () => {
+    const manager = await seedManager();
+    const created = await core.createAdminRole({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      code: `atomic-${crypto.randomUUID().slice(0, 8)}`,
+      name: "Atomic Role",
+      description: "before",
+      capabilityCodes: ["audit.read"],
+      idempotencyKey: `role-${crypto.randomUUID()}`,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await env.DB.prepare(
+      `CREATE TRIGGER fail_role_update_audit
+       BEFORE INSERT ON audit_event
+       WHEN NEW.action IN ('ROLE.UPDATED', 'ROLE.ARCHIVED')
+       BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END`,
+    ).run();
+
+    try {
+      await core.updateAdminRole({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        roleId: created.value.roleId,
+        name: "Changed Role",
+        description: "after",
+        expectedVersion: 1,
+        idempotencyKey: `role-${crypto.randomUUID()}`,
+      });
+    } catch {
+      // The observable invariant is rollback, independent of RPC error transport.
+    }
+    let row = await env.DB.prepare("SELECT name, status, version FROM role WHERE id=?")
+      .bind(created.value.roleId)
+      .first<{ name: string; status: string; version: number }>();
+    expect(row).toEqual({ name: "Atomic Role", status: "ACTIVE", version: 1 });
+
+    try {
+      await core.archiveAdminRole({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        roleId: created.value.roleId,
+        reason: "atomic archive",
+        expectedVersion: 1,
+        idempotencyKey: `arch-${crypto.randomUUID()}`,
+      });
+    } catch {
+      // The observable invariant is rollback, independent of RPC error transport.
+    }
+    row = await env.DB.prepare("SELECT name, status, version FROM role WHERE id=?")
+      .bind(created.value.roleId)
+      .first<{ name: string; status: string; version: number }>();
+    expect(row).toEqual({ name: "Atomic Role", status: "ACTIVE", version: 1 });
+  });
+
   it("lists only canonical capability definitions", async () => {
     const manager = await seedManager();
     const result = await core.listCapabilityDefinitions({

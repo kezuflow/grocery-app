@@ -13,10 +13,16 @@ import type {
 } from "@freshmarkets/contracts";
 import { manageableBenefitTypes } from "@freshmarkets/contracts";
 import { claimCommandIdempotency } from "../../idempotency";
-import { auditEventStatement, appendAuditEvent } from "../../audit/application/append-audit-event";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { log } from "../../observability";
 import { readPromotionDetail } from "./promotion-reads";
-import { resolvePromotionAdministrationAccess, boundListLimit, decodeStaffCursor, encodeStaffCursor, type PromotionAdministrationDeps } from "./promotion-administration-access";
+import {
+  resolvePromotionAdministrationAccess,
+  boundListLimit,
+  decodeStaffCursor,
+  encodeStaffCursor,
+  type PromotionAdministrationDeps,
+} from "./promotion-administration-access";
 
 const CREATE_SCOPE = "admin.promotions.create";
 const UPDATE_SCOPE = "admin.promotions.update";
@@ -84,38 +90,60 @@ export async function createAdminPromotion(
   let percent: number | null = null;
   if (request.benefitType === "ORDER_FIXED_DISCOUNT") {
     if (!Number.isInteger(request.discountMinor) || (request.discountMinor ?? 0) <= 0) {
-      return failure("VALIDATION_FAILED", "A positive discountMinor is required", request.requestId);
+      return failure(
+        "VALIDATION_FAILED",
+        "A positive discountMinor is required",
+        request.requestId,
+      );
     }
     discountMinor = request.discountMinor ?? null;
   } else {
-    if (!Number.isInteger(request.percent) || (request.percent ?? 0) < 1 || (request.percent ?? 0) > 100) {
+    if (
+      !Number.isInteger(request.percent) ||
+      (request.percent ?? 0) < 1 ||
+      (request.percent ?? 0) > 100
+    ) {
       return failure("VALIDATION_FAILED", "percent must be an integer 1-100", request.requestId);
     }
     percent = request.percent ?? null;
   }
   if (!Number.isInteger(request.minimumMinor) || request.minimumMinor < 0) {
-    return failure("VALIDATION_FAILED", "minimumMinor must be a non-negative integer", request.requestId);
+    return failure(
+      "VALIDATION_FAILED",
+      "minimumMinor must be a non-negative integer",
+      request.requestId,
+    );
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, CREATE_SCOPE, request.idempotencyKey, {
-    code,
-    name,
-    description: request.description.trim(),
-    benefitType: request.benefitType,
-    discountMinor,
-    percent,
-    minimumMinor: request.minimumMinor,
-    startsAt: request.startsAt,
-    endsAt: request.endsAt ?? null,
-    globalUsageLimit: request.globalUsageLimit ?? null,
-    perCustomerUsageLimit: request.perCustomerUsageLimit ?? null,
-    automatic: request.automatic === true,
-    priority: request.priority ?? 0,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    CREATE_SCOPE,
+    request.idempotencyKey,
+    {
+      code,
+      name,
+      description: request.description.trim(),
+      benefitType: request.benefitType,
+      discountMinor,
+      percent,
+      minimumMinor: request.minimumMinor,
+      startsAt: request.startsAt,
+      endsAt: request.endsAt ?? null,
+      globalUsageLimit: request.globalUsageLimit ?? null,
+      perCustomerUsageLimit: request.perCustomerUsageLimit ?? null,
+      automatic: request.automatic === true,
+      priority: request.priority ?? 0,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure("IDEMPOTENCY_CONFLICT", "Idempotency key was used with a different request", request.requestId);
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
     }
     if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
       return readPromotionDetail(deps, claim.existing.resultReference, request.requestId);
@@ -222,24 +250,38 @@ export async function updateAdminPromotion(
     return failure("VALIDATION_FAILED", "endsAt must not precede startsAt", request.requestId);
   }
   if (!Number.isInteger(request.minimumMinor) || request.minimumMinor < 0) {
-    return failure("VALIDATION_FAILED", "minimumMinor must be a non-negative integer", request.requestId);
+    return failure(
+      "VALIDATION_FAILED",
+      "minimumMinor must be a non-negative integer",
+      request.requestId,
+    );
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, UPDATE_SCOPE, request.idempotencyKey, {
-    promotionId: request.promotionId,
-    name,
-    description: request.description.trim(),
-    discountMinor: request.discountMinor ?? null,
-    percent: request.percent ?? null,
-    minimumMinor: request.minimumMinor,
-    startsAt: request.startsAt,
-    endsAt: request.endsAt ?? null,
-    expectedVersion: request.expectedVersion,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    UPDATE_SCOPE,
+    request.idempotencyKey,
+    {
+      promotionId: request.promotionId,
+      name,
+      description: request.description.trim(),
+      discountMinor: request.discountMinor ?? null,
+      percent: request.percent ?? null,
+      minimumMinor: request.minimumMinor,
+      startsAt: request.startsAt,
+      endsAt: request.endsAt ?? null,
+      expectedVersion: request.expectedVersion,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure("IDEMPOTENCY_CONFLICT", "Idempotency key was used with a different request", request.requestId);
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
     }
     if (claim.existing?.status === "SUCCEEDED") {
       return readPromotionDetail(deps, request.promotionId, request.requestId);
@@ -266,7 +308,11 @@ export async function updateAdminPromotion(
     .run();
   if ((updated.meta?.changes ?? 0) !== 1) {
     await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
-    return failure("STALE_VERSION", "Promotion changed; refresh before retrying", request.requestId);
+    return failure(
+      "STALE_VERSION",
+      "Promotion changed; refresh before retrying",
+      request.requestId,
+    );
   }
   await deps.db.batch([
     auditEventStatement(deps.db, {
@@ -282,7 +328,10 @@ export async function updateAdminPromotion(
   return readPromotionDetail(deps, request.promotionId, request.requestId);
 }
 
-const STATUS_TRANSITIONS: Record<"ACTIVATE" | "DEACTIVATE" | "ARCHIVE", { from: string[]; to: string }> = {
+const STATUS_TRANSITIONS: Record<
+  "ACTIVATE" | "DEACTIVATE" | "ARCHIVE",
+  { from: string[]; to: string }
+> = {
   ACTIVATE: { from: ["DRAFT", "INACTIVE"], to: "ACTIVE" },
   DEACTIVATE: { from: ["ACTIVE"], to: "INACTIVE" },
   ARCHIVE: { from: ["DRAFT", "INACTIVE"], to: "ARCHIVED" },
@@ -315,15 +364,25 @@ export async function changeAdminPromotionStatus(
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, STATUS_SCOPE, request.idempotencyKey, {
-    promotionId: request.promotionId,
-    action: request.action,
-    reason,
-    expectedVersion: request.expectedVersion,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    STATUS_SCOPE,
+    request.idempotencyKey,
+    {
+      promotionId: request.promotionId,
+      action: request.action,
+      reason,
+      expectedVersion: request.expectedVersion,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure("IDEMPOTENCY_CONFLICT", "Idempotency key was used with a different request", request.requestId);
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
     }
     if (claim.existing?.status === "SUCCEEDED") {
       return readPromotionDetail(deps, request.promotionId, request.requestId);
@@ -363,7 +422,9 @@ export async function changeAdminPromotionStatus(
         )
         .bind(request.promotionId, now, STATUS_SCOPE, request.idempotencyKey, ...guardBinds),
       deps.db
-        .prepare("UPDATE promotion SET status=?, updated_at=?, version=version+1 WHERE id=? AND status=? AND version=?")
+        .prepare(
+          "UPDATE promotion SET status=?, updated_at=?, version=version+1 WHERE id=? AND status=? AND version=?",
+        )
         .bind(transition.to, now, request.promotionId, current.status, request.expectedVersion),
     ]);
   } catch (error) {
@@ -379,7 +440,11 @@ export async function changeAdminPromotionStatus(
     .bind(request.promotionId)
     .first<{ version: number }>();
   if (after?.version !== request.expectedVersion + 1) {
-    return failure("STALE_VERSION", "Promotion changed; refresh before retrying", request.requestId);
+    return failure(
+      "STALE_VERSION",
+      "Promotion changed; refresh before retrying",
+      request.requestId,
+    );
   }
   return readPromotionDetail(deps, request.promotionId, request.requestId);
 }
@@ -392,7 +457,11 @@ export async function grantAdminPromotion(
   const access = await resolvePromotionAdministrationAccess(deps, request, "promotions.manage");
   if (!access.ok) return access;
   if (!Number.isInteger(request.maxRedemptions) || request.maxRedemptions < 1) {
-    return failure("VALIDATION_FAILED", "maxRedemptions must be a positive integer", request.requestId);
+    return failure(
+      "VALIDATION_FAILED",
+      "maxRedemptions must be a positive integer",
+      request.requestId,
+    );
   }
 
   const promotion = await deps.db
@@ -410,14 +479,24 @@ export async function grantAdminPromotion(
   if (!customer) return failure("VALIDATION_FAILED", "Unknown customer", request.requestId);
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, GRANT_SCOPE, request.idempotencyKey, {
-    promotionId: request.promotionId,
-    customerId: request.customerId,
-    maxRedemptions: request.maxRedemptions,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    GRANT_SCOPE,
+    request.idempotencyKey,
+    {
+      promotionId: request.promotionId,
+      customerId: request.customerId,
+      maxRedemptions: request.maxRedemptions,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure("IDEMPOTENCY_CONFLICT", "Idempotency key was used with a different request", request.requestId);
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
     }
     if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
       const replay = await deps.db
@@ -425,7 +504,14 @@ export async function grantAdminPromotion(
           "SELECT id, customer_id, benefit_type, max_redemptions, status, created_at FROM promotion_grant WHERE id = ?",
         )
         .bind(claim.existing.resultReference)
-        .first<{ id: string; customer_id: string; benefit_type: ManageableBenefitType; max_redemptions: number; status: string; created_at: number }>();
+        .first<{
+          id: string;
+          customer_id: string;
+          benefit_type: ManageableBenefitType;
+          max_redemptions: number;
+          status: string;
+          created_at: number;
+        }>();
       if (replay) {
         return {
           ok: true,
@@ -446,44 +532,45 @@ export async function grantAdminPromotion(
   }
 
   const grantId = crypto.randomUUID();
-  const inserted = await deps.db
-    .prepare(
-      "INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, customer_id, parameters_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?)",
-    )
-    .bind(
-      grantId,
-      promotion.code,
-      promotion.benefit_type,
-      request.maxRedemptions,
-      request.customerId,
-      JSON.stringify({ promotionId: request.promotionId, customerId: request.customerId }),
-      now,
-      now,
-    )
-    .run();
-  if ((inserted.meta?.changes ?? 0) !== 1) {
-    await idempotencyFailed(deps.db, GRANT_SCOPE, request.idempotencyKey);
-    return failure("CONFLICT", "The grant could not be created", request.requestId);
-  }
-  const appended = await appendAuditEvent(deps.db, {
-    actorUserId: access.value.authUserId,
-    action: "PROMOTION.GRANTED",
-    resourceType: "promotion_grant",
-    resourceId: grantId,
-    details: { promotionId: request.promotionId, customerId: request.customerId },
-    correlationId: request.requestId,
-    occurredAt: now,
-  });
-  if (!appended) {
+  let batchResults: D1Result[];
+  try {
+    batchResults = await deps.db.batch([
+      deps.db
+        .prepare(
+          "INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, customer_id, parameters_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?)",
+        )
+        .bind(
+          grantId,
+          promotion.code,
+          promotion.benefit_type,
+          request.maxRedemptions,
+          request.customerId,
+          JSON.stringify({ promotionId: request.promotionId, customerId: request.customerId }),
+          now,
+          now,
+        ),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "PROMOTION.GRANTED",
+        resourceType: "promotion_grant",
+        resourceId: grantId,
+        details: { promotionId: request.promotionId, customerId: request.customerId },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      idempotencyComplete(deps.db, GRANT_SCOPE, request.idempotencyKey, grantId, now),
+    ]);
+  } catch (error) {
+    log("error", "admin.promotions.grant_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
     await idempotencyFailed(deps.db, GRANT_SCOPE, request.idempotencyKey);
     return failure("CONFLICT", "The grant could not be recorded", request.requestId);
   }
-  await deps.db
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(grantId, now, GRANT_SCOPE, request.idempotencyKey)
-    .run();
+  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
+    await idempotencyFailed(deps.db, GRANT_SCOPE, request.idempotencyKey);
+    return failure("CONFLICT", "The grant could not be created", request.requestId);
+  }
 
   return {
     ok: true,
@@ -516,7 +603,11 @@ export async function listPromotionGrants(
 
   const limit = boundListLimit(request.limit);
   if (limit === "invalid") {
-    return failure("VALIDATION_FAILED", "limit must be an integer between 1 and 100", request.requestId);
+    return failure(
+      "VALIDATION_FAILED",
+      "limit must be an integer between 1 and 100",
+      request.requestId,
+    );
   }
   let cursor: { createdAt: number; id: string } | null = null;
   if (request.cursor !== undefined) {
@@ -539,7 +630,14 @@ export async function listPromotionGrants(
        ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)
-    .all<{ id: string; customer_id: string; benefit_type: ManageableBenefitType; max_redemptions: number; status: string; created_at: number }>();
+    .all<{
+      id: string;
+      customer_id: string;
+      benefit_type: ManageableBenefitType;
+      max_redemptions: number;
+      status: string;
+      created_at: number;
+    }>();
   const hasMore = rows.results.length > limit;
   const pageRows = rows.results.slice(0, limit);
   const items = pageRows.map((row) => ({

@@ -71,33 +71,45 @@ export async function archiveAdminRole(
     return failure("VALIDATION_FAILED", "Role is already archived", request.requestId);
   }
 
-  const updated = await deps.db
-    .prepare(
-      "UPDATE role SET status='ARCHIVED', version=version+1 WHERE id=? AND status='ACTIVE' AND version=?",
-    )
-    .bind(request.roleId, request.expectedVersion)
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
+  const appliedGuard = "EXISTS (SELECT 1 FROM role WHERE id=? AND status='ARCHIVED' AND version=?)";
+  const appliedGuardBinds = [request.roleId, request.expectedVersion + 1];
+  let batchResults: D1Result[];
+  try {
+    batchResults = await deps.db.batch([
+      deps.db
+        .prepare(
+          "UPDATE role SET status='ARCHIVED', version=version+1 WHERE id=? AND status='ACTIVE' AND version=?",
+        )
+        .bind(request.roleId, request.expectedVersion),
+      auditEventStatement(
+        deps.db,
+        {
+          actorUserId: access.value.authUserId,
+          action: "ROLE.ARCHIVED",
+          resourceType: "role",
+          resourceId: request.roleId,
+          reason,
+          before: { status: "ACTIVE" },
+          after: { status: "ARCHIVED" },
+          correlationId: request.requestId,
+          occurredAt: now,
+        },
+        { clause: appliedGuard, binds: appliedGuardBinds },
+      ),
+      deps.db
+        .prepare(
+          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
+        )
+        .bind(request.roleId, now, SCOPE, request.idempotencyKey, ...appliedGuardBinds),
+    ]);
+  } catch {
+    await idempotencyFailed();
+    return failure("CONFLICT", "The role archive could not be recorded", request.requestId);
+  }
+  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
     await idempotencyFailed();
     return failure("STALE_VERSION", "Role changed; refresh before retrying", request.requestId);
   }
-  await deps.db.batch([
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: "ROLE.ARCHIVED",
-      resourceType: "role",
-      resourceId: request.roleId,
-      reason,
-      before: { status: "ACTIVE" },
-      after: { status: "ARCHIVED" },
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-    deps.db
-      .prepare(
-        "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-      )
-      .bind(request.roleId, now, SCOPE, request.idempotencyKey),
-  ]);
   return readRoleDetail(deps, request.roleId, request.requestId);
 }

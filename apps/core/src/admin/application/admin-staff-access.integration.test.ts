@@ -363,6 +363,40 @@ describe("staff administration commands", () => {
     expect(JSON.parse(auditRow!.after_json)).toEqual({ displayName: "After Name" });
   });
 
+  it("rolls back a staff rename when its required audit cannot be recorded", async () => {
+    const manager = await seedManager();
+    const target = await seedStaff({
+      principal: await signUp(),
+      permissionCodes: [],
+      scope: { kind: "global" },
+      displayName: "Atomic Before",
+    });
+    await env.DB.prepare(
+      `CREATE TRIGGER fail_staff_update_audit
+       BEFORE INSERT ON audit_event
+       WHEN NEW.action = 'STAFF.UPDATED'
+       BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END`,
+    ).run();
+
+    try {
+      await core.updateAdminStaff({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        staffId: target.staffId,
+        displayName: "Atomic After",
+        expectedVersion: 1,
+        idempotencyKey: `upd-${crypto.randomUUID()}`,
+      });
+    } catch {
+      // The observable invariant is rollback, independent of RPC error transport.
+    }
+
+    const row = await env.DB.prepare("SELECT display_name, version FROM staff_identity WHERE id=?")
+      .bind(target.staffId)
+      .first<{ display_name: string; version: number }>();
+    expect(row).toEqual({ display_name: "Atomic Before", version: 1 });
+  });
+
   it("changes access both directions with reasons and rejects same-state changes", async () => {
     const manager = await seedManager();
     const target = await seedStaff({
@@ -407,6 +441,40 @@ describe("staff administration commands", () => {
     expect(activated.ok).toBe(true);
     if (!activated.ok) return;
     expect(activated.value.status).toBe("active");
+  });
+
+  it("rolls back staff access changes when required audit evidence fails", async () => {
+    const manager = await seedManager();
+    const target = await seedStaff({
+      principal: await signUp(),
+      permissionCodes: [],
+      scope: { kind: "global" },
+    });
+    await env.DB.prepare(
+      `CREATE TRIGGER fail_staff_access_audit
+       BEFORE INSERT ON audit_event
+       WHEN NEW.action = 'STAFF.ACCESS_CHANGED'
+       BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END`,
+    ).run();
+
+    try {
+      await core.changeAdminStaffAccess({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        staffId: target.staffId,
+        action: "SUSPEND",
+        reason: "atomic access",
+        expectedVersion: 1,
+        idempotencyKey: `acc-${crypto.randomUUID()}`,
+      });
+    } catch {
+      // The observable invariant is rollback, independent of RPC error transport.
+    }
+
+    const row = await env.DB.prepare("SELECT status, version FROM staff_identity WHERE id=?")
+      .bind(target.staffId)
+      .first<{ status: string; version: number }>();
+    expect(row).toEqual({ status: "active", version: 1 });
   });
 
   it("replaces roles atomically, rejects unknown and archived roles, and audits", async () => {
@@ -565,5 +633,41 @@ describe("staff administration commands", () => {
       "SELECT reason FROM audit_event WHERE action = 'STAFF.SESSIONS_REVOKED' ORDER BY occurred_at DESC LIMIT 1",
     ).first<{ reason: string | null }>();
     expect(auditRow?.reason).toBe("offboarding check");
+  });
+
+  it("keeps staff sessions when revocation audit cannot be recorded", async () => {
+    const manager = await seedManager();
+    const targetPrincipal = await signUp();
+    const target = await seedStaff({
+      principal: targetPrincipal,
+      permissionCodes: [],
+      scope: { kind: "global" },
+    });
+    const before = await env.DB.prepare("SELECT COUNT(*) AS count FROM session WHERE user_id=?")
+      .bind(targetPrincipal.userId)
+      .first<{ count: number }>();
+    await env.DB.prepare(
+      `CREATE TRIGGER fail_staff_session_audit
+       BEFORE INSERT ON audit_event
+       WHEN NEW.action = 'STAFF.SESSIONS_REVOKED'
+       BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END`,
+    ).run();
+
+    try {
+      await core.revokeAdminStaffSessions({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        staffId: target.staffId,
+        reason: "atomic revocation",
+        idempotencyKey: `ses-${crypto.randomUUID()}`,
+      });
+    } catch {
+      // The observable invariant is rollback, independent of RPC error transport.
+    }
+
+    const after = await env.DB.prepare("SELECT COUNT(*) AS count FROM session WHERE user_id=?")
+      .bind(targetPrincipal.userId)
+      .first<{ count: number }>();
+    expect(after?.count).toBe(before?.count);
   });
 });

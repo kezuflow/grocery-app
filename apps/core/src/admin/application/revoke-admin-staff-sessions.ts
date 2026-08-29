@@ -5,7 +5,7 @@ import type {
   SessionRevocationResult,
 } from "@freshmarkets/contracts";
 import { claimCommandIdempotency, findIdempotencyRecord } from "../../idempotency";
-import { appendAuditEvent } from "../../audit/application/append-audit-event";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
@@ -65,13 +65,30 @@ export async function revokeAdminStaffSessions(
     return failure("CONFLICT", "The revocation command is still processing", request.requestId);
   }
 
-  let revokedSessionCount = 0;
+  const sessionCount = await deps.db
+    .prepare("SELECT COUNT(*) AS count FROM session WHERE user_id=?")
+    .bind(target.auth_user_id)
+    .first<{ count: number }>();
+  const revokedSessionCount = sessionCount?.count ?? 0;
   try {
-    const deleted = await deps.db
-      .prepare("DELETE FROM session WHERE user_id = ?")
-      .bind(target.auth_user_id)
-      .run();
-    revokedSessionCount = deleted.meta?.changes ?? 0;
+    await deps.db.batch([
+      deps.db.prepare("DELETE FROM session WHERE user_id = ?").bind(target.auth_user_id),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "STAFF.SESSIONS_REVOKED",
+        resourceType: "staff_identity",
+        resourceId: request.staffId,
+        reason,
+        details: { revokedSessionCount },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      deps.db
+        .prepare(
+          "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+        )
+        .bind(String(revokedSessionCount), now, SCOPE, request.idempotencyKey),
+    ]);
   } catch (error) {
     await deps.db
       .prepare(
@@ -82,23 +99,6 @@ export async function revokeAdminStaffSessions(
     const message = error instanceof Error ? error.message : "session revocation failed";
     return failure("INTERNAL_ERROR", message, request.requestId);
   }
-
-  await appendAuditEvent(deps.db, {
-    actorUserId: access.value.authUserId,
-    action: "STAFF.SESSIONS_REVOKED",
-    resourceType: "staff_identity",
-    resourceId: request.staffId,
-    reason,
-    details: { revokedSessionCount },
-    correlationId: request.requestId,
-    occurredAt: now,
-  });
-  await deps.db
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(String(revokedSessionCount), now, SCOPE, request.idempotencyKey)
-    .run();
 
   return { ok: true, value: { revokedSessionCount }, requestId: request.requestId };
 }

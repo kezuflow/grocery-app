@@ -35,13 +35,25 @@ const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 async function readCustomerIdentity(
   database: D1Database,
   customerId: string,
-): Promise<{ id: string; principal_id: string; auth_user_id: string; version: number; principalStatus: string } | null> {
+): Promise<{
+  id: string;
+  principal_id: string;
+  auth_user_id: string;
+  version: number;
+  principalStatus: string;
+} | null> {
   const customer = await database
     .prepare(
       "SELECT c.id, c.principal_id, c.auth_user_id, c.version, cp.status AS principalStatus FROM customer c JOIN customer_principal cp ON cp.id = c.principal_id WHERE c.id = ?",
     )
     .bind(customerId)
-    .first<{ id: string; principal_id: string; auth_user_id: string; version: number; principalStatus: string }>();
+    .first<{
+      id: string;
+      principal_id: string;
+      auth_user_id: string;
+      version: number;
+      principalStatus: string;
+    }>();
   return customer ?? null;
 }
 
@@ -158,7 +170,13 @@ export async function inviteCustomer(
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, INVITE_SCOPE, request.idempotencyKey, { email });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    INVITE_SCOPE,
+    request.idempotencyKey,
+    { email },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
       return {
@@ -172,14 +190,20 @@ export async function inviteCustomer(
     }
     if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
       const row = await deps.db
-        .prepare("SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at FROM customer_invitation WHERE id = ?")
+        .prepare(
+          "SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at FROM customer_invitation WHERE id = ?",
+        )
         .bind(claim.existing.resultReference)
         .first<InvitationRow>();
       if (row) return { ok: true, value: toInvitationView(row), requestId: request.requestId };
     }
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The invite command is still processing", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The invite command is still processing",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -190,7 +214,15 @@ export async function inviteCustomer(
         .prepare(
           "INSERT INTO customer_invitation (id, email_normalized, status, invited_by_staff_id, expires_at, version, idempotency_key, created_at, updated_at) VALUES (?, ?, 'PENDING', ?, ?, 1, ?, ?, ?)",
         )
-        .bind(invitationId, email, access.value.staffId, now + INVITATION_TTL_MS, request.idempotencyKey, now, now),
+        .bind(
+          invitationId,
+          email,
+          access.value.staffId,
+          now + INVITATION_TTL_MS,
+          request.idempotencyKey,
+          now,
+          now,
+        ),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "CUSTOMER.INVITED",
@@ -211,23 +243,37 @@ export async function inviteCustomer(
     if (message.includes("UNIQUE")) {
       return {
         ok: false,
-        error: { code: "CONFLICT", message: "A pending invitation for this email already exists", requestId: request.requestId },
+        error: {
+          code: "CONFLICT",
+          message: "A pending invitation for this email already exists",
+          requestId: request.requestId,
+        },
       };
     }
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The invitation could not be created", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The invitation could not be created",
+        requestId: request.requestId,
+      },
     };
   }
 
   const created = await deps.db
-    .prepare("SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at FROM customer_invitation WHERE id = ?")
+    .prepare(
+      "SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at FROM customer_invitation WHERE id = ?",
+    )
     .bind(invitationId)
     .first<InvitationRow>();
   if (!created) {
     return {
       ok: false,
-      error: { code: "INTERNAL_ERROR", message: "The invitation could not be read back", requestId: request.requestId },
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "The invitation could not be read back",
+        requestId: request.requestId,
+      },
     };
   }
   return { ok: true, value: toInvitationView(created), requestId: request.requestId };
@@ -244,7 +290,11 @@ export async function changeCustomerAccess(
   if (reason === "") {
     return {
       ok: false,
-      error: { code: "VALIDATION_FAILED", message: "A reason is required", requestId: request.requestId },
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "A reason is required",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -268,12 +318,18 @@ export async function changeCustomerAccess(
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, ACCESS_SCOPE, request.idempotencyKey, {
-    customerId: request.customerId,
-    action: request.action,
-    reason,
-    expectedVersion: request.expectedVersion,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    ACCESS_SCOPE,
+    request.idempotencyKey,
+    {
+      customerId: request.customerId,
+      action: request.action,
+      reason,
+      expectedVersion: request.expectedVersion,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
       return {
@@ -290,7 +346,11 @@ export async function changeCustomerAccess(
     }
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The access command is still processing", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The access command is still processing",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -332,7 +392,11 @@ export async function changeCustomerAccess(
     await idempotencyFailed(deps.db, ACCESS_SCOPE, request.idempotencyKey);
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The access command could not be applied", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The access command could not be applied",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -343,7 +407,11 @@ export async function changeCustomerAccess(
   if (after?.version !== request.expectedVersion + 1) {
     return {
       ok: false,
-      error: { code: "STALE_VERSION", message: "Customer changed; refresh before retrying", requestId: request.requestId },
+      error: {
+        code: "STALE_VERSION",
+        message: "Customer changed; refresh before retrying",
+        requestId: request.requestId,
+      },
     };
   }
   return readCustomerSummary(deps, request.customerId, request.requestId);
@@ -367,7 +435,12 @@ async function readCustomerSummary(
        WHERE c.id = ?`,
     )
     .bind(customerId)
-    .first<Omit<AdminCustomerSummary, "createdAt" | "lastOrderAt"> & { createdAt: number; lastOrderAt: number | null }>();
+    .first<
+      Omit<AdminCustomerSummary, "createdAt" | "lastOrderAt"> & {
+        createdAt: number;
+        lastOrderAt: number | null;
+      }
+    >();
   if (!row) {
     return { ok: false, error: { code: "NOT_FOUND", message: "Customer not found", requestId } };
   }
@@ -393,7 +466,11 @@ export async function revokeCustomerSessions(
   if (reason === "") {
     return {
       ok: false,
-      error: { code: "VALIDATION_FAILED", message: "A reason is required", requestId: request.requestId },
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "A reason is required",
+        requestId: request.requestId,
+      },
     };
   }
   const customer = await readCustomerIdentity(deps.db, request.customerId);
@@ -405,10 +482,16 @@ export async function revokeCustomerSessions(
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, SESSIONS_SCOPE, request.idempotencyKey, {
-    customerId: request.customerId,
-    reason,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    SESSIONS_SCOPE,
+    request.idempotencyKey,
+    {
+      customerId: request.customerId,
+      reason,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
       return {
@@ -432,13 +515,20 @@ export async function revokeCustomerSessions(
     }
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The revocation command is still processing", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The revocation command is still processing",
+        requestId: request.requestId,
+      },
     };
   }
 
   let revokedSessionCount = 0;
   try {
-    const deleted = await deps.db.prepare("DELETE FROM session WHERE user_id = ?").bind(customer.auth_user_id).run();
+    const deleted = await deps.db
+      .prepare("DELETE FROM session WHERE user_id = ?")
+      .bind(customer.auth_user_id)
+      .run();
     revokedSessionCount = deleted.meta?.changes ?? 0;
   } catch (error) {
     await idempotencyFailed(deps.db, SESSIONS_SCOPE, request.idempotencyKey);
@@ -481,7 +571,11 @@ export async function requestCustomerClosure(
   if (reason === "") {
     return {
       ok: false,
-      error: { code: "VALIDATION_FAILED", message: "A reason is required", requestId: request.requestId },
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "A reason is required",
+        requestId: request.requestId,
+      },
     };
   }
   const customer = await readCustomerIdentity(deps.db, request.customerId);
@@ -493,11 +587,17 @@ export async function requestCustomerClosure(
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, CLOSURE_SCOPE, request.idempotencyKey, {
-    customerId: request.customerId,
-    requestType: request.requestType,
-    reason,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    CLOSURE_SCOPE,
+    request.idempotencyKey,
+    {
+      customerId: request.customerId,
+      requestType: request.requestType,
+      reason,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
       return {
@@ -515,7 +615,11 @@ export async function requestCustomerClosure(
     }
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The closure command is still processing", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The closure command is still processing",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -526,7 +630,17 @@ export async function requestCustomerClosure(
         .prepare(
           "INSERT INTO privacy_request (id, customer_id, request_type, status, requested_at, assigned_staff_id, reason, version, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 'SUBMITTED', ?, ?, ?, 1, ?, ?, ?)",
         )
-        .bind(privacyRequestId, request.customerId, request.requestType, now, access.value.staffId, reason, request.idempotencyKey, now, now),
+        .bind(
+          privacyRequestId,
+          request.customerId,
+          request.requestType,
+          now,
+          access.value.staffId,
+          reason,
+          request.idempotencyKey,
+          now,
+          now,
+        ),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "CUSTOMER.CLOSURE_REQUESTED",
@@ -546,7 +660,11 @@ export async function requestCustomerClosure(
     await idempotencyFailed(deps.db, CLOSURE_SCOPE, request.idempotencyKey);
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The closure request could not be created", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The closure request could not be created",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -554,7 +672,11 @@ export async function requestCustomerClosure(
   if (!created) {
     return {
       ok: false,
-      error: { code: "INTERNAL_ERROR", message: "The privacy request could not be read back", requestId: request.requestId },
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "The privacy request could not be read back",
+        requestId: request.requestId,
+      },
     };
   }
   return { ok: true, value: created, requestId: request.requestId };
@@ -664,7 +786,10 @@ export async function listPrivacyRequests(
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
 }
 
-const PRIVACY_TRANSITIONS: Record<PrivacyRequestAction, { from: PrivacyRequestStatus[]; to: PrivacyRequestStatus; terminal: boolean }> = {
+const PRIVACY_TRANSITIONS: Record<
+  PrivacyRequestAction,
+  { from: PrivacyRequestStatus[]; to: PrivacyRequestStatus; terminal: boolean }
+> = {
   VERIFY: { from: ["SUBMITTED"], to: "VERIFYING", terminal: false },
   APPROVE: { from: ["SUBMITTED", "VERIFYING"], to: "APPROVED", terminal: false },
   REJECT: { from: ["SUBMITTED", "VERIFYING"], to: "REJECTED", terminal: true },
@@ -684,7 +809,11 @@ export async function applyPrivacyAction(
   if (reason === "") {
     return {
       ok: false,
-      error: { code: "VALIDATION_FAILED", message: "A reason is required", requestId: request.requestId },
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "A reason is required",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -697,7 +826,11 @@ export async function applyPrivacyAction(
   if (!row) {
     return {
       ok: false,
-      error: { code: "NOT_FOUND", message: "Privacy request not found", requestId: request.requestId },
+      error: {
+        code: "NOT_FOUND",
+        message: "Privacy request not found",
+        requestId: request.requestId,
+      },
     };
   }
 
@@ -714,12 +847,18 @@ export async function applyPrivacyAction(
   }
 
   const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, PRIVACY_ACTION_SCOPE, request.idempotencyKey, {
-    privacyRequestId: request.privacyRequestId,
-    action: request.action,
-    reason,
-    expectedVersion: request.expectedVersion,
-  });
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    PRIVACY_ACTION_SCOPE,
+    request.idempotencyKey,
+    {
+      privacyRequestId: request.privacyRequestId,
+      action: request.action,
+      reason,
+      expectedVersion: request.expectedVersion,
+    },
+  );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
       return {
@@ -737,33 +876,66 @@ export async function applyPrivacyAction(
     }
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The privacy action is still processing", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The privacy action is still processing",
+        requestId: request.requestId,
+      },
     };
   }
 
   const verifiedAt = request.action === "VERIFY" ? now : row.verified_at;
   const resolvedAt = transition.terminal ? now : row.resolved_at;
   const resolution = transition.terminal ? reason : row.resolution;
+  const appliedGuard =
+    "EXISTS (SELECT 1 FROM privacy_request WHERE id=? AND status=? AND version=?)";
+  const appliedGuardBinds = [request.privacyRequestId, transition.to, request.expectedVersion + 1];
+  let batchResults: D1Result[];
   try {
-    await deps.db.batch([
-      auditEventStatement(deps.db, {
-        actorUserId: access.value.authUserId,
-        action: "PRIVACY.ACTION_APPLIED",
-        resourceType: "privacy_request",
-        resourceId: request.privacyRequestId,
-        reason,
-        before: { status: row.status },
-        after: { status: transition.to },
-        details: { action: request.action },
-        correlationId: request.requestId,
-        occurredAt: now,
-      }),
-      idempotencyComplete(deps.db, PRIVACY_ACTION_SCOPE, request.idempotencyKey, request.privacyRequestId, now),
+    batchResults = await deps.db.batch([
       deps.db
         .prepare(
           "UPDATE privacy_request SET status=?, verified_at=?, resolved_at=?, assigned_staff_id=?, resolution=?, updated_at=?, version=version+1 WHERE id=? AND status=? AND version=?",
         )
-        .bind(transition.to, verifiedAt, resolvedAt, access.value.staffId, resolution, now, request.privacyRequestId, row.status, request.expectedVersion),
+        .bind(
+          transition.to,
+          verifiedAt,
+          resolvedAt,
+          access.value.staffId,
+          resolution,
+          now,
+          request.privacyRequestId,
+          row.status,
+          request.expectedVersion,
+        ),
+      auditEventStatement(
+        deps.db,
+        {
+          actorUserId: access.value.authUserId,
+          action: "PRIVACY.ACTION_APPLIED",
+          resourceType: "privacy_request",
+          resourceId: request.privacyRequestId,
+          reason,
+          before: { status: row.status },
+          after: { status: transition.to },
+          details: { action: request.action },
+          correlationId: request.requestId,
+          occurredAt: now,
+        },
+        { clause: appliedGuard, binds: appliedGuardBinds },
+      ),
+      deps.db
+        .prepare(
+          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
+        )
+        .bind(
+          request.privacyRequestId,
+          now,
+          PRIVACY_ACTION_SCOPE,
+          request.idempotencyKey,
+          ...appliedGuardBinds,
+        ),
     ]);
   } catch (error) {
     log("error", "admin.privacy.action_failed", {
@@ -772,25 +944,34 @@ export async function applyPrivacyAction(
     await idempotencyFailed(deps.db, PRIVACY_ACTION_SCOPE, request.idempotencyKey);
     return {
       ok: false,
-      error: { code: "CONFLICT", message: "The privacy action could not be applied", requestId: request.requestId },
+      error: {
+        code: "CONFLICT",
+        message: "The privacy action could not be applied",
+        requestId: request.requestId,
+      },
     };
   }
 
-  const after = await deps.db
-    .prepare("SELECT version FROM privacy_request WHERE id = ?")
-    .bind(request.privacyRequestId)
-    .first<{ version: number }>();
-  if (after?.version !== request.expectedVersion + 1) {
+  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
+    await idempotencyFailed(deps.db, PRIVACY_ACTION_SCOPE, request.idempotencyKey);
     return {
       ok: false,
-      error: { code: "STALE_VERSION", message: "Request changed; refresh before retrying", requestId: request.requestId },
+      error: {
+        code: "STALE_VERSION",
+        message: "Request changed; refresh before retrying",
+        requestId: request.requestId,
+      },
     };
   }
   const updated = await readPrivacyRequest(deps.db, request.privacyRequestId);
   if (!updated) {
     return {
       ok: false,
-      error: { code: "INTERNAL_ERROR", message: "The privacy request could not be read back", requestId: request.requestId },
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "The privacy request could not be read back",
+        requestId: request.requestId,
+      },
     };
   }
   return { ok: true, value: updated, requestId: request.requestId };

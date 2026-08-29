@@ -25,6 +25,14 @@ export type CancelSubscriptionCommand = {
   requestId: string;
 };
 
+export type SubscriptionTransitionOptions = {
+  actorType?: "CUSTOMER" | "ADMIN";
+  evidence?: (guard: {
+    clause: string;
+    binds: ReadonlyArray<unknown>;
+  }) => ReadonlyArray<D1PreparedStatement>;
+};
+
 const SUMMARY_STATE = [
   "PENDING",
   "TRIALING",
@@ -117,18 +125,19 @@ async function claim(
   return (result.meta?.changes ?? 0) === 1;
 }
 
-async function complete(
+function completionStatement(
   database: D1Database,
   scope: string,
   key: string,
   reference: string,
-): Promise<void> {
-  await database
+  guard: { clause: string; binds: ReadonlyArray<unknown> },
+): D1PreparedStatement {
+  return database
     .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+      `UPDATE idempotency_records SET status='SUCCEEDED', updated_at=?
+       WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard.clause}`,
     )
-    .bind(Date.now(), scope, key)
-    .run();
+    .bind(Date.now(), scope, key, ...guard.binds);
 }
 
 async function failClaim(database: D1Database, scope: string, key: string): Promise<void> {
@@ -143,6 +152,7 @@ async function failClaim(database: D1Database, scope: string, key: string): Prom
 export async function pauseSubscription(
   database: D1Database,
   command: PauseSubscriptionCommand,
+  options: SubscriptionTransitionOptions = {},
 ): Promise<
   { ok: true; value: SubscriptionSummary; requestId: string } | ReturnType<typeof failure>
 > {
@@ -186,28 +196,46 @@ export async function pauseSubscription(
     return failure("CONFLICT", "The original pause command is still processing", command.requestId);
 
   const now = Date.now();
-  const applied = await database
-    .prepare(
-      "UPDATE subscription SET status='PAUSED', paused_at=?, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
-    )
-    .bind(now, now, row.id, row.status, command.expectedVersion)
-    .run()
-    .then((result) => (result.meta?.changes ?? 0) === 1);
-  if (!applied) {
+  const guard = {
+    clause: "EXISTS (SELECT 1 FROM subscription WHERE id=? AND status='PAUSED' AND version=?)",
+    binds: [row.id, command.expectedVersion + 1] as const,
+  };
+  try {
+    const results = await database.batch([
+      database
+        .prepare(
+          "UPDATE subscription SET status='PAUSED', paused_at=?, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
+        )
+        .bind(now, now, row.id, row.status, command.expectedVersion),
+      database
+        .prepare(
+          `INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at)
+           SELECT ?, ?, 'PAUSED', ?, ?, ?, ? WHERE ${guard.clause}`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          row.id,
+          options.actorType ?? "CUSTOMER",
+          JSON.stringify({ reason: command.reason ?? null }),
+          now,
+          now,
+          ...guard.binds,
+        ),
+      ...(options.evidence?.(guard) ?? []),
+      completionStatement(database, scope, command.idempotencyKey, row.id, guard),
+    ]);
+    if ((results[0]?.meta?.changes ?? 0) !== 1) {
+      await failClaim(database, scope, command.idempotencyKey);
+      return failure(
+        "STALE_VERSION",
+        "Subscription changed; refresh before retrying",
+        command.requestId,
+      );
+    }
+  } catch {
     await failClaim(database, scope, command.idempotencyKey);
-    return failure(
-      "STALE_VERSION",
-      "Subscription changed; refresh before retrying",
-      command.requestId,
-    );
+    return failure("CONFLICT", "Subscription pause could not be applied", command.requestId);
   }
-  await database
-    .prepare(
-      "INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'PAUSED', 'CUSTOMER', ?, ?, ?)",
-    )
-    .bind(crypto.randomUUID(), row.id, JSON.stringify({ reason: command.reason ?? null }), now, now)
-    .run();
-  await complete(database, scope, command.idempotencyKey, row.id);
   const updated = await loadSubscription(database, row.id);
   return { ok: true, value: summary(updated!), requestId: command.requestId };
 }
@@ -215,6 +243,7 @@ export async function pauseSubscription(
 export async function resumeSubscription(
   database: D1Database,
   command: ResumeSubscriptionCommand,
+  options: SubscriptionTransitionOptions = {},
 ): Promise<
   { ok: true; value: SubscriptionSummary; requestId: string } | ReturnType<typeof failure>
 > {
@@ -264,28 +293,45 @@ export async function resumeSubscription(
   const now = Date.now();
   // Resume is the explicit reversal command that clears pending cancellation
   // intent together with the pause itself.
-  const applied = await database
-    .prepare(
-      "UPDATE subscription SET status='ACTIVE', paused_at=NULL, resume_at=?, cancel_at_period_end=0, cancellation_requested_at=NULL, scheduled_cancellation_at=NULL, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
-    )
-    .bind(now, now, row.id, row.status, command.expectedVersion)
-    .run()
-    .then((result) => (result.meta?.changes ?? 0) === 1);
-  if (!applied) {
+  const guard = {
+    clause: "EXISTS (SELECT 1 FROM subscription WHERE id=? AND status='ACTIVE' AND version=?)",
+    binds: [row.id, command.expectedVersion + 1] as const,
+  };
+  try {
+    const results = await database.batch([
+      database
+        .prepare(
+          "UPDATE subscription SET status='ACTIVE', paused_at=NULL, resume_at=?, cancel_at_period_end=0, cancellation_requested_at=NULL, scheduled_cancellation_at=NULL, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
+        )
+        .bind(now, now, row.id, row.status, command.expectedVersion),
+      database
+        .prepare(
+          `INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at)
+           SELECT ?, ?, 'RESUMED', ?, '{}', ?, ? WHERE ${guard.clause}`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          row.id,
+          options.actorType ?? "CUSTOMER",
+          now,
+          now,
+          ...guard.binds,
+        ),
+      ...(options.evidence?.(guard) ?? []),
+      completionStatement(database, scope, command.idempotencyKey, row.id, guard),
+    ]);
+    if ((results[0]?.meta?.changes ?? 0) !== 1) {
+      await failClaim(database, scope, command.idempotencyKey);
+      return failure(
+        "STALE_VERSION",
+        "Subscription changed; refresh before retrying",
+        command.requestId,
+      );
+    }
+  } catch {
     await failClaim(database, scope, command.idempotencyKey);
-    return failure(
-      "STALE_VERSION",
-      "Subscription changed; refresh before retrying",
-      command.requestId,
-    );
+    return failure("CONFLICT", "Subscription resume could not be applied", command.requestId);
   }
-  await database
-    .prepare(
-      "INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'RESUMED', 'CUSTOMER', '{}', ?, ?)",
-    )
-    .bind(crypto.randomUUID(), row.id, now, now)
-    .run();
-  await complete(database, scope, command.idempotencyKey, row.id);
   const updated = await loadSubscription(database, row.id);
   return { ok: true, value: summary(updated!), requestId: command.requestId };
 }
@@ -293,6 +339,7 @@ export async function resumeSubscription(
 export async function cancelSubscription(
   database: D1Database,
   command: CancelSubscriptionCommand,
+  options: SubscriptionTransitionOptions = {},
 ): Promise<
   { ok: true; value: SubscriptionSummary; requestId: string } | ReturnType<typeof failure>
 > {
@@ -345,34 +392,50 @@ export async function cancelSubscription(
         command.requestId,
       );
     const now = Date.now();
-    const applied = await database
-      .prepare(
-        "UPDATE subscription SET status='CANCELED', ended_at=?, cancel_at_period_end=0, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
-      )
-      .bind(now, now, row.id, row.status, command.expectedVersion)
-      .run()
-      .then((result) => (result.meta?.changes ?? 0) === 1);
-    if (!applied) {
+    const guard = {
+      clause: "EXISTS (SELECT 1 FROM subscription WHERE id=? AND status='CANCELED' AND version=?)",
+      binds: [row.id, command.expectedVersion + 1] as const,
+    };
+    try {
+      const results = await database.batch([
+        database
+          .prepare(
+            "UPDATE subscription SET status='CANCELED', ended_at=?, cancel_at_period_end=0, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
+          )
+          .bind(now, now, row.id, row.status, command.expectedVersion),
+        database
+          .prepare(
+            `INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at)
+             SELECT ?, ?, 'CANCELED', ?, ?, ?, ? WHERE ${guard.clause}`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            row.id,
+            options.actorType ?? "CUSTOMER",
+            JSON.stringify({ timing: "IMMEDIATE", reason: command.reason ?? null }),
+            now,
+            now,
+            ...guard.binds,
+          ),
+        ...(options.evidence?.(guard) ?? []),
+        completionStatement(database, scope, command.idempotencyKey, row.id, guard),
+      ]);
+      if ((results[0]?.meta?.changes ?? 0) !== 1) {
+        await failClaim(database, scope, command.idempotencyKey);
+        return failure(
+          "STALE_VERSION",
+          "Subscription changed; refresh before retrying",
+          command.requestId,
+        );
+      }
+    } catch {
       await failClaim(database, scope, command.idempotencyKey);
       return failure(
-        "STALE_VERSION",
-        "Subscription changed; refresh before retrying",
+        "CONFLICT",
+        "Subscription cancellation could not be applied",
         command.requestId,
       );
     }
-    await database
-      .prepare(
-        "INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'CANCELED', 'CUSTOMER', ?, ?, ?)",
-      )
-      .bind(
-        crypto.randomUUID(),
-        row.id,
-        JSON.stringify({ timing: "IMMEDIATE", reason: command.reason ?? null }),
-        now,
-        now,
-      )
-      .run();
-    await complete(database, scope, command.idempotencyKey, row.id);
     const updated = await loadSubscription(database, row.id);
     return { ok: true, value: summary(updated!), requestId: command.requestId };
   }
@@ -395,34 +458,47 @@ export async function cancelSubscription(
       command.requestId,
     );
   const now = Date.now();
-  const applied = await database
-    .prepare(
-      "UPDATE subscription SET cancel_at_period_end=1, cancellation_requested_at=?, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
-    )
-    .bind(now, now, row.id, row.status, command.expectedVersion)
-    .run()
-    .then((result) => (result.meta?.changes ?? 0) === 1);
-  if (!applied) {
+  const guard = {
+    clause:
+      "EXISTS (SELECT 1 FROM subscription WHERE id=? AND cancel_at_period_end=1 AND version=?)",
+    binds: [row.id, command.expectedVersion + 1] as const,
+  };
+  try {
+    const results = await database.batch([
+      database
+        .prepare(
+          "UPDATE subscription SET cancel_at_period_end=1, cancellation_requested_at=?, version=version+1, updated_at=? WHERE id=? AND status=? AND version=?",
+        )
+        .bind(now, now, row.id, row.status, command.expectedVersion),
+      database
+        .prepare(
+          `INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at)
+           SELECT ?, ?, 'CANCELLATION_REQUESTED', ?, ?, ?, ? WHERE ${guard.clause}`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          row.id,
+          options.actorType ?? "CUSTOMER",
+          JSON.stringify({ timing: "PERIOD_END", reason: command.reason ?? null }),
+          now,
+          now,
+          ...guard.binds,
+        ),
+      ...(options.evidence?.(guard) ?? []),
+      completionStatement(database, scope, command.idempotencyKey, row.id, guard),
+    ]);
+    if ((results[0]?.meta?.changes ?? 0) !== 1) {
+      await failClaim(database, scope, command.idempotencyKey);
+      return failure(
+        "STALE_VERSION",
+        "Subscription changed; refresh before retrying",
+        command.requestId,
+      );
+    }
+  } catch {
     await failClaim(database, scope, command.idempotencyKey);
-    return failure(
-      "STALE_VERSION",
-      "Subscription changed; refresh before retrying",
-      command.requestId,
-    );
+    return failure("CONFLICT", "Subscription cancellation could not be applied", command.requestId);
   }
-  await database
-    .prepare(
-      "INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'CANCELLATION_REQUESTED', 'CUSTOMER', ?, ?, ?)",
-    )
-    .bind(
-      crypto.randomUUID(),
-      row.id,
-      JSON.stringify({ timing: "PERIOD_END", reason: command.reason ?? null }),
-      now,
-      now,
-    )
-    .run();
-  await complete(database, scope, command.idempotencyKey, row.id);
   const updated = await loadSubscription(database, row.id);
   return { ok: true, value: summary(updated!), requestId: command.requestId };
 }
