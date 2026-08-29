@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { AdminStaffInvitationPage, AdminStaffPage, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
@@ -23,16 +23,21 @@ type LoadState =
 
 function useCommand() {
   const [notice, setNotice] = useState<string | null>(null);
-  const run = useCallback(async (url: string, body: unknown) => {
+  const keys = useRef(new Map<string, string>());
+  const run = useCallback(async (operationId: string, url: string, body: unknown) => {
+    const signature = `${operationId}:${JSON.stringify(body)}`;
+    const idempotencyKey = keys.current.get(signature) ?? crypto.randomUUID();
+    keys.current.set(signature, idempotencyKey);
     const response = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
       body: JSON.stringify(body),
     });
     const payload = (await response.json()) as RpcResult<unknown> & {
       error?: { message?: string };
     };
     setNotice(payload.ok ? "Done." : (payload.error?.message ?? "The command failed."));
+    if (payload.ok) keys.current.delete(signature);
     return payload.ok;
   }, []);
   return { notice, setNotice, run };
@@ -44,6 +49,7 @@ export default function StaffPage() {
   const [invitations, setInvitations] = useState<AdminStaffInvitationPage | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
+  const [revokeReason, setRevokeReason] = useState("");
   const { notice, setNotice, run } = useCommand();
 
   const load = useCallback(() => {
@@ -85,10 +91,14 @@ export default function StaffPage() {
       setNotice("An email and display name are required.");
       return;
     }
-    const ok = await run("/api/admin/staff/invitations", {
-      email: inviteEmail.trim(),
-      displayName: inviteName.trim(),
-    });
+    const ok = await run(
+      `invite:${inviteEmail.trim().toLowerCase()}`,
+      "/api/admin/staff/invitations",
+      {
+        email: inviteEmail.trim(),
+        displayName: inviteName.trim(),
+      },
+    );
     if (ok) {
       setInviteEmail("");
       setInviteName("");
@@ -161,6 +171,15 @@ export default function StaffPage() {
                 Send invitation
               </Button>
             </form>
+            <div className="border-t border-[var(--fm-border)] p-4">
+              <Input
+                aria-label="Invitation revocation reason"
+                placeholder="revocation reason (required)"
+                value={revokeReason}
+                onChange={(event) => setRevokeReason(event.target.value)}
+                className="sm:w-80"
+              />
+            </div>
             {invitations && invitations.items.length > 0 ? (
               <ul className="divide-y divide-[var(--fm-border)] border-t border-[var(--fm-border)]">
                 {invitations.items.map((invitation) => (
@@ -183,17 +202,20 @@ export default function StaffPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          void fetch(`/api/admin/staff/invitations`, {
-                            method: "POST",
-                            headers: {
-                              "content-type": "application/json",
-                              "idempotency-key": crypto.randomUUID(),
-                            },
-                            body: JSON.stringify({
-                              invitationId: invitation.invitationId,
-                              reason: "Revoked from the staff workspace",
-                            }),
-                          }).then(() => load());
+                          if (revokeReason.trim() === "") {
+                            setNotice("A revocation reason is required.");
+                            return;
+                          }
+                          void run(
+                            `revoke:${invitation.invitationId}`,
+                            `/api/admin/staff/invitations/${encodeURIComponent(invitation.invitationId)}/revoke`,
+                            { reason: revokeReason.trim() },
+                          ).then((ok) => {
+                            if (ok) {
+                              setRevokeReason("");
+                              load();
+                            }
+                          });
                         }}
                       >
                         Revoke

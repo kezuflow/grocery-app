@@ -33,6 +33,52 @@ function validateScopeInput(scope: Scope): string | null {
   return "unknown scope kind";
 }
 
+async function validateActiveGeography(
+  database: D1Database,
+  scopes: ReadonlyArray<Scope>,
+): Promise<string | null> {
+  const marketIds = [
+    ...new Set(scopes.flatMap((scope) => (scope.kind === "market" ? [scope.marketId] : []))),
+  ];
+  const locationIds = [
+    ...new Set(scopes.flatMap((scope) => (scope.kind === "location" ? [scope.locationId] : []))),
+  ];
+
+  if (marketIds.length > 0) {
+    const rows = await database
+      .prepare(`SELECT id, status FROM market WHERE id IN (${marketIds.map(() => "?").join(",")})`)
+      .bind(...marketIds)
+      .all<{ id: string; status: string }>();
+    const active = new Set(
+      rows.results.filter((row) => row.status === "active").map((row) => row.id),
+    );
+    if (marketIds.some((id) => !active.has(id)))
+      return "Every market scope must reference an active market";
+  }
+
+  if (locationIds.length > 0) {
+    const rows = await database
+      .prepare(
+        `SELECT l.id, l.market_id AS marketId, l.status, m.status AS marketStatus
+         FROM fulfillment_location l JOIN market m ON m.id=l.market_id
+         WHERE l.id IN (${locationIds.map(() => "?").join(",")})`,
+      )
+      .bind(...locationIds)
+      .all<{ id: string; marketId: string; status: string; marketStatus: string }>();
+    const byId = new Map(rows.results.map((row) => [row.id, row]));
+    for (const id of locationIds) {
+      const row = byId.get(id);
+      if (!row || row.status !== "active" || row.marketStatus !== "active") {
+        return "Every location scope must reference an active location in an active market";
+      }
+      if (marketIds.length > 0 && !marketIds.includes(row.marketId)) {
+        return "Location scopes must belong to one of the assigned market scopes";
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Atomically replace a staff member's scope assignments. Like role
  * replacement, every batch statement carries the caller's version predicate,
@@ -63,6 +109,8 @@ export async function setAdminStaffScopes(
       uniqueScopes.push(scope);
     }
   }
+  const invalidGeography = await validateActiveGeography(deps.db, uniqueScopes);
+  if (invalidGeography) return failure("VALIDATION_FAILED", invalidGeography, request.requestId);
 
   const before = (await loadStaffRelations(deps, [request.staffId])).get(request.staffId)!;
 
@@ -107,7 +155,7 @@ export async function setAdminStaffScopes(
           ...guardBinds,
         ),
     ),
-    
+
     auditEventStatement(
       deps.db,
       {
@@ -133,7 +181,7 @@ export async function setAdminStaffScopes(
         "UPDATE staff_identity SET updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
       )
       .bind(now, request.staffId, request.expectedVersion),
-];
+  ];
 
   await deps.db.batch(statements);
   const after = await deps.db

@@ -5,6 +5,7 @@ const coreMocks = vi.hoisted(() => ({
   getAdminStaff: vi.fn(),
   listAdminStaffInvitations: vi.fn(),
   inviteAdminStaff: vi.fn(),
+  revokeAdminStaffInvitation: vi.fn(),
   updateAdminStaff: vi.fn(),
   changeAdminStaffAccess: vi.fn(),
   setAdminStaffRoles: vi.fn(),
@@ -24,8 +25,9 @@ vi.mock("cloudflare:workers", () => ({
 }));
 
 import { GET as listStaff } from "./staff/route";
-import { GET as getStaff } from "./staff/[staff-id]/route";
+import { GET as getStaff, PATCH as updateStaff } from "./staff/[staff-id]/route";
 import { GET as listInvitations, POST as invite } from "./staff/invitations/route";
+import { POST as revokeInvitation } from "./staff/invitations/[invitation-id]/revoke/route";
 import { POST as changeAccess } from "./staff/[staff-id]/access/route";
 import { PUT as setRoles } from "./staff/[staff-id]/roles/route";
 import { PUT as setScopes } from "./staff/[staff-id]/scopes/route";
@@ -43,6 +45,7 @@ beforeEach(() => {
 const COOKIE = { cookie: "session=abc" };
 const staffParams = { params: Promise.resolve({ "staff-id": "st-1" }) };
 const roleParams = { params: Promise.resolve({ "role-id": "ro-1" }) };
+const invitationParams = { params: Promise.resolve({ "invitation-id": "inv-1" }) };
 
 function jsonRequest(url: string, body: unknown, key = "idem-1"): Request {
   return new Request(url, {
@@ -78,6 +81,25 @@ describe("staff access BFF routes", () => {
     expect(coreMocks.getAdminStaff.mock.calls[0][0].staffId).toBe("st-1");
   });
 
+  it("delegates staff profile edits with the current aggregate version", async () => {
+    coreMocks.updateAdminStaff.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    const response = await updateStaff(
+      new Request("https://freshmarkets.ph/api/admin/staff/st-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "idempotency-key": "profile-1", ...COOKIE },
+        body: JSON.stringify({ displayName: "Updated name", expectedVersion: 4 }),
+      }),
+      staffParams,
+    );
+    expect(response.status).toBe(200);
+    expect(coreMocks.updateAdminStaff.mock.calls[0][0]).toMatchObject({
+      staffId: "st-1",
+      displayName: "Updated name",
+      expectedVersion: 4,
+      idempotencyKey: "profile-1",
+    });
+  });
+
   it("rejects invitations without an idempotency key without calling Core", async () => {
     const response = await invite(
       new Request("https://freshmarkets.ph/api/admin/staff/invitations", {
@@ -107,6 +129,26 @@ describe("staff access BFF routes", () => {
     expect(input).toMatchObject({
       email: "a@example.com",
       displayName: "A",
+      idempotencyKey: "idem-1",
+    });
+  });
+
+  it("delegates invitation revocation through its purpose-built route", async () => {
+    coreMocks.revokeAdminStaffInvitation.mockResolvedValue({
+      ok: true,
+      value: { invitationId: "inv-1", status: "REVOKED" },
+      requestId: "r",
+    });
+    const response = await revokeInvitation(
+      jsonRequest("https://freshmarkets.ph/api/admin/staff/invitations/inv-1/revoke", {
+        reason: "withdrawn",
+      }),
+      invitationParams,
+    );
+    expect(response.status).toBe(200);
+    expect(coreMocks.revokeAdminStaffInvitation.mock.calls[0][0]).toMatchObject({
+      invitationId: "inv-1",
+      reason: "withdrawn",
       idempotencyKey: "idem-1",
     });
   });

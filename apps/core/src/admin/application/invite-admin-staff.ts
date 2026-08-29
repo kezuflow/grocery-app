@@ -221,31 +221,53 @@ export async function revokeAdminStaffInvitation(
   }
 
   try {
-    await deps.db.batch([
+    const guard = {
+      clause:
+        "EXISTS (SELECT 1 FROM staff_invitation WHERE id=? AND status='REVOKED' AND version=?)",
+      binds: [request.invitationId, existing.version + 1] as const,
+    };
+    const results = await deps.db.batch([
       deps.db
         .prepare(
           "UPDATE staff_invitation SET status='REVOKED', updated_at=?, version=version+1 WHERE id=? AND status='PENDING' AND version=?",
         )
         .bind(now, request.invitationId, existing.version),
-      auditEventStatement(deps.db, {
-        actorUserId: access.value.authUserId,
-        action: "STAFF.INVITATION_REVOKED",
-        resourceType: "staff_invitation",
-        resourceId: request.invitationId,
-        reason: request.reason.trim(),
-        before: { status: existing.status },
-        after: { status: "REVOKED" },
-        correlationId: request.requestId,
-        occurredAt: now,
-      }),
-      idempotencyComplete(
+      auditEventStatement(
         deps.db,
-        INVITATION_REVOKE_SCOPE,
-        request.idempotencyKey,
-        request.invitationId,
-        now,
+        {
+          actorUserId: access.value.authUserId,
+          action: "STAFF.INVITATION_REVOKED",
+          resourceType: "staff_invitation",
+          resourceId: request.invitationId,
+          reason: request.reason.trim(),
+          before: { status: existing.status },
+          after: { status: "REVOKED" },
+          correlationId: request.requestId,
+          occurredAt: now,
+        },
+        guard,
       ),
+      deps.db
+        .prepare(
+          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard.clause}`,
+        )
+        .bind(
+          request.invitationId,
+          now,
+          INVITATION_REVOKE_SCOPE,
+          request.idempotencyKey,
+          ...guard.binds,
+        ),
     ]);
+    if ((results[0]?.meta?.changes ?? 0) !== 1) {
+      await idempotencyFailed(deps.db, INVITATION_REVOKE_SCOPE, request.idempotencyKey);
+      return failure(
+        "CONFLICT",
+        "The invitation changed; refresh before retrying",
+        request.requestId,
+      );
+    }
   } catch (error) {
     log("error", "admin.staff.invitation_revoke_failed", {
       message: error instanceof Error ? error.message : String(error),

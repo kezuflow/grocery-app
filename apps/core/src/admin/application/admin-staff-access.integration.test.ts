@@ -304,16 +304,35 @@ describe("staff administration commands", () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
+    const revokeKey = `rvk-${crypto.randomUUID()}`;
     const revoked = await core.revokeAdminStaffInvitation({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       invitationId: created.value.invitationId,
       reason: "no longer required",
-      idempotencyKey: `rvk-${crypto.randomUUID()}`,
+      idempotencyKey: revokeKey,
     });
     expect(revoked.ok).toBe(true);
     if (!revoked.ok) return;
     expect(revoked.value.status).toBe("REVOKED");
+
+    const replay = await core.revokeAdminStaffInvitation({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      invitationId: created.value.invitationId,
+      reason: "no longer required",
+      idempotencyKey: revokeKey,
+    });
+    expect(replay.ok).toBe(true);
+
+    const conflict = await core.revokeAdminStaffInvitation({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      invitationId: created.value.invitationId,
+      reason: "different reason",
+      idempotencyKey: revokeKey,
+    });
+    expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
 
     const again = await core.revokeAdminStaffInvitation({
       requestId: crypto.randomUUID(),
@@ -596,6 +615,55 @@ describe("staff administration commands", () => {
       idempotencyKey: `scope-${crypto.randomUUID()}`,
     });
     expect(stale).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+  });
+
+  it("rejects unknown, inactive, and cross-market geography scopes", async () => {
+    const manager = await seedManager();
+    const target = await seedStaff({
+      principal: await signUp(),
+      permissionCodes: [],
+      scope: { kind: "global" },
+    });
+    const now = Date.now();
+    const inactiveMarketId = `market-${crypto.randomUUID()}`;
+    const activeMarketId = `market-${crypto.randomUUID()}`;
+    const inactiveLocationId = `location-${crypto.randomUUID()}`;
+    const otherLocationId = `location-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO market (id, organization_id, code, name, currency, timezone, status, created_at, updated_at) VALUES (?, (SELECT id FROM organization LIMIT 1), ?, 'Inactive', 'PHP', 'Asia/Manila', 'inactive', ?, ?)",
+      ).bind(inactiveMarketId, `inactive-${crypto.randomUUID()}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO market (id, organization_id, code, name, currency, timezone, status, created_at, updated_at) VALUES (?, (SELECT id FROM organization LIMIT 1), ?, 'Other', 'PHP', 'Asia/Manila', 'active', ?, ?)",
+      ).bind(activeMarketId, `other-${crypto.randomUUID()}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO fulfillment_location (id, market_id, code, name, type, latitude, longitude, status, created_at, updated_at) VALUES (?, 'market-metro-cebu', ?, 'Inactive location', 'FULFILLMENT_CENTER', 10.3, 123.9, 'inactive', ?, ?)",
+      ).bind(inactiveLocationId, `inactive-${crypto.randomUUID()}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO fulfillment_location (id, market_id, code, name, type, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, 'Other location', 'FULFILLMENT_CENTER', 10.3, 123.9, 'active', ?, ?)",
+      ).bind(otherLocationId, activeMarketId, `other-${crypto.randomUUID()}`, now, now),
+    ]);
+
+    for (const scopes of [
+      [{ kind: "market", marketId: "market-missing" }],
+      [{ kind: "market", marketId: inactiveMarketId }],
+      [{ kind: "location", locationId: "location-missing" }],
+      [{ kind: "location", locationId: inactiveLocationId }],
+      [
+        { kind: "market", marketId: "market-metro-cebu" },
+        { kind: "location", locationId: otherLocationId },
+      ],
+    ] as const) {
+      const result = await core.setAdminStaffScopes({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        staffId: target.staffId,
+        scopes,
+        expectedVersion: 1,
+        idempotencyKey: `scope-${crypto.randomUUID()}`,
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    }
   });
 
   it("revokes live Better Auth sessions for the target staff user", async () => {

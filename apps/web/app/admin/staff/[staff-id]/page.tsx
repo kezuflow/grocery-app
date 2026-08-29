@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import type { AdminRolePage, AdminStaffDetail, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../../components/ui/button";
@@ -26,6 +26,10 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [marketId, setMarketId] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const commandKeys = useRef(new Map<string, string>());
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -45,6 +49,13 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
           return;
         }
         const rolesPayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
+        setDisplayName(staffPayload.value.displayName);
+        setMarketId(
+          staffPayload.value.scopes.find((scope) => scope.kind === "market")?.marketId ?? "",
+        );
+        setLocationId(
+          staffPayload.value.scopes.find((scope) => scope.kind === "location")?.locationId ?? "",
+        );
         setState({
           phase: "ready",
           staff: staffPayload.value,
@@ -58,17 +69,28 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
 
   useEffect(() => load(), [load]);
 
-  async function run(url: string, method: "POST" | "PUT", body: unknown) {
+  async function run(
+    operation: string,
+    url: string,
+    method: "POST" | "PUT" | "PATCH",
+    body: unknown,
+  ) {
+    const signature = `${operation}:${JSON.stringify(body)}`;
+    const idempotencyKey = commandKeys.current.get(signature) ?? crypto.randomUUID();
+    commandKeys.current.set(signature, idempotencyKey);
     const response = await fetch(url, {
       method,
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
       body: JSON.stringify(body),
     });
     const payload = (await response.json()) as RpcResult<unknown> & {
       error?: { message?: string };
     };
     setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
-    if (payload.ok) load();
+    if (payload.ok) {
+      commandKeys.current.delete(signature);
+      load();
+    }
     return payload.ok;
   }
 
@@ -141,6 +163,33 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
         </p>
       ) : null}
 
+      <ListPageSection title="Profile" description="Display identity used in Admin workflows.">
+        <form
+          className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (displayName.trim() === "") {
+              setNotice("A display name is required.");
+              return;
+            }
+            void run("profile", `/api/admin/staff/${encodeURIComponent(staffId)}`, "PATCH", {
+              displayName: displayName.trim(),
+              expectedVersion: staff.version,
+            });
+          }}
+        >
+          <Input
+            aria-label="Staff display name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            className="sm:w-72"
+          />
+          <Button type="submit" size="sm">
+            Save profile
+          </Button>
+        </form>
+      </ListPageSection>
+
       <ListPageSection title="Access" description="Suspension is application-owned and audited.">
         <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
           <Input
@@ -158,7 +207,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                 setNotice("A reason is required.");
                 return;
               }
-              void run(`/api/admin/staff/${encodeURIComponent(staffId)}/access`, "POST", {
+              void run("access", `/api/admin/staff/${encodeURIComponent(staffId)}/access`, "POST", {
                 action: staff.status === "active" ? "SUSPEND" : "ACTIVATE",
                 reason: reason.trim(),
                 expectedVersion: staff.version,
@@ -175,9 +224,14 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                 setNotice("A reason is required.");
                 return;
               }
-              void run(`/api/admin/staff/${encodeURIComponent(staffId)}/sessions/revoke`, "POST", {
-                reason: reason.trim(),
-              });
+              void run(
+                "sessions",
+                `/api/admin/staff/${encodeURIComponent(staffId)}/sessions/revoke`,
+                "POST",
+                {
+                  reason: reason.trim(),
+                },
+              );
             }}
           >
             Revoke sessions
@@ -204,10 +258,15 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                     const next = new Set(assignedRoleIds);
                     if (event.target.checked) next.add(role.roleId);
                     else next.delete(role.roleId);
-                    void run(`/api/admin/staff/${encodeURIComponent(staffId)}/roles`, "PUT", {
-                      roleIds: [...next],
-                      expectedVersion: staff.version,
-                    });
+                    void run(
+                      "roles",
+                      `/api/admin/staff/${encodeURIComponent(staffId)}/roles`,
+                      "PUT",
+                      {
+                        roleIds: [...next],
+                        expectedVersion: staff.version,
+                      },
+                    );
                   }}
                 />
                 <span className="font-medium">{role.name}</span>
@@ -215,8 +274,83 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
               </label>
             ))
           )}
-          <p className="text-xs text-[var(--fm-text-muted)]">
-            Scopes: {staff.scopes.map((scope) => scope.kind).join(", ") || "none"}
+        </div>
+      </ListPageSection>
+
+      <ListPageSection
+        title="Scopes"
+        description="Replace authority with a global scope, a market, or a location. Core validates active geography."
+      >
+        <div className="grid gap-3 p-4 sm:grid-cols-2">
+          <Input
+            aria-label="Market ID"
+            placeholder="market ID"
+            value={marketId}
+            onChange={(event) => setMarketId(event.target.value)}
+          />
+          <Input
+            aria-label="Location ID"
+            placeholder="location ID"
+            value={locationId}
+            onChange={(event) => setLocationId(event.target.value)}
+          />
+          <div className="flex flex-wrap gap-2 sm:col-span-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void run(
+                  "scopes",
+                  `/api/admin/staff/${encodeURIComponent(staffId)}/scopes`,
+                  "PUT",
+                  {
+                    scopes: [{ kind: "global" }],
+                    expectedVersion: staff.version,
+                  },
+                )
+              }
+            >
+              Set global
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={marketId.trim() === ""}
+              onClick={() =>
+                void run(
+                  "scopes",
+                  `/api/admin/staff/${encodeURIComponent(staffId)}/scopes`,
+                  "PUT",
+                  {
+                    scopes: [{ kind: "market", marketId: marketId.trim() }],
+                    expectedVersion: staff.version,
+                  },
+                )
+              }
+            >
+              Set market
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={locationId.trim() === ""}
+              onClick={() =>
+                void run(
+                  "scopes",
+                  `/api/admin/staff/${encodeURIComponent(staffId)}/scopes`,
+                  "PUT",
+                  {
+                    scopes: [{ kind: "location", locationId: locationId.trim() }],
+                    expectedVersion: staff.version,
+                  },
+                )
+              }
+            >
+              Set location
+            </Button>
+          </div>
+          <p className="text-xs text-[var(--fm-text-muted)] sm:col-span-2">
+            Current: {staff.scopes.map((scope) => JSON.stringify(scope)).join(", ") || "none"}
           </p>
         </div>
       </ListPageSection>
