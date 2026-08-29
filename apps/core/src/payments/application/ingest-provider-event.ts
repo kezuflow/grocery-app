@@ -1,3 +1,4 @@
+import type { VerifiedProviderEvent } from "../ports/payment-provider";
 import {
   extendPaymentRepository,
   extendPaymentRepositoryForRefunds,
@@ -22,107 +23,58 @@ export type ProviderEventResult = {
 };
 
 function result(
-  provider: string,
-  providerEventId: string,
+  event: Pick<VerifiedProviderEvent, "provider" | "providerEventId">,
   processingStatus: ProviderEventProcessingStatus,
   paymentIntentId: string | null = null,
   canonicalState: string | null = null,
 ): { ok: true; value: ProviderEventResult } {
   return {
     ok: true,
-    value: { provider, providerEventId, processingStatus, paymentIntentId, canonicalState },
+    value: {
+      provider: event.provider,
+      providerEventId: event.providerEventId,
+      processingStatus,
+      paymentIntentId,
+      canonicalState,
+    },
   };
 }
 
-/**
- * Verify-first durable provider-event ingestion. Signature verification happens
- * through the selected adapter before any identifier is trusted. Inbox identity
- * is `(provider, providerEventId)`; duplicates never reapply effects. The
- * canonical transition uses handler-side compare-and-swap on the stored intent
- * version — provider payloads carry no application `expectedVersion`.
- */
-export async function ingestProviderEvent(
-  database: D1Database,
-  registry: ProviderRegistry,
-  providerCode: string,
-  headers: Headers,
-  rawBody: string,
-): Promise<
-  { ok: true; value: ProviderEventResult } | { ok: false; error: { code: string; message: string } }
-> {
-  let provider;
-  try {
-    provider = registry.require(providerCode);
-  } catch {
-    return {
-      ok: false,
-      error: {
-        code: "PAYMENT_PROVIDER_UNCONFIGURED",
-        message: `No payment provider is configured for '${providerCode}'`,
-      },
-    };
-  }
-
-  const verification = await provider.verifyAndParseEvent(headers, rawBody);
-  if (!verification.ok) {
-    return {
-      ok: false,
-      error: {
-        code: "WEBHOOK_VERIFICATION_FAILED",
-        message: `Provider event rejected: ${verification.reason}`,
-      },
-    };
-  }
-
-  const event = verification.event;
-  const repository = extendPaymentRepository(database);
-  const now = Date.now();
-
-  const claimed = await repository.insertInbox({
+export function normalizedProviderObservation(event: VerifiedProviderEvent): string {
+  return JSON.stringify({
     provider: event.provider,
     providerEventId: event.providerEventId,
+    providerReference: event.providerReference,
+    observedAt: event.observedAt,
+    canonicalState: event.canonicalState,
+    amountMinor: event.amountMinor,
+    currency: event.currency,
     payloadHash: event.payloadHash,
-    now,
+    kind: event.kind,
+    refundReference: event.refundReference,
   });
+}
 
-  const inboxEntry = await repository.findInboxEntry(event.provider, event.providerEventId);
-  if (!inboxEntry) {
-    // Should not happen after a successful claim; treat as retryable.
-    return result(event.provider, event.providerEventId, "RETRY_REQUIRED");
-  }
-
-  if (claimed === 0) {
-    if (inboxEntry.payloadHash !== event.payloadHash) {
-      // Same event identity with a different payload: integrity violation.
-      await repository.setInboxStatus({
-        id: inboxEntry.id,
-        processingStatus: "REJECTED",
-        errorCode: "PAYLOAD_HASH_MISMATCH",
-        now,
-      });
-      await repository.recordReconciliationCase({
-        intentId: null,
-        category: "AMBIGUOUS_OUTCOME",
-        detailsJson: JSON.stringify({
-          provider: event.provider,
-          providerEventId: event.providerEventId,
-        }),
-        now,
-      });
-      return result(event.provider, event.providerEventId, "REJECTED");
-    }
-    if (inboxEntry.processingStatus !== "APPLIED" && inboxEntry.processingStatus !== "DUPLICATE") {
-      return result(event.provider, event.providerEventId, "RETRY_REQUIRED");
-    }
-    recordFinancialEvent({
-      event: "provider_observation_replayed",
-      scope: "payments.ingest",
-      provider: event.provider,
-      aggregateId: event.providerEventId,
-      outcomeCode: "DUPLICATE",
+/** Apply an already verified, provider-neutral observation under an inbox lease. */
+export async function applyVerifiedProviderEvent(
+  database: D1Database,
+  event: VerifiedProviderEvent,
+  inboxId: string,
+  leaseOwner: string,
+  now = Date.now(),
+): Promise<{ ok: true; value: ProviderEventResult }> {
+  const repository = extendPaymentRepository(database);
+  const finish = (
+    processingStatus: ProviderEventProcessingStatus,
+    errorCode?: string,
+  ) =>
+    repository.setInboxStatus({
+      id: inboxId,
+      processingStatus,
+      errorCode,
+      now,
+      leaseOwner,
     });
-    return result(event.provider, event.providerEventId, "DUPLICATE");
-  }
 
   if (event.kind === "refund" && event.refundReference) {
     const refunds = extendPaymentRepositoryForRefunds(database);
@@ -137,23 +89,12 @@ export async function ingestProviderEvent(
         }),
         now,
       });
-      await repository.setInboxStatus({
-        id: inboxEntry.id,
-        processingStatus: "RECONCILIATION_REQUIRED",
-        errorCode: "REFUND_UNMAPPED",
-        now,
-      });
-      return result(event.provider, event.providerEventId, "RECONCILIATION_REQUIRED");
+      await finish("RECONCILIATION_REQUIRED", "REFUND_UNMAPPED");
+      return result(event, "RECONCILIATION_REQUIRED");
     }
     if (refund.status === event.canonicalState) {
-      await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
-      return result(
-        event.provider,
-        event.providerEventId,
-        "DUPLICATE",
-        refund.paymentIntentId,
-        event.canonicalState,
-      );
+      await finish("APPLIED");
+      return result(event, "DUPLICATE", refund.paymentIntentId, event.canonicalState);
     }
     const changed = await refunds.updateRefundStatusCas({
       refundId: refund.id,
@@ -163,45 +104,26 @@ export async function ingestProviderEvent(
       now,
     });
     if (changed !== 1) {
-      await repository.setInboxStatus({
-        id: inboxEntry.id,
-        processingStatus: "RETRY_REQUIRED",
-        errorCode: "VERSION_CONFLICT",
-        now,
-      });
-      return result(
-        event.provider,
-        event.providerEventId,
-        "RETRY_REQUIRED",
-        refund.paymentIntentId,
-        event.canonicalState,
-      );
+      await finish("RETRY_REQUIRED", "VERSION_CONFLICT");
+      return result(event, "RETRY_REQUIRED", refund.paymentIntentId, event.canonicalState);
     }
     if (event.canonicalState === "SUCCEEDED") {
-      // Reflect aggregate refund progression on the payment itself.
       const intent = await refunds.findIntentById(refund.paymentIntentId);
       if (intent && intent.status === "SUCCEEDED") {
         const total = await refunds.succeededRefundSum(intent.id);
-        const next = total >= intent.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED";
         await refunds
           .updateIntentStatusCas({
             intentId: intent.id,
             expectedVersion: intent.version,
             fromStatus: "SUCCEEDED",
-            toStatus: next,
+            toStatus: total >= intent.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED",
             now,
           })
           .run();
       }
     }
-    await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
-    return result(
-      event.provider,
-      event.providerEventId,
-      "APPLIED",
-      refund.paymentIntentId,
-      event.canonicalState,
-    );
+    await finish("APPLIED");
+    return result(event, "APPLIED", refund.paymentIntentId, event.canonicalState);
   }
 
   const intents = await repository.findIntentByProviderReference(
@@ -219,35 +141,21 @@ export async function ingestProviderEvent(
       }),
       now,
     });
-    await repository.setInboxStatus({
-      id: inboxEntry.id,
-      processingStatus: "RECONCILIATION_REQUIRED",
-      errorCode: "INTENT_MAPPING_AMBIGUOUS",
-      now,
-    });
-    return result(event.provider, event.providerEventId, "RECONCILIATION_REQUIRED");
+    await finish("RECONCILIATION_REQUIRED", "INTENT_MAPPING_AMBIGUOUS");
+    return result(event, "RECONCILIATION_REQUIRED");
   }
 
   const application = await applyObservationToIntents(database, intents, event.canonicalState);
   if (application.processingStatus === "RECONCILIATION_REQUIRED") {
-    await repository.setInboxStatus({
-      id: inboxEntry.id,
-      processingStatus: "RECONCILIATION_REQUIRED",
-      errorCode: "ILLEGAL_TRANSITION",
-      now,
-    });
+    await finish("RECONCILIATION_REQUIRED", "ILLEGAL_TRANSITION");
     return result(
-      event.provider,
-      event.providerEventId,
+      event,
       "RECONCILIATION_REQUIRED",
       application.paymentIntentId,
       event.canonicalState,
     );
   }
   if (application.processingStatus === "APPLIED" && event.kind === "payment") {
-    // Dispatch any durable downstream reaction created by this observation.
-    // Membership reactions apply inline; order/amendment commitment stays
-    // with the redrive job that owns those appliers.
     const reaction = await database
       .prepare(
         "SELECT id, reaction_type, subject_id FROM payment_reaction WHERE payment_intent_id=? AND status='PENDING' ORDER BY created_at ASC LIMIT 1",
@@ -269,30 +177,98 @@ export async function ingestProviderEvent(
       });
     }
   }
-
   if (application.processingStatus === "RETRY_REQUIRED") {
-    // Concurrent command changed the payment; retry or reconcile later.
+    await finish("RETRY_REQUIRED", "VERSION_CONFLICT");
+    return result(event, "RETRY_REQUIRED", application.paymentIntentId, event.canonicalState);
+  }
+  await finish("APPLIED");
+  return result(event, "APPLIED", application.paymentIntentId, event.canonicalState);
+}
+
+/** Verify, normalize, persist, lease, and apply one provider event. */
+export async function ingestProviderEvent(
+  database: D1Database,
+  registry: ProviderRegistry,
+  providerCode: string,
+  headers: Headers,
+  rawBody: string,
+): Promise<
+  { ok: true; value: ProviderEventResult } | { ok: false; error: { code: string; message: string } }
+> {
+  let provider;
+  try {
+    provider = registry.require(providerCode);
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "PAYMENT_PROVIDER_UNCONFIGURED",
+        message: `No payment provider is configured for '${providerCode}'`,
+      },
+    };
+  }
+  const verification = await provider.verifyAndParseEvent(headers, rawBody);
+  if (!verification.ok)
+    return {
+      ok: false,
+      error: {
+        code: "WEBHOOK_VERIFICATION_FAILED",
+        message: `Provider event rejected: ${verification.reason}`,
+      },
+    };
+
+  const event = verification.event;
+  const repository = extendPaymentRepository(database);
+  const now = Date.now();
+  const observation = normalizedProviderObservation(event);
+  const claimedInsert = await repository.insertInbox({
+    provider: event.provider,
+    providerEventId: event.providerEventId,
+    providerReference: event.providerReference,
+    eventType: event.kind,
+    payloadHash: event.payloadHash,
+    normalizedObservationJson: observation,
+    now,
+  });
+  const inbox = await repository.findInboxEntry(event.provider, event.providerEventId);
+  if (!inbox) return result(event, "RETRY_REQUIRED");
+
+  if (claimedInsert === 0 && inbox.payloadHash !== event.payloadHash) {
     await repository.setInboxStatus({
-      id: inboxEntry.id,
-      processingStatus: "RETRY_REQUIRED",
-      errorCode: "VERSION_CONFLICT",
+      id: inbox.id,
+      processingStatus: "REJECTED",
+      errorCode: "PAYLOAD_HASH_MISMATCH",
       now,
     });
-    return result(
-      event.provider,
-      event.providerEventId,
-      "RETRY_REQUIRED",
-      application.paymentIntentId,
-      event.canonicalState,
-    );
+    await repository.recordReconciliationCase({
+      intentId: null,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({
+        provider: event.provider,
+        providerEventId: event.providerEventId,
+      }),
+      now,
+    });
+    return result(event, "REJECTED");
+  }
+  if (inbox.processingStatus === "APPLIED" || inbox.processingStatus === "DUPLICATE") {
+    recordFinancialEvent({
+      event: "provider_observation_replayed",
+      scope: "payments.ingest",
+      provider: event.provider,
+      aggregateId: event.providerEventId,
+      outcomeCode: "DUPLICATE",
+    });
+    return result(event, "DUPLICATE");
   }
 
-  await repository.setInboxStatus({ id: inboxEntry.id, processingStatus: "APPLIED", now });
-  return result(
-    event.provider,
-    event.providerEventId,
-    "APPLIED",
-    application.paymentIntentId,
-    event.canonicalState,
-  );
+  const leaseOwner = crypto.randomUUID();
+  const claimedLease = await repository.claimInbox({
+    id: inbox.id,
+    leaseOwner,
+    now,
+    leaseMs: 30_000,
+  });
+  if (claimedLease !== 1) return result(event, "RETRY_REQUIRED");
+  return applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now);
 }

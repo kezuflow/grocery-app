@@ -350,8 +350,16 @@ export type PaymentRepository = ReturnType<typeof createPaymentRepository>;
 
 export type InboxRow = {
   id: string;
+  provider: string;
+  providerEventId: string;
   payloadHash: string;
   processingStatus: string;
+  normalizedObservationJson: string | null;
+  attempts: number;
+  receivedAt: number;
+  availableAt: number | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: number | null;
 };
 
 export function extendPaymentRepository(database: D1Database) {
@@ -395,29 +403,60 @@ export function extendPaymentRepository(database: D1Database) {
     async findInboxEntry(provider: string, providerEventId: string): Promise<InboxRow | null> {
       const row = await database
         .prepare(
-          "SELECT id, payload_hash, processing_status FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
+          "SELECT id, provider, provider_event_id, payload_hash, processing_status, normalized_observation_json, attempts, received_at, available_at, lease_owner, lease_expires_at FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
         )
         .bind(provider, providerEventId)
-        .first<{ id: string; payload_hash: string; processing_status: string }>();
+        .first<{
+          id: string;
+          provider: string;
+          provider_event_id: string;
+          payload_hash: string;
+          processing_status: string;
+          normalized_observation_json: string | null;
+          attempts: number;
+          received_at: number;
+          available_at: number | null;
+          lease_owner: string | null;
+          lease_expires_at: number | null;
+        }>();
       return row
-        ? { id: row.id, payloadHash: row.payload_hash, processingStatus: row.processing_status }
+        ? {
+            id: row.id,
+            provider: row.provider,
+            providerEventId: row.provider_event_id,
+            payloadHash: row.payload_hash,
+            processingStatus: row.processing_status,
+            normalizedObservationJson: row.normalized_observation_json,
+            attempts: row.attempts,
+            receivedAt: row.received_at,
+            availableAt: row.available_at,
+            leaseOwner: row.lease_owner,
+            leaseExpiresAt: row.lease_expires_at,
+          }
         : null;
     },
     insertInbox(input: {
       provider: string;
       providerEventId: string;
       payloadHash: string;
+      providerReference: string;
+      eventType: string;
+      normalizedObservationJson: string;
       now: number;
     }): Promise<number> {
       return database
         .prepare(
-          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, processing_status, attempts, received_at, updated_at) VALUES (?, ?, ?, ?, 'RECEIVED', 0, ?, ?)",
+          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, provider_reference, event_type, normalized_observation_json, processing_status, attempts, received_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'RECEIVED', 0, ?, ?, ?)",
         )
         .bind(
           crypto.randomUUID(),
           input.provider,
           input.providerEventId,
           input.payloadHash,
+          input.providerReference,
+          input.eventType,
+          input.normalizedObservationJson,
+          input.now,
           input.now,
           input.now,
         )
@@ -429,14 +468,97 @@ export function extendPaymentRepository(database: D1Database) {
       processingStatus: string;
       errorCode?: string | null;
       now: number;
+      leaseOwner?: string;
     }): Promise<void> {
+      const retry = input.processingStatus === "RETRY_REQUIRED";
       return database
         .prepare(
-          "UPDATE payment_provider_event_inbox SET processing_status=?, last_error_code=?, attempts=attempts+1, processed_at=?, updated_at=? WHERE id=?",
+          `UPDATE payment_provider_event_inbox
+           SET processing_status=?, last_error_code=?, attempts=attempts+1,
+               first_failed_at=CASE WHEN ? THEN COALESCE(first_failed_at, ?) ELSE first_failed_at END,
+               available_at=CASE WHEN ? THEN ? + MIN(900000, 1000 * (1 << MIN(attempts, 9))) ELSE NULL END,
+               processed_at=CASE WHEN ? THEN NULL ELSE ? END,
+               lease_owner=NULL, lease_expires_at=NULL, updated_at=?
+           WHERE id=? AND (? IS NULL OR lease_owner=?)`,
         )
-        .bind(input.processingStatus, input.errorCode ?? null, input.now, input.now, input.id)
+        .bind(
+          input.processingStatus,
+          input.errorCode ?? null,
+          retry ? 1 : 0,
+          input.now,
+          retry ? 1 : 0,
+          input.now,
+          retry ? 1 : 0,
+          input.now,
+          input.now,
+          input.id,
+          input.leaseOwner ?? null,
+          input.leaseOwner ?? null,
+        )
         .run()
         .then(() => undefined);
+    },
+    claimInbox(input: { id: string; leaseOwner: string; now: number; leaseMs: number }) {
+      return database
+        .prepare(
+          `UPDATE payment_provider_event_inbox
+           SET lease_owner=?, lease_expires_at=?, updated_at=?
+           WHERE id=?
+             AND processing_status IN ('RECEIVED','RETRY_REQUIRED')
+             AND (available_at IS NULL OR available_at<=?)
+             AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at<=?)`,
+        )
+        .bind(
+          input.leaseOwner,
+          input.now + input.leaseMs,
+          input.now,
+          input.id,
+          input.now,
+          input.now,
+        )
+        .run()
+        .then((outcome) => outcome.meta?.changes ?? 0);
+    },
+    async listDueInbox(now: number, limit: number): Promise<InboxRow[]> {
+      const rows = await database
+        .prepare(
+          `SELECT id, provider, provider_event_id, payload_hash, processing_status,
+                  normalized_observation_json, attempts, received_at, available_at,
+                  lease_owner, lease_expires_at
+           FROM payment_provider_event_inbox
+           WHERE processing_status IN ('RECEIVED','RETRY_REQUIRED')
+             AND normalized_observation_json IS NOT NULL
+             AND (available_at IS NULL OR available_at<=?)
+             AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at<=?)
+           ORDER BY COALESCE(available_at, received_at), received_at, id LIMIT ?`,
+        )
+        .bind(now, now, limit)
+        .all<{
+          id: string;
+          provider: string;
+          provider_event_id: string;
+          payload_hash: string;
+          processing_status: string;
+          normalized_observation_json: string | null;
+          attempts: number;
+          received_at: number;
+          available_at: number | null;
+          lease_owner: string | null;
+          lease_expires_at: number | null;
+        }>();
+      return rows.results.map((row) => ({
+        id: row.id,
+        provider: row.provider,
+        providerEventId: row.provider_event_id,
+        payloadHash: row.payload_hash,
+        processingStatus: row.processing_status,
+        normalizedObservationJson: row.normalized_observation_json,
+        attempts: row.attempts,
+        receivedAt: row.received_at,
+        availableAt: row.available_at,
+        leaseOwner: row.lease_owner,
+        leaseExpiresAt: row.lease_expires_at,
+      }));
     },
     applyObservationWithReaction(input: {
       intentId: string;

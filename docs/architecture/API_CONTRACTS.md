@@ -202,6 +202,8 @@ Core receives payment provider webhooks through a signed public webhook handler 
 
 - verify signature and timestamp;
 - insert `(provider, providerEventId)` into the durable Payments inbox exactly once;
+- persist only the bounded provider-neutral observation plus payload hash, never the raw webhook body;
+- conditionally lease due `RECEIVED`/`RETRY_REQUIRED` rows so redelivery and scheduled redrive share one application path;
 - translate the vendor state into canonical Payments state under the configured payment commitment policy;
 - update Payments using handler-side legal-transition and compare-and-swap protection, safely retrying/reconciling concurrent aggregate changes;
 - invoke an explicit idempotent Membership or Order application command when the canonical outcome is sufficient;
@@ -209,6 +211,8 @@ Core receives payment provider webhooks through a signed public webhook handler 
 - enqueue non-critical follow-up.
 
 Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for MVP; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Membership or Order DTOs.
+
+Retry availability uses bounded backoff. Expired leases are reclaimable; competing Workers cannot both own an observation. Retry age/attempt exhaustion transitions the inbox row to `RECONCILIATION_REQUIRED` and creates one operationally visible case, so recovery does not depend on the provider sending the event again.
 
 Immediately before a new payment creation, Core recalculates current catalog prices, discounts, stock/hold, serviceability, route-based delivery fee, membership entitlement, and fulfillment eligibility without persisting or superseding another Quote. `expectedTotalMinor` and every explicit component must equal the accepted Quote; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must request/present a replacement quote for explicit acceptance. Identical payment replay is resolved first and retains `checkout_quote/<accepted quote id>` as its subject even after commitment consumes that Quote.
 
