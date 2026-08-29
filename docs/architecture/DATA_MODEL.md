@@ -228,6 +228,8 @@ Migration `0028_customer_crm.sql` adds the application-owned `customer_invitatio
 
 Migration `0029_promotion_administration.sql` rebuilds the historical fixed-discount `promotion` seam into the canonical definition shape: closed order/delivery benefit types, `DRAFT|ACTIVE|INACTIVE|ARCHIVED` lifecycle, usage limits, priority/automatic flags, and optimistic `version` (legacy rows copy forward as active fixed-discount definitions). It also adds `promotion_grant.customer_id` so targeted grants persist their customer on the canonical grant row. The introductory-trial authority (`INTRO_TRIAL`) is untouched.
 
+Migration `0038_promotion_grant_uniqueness.sql` reconciles historical duplicate targeted grants to their earliest stable grant, repoints any redemption references, and enforces the canonical unique `(benefit_code, customer_id)` key for non-null customers. System membership authority rows remain customer-neutral grants and are unaffected.
+
 ## Pagination and Read Models
 
 High-volume lists use keyset pagination with stable compound sort keys, commonly `(created_at, id)` or domain deadline plus ID. Admin read models may query normalized tables directly using selected joins and indexes. Materialized projection tables are added only when measured query shape/latency warrants them and remain rebuildable from transactional truth.
