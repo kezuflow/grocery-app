@@ -42,9 +42,7 @@ test("authenticated shell supports keyboard focus, menu focus return, and respon
   await expect(adminPage.getByRole("button", { name: "Close admin navigation" })).toBeVisible();
   await adminPage.getByRole("button", { name: "Close admin navigation" }).click();
   await expect(trigger).toBeFocused();
-  await expect(
-    adminPage.getByRole("navigation", { name: "Mobile admin navigation" }),
-  ).toBeVisible();
+  await expect(adminPage.getByRole("dialog", { name: "Admin navigation" })).toHaveCount(0);
 
   await adminPage.setViewportSize({ width: 1280, height: 800 });
   await expect(adminPage.getByRole("navigation", { name: "Admin navigation" })).toBeVisible();

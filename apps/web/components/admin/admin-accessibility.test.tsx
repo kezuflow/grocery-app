@@ -5,6 +5,9 @@ import { createElement } from "react";
 import { AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
 import { AdminConfirmationDialog, AdminCursorPagination } from "./admin-controls";
+import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
+import { AdminPageState, AdminLiveRegion } from "./admin-page-state";
+import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
 vi.mock("../../app/admin/admin-context-provider", () => ({
@@ -186,5 +189,59 @@ describe("shared Admin accessibility contract", () => {
     expect(confirmation).toContain("disabled");
     expect(confirmation).toContain("Tomatoes · -10 GRAM");
     expect(confirmation).toContain("Cebu Central");
+  });
+
+  it("renders all distinct shared page states with recoverable semantics", () => {
+    const variants = ["loading", "empty", "filtered-empty", "permission-empty", "error"] as const;
+    const markup = variants
+      .map((state) =>
+        renderToStaticMarkup(
+          createElement(AdminPageState, {
+            state,
+            title: `${state} title`,
+            message: `${state} message`,
+            requestId: state === "error" ? "request-1" : undefined,
+            onRetry: state === "error" ? vi.fn() : undefined,
+          }),
+        ),
+      )
+      .join("");
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("No data is available yet");
+    expect(markup).toContain("No results match the active filters");
+    expect(markup).toContain("The selected scope or your permissions do not expose data");
+    expect(markup).toContain("Request reference: request-1");
+    expect(markup).toContain("Retry");
+  });
+
+  it("renders a responsive typed data table, breadcrumbs, and live command result", () => {
+    type Row = { id: string; name: string; status: string };
+    const columns: ReadonlyArray<AdminDataTableColumn<Row>> = [
+      { key: "name", header: "Name", render: (row) => row.name },
+      { key: "status", header: "Status", render: (row) => row.status },
+    ];
+    const markup = renderToStaticMarkup(
+      createElement(
+        "div",
+        null,
+        createElement(AdminBreadcrumbs, {
+          items: [{ label: "Admin", href: "/admin" }, { label: "Orders" }],
+        }),
+        createElement(AdminDataTable<Row>, {
+          ariaLabel: "Typed records",
+          columns,
+          rows: [{ id: "1", name: "Carrots", status: "ACTIVE" }],
+          rowKey: (row) => row.id,
+        }),
+        createElement(AdminLiveRegion, { message: "Order updated" }),
+      ),
+    );
+    expect(markup).toContain('aria-label="Breadcrumb"');
+    expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain('aria-label="Typed records"');
+    expect(markup).toContain('data-label="Name"');
+    expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain("Order updated");
   });
 });

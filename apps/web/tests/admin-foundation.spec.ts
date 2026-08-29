@@ -56,6 +56,14 @@ test("the desktop shell persists its collapsed navigation preference", async ({ 
   await expect(adminPage.getByRole("button", { name: "Expand admin navigation" })).toBeVisible();
 });
 
+test("Core-authorized workspaces expose hierarchical breadcrumbs", async ({ adminPage }) => {
+  await adminPage.goto("/admin/payments/transactions");
+  const breadcrumb = adminPage.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(breadcrumb).toBeVisible();
+  await expect(breadcrumb).toContainText("Payments");
+  await expect(breadcrumb).toContainText("Transactions");
+});
+
 test("admin accent tokens stay isolated from the storefront", async ({ adminPage, page }) => {
   await adminPage.goto("/admin");
   const adminAccent = await adminPage

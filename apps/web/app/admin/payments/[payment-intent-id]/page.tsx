@@ -10,6 +10,7 @@ import { ListPageSection, PageHeader, StatusBadge } from "../../../../components
 import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { PaymentNavigation } from "../../../../components/admin/payment-navigation";
+import { AdminDetailGrid, AdminLiveRegion } from "../../../../components/admin/admin-page-state";
 
 function money(value: number, currency: string) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
@@ -120,12 +121,7 @@ export default function PaymentDetailPage({
             description={`${payment.customerEmail} · ${payment.purpose}`}
             action={<StatusBadge>{payment.status}</StatusBadge>}
           />
-          {notice ? (
-            <Alert>
-              <AlertTitle>Payment status</AlertTitle>
-              <AlertDescription>{notice}</AlertDescription>
-            </Alert>
-          ) : null}
+          <AdminLiveRegion message={notice} />
           {payment.reconciliationCases.some((item) => item.status === "OPEN") ? (
             <Alert variant="destructive">
               <AlertTitle>Reconciliation required</AlertTitle>
@@ -136,7 +132,7 @@ export default function PaymentDetailPage({
             </Alert>
           ) : null}
           <ListPageSection title="Summary">
-            <dl className="grid gap-4 p-4 text-sm sm:grid-cols-3">
+            <AdminDetailGrid>
               <div>
                 <dt className="text-[var(--fm-text-muted)]">Amount</dt>
                 <dd className="font-semibold">{money(payment.amountMinor, payment.currency)}</dd>
@@ -163,7 +159,7 @@ export default function PaymentDetailPage({
                 <dt className="text-[var(--fm-text-muted)]">Updated</dt>
                 <dd>{payment.updatedAt.slice(0, 19)}</dd>
               </div>
-            </dl>
+            </AdminDetailGrid>
           </ListPageSection>
           <ListPageSection title="Attempts">
             {payment.attempts.length === 0 ? (

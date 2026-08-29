@@ -16,6 +16,11 @@ import {
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
+import {
+  AdminDetailGrid,
+  AdminLiveRegion,
+  AdminTimeline,
+} from "../../../../components/admin/admin-page-state";
 
 function money(amountMinor: number | null, currency: string): string {
   return amountMinor === null
@@ -104,11 +109,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             description={`${order.customerEmail} · ${order.currency} ${(order.totalMinor / 100).toFixed(2)}`}
             action={<StatusBadge>{order.status}</StatusBadge>}
           />
-          {message ? (
-            <p role="status" className="border p-3 text-sm">
-              {message}
-            </p>
-          ) : null}
+          <AdminLiveRegion message={message} />
           {order.exceptions.length > 0 ? (
             <Alert variant="destructive">
               <AlertTitle>Operational attention required</AlertTitle>
@@ -126,7 +127,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                 : "Only the committed order total is available for this historical order."
             }
           >
-            <dl className="grid gap-4 p-4 text-sm sm:grid-cols-4">
+            <AdminDetailGrid>
               <div>
                 <dt className="text-[var(--fm-text-muted)]">Subtotal</dt>
                 <dd className="font-semibold">
@@ -151,7 +152,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                   {money(order.financial.totalMinor, order.currency)}
                 </dd>
               </div>
-            </dl>
+            </AdminDetailGrid>
           </ListPageSection>
           <ListPageSection title="Items">
             <Table>
@@ -320,21 +321,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             )}
           </ListPageSection>
           <ListPageSection title="Timeline">
-            {order.timeline.length === 0 ? (
-              <p className="p-4 text-sm text-[var(--fm-text-muted)]">No lifecycle events.</p>
-            ) : (
-              <ol className="divide-y text-sm">
-                {order.timeline.map((entry) => (
-                  <li className="grid gap-1 p-4 sm:grid-cols-[10rem_1fr_auto]" key={entry.eventId}>
-                    <time className="text-xs text-[var(--fm-text-muted)]">
-                      {entry.occurredAt.slice(0, 19)}
-                    </time>
-                    <span>{entry.label}</span>
-                    {entry.status ? <StatusBadge>{entry.status}</StatusBadge> : null}
-                  </li>
-                ))}
-              </ol>
-            )}
+            <AdminTimeline>
+              {order.timeline.length > 0
+                ? order.timeline.map((entry) => (
+                    <li
+                      className="grid gap-1 p-4 sm:grid-cols-[10rem_1fr_auto]"
+                      key={entry.eventId}
+                    >
+                      <time className="text-xs text-[var(--fm-text-muted)]">
+                        {entry.occurredAt.slice(0, 19)}
+                      </time>
+                      <span>{entry.label}</span>
+                      {entry.status ? <StatusBadge>{entry.status}</StatusBadge> : null}
+                    </li>
+                  ))
+                : undefined}
+            </AdminTimeline>
           </ListPageSection>
           <ListPageSection
             title="Cancellation"

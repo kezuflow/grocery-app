@@ -1,25 +1,21 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { AdminPaymentPage, RpcResult } from "@freshmarkets/contracts";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
+import type { AdminPaymentPage, AdminPaymentSummary, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
-import { Skeleton } from "../../../../components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import {
   AdminCursorPagination,
+  FilterBar,
   useAdminPagination,
 } from "../../../../components/admin/admin-controls";
 import { PaymentNavigation } from "../../../../components/admin/payment-navigation";
+import {
+  AdminDataTable,
+  type AdminDataTableColumn,
+} from "../../../../components/admin/admin-data-table";
+import { AdminPageState } from "../../../../components/admin/admin-page-state";
 
 function money(value: number, currency: string) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
@@ -57,33 +53,21 @@ export default function PaymentTransactionsPage() {
       />
       <PaymentNavigation />
       {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Transactions could not be loaded</AlertTitle>
-          <AlertDescription>
-            {error}
-            <br />
-            <Button
-              className="mt-3"
-              size="sm"
-              variant="outline"
-              onClick={() => void load(pagination.cursor, appliedStatus)}
-            >
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <AdminPageState
+          state="error"
+          title="Transactions could not be loaded"
+          message={error}
+          onRetry={() => void load(pagination.cursor, appliedStatus)}
+        />
       ) : null}
       {!page && !error ? (
-        <div role="status">
-          <Skeleton className="h-32 w-full" />
-        </div>
+        <AdminPageState state="loading" title="Loading payment transactions" />
       ) : null}
       {page ? (
         <ListPageSection title="Transactions">
-          <form
-            className="flex gap-2 p-4"
-            onSubmit={(event) => {
-              event.preventDefault();
+          <FilterBar
+            label="Payment filters"
+            onSubmit={() => {
               setAppliedStatus(status.trim().toUpperCase());
               pagination.reset();
             }}
@@ -98,47 +82,62 @@ export default function PaymentTransactionsPage() {
             <Button type="submit" size="sm" variant="outline">
               Filter
             </Button>
-          </form>
+          </FilterBar>
           {page.items.length === 0 ? (
-            <p className="p-4 text-sm text-[var(--fm-text-muted)]">
-              No payment intents match this filter.
-            </p>
+            <div className="p-4">
+              <AdminPageState
+                state={appliedStatus ? "filtered-empty" : "empty"}
+                message="No payment intents are visible."
+              />
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Purpose</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Refunded</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.items.map((payment) => (
-                  <TableRow key={payment.paymentIntentId}>
-                    <TableCell>{payment.customerEmail}</TableCell>
-                    <TableCell>{payment.purpose}</TableCell>
-                    <TableCell>
-                      <StatusBadge>{payment.status}</StatusBadge>
-                    </TableCell>
-                    <TableCell>{money(payment.amountMinor, payment.currency)}</TableCell>
-                    <TableCell>{money(payment.refundedMinor, payment.currency)}</TableCell>
-                    <TableCell>{payment.createdAt.slice(0, 10)}</TableCell>
-                    <TableCell>
+            <AdminDataTable<AdminPaymentSummary>
+              ariaLabel="Payment transactions"
+              rows={page.items}
+              rowKey={(payment) => payment.paymentIntentId}
+              columns={
+                [
+                  {
+                    key: "customer",
+                    header: "Customer",
+                    render: (payment) => payment.customerEmail,
+                  },
+                  { key: "purpose", header: "Purpose", render: (payment) => payment.purpose },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (payment) => <StatusBadge>{payment.status}</StatusBadge>,
+                  },
+                  {
+                    key: "amount",
+                    header: "Amount",
+                    render: (payment) => money(payment.amountMinor, payment.currency),
+                  },
+                  {
+                    key: "refunded",
+                    header: "Refunded",
+                    render: (payment) => money(payment.refundedMinor, payment.currency),
+                  },
+                  {
+                    key: "created",
+                    header: "Created",
+                    render: (payment) => payment.createdAt.slice(0, 10),
+                  },
+                  {
+                    key: "open",
+                    header: "Actions",
+                    render: (payment) => (
                       <Link
                         className="font-medium underline"
                         href={`/admin/payments/transactions/${payment.paymentIntentId}`}
                       >
                         Open
                       </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    ),
+                  },
+                ] satisfies ReadonlyArray<AdminDataTableColumn<AdminPaymentSummary>>
+              }
+            />
           )}
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}

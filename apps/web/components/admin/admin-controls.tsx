@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
@@ -132,5 +132,30 @@ export function AdminConfirmationDialog({
         </div>
       </section>
     </div>
+  );
+}
+
+export const ConfirmCommandDialog = AdminConfirmationDialog;
+
+export function FilterBar({
+  children,
+  onSubmit,
+  label = "Filters",
+}: {
+  children: ReactNode;
+  onSubmit?: () => void;
+  label?: string;
+}) {
+  return (
+    <form
+      aria-label={label}
+      className="flex flex-wrap items-end gap-2 border-b p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit?.();
+      }}
+    >
+      {children}
+    </form>
   );
 }

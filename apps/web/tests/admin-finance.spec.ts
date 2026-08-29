@@ -75,7 +75,9 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   await expect(adminPage.getByRole("alertdialog")).toContainText(paymentIntentId);
   await adminPage.getByLabel("Confirmation reason").fill("E2E quality issue");
   await adminPage.getByRole("button", { name: "Confirm" }).click();
-  await expect(adminPage.getByRole("alert")).toContainText("Refund request recorded");
+  await expect(
+    adminPage.getByRole("status").filter({ hasText: "Refund request recorded" }),
+  ).toBeVisible();
 
   await adminPage.goto("/admin/payments/reconciliation");
   await expect(

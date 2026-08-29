@@ -1,24 +1,20 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { AdminOrderPage, RpcResult } from "@freshmarkets/contracts";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+import type { AdminOrderPage, AdminOrderSummary, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import {
   AdminCursorPagination,
   useAdminPagination,
+  FilterBar,
 } from "../../../components/admin/admin-controls";
+import {
+  AdminDataTable,
+  type AdminDataTableColumn,
+} from "../../../components/admin/admin-data-table";
+import { AdminPageState } from "../../../components/admin/admin-page-state";
 
 type State =
   | { phase: "loading" }
@@ -71,41 +67,21 @@ export default function OrdersPage() {
           Customer issues
         </Link>
       </nav>
-      {state.phase === "loading" ? (
-        <div role="status" aria-label="Loading orders">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="mt-3 h-12 w-full" />
-        </div>
-      ) : null}
+      {state.phase === "loading" ? <AdminPageState state="loading" title="Loading orders" /> : null}
       {state.phase === "error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>Orders could not be loaded</AlertTitle>
-          <AlertDescription>
-            {state.message}
-            {state.requestId ? (
-              <>
-                <br />
-                <span className="font-mono text-xs">Request reference: {state.requestId}</span>
-              </>
-            ) : null}
-            <br />
-            <Button
-              className="mt-3"
-              size="sm"
-              variant="outline"
-              onClick={() => void load(appliedStatus, pagination.cursor)}
-            >
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <AdminPageState
+          state="error"
+          title="Orders could not be loaded"
+          message={state.message}
+          requestId={state.requestId}
+          onRetry={() => void load(appliedStatus, pagination.cursor)}
+        />
       ) : null}
       {state.phase === "ready" ? (
         <ListPageSection title="Order queue">
-          <form
-            className="flex gap-2 p-4"
-            onSubmit={(event) => {
-              event.preventDefault();
+          <FilterBar
+            label="Order filters"
+            onSubmit={() => {
               setAppliedStatus(status.trim());
               pagination.reset();
             }}
@@ -134,51 +110,63 @@ export default function OrdersPage() {
                 Clear
               </Button>
             ) : null}
-          </form>
+          </FilterBar>
           {!page || page.items.length === 0 ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
-              No orders match this filter.
-            </p>
+            <div className="p-4">
+              <AdminPageState
+                state={appliedStatus ? "filtered-empty" : "empty"}
+                message="No orders are visible in this queue."
+              />
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Fulfillment</TableHead>
-                  <TableHead>Committed</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.items.map((order) => (
-                  <TableRow key={order.orderId}>
-                    <TableCell>{order.customerEmail}</TableCell>
-                    <TableCell>
-                      <StatusBadge>{order.status}</StatusBadge>
-                    </TableCell>
-                    <TableCell>
-                      {order.currency} {(order.totalMinor / 100).toFixed(2)}
-                    </TableCell>
-                    <TableCell>{order.paymentStatus ?? "—"}</TableCell>
-                    <TableCell>{order.fulfillmentStatus ?? "—"}</TableCell>
-                    <TableCell className="text-xs">
-                      {order.committedAt ? order.committedAt.slice(0, 10) : "—"}
-                    </TableCell>
-                    <TableCell>
+            <AdminDataTable<AdminOrderSummary>
+              ariaLabel="Order queue"
+              rows={page.items}
+              rowKey={(order) => order.orderId}
+              columns={
+                [
+                  { key: "customer", header: "Customer", render: (order) => order.customerEmail },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (order) => <StatusBadge>{order.status}</StatusBadge>,
+                  },
+                  {
+                    key: "total",
+                    header: "Total",
+                    render: (order) => `${order.currency} ${(order.totalMinor / 100).toFixed(2)}`,
+                  },
+                  {
+                    key: "payment",
+                    header: "Payment",
+                    render: (order) => order.paymentStatus ?? "—",
+                  },
+                  {
+                    key: "fulfillment",
+                    header: "Fulfillment",
+                    render: (order) => order.fulfillmentStatus ?? "—",
+                  },
+                  {
+                    key: "committed",
+                    header: "Committed",
+                    className: "text-xs",
+                    render: (order) => (order.committedAt ? order.committedAt.slice(0, 10) : "—"),
+                  },
+                  {
+                    key: "open",
+                    header: "Actions",
+                    render: (order) => (
                       <Link
                         className="text-xs font-medium underline"
                         href={`/admin/orders/${order.orderId}`}
                       >
                         Open
                       </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    ),
+                  },
+                ] satisfies ReadonlyArray<AdminDataTableColumn<AdminOrderSummary>>
+              }
+            />
           )}
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}

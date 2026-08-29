@@ -147,7 +147,7 @@ test("promotion, catalog, finance, and operations queues expose later cursor rec
       text: "Later promotion",
     },
     {
-      path: "/admin/payments",
+      path: "/admin/payments/transactions",
       api: "/api/admin/payments",
       cursor: "payments-next",
       first: {

@@ -290,23 +290,23 @@
 - Produces shared `AdminDataTable`, `AdminPageState`, `AdminBreadcrumbs`, `FilterBar`, `ConfirmCommandDialog`, cursor controls, status/timeline/detail compositions, and live command-result announcements.
 - Every list consumes `nextCursor`, preserves filters/selected scope, and distinguishes no data, filtered empty, permission/scope empty, loading, and error.
 
-- [ ] **Step 1: Write failing component and browser tests for every state and responsive/keyboard behavior**
+- [x] **Step 1: Write failing component and browser tests for every state and responsive/keyboard behavior**
 
   Cover Overview, Customers/Privacy, Memberships, Promotions, Inventory, Procurement/Receiving, Fulfillment, Delivery, Operational Exceptions, Analytics, Staff/Roles, Audit, and Fulfillment Mode Settings. Assert later cursor pages are reachable and no screen renders raw persistence/provider payloads.
 
-- [ ] **Step 2: Run Web unit and Admin browser suites and verify RED**
+- [x] **Step 2: Run Web unit and Admin browser suites and verify RED**
 
   Run: `pnpm --filter @freshmarkets/web test -- components/admin app/api/admin && pnpm --filter @freshmarkets/web exec playwright test tests/admin-*.spec.ts`.
 
-- [ ] **Step 3: Implement shared compositions and migrate each workspace**
+- [x] **Step 3: Implement shared compositions and migrate each workspace**
 
   Keep domain-specific actions and status vocabularies explicit. Replace page-local duplicate tables/states only where the shared composition preserves the domain decision; retain Core-derived allowed actions and explicit selected scope.
 
-- [ ] **Step 4: Run Web unit/browser suites and verify GREEN**
+- [x] **Step 4: Run Web unit/browser suites and verify GREEN**
 
   Repeat Step 2, then run `pnpm --filter @freshmarkets/web run check:vinext` and `pnpm --filter @freshmarkets/web build`.
 
-- [ ] **Step 5: Review against the complete required screen inventory, record progress, commit, and push**
+- [x] **Step 5: Review against the complete required screen inventory, record progress, commit, and push**
 
   Commit `feat(admin): unify operational workspaces`, then push `origin main`.
 

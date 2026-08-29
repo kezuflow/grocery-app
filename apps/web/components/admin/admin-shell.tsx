@@ -12,6 +12,7 @@ import { Button } from "../ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 import {
   adminNavigationFromContext,
   groupAdminNavigation,
@@ -44,6 +45,19 @@ export function AdminShell({
   environment: string;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
+  const active = mostSpecificActiveNavigation(items, pathname);
+  const activeItem = active ? items.find((item) => item.code === active.code) : undefined;
+  const parentItem = activeItem?.parentCode
+    ? items.find((item) => item.code === activeItem.parentCode)
+    : undefined;
+  const breadcrumbs = activeItem
+    ? [
+        ...(activeItem.href === "/admin" ? [] : [{ label: "Admin", href: "/admin" }]),
+        ...(parentItem ? [{ label: parentItem.label, href: parentItem.href }] : []),
+        { label: activeItem.label },
+      ]
+    : [{ label: "Admin" }];
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY) === "true");
@@ -65,7 +79,10 @@ export function AdminShell({
           tabIndex={-1}
           className="min-w-0 flex-1 px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8"
         >
-          <div className="mx-auto w-full max-w-[var(--fm-container-admin)]">{children}</div>
+          <div className="mx-auto w-full max-w-[var(--fm-container-admin)] space-y-4">
+            <AdminBreadcrumbs items={breadcrumbs} />
+            {children}
+          </div>
         </main>
       </div>
     </div>
