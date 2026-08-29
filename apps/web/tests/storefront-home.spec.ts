@@ -34,6 +34,20 @@ test("the marketplace home server-renders categories, rails, and membership cont
   await expect(page.getByText("500 g").first()).toBeVisible();
 });
 
+test("the membership offer returns after a full page refresh", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  const offer = page.getByRole("complementary", { name: "FreshMarkets membership offer" });
+
+  await expect(offer).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss membership offer" }).click();
+  await expect(offer).toBeHidden();
+
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await expect(offer).toBeVisible();
+});
+
 test("daily deals advances with gallery controls", async ({ page }) => {
   await page.goto("/");
   const gallery = page.getByTestId("daily-deals-gallery");

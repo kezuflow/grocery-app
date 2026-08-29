@@ -2,29 +2,10 @@
 
 import Link from "next/link";
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
-
-const DISMISSED_KEY = "freshmarkets-membership-cta-dismissed";
+import { useState } from "react";
 
 export function MembershipCtaBar() {
   const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    try {
-      if (window.sessionStorage.getItem(DISMISSED_KEY) === "true") setVisible(false);
-    } catch {
-      // The offer remains dismissible even when browser storage is unavailable.
-    }
-  }, []);
-
-  const dismiss = () => {
-    setVisible(false);
-    try {
-      window.sessionStorage.setItem(DISMISSED_KEY, "true");
-    } catch {
-      // Local state still dismisses the offer for the current page lifecycle.
-    }
-  };
 
   if (!visible) return null;
 
@@ -68,7 +49,7 @@ export function MembershipCtaBar() {
       <button
         type="button"
         aria-label="Dismiss membership offer"
-        onClick={dismiss}
+        onClick={() => setVisible(false)}
         className="absolute top-1/2 right-2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none sm:right-4"
       >
         <X className="size-5" aria-hidden="true" />
