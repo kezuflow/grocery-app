@@ -77,4 +77,10 @@ Slice 8 (Analytics) is implemented per
 `docs/superpowers/plans/ADMIN_ANALYTICS_SLICE_8_IMPLEMENTATION_PLAN.md`; metric definitions,
 scoped read models, BFF routes, and the Analytics workspace are complete, while authenticated
 browser execution remains environment-gated by the unprovisioned auth-email transport. Slice 9
-readiness work has not begun.
+(cross-workspace readiness) is implemented per
+`docs/superpowers/plans/ADMIN_READINESS_SLICE_9_IMPLEMENTATION_PLAN.md`; accessibility,
+boundary/security, Worker-local checks, performance evidence, and operational runbooks are
+complete. Its final gate is recorded in
+`docs/superpowers/reports/ADMIN_READINESS_SLICE_9_FINAL.md`. Authenticated browser execution
+remains environment-gated by the unprovisioned auth-email transport, the pre-existing Slice 7
+non-atomic operations/audit concern remains parked, and Slice 10 has not begun.
