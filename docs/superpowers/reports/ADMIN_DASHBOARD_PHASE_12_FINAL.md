@@ -88,4 +88,4 @@ The version-controlled storefront image path intentionally remains a compatibili
 - `b592bdb` — `fix(admin): harden catalog and refund concurrency`
 - `79fab8a` — `fix(admin): close dashboard review findings`
 
-The closing documentation commit is reported in the task handoff. Remote parity is temporarily blocked because six separately owned, not-yet-authorized Maps commits are ancestors of the final local Admin commits; pushing Admin would publish that unfinished program transitively. The Maps owner explicitly withheld push authorization until its three-plan program and independent verification finish, so this task does not bypass that boundary.
+The closing documentation commit is reported in the task handoff. After the owner explicitly authorized publishing the integrated ancestry, the verified chain through `7964efc` was pushed directly to `origin/main`. Untracked Maps planning/specification files remain separately owned and intentionally untouched.

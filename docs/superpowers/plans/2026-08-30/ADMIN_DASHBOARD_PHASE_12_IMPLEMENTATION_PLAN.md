@@ -350,7 +350,7 @@
 
 - [x] **Step 5: Use `superpowers:verification-before-completion` and rerun the complete validation matrix**
 
-- [ ] **Step 6: Commit documentation/evidence, push, and verify remote parity**
+- [x] **Step 6: Commit documentation/evidence, push, and verify remote parity**
 
   Commit `docs(admin): close phase 12 dashboard`, push `origin main`, and verify `git rev-parse HEAD` equals `git rev-parse origin/main` with a clean worktree.
 
@@ -364,4 +364,4 @@
 - [x] Every remaining Admin workspace uses the unified responsive/state/accessibility model and reachable cursor pagination.
 - [x] No raw D1/R2/provider type reaches contracts or UI; Web has no authoritative data access or invented authorization.
 - [x] Migration, focused tests, Worker-local tests, vinext checks, builds, and Admin Playwright flows pass.
-- [ ] Full verification is fresh, the worktree is clean, and all verified commits are pushed to `origin/main`.
+- [x] Full verification is fresh, all Phase 12 files are committed, and all verified commits are pushed to `origin/main`. Untracked Maps planning/specification files remain separately owned and intentionally untouched.
