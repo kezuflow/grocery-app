@@ -100,7 +100,7 @@ Indexes: customer/state, next billing, trial end, scheduled cancellation, and on
 
 ## Catalog, Units, and Prices
 
-- `categories(id PK, parent_id FK NULL, slug UNIQUE, name, icon_asset_key NULL, status, sort_order)`
+- `categories(id PK, parent_id FK NULL, slug UNIQUE, name, icon_asset_key NULL, status, sort_order, version)`
 - `products(id PK, slug UNIQUE, name, description, category_id FK, status, version)`
 - `unit_definitions(id PK, code UNIQUE, display_name, dimension MASS|VOLUME|COUNT, canonical_base_code GRAM|MILLILITER|PIECE, conversion_numerator, conversion_denominator, status, version)` with positive integer conversion factors and same-dimension conversion only.
 - `inventory_pools(id PK, product_id FK, base_unit_id FK, code, UNIQUE(product_id, code))` where the referenced unit is the dimension's canonical base unit.

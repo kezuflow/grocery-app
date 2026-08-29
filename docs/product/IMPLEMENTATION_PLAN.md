@@ -550,19 +550,27 @@ Phases 1 and 7–11.
 
 ### Domain/application work
 
-- Fill read-model gaps, exception summaries, audit views, permission-aware action availability.
+- Fill read-model gaps, exception summaries, audit views, permission-aware action availability, and Core-provided hierarchical navigation metadata.
+- Complete Catalog administration for product create/update/status, customer-facing detail fields, primary/ordered media association, persisted SKU variants, exact inventory consumption, price/location availability, and category create/detail/update/status/hierarchy. Referenced catalog records are deactivated, never generically deleted.
 
 ### D1/data changes
 
-- Add indexes or rebuildable projections only where measured admin queries require them.
+- Add category hierarchy and optimistic-version storage required by the canonical model, plus canonical product-media storage/association required by MVP. Add indexes or rebuildable projections only where measured admin queries require them.
 
 ### RPC/contracts
 
 - Finalize admin query DTOs and command result/error UX metadata.
+- Extend Admin Context navigation with Core-authorized section and parent metadata; Web renders the hierarchy without inventing links or permissions.
+- Add purpose-built category detail/update/status and product create/update/detail/media contracts with idempotency and expected-version guards. Preserve explicit SKU, price-version, availability, and status commands rather than exposing arbitrary row updates.
 
 ### Web/UI work
 
-- Overview, orders, catalog, inventory, procurement, fulfillment, delivery, customers, subscriptions, payments, staff, and audit.
+- Apply the light-only `.fm-admin` neutral/orange design system and fixed five-step orange chart palette, adapted from the Shadcn UI Kit reference and isolated from storefront styling.
+- Build the collapsible grouped admin navigation and responsive Sheet with Overview; Commerce; Operations; Finance; and Administration sections.
+- Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category, including variants, prices, availability, media, customer-facing details, hierarchy, status, contained products, and audit context.
+- Orders: Order List, Order Detail, and Order Issues, including items, financial snapshots, payment, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit context. Do not add admin Order creation.
+- Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation, with contextual refund/retry/reconcile commands.
+- Customers, Privacy Queue, Memberships, Promotions, Inventory, Procurement Requirements, Receiving, Fulfillment, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit Log, and Fulfillment Mode Settings list/detail/configuration flows as applicable.
 
 ### Cloudflare resources
 
@@ -571,6 +579,8 @@ Phases 1 and 7–11.
 ### Tests and acceptance
 
 - Playwright operational flows, capability/location scopes, keyboard/accessibility, loading/empty/error states, and no raw-row leakage.
+- Catalog coverage includes category hierarchy and lifecycle, product create/detail/edit/deactivate, variants, media, price/availability, stale-version and permission failures, and list-to-detail breadcrumb/filter preservation.
+- Navigation coverage includes capability-filtered sections/children, specific-route active state, collapsed icon rail, mobile Sheet, keyboard/focus behavior, and strict storefront/admin token isolation.
 
 ### Not in this phase
 

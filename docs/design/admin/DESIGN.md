@@ -10,31 +10,30 @@ Use shadcn/ui for generic primitives: Button, Input, Select, Checkbox, Switch, D
 
 Do not recreate generic primitives. Custom components are justified only when they express a domain composition such as `AdminDataTable`, `OrderStatus`, `PaymentStatus`, `ProcurementRequirement`, `DeliveryCycleSummary`, `InventoryAvailability`, `FulfillmentWorkQueue`, or `ExceptionQueue`.
 
+## Reference Adaptation and Admin Theme
+
+Use [Shadcn UI Kit Dashboard](https://shadcnuikit.com/dashboard/) as the visual and interaction reference for the admin shell, ecommerce/product screens, order screens, payment/transaction screens, analytics, tables, forms, dialogs, filters, empty states, settings, and responsive behavior. Adapt its patterns to FreshMarkets domain commands and read models; do not copy branding, proprietary assets, placeholder data, generic edit/delete actions, or interactions that bypass Core policy.
+
+Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/storefront tokens. The initial admin theme is light-only, uses a neutral operational canvas with orange as the controlled accent, and exposes a fixed five-step orange data-visualization palette through admin-scoped design tokens. Staff may collapse navigation, but no runtime color/font/radius/theme customizer is included. Semantic success, warning, danger, information, and status colors retain their meanings and are not replaced with orange.
+
 ## Information Architecture
 
 Primary navigation is organized around operational ownership:
 
-1. Overview
-2. Orders
-3. Catalog
-4. Inventory
-5. Procurement
-6. Fulfillment
-7. Delivery
-8. Customers
-9. Subscriptions
-10. Payments
-11. Promotions (later/MVP subset)
-12. Analytics (later)
-13. Staff / Roles
-14. Audit Log
-15. Settings
+- Overview: Overview.
+- Commerce: Products (Product List, Add Product), Categories (Category List, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Privacy Queue), Memberships, and Promotions.
+- Operations: Inventory, Procurement (Requirements, Receiving), Fulfillment, Delivery, and Operational Exceptions.
+- Finance: Payments (Overview, Transactions, Reconciliation) and Analytics.
+- Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Fulfillment Mode).
+
+Resource-specific detail and edit screens are contextual destinations, not permanent navigation items. Product, category, order, customer, membership, promotion, payment, staff, role, issue, and audit detail routes open from their owning list and preserve breadcrumbs back to the filtered list. A stable create route may appear as a nested shortcut; a route requiring a resource ID may not.
 
 Navigation items and actions are capability-aware. A user may see a workspace but receive a scoped empty state if they have no records in the permitted market/location; unauthorized actions remain unavailable in Core.
 
 ## Global Shell
 
-- Persistent sidebar on desktop; collapsible sheet/drawer on narrower screens.
+- A 252px persistent sidebar on desktop collapses to a 72px icon rail and remembers that browser preference. On narrower screens it becomes a Sheet/drawer; the admin shell has no truncated bottom navigation.
+- Section labels and nested links follow the Information Architecture above. Parent labels navigate to their overview, a separate chevron toggles children, the most-specific matching route is active, and the active child's parent opens automatically. Collapsed groups use accessible tooltips/flyouts.
 - Header includes breadcrumb, current market/location scope, cycle context where relevant, search/command affordance, notifications/exceptions indicator, and user menu.
 - Scope selection is explicit and never silently changes a command's target.
 - Use URL-addressable filters/tabs for operational queues.
@@ -56,6 +55,16 @@ The overview is a prioritized operational briefing, not four generic statistic c
 Visual choices follow the question: KPI trend, queue count, capacity bar, aging table, timeline, or exception list. Every summary links to the filtered workspace that can resolve it.
 
 ## Page Archetypes
+
+### Required screen inventory
+
+- Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category. Product workspaces cover identity, categorization, customer-facing details, primary/ordered media, persisted SKU variants, exact base-unit consumption, prices, location availability/sourcing, status, and audit history. Category workspaces cover parent hierarchy, name/slug/code, icon, sort order, status, contained products, and audit history.
+- Orders: Order List, Order Detail, and Order Issues. Detail composes items, immutable financial snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit history.
+- Customers, Memberships, and Promotions: list/detail workspaces plus the Customer Privacy Queue and the approved explicit commands for each domain.
+- Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation. Refund and retry/reconcile actions are contextual commands from detail or exception states, not generic row edits.
+- Operations and administration: Inventory, Procurement Requirements, Receiving, Fulfillment, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit, and Fulfillment Mode settings.
+
+Products and categories referenced by committed or historical records are deactivated rather than hard-deleted. Archival is used only where the owning aggregate explicitly defines an archive transition. Admin does not provide a Create Order workflow: Orders originate from the authoritative checkout/payment commitment flow.
 
 ### Operational list/queue
 

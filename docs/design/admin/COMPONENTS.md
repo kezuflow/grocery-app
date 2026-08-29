@@ -13,6 +13,7 @@ Primitive styling may be themed, but behavior, accessibility, and composition sh
 Build these only once they appear across multiple workspaces:
 
 - `AdminShell`: sidebar, header, scope/cycle context, responsive navigation.
+- `AdminNavigation`: Core-provided section/parent/child links, expanded and icon-rail modes, mobile Sheet, route-aware expansion, tooltips, and keyboard navigation.
 - `PageHeader`: title, description, breadcrumbs, scope, primary/secondary actions.
 - `FilterBar`: debounced search, select/date/status filters, clear-all, URL state.
 - `AdminDataTable`: server-side data, keyset pagination, row selection, responsive fallback, loading/empty/error states.
@@ -33,6 +34,8 @@ Build these only once they appear across multiple workspaces:
 - `DeliveryCycleSummary`, `CapacityBar`, `DeliveryBatchBoard`, `RiderAssignment`, `FailedDeliveryResolution`.
 - `FulfillmentWorkQueue`, `ShortageResolution`, `PackedSummary`.
 - `StaffScopeEditor`, `CapabilityMatrix`, `AuditEventList`.
+- `ProductListTable`, `ProductEditor`, `ProductMediaManager`, `SkuVariantEditor`, `SkuPricePanel`, and `SkuAvailabilityPanel`.
+- `CategoryListTable`, `CategoryEditor`, `CategoryTree`, and `CategoryProductList`.
 
 Domain compositions must consume purpose-built DTOs and call explicit Core commands. They must not infer legal transitions from arbitrary strings or modify data locally as if the mutation succeeded.
 
@@ -90,4 +93,3 @@ Do not turn exception resolution into an arbitrary edit form.
 ## Testing Expectations
 
 Component tests cover loading/empty/error/permission/disabled/conflict states and command success/failure. Playwright tests cover representative admin flows: order cancellation/refund, inventory adjustment, receiving discrepancy, packing, batch assignment, rider delivery failure, role scope enforcement, and audit visibility.
-
