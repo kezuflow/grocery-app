@@ -91,14 +91,17 @@ export function parseDimensions(
 }
 
 export function parseScope(params: URLSearchParams) {
+  const kind = value(params, "scopeKind");
   const locationId = value(params, "locationId");
   const marketId = value(params, "marketId");
-  if (locationId && marketId) return invalid("locationId and marketId cannot be combined");
-  return locationId
-    ? { kind: "location" as const, locationId }
-    : marketId
-      ? { kind: "market" as const, marketId }
-      : undefined;
+  if (kind === "GLOBAL" && !locationId && !marketId) return { kind: "GLOBAL" as const };
+  if (kind === "MARKET" && marketId && !locationId) {
+    return { kind: "MARKET" as const, marketId };
+  }
+  if (kind === "LOCATION" && marketId && locationId) {
+    return { kind: "LOCATION" as const, marketId, locationId };
+  }
+  return invalid("An explicit valid scopeKind and its required identifiers are required");
 }
 
 export function parseMetricCode(metricCode: string): string | Response {

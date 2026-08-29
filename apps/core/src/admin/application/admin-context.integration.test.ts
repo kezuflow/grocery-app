@@ -140,14 +140,6 @@ describe("scoped admin context", () => {
     if (!scopes.ok) return;
     expect(scopes.value).toEqual([
       {
-        kind: "market",
-        marketId: "market-metro-cebu",
-        marketCode: "METRO_CEBU",
-        marketName: "Metro Cebu",
-        currency: "PHP",
-        timezone: "Asia/Manila",
-      },
-      {
         kind: "location",
         marketId: "market-metro-cebu",
         marketCode: "METRO_CEBU",

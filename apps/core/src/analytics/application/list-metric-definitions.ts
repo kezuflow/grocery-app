@@ -14,7 +14,7 @@ export async function listAnalyticsMetricDefinitions(
   deps: AnalyticsDeps,
   request: ListMetricDefinitionsRequest,
 ): Promise<RpcResult<ReadonlyArray<MetricDefinitionView>>> {
-  const access = await resolveAnalyticsAccess(deps, request);
+  const access = await resolveAnalyticsAccess(deps, request, request.scope);
   if (!access.ok) return access;
   try {
     return {

@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { adminNavigationFromContext, type AdminNavigationEntry } from "./admin-navigation";
-import { useAdminContext } from "../../app/admin/admin-context-provider";
+import { adminSelectableScopes, useAdminContext } from "../../app/admin/admin-context-provider";
+import type { AdminSelectedScope } from "@freshmarkets/contracts";
 import { Skeleton } from "../ui/skeleton";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -81,9 +82,7 @@ function AdminHeader({
           </Link>
         </div>
         <div className="hidden items-center gap-2 text-xs text-[var(--fm-text-muted)] sm:flex">
-          <span className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1">
-            {scopeLabel}
-          </span>
+          <AdminScopeSelector fallbackLabel={scopeLabel} />
           {environment !== "production" ? (
             <span className="rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] px-2 py-1 font-semibold uppercase tracking-wide text-[var(--fm-warning)]">
               {environment}
@@ -98,6 +97,56 @@ function AdminHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
+  const { state, selectScope } = useAdminContext();
+  if (state.phase !== "ready") return <span>{fallbackLabel}</span>;
+  const selections: Array<{ value: AdminSelectedScope; label: string }> = adminSelectableScopes(
+    state.context,
+    state.scopes,
+  ).map((scope) => {
+    if (scope.kind === "GLOBAL") return { value: scope, label: "Global" };
+    if (scope.kind === "MARKET") {
+      const option = state.scopes.find(
+        (candidate) => candidate.kind === "market" && candidate.marketId === scope.marketId,
+      );
+      return {
+        value: scope,
+        label: option?.kind === "market" ? option.marketName : scope.marketId,
+      };
+    }
+    const option = state.scopes.find(
+      (candidate) => candidate.kind === "location" && candidate.locationId === scope.locationId,
+    );
+    return {
+      value: scope,
+      label: option?.kind === "location" ? option.locationName : scope.locationId,
+    };
+  });
+  return (
+    <label className="flex items-center gap-2">
+      <span>Scope</span>
+      <select
+        aria-label="Active admin scope"
+        className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1"
+        value={state.selectedScope ? JSON.stringify(state.selectedScope) : ""}
+        onChange={(event) => {
+          if (event.target.value) selectScope(JSON.parse(event.target.value) as AdminSelectedScope);
+        }}
+      >
+        {state.selectedScope === null ? <option value="">Select scope…</option> : null}
+        {selections.map((selection) => {
+          const value = JSON.stringify(selection.value);
+          return (
+            <option key={value} value={value}>
+              {selection.label}
+            </option>
+          );
+        })}
+      </select>
+    </label>
   );
 }
 

@@ -73,14 +73,7 @@ export async function listAdminScopes(
   const marketById = new Map(markets.results.map((market) => [market.id, market]));
   const options: AdminScopeOptionView[] = [];
   for (const market of markets.results) {
-    const reachable =
-      isGlobal ||
-      assignedMarketIds.has(market.id) ||
-      [...assignedLocationIds].some((locationId) =>
-        locations.results.some(
-          (location) => location.id === locationId && location.market_id === market.id,
-        ),
-      );
+    const reachable = isGlobal || assignedMarketIds.has(market.id);
     if (reachable) {
       options.push({
         kind: "market",

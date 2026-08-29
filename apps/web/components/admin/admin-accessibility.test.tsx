@@ -6,7 +6,18 @@ import { AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
-vi.mock("../../app/admin/admin-context-provider", () => ({ useAdminContext }));
+vi.mock("../../app/admin/admin-context-provider", () => ({
+  useAdminContext,
+  adminSelectableScopes: (
+    _context: unknown,
+    options: ReadonlyArray<{ kind: string; marketId: string; locationId?: string }>,
+  ) =>
+    options.map((option) =>
+      option.kind === "location"
+        ? { kind: "LOCATION", marketId: option.marketId, locationId: option.locationId }
+        : { kind: "MARKET", marketId: option.marketId },
+    ),
+}));
 vi.mock("next/link", () => ({ default: ({ children }: { children: unknown }) => children }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
 
@@ -88,5 +99,55 @@ describe("shared Admin accessibility contract", () => {
 
   it("names the mobile dialog close action", () => {
     expect(sheet).toMatch(/aria-label="Close admin navigation"/);
+  });
+
+  it("renders an explicit selector when multiple Admin scopes are assigned", () => {
+    useAdminContext.mockReturnValue({
+      state: {
+        phase: "ready",
+        context: {
+          staffId: "staff-1",
+          displayName: "Operator",
+          email: "operator@example.com",
+          capabilities: ["analytics.read"],
+          scopes: [
+            { kind: "location", locationId: "location-1" },
+            { kind: "location", locationId: "location-2" },
+          ],
+          navigation: [],
+          environment: "test",
+        },
+        scopes: [
+          {
+            kind: "location",
+            marketId: "market-1",
+            marketCode: "M1",
+            locationId: "location-1",
+            locationCode: "L1",
+            locationName: "Location One",
+            currency: "PHP",
+            timezone: "Asia/Manila",
+          },
+          {
+            kind: "location",
+            marketId: "market-1",
+            marketCode: "M1",
+            locationId: "location-2",
+            locationCode: "L2",
+            locationName: "Location Two",
+            currency: "PHP",
+            timezone: "Asia/Manila",
+          },
+        ],
+        selectedScope: null,
+      },
+      retry: vi.fn(),
+      selectScope: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
+    expect(markup).toContain('aria-label="Active admin scope"');
+    expect(markup).toContain("Select scope");
+    expect(markup).toContain("Location One");
+    expect(markup).toContain("Location Two");
   });
 });

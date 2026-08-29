@@ -1,5 +1,5 @@
 import type { RpcResult } from "./common";
-import type { AuthenticatedRequest, Scope } from "./index";
+import type { AdminSelectedScope, AuthenticatedRequest, Scope } from "./index";
 
 export const metricDefinitionAvailabilities = ["AVAILABLE", "UNAVAILABLE"] as const;
 export type MetricDefinitionAvailability = (typeof metricDefinitionAvailabilities)[number];
@@ -103,11 +103,12 @@ export type MetricSeriesView = {
 export type ListMetricDefinitionsRequest = AuthenticatedRequest & {
   category?: AnalyticsMetricCategory;
   status?: MetricDefinitionStatus;
+  scope?: AdminSelectedScope;
 };
 
 export type AnalyticsOverviewRequest = AuthenticatedRequest & {
   window: AnalyticsWindow;
-  scope?: Scope;
+  scope?: AdminSelectedScope;
   dimensions?: ReadonlyArray<AnalyticsDimension>;
 };
 
@@ -115,7 +116,7 @@ export type MetricSeriesRequest = AuthenticatedRequest & {
   metricCode: string;
   definitionVersion?: number;
   window: AnalyticsWindow;
-  scope?: Scope;
+  scope?: AdminSelectedScope;
   dimensions?: ReadonlyArray<AnalyticsDimension>;
 };
 

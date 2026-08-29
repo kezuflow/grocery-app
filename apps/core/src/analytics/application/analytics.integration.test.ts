@@ -20,9 +20,9 @@ type AnalyticsCore = {
     headers: Readonly<Record<string, string>>;
     window: { startAt: string; endAt: string; timezone: string };
     scope?:
-      | { kind: "global" }
-      | { kind: "market"; marketId: string }
-      | { kind: "location"; locationId: string };
+      | { kind: "GLOBAL" }
+      | { kind: "MARKET"; marketId: string }
+      | { kind: "LOCATION"; marketId: string; locationId: string };
     dimensions?: ReadonlyArray<{ key: string; value: string }>;
   }): Promise<RpcResult<AnalyticsOverviewView>>;
   getMetricSeries(input: {
@@ -32,9 +32,9 @@ type AnalyticsCore = {
     definitionVersion?: number;
     window: { startAt: string; endAt: string; timezone: string };
     scope?:
-      | { kind: "global" }
-      | { kind: "market"; marketId: string }
-      | { kind: "location"; locationId: string };
+      | { kind: "GLOBAL" }
+      | { kind: "MARKET"; marketId: string }
+      | { kind: "LOCATION"; marketId: string; locationId: string };
     dimensions?: ReadonlyArray<{ key: string; value: string }>;
   }): Promise<RpcResult<MetricSeriesView>>;
 };
@@ -79,7 +79,7 @@ async function seedAnalyticsReader(
     marketId?: string;
     locationId?: string;
   } = {},
-): Promise<{ cookie: string }> {
+): Promise<{ cookie: string; staffId: string }> {
   const principal = await signUp();
   const staffId = crypto.randomUUID();
   const roleId = crypto.randomUUID();
@@ -115,7 +115,7 @@ async function seedAnalyticsReader(
       ).bind(roleId),
     ]);
   }
-  return { cookie: principal.cookie };
+  return { cookie: principal.cookie, staffId };
 }
 
 const window = {
@@ -195,7 +195,7 @@ describe("Core Analytics reads", () => {
         headers: { cookie: globalReader.cookie },
         metricCode: "gmv",
         window,
-        scope: { kind: "global" },
+        scope: { kind: "GLOBAL" },
       }),
     ).resolves.toMatchObject({ ok: true, value: { availability: "UNAVAILABLE" } });
 
@@ -206,7 +206,7 @@ describe("Core Analytics reads", () => {
         headers: { cookie: marketReader.cookie },
         metricCode: "gmv",
         window,
-        scope: { kind: "market", marketId: "market-metro-cebu" },
+        scope: { kind: "MARKET", marketId: "market-metro-cebu" },
       }),
     ).resolves.toMatchObject({ ok: true, value: { availability: "UNAVAILABLE" } });
 
@@ -217,7 +217,11 @@ describe("Core Analytics reads", () => {
         headers: { cookie: locationReader.cookie },
         metricCode: "gmv",
         window,
-        scope: { kind: "location", locationId: "location-cebu-central" },
+        scope: {
+          kind: "LOCATION",
+          marketId: "market-metro-cebu",
+          locationId: "location-cebu-central",
+        },
       }),
     ).resolves.toMatchObject({ ok: true, value: { availability: "UNAVAILABLE" } });
     await env.DB.prepare(
@@ -229,9 +233,55 @@ describe("Core Analytics reads", () => {
         headers: { cookie: locationReader.cookie },
         metricCode: "gmv",
         window,
-        scope: { kind: "location", locationId: "location-analytics-forbidden" },
+        scope: {
+          kind: "LOCATION",
+          marketId: "market-metro-cebu",
+          locationId: "location-analytics-forbidden",
+        },
       }),
     ).resolves.toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+
+  it("requires an explicit assigned scope when more than one scope is available", async () => {
+    const reader = await seedAnalyticsReader({ scope: "location" });
+    const secondLocationId = `location-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO fulfillment_location (id, market_id, code, name, type, latitude, longitude, status, version, created_at, updated_at) VALUES (?, 'market-metro-cebu', ?, 'Second analytics location', 'FULFILLMENT_CENTER', 10.31, 123.88, 'active', 1, 0, 0)",
+      ).bind(secondLocationId, `SECOND_${crypto.randomUUID().slice(0, 8)}`),
+      env.DB.prepare(
+        "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'location', NULL, ?)",
+      ).bind(crypto.randomUUID(), reader.staffId, secondLocationId),
+    ]);
+
+    const base = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+      metricCode: "gmv",
+      window,
+    };
+    await expect(core.getMetricSeries(base)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    for (const locationId of ["location-cebu-central", secondLocationId]) {
+      await expect(
+        core.getMetricSeries({
+          ...base,
+          scope: { kind: "LOCATION", marketId: "market-metro-cebu", locationId },
+        }),
+      ).resolves.toMatchObject({ ok: true });
+    }
+    await expect(
+      core.getMetricSeries({
+        ...base,
+        scope: {
+          kind: "LOCATION",
+          marketId: "market-metro-cebu",
+          locationId: "location-analytics-unassigned",
+        },
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 
   it("preserves empty denominators, freshness metadata, and overview-series definition parity", async () => {

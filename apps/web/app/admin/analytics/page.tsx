@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminContext } from "../admin-context-provider";
 
 type AnalyticsState =
   | { phase: "loading" }
@@ -59,20 +60,37 @@ function errorMessage(code: string, message: string): string {
 }
 
 export default function AnalyticsPage() {
+  const { state: adminContext } = useAdminContext();
   const [state, setState] = useState<AnalyticsState>({ phase: "loading" });
   const [attempt, setAttempt] = useState(0);
   const window = useMemo(currentWindow, []);
 
   const load = useCallback(async () => {
+    if (adminContext.phase !== "ready" || adminContext.selectedScope === null) {
+      setState({
+        phase: "error",
+        message: "Select an Admin scope to load Analytics.",
+        requestId: null,
+      });
+      return;
+    }
     setState({ phase: "loading" });
     const query = new URLSearchParams({
       startAt: window.startAt,
       endAt: window.endAt,
       timezone: window.timezone,
     });
+    query.set("scopeKind", adminContext.selectedScope.kind);
+    if (adminContext.selectedScope.kind === "MARKET") {
+      query.set("marketId", adminContext.selectedScope.marketId);
+    }
+    if (adminContext.selectedScope.kind === "LOCATION") {
+      query.set("marketId", adminContext.selectedScope.marketId);
+      query.set("locationId", adminContext.selectedScope.locationId);
+    }
     try {
       const [definitionsResponse, overviewResponse] = await Promise.all([
-        fetch("/api/admin/analytics/definitions"),
+        fetch(`/api/admin/analytics/definitions?${query.toString()}`),
         fetch(`/api/admin/analytics/overview?${query.toString()}`),
       ]);
       const definitions = (await definitionsResponse.json()) as RpcResult<
@@ -99,7 +117,7 @@ export default function AnalyticsPage() {
     } catch {
       setState({ phase: "error", message: "Network error loading Analytics.", requestId: null });
     }
-  }, [window]);
+  }, [adminContext, window]);
 
   useEffect(() => {
     void load();

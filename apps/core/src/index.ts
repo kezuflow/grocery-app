@@ -10,6 +10,8 @@ import {
   type RequestMeta,
   adminCapabilityCodes,
   analyticsDimensionKeys,
+  analyticsMetricCategories,
+  metricDefinitionStatuses,
 } from "@freshmarkets/contracts";
 import { runtimeEnvironment } from "@freshmarkets/config";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
@@ -230,13 +232,14 @@ const adminAuditDetailRequestSchema = authenticatedRequestSchema.extend({
 
 const analyticsScopeSchema = validationSchema
   .union([
-    validationSchema.object({ kind: validationSchema.literal("global") }),
+    validationSchema.object({ kind: validationSchema.literal("GLOBAL") }),
     validationSchema.object({
-      kind: validationSchema.literal("market"),
+      kind: validationSchema.literal("MARKET"),
       marketId: validationSchema.string().trim().min(1).max(200),
     }),
     validationSchema.object({
-      kind: validationSchema.literal("location"),
+      kind: validationSchema.literal("LOCATION"),
+      marketId: validationSchema.string().trim().min(1).max(200),
       locationId: validationSchema.string().trim().min(1).max(200),
     }),
   ])
@@ -259,6 +262,11 @@ const analyticsOverviewRequestSchema = authenticatedRequestSchema.extend({
   window: analyticsWindowSchema,
   scope: analyticsScopeSchema,
   dimensions: analyticsDimensionsSchema,
+});
+const metricDefinitionsRequestSchema = authenticatedRequestSchema.extend({
+  category: validationSchema.enum(analyticsMetricCategories).optional(),
+  status: validationSchema.enum(metricDefinitionStatuses).optional(),
+  scope: analyticsScopeSchema,
 });
 const metricSeriesRequestSchema = analyticsOverviewRequestSchema.extend({
   metricCode: validationSchema.string().trim().min(1).max(100),
@@ -875,7 +883,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async listMetricDefinitions(
     input: import("@freshmarkets/contracts").ListMetricDefinitionsRequest,
   ) {
-    const validation = authenticatedRequestSchema.safeParse(input);
+    const validation = metricDefinitionsRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAnalyticsMetricDefinitions(

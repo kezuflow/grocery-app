@@ -19,6 +19,7 @@ import { GET as getMetric } from "./metrics/[metric-code]/route";
 const COOKIE = { cookie: "session=analytics" };
 const WINDOW =
   "startAt=2026-08-01T00%3A00%3A00.000Z&endAt=2026-09-01T00%3A00%3A00.000Z&timezone=Asia%2FManila";
+const SCOPE = "scopeKind=LOCATION&marketId=market-metro-cebu&locationId=location-cebu-central";
 
 beforeEach(() => {
   listMetricDefinitions.mockReset();
@@ -31,7 +32,7 @@ describe("admin analytics BFF routes", () => {
     listMetricDefinitions.mockResolvedValue({ ok: true, value: [], requestId: "core-defs" });
     const response = await getDefinitions(
       new Request(
-        "https://freshmarkets.ph/api/admin/analytics/definitions?category=ORDERS&status=APPROVED",
+        `https://freshmarkets.ph/api/admin/analytics/definitions?category=ORDERS&status=APPROVED&${SCOPE}`,
         {
           headers: COOKIE,
         },
@@ -43,6 +44,11 @@ describe("admin analytics BFF routes", () => {
     expect(listMetricDefinitions.mock.calls[0][0]).toMatchObject({
       category: "ORDERS",
       status: "APPROVED",
+      scope: {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      },
       headers: { cookie: "session=analytics" },
     });
     expect(typeof listMetricDefinitions.mock.calls[0][0].requestId).toBe("string");
@@ -66,7 +72,7 @@ describe("admin analytics BFF routes", () => {
       requestId: "core-overview",
     });
     const response = await getOverview(
-      new Request(`https://freshmarkets.ph/api/admin/analytics/overview?${WINDOW}`, {
+      new Request(`https://freshmarkets.ph/api/admin/analytics/overview?${WINDOW}&${SCOPE}`, {
         headers: COOKIE,
       }),
     );
@@ -77,6 +83,11 @@ describe("admin analytics BFF routes", () => {
         startAt: "2026-08-01T00:00:00.000Z",
         endAt: "2026-09-01T00:00:00.000Z",
         timezone: "Asia/Manila",
+      },
+      scope: {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
       },
       headers: { cookie: "session=analytics" },
     });
@@ -104,7 +115,7 @@ describe("admin analytics BFF routes", () => {
     });
     const response = await getMetric(
       new Request(
-        `https://freshmarkets.ph/api/admin/analytics/metrics/order_count?${WINDOW}&definitionVersion=1`,
+        `https://freshmarkets.ph/api/admin/analytics/metrics/order_count?${WINDOW}&${SCOPE}&definitionVersion=1`,
         {
           headers: COOKIE,
         },
@@ -117,6 +128,11 @@ describe("admin analytics BFF routes", () => {
       metricCode: "order_count",
       definitionVersion: 1,
       window: { timezone: "Asia/Manila" },
+      scope: {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      },
       headers: { cookie: "session=analytics" },
     });
   });

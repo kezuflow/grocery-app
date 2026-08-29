@@ -1,6 +1,11 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { AuthenticatedRequest, RpcResult, Scope } from "@freshmarkets/contracts";
+import type {
+  AdminSelectedScope,
+  AuthenticatedRequest,
+  RpcResult,
+  Scope,
+} from "@freshmarkets/contracts";
 import { applicationContext, hasOperationalScope } from "../../auth/authorization";
 import type { AuthInstance } from "../../auth/service";
 import { iamSchema } from "../../iam/schema";
@@ -13,7 +18,7 @@ export type AnalyticsAccess = { scope: Scope; now: number };
 export async function resolveAnalyticsAccess(
   deps: AnalyticsDeps,
   request: AuthenticatedRequest,
-  requestedScope?: Scope,
+  requestedScope?: AdminSelectedScope,
 ): Promise<RpcResult<AnalyticsAccess>> {
   const database = drizzle(deps.db, { schema: iamSchema });
   const context = await applicationContext(deps.auth, database, request);
@@ -39,7 +44,23 @@ export async function resolveAnalyticsAccess(
     };
   }
 
-  const scope = requestedScope ?? context.value.scopes[0];
+  if (!requestedScope && context.value.scopes.length > 1) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "Select an Admin scope",
+        requestId: request.requestId,
+      },
+    };
+  }
+  const scope: Scope | undefined = requestedScope
+    ? requestedScope.kind === "GLOBAL"
+      ? { kind: "global" }
+      : requestedScope.kind === "MARKET"
+        ? { kind: "market", marketId: requestedScope.marketId }
+        : { kind: "location", locationId: requestedScope.locationId }
+    : context.value.scopes[0];
   if (!scope) {
     return {
       ok: false,
@@ -105,6 +126,16 @@ export async function resolveAnalyticsAccess(
         error: {
           code: "NOT_FOUND",
           message: "Active fulfillment location not found",
+          requestId: request.requestId,
+        },
+      };
+    }
+    if (requestedScope?.kind === "LOCATION" && requestedScope.marketId !== location.marketId) {
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "Selected location does not belong to the selected market",
           requestId: request.requestId,
         },
       };

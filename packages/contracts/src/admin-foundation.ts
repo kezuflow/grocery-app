@@ -85,6 +85,12 @@ export type AdminScopeOptionView =
       timezone: string;
     };
 
+/** Explicit operator-selected scope carried by scoped Admin requests. */
+export type AdminSelectedScope =
+  | { kind: "GLOBAL" }
+  | { kind: "MARKET"; marketId: string }
+  | { kind: "LOCATION"; marketId: string; locationId: string };
+
 /** Decision-facing Audit summary; sanitized metadata lives on the detail view. */
 export type AdminAuditEventListItem = {
   auditEventId: string;
