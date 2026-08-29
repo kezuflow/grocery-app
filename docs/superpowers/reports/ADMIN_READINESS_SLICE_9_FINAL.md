@@ -9,17 +9,17 @@ remain authoritative.
 | Criterion | Evidence | Result |
 |---|---|---|
 | Admin accessibility/states | Production-component Vitest assertions (6 focused tests), readiness Playwright coverage (3 listed tests), semantic/focus/live-status/responsive fixes | PASS for automated evidence; authenticated browser execution is auth-email-gated |
-| Web/Core boundary | 8 Web + 3 Core focused tests, cookie/request-reference forwarding, fail-closed envelopes, security verifier | PASS |
+| Web/Core boundary | 8 Web + 3 Core focused tests, explicit `requestHeaders` allowlist forwarding for cookie/request-reference metadata, fail-closed envelopes, security verifier | PASS |
 | Security/config | Readiness security verifier; no new secret, unsafe mock default, CORS, or direct Web D1 finding | PASS; narrow documented fixture/type exceptions |
 | Performance | Four representative surfaces documented with one local-build sample each and unavailable browser metrics | PASS with explicit limitations; no latency claim |
-| Worker/production-like readiness | Builds, vinext, migration/naming/typecheck/lint, Worker smoke default and dry-run | PASS |
+| Worker/production-like readiness | Core health/smoke, builds, vinext, migration/naming/typecheck/lint, Worker smoke default and dry-run; local Web→Core Service Binding probe not run because no local stack was available | PASS with local Web→Core Service Binding probe environment-gated |
 | Runbooks | Deployment, migration recovery, provider replay, failed job, auth-email setup | PASS |
-| Scope | Diff from `af32992` contains only readiness tests/docs/scripts; no migration, service/binding, queue, DO, Workflow, projection, general API, CORS, or Slice 10 | PASS |
+| Scope | Full Slice 9 diff from `6672b09..HEAD` contains only readiness tests/docs/scripts; no migration, service/binding, queue, DO, Workflow, projection, general API, CORS, or Slice 10 | PASS |
 
 ## Implemented files/modules
 
 - Shared Admin accessibility hardening and representative browser/component coverage (Task 2).
-- Web/Core security-boundary tests and `scripts/verify-readiness-security.mjs` (Task 3).
+- Web/Core security-boundary tests and `scripts/verify-readiness-security.mjs` (Task 3), including regression coverage for the explicit `requestHeaders` allowlist.
 - `scripts/verify-worker-readiness.mjs`, verifier tests, Core Worker smoke coverage, performance evidence, and five operational runbooks (Task 4).
 - This report plus descriptive status/program-map closeout (Task 5).
 
@@ -42,7 +42,7 @@ endpoint was added.
 | Format | `pnpm format:check` reported existing issues in 44 files; no unrelated rewrite applied |
 | Playwright | 38 tests in 11 files listed; authenticated journeys remain gated |
 | Security verifier | Passed; generated Web types/test fixtures are narrow documented exceptions |
-| Worker readiness | Default and `--dry-run` passed |
+| Worker readiness | Default and `--dry-run` passed; `--probe-local` was not run because no Web/Core stack was available |
 | `git diff --check` | Passed |
 
 ## Deferred risks and owners
