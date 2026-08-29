@@ -100,6 +100,9 @@ export default function AccountPage() {
             </p>
           ) : null}
         </section>
+        <Link href="/account/addresses" className="font-medium underline">
+          Delivery addresses
+        </Link>
         <Link href="/cart" className="font-medium underline">
           Open cart
         </Link>

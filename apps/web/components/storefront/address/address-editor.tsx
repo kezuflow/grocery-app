@@ -47,7 +47,8 @@ type FieldErrors = Partial<
 >;
 
 export type AddressEditorProps = Readonly<{
-  onConfirmed: (addressId: string) => void;
+  onConfirmed?: (addressId: string) => void;
+  purpose?: "save" | "serviceability";
   initialAddress?: CustomerAddressView;
   publicAccessToken?: string;
   mapAdapter?: MapAdapter;
@@ -153,6 +154,7 @@ function TextAreaField({
 
 export function AddressEditor({
   onConfirmed,
+  purpose = "save",
   initialAddress,
   publicAccessToken,
   mapAdapter,
@@ -363,6 +365,7 @@ export function AddressEditor({
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (purpose !== "save") return;
     setSaveError("");
     const errors = validate();
     setFieldErrors(errors);
@@ -400,7 +403,7 @@ export function AddressEditor({
         return;
       }
       setSaveState("idle");
-      onConfirmed(result.value.id);
+      onConfirmed?.(result.value.id);
     } catch {
       setSaveState("error");
       setSaveError(safeSaveMessage());
@@ -530,204 +533,218 @@ export function AddressEditor({
             <p>
               {serviceability.serviceable
                 ? "Core confirmed this pin is inside the current delivery area."
-                : "You may save this address, but it cannot be used at checkout until corrected."}
+                : purpose === "save"
+                  ? "You may save this address, but it cannot be used at checkout until corrected."
+                  : "Try another address or adjust the pin to check a different entrance."}
             </p>
           </div>
         ) : null}
       </section>
 
-      <section aria-labelledby="address-details-heading" className="grid gap-4">
-        <h2 id="address-details-heading" className="text-lg font-semibold text-slate-950">
-          Address and recipient details
-        </h2>
-        {providerResolvedComponents ? (
-          <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-            Search-result address fields are provider-resolved when saved. Move the pin to establish
-            a first-party location before changing them; add unit, entrance, landmark, and rider
-            guidance under Delivery instructions.
-          </p>
-        ) : null}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            id="address-label"
-            label="Address label"
-            description="For example, Home or Office."
-            value={label}
-            error={fieldErrors.label}
-            onChange={(event) => setLabel(event.currentTarget.value)}
-          />
-          <TextField
-            id="address-recipient"
-            label="Recipient name"
-            value={recipient}
-            error={fieldErrors.recipient}
-            onChange={(event) => setRecipient(event.currentTarget.value)}
-          />
-          <TextField
-            id="address-phone"
-            label="Phone number"
-            type="tel"
-            autoComplete="tel"
-            description="Used only to coordinate this delivery."
-            value={phone}
-            error={fieldErrors.phone}
-            onChange={(event) => setPhone(event.currentTarget.value)}
-          />
-          <TextField
-            id="address-line-1"
-            label="Street, building, or place"
-            readOnly={providerResolvedComponents}
-            value={components.addressLine1}
-            error={fieldErrors.addressLine1}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setComponents((current) => ({ ...current, addressLine1: value }));
-            }}
-          />
-          <TextField
-            id="address-line-2"
-            label="Additional address line"
-            readOnly={providerResolvedComponents}
-            value={components.addressLine2 ?? ""}
-            onChange={(event) => {
-              const value = nullable(event.currentTarget.value);
-              setComponents((current) => ({ ...current, addressLine2: value }));
-            }}
-          />
-          <TextField
-            id="address-barangay"
-            label="Barangay"
-            readOnly={providerResolvedComponents}
-            value={components.barangay ?? ""}
-            onChange={(event) => {
-              const value = nullable(event.currentTarget.value);
-              setComponents((current) => ({ ...current, barangay: value }));
-            }}
-          />
-          <TextField
-            id="address-city"
-            label="City"
-            readOnly={providerResolvedComponents}
-            value={components.city}
-            error={fieldErrors.city}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setComponents((current) => ({ ...current, city: value }));
-            }}
-          />
-          <TextField
-            id="address-region"
-            label="Region or province"
-            readOnly={providerResolvedComponents}
-            value={components.region ?? ""}
-            onChange={(event) => {
-              const value = nullable(event.currentTarget.value);
-              setComponents((current) => ({ ...current, region: value }));
-            }}
-          />
-          <TextField
-            id="address-postal-code"
-            label="Postal code"
-            readOnly={providerResolvedComponents}
-            inputMode="numeric"
-            value={components.postalCode ?? ""}
-            onChange={(event) => {
-              const value = nullable(event.currentTarget.value);
-              setComponents((current) => ({ ...current, postalCode: value }));
-            }}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="delivery-instructions-heading" className="grid gap-4">
-        <div>
-          <h2 id="delivery-instructions-heading" className="text-lg font-semibold text-slate-950">
-            Delivery instructions
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Add only details a delivery rider needs for this destination.
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            id="instruction-building-unit"
-            label="Building or unit"
-            value={instructions.buildingUnit ?? ""}
-            onChange={(event) => {
-              const value = nullable(event.currentTarget.value);
-              setInstructions((current) => ({ ...current, buildingUnit: value }));
-            }}
-          />
-          <TextField
-            id="instruction-landmark"
-            label="Landmark"
-            value={instructions.landmark ?? ""}
-            onChange={(event) => {
-              const value = nullable(event.currentTarget.value);
-              setInstructions((current) => ({ ...current, landmark: value }));
-            }}
-          />
-        </div>
-        <TextAreaField
-          id="instruction-gate-guard"
-          label="Gate or guard instructions"
-          value={instructions.gateGuard ?? ""}
-          onChange={(event) => {
-            const value = nullable(event.currentTarget.value);
-            setInstructions((current) => ({ ...current, gateGuard: value }));
-          }}
-        />
-        <TextAreaField
-          id="instruction-delivery-note"
-          label="Delivery note"
-          description="For example, where to leave groceries or when to call."
-          maxLength={1000}
-          value={instructions.deliveryNote ?? ""}
-          onChange={(event) => {
-            const value = nullable(event.currentTarget.value);
-            setInstructions((current) => ({ ...current, deliveryNote: value }));
-          }}
-        />
-        <TextAreaField
-          id="instruction-recipient"
-          label="Recipient guidance"
-          maxLength={1000}
-          value={instructions.recipientInstruction ?? ""}
-          onChange={(event) => {
-            const value = nullable(event.currentTarget.value);
-            setInstructions((current) => ({ ...current, recipientInstruction: value }));
-          }}
-        />
-        {!initialAddress ? (
-          <TextAreaField
-            id="address-notes"
-            label="Private address note"
-            description="Optional account note. Delivery instructions belong in the fields above."
-            maxLength={1000}
-            value={notes}
-            onChange={(event) => setNotes(event.currentTarget.value)}
-          />
-        ) : null}
-      </section>
-
-      {saveError ? (
-        <p role="alert" className="text-sm text-red-700">
-          {saveError}
+      {purpose === "serviceability" ? (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          This coverage check is not saved. Sign in and use your address book when you are ready to
+          keep a delivery address.
         </p>
-      ) : null}
-      <button
-        type="submit"
-        disabled={saveState === "saving" || !coordinate || !confirmationSource}
-        className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saveState === "saving"
-          ? "Saving address…"
-          : serviceability?.serviceable === false
-            ? "Save unavailable address"
-            : initialAddress
-              ? "Update confirmed address"
-              : "Save confirmed address"}
-      </button>
+      ) : (
+        <>
+          <section aria-labelledby="address-details-heading" className="grid gap-4">
+            <h2 id="address-details-heading" className="text-lg font-semibold text-slate-950">
+              Address and recipient details
+            </h2>
+            {providerResolvedComponents ? (
+              <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                Search-result address fields are provider-resolved when saved. Move the pin to
+                establish a first-party location before changing them; add unit, entrance, landmark,
+                and rider guidance under Delivery instructions.
+              </p>
+            ) : null}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                id="address-label"
+                label="Address label"
+                description="For example, Home or Office."
+                value={label}
+                error={fieldErrors.label}
+                onChange={(event) => setLabel(event.currentTarget.value)}
+              />
+              <TextField
+                id="address-recipient"
+                label="Recipient name"
+                value={recipient}
+                error={fieldErrors.recipient}
+                onChange={(event) => setRecipient(event.currentTarget.value)}
+              />
+              <TextField
+                id="address-phone"
+                label="Phone number"
+                type="tel"
+                autoComplete="tel"
+                description="Used only to coordinate this delivery."
+                value={phone}
+                error={fieldErrors.phone}
+                onChange={(event) => setPhone(event.currentTarget.value)}
+              />
+              <TextField
+                id="address-line-1"
+                label="Street, building, or place"
+                readOnly={providerResolvedComponents}
+                value={components.addressLine1}
+                error={fieldErrors.addressLine1}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setComponents((current) => ({ ...current, addressLine1: value }));
+                }}
+              />
+              <TextField
+                id="address-line-2"
+                label="Additional address line"
+                readOnly={providerResolvedComponents}
+                value={components.addressLine2 ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setComponents((current) => ({ ...current, addressLine2: value }));
+                }}
+              />
+              <TextField
+                id="address-barangay"
+                label="Barangay"
+                readOnly={providerResolvedComponents}
+                value={components.barangay ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setComponents((current) => ({ ...current, barangay: value }));
+                }}
+              />
+              <TextField
+                id="address-city"
+                label="City"
+                readOnly={providerResolvedComponents}
+                value={components.city}
+                error={fieldErrors.city}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setComponents((current) => ({ ...current, city: value }));
+                }}
+              />
+              <TextField
+                id="address-region"
+                label="Region or province"
+                readOnly={providerResolvedComponents}
+                value={components.region ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setComponents((current) => ({ ...current, region: value }));
+                }}
+              />
+              <TextField
+                id="address-postal-code"
+                label="Postal code"
+                readOnly={providerResolvedComponents}
+                inputMode="numeric"
+                value={components.postalCode ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setComponents((current) => ({ ...current, postalCode: value }));
+                }}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="delivery-instructions-heading" className="grid gap-4">
+            <div>
+              <h2
+                id="delivery-instructions-heading"
+                className="text-lg font-semibold text-slate-950"
+              >
+                Delivery instructions
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Add only details a delivery rider needs for this destination.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                id="instruction-building-unit"
+                label="Building or unit"
+                value={instructions.buildingUnit ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setInstructions((current) => ({ ...current, buildingUnit: value }));
+                }}
+              />
+              <TextField
+                id="instruction-landmark"
+                label="Landmark"
+                value={instructions.landmark ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setInstructions((current) => ({ ...current, landmark: value }));
+                }}
+              />
+            </div>
+            <TextAreaField
+              id="instruction-gate-guard"
+              label="Gate or guard instructions"
+              value={instructions.gateGuard ?? ""}
+              onChange={(event) => {
+                const value = nullable(event.currentTarget.value);
+                setInstructions((current) => ({ ...current, gateGuard: value }));
+              }}
+            />
+            <TextAreaField
+              id="instruction-delivery-note"
+              label="Delivery note"
+              description="For example, where to leave groceries or when to call."
+              maxLength={1000}
+              value={instructions.deliveryNote ?? ""}
+              onChange={(event) => {
+                const value = nullable(event.currentTarget.value);
+                setInstructions((current) => ({ ...current, deliveryNote: value }));
+              }}
+            />
+            <TextAreaField
+              id="instruction-recipient"
+              label="Recipient guidance"
+              maxLength={1000}
+              value={instructions.recipientInstruction ?? ""}
+              onChange={(event) => {
+                const value = nullable(event.currentTarget.value);
+                setInstructions((current) => ({ ...current, recipientInstruction: value }));
+              }}
+            />
+            {!initialAddress ? (
+              <TextAreaField
+                id="address-notes"
+                label="Private address note"
+                description="Optional account note. Delivery instructions belong in the fields above."
+                maxLength={1000}
+                value={notes}
+                onChange={(event) => setNotes(event.currentTarget.value)}
+              />
+            ) : null}
+          </section>
+
+          {saveError ? (
+            <p role="alert" className="text-sm text-red-700">
+              {saveError}
+            </p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={saveState === "saving" || !coordinate || !confirmationSource}
+            className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saveState === "saving"
+              ? "Saving address…"
+              : serviceability?.serviceable === false
+                ? "Save unavailable address"
+                : initialAddress
+                  ? "Update confirmed address"
+                  : "Save confirmed address"}
+          </button>
+        </>
+      )}
     </form>
   );
 }

@@ -528,4 +528,25 @@ describe("AddressEditor", () => {
     expect(container.textContent).not.toContain("private map detail");
     act(() => root.unmount());
   });
+
+  it("checks public serviceability without rendering customer address persistence controls", async () => {
+    const fetchImpl = vi.fn((url: string | URL | Request) => {
+      const path = String(url);
+      if (path === "/api/commerce/address-search")
+        return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+      if (path === "/api/serviceability")
+        return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
+      throw new Error(`Unexpected persistence request ${path}`);
+    }) as unknown as typeof fetch;
+    const { container, root } = mount({ fetchImpl, purpose: "serviceability" });
+
+    await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
+
+    expect(container.textContent).toContain("Delivery is available");
+    expect(container.textContent).toContain("This coverage check is not saved");
+    expect(container.textContent).not.toContain("Recipient name");
+    expect(container.textContent).not.toContain("Save confirmed address");
+    expect(fetchImpl).not.toHaveBeenCalledWith("/api/commerce/address", expect.anything());
+    act(() => root.unmount());
+  });
 });
