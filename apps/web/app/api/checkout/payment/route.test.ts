@@ -74,4 +74,37 @@ describe("checkout payment route", () => {
     expect(body.value.state).toBe("REQUIRES_ACTION");
     expect(body.value).not.toHaveProperty("orderId");
   });
+
+  it("returns the same usable continuation for a repeated payment request", async () => {
+    requireIdempotencyKey.mockReturnValue("same-key");
+    const action = {
+      ok: true,
+      value: {
+        paymentIntentId: "pi-replay",
+        state: "REQUIRES_ACTION",
+        actionType: "REDIRECT",
+        redirectUrl: "https://pay.example/continue",
+        clientToken: null,
+        expiresAt: null,
+      },
+      requestId: "r",
+    };
+    createPaymentIntent.mockResolvedValue(action);
+    const request = () =>
+      new Request("https://freshmarkets.ph/api/checkout/payment", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "same-key" },
+        body: JSON.stringify({
+          checkoutAttemptId: "q-replay",
+          expectedTotalMinor: 100,
+          returnUrl: "https://freshmarkets.ph/orders",
+        }),
+      });
+
+    const first = await POST(request());
+    const replay = await POST(request());
+
+    await expect(first.json()).resolves.toEqual(action);
+    await expect(replay.json()).resolves.toEqual(action);
+  });
 });

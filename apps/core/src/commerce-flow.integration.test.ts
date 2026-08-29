@@ -168,6 +168,11 @@ describe("customer checkout flow", () => {
     expect(acceptedQuote.ok).toBe(true);
     if (!acceptedQuote.ok) return;
     expect(acceptedQuote.value.totalMinor).toBeGreaterThan(quote.value.totalMinor);
+    const quotesBeforePayment = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
+    )
+      .bind(cart.value.id)
+      .first<{ count: number }>();
 
     const paymentKey = `flow-payment-${crypto.randomUUID()}`;
     const payment = await core.createPaymentIntent({
@@ -183,6 +188,18 @@ describe("customer checkout flow", () => {
       value: { state: "REQUIRES_ACTION", actionType: "REDIRECT" },
     });
     if (!payment.ok) return;
+    const paymentSubject = await env.DB.prepare(
+      "SELECT subject_id FROM payment_intent WHERE id=?",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ subject_id: string }>();
+    const quotesAfterPayment = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
+    )
+      .bind(cart.value.id)
+      .first<{ count: number }>();
+    expect(paymentSubject?.subject_id).toBe(acceptedQuote.value.quoteId);
+    expect(quotesAfterPayment?.count).toBe(quotesBeforePayment?.count);
 
     const eventBody = JSON.stringify({
       eventId: `evt-${crypto.randomUUID()}`,
@@ -258,5 +275,26 @@ describe("customer checkout flow", () => {
       configurationVersion: 1,
       calculation: { method: "ROAD_ROUTE", profile: "DRIVING" },
     });
+
+    // A lost browser response can be replayed after commitment consumed the
+    // quote. Replay must resolve by payment identity before quote validity.
+    const paymentReplay = await core.createPaymentIntent({
+      headers,
+      requestId: requestId(),
+      checkoutAttemptId: acceptedQuote.value.quoteId,
+      expectedTotalMinor: acceptedQuote.value.totalMinor,
+      returnUrl: "https://freshmarkets.example.invalid/orders",
+      idempotencyKey: paymentKey,
+    });
+    expect(paymentReplay).toMatchObject({
+      ok: true,
+      value: { paymentIntentId: payment.value.paymentIntentId },
+    });
+    const quotesAfterReplay = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
+    )
+      .bind(cart.value.id)
+      .first<{ count: number }>();
+    expect(quotesAfterReplay?.count).toBe(quotesBeforePayment?.count);
   }, 15_000);
 });
