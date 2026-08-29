@@ -24,7 +24,7 @@ test("the marketplace home server-renders categories, rails, and membership cont
 }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Shop fresh, live well" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Daily deals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Daily Deals" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fresh this week" })).toHaveCount(0);
   await expect(page.getByText("Membership eligibility is checked at checkout.")).toBeVisible();
   // Seeded catalog content renders with prices and fixed-variant labels.

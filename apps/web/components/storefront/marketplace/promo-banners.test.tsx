@@ -20,7 +20,7 @@ describe("PromoBanners", () => {
   it("renders the five image-based daily deal cards in a horizontal carousel", () => {
     const html = renderToStaticMarkup(<PromoBanners />);
 
-    expect(html).toContain("Daily deals");
+    expect(html).toContain("Daily Deals");
     expect(html.match(/<img/g)).toHaveLength(5);
     expect(html).toContain('src="/promos/fresh-this-week.png"');
     expect(html).toContain('src="/promos/tropical-fruit-favorites.png"');

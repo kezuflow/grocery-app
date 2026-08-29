@@ -117,7 +117,7 @@ export function PromoBanners() {
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="daily-deals-title" className="text-[32px] leading-[42px] font-semibold">
-          Daily deals
+          Daily Deals
         </h2>
         <div className="flex items-center gap-2">
           <button
