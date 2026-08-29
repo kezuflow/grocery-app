@@ -85,11 +85,19 @@ async function checkoutFixture(quantity: number) {
   expect(address.ok).toBe(true);
   const cart = await core.getCart(request());
   expect(cart.ok).toBe(true);
-  const item = await core.setCartItem({ ...request(), skuId: "sku-red-onion-500g", quantity });
+  if (!cart.ok) throw new Error("cart unavailable");
+  const item = await core.setCartItem({
+    ...request(),
+    cartId: cart.value.id,
+    skuId: "sku-red-onion-500g",
+    quantity,
+    expectedVersion: cart.value.version,
+    idempotencyKey: `cart-set-${crypto.randomUUID()}`,
+  });
   expect(item.ok).toBe(true);
   const cycles = await core.listDeliveryCycles({ requestId: requestId() });
   expect(cycles.ok).toBe(true);
-  if (!address.ok || !cart.ok || !cycles.ok || cycles.value.length === 0)
+  if (!address.ok || !cycles.ok || cycles.value.length === 0)
     throw new Error("fixture incomplete");
   return {
     headers,

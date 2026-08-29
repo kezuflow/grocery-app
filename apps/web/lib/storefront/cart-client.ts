@@ -25,9 +25,10 @@ export type GuestCartItem = {
   skuId: string;
   quantity: number;
   name: string;
-  unitPriceMinor: number;
+  availability: "AVAILABLE" | "UNAVAILABLE" | "PRICE_UNAVAILABLE";
+  unitPriceMinor: number | null;
   currency: string;
-  lineTotalMinor: number;
+  lineTotalMinor: number | null;
 };
 
 export type CartItemMetadata = Pick<GuestCartItem, "name" | "unitPriceMinor" | "currency">;
@@ -71,22 +72,40 @@ function guestCartView(): CartView | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { items?: GuestCartItem[] };
     if (!Array.isArray(parsed.items)) return null;
-    const items = parsed.items.filter(
-      (item) =>
-        typeof item?.skuId === "string" &&
-        typeof item?.quantity === "number" &&
-        item.quantity > 0 &&
-        typeof item?.name === "string" &&
-        typeof item?.unitPriceMinor === "number" &&
-        typeof item?.currency === "string",
-    );
+    const items = parsed.items
+      .filter(
+        (item) =>
+          typeof item?.skuId === "string" &&
+          typeof item?.quantity === "number" &&
+          item.quantity > 0 &&
+          typeof item?.name === "string" &&
+          (typeof item?.unitPriceMinor === "number" || item?.unitPriceMinor === null) &&
+          typeof item?.currency === "string",
+      )
+      .map((item) => ({
+        ...item,
+        availability:
+          item.availability ??
+          (item.unitPriceMinor === null ? "PRICE_UNAVAILABLE" : "AVAILABLE"),
+        lineTotalMinor:
+          item.unitPriceMinor === null ? null : item.quantity * item.unitPriceMinor,
+      }));
     if (items.length === 0) return null;
     return {
       id: "guest-cart",
       version: 1,
       items,
-      totalMinor: items.reduce((total, item) => total + item.lineTotalMinor, 0),
+      totalMinor: items.reduce((total, item) => total + (item.lineTotalMinor ?? 0), 0),
       currency: items[0]?.currency ?? "PHP",
+      checkoutBlocked: items.some((item) => item.availability !== "AVAILABLE"),
+      blockingReasons: [
+        ...(items.some((item) => item.availability === "UNAVAILABLE")
+          ? (["ITEM_UNAVAILABLE"] as const)
+          : []),
+        ...(items.some((item) => item.availability === "PRICE_UNAVAILABLE")
+          ? (["PRICE_UNAVAILABLE"] as const)
+          : []),
+      ],
     };
   } catch {
     return null;
@@ -103,13 +122,15 @@ function rememberGuestItem(skuId: string, quantity: number, metadata?: CartItemM
     if (index >= 0) items.splice(index, 1);
   } else {
     const previous = index >= 0 ? items[index] : undefined;
+    const unitPriceMinor = metadata?.unitPriceMinor ?? previous?.unitPriceMinor ?? null;
     const next: GuestCartItem = {
       skuId,
       quantity,
       name: metadata?.name ?? previous?.name ?? "Fresh grocery",
-      unitPriceMinor: metadata?.unitPriceMinor ?? previous?.unitPriceMinor ?? 0,
+      availability: unitPriceMinor === null ? "PRICE_UNAVAILABLE" : "AVAILABLE",
+      unitPriceMinor,
       currency: metadata?.currency ?? previous?.currency ?? "PHP",
-      lineTotalMinor: quantity * (metadata?.unitPriceMinor ?? previous?.unitPriceMinor ?? 0),
+      lineTotalMinor: unitPriceMinor === null ? null : quantity * unitPriceMinor,
     };
     if (index >= 0) items[index] = next;
     else items.push(next);
@@ -118,8 +139,17 @@ function rememberGuestItem(skuId: string, quantity: number, metadata?: CartItemM
     id: "guest-cart",
     version: 1,
     items,
-    totalMinor: items.reduce((total, item) => total + item.lineTotalMinor, 0),
+    totalMinor: items.reduce((total, item) => total + (item.lineTotalMinor ?? 0), 0),
     currency: items[0]?.currency ?? "PHP",
+    checkoutBlocked: items.some((item) => item.availability !== "AVAILABLE"),
+    blockingReasons: [
+      ...(items.some((item) => item.availability === "UNAVAILABLE")
+        ? (["ITEM_UNAVAILABLE"] as const)
+        : []),
+      ...(items.some((item) => item.availability === "PRICE_UNAVAILABLE")
+        ? (["PRICE_UNAVAILABLE"] as const)
+        : []),
+    ],
   };
   if (typeof window !== "undefined") {
     if (items.length)
@@ -144,12 +174,38 @@ async function postCartQuantity(
   quantity: number,
   metadata?: CartItemMetadata,
 ): Promise<AddToCartResult> {
+  let serverView = cachedCartView?.id !== "guest-cart" ? cachedCartView : null;
+  if (!serverView) {
+    try {
+      const response = await fetch("/api/commerce/cart");
+      const loaded = (await response.json()) as CartRouteResult;
+      if (loaded.ok && loaded.value) serverView = loaded.value;
+      else if (loaded.error?.code === "UNAUTHENTICATED") {
+        const view = rememberGuestItem(skuId, quantity, metadata);
+        return { ok: true, count: cartCountFromView(view), requiresSignIn: true };
+      } else {
+        return {
+          ok: false,
+          reason: "error",
+          message: loaded.error?.message ?? "Unable to load the cart.",
+        };
+      }
+    } catch {
+      return { ok: false, reason: "error", message: "The cart could not be reached." };
+    }
+  }
   let result: CartRouteResult;
   try {
     const response = await fetch("/api/commerce/cart", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ skuId, quantity }),
+      body: JSON.stringify({
+        cartId: serverView.id,
+        skuId,
+        quantity,
+        expectedVersion: serverView.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
     });
     result = (await response.json()) as CartRouteResult;
   } catch {
@@ -178,7 +234,13 @@ async function mergeGuestCart(serverView: CartView, guestView: CartView): Promis
       const response = await fetch("/api/commerce/cart", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ skuId: item.skuId, quantity: item.quantity }),
+        body: JSON.stringify({
+          cartId: merged.id,
+          skuId: item.skuId,
+          quantity: item.quantity,
+          expectedVersion: merged.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
       });
       const result = (await response.json()) as CartRouteResult;
       if (!result.ok || !result.value) return null;

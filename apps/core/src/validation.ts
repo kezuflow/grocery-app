@@ -185,9 +185,11 @@ export const commitOrderRequestSchema = checkoutRequestSchema.extend({
 });
 
 export const setCartItemRequestSchema = headersRequest.extend({
+  cartId: identifierSchema,
   skuId: identifierSchema,
   quantity: z.number().int().safe().nonnegative(),
-  locationId: identifierSchema.optional(),
+  expectedVersion: expectedVersionSchema,
+  idempotencyKey: idempotencyKeySchema,
 });
 
 export const adminOrderCommandSchema = headersRequest.extend({

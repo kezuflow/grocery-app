@@ -43,7 +43,7 @@ export default function CartPage() {
   }
   const guest = cart?.id === "guest-cart";
   const count = cart ? cartCountFromView(cart) : 0;
-  const canCheckout = Boolean(cart?.items.length);
+  const canCheckout = Boolean(cart?.items.length) && !cart?.checkoutBlocked;
   return (
     <StorefrontShell>
       <div className="min-h-[100dvh] w-full px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
@@ -109,7 +109,11 @@ export default function CartPage() {
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 font-semibold">{item.name}</p>
                       <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                        {money(item.unitPriceMinor)} each · fixed pack
+                        {item.unitPriceMinor === null
+                          ? item.availability === "PRICE_UNAVAILABLE"
+                            ? "Price unavailable"
+                            : "Unavailable"
+                          : `${money(item.unitPriceMinor)} each · fixed pack`}
                       </p>
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                         <div className="inline-flex h-10 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
@@ -127,11 +131,14 @@ export default function CartPage() {
                             aria-label={`Increase ${item.name}`}
                             className="inline-flex size-10 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                             onClick={() => void update(item, item.quantity + 1)}
+                            disabled={item.availability !== "AVAILABLE"}
                           >
                             +
                           </button>
                         </div>
-                        <strong className="tabular-nums">{money(item.lineTotalMinor)}</strong>
+                        <strong className="tabular-nums">
+                          {item.lineTotalMinor === null ? "—" : money(item.lineTotalMinor)}
+                        </strong>
                       </div>
                     </div>
                   </div>
@@ -147,7 +154,7 @@ export default function CartPage() {
               }
               actionHref={!canCheckout ? "/" : guest ? undefined : "/checkout"}
               onAction={guest && canCheckout ? () => setAuthOpen(true) : undefined}
-              disabled={loading}
+              disabled={loading || Boolean(cart?.checkoutBlocked)}
               note="Minimum order, availability, and delivery are confirmed at checkout."
             />
           </div>

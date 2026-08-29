@@ -15,11 +15,13 @@ function view(overrides: Partial<CartView> = {}): CartView {
     id: "cart-1",
     version: 2,
     items: [
-      { skuId: "sku-a", quantity: 2, name: "Avocado", unitPriceMinor: 9450, lineTotalMinor: 18900 },
-      { skuId: "sku-b", quantity: 1, name: "Pechay", unitPriceMinor: 5450, lineTotalMinor: 5450 },
+      { skuId: "sku-a", quantity: 2, name: "Avocado", availability: "AVAILABLE", unitPriceMinor: 9450, lineTotalMinor: 18900 },
+      { skuId: "sku-b", quantity: 1, name: "Pechay", availability: "AVAILABLE", unitPriceMinor: 5450, lineTotalMinor: 5450 },
     ],
     totalMinor: 24350,
     currency: "PHP",
+    checkoutBlocked: false,
+    blockingReasons: [],
     ...overrides,
   };
 }
@@ -172,6 +174,7 @@ describe("fetchCart", () => {
                   skuId: "sku-a",
                   quantity: 2,
                   name: "Avocado",
+                  availability: "AVAILABLE",
                   unitPriceMinor: 9450,
                   lineTotalMinor: 18900,
                 },

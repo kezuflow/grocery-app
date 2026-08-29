@@ -386,16 +386,21 @@ export type CartView = {
     skuId: string;
     quantity: number;
     name: string;
-    unitPriceMinor: number;
-    lineTotalMinor: number;
+    availability: "AVAILABLE" | "UNAVAILABLE" | "PRICE_UNAVAILABLE";
+    unitPriceMinor: number | null;
+    lineTotalMinor: number | null;
   }>;
   totalMinor: number;
   currency: string;
+  checkoutBlocked: boolean;
+  blockingReasons: ReadonlyArray<"ITEM_UNAVAILABLE" | "PRICE_UNAVAILABLE">;
 };
 export type SetCartItemRequest = AuthenticatedRequest & {
+  cartId: string;
   skuId: string;
   quantity: number;
-  locationId?: string;
+  expectedVersion: number;
+  idempotencyKey: string;
 };
 export type CustomerOrderView = {
   id: string;

@@ -176,12 +176,9 @@ These are Payments-owned operations. A provider-confirmed canonical outcome caus
 ## Cart
 
 - `cart.get() -> CartView`
-- `cart.addItem({ skuId, quantity, expectedVersion }) -> CartView`
-- `cart.updateQuantity({ itemId, quantity, expectedVersion }) -> CartView`
-- `cart.removeItem({ itemId, expectedVersion }) -> CartView`
-- `cart.clear({ expectedVersion }) -> CartView`
+- `cart.setItem({ cartId, skuId, quantity, expectedVersion, idempotencyKey }) -> CartView`
 
-Cart `quantity` is an integer count of the configured SKU, never kilograms/liters or a floating requested weight. `CartView` repeats the SKU sell-unit and exact base-unit-consumption projection for clarity but remains non-authoritative until Quote. Cart version supports optimistic concurrency. Cart activity alone promises no inventory hold/reservation or capacity.
+Cart `quantity` is an integer count of the configured SKU, never kilograms/liters or a floating requested weight; zero removes the line. Every mutation is idempotent and compare-and-swaps the customer-owned active cart version. Identical replay returns the already-applied cart, key reuse with another payload returns `IDEMPOTENCY_CONFLICT`, and stale aggregate state returns `CART_VERSION_CONFLICT`. `CartView` reports each line as `AVAILABLE`, `UNAVAILABLE`, or `PRICE_UNAVAILABLE`; unavailable prices are nullable and are never projected as zero. `checkoutBlocked` plus stable blocking reasons prevents checkout while retaining removable stale lines. Cart activity alone promises no inventory hold/reservation or capacity.
 
 ## Checkout Eligibility and Quote
 

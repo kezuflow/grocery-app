@@ -149,6 +149,8 @@ Delivery-fee configuration applies to both modes and is selected by effective ma
 
 Cart rows create no authoritative hold, capacity, reservation, or demand. `INSTANT` checkout-attempt creation/refresh may atomically create or replace expiring `inventory_holds`; commitment converts valid holds into committed reservations exactly once. `SCHEDULED` capacity and demand/reservation effects follow the cycle policy.
 
+Core provisions first-touch carts through the partial unique active-cart index, then reads the winning identity. `cart.setItem` claims a stable idempotency key and applies the line mutation plus cart-version compare-and-swap in one transactional batch. Current price is resolved location-first then market-wide; missing/expired price remains nullable and blocks checkout rather than becoming a zero-valued line. Quantity reduction/removal remains available for a line that later becomes unavailable.
+
 ## Orders and Amendments
 
 - `orders(id PK, order_number UNIQUE, customer_id FK, market_id FK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, fulfillment_configuration_id FK, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, service_fee_minor, tax_minor, final_total_minor, currency, address_snapshot_json, fulfillment_promise_snapshot_json, delivery_fee_snapshot_json, cycle_snapshot_json NULL, fulfillment_context_snapshot_json, committed_at, version, created_at, updated_at)`

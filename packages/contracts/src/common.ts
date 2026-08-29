@@ -1,4 +1,4 @@
-export const CONTRACT_VERSION = "2026-08-30.financial-safety" as const;
+export const CONTRACT_VERSION = "2026-08-30.cart-reliability" as const;
 
 export type RequestMeta = {
   requestId: string;
@@ -25,6 +25,7 @@ export const appErrorCodes = [
   "CAPACITY_UNAVAILABLE",
   "MINIMUM_ORDER_NOT_MET",
   "PRICE_CHANGED",
+  "PRICE_UNAVAILABLE",
   "DELIVERY_FEE_CONFIGURATION_MISSING",
   "ROUTE_DISTANCE_UNCONFIGURED",
   "ROUTE_DISTANCE_UNAVAILABLE",
@@ -53,6 +54,7 @@ export const appErrorCodes = [
   "CONFIGURATION_ERROR",
   "ILLEGAL_TRANSITION",
   "IDEMPOTENCY_CONFLICT",
+  "CART_VERSION_CONFLICT",
   "INTERNAL_ERROR",
 ] as const;
 

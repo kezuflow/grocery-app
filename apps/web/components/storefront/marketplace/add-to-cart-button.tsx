@@ -49,7 +49,7 @@ export function AddToCartButton({
     setPending(true);
     const result = await addToCart(skuId, next, {
       name: productName,
-      unitPriceMinor: unitPriceMinor ?? 0,
+      unitPriceMinor: unitPriceMinor ?? null,
       currency,
     });
     setPending(false);
@@ -82,7 +82,7 @@ export function AddToCartButton({
       <button
         type="button"
         onClick={() => void mutate(1)}
-        disabled={pending}
+        disabled={pending || unitPriceMinor == null}
         aria-label={`Add ${productName} to cart`}
         className={cn(
           "inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white text-[var(--fm-primary-dark)] shadow-sm transition-colors hover:border-[var(--fm-primary-dark)] hover:bg-[var(--fm-primary-lime)] disabled:opacity-60",

@@ -92,8 +92,11 @@ describe("customer checkout flow", () => {
     if (!cart.ok) return;
     const item = await core.setCartItem({
       ...request(),
+      cartId: cart.value.id,
       skuId: "sku-red-onion-500g",
       quantity: 4,
+      expectedVersion: cart.value.version,
+      idempotencyKey: `cart-set-${crypto.randomUUID()}`,
     });
     expect(item.ok).toBe(true);
     const cycles = await core.listDeliveryCycles({ requestId: requestId() });

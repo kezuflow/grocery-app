@@ -140,7 +140,11 @@ export function CartDrawer() {
                       <p className="line-clamp-2 text-sm font-semibold">{item.name}</p>
                       <p className="mt-1 text-xs text-[var(--fm-text-muted)]">Fixed pack</p>
                       <p className="mt-1 text-sm font-bold tabular-nums">
-                        {money(item.lineTotalMinor, cart.currency)}
+                        {item.lineTotalMinor === null
+                          ? item.availability === "PRICE_UNAVAILABLE"
+                            ? "Price unavailable"
+                            : "Unavailable"
+                          : money(item.lineTotalMinor, cart.currency)}
                       </p>
                       <div className="mt-2 inline-flex h-9 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
                         <button
@@ -158,6 +162,7 @@ export function CartDrawer() {
                           type="button"
                           aria-label={`Increase ${item.name}`}
                           onClick={() => void update(item, item.quantity + 1)}
+                          disabled={item.availability !== "AVAILABLE"}
                           className="inline-flex size-9 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                         >
                           <Plus className="size-3.5" aria-hidden="true" />
@@ -191,6 +196,7 @@ export function CartDrawer() {
                     : undefined
                 }
                 note="Minimum order, availability, and delivery are confirmed at checkout."
+                disabled={cart?.checkoutBlocked}
               />
             </div>
           ) : null}
