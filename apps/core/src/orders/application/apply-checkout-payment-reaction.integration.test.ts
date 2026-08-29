@@ -400,6 +400,105 @@ describe("order commitment from canonical payment reactions", () => {
     expect(exceptions?.count).toBe(1);
   });
 
+  it("rolls back a paid commitment when the final Scheduled capacity unit is gone", async () => {
+    const fixture = await seededCheckout();
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    const storedQuote = await env.DB.prepare(
+      "SELECT delivery_cycle_id, cycle_snapshot_json FROM checkout_quote WHERE id=?",
+    )
+      .bind(quote.value.quoteId)
+      .first<{ delivery_cycle_id: string; cycle_snapshot_json: string }>();
+    const route = JSON.parse(storedQuote!.cycle_snapshot_json) as {
+      zoneId: string;
+      locationId: string;
+    };
+    const original = await env.DB.prepare(
+      "SELECT capacity, allocated FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
+    )
+      .bind(storedQuote!.delivery_cycle_id, route.zoneId, route.locationId)
+      .first<{ capacity: number; allocated: number }>();
+    await env.DB.prepare(
+      "UPDATE cycle_zone_capacity SET allocated=capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
+    )
+      .bind(storedQuote!.delivery_cycle_id, route.zoneId, route.locationId)
+      .run();
+    const { intentId, reactionId } = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+    );
+
+    try {
+      const outcome = await applyCheckoutPaymentReaction(env.DB, {
+        reactionId,
+        paymentIntentId: intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      });
+
+      expect(outcome).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+      const orderCount = await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM order_payment_reaction WHERE checkout_quote_id=?",
+      )
+        .bind(quote.value.quoteId)
+        .first<{ count: number }>();
+      expect(orderCount?.count).toBe(0);
+      const storedStatus = await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+        .bind(quote.value.quoteId)
+        .first<{ status: string }>();
+      expect(storedStatus?.status).toBe("ACTIVE");
+      const exception = await env.DB.prepare(
+        "SELECT kind FROM finance_exception WHERE payment_intent_id=? AND status='OPEN'",
+      )
+        .bind(intentId)
+        .first<{ kind: string }>();
+      expect(exception?.kind).toBe("CAPACITY_UNAVAILABLE_AFTER_PAYMENT");
+    } finally {
+      await env.DB.prepare(
+        "UPDATE cycle_zone_capacity SET capacity=?, allocated=? WHERE cycle_id=? AND zone_id=? AND location_id=?",
+      )
+        .bind(
+          original!.capacity,
+          original!.allocated,
+          storedQuote!.delivery_cycle_id,
+          route.zoneId,
+          route.locationId,
+        )
+        .run();
+    }
+  });
+
+  it("commits only one order when two successful payments race for one quote", async () => {
+    const fixture = await seededCheckout();
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    const first = await intentWithReaction(quote.value.quoteId, fixture.customerId);
+    const second = await intentWithReaction(quote.value.quoteId, fixture.customerId);
+
+    const outcomes = await Promise.all([
+      applyCheckoutPaymentReaction(env.DB, {
+        reactionId: first.reactionId,
+        paymentIntentId: first.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+      applyCheckoutPaymentReaction(env.DB, {
+        reactionId: second.reactionId,
+        paymentIntentId: second.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.applied)).toHaveLength(1);
+    const orderCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM order_payment_reaction WHERE checkout_quote_id=?",
+    )
+      .bind(quote.value.quoteId)
+      .first<{ count: number }>();
+    expect(orderCount?.count).toBe(1);
+  });
+
   it("retries a paid commitment with the same identities after stock recovers", async () => {
     const fixture = await seededCheckout({ sourcingMode: "STOCKED", onHand: 0 });
     const quote = await createQuote(fixture);

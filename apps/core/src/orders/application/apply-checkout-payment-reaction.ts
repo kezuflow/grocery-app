@@ -255,6 +255,10 @@ export async function applyCheckoutPaymentReaction(
         "UPDATE checkout_quote SET status='CONSUMED', version=version+1, updated_at=? WHERE id=? AND version=? AND status='ACTIVE'",
       )
       .bind(now, quote.id, quote.version),
+    // `changes()` is scoped to the immediately preceding statement. A lost
+    // quote CAS aborts the whole batch before any dependent order survives.
+    database
+      .prepare("INSERT INTO commitment_abort (id) SELECT -3 WHERE changes()=0"),
     ...quote.lines.map((line) =>
       database
         .prepare(
@@ -273,12 +277,19 @@ export async function applyCheckoutPaymentReaction(
           line.baseQuantity,
         ),
     ),
-    database
-      .prepare(
-        "UPDATE cycle_zone_capacity SET allocated=allocated+1, version=version+1 WHERE cycle_id=? AND zone_id=? AND location_id=? AND allocated < capacity",
-      )
-      .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId),
   ];
+
+  if (!instant) {
+    statements.push(
+      database
+        .prepare(
+          "UPDATE cycle_zone_capacity SET allocated=allocated+1, version=version+1 WHERE cycle_id=? AND zone_id=? AND location_id=? AND allocated < capacity",
+        )
+        .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId),
+      // Missing/full capacity is a zero-row update, not a successful no-op.
+      database.prepare("INSERT INTO commitment_abort (id) SELECT -4 WHERE changes()=0"),
+    );
+  }
 
   // Instant commitments convert their expiring holds and respect the
   // location's concurrent-order capacity instead of cycle capacity.
@@ -406,23 +417,47 @@ export async function applyCheckoutPaymentReaction(
     return { applied: true, reason: "APPLIED", orderId };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const winner = await database
+    const paymentWinner = await database
       .prepare("SELECT order_id FROM order_payment_reaction WHERE payment_intent_id=?")
       .bind(input.paymentIntentId)
       .first<{ order_id: string }>();
-    if (winner) return { applied: true, reason: "ALREADY_APPLIED", orderId: winner.order_id };
+    if (paymentWinner)
+      return { applied: true, reason: "ALREADY_APPLIED", orderId: paymentWinner.order_id };
+    const quoteWinner = await database
+      .prepare("SELECT order_id FROM order_payment_reaction WHERE checkout_quote_id=?")
+      .bind(quote.id)
+      .first<{ order_id: string }>();
+    if (quoteWinner) {
+      await recordFinanceExceptionRow(
+        database,
+        input,
+        "QUOTE_ALREADY_CONSUMED",
+        "QUOTE_ALREADY_CONSUMED",
+        now,
+      );
+      return { applied: false, reason: "CAS_CONFLICT" };
+    }
     if (
       message.includes("CHECK constraint failed") ||
       message.includes("on_hand-reserved") ||
       message.includes("capacity")
     ) {
-      await database
-        .prepare(
-          "INSERT INTO finance_exception (id, kind, payment_intent_id, reaction_id, details_json, attempts, last_error_code, status, created_at) VALUES ('stock' || lower(hex(randomblob(12))), 'STOCK_UNAVAILABLE', ?, ?, '{}', 1, ?, 'OPEN', ?)",
-        )
-        .bind(input.paymentIntentId, input.reactionId, message.slice(0, 120), now)
-        .run()
-        .catch(() => undefined);
+      const capacity = instant
+        ? null
+        : await database
+            .prepare(
+              "SELECT allocated, capacity FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
+            )
+            .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId)
+            .first<{ allocated: number; capacity: number }>();
+      const capacityUnavailable = !instant && (!capacity || capacity.allocated >= capacity.capacity);
+      await recordFinanceExceptionRow(
+        database,
+        input,
+        capacityUnavailable ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT" : "STOCK_UNAVAILABLE",
+        capacityUnavailable ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT" : message,
+        now,
+      );
       return { applied: false, reason: "CAS_CONFLICT" };
     }
     await recordFinanceExceptionRow(database, input, "TRANSIENT_FAILURE", message, now);
