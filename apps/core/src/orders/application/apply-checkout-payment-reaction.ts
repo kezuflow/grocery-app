@@ -2,6 +2,7 @@ import { isSufficientForCommitment } from "../../payments/domain/payment";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
+import { recordFinancialEvent } from "../../payments/application/financial-observability";
 
 export type ApplyCheckoutPaymentReactionInput = {
   reactionId: string;
@@ -435,6 +436,12 @@ export async function applyCheckoutPaymentReaction(
         "QUOTE_ALREADY_CONSUMED",
         now,
       );
+      recordFinancialEvent({
+        event: "paid_commitment_conflict",
+        scope: "orders.commit",
+        aggregateId: input.paymentIntentId,
+        outcomeCode: "QUOTE_ALREADY_CONSUMED",
+      });
       return { applied: false, reason: "CAS_CONFLICT" };
     }
     if (
@@ -458,6 +465,14 @@ export async function applyCheckoutPaymentReaction(
         capacityUnavailable ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT" : message,
         now,
       );
+      recordFinancialEvent({
+        event: "paid_commitment_conflict",
+        scope: "orders.commit",
+        aggregateId: input.paymentIntentId,
+        outcomeCode: capacityUnavailable
+          ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT"
+          : "STOCK_UNAVAILABLE",
+      });
       return { applied: false, reason: "CAS_CONFLICT" };
     }
     await recordFinanceExceptionRow(database, input, "TRANSIENT_FAILURE", message, now);

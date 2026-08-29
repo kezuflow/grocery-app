@@ -3,6 +3,7 @@ import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-
 
 type RefundRowLike = Omit<RefundRow, "providerRefundReference">;
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import { recordFinancialEvent } from "./financial-observability";
 
 export type RequestRefundCommand = {
   paymentIntentId: string;
@@ -84,6 +85,13 @@ export async function requestRefund(
     const concurrentReplay = await repository.findRefundByIdempotencyKey(command.idempotencyKey);
     if (concurrentReplay)
       return { ok: true, value: toView(concurrentReplay), requestId: command.requestId };
+    recordFinancialEvent({
+      event: "refund_budget_rejected",
+      requestId: command.requestId,
+      scope: "refunds.request",
+      aggregateId: intent.id,
+      outcomeCode: "REFUND_AMOUNT_UNAVAILABLE",
+    });
     return failure(
       "REFUND_AMOUNT_UNAVAILABLE",
       "Refund exceeds the currently refundable captured amount",
@@ -161,6 +169,14 @@ export async function requestRefund(
         reason: error instanceof Error ? error.message : String(error),
       }),
       now,
+    });
+    recordFinancialEvent({
+      event: "refund_outcome_unresolved",
+      requestId: command.requestId,
+      scope: "refunds.request",
+      provider: attempt.provider,
+      aggregateId: refundId,
+      outcomeCode: "REFUND_UNRESOLVED",
     });
     return failure(
       "CONFLICT",

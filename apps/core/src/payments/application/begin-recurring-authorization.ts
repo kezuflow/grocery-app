@@ -1,6 +1,7 @@
 import { requestHash } from "../../idempotency";
 import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
+import { recordFinancialEvent } from "./financial-observability";
 
 export type BeginRecurringAuthorizationCommand = {
   customerId: string;
@@ -68,12 +69,29 @@ export async function beginRecurringAuthorization(
       if (row) {
         const repository = createPaymentRepository(database);
         const action = await repository.findActiveAuthorizationAction(row.id, Date.now());
-        if (!action && (await repository.hasAuthorizationProviderAction(row.id)))
+        if (!action && (await repository.hasAuthorizationProviderAction(row.id))) {
+          recordFinancialEvent({
+            event: "authorization_action_expired",
+            requestId: command.requestId,
+            scope: "authorizations.begin",
+            provider: row.provider,
+            aggregateId: row.id,
+            outcomeCode: "AUTHORIZATION_ACTION_EXPIRED",
+          });
           return failure(
             "AUTHORIZATION_ACTION_EXPIRED",
             "The authorization continuation expired; start a new command",
             command.requestId,
           );
+        }
+        recordFinancialEvent({
+          event: "authorization_command_replayed",
+          requestId: command.requestId,
+          scope: "authorizations.begin",
+          provider: row.provider,
+          aggregateId: row.id,
+          outcomeCode: row.status,
+        });
         return {
           ok: true,
           value: replayValue(row, action),
@@ -179,6 +197,14 @@ export async function beginRecurringAuthorization(
       }),
       now: Date.now(),
     });
+    recordFinancialEvent({
+      event: "authorization_outcome_unresolved",
+      requestId: command.requestId,
+      scope: "authorizations.begin",
+      provider: provider.code,
+      aggregateId: authorizationId,
+      outcomeCode: "AUTHORIZATION_OUTCOME_UNRESOLVED",
+    });
     return failure(
       "AUTHORIZATION_OUTCOME_UNRESOLVED",
       "The provider outcome is unknown; reconciliation is required",
@@ -271,6 +297,14 @@ export async function beginRecurringAuthorization(
         reason: error instanceof Error ? error.message : String(error),
       }),
       now: Date.now(),
+    });
+    recordFinancialEvent({
+      event: "authorization_outcome_unresolved",
+      requestId: command.requestId,
+      scope: "authorizations.persist",
+      provider: provider.code,
+      aggregateId: authorizationId,
+      outcomeCode: "AUTHORIZATION_OUTCOME_UNRESOLVED",
     });
     return failure(
       "AUTHORIZATION_OUTCOME_UNRESOLVED",

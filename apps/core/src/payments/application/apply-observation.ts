@@ -5,6 +5,7 @@ import {
 } from "../domain/payment";
 import { extendPaymentRepository } from "../infrastructure/d1/payment-repository";
 import type { PaymentIntentRow } from "../infrastructure/d1/payment-repository";
+import { recordFinancialEvent } from "./financial-observability";
 
 export type ObservationApplication = {
   processingStatus: "APPLIED" | "RETRY_REQUIRED" | "RECONCILIATION_REQUIRED";
@@ -57,8 +58,15 @@ export async function applyObservationToIntents(
   }
 
   const intent = intents[0];
-  if (intent.status === canonicalState)
+  if (intent.status === canonicalState) {
+    recordFinancialEvent({
+      event: "provider_observation_replayed",
+      scope: "payments.observe",
+      aggregateId: intent.id,
+      outcomeCode: canonicalState,
+    });
     return { processingStatus: "APPLIED", paymentIntentId: intent.id, canonicalState };
+  }
 
   // Reconciliation may need to walk a lagging stored state forward through the
   // canonical machine (e.g. REQUIRES_ACTION -> PROCESSING -> SUCCEEDED).
@@ -105,8 +113,15 @@ export async function applyObservationToIntents(
             }
           : null,
     });
-    if (!applied)
+    if (!applied) {
+      recordFinancialEvent({
+        event: "provider_observation_retry_required",
+        scope: "payments.observe",
+        aggregateId: intent.id,
+        outcomeCode: "VERSION_CONFLICT",
+      });
       return { processingStatus: "RETRY_REQUIRED", paymentIntentId: intent.id, canonicalState };
+    }
     version += 1;
     currentStatus = nextStatus;
   }

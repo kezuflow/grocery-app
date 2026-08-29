@@ -4,6 +4,7 @@ import {
 } from "../infrastructure/d1/payment-repository";
 import { applyObservationToIntents } from "./apply-observation";
 import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import { recordFinancialEvent } from "./financial-observability";
 
 export type ProviderEventProcessingStatus =
   | "APPLIED"
@@ -113,6 +114,13 @@ export async function ingestProviderEvent(
     if (inboxEntry.processingStatus !== "APPLIED" && inboxEntry.processingStatus !== "DUPLICATE") {
       return result(event.provider, event.providerEventId, "RETRY_REQUIRED");
     }
+    recordFinancialEvent({
+      event: "provider_observation_replayed",
+      scope: "payments.ingest",
+      provider: event.provider,
+      aggregateId: event.providerEventId,
+      outcomeCode: "DUPLICATE",
+    });
     return result(event.provider, event.providerEventId, "DUPLICATE");
   }
 

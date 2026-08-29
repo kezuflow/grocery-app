@@ -5,6 +5,7 @@ import {
   type PaymentRepository,
 } from "../infrastructure/d1/payment-repository";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import { recordFinancialEvent } from "./financial-observability";
 
 export type CreatePaymentCommand = {
   purpose: PaymentPurpose;
@@ -85,12 +86,27 @@ export async function createPayment(
       state === "REQUIRES_ACTION"
         ? await repository.findActiveProviderAction(existing.id, Date.now())
         : null;
-    if (state === "REQUIRES_ACTION" && !action)
+    if (state === "REQUIRES_ACTION" && !action) {
+      recordFinancialEvent({
+        event: "payment_action_expired",
+        requestId: command.requestId,
+        scope: "payments.create",
+        aggregateId: existing.id,
+        outcomeCode: "PAYMENT_ACTION_EXPIRED",
+      });
       return failure(
         "PAYMENT_ACTION_EXPIRED",
         "The payment continuation expired; start a new payment command",
         command.requestId,
       );
+    }
+    recordFinancialEvent({
+      event: "payment_command_replayed",
+      requestId: command.requestId,
+      scope: "payments.create",
+      aggregateId: existing.id,
+      outcomeCode: existing.status,
+    });
     return {
       ok: true,
       value: {
@@ -198,6 +214,14 @@ export async function createPayment(
       }),
       now: Date.now(),
     });
+    recordFinancialEvent({
+      event: "payment_outcome_unresolved",
+      requestId: command.requestId,
+      scope: "payments.create",
+      provider: provider.code,
+      aggregateId: intentId,
+      outcomeCode: "PAYMENT_OUTCOME_UNRESOLVED",
+    });
     return failure(
       "PAYMENT_OUTCOME_UNRESOLVED",
       "The provider outcome is unknown; reconciliation is required",
@@ -289,6 +313,14 @@ export async function createPayment(
         reason: error instanceof Error ? error.message : String(error),
       }),
       now: Date.now(),
+    });
+    recordFinancialEvent({
+      event: "payment_outcome_unresolved",
+      requestId: command.requestId,
+      scope: "payments.persist",
+      provider: provider.code,
+      aggregateId: intentId,
+      outcomeCode: "PAYMENT_OUTCOME_UNRESOLVED",
     });
     return failure(
       "PAYMENT_OUTCOME_UNRESOLVED",
