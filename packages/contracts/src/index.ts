@@ -276,9 +276,9 @@ export type CreateCustomerAddressRequest = CustomerAddressCreateBase &
     | {
         /** Historical compatibility input for callers not yet migrated to structured fields. */
         addressJson: string;
-        components?: AddressComponents;
-        confirmationSource?: CoordinateConfirmationSource;
-        instructions?: DeliveryInstructions;
+        components?: never;
+        confirmationSource?: never;
+        instructions?: never;
       }
   );
 export type UpdateCustomerAddressRequest = AuthenticatedRequest & {

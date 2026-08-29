@@ -213,9 +213,15 @@ describe("provider-neutral geography contracts", () => {
       longitude: 123.9058,
       addressJson: "{\"line1\":\"Cebu City\"}",
     } satisfies CreateCustomerAddressRequest;
+    // @ts-expect-error Legacy raw JSON cannot be mixed with partial structured address data.
+    const invalidMixedCreate: CreateCustomerAddressRequest = {
+      ...legacyCreate,
+      components: structuredCreate.components,
+    };
 
     expect(structuredCreate).not.toHaveProperty("addressJson");
     expect(legacyCreate.addressJson).toContain("Cebu City");
+    void invalidMixedCreate;
     void (true as UpdateShape);
     void (true as ViewShape);
   });
