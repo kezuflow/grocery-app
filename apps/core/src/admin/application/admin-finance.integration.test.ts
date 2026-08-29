@@ -43,7 +43,10 @@ const FINANCE_CAPABILITIES = [
   "memberships.manage",
 ];
 
-async function seedManager(): Promise<{ cookie: string; staffId: string }> {
+async function seedManager(
+  capabilities: readonly string[] = FINANCE_CAPABILITIES,
+  scope: "global" | "location" = "global",
+): Promise<{ cookie: string; staffId: string }> {
   const principal = await signUp();
   const staffId = crypto.randomUUID();
   const roleId = crypto.randomUUID();
@@ -60,10 +63,15 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
       roleId,
     ),
     env.DB.prepare(
-      "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'global', NULL, NULL)",
-    ).bind(crypto.randomUUID(), staffId),
+      "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, ?, NULL, ?)",
+    ).bind(
+      crypto.randomUUID(),
+      staffId,
+      scope,
+      scope === "location" ? "location-cebu-central" : null,
+    ),
   ];
-  for (const capability of FINANCE_CAPABILITIES) {
+  for (const capability of capabilities) {
     statements.push(
       env.DB.prepare(
         "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, ?, 'fin', ?)",
@@ -176,6 +184,203 @@ describe("finance administration", () => {
     });
     expect(terminalDetail.ok).toBe(true);
     if (terminalDetail.ok) expect(terminalDetail.value.allowedActions).toEqual([]);
+  });
+
+  it("derives order actions from both lifecycle state and the caller's capabilities", async () => {
+    const reader = await seedManager(["orders.read"]);
+    const { orderId } = await seedOrderWithPayment();
+
+    const detail = await core.getAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+      orderId,
+    });
+
+    expect(detail.ok).toBe(true);
+    if (detail.ok) expect(detail.value.allowedActions).toEqual([]);
+  });
+
+  it("requires global finance scope and derives payment actions from refund capability", async () => {
+    const scopedReader = await seedManager(["payments.read", "refunds.manage"], "location");
+    const globalReader = await seedManager(["payments.read"]);
+    const { paymentIntentId } = await seedOrderWithPayment();
+
+    expect(
+      await core.getAdminPaymentOverview({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: scopedReader.cookie },
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+
+    const detail = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: globalReader.cookie },
+      paymentIntentId,
+    });
+    expect(detail.ok).toBe(true);
+    if (detail.ok) expect(detail.value.allowedActions).toEqual([]);
+  });
+
+  it("composes immutable order finance, operations, exceptions, and timeline projections", async () => {
+    const manager = await seedManager();
+    const { customerId, orderId, paymentIntentId } = await seedOrderWithPayment();
+    const now = Date.now();
+    const quoteId = crypto.randomUUID();
+    const addressId = crypto.randomUUID();
+    const cartId = crypto.randomUUID();
+    const amendmentId = crypto.randomUUID();
+    const reactionId = (await env.DB.prepare(
+      "SELECT reaction_id AS id FROM order_payment_reaction WHERE order_id=?",
+    )
+      .bind(orderId)
+      .first<{ id: string }>())!.id;
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'Customer', '09170000000', '{}', 10.3, 123.9, 'active', 1, ?, ?)",
+      ).bind(addressId, customerId, now, now),
+      env.DB.prepare(
+        "INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at) VALUES (?, ?, 'location-cebu-central', 'CHECKED_OUT', 1, ?, ?)",
+      ).bind(cartId, customerId, now, now),
+      env.DB.prepare(
+        `INSERT INTO checkout_quote
+          (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode,
+           currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json,
+           status, version, expires_at, idempotency_key, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'cycle-next-cebu', 'SCHEDULED', 'PHP', 48000, 1000, 3000,
+                 50000, '[]', 'CONSUMED', 1, ?, ?, ?, ?)`,
+      ).bind(
+        quoteId,
+        `attempt-${crypto.randomUUID()}`,
+        customerId,
+        cartId,
+        addressId,
+        now,
+        `quote-${crypto.randomUUID()}`,
+        now,
+        now,
+      ),
+      env.DB.prepare(
+        "UPDATE payment_intent SET subject_type='checkout_quote', subject_id=? WHERE id=?",
+      ).bind(quoteId, paymentIntentId),
+      env.DB.prepare(
+        "UPDATE payment_attempt SET payment_intent_id=?, provider_reference='provider-secret' WHERE customer_id=?",
+      ).bind(paymentIntentId, customerId),
+      env.DB.prepare(
+        "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity) VALUES (?, ?, 'sku-red-onion-500g', 'Red Onion', '500 g', 'GRAM', 2, 12000, 24000, 1000)",
+      ).bind(crypto.randomUUID(), orderId),
+      env.DB.prepare(
+        "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, 'location-cebu-central', 'cycle-next-cebu', 'zone-cebu', ?, ?, ?, 'SCHEDULED', '[\"PLANNED\"]', ?)",
+      ).bind(orderId, now + 3600000, now + 86400000, now + 90000000, now),
+      env.DB.prepare(
+        "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'PICKING', ?, 2)",
+      ).bind(crypto.randomUUID(), orderId, now),
+      env.DB.prepare(
+        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES (?, ?, 'cycle-next-cebu', 'SCHEDULED', 'rider-1', 'ASSIGNED', '{}', NULL, 3, ?, ?)",
+      ).bind(crypto.randomUUID(), orderId, now, now),
+      env.DB.prepare(
+        "INSERT INTO paid_order_amendment (id, order_id, status, currency, total_minor, payment_intent_id, idempotency_key, created_at, updated_at) VALUES (?, ?, 'COMMITTED', 'PHP', 5000, ?, ?, ?, ?)",
+      ).bind(amendmentId, orderId, paymentIntentId, `amend-${crypto.randomUUID()}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO paid_order_amendment_line (id, amendment_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, base_quantity, unit_price_minor, line_total_minor, created_at) VALUES (?, ?, 'sku-red-onion-500g', 'Red Onion', '500 g', 'GRAM', 1, 500, 5000, 5000, ?)",
+      ).bind(crypto.randomUUID(), amendmentId, now),
+      env.DB.prepare(
+        "INSERT INTO finance_exception (id, kind, payment_intent_id, reaction_id, order_id, details_json, attempts, last_error_code, status, created_at) VALUES (?, 'TRANSIENT_FAILURE', ?, ?, ?, '{}', 1, 'TIMEOUT', 'OPEN', ?)",
+      ).bind(crypto.randomUUID(), paymentIntentId, reactionId, orderId, now),
+      env.DB.prepare(
+        "INSERT INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, available_at, created_at, updated_at) VALUES (?, ?, 'COMMIT_ORDER', 'checkout_quote', ?, 'SUCCEEDED', ?, 1, ?, ?, ?)",
+      ).bind(
+        reactionId,
+        paymentIntentId,
+        quoteId,
+        `reaction-${crypto.randomUUID()}`,
+        now,
+        now,
+        now,
+      ),
+    ]);
+
+    const detail = await core.getAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId,
+    });
+    expect(detail.ok).toBe(true);
+    if (!detail.ok) return;
+    expect(detail.value.financial).toMatchObject({
+      source: "CHECKOUT_QUOTE",
+      subtotalMinor: 48000,
+      discountMinor: 1000,
+      deliveryFeeMinor: 3000,
+    });
+    expect(detail.value.items[0]).toMatchObject({
+      productName: "Red Onion",
+      variantName: "500 g",
+      unit: "GRAM",
+      baseQuantity: 1000,
+    });
+    expect(detail.value.payments).toHaveLength(1);
+    expect(detail.value.amendments[0]?.lines).toHaveLength(1);
+    expect(detail.value.fulfillment).toMatchObject({ status: "PICKING", version: 2 });
+    expect(detail.value.delivery).toMatchObject({ status: "ASSIGNED", version: 3 });
+    expect(detail.value.exceptions).toEqual([
+      expect.objectContaining({ source: "FINANCE", kind: "TRANSIENT_FAILURE" }),
+    ]);
+    expect(detail.value.timeline.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("composes payment overview and detail without leaking provider identifiers or payload hashes", async () => {
+    const manager = await seedManager();
+    const { customerId, paymentIntentId } = await seedOrderWithPayment();
+    const now = Date.now();
+    const attempt = await env.DB.prepare("SELECT id FROM payment_attempt WHERE customer_id=?")
+      .bind(customerId)
+      .first<{ id: string }>();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE payment_attempt SET payment_intent_id=?, provider_reference='provider-secret' WHERE id=?",
+      ).bind(paymentIntentId, attempt!.id),
+      env.DB.prepare(
+        "INSERT INTO payment_events (id, provider, provider_event_id, provider_reference, event_type, payload_hash, received_at, processed_at, processing_status) VALUES (?, 'mock', 'event-secret', 'provider-secret', 'payment.succeeded', 'hash-secret', ?, ?, 'PROCESSED')",
+      ).bind(crypto.randomUUID(), now, now),
+      env.DB.prepare(
+        "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 10000, 'PHP', 'SUCCEEDED', 'quality issue', ?, 1, ?, ?)",
+      ).bind(crypto.randomUUID(), paymentIntentId, `refund-${crypto.randomUUID()}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO payment_reconciliation_case (id, payment_intent_id, category, status, details_json, created_at) VALUES (?, ?, 'AMBIGUOUS_OUTCOME', 'OPEN', '{\"providerReference\":\"must-not-leak\"}', ?)",
+      ).bind(crypto.randomUUID(), paymentIntentId, now),
+    ]);
+
+    const overview = await core.getAdminPaymentOverview({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+    });
+    expect(overview.ok).toBe(true);
+    if (overview.ok) {
+      expect(overview.value.intentCounts.total).toBeGreaterThan(0);
+      expect(overview.value.openReconciliationCount).toBeGreaterThan(0);
+      expect(overview.value.totalsByCurrency).toEqual(
+        expect.arrayContaining([expect.objectContaining({ currency: "PHP" })]),
+      );
+    }
+
+    const detail = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      paymentIntentId,
+    });
+    expect(detail.ok).toBe(true);
+    if (!detail.ok) return;
+    expect(detail.value.remainingRefundableMinor).toBe(40000);
+    expect(detail.value.allowedActions).toEqual(["REQUEST_REFUND"]);
+    expect(detail.value.attempts).toHaveLength(1);
+    expect(detail.value.events).toEqual([
+      expect.objectContaining({ eventType: "payment.succeeded", processingStatus: "PROCESSED" }),
+    ]);
+    expect(detail.value.reconciliationCases[0]).not.toHaveProperty("details");
+    expect(JSON.stringify(detail.value)).not.toContain("provider-secret");
+    expect(JSON.stringify(detail.value)).not.toContain("hash-secret");
+    expect(JSON.stringify(detail.value)).not.toContain("event-secret");
   });
 
   it("cancels an order through the canonical command with reason and audit", async () => {

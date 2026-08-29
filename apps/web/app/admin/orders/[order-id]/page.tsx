@@ -17,6 +17,12 @@ import { ListPageSection, PageHeader, StatusBadge } from "../../../../components
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
 
+function money(amountMinor: number | null, currency: string): string {
+  return amountMinor === null
+    ? "Unavailable"
+    : new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(amountMinor / 100);
+}
+
 export default function OrderDetailPage({ params }: { params: Promise<{ "order-id": string }> }) {
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
@@ -103,6 +109,50 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
               {message}
             </p>
           ) : null}
+          {order.exceptions.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertTitle>Operational attention required</AlertTitle>
+              <AlertDescription>
+                {order.exceptions.length} open or historical exception
+                {order.exceptions.length === 1 ? "" : "s"} are attached to this order.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <ListPageSection
+            title="Financial snapshot"
+            description={
+              order.financial.source === "CHECKOUT_QUOTE"
+                ? "Immutable values captured at checkout."
+                : "Only the committed order total is available for this historical order."
+            }
+          >
+            <dl className="grid gap-4 p-4 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-[var(--fm-text-muted)]">Subtotal</dt>
+                <dd className="font-semibold">
+                  {money(order.financial.subtotalMinor, order.currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fm-text-muted)]">Discount</dt>
+                <dd className="font-semibold">
+                  {money(order.financial.discountMinor, order.currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fm-text-muted)]">Delivery</dt>
+                <dd className="font-semibold">
+                  {money(order.financial.deliveryFeeMinor, order.currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fm-text-muted)]">Total</dt>
+                <dd className="font-semibold">
+                  {money(order.financial.totalMinor, order.currency)}
+                </dd>
+              </div>
+            </dl>
+          </ListPageSection>
           <ListPageSection title="Items">
             <Table>
               <TableHeader>
@@ -115,19 +165,176 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
               </TableHeader>
               <TableBody>
                 {order.items.map((item, index) => (
-                  <TableRow key={`${item.skuName}-${index}`}>
-                    <TableCell>{item.skuName}</TableCell>
+                  <TableRow key={`${item.productName}-${item.variantName}-${index}`}>
+                    <TableCell>
+                      <span className="font-medium">{item.productName}</span>
+                      <br />
+                      <span className="text-xs text-[var(--fm-text-muted)]">
+                        {item.variantName} · {item.baseQuantity} {item.unit.toLowerCase()}
+                      </span>
+                    </TableCell>
                     <TableCell>{item.quantity}</TableCell>
-                    <TableCell>
-                      {order.currency} {(item.unitPriceMinor / 100).toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      {order.currency} {(item.lineTotalMinor / 100).toFixed(2)}
-                    </TableCell>
+                    <TableCell>{money(item.unitPriceMinor, order.currency)}</TableCell>
+                    <TableCell>{money(item.lineTotalMinor, order.currency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+          </ListPageSection>
+          <ListPageSection title="Payments">
+            {order.payments.length === 0 ? (
+              <p className="p-4 text-sm text-[var(--fm-text-muted)]">
+                No payment intent is linked to this order.
+              </p>
+            ) : (
+              <ul className="divide-y text-sm">
+                {order.payments.map((payment) => (
+                  <li
+                    className="flex flex-wrap items-center justify-between gap-3 p-4"
+                    key={payment.paymentIntentId}
+                  >
+                    <div>
+                      <Link
+                        className="font-medium underline"
+                        href={`/admin/payments/transactions/${payment.paymentIntentId}`}
+                      >
+                        {payment.purpose}
+                      </Link>
+                      <p className="text-xs text-[var(--fm-text-muted)]">
+                        {payment.paymentIntentId}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <StatusBadge>{payment.status}</StatusBadge>
+                      <p>
+                        {money(payment.amountMinor, payment.currency)} · refunded{" "}
+                        {money(payment.refundedMinor, payment.currency)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ListPageSection>
+          <ListPageSection
+            title="Amendments"
+            description="Post-payment additions retain independent item, price, and payment history."
+          >
+            {order.amendments.length === 0 ? (
+              <p className="p-4 text-sm text-[var(--fm-text-muted)]">No amendments.</p>
+            ) : (
+              <div className="divide-y">
+                {order.amendments.map((amendment) => (
+                  <article className="space-y-2 p-4 text-sm" key={amendment.amendmentId}>
+                    <div className="flex justify-between">
+                      <span className="font-medium">{amendment.amendmentId}</span>
+                      <StatusBadge>{amendment.status}</StatusBadge>
+                    </div>
+                    <p>
+                      {money(amendment.totalMinor, amendment.currency)} · {amendment.lines.length}{" "}
+                      line{amendment.lines.length === 1 ? "" : "s"}
+                    </p>
+                    {amendment.paymentIntentId ? (
+                      <Link
+                        className="underline"
+                        href={`/admin/payments/transactions/${amendment.paymentIntentId}`}
+                      >
+                        Open amendment payment
+                      </Link>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </ListPageSection>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ListPageSection title="Fulfillment">
+              {order.fulfillment ? (
+                <dl className="grid gap-3 p-4 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Mode</dt>
+                    <dd>{order.fulfillment.fulfillmentMode}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Status</dt>
+                    <dd>{order.fulfillment.status ?? "Not started"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Location</dt>
+                    <dd>{order.fulfillment.locationId}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Promise</dt>
+                    <dd>{order.fulfillment.promisedAt ?? order.fulfillment.deliveryDate ?? "—"}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="p-4 text-sm text-[var(--fm-text-muted)]">No fulfillment snapshot.</p>
+              )}
+            </ListPageSection>
+            <ListPageSection title="Delivery">
+              {order.delivery ? (
+                <dl className="grid gap-3 p-4 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Status</dt>
+                    <dd>
+                      <StatusBadge>{order.delivery.status}</StatusBadge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Rider</dt>
+                    <dd>{order.delivery.riderUserId ?? "Unassigned"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Version</dt>
+                    <dd>{order.delivery.version}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--fm-text-muted)]">Delivered</dt>
+                    <dd>{order.delivery.deliveredAt ?? "—"}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="p-4 text-sm text-[var(--fm-text-muted)]">No delivery job.</p>
+              )}
+            </ListPageSection>
+          </div>
+          <ListPageSection title="Exceptions">
+            {order.exceptions.length === 0 ? (
+              <p className="p-4 text-sm text-[var(--fm-text-muted)]">No exceptions.</p>
+            ) : (
+              <ul className="divide-y text-sm">
+                {order.exceptions.map((exception) => (
+                  <li className="p-4" key={exception.exceptionId}>
+                    <div className="flex justify-between">
+                      <strong>{exception.kind}</strong>
+                      <StatusBadge>{exception.status}</StatusBadge>
+                    </div>
+                    <p className="text-[var(--fm-text-muted)]">
+                      {exception.source}
+                      {exception.details ? ` · ${exception.details}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ListPageSection>
+          <ListPageSection title="Timeline">
+            {order.timeline.length === 0 ? (
+              <p className="p-4 text-sm text-[var(--fm-text-muted)]">No lifecycle events.</p>
+            ) : (
+              <ol className="divide-y text-sm">
+                {order.timeline.map((entry) => (
+                  <li className="grid gap-1 p-4 sm:grid-cols-[10rem_1fr_auto]" key={entry.eventId}>
+                    <time className="text-xs text-[var(--fm-text-muted)]">
+                      {entry.occurredAt.slice(0, 19)}
+                    </time>
+                    <span>{entry.label}</span>
+                    {entry.status ? <StatusBadge>{entry.status}</StatusBadge> : null}
+                  </li>
+                ))}
+              </ol>
+            )}
           </ListPageSection>
           <ListPageSection
             title="Cancellation"

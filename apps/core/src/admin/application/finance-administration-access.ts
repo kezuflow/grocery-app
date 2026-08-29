@@ -20,6 +20,7 @@ export type FinanceAdministrationDeps = {
 export type FinanceAdministrationAccess = {
   staffId: string;
   authUserId: string;
+  capabilities: ReadonlyArray<string>;
 };
 
 /**
@@ -81,7 +82,11 @@ export async function resolveFinanceAdministrationAccess(
   }
   return {
     ok: true,
-    value: { staffId: staffRecord.id, authUserId: context.value.principal.userId },
+    value: {
+      staffId: staffRecord.id,
+      authUserId: context.value.principal.userId,
+      capabilities: context.value.capabilities,
+    },
     requestId: request.requestId,
   };
 }

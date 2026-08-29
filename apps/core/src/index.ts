@@ -200,6 +200,8 @@ import {
 import {
   listAdminOrders as listAdminOrdersQuery,
   getAdminOrder as getAdminOrderQuery,
+  getAdminPayment as getAdminPaymentQuery,
+  getAdminPaymentOverview as getAdminPaymentOverviewQuery,
   listAdminPayments as listAdminPaymentsQuery,
   listAdminReconciliationCases as listAdminReconciliationCasesQuery,
   listAdminMemberships as listAdminMembershipsQuery,
@@ -862,6 +864,10 @@ const paymentListSchema = authenticatedRequestSchema.extend({
     .optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const paymentDetailSchema = authenticatedRequestSchema.extend({
+  paymentIntentId: validationSchema.string().trim().min(1).max(200),
 });
 
 const refundRequestSchema = authenticatedRequestSchema.extend({
@@ -1808,6 +1814,24 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminPaymentsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getAdminPaymentOverview(input: AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminPaymentOverviewQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getAdminPayment(input: import("@freshmarkets/contracts").AdminPaymentDetailRequest) {
+    const validation = paymentDetailSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminPaymentQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

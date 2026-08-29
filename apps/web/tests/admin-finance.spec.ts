@@ -33,6 +33,56 @@ test("a provisioned Staff reader opens the real Orders workspace", async ({ admi
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 });
 
+test("a provisioned Staff operator uses the real payment workspaces and contextual refund", async ({
+  adminPage,
+}) => {
+  const suffix = crypto.randomUUID();
+  const now = Date.now();
+  const userId = `payment-user-${suffix}`;
+  const principalId = `payment-principal-${suffix}`;
+  const customerId = `payment-customer-${suffix}`;
+  const paymentIntentId = `payment-intent-${suffix}`;
+  executeAdminE2eSql(`
+    INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
+      VALUES ('${userId}', 'Payment Customer', 'payment-${suffix}@example.com', 1, ${now}, ${now});
+    INSERT INTO customer_principal (id, auth_user_id, status, created_at, updated_at)
+      VALUES ('${principalId}', '${userId}', 'active', ${now}, ${now});
+    INSERT INTO customer (id, auth_user_id, principal_id, status, version, created_at, updated_at)
+      VALUES ('${customerId}', '${userId}', '${principalId}', 'active', 1, ${now}, ${now});
+    INSERT INTO payment_intent
+      (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status,
+       idempotency_key, version, created_at, updated_at)
+      VALUES ('${paymentIntentId}', 'GROCERY_CHECKOUT', 'checkout_quote', 'quote-${suffix}',
+              '${customerId}', 12500, 'PHP', 'SUCCEEDED', 'intent-${suffix}', 1, ${now}, ${now});
+  `);
+
+  await adminPage.goto("/admin/payments");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();
+  await expect(adminPage.getByText("Recent transactions")).toBeVisible();
+
+  await adminPage.goto("/admin/payments/transactions");
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "Payment transactions" }),
+  ).toBeVisible();
+  await expect(adminPage.getByText(`payment-${suffix}@example.com`)).toBeVisible();
+
+  await adminPage.goto(`/admin/payments/transactions/${paymentIntentId}`);
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: `Payment ${paymentIntentId}` }),
+  ).toBeVisible();
+  await adminPage.getByLabel("Refund amount").fill("25.00");
+  await adminPage.getByRole("button", { name: "Request refund" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText(paymentIntentId);
+  await adminPage.getByLabel("Confirmation reason").fill("E2E quality issue");
+  await adminPage.getByRole("button", { name: "Confirm" }).click();
+  await expect(adminPage.getByRole("alert")).toContainText("Refund request recorded");
+
+  await adminPage.goto("/admin/payments/reconciliation");
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "Payment reconciliation" }),
+  ).toBeVisible();
+});
+
 test("a Staff principal without capability is denied the Orders workspace", async ({
   deniedAdminPage,
 }) => {

@@ -305,11 +305,14 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - `admin.orders.get({ orderId }) -> AdminOrderDetail`
 - `admin.orders.cancel({ orderId, reason, resolution, expectedVersion, idempotencyKey }) -> AdminOrderDetail`
 - `admin.orders.recordExceptionResolution(...)`
-- `admin.payments.list(filters, page) -> PaymentOperationsPage`
-- `admin.payments.refund({ paymentId, amountMinor, reason, idempotencyKey }) -> RefundView`
-- `admin.payments.reconcile({ paymentId, idempotencyKey }) -> ReconciliationResult`
+- `admin.payments.getOverview() -> AdminPaymentOverview`
+- `admin.payments.list(filters, page) -> AdminPaymentPage`
+- `admin.payments.get({ paymentIntentId }) -> AdminPaymentDetail`
+- `admin.payments.refund({ paymentIntentId, amountMinor, reason, idempotencyKey }) -> AdminRefundView`
+- `admin.payments.listReconciliationCases(filters, page) -> AdminReconciliationPage`
+- `admin.payments.resolveReconciliationCase({ caseId, reason, idempotencyKey }) -> AdminReconciliationCaseView`
 
-Admin order detail is an operational read model combining order, payment, demand/reservation, fulfillment, delivery, and audit summaries; it is not a raw join response.
+Admin order detail composes immutable checkout financial and item snapshots with Payments, amendments, fulfillment, delivery, exception, merged timeline, allowed-action, and Audit projections; it is not a raw join response. Historical orders without an authoritative checkout quote explicitly return an `ORDER_TOTAL_ONLY` financial source with unavailable component amounts rather than fabricating a breakdown. Payment detail composes canonical attempts, refunds, provider-safe event metadata, downstream reactions, reconciliation cases, allowed actions, and Audit. Provider references, provider event identifiers, payload hashes/payloads, idempotency records, and reconciliation detail JSON do not leave Core. `CANCEL` and `REQUEST_REFUND` are returned only when both lifecycle policy and the caller's capability authorize the command.
 
 Operational command/read contracts publish the canonical Fulfillment (`NOT_STARTED` through `COMPLETED`, with `SHORTED` resolution) and Delivery Job (`UNASSIGNED` through `DELIVERED`, with explicit failure/retry/escalation) states and command actions. Core derives `allowedActions`; the former `START|PACK|SHORTAGE` and `DISPATCH|DELIVER|FAIL` shortcuts are not accepted. Procurement aggregation computes committed demand and usable inventory inside its version-guarded command and permits only one active requirement per cycle/location/pool. Order issues have no `REOPEN` action: `RESOLVED` is terminal and further work requires a new linked issue.
 

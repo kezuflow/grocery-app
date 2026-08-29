@@ -25,6 +25,7 @@ import {
   resolveFinanceAdministrationAccess,
   type FinanceAdministrationDeps,
 } from "./finance-administration-access";
+import { getAdminOrder } from "./finance-reads";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -126,63 +127,7 @@ export async function cancelAdminOrder(
     return failure("VALIDATION_FAILED", "Order is not in a cancellable state", request.requestId);
   }
 
-  const row = await deps.db
-    .prepare(
-      `SELECT o.id AS orderId, u.email AS customerEmail, o.status, o.total_minor AS totalMinor,
-              o.currency, o.created_at AS committedAt, o.version,
-              (SELECT pi.status FROM order_payment_reaction opr JOIN payment_intent pi ON pi.id = opr.payment_intent_id WHERE opr.order_id=o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
-              (SELECT f.status FROM fulfillment_record f WHERE f.order_id=o.id LIMIT 1) AS fulfillmentStatus,
-              (SELECT d.status FROM delivery_job d WHERE d.order_id=o.id LIMIT 1) AS deliveryStatus
-       FROM grocery_order o JOIN customer c ON c.id=o.customer_id JOIN user u ON u.id=c.auth_user_id WHERE o.id=?`,
-    )
-    .bind(request.orderId)
-    .first<{
-      orderId: string;
-      customerEmail: string;
-      status: string;
-      totalMinor: number;
-      currency: string;
-      committedAt: number;
-      version: number;
-      paymentStatus: string | null;
-      fulfillmentStatus: string | null;
-      deliveryStatus: string | null;
-    }>();
-  if (!row) return failure("NOT_FOUND", "Order not found", request.requestId);
-  const items = await deps.db
-    .prepare(
-      `SELECT product_name_snapshot AS skuName, quantity, unit_price_minor AS unitPriceMinor, line_total_minor AS lineTotalMinor FROM order_item WHERE order_id=?`,
-    )
-    .bind(request.orderId)
-    .all<{ skuName: string; quantity: number; unitPriceMinor: number; lineTotalMinor: number }>();
-  const audits = await deps.db
-    .prepare(
-      `SELECT id AS auditEventId, occurred_at AS occurredAt, action, reason FROM audit_event WHERE aggregate_type='order' AND aggregate_id=? ORDER BY occurred_at DESC, id DESC LIMIT 10`,
-    )
-    .bind(request.orderId)
-    .all<{ auditEventId: string; occurredAt: number; action: string; reason: string | null }>();
-  return {
-    ok: true,
-    value: {
-      orderId: row.orderId,
-      customerEmail: row.customerEmail,
-      status: row.status,
-      totalMinor: row.totalMinor,
-      currency: row.currency,
-      paymentStatus: row.paymentStatus,
-      fulfillmentStatus: row.fulfillmentStatus,
-      deliveryStatus: row.deliveryStatus,
-      committedAt: new Date(row.committedAt).toISOString(),
-      version: row.version,
-      allowedActions: [],
-      items: items.results,
-      recentAudit: audits.results.map((audit) => ({
-        ...audit,
-        occurredAt: new Date(audit.occurredAt).toISOString(),
-      })),
-    },
-    requestId: request.requestId,
-  };
+  return getAdminOrder(deps, request, "orders.manage");
 }
 
 /**
@@ -383,7 +328,7 @@ export async function resolveAdminReconciliationCase(
     if (claim.existing?.status === "SUCCEEDED") {
       const existing = await deps.db
         .prepare(
-          "SELECT id, payment_intent_id, category, status, details_json, created_at, resolved_at FROM payment_reconciliation_case WHERE id = ?",
+          "SELECT id, payment_intent_id, category, status, created_at, resolved_at FROM payment_reconciliation_case WHERE id = ?",
         )
         .bind(request.caseId)
         .first<{
@@ -391,7 +336,6 @@ export async function resolveAdminReconciliationCase(
           payment_intent_id: string | null;
           category: AdminReconciliationCaseView["category"];
           status: "OPEN" | "RESOLVED";
-          details_json: string;
           created_at: number;
           resolved_at: number | null;
         }>();
@@ -403,7 +347,6 @@ export async function resolveAdminReconciliationCase(
             paymentIntentId: existing.payment_intent_id,
             category: existing.category,
             status: existing.status,
-            details: existing.details_json,
             createdAt: new Date(existing.created_at).toISOString(),
             resolvedAt:
               existing.resolved_at === null ? null : new Date(existing.resolved_at).toISOString(),
@@ -459,7 +402,7 @@ export async function resolveAdminReconciliationCase(
 
   const resolved = await deps.db
     .prepare(
-      "SELECT id, payment_intent_id, category, status, details_json, created_at, resolved_at FROM payment_reconciliation_case WHERE id = ?",
+      "SELECT id, payment_intent_id, category, status, created_at, resolved_at FROM payment_reconciliation_case WHERE id = ?",
     )
     .bind(request.caseId)
     .first<{
@@ -467,7 +410,6 @@ export async function resolveAdminReconciliationCase(
       payment_intent_id: string | null;
       category: AdminReconciliationCaseView["category"];
       status: "OPEN" | "RESOLVED";
-      details_json: string;
       created_at: number;
       resolved_at: number | null;
     }>();
@@ -480,7 +422,6 @@ export async function resolveAdminReconciliationCase(
       paymentIntentId: resolved.payment_intent_id,
       category: resolved.category,
       status: resolved.status,
-      details: resolved.details_json,
       createdAt: new Date(resolved.created_at).toISOString(),
       resolvedAt:
         resolved.resolved_at === null ? null : new Date(resolved.resolved_at).toISOString(),

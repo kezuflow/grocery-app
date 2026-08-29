@@ -51,15 +51,98 @@ export type AdminOrderPage = {
 };
 
 export type AdminOrderItemView = {
-  skuName: string;
+  productName: string;
+  variantName: string;
+  unit: string;
   quantity: number;
+  baseQuantity: number;
   unitPriceMinor: number;
   lineTotalMinor: number;
 };
 
+export type AdminOrderFinancialView = {
+  subtotalMinor: number | null;
+  discountMinor: number | null;
+  deliveryFeeMinor: number | null;
+  totalMinor: number;
+  currency: string;
+  source: "CHECKOUT_QUOTE" | "ORDER_TOTAL_ONLY";
+};
+
+export type AdminOrderPaymentView = {
+  paymentIntentId: string;
+  purpose: string;
+  status: string;
+  amountMinor: number;
+  refundedMinor: number;
+  currency: string;
+  createdAt: string;
+};
+
+export type AdminOrderAmendmentView = {
+  amendmentId: string;
+  status: string;
+  totalMinor: number;
+  currency: string;
+  paymentIntentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lines: ReadonlyArray<AdminOrderItemView>;
+};
+
+export type AdminOrderFulfillmentView = {
+  locationId: string;
+  cycleId: string | null;
+  zoneId: string | null;
+  fulfillmentMode: string;
+  cutoffAt: string | null;
+  deliveryDate: string | null;
+  promisedAt: string | null;
+  sourcingModes: ReadonlyArray<string>;
+  status: string | null;
+  version: number | null;
+  updatedAt: string | null;
+};
+
+export type AdminOrderDeliveryView = {
+  deliveryJobId: string;
+  status: string;
+  riderUserId: string | null;
+  version: number;
+  deliveredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminOrderExceptionView = {
+  exceptionId: string;
+  source: "FINANCE" | "ORDER_ISSUE";
+  kind: string;
+  status: string;
+  details: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
+export type AdminTimelineEntry = {
+  eventId: string;
+  kind: "ORDER" | "PAYMENT" | "FULFILLMENT" | "DELIVERY" | "AMENDMENT" | "AUDIT";
+  label: string;
+  status: string | null;
+  occurredAt: string;
+  referenceId: string | null;
+};
+
 export type AdminOrderDetail = AdminOrderSummary & {
   allowedActions: ReadonlyArray<"CANCEL">;
+  financial: AdminOrderFinancialView;
   items: ReadonlyArray<AdminOrderItemView>;
+  payments: ReadonlyArray<AdminOrderPaymentView>;
+  amendments: ReadonlyArray<AdminOrderAmendmentView>;
+  fulfillment: AdminOrderFulfillmentView | null;
+  delivery: AdminOrderDeliveryView | null;
+  exceptions: ReadonlyArray<AdminOrderExceptionView>;
+  timeline: ReadonlyArray<AdminTimelineEntry>;
   recentAudit: ReadonlyArray<{
     auditEventId: string;
     occurredAt: string;
@@ -111,6 +194,81 @@ export type AdminPaymentListRequest = AuthenticatedRequest & {
   limit?: number;
 };
 
+export type AdminPaymentDetailRequest = AuthenticatedRequest & {
+  paymentIntentId: string;
+};
+
+export type AdminPaymentAttemptView = {
+  attemptId: string;
+  provider: string;
+  status: string;
+  amountMinor: number;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminPaymentEventView = {
+  eventId: string;
+  provider: string;
+  eventType: string;
+  processingStatus: string;
+  receivedAt: string;
+  processedAt: string | null;
+};
+
+export type AdminPaymentReactionView = {
+  reactionId: string;
+  reactionType: string;
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  attempts: number;
+  lastErrorCode: string | null;
+  availableAt: string;
+  processedAt: string | null;
+};
+
+export type AdminPaymentReconciliationView = AdminReconciliationCaseView;
+
+export type AdminPaymentDetail = AdminPaymentSummary & {
+  subjectType: string;
+  subjectId: string;
+  remainingRefundableMinor: number;
+  version: number;
+  updatedAt: string;
+  allowedActions: ReadonlyArray<"REQUEST_REFUND">;
+  attempts: ReadonlyArray<AdminPaymentAttemptView>;
+  refunds: ReadonlyArray<AdminRefundView>;
+  events: ReadonlyArray<AdminPaymentEventView>;
+  reactions: ReadonlyArray<AdminPaymentReactionView>;
+  reconciliationCases: ReadonlyArray<AdminPaymentReconciliationView>;
+  recentAudit: ReadonlyArray<{
+    auditEventId: string;
+    occurredAt: string;
+    action: string;
+    reason: string | null;
+  }>;
+};
+
+export type AdminPaymentOverview = {
+  intentCounts: {
+    total: number;
+    actionRequired: number;
+    processing: number;
+    succeeded: number;
+    failed: number;
+  };
+  openReconciliationCount: number;
+  pendingRefundCount: number;
+  totalsByCurrency: ReadonlyArray<{
+    currency: string;
+    succeededMinor: number;
+    refundedMinor: number;
+  }>;
+  recentTransactions: ReadonlyArray<AdminPaymentSummary>;
+};
+
 export type AdminRefundRequest = AuthenticatedRequest & {
   paymentIntentId: string;
   amountMinor: number;
@@ -133,7 +291,6 @@ export type AdminReconciliationCaseView = {
   paymentIntentId: string | null;
   category: ReconciliationCaseCategory;
   status: "OPEN" | "RESOLVED";
-  details: string | null;
   createdAt: string;
   resolvedAt: string | null;
 };
@@ -233,7 +390,9 @@ export type AdminOrdersService = {
 };
 
 export type AdminPaymentsService = {
+  getAdminPaymentOverview(request: AuthenticatedRequest): Promise<RpcResult<AdminPaymentOverview>>;
   listAdminPayments(request: AdminPaymentListRequest): Promise<RpcResult<AdminPaymentPage>>;
+  getAdminPayment(request: AdminPaymentDetailRequest): Promise<RpcResult<AdminPaymentDetail>>;
   requestAdminRefund(request: AdminRefundRequest): Promise<RpcResult<AdminRefundView>>;
   listAdminReconciliationCases(
     request: AdminReconciliationListRequest,

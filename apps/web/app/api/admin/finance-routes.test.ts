@@ -5,6 +5,8 @@ const coreMocks = vi.hoisted(() => ({
   getAdminOrder: vi.fn(),
   cancelAdminOrder: vi.fn(),
   listAdminPayments: vi.fn(),
+  getAdminPayment: vi.fn(),
+  getAdminPaymentOverview: vi.fn(),
   requestAdminRefund: vi.fn(),
   listAdminReconciliationCases: vi.fn(),
   resolveAdminReconciliationCase: vi.fn(),
@@ -24,6 +26,8 @@ vi.mock("cloudflare:workers", () => ({
 import { GET as listOrders } from "./orders/route";
 import { POST as cancelOrder } from "./orders/[order-id]/cancel/route";
 import { POST as requestRefund } from "./payments/refunds/route";
+import { GET as paymentOverview } from "./payments/overview/route";
+import { GET as paymentDetail } from "./payments/[payment-intent-id]/route";
 import { GET as listCases } from "./payments/reconciliation/route";
 import { POST as resolveCase } from "./payments/reconciliation/[case-id]/resolve/route";
 import { GET as listIssues } from "./order-issues/route";
@@ -96,6 +100,19 @@ describe("finance BFF routes", () => {
     });
     expect(coreMocks.listAdminReconciliationCases.mock.calls[0][0].status).toBe("OPEN");
     expect(coreMocks.resolveAdminReconciliationCase.mock.calls[0][0].caseId).toBe("c1");
+  });
+
+  it("delegates payment overview and detail through typed Core methods", async () => {
+    coreMocks.getAdminPaymentOverview.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.getAdminPayment.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+
+    await paymentOverview(new Request("https://x/payments/overview", { headers: COOKIE }));
+    await paymentDetail(new Request("https://x/payments/pi-1", { headers: COOKIE }), {
+      params: Promise.resolve({ "payment-intent-id": "pi-1" }),
+    });
+
+    expect(coreMocks.getAdminPaymentOverview).toHaveBeenCalledOnce();
+    expect(coreMocks.getAdminPayment.mock.calls[0][0]).toMatchObject({ paymentIntentId: "pi-1" });
   });
 
   it("delegates the issue queue and closed actions", async () => {

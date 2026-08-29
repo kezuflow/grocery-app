@@ -250,25 +250,25 @@
 - Extends `AdminOrderDetail` with immutable financial components, item snapshots, Payments, amendments, fulfillment, delivery, exceptions, a merged ordered timeline, Audit, and Core-derived `allowedActions`.
 - Produces `AdminPaymentOverview`, `AdminPaymentDetail`, and `getAdminPayment`; detail includes canonical attempt/refund/event/reaction/reconciliation projections and allowed actions derived in Core.
 
-- [ ] **Step 1: Write failing contract/Core tests for complete composition, immutable snapshot sources, authorization, scope, and canonical allowed actions**
+- [x] **Step 1: Write failing contract/Core tests for complete composition, immutable snapshot sources, authorization, scope, and canonical allowed actions**
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
   Run: `pnpm --filter @freshmarkets/contracts test -- src/admin-finance.test.ts && pnpm --filter @freshmarkets/core test -- src/admin/application/admin-finance.integration.test.ts`.
 
-- [ ] **Step 3: Implement purpose-built Order and Payment projections**
+- [x] **Step 3: Implement purpose-built Order and Payment projections**
 
   Compose source-owned state without mutating it. Financial amounts remain integer minor units with currency; provider payloads and raw rows never leave Core.
 
-- [ ] **Step 4: Implement Overview, Transactions, Detail, and Reconciliation screens**
+- [x] **Step 4: Implement Overview, Transactions, Detail, and Reconciliation screens**
 
   Refund/retry/reconcile remain contextual commands with confirmation, stable intent keys, current allowed actions, and recoverable conflict/error UI. Keep `/admin/payments` as a compatibility redirect or overview shell.
 
-- [ ] **Step 5: Run focused route/browser tests and verify GREEN**
+- [x] **Step 5: Run focused route/browser tests and verify GREEN**
 
   Run: `pnpm --filter @freshmarkets/web test -- app/api/admin/finance-routes.test.ts && pnpm --filter @freshmarkets/web exec playwright test tests/admin-finance.spec.ts`.
 
-- [ ] **Step 6: Review, record progress, commit, and push**
+- [x] **Step 6: Review, record progress, commit, and push**
 
   Commit `feat(admin): complete order and payment workspaces`, then push `origin main`.
 
