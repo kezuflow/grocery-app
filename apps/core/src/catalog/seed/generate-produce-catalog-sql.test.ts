@@ -144,11 +144,12 @@ describe("generateProduceCatalogSql", () => {
       "INSERT OR IGNORE INTO category (id, code, name, slug, status, sort_order, created_at, updated_at)",
     );
     expect(sql).toContain(
-      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-papaya', 'AVAILABLE', 'PLANNED', 0);`,
+      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-papaya', 'AVAILABLE', 'PLANNED_PROCUREMENT', 0);`,
     );
     expect(sql).toContain(
-      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-chili-pepper-fruit-siling-labuyo', 'AVAILABLE', 'PLANNED', 0);`,
+      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-chili-pepper-fruit-siling-labuyo', 'AVAILABLE', 'PLANNED_PROCUREMENT', 0);`,
     );
+    expect(sql).not.toContain("canonical_sourcing_mode");
     expect(sql).toContain(MARKET_METRO_CEBU);
     const availabilityLines = sql
       .split("\n")

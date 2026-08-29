@@ -15,19 +15,18 @@ import { DatabaseSync } from "node:sqlite";
 import { validateProduceCatalog } from "../src/catalog/seed/validate-produce-catalog.ts";
 import { produceCatalog } from "../src/catalog/seed/produce-catalog.ts";
 import { generateProduceCatalogSql } from "../src/catalog/seed/generate-produce-catalog-sql.ts";
+import { selectCatalogSchemaMigrations } from "../src/catalog/seed/catalog-schema-boundary.ts";
 
 const coreDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migrationsDir = join(coreDir, "migrations");
 const outputName = "0025_complete_produce_catalog.sql";
 const outputPath = join(migrationsDir, outputName);
 
-const migrationFiles = readdirSync(migrationsDir)
-  .filter((name) => name.endsWith(".sql"))
-  .sort();
+const migrationFiles = selectCatalogSchemaMigrations(readdirSync(migrationsDir), outputName);
 
 const database = new DatabaseSync(":memory:");
 database.exec("PRAGMA foreign_keys=ON");
-for (const name of migrationFiles.filter((name) => name !== outputName)) {
+for (const name of migrationFiles) {
   database.exec("BEGIN; PRAGMA defer_foreign_keys=ON;");
   try {
     database.exec(readFileSync(join(migrationsDir, name), "utf8"));

@@ -27,11 +27,13 @@ test("the marketplace home server-renders categories, rails, and membership cont
   await expect(page.getByRole("heading", { name: "Daily Deals" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fresh this week" })).toHaveCount(0);
   await expect(page.getByText("Membership eligibility is checked at checkout.")).toBeVisible();
-  // Seeded catalog content renders with prices and fixed-variant labels.
-  const strawberries = page.getByRole("heading", { name: "Baguio Strawberries" }).first();
-  await expect(strawberries).toBeVisible();
-  await expect(page.getByText("₱179.00").first()).toBeVisible();
-  await expect(page.getByText("500 g").first()).toBeVisible();
+  // Cards stay concise: product identity and the selected starting price.
+  const strawberryCard = page
+    .getByRole("article")
+    .filter({ hasText: "Baguio Strawberries" })
+    .first();
+  await expect(strawberryCard.getByRole("heading", { name: "Baguio Strawberries" })).toBeVisible();
+  await expect(strawberryCard.getByText("₱179.00")).toBeVisible();
 });
 
 test("the membership offer returns after a full page refresh", async ({ page }) => {

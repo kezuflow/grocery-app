@@ -19,8 +19,8 @@ import {
  *   the storefront presents exactly the reviewed variant sets.
  * - Existing SKUs receive price version 2 with prior open-ended Metro Cebu
  *   STANDARD rows closed; brand-new SKUs start at version 1.
- * - Sourcing stays in the stored compatibility vocabulary of
- *   `PLANNED`; it never conflates sourcing with fulfillment mode.
+ * - Sourcing stays in the schema vocabulary owned at migration 0025,
+ *   `PLANNED_PROCUREMENT`; migration 0036 canonicalizes it to `PLANNED`.
  */
 
 export const MARKET_METRO_CEBU = "market-metro-cebu";
@@ -105,7 +105,7 @@ export function generateProduceCatalogSql(
   push("-- Deterministic additive seed for the complete produce launch catalog:");
   push("-- launch taxonomy reconciliation, product/media/detail rows, fixed");
   push("-- piece/weight/pack/bunch SKUs, Cebu availability, and versioned Metro");
-  push("-- Cebu STANDARD prices. Sourcing vocabulary remains PLANNED.");
+  push("-- Cebu STANDARD prices. Sourcing vocabulary remains PLANNED_PROCUREMENT.");
   push("");
 
   /* ---------------- Category taxonomy reconciliation ---------------- */
@@ -153,11 +153,11 @@ export function generateProduceCatalogSql(
         `UPDATE product SET category_id = ${sqlQuote(categoryId)}, description = ${sqlQuote(product.description)}, status = 'active', image_metadata_json = ${sqlQuote(mediaJson)} WHERE id = ${sqlQuote(productId)};`,
       );
       push(
-        `UPDATE inventory_pool SET sourcing_mode = 'PLANNED_PROCUREMENT', canonical_sourcing_mode = 'PLANNED', base_unit_id = ${sqlQuote(baseUnitId)} WHERE id = ${sqlQuote(poolId)};`,
+        `UPDATE inventory_pool SET sourcing_mode = 'PLANNED_PROCUREMENT', base_unit_id = ${sqlQuote(baseUnitId)} WHERE id = ${sqlQuote(poolId)};`,
       );
     } else {
       push(
-        `INSERT OR IGNORE INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (${sqlQuote(poolId)}, ${sqlQuote(productId)}, ${sqlQuote(baseUnitId)}, 'PLANNED_PROCUREMENT', 'PLANNED', 0, 0);`,
+        `INSERT OR IGNORE INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (${sqlQuote(poolId)}, ${sqlQuote(productId)}, ${sqlQuote(baseUnitId)}, 'PLANNED_PROCUREMENT', 0, 0);`,
       );
       push(
         `INSERT OR IGNORE INTO product (id, category_id, inventory_pool_id, slug, name, description, status, image_metadata_json, created_at, updated_at) VALUES (${[productId, categoryId, poolId, product.slug, product.name, product.description, "active", mediaJson].map(sqlQuote).join(", ")}, 0, 0);`,
@@ -183,7 +183,7 @@ export function generateProduceCatalogSql(
 
     // Product-level Cebu availability remains for compatibility reads.
     push(
-      `INSERT OR IGNORE INTO location_product_availability (location_id, product_id, availability_status, sourcing_mode, valid_from) VALUES (${[LOCATION_CEBU_CENTRAL, productId, "AVAILABLE", "PLANNED"].map(sqlQuote).join(", ")}, 0);`,
+      `INSERT OR IGNORE INTO location_product_availability (location_id, product_id, availability_status, sourcing_mode, valid_from) VALUES (${[LOCATION_CEBU_CENTRAL, productId, "AVAILABLE", "PLANNED_PROCUREMENT"].map(sqlQuote).join(", ")}, 0);`,
     );
 
     for (const variant of sortedVariants(product)) {
@@ -231,7 +231,7 @@ export function generateProduceCatalogSql(
       }
 
       push(
-        `INSERT OR IGNORE INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (${[variant.id, LOCATION_CEBU_CENTRAL, "AVAILABLE", "PLANNED"].map(sqlQuote).join(", ")}, 1);`,
+        `INSERT OR IGNORE INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (${[variant.id, LOCATION_CEBU_CENTRAL, "AVAILABLE", "PLANNED_PROCUREMENT"].map(sqlQuote).join(", ")}, 1);`,
       );
 
       const isReused = existingSkus.has(variant.id);
