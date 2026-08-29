@@ -539,31 +539,41 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
           }
         : null;
     },
-    insertRefundClaim(input: {
+    claimRefundBudget(input: {
       refundId: string;
       intentId: string;
       amountMinor: number;
-      currency: string;
       reason: string | null;
       idempotencyKey: string;
       now: number;
-    }): Promise<number> {
+    }): Promise<boolean> {
       return database
         .prepare(
-          "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, 'REQUESTED', ?, ?, 1, ?, ?)",
+          `INSERT INTO payment_refund (
+             id, payment_intent_id, amount_minor, currency, status, reason,
+             idempotency_key, version, created_at, updated_at
+           )
+           SELECT ?, pi.id, ?, pi.currency, 'REQUESTED', ?, ?, 1, ?, ?
+           FROM payment_intent pi
+           WHERE pi.id=? AND pi.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
+             AND ? <= pi.amount_minor - COALESCE((
+               SELECT SUM(pr.amount_minor) FROM payment_refund pr
+               WHERE pr.payment_intent_id=pi.id
+                 AND pr.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')
+             ), 0)`,
         )
         .bind(
           input.refundId,
-          input.intentId,
           input.amountMinor,
-          input.currency,
           input.reason,
           input.idempotencyKey,
           input.now,
           input.now,
+          input.intentId,
+          input.amountMinor,
         )
         .run()
-        .then((result) => result.meta?.changes ?? 0);
+        .then((result) => (result.meta?.changes ?? 0) === 1);
     },
     updateRefundStatusCas(input: {
       refundId: string;
@@ -620,7 +630,7 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
     succeededRefundSum(intentId: string): Promise<number> {
       return database
         .prepare(
-          "SELECT COALESCE(SUM(amount_minor),0) AS total FROM payment_refund WHERE payment_intent_id=? AND status IN ('SUCCEEDED','PROCESSING')",
+          "SELECT COALESCE(SUM(amount_minor),0) AS total FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED'",
         )
         .bind(intentId)
         .first<{ total: number }>()

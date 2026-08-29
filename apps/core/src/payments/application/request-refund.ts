@@ -46,24 +46,10 @@ export async function requestRefund(
   const repository = extendPaymentRepositoryForRefunds(database);
   const intent = await repository.findIntentById(command.paymentIntentId);
   if (!intent) return failure("NOT_FOUND", "Payment intent not found", command.requestId);
-  if (!["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(intent.status))
-    return failure(
-      "ILLEGAL_TRANSITION",
-      "Only captured payments can be refunded",
-      command.requestId,
-    );
   if (!Number.isInteger(command.amountMinor) || command.amountMinor <= 0)
     return failure(
       "VALIDATION_FAILED",
       "Refund amount must be a positive integer minor unit",
-      command.requestId,
-    );
-
-  const committed = intent.amountMinor - (await repository.succeededRefundSum(intent.id));
-  if (command.amountMinor > committed)
-    return failure(
-      "VALIDATION_FAILED",
-      "Refund exceeds the refundable captured amount",
       command.requestId,
     );
 
@@ -77,24 +63,33 @@ export async function requestRefund(
       );
     return { ok: true, value: toView(replay), requestId: command.requestId };
   }
+  if (!["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(intent.status))
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Only captured payments can be refunded",
+      command.requestId,
+    );
 
   const refundId = crypto.randomUUID();
   const now = Date.now();
-  const claimed = await repository.insertRefundClaim({
+  const claimed = await repository.claimRefundBudget({
     refundId,
     intentId: intent.id,
     amountMinor: command.amountMinor,
-    currency: intent.currency,
     reason: command.reason,
     idempotencyKey: command.idempotencyKey,
     now,
   });
-  if (claimed !== 1)
+  if (!claimed) {
+    const concurrentReplay = await repository.findRefundByIdempotencyKey(command.idempotencyKey);
+    if (concurrentReplay)
+      return { ok: true, value: toView(concurrentReplay), requestId: command.requestId };
     return failure(
-      "CONFLICT",
-      "The original refund command is still processing",
+      "REFUND_AMOUNT_UNAVAILABLE",
+      "Refund exceeds the currently refundable captured amount",
       command.requestId,
     );
+  }
 
   // The provider reference travels with the captured payment attempt.
   const attempt = await database
@@ -132,7 +127,7 @@ export async function requestRefund(
         command.requestId,
       );
     }
-    await repository.updateRefundStatusCas({
+    const processing = await repository.updateRefundStatusCas({
       refundId,
       expectedVersion: 1,
       fromStatus: "REQUESTED",
@@ -140,6 +135,7 @@ export async function requestRefund(
       providerRefundReference: outcome.providerRefundReference,
       now,
     });
+    if (processing !== 1) throw new Error("REFUND_STATUS_CONFLICT");
     const stored = await repository.findRefundByIdempotencyKey(command.idempotencyKey);
     if (!stored) throw new Error("REFUND_LOST");
     return {
@@ -150,6 +146,13 @@ export async function requestRefund(
   } catch (error) {
     // Ambiguous failure: keep the identity and record reconciliation instead of
     // retrying with a new identity.
+    await repository.updateRefundStatusCas({
+      refundId,
+      expectedVersion: 1,
+      fromStatus: "REQUESTED",
+      toStatus: "ESCALATED",
+      now: Date.now(),
+    });
     await repository.recordReconciliationCase({
       intentId: intent.id,
       category: "REFUND_UNRESOLVED",

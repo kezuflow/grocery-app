@@ -88,6 +88,61 @@ function refundCommand(
 }
 
 describe("non-synthetic refunds", () => {
+  it("reserves outstanding ESCALATED refund value", async () => {
+    const { intentId } = await succeededIntent();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 16000, 'PHP', 'ESCALATED', 'ambiguous', ?, 1, ?, ?)",
+    )
+      .bind(crypto.randomUUID(), intentId, `seed-${crypto.randomUUID()}`, Date.now(), Date.now())
+      .run();
+
+    const result = await requestRefund(
+      env.DB,
+      testRegistry(),
+      refundCommand(intentId, { amountMinor: 5000 }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "REFUND_AMOUNT_UNAVAILABLE" },
+    });
+    const rows = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_refund WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(rows?.count).toBe(1);
+  });
+
+  it("allows only one concurrent full-refund budget claim", async () => {
+    const { intentId } = await succeededIntent();
+
+    const [first, second] = await Promise.all([
+      requestRefund(
+        env.DB,
+        testRegistry(),
+        refundCommand(intentId, { amountMinor: 20000, idempotencyKey: `full-a-${crypto.randomUUID()}` }),
+      ),
+      requestRefund(
+        env.DB,
+        testRegistry(),
+        refundCommand(intentId, { amountMinor: 20000, idempotencyKey: `full-b-${crypto.randomUUID()}` }),
+      ),
+    ]);
+
+    expect([first.ok, second.ok].sort()).toEqual([false, true]);
+    expect([first, second].find((result) => !result.ok)).toMatchObject({
+      ok: false,
+      error: { code: "REFUND_AMOUNT_UNAVAILABLE" },
+    });
+    const rows = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_refund WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(rows?.count).toBe(1);
+  });
+
   it("creates a processing refund without ever writing SUCCEEDED locally", async () => {
     const { intentId } = await succeededIntent();
     const result = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));
@@ -107,7 +162,10 @@ describe("non-synthetic refunds", () => {
       testRegistry(),
       refundCommand(intentId, { amountMinor: 999999 }),
     );
-    expect(over).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(over).toMatchObject({
+      ok: false,
+      error: { code: "REFUND_AMOUNT_UNAVAILABLE" },
+    });
 
     const pendingIntent = await createPayment(env.DB, testRegistry(), {
       purpose: "MEMBERSHIP_RENEWAL",
