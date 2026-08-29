@@ -87,13 +87,40 @@ describe("beginRecurringAuthorization", () => {
     const replay = await beginRecurringAuthorization(env.DB, testRegistry(), command);
     expect(first.ok && replay.ok).toBe(true);
     if (!first.ok || !replay.ok) return;
-    expect(replay.value.authorizationId).toBe(first.value.authorizationId);
+    expect(replay.value).toEqual(first.value);
     const count = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM payment_authorization WHERE customer_id=?",
     )
       .bind(command.customerId)
       .first<{ count: number }>();
     expect(count?.count).toBe(1);
+  });
+
+  it("allows only one provider authorization call for concurrent identical commands", async () => {
+    const command = await beginCommand();
+    const provider = createMockPaymentProvider();
+    const createAuthorization = provider.createAuthorization.bind(provider);
+    let providerCalls = 0;
+    provider.createAuthorization = async (input) => {
+      providerCalls += 1;
+      await Promise.resolve();
+      return createAuthorization(input);
+    };
+    const registry = new ProviderRegistry("test", [provider]);
+
+    const [first, second] = await Promise.all([
+      beginRecurringAuthorization(env.DB, registry, command),
+      beginRecurringAuthorization(env.DB, registry, command),
+    ]);
+
+    expect(providerCalls).toBe(1);
+    expect([first, second].some((result) => result.ok)).toBe(true);
+    const claims = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM idempotency_records WHERE scope='payments.beginRecurringAuthorization' AND idempotency_key=?",
+    )
+      .bind(command.idempotencyKey)
+      .first<{ count: number }>();
+    expect(claims?.count).toBe(1);
   });
 
   it("rejects a reused idempotency key with a different request", async () => {
@@ -135,6 +162,12 @@ describe("completeRecurringAuthorization", () => {
     expect(row).toMatchObject({ status: "ACTIVE", recurring_capable: 1 });
     expect(row?.provider_method_ref).toContain("mock_method_");
     expect(row?.established_at).not.toBeNull();
+    const action = await env.DB.prepare(
+      "SELECT status FROM payment_provider_action WHERE authorization_id=?",
+    )
+      .bind(begun.value.authorizationId)
+      .first<{ status: string }>();
+    expect(action?.status).toBe("CONSUMED");
   });
 
   it("is idempotent for an already-ACTIVE authorization", async () => {

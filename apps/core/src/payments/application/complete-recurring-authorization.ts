@@ -1,4 +1,5 @@
 import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 
 export type CompleteRecurringAuthorizationCommand = {
   customerId: string;
@@ -84,12 +85,14 @@ export async function completeRecurringAuthorization(
       command.requestId,
     );
   if (authorization.status === "REVOKED" || !authorization.recurringCapable) {
-    await database
-      .prepare(
-        "UPDATE payment_authorization SET status='REVOKED', revoked_at=?, updated_at=? WHERE id=? AND status='PENDING'",
-      )
-      .bind(now, now, row.id)
-      .run();
+    await database.batch([
+      database
+        .prepare(
+          "UPDATE payment_authorization SET status='REVOKED', revoked_at=?, updated_at=? WHERE id=? AND status='PENDING'",
+        )
+        .bind(now, now, row.id),
+      createPaymentRepository(database).consumeAuthorizationActionsStatement(row.id, now),
+    ]);
     return failure(
       authorization.recurringCapable ? "AUTHORIZATION_REVOKED" : "RECURRING_NOT_CAPABLE",
       authorization.recurringCapable
@@ -107,22 +110,27 @@ export async function completeRecurringAuthorization(
 
   try {
     const applied = await database
-      .prepare(
-        "UPDATE payment_authorization SET status='ACTIVE', recurring_capable=1, provider_method_ref=?, established_at=?, updated_at=? WHERE id=? AND status='PENDING'",
-      )
-      .bind(authorization.providerMethodRef, now, now, row.id)
-      .run()
-      .then((outcome) => (outcome.meta?.changes ?? 0) === 1);
+      .batch([
+        database
+          .prepare(
+            "UPDATE payment_authorization SET status='ACTIVE', recurring_capable=1, provider_method_ref=?, established_at=?, updated_at=? WHERE id=? AND status='PENDING'",
+          )
+          .bind(authorization.providerMethodRef, now, now, row.id),
+        createPaymentRepository(database).consumeAuthorizationActionsStatement(row.id, now),
+      ])
+      .then((outcomes) => (outcomes[0]?.meta?.changes ?? 0) === 1);
     if (!applied)
       return failure("CONFLICT", "The authorization was concurrently resolved", command.requestId);
   } catch {
     // The live mandate identity is already owned by another authorization.
-    await database
-      .prepare(
-        "UPDATE payment_authorization SET status='REVOKED', revoked_at=?, updated_at=? WHERE id=? AND status='PENDING'",
-      )
-      .bind(now, now, row.id)
-      .run();
+    await database.batch([
+      database
+        .prepare(
+          "UPDATE payment_authorization SET status='REVOKED', revoked_at=?, updated_at=? WHERE id=? AND status='PENDING'",
+        )
+        .bind(now, now, row.id),
+      createPaymentRepository(database).consumeAuthorizationActionsStatement(row.id, now),
+    ]);
     return failure(
       "AUTHORIZATION_IDENTITY_IN_USE",
       "This instrument identity is already authorized",

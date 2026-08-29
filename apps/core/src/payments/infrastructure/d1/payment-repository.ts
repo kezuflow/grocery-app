@@ -219,12 +219,86 @@ export function createPaymentRepository(database: D1Database) {
           input.now,
         );
     },
+    async findActiveAuthorizationAction(
+      authorizationId: string,
+      now: number,
+    ): Promise<ProviderActionRow | null> {
+      await database
+        .prepare(
+          "UPDATE payment_provider_action SET status='EXPIRED', updated_at=? WHERE authorization_id=? AND status='ACTIVE' AND expires_at<=?",
+        )
+        .bind(now, authorizationId, now)
+        .run();
+      const row = await database
+        .prepare(
+          "SELECT action_type, redirect_url, client_token, expires_at FROM payment_provider_action WHERE authorization_id=? AND status='ACTIVE' AND expires_at>?",
+        )
+        .bind(authorizationId, now)
+        .first<{
+          action_type: "REDIRECT" | "SDK";
+          redirect_url: string | null;
+          client_token: string | null;
+          expires_at: number;
+        }>();
+      return row
+        ? {
+            actionType: row.action_type,
+            redirectUrl: row.redirect_url,
+            clientToken: row.client_token,
+            expiresAt: row.expires_at,
+          }
+        : null;
+    },
+    hasAuthorizationProviderAction(authorizationId: string): Promise<boolean> {
+      return database
+        .prepare("SELECT 1 AS present FROM payment_provider_action WHERE authorization_id=?")
+        .bind(authorizationId)
+        .first<{ present: number }>()
+        .then((row) => Boolean(row));
+    },
+    recordAuthorizationActionStatement(input: {
+      authorizationId: string;
+      provider: string;
+      providerReference: string;
+      actionType: "REDIRECT" | "SDK";
+      redirectUrl: string | null;
+      clientToken: string | null;
+      expiresAt: number;
+      now: number;
+    }): D1PreparedStatement {
+      return database
+        .prepare(
+          "INSERT INTO payment_provider_action (id, payment_intent_id, authorization_id, provider, provider_reference, action_type, redirect_url, client_token, expires_at, status, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)",
+        )
+        .bind(
+          crypto.randomUUID(),
+          input.authorizationId,
+          input.provider,
+          input.providerReference,
+          input.actionType,
+          input.redirectUrl,
+          input.clientToken,
+          input.expiresAt,
+          input.now,
+          input.now,
+        );
+    },
     consumeProviderActionsStatement(paymentIntentId: string, now: number): D1PreparedStatement {
       return database
         .prepare(
           "UPDATE payment_provider_action SET status='CONSUMED', updated_at=? WHERE payment_intent_id=? AND status='ACTIVE'",
         )
         .bind(now, paymentIntentId);
+    },
+    consumeAuthorizationActionsStatement(
+      authorizationId: string,
+      now: number,
+    ): D1PreparedStatement {
+      return database
+        .prepare(
+          "UPDATE payment_provider_action SET status='CONSUMED', updated_at=? WHERE authorization_id=? AND status='ACTIVE'",
+        )
+        .bind(now, authorizationId);
     },
     recordAttempt(input: {
       attemptId: string;
