@@ -544,6 +544,57 @@ describe("finance administration", () => {
     expect(payments.ok).toBe(true);
   });
 
+  it("reserves pending refunds in detail actions and records one winner under a refund race", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    const firstKey = `ref-${crypto.randomUUID()}`;
+    const secondKey = `ref-${crypto.randomUUID()}`;
+
+    const [first, second] = await Promise.all([
+      core.requestAdminRefund({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+        amountMinor: 50000,
+        reason: "first concurrent request",
+        idempotencyKey: firstKey,
+      }),
+      core.requestAdminRefund({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+        amountMinor: 50000,
+        reason: "second concurrent request",
+        idempotencyKey: secondKey,
+      }),
+    ]);
+
+    expect([first, second].filter((result) => result.ok)).toHaveLength(1);
+    const detail = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      paymentIntentId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: { remainingRefundableMinor: 0, allowedActions: [] },
+    });
+    const audit = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action='PAYMENT.REFUND_REQUESTED' AND json_extract(details_json, '$.paymentIntentId')=?",
+    )
+      .bind(paymentIntentId)
+      .first<{ count: number }>();
+    expect(audit?.count).toBe(1);
+    const claims = await env.DB.prepare(
+      "SELECT status, result_reference AS resultReference FROM idempotency_records WHERE scope='admin.payments.refund' AND idempotency_key IN (?, ?) ORDER BY idempotency_key",
+    )
+      .bind(firstKey, secondKey)
+      .all<{ status: string; resultReference: string | null }>();
+    expect(claims.results.filter((claim) => claim.status === "SUCCEEDED")).toHaveLength(1);
+    expect(claims.results.filter((claim) => claim.status === "PROCESSING")).toHaveLength(0);
+    expect(claims.results.find((claim) => claim.status === "SUCCEEDED")?.resultReference).toBeTruthy();
+  });
+
   it("resolves an open reconciliation case once", async () => {
     const manager = await seedManager();
     const caseId = crypto.randomUUID();

@@ -551,7 +551,10 @@ const PAYMENT_SELECT = `
          pi.amount_minor AS amountMinor, pi.currency, pi.status,
          pi.created_at AS createdAt,
          (SELECT COALESCE(SUM(r.amount_minor), 0) FROM payment_refund r
-          WHERE r.payment_intent_id = pi.id AND r.status = 'SUCCEEDED') AS refundedMinor
+          WHERE r.payment_intent_id = pi.id AND r.status = 'SUCCEEDED') AS refundedMinor,
+         (SELECT COALESCE(SUM(r.amount_minor), 0) FROM payment_refund r
+          WHERE r.payment_intent_id = pi.id
+            AND r.status IN ('REQUESTED','APPROVED','PROCESSING','SUCCEEDED')) AS reservedRefundMinor
   FROM payment_intent pi LEFT JOIN customer c ON c.id = pi.customer_id
   LEFT JOIN user u ON u.id = c.auth_user_id`;
 
@@ -612,6 +615,7 @@ export async function listAdminPayments(
       status: string;
       createdAt: number;
       refundedMinor: number;
+      reservedRefundMinor: number;
     }>();
   const hasMore = rows.results.length > limit;
   const items: AdminPaymentSummary[] = rows.results.slice(0, limit).map((row) => ({
@@ -717,6 +721,7 @@ export async function getAdminPayment(
       status: string;
       createdAt: number;
       refundedMinor: number;
+      reservedRefundMinor: number;
     }>();
   const intent = await deps.db
     .prepare(
@@ -821,7 +826,7 @@ export async function getAdminPayment(
     )
     .bind(request.paymentIntentId)
     .all<{ id: string; occurredAt: number; action: string; reason: string | null }>();
-  const remainingRefundableMinor = Math.max(0, row.amountMinor - row.refundedMinor);
+  const remainingRefundableMinor = Math.max(0, row.amountMinor - row.reservedRefundMinor);
   const refundable = ["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(row.status);
 
   return {

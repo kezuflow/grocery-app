@@ -232,6 +232,8 @@ export async function requestAdminRefund(
 
   const refundId = crypto.randomUUID();
   try {
+    const refundGuard =
+      "EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND payment_intent_id=? AND status='REQUESTED')";
     const batchResult = await deps.db.batch([
       deps.db
         .prepare(
@@ -251,17 +253,33 @@ export async function requestAdminRefund(
           request.paymentIntentId,
           request.amountMinor,
         ),
-      auditEventStatement(deps.db, {
-        actorUserId: access.value.authUserId,
-        action: "PAYMENT.REFUND_REQUESTED",
-        resourceType: "payment_refund",
-        resourceId: refundId,
-        reason,
-        details: { paymentIntentId: request.paymentIntentId, amountMinor: request.amountMinor },
-        correlationId: request.requestId,
-        occurredAt: now,
-      }),
-      idempotencyComplete(deps.db, "admin.payments.refund", request.idempotencyKey, refundId, now),
+      auditEventStatement(
+        deps.db,
+        {
+          actorUserId: access.value.authUserId,
+          action: "PAYMENT.REFUND_REQUESTED",
+          resourceType: "payment_refund",
+          resourceId: refundId,
+          reason,
+          details: { paymentIntentId: request.paymentIntentId, amountMinor: request.amountMinor },
+          correlationId: request.requestId,
+          occurredAt: now,
+        },
+        { clause: refundGuard, binds: [refundId, request.paymentIntentId] },
+      ),
+      deps.db
+        .prepare(
+          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
+           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${refundGuard}`,
+        )
+        .bind(
+          refundId,
+          now,
+          "admin.payments.refund",
+          request.idempotencyKey,
+          refundId,
+          request.paymentIntentId,
+        ),
     ]);
     if ((batchResult[0]?.meta?.changes ?? 0) !== 1) {
       await idempotencyFailed(deps.db, "admin.payments.refund", request.idempotencyKey);

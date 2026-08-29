@@ -405,6 +405,62 @@ describe("catalog administration", () => {
       .first<{ reason: string | null }>();
     expect(audit?.reason).toBe("Seasonal catalog pause");
   });
+
+  it("prevents concurrent category moves from committing a hierarchy cycle", async () => {
+    const manager = await seedManager();
+    const create = (label: string) =>
+      core.createAdminCategory({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        code: `${label}_${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`,
+        name: `${label} category`,
+        slug: `${label.toLowerCase()}-${crypto.randomUUID().slice(0, 10)}`,
+        parentCategoryId: null,
+        iconAssetKey: null,
+        sortOrder: 20,
+        idempotencyKey: `category-${crypto.randomUUID()}`,
+      });
+    const [left, right] = await Promise.all([create("LEFT"), create("RIGHT")]);
+    expect(left.ok && right.ok).toBe(true);
+    if (!left.ok || !right.ok) return;
+
+    const [leftToRight, rightToLeft] = await Promise.all([
+      core.updateAdminCategory({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        categoryId: left.value.categoryId,
+        name: left.value.name,
+        slug: left.value.slug,
+        parentCategoryId: right.value.categoryId,
+        iconAssetKey: null,
+        sortOrder: left.value.sortOrder,
+        expectedVersion: 1,
+        idempotencyKey: `category-${crypto.randomUUID()}`,
+      }),
+      core.updateAdminCategory({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        categoryId: right.value.categoryId,
+        name: right.value.name,
+        slug: right.value.slug,
+        parentCategoryId: left.value.categoryId,
+        iconAssetKey: null,
+        sortOrder: right.value.sortOrder,
+        expectedVersion: 1,
+        idempotencyKey: `category-${crypto.randomUUID()}`,
+      }),
+    ]);
+
+    expect([leftToRight, rightToLeft].filter((result) => result.ok)).toHaveLength(1);
+    const rows = await env.DB.prepare("SELECT id, parent_id AS parentId FROM category WHERE id IN (?, ?)")
+      .bind(left.value.categoryId, right.value.categoryId)
+      .all<{ id: string; parentId: string | null }>();
+    const parentById = new Map(rows.results.map((row) => [row.id, row.parentId]));
+    expect(
+      parentById.get(left.value.categoryId) === right.value.categoryId &&
+        parentById.get(right.value.categoryId) === left.value.categoryId,
+    ).toBe(false);
+  });
   it("denies unauthenticated and non-staff readers", async () => {
     expect(await core.listAdminProducts({ requestId: "r1", headers: {} })).toMatchObject({
       ok: false,

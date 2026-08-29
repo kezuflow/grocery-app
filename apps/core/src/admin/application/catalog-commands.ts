@@ -336,7 +336,13 @@ export async function updateAdminCategory(
       deps.db
         .prepare(
           `UPDATE category SET name=?, slug=?, parent_id=?, icon_asset_key=?, sort_order=?,
-             version=version+1, updated_at=? WHERE id=? AND version=?`,
+             version=version+1, updated_at=? WHERE id=? AND version=?
+             AND (? IS NULL OR NOT EXISTS (
+               WITH RECURSIVE descendants(id) AS (
+                 SELECT id FROM category WHERE parent_id=?
+                 UNION ALL SELECT c.id FROM category c JOIN descendants d ON c.parent_id=d.id
+               ) SELECT 1 FROM descendants WHERE id=?
+             ))`,
         )
         .bind(
           name,
@@ -347,6 +353,9 @@ export async function updateAdminCategory(
           now,
           request.categoryId,
           request.expectedVersion,
+          request.parentCategoryId,
+          request.categoryId,
+          request.parentCategoryId,
         ),
       deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
       auditEventStatement(deps.db, {
