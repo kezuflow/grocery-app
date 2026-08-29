@@ -43,7 +43,7 @@ export default async function MarketplaceHome({
   const client = coreClient(env.CORE);
 
   if (browsing) {
-    const home = await client.getMarketplaceHome({ requestId, itemsPerRail: 8 });
+    const home = await client.getMarketplaceHome({ requestId, itemsPerRail: 12 });
     if (!home.ok) {
       return (
         <StorefrontShell>

@@ -89,12 +89,12 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
         }}
         className="block pt-2 focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
       >
-        <p className="text-sm leading-[22px] font-semibold tabular-nums">
+        <h3 className="line-clamp-2 text-base leading-6 font-bold">{product.name}</h3>
+        <p className="mt-0.5 text-sm leading-[22px] font-semibold tabular-nums">
           {variant && variant.priceMinor !== null && variant.currency !== null
             ? formatMoney(variant.priceMinor, variant.currency)
             : "Unavailable"}
         </p>
-        <h3 className="mt-0.5 line-clamp-2 text-base leading-6 font-bold">{product.name}</h3>
       </Link>
     </article>
   );
