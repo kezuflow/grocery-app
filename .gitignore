@@ -14,3 +14,6 @@ coverage/
 # Playwright local run artifacts
 test-results/
 playwright-report/
+
+# Local isolated implementation worktrees
+.worktrees/
