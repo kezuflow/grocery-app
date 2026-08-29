@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CustomerAddressView, RpcResult } from "@freshmarkets/contracts";
 import { StorefrontShell } from "../../../components/storefront/storefront-shell";
 import { AddressEditor } from "../../../components/storefront/address/address-editor";
@@ -13,8 +13,10 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
   const [selectedAddressId, setSelectedAddressId] = useState<string>();
   const [editingAddress, setEditingAddress] = useState<CustomerAddressView>();
   const [announcement, setAnnouncement] = useState("");
+  const addressLoadGeneration = useRef(0);
 
   const loadAddresses = useCallback(async (confirmedAddressId?: string) => {
+    const generation = ++addressLoadGeneration.current;
     setLoadState("loading");
     try {
       const response = await fetch("/api/commerce/address", {
@@ -22,24 +24,34 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
         cache: "no-store",
       });
       const result = (await response.json()) as RpcResult<ReadonlyArray<CustomerAddressView>>;
+      if (generation !== addressLoadGeneration.current) return;
       if (!response.ok || !result.ok) {
         setLoadState("error");
         return;
       }
       setAddresses(result.value);
+      setSelectedAddressId((current) => {
+        const nextId = confirmedAddressId ?? current;
+        return result.value.some((address) => address.id === nextId && address.serviceable === true)
+          ? nextId
+          : undefined;
+      });
       setLoadState("ready");
       if (confirmedAddressId) {
-        setSelectedAddressId(confirmedAddressId);
         setEditingAddress(undefined);
         setAnnouncement("Delivery address saved and refreshed.");
       }
     } catch {
+      if (generation !== addressLoadGeneration.current) return;
       setLoadState("error");
     }
   }, []);
 
   useEffect(() => {
     void loadAddresses();
+    return () => {
+      addressLoadGeneration.current += 1;
+    };
   }, [loadAddresses]);
 
   return (
@@ -91,7 +103,9 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold">
-                  {editingAddress ? `Correct ${editingAddress.label}` : "Add a delivery address"}
+                  {editingAddress
+                    ? `${editingAddress.serviceable === true ? "Edit" : "Correct"} ${editingAddress.label}`
+                    : "Add a delivery address"}
                 </h2>
                 <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
                   Unavailable destinations remain saved for correction but cannot be used at

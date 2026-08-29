@@ -115,3 +115,78 @@ after the primary agent cleared local port 3100.
 - Vite reports the repository's existing non-fatal large-chunk advisory during Web builds; it did
   not fail the build or focused managed Playwright fixture.
 - No implementation deviations or business-rule changes were introduced.
+
+## Review fix round 1
+
+### Findings resolved
+
+- Every active saved address now exposes an accessible edit/correct action. Serviceable addresses
+  use "Edit address" while unavailable addresses retain the explicit "Correct address" wording and
+  unavailable badge. The Address Book passes the saved address and aggregate version to the PATCH
+  flow, then applies the refreshed authoritative list.
+- Checkout quotes are now bound to the address ID, delivery-cycle ID, cart version, and logical
+  attempt key used to create them. Selecting another address, correcting the same address, or
+  changing/reviewing a cycle invalidates the pending quote and rotates the attempt key. Payment is
+  refused when current inputs no longer match the quote context. Core quote/payment/serviceability
+  rechecks remain unchanged.
+- Address Book and Checkout address loads use monotonic generations. An older GET response or error
+  cannot overwrite a newer post-save/current response. Applying the latest authoritative list
+  revalidates the selected address and clears any now-stale Checkout quote.
+- Anonymous Serviceability is covered both at the Web route level without cookies and in managed
+  Playwright through the real Web adapter, Core service binding, and isolated Core D1 fixture. The
+  browser test intercepts only address search so it never calls the live Mapbox provider; the
+  serviceability request itself is not intercepted, requires no session, persists nothing, and
+  exposes no fulfillment hub.
+- The managed binding test exposed a pre-existing nested RPC-result envelope in
+  `CoreEntrypoint.resolveServiceability`. Core now returns the geography application's existing
+  `RpcResult<ServiceabilityResult>` directly, matching the shared contract without adding a public
+  Core HTTP API.
+
+### Review TDD evidence
+
+Genuine focused RED failures were recorded before implementation:
+
+- `pnpm --filter @freshmarkets/web test -- address-list.test.tsx address-editor.test.tsx address-book-client.test.tsx`
+  failed because a serviceable address had no Edit action and because a delayed initial GET replaced
+  the newer post-save list.
+- `pnpm --filter @freshmarkets/web test -- checkout-client.test.tsx` failed because address and cycle
+  changes retained a stale quote/reused the same idempotency attempt, serviceable addresses could not
+  be corrected, and a delayed initial GET replaced the current list.
+
+Focused GREEN:
+
+- `pnpm --filter @freshmarkets/web test -- address-list.test.tsx address-editor.test.tsx address-book-client.test.tsx checkout-client.test.tsx app/api/serviceability/route.test.ts`
+  — exit 0; 5 files and 21 tests passed.
+- `pnpm --filter @freshmarkets/core test -- geography/serviceability.test.ts` — exit 0; 7 tests
+  passed.
+
+### Review verification
+
+- `pnpm --filter @freshmarkets/web test` — exit 0; 38 files and 177 tests passed.
+- `pnpm --filter @freshmarkets/web typecheck` — exit 0.
+- `pnpm --filter @freshmarkets/core typecheck` — exit 0.
+- `pnpm --filter @freshmarkets/web check:vinext` — exit 0; 100% compatible, 0 issues.
+- `pnpm --filter @freshmarkets/web build` — exit 0; Vite retained the existing non-fatal
+  large-chunk advisory.
+- Targeted `pnpm exec oxfmt --check ...` — exit 0; all 9 review TypeScript/TSX files formatted.
+- Targeted `pnpm exec oxlint ...` — exit 0; no errors. It reported three pre-existing unused-symbol
+  warnings in `apps/core/src/index.ts` outside the changed serviceability method.
+- First review managed run: `E2E_START_STACK=1 pnpm --filter @freshmarkets/web exec playwright test tests/address-map.spec.ts`
+  — exit 1; 4 passed / 1 failed. The new anonymous real-binding case identified the nested Core RPC
+  envelope described above.
+- Final review managed rerun after the contract-conformance fix: the same command — exit 0; 5 tests
+  passed in 1.4 minutes.
+- `pnpm naming:check` — exit 0.
+- `git diff --check` — exit 0.
+
+### Review schema, RPC, documentation, privacy, and authority ruling
+
+- Database/schema/migrations: none.
+- Shared RPC contract: unchanged. Core implementation was corrected to conform to the existing
+  serviceability result contract.
+- Canonical documentation: unchanged; no architecture or business rule changed.
+- Address search remains POST JSON/no-store. Temporary candidates are not persisted, cached, or
+  logged. No raw latitude/longitude inputs were added.
+- Public Serviceability remains anonymous and non-persisting and exposes no hub. Checkout remains
+  serviceable-only, while Core remains the authority for serviceability, eligibility, quote,
+  capacity, and payment checks.

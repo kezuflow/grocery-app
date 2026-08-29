@@ -77,6 +77,7 @@ test("searches, confirms, and saves an address from the address book with map fa
 }) => {
   let savedAddresses: ReadonlyArray<ReturnType<typeof address>> = [];
   let searchRequest: Record<string, unknown> | undefined;
+  let updateRequest: Record<string, unknown> | undefined;
   await page.route("**/api/commerce/address-search", async (route) => {
     searchRequest = route.request().postDataJSON() as Record<string, unknown>;
     await json(route, { ok: true, value: [candidate], requestId: "search-1" });
@@ -87,6 +88,17 @@ test("searches, confirms, and saves an address from the address book with map fa
   await page.route("**/api/commerce/address", async (route) => {
     if (route.request().method() === "GET") {
       await json(route, { ok: true, value: savedAddresses, requestId: "addresses-1" });
+      return;
+    }
+    if (route.request().method() === "PATCH") {
+      updateRequest = route.request().postDataJSON() as Record<string, unknown>;
+      const updated = {
+        ...(savedAddresses[0] ?? address("address-home", "Home", true)),
+        recipient: String(updateRequest.recipient),
+        version: 3,
+      };
+      savedAddresses = [updated];
+      await json(route, { ok: true, value: updated, requestId: "address-update-1" });
       return;
     }
     const saved = address("address-home", "Home", true);
@@ -112,6 +124,16 @@ test("searches, confirms, and saves an address from the address book with map fa
   expect(searchRequest).toEqual({ query: "Ayala Cebu" });
   expect(searchRequest).not.toHaveProperty("latitude");
   expect(searchRequest).not.toHaveProperty("longitude");
+
+  await page.getByRole("button", { name: "Edit Home address" }).click();
+  await page.getByLabel("Recipient name").fill("Bea Santos");
+  await page.getByRole("button", { name: "Update confirmed address" }).click();
+  await expect(page.getByRole("radio", { name: /Bea Santos/ })).toBeEnabled();
+  expect(updateRequest).toMatchObject({
+    addressId: "address-home",
+    expectedVersion: 2,
+    recipient: "Bea Santos",
+  });
 });
 
 test("shows an unavailable saved address and opens correction without making it selectable", async ({
@@ -227,4 +249,23 @@ test("public serviceability checks a confirmed search result without saving or s
   await expect(page.getByText(/operations location/i)).toHaveCount(0);
   await assertNoCoordinateInputs(page);
   expect(saveCalls).toBe(0);
+});
+
+test("anonymous serviceability reaches Core through the real Web Service Binding", async ({
+  playwright,
+  baseURL,
+}) => {
+  const anonymous = await playwright.request.newContext({ baseURL });
+  try {
+    const response = await anonymous.post("/api/serviceability", {
+      data: candidate.coordinate,
+    });
+    expect(response.ok()).toBe(true);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      value: { coordinate: candidate.coordinate },
+    });
+  } finally {
+    await anonymous.dispose();
+  }
 });

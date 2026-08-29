@@ -65,6 +65,7 @@ describe("AddressList", () => {
     expect(markup).toContain("Home");
     expect(markup).toContain("Ayala Center Cebu");
     expect(markup).toContain("Delivery unavailable");
+    expect(markup).toContain("Edit Home address");
     expect(markup).toContain("Correct Parents address");
     expect(markup).toMatch(/address-2[\s\S]*disabled/);
   });

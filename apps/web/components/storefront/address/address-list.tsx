@@ -74,16 +74,14 @@ export function AddressList({
                 </span>
               </span>
             </label>
-            {!available ? (
-              <button
-                type="button"
-                aria-label={`Correct ${address.label} address`}
-                onClick={() => onCorrect(address)}
-                className="mt-3 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
-              >
-                Correct address
-              </button>
-            ) : null}
+            <button
+              type="button"
+              aria-label={`${available ? "Edit" : "Correct"} ${address.label} address`}
+              onClick={() => onCorrect(address)}
+              className="mt-3 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+            >
+              {available ? "Edit address" : "Correct address"}
+            </button>
           </div>
         );
       })}

@@ -1967,11 +1967,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = serviceabilityRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return {
-      ok: true as const,
-      value: await resolveServiceability(drizzle(this.env.DB), input),
-      requestId: input.requestId,
-    };
+    return resolveServiceability(drizzle(this.env.DB), input);
   }
   async searchAddressCandidates(input: import("@freshmarkets/contracts").AddressSearchRequest) {
     const validation = addressSearchRequestSchema.safeParse(input);

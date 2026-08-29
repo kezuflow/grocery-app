@@ -22,13 +22,18 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
   const [editingAddress, setEditingAddress] = useState<CustomerAddressView>();
   const [showAddressEditor, setShowAddressEditor] = useState(false);
   const [addressId, setAddressId] = useState("");
+  const selectedAddressId = useRef("");
+  const selectedCycleId = useRef("");
   const [status, setStatus] = useState("");
   const [pendingQuote, setPendingQuote] = useState<{
     quoteId: string;
     totalMinor: number;
     currency: string;
+    input: { addressId: string; cycleId: string; cartVersion: number };
+    attemptKey: string;
   } | null>(null);
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
+  const addressLoadGeneration = useRef(0);
   useEffect(() => {
     void Promise.all([
       fetchCart().then((value) => ({ value })),
@@ -43,9 +48,13 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       }
     });
     void loadAddresses();
+    return () => {
+      addressLoadGeneration.current += 1;
+    };
   }, []);
 
   async function loadAddresses(preferredAddressId?: string) {
+    const generation = ++addressLoadGeneration.current;
     setAddressLoadState("loading");
     try {
       const response = await fetch("/api/commerce/address", {
@@ -53,38 +62,62 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
         cache: "no-store",
       });
       const result = (await response.json()) as RpcResult<ReadonlyArray<CustomerAddressView>>;
+      if (generation !== addressLoadGeneration.current) return;
       if (!response.ok || !result.ok) {
         setAddressLoadState("error");
         return;
       }
       setAddresses(result.value);
       setAddressLoadState("ready");
+      const requestedAddressId = preferredAddressId ?? selectedAddressId.current;
+      const confirmed = result.value.find((address) => address.id === requestedAddressId);
+      setCurrentAddress(confirmed?.serviceable === true ? confirmed.id : "");
+      invalidatePendingQuote();
       if (preferredAddressId) {
-        const confirmed = result.value.find((address) => address.id === preferredAddressId);
         if (confirmed?.serviceable === true) {
-          setAddressId(confirmed.id);
           setStatus("Address confirmed for delivery.");
         } else {
-          setAddressId("");
           setStatus("This saved address is unavailable for checkout. Correct its pin to continue.");
         }
         setEditingAddress(undefined);
         setShowAddressEditor(false);
       }
     } catch {
+      if (generation !== addressLoadGeneration.current) return;
       setAddressLoadState("error");
     }
+  }
+
+  function setCurrentAddress(nextAddressId: string) {
+    selectedAddressId.current = nextAddressId;
+    setAddressId(nextAddressId);
+  }
+
+  function invalidatePendingQuote() {
+    setPendingQuote(null);
+    attemptKey.current = `checkout-${crypto.randomUUID()}`;
+  }
+
+  function quoteInputIsCurrent(input: { addressId: string; cycleId: string; cartVersion: number }) {
+    return (
+      input.addressId === selectedAddressId.current &&
+      input.cycleId === selectedCycleId.current &&
+      input.cartVersion === cart?.version
+    );
   }
 
   function selectAddress(nextAddressId: string) {
     const selected = addresses.find((address) => address.id === nextAddressId);
     if (selected?.serviceable !== true) {
-      setAddressId("");
+      setCurrentAddress("");
+      invalidatePendingQuote();
       setStatus("Only a serviceable saved address can be selected for checkout.");
       return;
     }
-    setAddressId(selected.id);
-    setPendingQuote(null);
+    if (selected.id !== selectedAddressId.current) {
+      setCurrentAddress(selected.id);
+      invalidatePendingQuote();
+    }
     setStatus("Serviceable delivery address selected. Core will recheck it before payment.");
   }
   async function reviewTotal(cycleId: string) {
@@ -96,6 +129,13 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
       return;
     }
+    if (cycleId !== selectedCycleId.current) {
+      selectedCycleId.current = cycleId;
+      invalidatePendingQuote();
+      setStatus("Checking the selected delivery window and current total.");
+    }
+    const quoteInput = { addressId: selectedAddressId.current, cycleId, cartVersion: cart.version };
+    const quoteAttemptKey = attemptKey.current;
     const eligibilityResponse = await fetch("/api/commerce/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -115,13 +155,14 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       );
       return;
     }
+    if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
     // 1) Core-authoritative quote. Core recalculates before payment and any
     // changed total must be accepted through a new attempt.
     const quoteResponse = await fetch("/api/checkout/quote", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": attemptKey.current,
+        "idempotency-key": quoteAttemptKey,
       },
       body: JSON.stringify({
         cartId: cart.id,
@@ -135,13 +176,14 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       value?: { quoteId: string; totalMinor: number; currency: string };
       error?: { code: string; message: string };
     };
+    if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
     if (!quoteResult.ok) {
       setPendingQuote(null);
       setStatus(quoteResult.error?.message ?? "Could not price your order.");
       return;
     }
     if (!quoteResult.value) return;
-    setPendingQuote(quoteResult.value);
+    setPendingQuote({ ...quoteResult.value, input: quoteInput, attemptKey: quoteAttemptKey });
     setStatus(
       `Review your current total: ${quoteResult.value.currency} ${(quoteResult.value.totalMinor / 100).toFixed(2)}.`,
     );
@@ -149,13 +191,21 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
 
   async function confirmPayment() {
     if (!pendingQuote) return;
+    if (
+      !quoteInputIsCurrent(pendingQuote.input) ||
+      pendingQuote.attemptKey !== attemptKey.current
+    ) {
+      invalidatePendingQuote();
+      setStatus("Delivery details changed. Review the current total again before payment.");
+      return;
+    }
     // 2) Canonical payment intent. Order commitment happens in Core from the
     // provider-confirmed payment reaction — never from this browser.
     const paymentResponse = await fetch("/api/checkout/payment", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": attemptKey.current,
+        "idempotency-key": pendingQuote.attemptKey,
       },
       body: JSON.stringify({
         checkoutAttemptId: pendingQuote.quoteId,
@@ -271,7 +321,10 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                       key={editingAddress?.id ?? "checkout-new-address"}
                       publicAccessToken={publicAccessToken}
                       initialAddress={editingAddress}
-                      onConfirmed={(confirmedAddressId) => void loadAddresses(confirmedAddressId)}
+                      onConfirmed={(confirmedAddressId) => {
+                        invalidatePendingQuote();
+                        void loadAddresses(confirmedAddressId);
+                      }}
                     />
                   </div>
                 ) : null}

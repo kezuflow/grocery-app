@@ -39,4 +39,34 @@ describe("serviceability route", () => {
     });
     expect(resolveServiceability.mock.calls[0][0]).not.toHaveProperty("locationId");
   });
+
+  it("allows an anonymous no-cookie request through the real Web adapter to the Core binding", async () => {
+    resolveServiceability.mockResolvedValue({
+      ok: true,
+      value: { serviceable: true, reason: null },
+      requestId: "anonymous-serviceability",
+    });
+    const anonymousRequest = new Request("https://freshmarkets.ph/api/serviceability", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": "anonymous-serviceability",
+      },
+      body: JSON.stringify({ latitude: 10.3173, longitude: 123.9058 }),
+    });
+
+    expect(anonymousRequest.headers.has("cookie")).toBe(false);
+    const response = await POST(anonymousRequest);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      value: { serviceable: true },
+    });
+    expect(resolveServiceability).toHaveBeenCalledWith({
+      requestId: "anonymous-serviceability",
+      latitude: 10.3173,
+      longitude: 123.9058,
+    });
+  });
 });
