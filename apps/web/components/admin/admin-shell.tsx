@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { adminNavigationFromContext, type AdminNavigationEntry } from "./admin-navigation";
 import { useAdminContext } from "../../app/admin/admin-context-provider";
 import { Skeleton } from "../ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../ui/sheet";
 import { cn } from "../../lib/utils";
@@ -41,7 +42,14 @@ export function AdminShell({
       <AdminHeader items={items} scopeLabel={scopeLabel} environment={environment} />
       <div className="mx-auto flex w-full max-w-[var(--fm-container-admin)]">
         <AdminSidebar items={items} />
-        <main className="min-w-0 flex-1 px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
+        <main
+          id="main-content"
+          aria-labelledby="admin-page-title"
+          tabIndex={-1}
+          className="min-w-0 flex-1 px-4 py-6 pb-20 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8 lg:pb-8"
+        >
+          {children}
+        </main>
       </div>
       <AdminMobileNav items={items} />
     </div>
@@ -94,15 +102,23 @@ function AdminHeader({
 }
 
 function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <Sheet>
       <SheetTrigger
+        ref={triggerRef}
         aria-label="Open admin navigation"
         className="rounded-[var(--fm-radius-control)] p-2 hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] lg:hidden"
       >
         <Menu className="size-5" />
       </SheetTrigger>
-      <SheetContent side="left">
+      <SheetContent
+        side="left"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef.current?.focus();
+        }}
+      >
         <SheetHeader>
           <SheetTitle>Admin navigation</SheetTitle>
         </SheetHeader>
@@ -124,6 +140,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
 }
 
 function AdminSidebar({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
+  const pathname = usePathname();
   return (
     <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 border-r border-[var(--fm-border)] bg-white px-3 py-5 lg:block">
       <nav aria-label="Admin navigation" className="space-y-1">
@@ -133,9 +150,10 @@ function AdminSidebar({ items }: { items: ReadonlyArray<AdminNavigationEntry> })
             href={item.href}
             className={cn(
               "flex items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]",
-              item.code === "overview" &&
+              isActivePath(pathname, item.href) &&
                 "bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]",
             )}
+            aria-current={isActivePath(pathname, item.href) ? "page" : undefined}
           >
             <item.icon className="size-4" aria-hidden="true" />
             {item.label}
@@ -150,6 +168,7 @@ function AdminSidebar({ items }: { items: ReadonlyArray<AdminNavigationEntry> })
 }
 
 function AdminMobileNav({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
+  const pathname = usePathname();
   return (
     <nav
       aria-label="Mobile admin navigation"
@@ -160,6 +179,7 @@ function AdminMobileNav({ items }: { items: ReadonlyArray<AdminNavigationEntry> 
           key={item.code}
           href={item.href}
           className="flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)]"
+          aria-current={isActivePath(pathname, item.href) ? "page" : undefined}
         >
           <item.icon className="size-4" aria-hidden="true" />
           {item.label}
@@ -167,6 +187,10 @@ function AdminMobileNav({ items }: { items: ReadonlyArray<AdminNavigationEntry> 
       ))}
     </nav>
   );
+}
+
+function isActivePath(pathname: string | null, href: string): boolean {
+  return pathname === href || (href !== "/admin" && pathname?.startsWith(`${href}/`) === true);
 }
 
 /**
@@ -178,7 +202,7 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
   const { state, retry } = useAdminContext();
   if (state.phase === "loading") {
     return (
-      <div
+      <main
         className="min-h-screen bg-[var(--fm-surface-soft)] p-4 sm:p-6 lg:p-8"
         role="status"
         aria-label="Loading admin shell"
@@ -192,14 +216,16 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
             <Skeleton className="h-40 w-full" />
           </div>
         </div>
-      </div>
+      </main>
     );
   }
   if (state.phase === "unauthenticated") {
     return (
-      <div className="mx-auto max-w-2xl p-6">
+      <main className="mx-auto max-w-2xl p-6" aria-labelledby="admin-page-title">
         <Alert>
-          <AlertTitle>Sign in required</AlertTitle>
+          <h1 id="admin-page-title" className="font-semibold leading-none">
+            Sign in required
+          </h1>
           <AlertDescription>
             Sign in with a staff account to open the admin workspace.{" "}
             <Link href="/login" className="font-medium underline">
@@ -207,27 +233,31 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
             </Link>
           </AlertDescription>
         </Alert>
-      </div>
+      </main>
     );
   }
   if (state.phase === "forbidden") {
     return (
-      <div className="mx-auto max-w-2xl p-6">
+      <main className="mx-auto max-w-2xl p-6" aria-labelledby="admin-page-title">
         <Alert variant="warning">
-          <AlertTitle>Staff access required</AlertTitle>
+          <h1 id="admin-page-title" className="font-semibold leading-none">
+            Staff access required
+          </h1>
           <AlertDescription>
             This account is not an active staff principal. Ask an administrator for the roles and
             scopes your work requires.
           </AlertDescription>
         </Alert>
-      </div>
+      </main>
     );
   }
   if (state.phase === "error") {
     return (
-      <div className="mx-auto max-w-2xl p-6">
+      <main className="mx-auto max-w-2xl p-6" aria-labelledby="admin-page-title">
         <Alert variant="destructive">
-          <AlertTitle>The admin workspace could not be loaded</AlertTitle>
+          <h1 id="admin-page-title" className="font-semibold leading-none">
+            The admin workspace could not be loaded
+          </h1>
           <AlertDescription>
             {state.message}
             {state.requestId ? (
@@ -242,7 +272,7 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
             </Button>
           </AlertDescription>
         </Alert>
-      </div>
+      </main>
     );
   }
   return (
@@ -271,7 +301,12 @@ export function PageHeader({
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fm-text-muted)]">
           Operations
         </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-[-0.02em] sm:text-3xl">{title}</h1>
+        <h1
+          id="admin-page-title"
+          className="mt-1 text-2xl font-bold tracking-[-0.02em] sm:text-3xl"
+        >
+          {title}
+        </h1>
         {description ? (
           <p className="mt-2 max-w-2xl text-sm text-[var(--fm-text-muted)]">{description}</p>
         ) : null}
@@ -330,6 +365,8 @@ export function StatusBadge({
   };
   return (
     <span
+      role="status"
+      aria-live="polite"
       className={cn(
         "inline-flex items-center rounded-[var(--fm-radius-control)] border px-2 py-1 text-xs font-semibold",
         tones[tone],

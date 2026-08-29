@@ -9,7 +9,10 @@ export const SheetTrigger = SheetPrimitive.Trigger;
 export const SheetClose = SheetPrimitive.Close;
 export const SheetPortal = SheetPrimitive.Portal;
 
-export function SheetOverlay({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+export function SheetOverlay({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
   return (
     <SheetPrimitive.Overlay
       className={cn("fixed inset-0 z-50 bg-[rgb(25_25_25_/_0.4)]", className)}
@@ -42,7 +45,7 @@ export function SheetContent({
       >
         {children}
         <SheetPrimitive.Close
-          aria-label="Close"
+          aria-label="Close admin navigation"
           className="absolute right-3 top-3 rounded-[var(--fm-radius-control)] p-1 hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
         >
           <X className="size-4" />
@@ -56,7 +59,10 @@ export function SheetHeader({ className, ...props }: React.ComponentProps<"div">
   return <div className={cn("flex flex-col gap-1 p-2", className)} {...props} />;
 }
 
-export function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Title>) {
+export function SheetTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Title>) {
   return (
     <SheetPrimitive.Title
       className={cn("text-base font-semibold text-[var(--fm-text)]", className)}

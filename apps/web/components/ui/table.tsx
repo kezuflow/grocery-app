@@ -2,9 +2,18 @@ import * as React from "react";
 import { cn } from "../../lib/utils";
 
 export function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const label = props["aria-label"] ?? "Data table";
   return (
-    <div className="relative w-full overflow-x-auto">
-      <table className={cn("w-full caption-bottom border-collapse text-sm", className)} {...props} />
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label={label}
+      className="relative w-full overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+    >
+      <table
+        className={cn("w-full caption-bottom border-collapse text-sm", className)}
+        {...props}
+      />
     </div>
   );
 }
@@ -27,7 +36,9 @@ export function TableFooter({ className, ...props }: React.ComponentProps<"tfoot
 }
 
 export function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
-  return <tr className={cn("transition-colors hover:bg-[var(--fm-hover)]", className)} {...props} />;
+  return (
+    <tr className={cn("transition-colors hover:bg-[var(--fm-hover)]", className)} {...props} />
+  );
 }
 
 export function TableHead({ className, ...props }: React.ComponentProps<"th">) {
