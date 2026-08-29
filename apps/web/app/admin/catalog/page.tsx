@@ -20,6 +20,11 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -32,49 +37,63 @@ export default function CatalogPage() {
   const [categories, setCategories] = useState<AdminCategoryPage | null>(null);
   const [units, setUnits] = useState<AdminUnitSummary[] | null>(null);
   const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
   const [newCategory, setNewCategory] = useState({ code: "", name: "", slug: "" });
   const [notice, setNotice] = useState<string | null>(null);
+  const createIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const categoryPagination = useAdminPagination();
 
-  const load = useCallback((search: string) => {
-    setState({ phase: "loading" });
-    void (async () => {
-      try {
-        const params = new URLSearchParams({ limit: "50" });
-        if (search.trim() !== "") params.set("query", search.trim());
-        const [productsResponse, categoriesResponse, unitsResponse] = await Promise.all([
-          fetch(`/api/admin/catalog/products?${params}`),
-          fetch("/api/admin/catalog/categories"),
-          fetch("/api/admin/catalog/units"),
-        ]);
-        const productsPayload = (await productsResponse.json()) as RpcResult<AdminProductPage>;
-        if (!productsPayload.ok) {
+  const load = useCallback(
+    (search: string, cursor: string | null, categoryCursor: string | null) => {
+      setState({ phase: "loading" });
+      void (async () => {
+        try {
+          const params = new URLSearchParams({ limit: "50" });
+          if (search.trim() !== "") params.set("query", search.trim());
+          if (cursor) params.set("cursor", cursor);
+          const [productsResponse, categoriesResponse, unitsResponse] = await Promise.all([
+            fetch(`/api/admin/catalog/products?${params}`),
+            fetch(
+              `/api/admin/catalog/categories${categoryCursor ? `?cursor=${encodeURIComponent(categoryCursor)}` : ""}`,
+            ),
+            fetch("/api/admin/catalog/units"),
+          ]);
+          const productsPayload = (await productsResponse.json()) as RpcResult<AdminProductPage>;
+          if (!productsPayload.ok) {
+            setState({
+              phase: "error",
+              message:
+                productsPayload.error.code === "FORBIDDEN"
+                  ? "Catalog administration requires the catalog.read capability with a global scope."
+                  : productsPayload.error.message,
+              requestId: productsPayload.error.requestId,
+            });
+            return;
+          }
+          const categoriesPayload =
+            (await categoriesResponse.json()) as RpcResult<AdminCategoryPage>;
+          const unitsPayload = (await unitsResponse.json()) as RpcResult<AdminUnitSummary[]>;
+          setProducts(productsPayload.value);
+          setCategories(categoriesPayload.ok ? categoriesPayload.value : null);
+          setUnits(unitsPayload.ok ? unitsPayload.value : null);
+          setState({ phase: "ready" });
+        } catch {
           setState({
             phase: "error",
-            message:
-              productsPayload.error.code === "FORBIDDEN"
-                ? "Catalog administration requires the catalog.read capability with a global scope."
-                : productsPayload.error.message,
-            requestId: productsPayload.error.requestId,
+            message: "Network error loading the catalog.",
+            requestId: null,
           });
-          return;
         }
-        const categoriesPayload = (await categoriesResponse.json()) as RpcResult<AdminCategoryPage>;
-        const unitsPayload = (await unitsResponse.json()) as RpcResult<AdminUnitSummary[]>;
-        setProducts(productsPayload.value);
-        setCategories(categoriesPayload.ok ? categoriesPayload.value : null);
-        setUnits(unitsPayload.ok ? unitsPayload.value : null);
-        setState({ phase: "ready" });
-      } catch {
-        setState({
-          phase: "error",
-          message: "Network error loading the catalog.",
-          requestId: null,
-        });
-      }
-    })();
-  }, []);
+      })();
+    },
+    [],
+  );
 
-  useEffect(() => load(""), [load]);
+  useEffect(
+    () => load(appliedQuery, pagination.cursor, categoryPagination.cursor),
+    [appliedQuery, categoryPagination.cursor, load, pagination.cursor],
+  );
 
   async function createCategory(event: React.FormEvent) {
     event.preventDefault();
@@ -86,22 +105,28 @@ export default function CatalogPage() {
       setNotice("Code, name, and slug are required.");
       return;
     }
-    const response = await fetch("/api/admin/catalog/categories", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        code: newCategory.code.trim().toUpperCase(),
-        name: newCategory.name.trim(),
-        slug: newCategory.slug.trim(),
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await createIntent.submit(async (idempotencyKey) => {
+        const response = await fetch("/api/admin/catalog/categories", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({
+            code: newCategory.code.trim().toUpperCase(),
+            name: newCategory.name.trim(),
+            slug: newCategory.slug.trim(),
+          }),
+        });
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry to safely reuse the same category request.");
+      return;
+    }
     setNotice(payload.ok ? "Category created." : (payload.error?.message ?? "Creation failed."));
     if (payload.ok) {
       setNewCategory({ code: "", name: "", slug: "" });
-      load(query);
+      load(appliedQuery, pagination.cursor, categoryPagination.cursor);
     }
   }
 
@@ -171,8 +196,8 @@ export default function CatalogPage() {
                 onChange={(event) => setNewCategory({ ...newCategory, slug: event.target.value })}
                 className="sm:w-56"
               />
-              <Button type="submit" size="sm">
-                Create
+              <Button type="submit" size="sm" disabled={createIntent.pending}>
+                {createIntent.pending ? "Creating…" : "Create"}
               </Button>
             </form>
             {categories && categories.items.length > 0 ? (
@@ -181,6 +206,12 @@ export default function CatalogPage() {
                 {categories.items.map((category) => category.code).join(", ")}
               </p>
             ) : null}
+            <AdminCursorPagination
+              pageNumber={categoryPagination.pageNumber}
+              nextCursor={categories?.nextCursor ?? null}
+              onPrevious={categoryPagination.previous}
+              onNext={categoryPagination.next}
+            />
           </ListPageSection>
 
           <ListPageSection title="Controlled units" description="The closed sell-unit registry.">
@@ -198,7 +229,8 @@ export default function CatalogPage() {
               className="flex gap-2 p-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                load(query);
+                setAppliedQuery(query.trim());
+                pagination.reset();
               }}
             >
               <Input
@@ -253,6 +285,12 @@ export default function CatalogPage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={products?.nextCursor ?? null}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         </>
       ) : null}

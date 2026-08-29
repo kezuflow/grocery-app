@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { AdminOrderDetail, RpcResult } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import {
   Table,
@@ -15,14 +14,16 @@ import {
   TableRow,
 } from "../../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ "order-id": string }> }) {
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
-  const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const cancelIntent = useAdminCommandIntent();
   const load = useCallback(async (id: string) => {
     setState("loading");
     try {
@@ -47,25 +48,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
       void load(id);
     });
   }, [params, load]);
-  async function cancel() {
-    if (!order || reason.trim() === "") {
-      setMessage("A cancellation reason is required.");
-      return;
-    }
-    setPending(true);
+  async function cancel(reason: string) {
+    if (!order) return;
     try {
-      const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ reasonCode: reason.trim(), expectedVersion: order.version }),
+      const payload = await cancelIntent.submit(async (idempotencyKey) => {
+        const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({ reasonCode: reason, expectedVersion: order.version }),
+        });
+        return (await response.json()) as RpcResult<unknown>;
       });
-      const payload = (await response.json()) as RpcResult<unknown>;
       setMessage(payload.ok ? "Cancellation submitted." : payload.error.message);
-      if (payload.ok) await load(orderId);
+      if (payload.ok) {
+        setConfirming(false);
+        await load(orderId);
+      }
     } catch {
-      setMessage("Network error submitting cancellation.");
-    } finally {
-      setPending(false);
+      setMessage("Connection lost. Retry confirmation to safely reuse the cancellation request.");
     }
   }
   return (
@@ -133,22 +133,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             title="Cancellation"
             description="Uses the canonical order cancellation command and refund seam."
           >
-            <div className="flex flex-col gap-2 p-4 sm:flex-row">
-              <Input
-                aria-label="Cancellation reason"
-                placeholder="reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
+            <div className="p-4">
               <Button
-                disabled={pending || order.status === "CANCELED"}
+                disabled={cancelIntent.pending || order.status === "CANCELED"}
                 variant="destructive"
-                onClick={() => void cancel()}
+                onClick={() => setConfirming(true)}
               >
-                {pending ? "Submitting…" : "Cancel order"}
+                Cancel order
               </Button>
             </div>
           </ListPageSection>
+          <AdminConfirmationDialog
+            open={confirming}
+            title="Confirm order cancellation"
+            resource={`Order ${order.orderId} · ${order.currency} ${(order.totalMinor / 100).toFixed(2)}`}
+            scope="Core-authorized order scope"
+            consequence="Cancellation is a lifecycle transition and may initiate refund handling; it cannot be treated as an arbitrary edit."
+            pending={cancelIntent.pending}
+            onCancel={() => setConfirming(false)}
+            onConfirm={(confirmedReason) => void cancel(confirmedReason)}
+          />
           <ListPageSection title="Recent audit">
             <ul className="divide-y text-sm">
               {order.recentAudit.map((event) => (

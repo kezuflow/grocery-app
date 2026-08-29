@@ -15,6 +15,11 @@ import {
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 export default function ReceivingPage() {
   const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<ReceivingSessionPage | null>(null);
@@ -25,60 +30,77 @@ export default function ReceivingPage() {
   const [lineValues, setLineValues] = useState<
     Record<string, { accepted: string; rejected: string; reason: string }>
   >({});
-  const [pending, setPending] = useState(false);
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const payload = (await (
-        await fetch(`/api/admin/receiving?locationId=${locationId ?? ""}&limit=50`)
-      ).json()) as RpcResult<ReceivingSessionPage>;
-      if (!payload.ok) {
-        setNotice(
-          payload.error.code === "FORBIDDEN"
-            ? "Receiving access is not permitted for this scope."
-            : payload.error.message,
-        );
+  const commandIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const load = useCallback(
+    async (cursor: string | null) => {
+      setState("loading");
+      try {
+        const payload = (await (
+          await fetch(
+            `/api/admin/receiving?locationId=${locationId ?? ""}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+          )
+        ).json()) as RpcResult<ReceivingSessionPage>;
+        if (!payload.ok) {
+          setNotice(
+            payload.error.code === "FORBIDDEN"
+              ? "Receiving access is not permitted for this scope."
+              : payload.error.message,
+          );
+          setState("error");
+          return;
+        }
+        setPage(payload.value);
+        setState("ready");
+      } catch {
+        setNotice("Network error loading receiving sessions.");
         setState("error");
-        return;
       }
-      setPage(payload.value);
-      setState("ready");
-    } catch {
-      setNotice("Network error loading receiving sessions.");
-      setState("error");
-    }
-  }, [locationId]);
+    },
+    [locationId],
+  );
   useEffect(() => {
-    if (locationId) void load();
-  }, [load]);
+    if (locationId) void load(pagination.cursor);
+  }, [load, locationId, pagination.cursor]);
+
+  async function runCommand(path: string, body: object, success: string) {
+    try {
+      const payload = await commandIntent.submit(async (idempotencyKey) => {
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify(body),
+        });
+        return (await response.json()) as RpcResult<unknown>;
+      });
+      setNotice(payload.ok ? success : payload.error.message);
+      if (payload.ok || payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT")
+        void load(pagination.cursor);
+    } catch {
+      setNotice(
+        "Connection lost. Retry the same receiving action to safely reuse its request key.",
+      );
+    }
+  }
   async function start() {
     const expectedVersion = Number(startVersion);
     if (!requirementId.trim() || !Number.isInteger(expectedVersion) || expectedVersion < 0) {
       setNotice("Requirement ID and current version are required.");
       return;
     }
-    if (!locationId || pending) return;
-    setPending(true);
-    const response = await fetch("/api/admin/receiving/start", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
+    if (!locationId || commandIntent.pending) return;
+    await runCommand(
+      "/api/admin/receiving/start",
+      {
         locationId,
         requirementId: requirementId.trim(),
         expectedVersion,
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown>;
-    setNotice(payload.ok ? "Receiving session started." : payload.error.message);
-    if (
-      payload.ok ||
-      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
-    )
-      void load();
-    setPending(false);
+      },
+      "Receiving session started.",
+    );
   }
   async function recordLine(sessionId: string, expectedVersion: number) {
-    if (!locationId || pending) return;
+    if (!locationId || commandIntent.pending) return;
     const values = lineValues[sessionId] ?? { accepted: "", rejected: "", reason: "" };
     const acceptedBase = Number(values.accepted);
     const rejectedBase = Number(values.rejected);
@@ -91,48 +113,30 @@ export default function ReceivingPage() {
       setNotice("Accepted and rejected quantities must be non-negative integers.");
       return;
     }
-    setPending(true);
-    const response = await fetch("/api/admin/receiving/record-line", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
+    await runCommand(
+      "/api/admin/receiving/record-line",
+      {
         locationId,
         receivingSessionId: sessionId,
         acceptedBase,
         rejectedBase,
         expectedVersion,
         reason: values.reason.trim() || undefined,
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown>;
-    setNotice(payload.ok ? "Receiving line recorded." : payload.error.message);
-    if (
-      payload.ok ||
-      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
-    )
-      void load();
-    setPending(false);
+      },
+      "Receiving line recorded.",
+    );
   }
   async function complete(sessionId: string, expectedVersion: number) {
-    if (!locationId || pending) return;
-    setPending(true);
-    const response = await fetch("/api/admin/receiving/complete", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
+    if (!locationId || commandIntent.pending) return;
+    await runCommand(
+      "/api/admin/receiving/complete",
+      {
         locationId,
         receivingSessionId: sessionId,
         expectedVersion,
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown>;
-    setNotice(payload.ok ? "Receiving session completed." : payload.error.message);
-    if (
-      payload.ok ||
-      (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
-    )
-      void load();
-    setPending(false);
+      },
+      "Receiving session completed.",
+    );
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
@@ -151,7 +155,12 @@ export default function ReceivingPage() {
           <AlertTitle>Receiving could not be loaded</AlertTitle>
           <AlertDescription>
             {notice}
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(pagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -174,8 +183,8 @@ export default function ReceivingPage() {
                 value={startVersion}
                 onChange={(event) => setStartVersion(event.target.value)}
               />
-              <Button disabled={pending || !locationId} onClick={() => void start()}>
-                {pending ? "Working…" : "Start receiving"}
+              <Button disabled={commandIntent.pending || !locationId} onClick={() => void start()}>
+                {commandIntent.pending ? "Working…" : "Start receiving"}
               </Button>
             </div>
           </ListPageSection>
@@ -275,7 +284,7 @@ export default function ReceivingPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={pending}
+                              disabled={commandIntent.pending}
                               onClick={() => void recordLine(item.receivingSessionId, item.version)}
                             >
                               Record line
@@ -286,7 +295,7 @@ export default function ReceivingPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={pending}
+                            disabled={commandIntent.pending}
                             onClick={() => void complete(item.receivingSessionId, item.version)}
                           >
                             Complete
@@ -298,6 +307,12 @@ export default function ReceivingPage() {
                 </Table>
               </div>
             )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={page.nextCursor}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         </>
       ) : null}

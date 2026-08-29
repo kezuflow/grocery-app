@@ -16,6 +16,11 @@ import {
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { STAFF_SUB_NAVIGATION } from "../../../../components/admin/admin-navigation";
+import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -27,12 +32,16 @@ export default function RolesPage() {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const createIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
 
-  const load = useCallback(() => {
+  const load = useCallback((cursor: string | null) => {
     setState({ phase: "loading" });
     void (async () => {
       try {
-        const response = await fetch("/api/admin/roles?limit=100");
+        const response = await fetch(
+          `/api/admin/roles?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        );
         const payload = (await response.json()) as RpcResult<AdminRolePage>;
         if (!payload.ok) {
           setState({
@@ -52,7 +61,7 @@ export default function RolesPage() {
     })();
   }, []);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => load(pagination.cursor), [load, pagination.cursor]);
 
   async function createRole(event: React.FormEvent) {
     event.preventDefault();
@@ -60,26 +69,26 @@ export default function RolesPage() {
       setNotice("A code and name are required.");
       return;
     }
-    const response = await fetch("/api/admin/roles", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        code: code.trim(),
-        name: name.trim(),
-        description: "",
-        capabilityCodes: [],
-      }),
+    const payload = await createIntent.submit(async (idempotencyKey) => {
+      const response = await fetch("/api/admin/roles", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify({
+          code: code.trim(),
+          name: name.trim(),
+          description: "",
+          capabilityCodes: [],
+        }),
+      });
+      return (await response.json()) as RpcResult<unknown>;
     });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
     setNotice(
       payload.ok ? "Role created." : (payload.error?.message ?? "The role could not be created."),
     );
     if (payload.ok) {
       setCode("");
       setName("");
-      load();
+      load(pagination.cursor);
     }
   }
 
@@ -210,6 +219,12 @@ export default function RolesPage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={state.page.nextCursor}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         </>
       ) : null}

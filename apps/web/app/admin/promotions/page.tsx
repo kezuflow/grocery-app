@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { AdminPromotionPage, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
@@ -15,6 +15,11 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -28,13 +33,16 @@ export default function PromotionsPage() {
   const [name, setName] = useState("");
   const [discount, setDiscount] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const commandKeys = useRef(new Map<string, string>());
+  const createIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
 
-  const load = useCallback(() => {
+  const load = useCallback((cursor: string | null) => {
     setState({ phase: "loading" });
     void (async () => {
       try {
-        const response = await fetch("/api/admin/promotions?limit=50");
+        const params = new URLSearchParams({ limit: "50" });
+        if (cursor) params.set("cursor", cursor);
+        const response = await fetch(`/api/admin/promotions?${params}`);
         const payload = (await response.json()) as RpcResult<AdminPromotionPage>;
         if (!payload.ok) {
           setState({
@@ -55,7 +63,7 @@ export default function PromotionsPage() {
     })();
   }, []);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => load(pagination.cursor), [load, pagination.cursor]);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -63,37 +71,36 @@ export default function PromotionsPage() {
       setNotice("A code, name, and numeric discount are required.");
       return;
     }
-    const intent = JSON.stringify({
-      code: code.trim().toUpperCase(),
-      name: name.trim(),
-      discountMinor: Math.round(Number(discount) * 100),
-    });
-    const idempotencyKey = commandKeys.current.get(intent) ?? crypto.randomUUID();
-    commandKeys.current.set(intent, idempotencyKey);
-    const response = await fetch("/api/admin/promotions", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-      body: JSON.stringify({
-        code: code.trim().toUpperCase(),
-        name: name.trim(),
-        benefitType: "ORDER_FIXED_DISCOUNT",
-        discountMinor: Math.round(Number(discount) * 100),
-        minimumMinor: 0,
-        startsAt: new Date().toISOString(),
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await createIntent.submit(async (idempotencyKey) => {
+        const response = await fetch("/api/admin/promotions", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({
+            code: code.trim().toUpperCase(),
+            name: name.trim(),
+            benefitType: "ORDER_FIXED_DISCOUNT",
+            discountMinor: Math.round(Number(discount) * 100),
+            minimumMinor: 0,
+            startsAt: new Date().toISOString(),
+          }),
+        });
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry to safely reuse the same promotion request.");
+      return;
+    }
     setNotice(
       payload.ok ? "Promotion created as DRAFT." : (payload.error?.message ?? "Creation failed."),
     );
     if (payload.ok) {
-      commandKeys.current.delete(intent);
       setCode("");
       setName("");
       setDiscount("");
-      load();
+      pagination.reset();
+      load(null);
     }
   }
 
@@ -163,8 +170,8 @@ export default function PromotionsPage() {
                 onChange={(event) => setDiscount(event.target.value)}
                 className="sm:w-32"
               />
-              <Button type="submit" size="sm">
-                Create draft
+              <Button type="submit" size="sm" disabled={createIntent.pending}>
+                {createIntent.pending ? "Creating…" : "Create draft"}
               </Button>
             </form>
           </ListPageSection>
@@ -223,6 +230,12 @@ export default function PromotionsPage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={page?.nextCursor ?? null}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         </>
       ) : null}

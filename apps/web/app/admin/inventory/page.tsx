@@ -19,6 +19,12 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminConfirmationDialog,
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -33,15 +39,23 @@ export default function InventoryPage() {
   const [ledgerFor, setLedgerFor] = useState<{ poolId: string; name: string } | null>(null);
   const [ledger, setLedger] = useState<AdminInventoryLedgerPage | null>(null);
   const [adjustDelta, setAdjustDelta] = useState<Record<string, string>>({});
-  const [adjustReason, setAdjustReason] = useState("");
+  const [confirming, setConfirming] = useState<{
+    poolId: string;
+    productName: string;
+    baseUnitSymbol: string;
+    version: number;
+  } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const adjustmentIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const ledgerPagination = useAdminPagination();
 
-  const load = useCallback((location: string) => {
+  const load = useCallback((location: string, cursor: string | null) => {
     setState({ phase: "loading" });
     void (async () => {
       try {
         const response = await fetch(
-          `/api/admin/inventory?locationId=${encodeURIComponent(location)}&limit=50`,
+          `/api/admin/inventory?locationId=${encodeURIComponent(location)}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
         );
         const payload = (await response.json()) as RpcResult<AdminInventoryPage>;
         if (!payload.ok) {
@@ -62,46 +76,65 @@ export default function InventoryPage() {
     })();
   }, []);
 
-  useEffect(() => load(locationId), [load, locationId]);
+  useEffect(() => load(locationId, pagination.cursor), [load, locationId, pagination.cursor]);
 
-  async function loadLedger(poolId: string, name: string) {
+  function loadLedger(poolId: string, name: string) {
     setLedgerFor({ poolId, name });
     setLedger(null);
-    const response = await fetch(
-      `/api/admin/inventory/${encodeURIComponent(poolId)}/ledger?locationId=${encodeURIComponent(locationId)}&limit=20`,
-    );
-    const payload = (await response.json()) as RpcResult<AdminInventoryLedgerPage>;
-    setLedger(payload.ok ? payload.value : { items: [], nextCursor: null });
+    ledgerPagination.reset();
   }
 
-  async function adjust(poolId: string, expectedVersion: number) {
+  useEffect(() => {
+    if (!ledgerFor) return;
+    void (async () => {
+      const response = await fetch(
+        `/api/admin/inventory/${encodeURIComponent(ledgerFor.poolId)}/ledger?locationId=${encodeURIComponent(locationId)}&limit=20${ledgerPagination.cursor ? `&cursor=${encodeURIComponent(ledgerPagination.cursor)}` : ""}`,
+      );
+      const payload = (await response.json()) as RpcResult<AdminInventoryLedgerPage>;
+      setLedger(payload.ok ? payload.value : { items: [], nextCursor: null });
+    })();
+  }, [ledgerFor, ledgerPagination.cursor, locationId]);
+
+  async function adjust(poolId: string, expectedVersion: number, reason: string) {
     const delta = Number(adjustDelta[poolId]);
-    if (adjustReason.trim() === "" || Number.isNaN(delta) || !Number.isInteger(delta)) {
+    if (Number.isNaN(delta) || !Number.isInteger(delta)) {
       setNotice("An integer delta and a reason are required.");
       return;
     }
-    const response = await fetch(`/api/admin/inventory/${encodeURIComponent(poolId)}/adjustments`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        locationId,
-        inventoryPoolId: poolId,
-        delta,
-        reason: adjustReason.trim(),
-        expectedVersion,
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { code?: string; message?: string };
-    };
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await adjustmentIntent.submit(async (idempotencyKey) => {
+        const response = await fetch(
+          `/api/admin/inventory/${encodeURIComponent(poolId)}/adjustments`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+            body: JSON.stringify({
+              locationId,
+              inventoryPoolId: poolId,
+              delta,
+              reason,
+              expectedVersion,
+            }),
+          },
+        );
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry confirmation to safely reuse the adjustment request.");
+      return;
+    }
     if (payload.ok || payload.error?.code === "STALE_VERSION") {
       setNotice(
         payload.ok
           ? "Adjustment applied."
           : (payload.error?.message ?? "Version conflict; refresh."),
       );
-      if (payload.ok) setAdjustDelta({});
-      load(locationId);
+      if (payload.ok) {
+        setAdjustDelta({});
+        setConfirming(null);
+      }
+      load(locationId, pagination.cursor);
     } else {
       setNotice(payload.error?.message ?? "The adjustment failed.");
     }
@@ -155,7 +188,11 @@ export default function InventoryPage() {
                 onChange={(event) => setLocationId(event.target.value)}
                 className="sm:w-72"
               />
-              <Button size="sm" variant="outline" onClick={() => load(locationId)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => load(locationId, pagination.cursor)}
+              >
                 Load
               </Button>
             </div>
@@ -204,7 +241,20 @@ export default function InventoryPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => void adjust(item.inventoryPoolId, item.version)}
+                              disabled={adjustmentIntent.pending}
+                              onClick={() => {
+                                const delta = Number(adjustDelta[item.inventoryPoolId]);
+                                if (!Number.isInteger(delta)) {
+                                  setNotice("Enter an integer adjustment before confirmation.");
+                                  return;
+                                }
+                                setConfirming({
+                                  poolId: item.inventoryPoolId,
+                                  productName: item.productName,
+                                  baseUnitSymbol: item.baseUnitSymbol,
+                                  version: item.version,
+                                });
+                              }}
                             >
                               Apply
                             </Button>
@@ -214,7 +264,7 @@ export default function InventoryPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => void loadLedger(item.inventoryPoolId, item.productName)}
+                            onClick={() => loadLedger(item.inventoryPoolId, item.productName)}
                           >
                             Ledger
                           </Button>
@@ -224,21 +274,15 @@ export default function InventoryPage() {
                   </TableBody>
                 </Table>
                 <p className="px-4 pb-3 text-xs text-[var(--fm-text-muted)]">
-                  Adjustments use the guarded command with a shared reason above; a version conflict
-                  asks you to refresh.{" "}
-                  {adjustReason === "" ? (
-                    <span className="text-[var(--fm-destructive)]">Set a reason first.</span>
-                  ) : null}
+                  Adjustments use the guarded command; confirmation requires a reason and a version
+                  conflict asks you to refresh.
                 </p>
-                <div className="border-t border-[var(--fm-border)] p-4">
-                  <Input
-                    aria-label="Adjustment reason"
-                    placeholder="reason for adjustments (required)"
-                    value={adjustReason}
-                    onChange={(event) => setAdjustReason(event.target.value)}
-                    className="sm:w-96"
-                  />
-                </div>
+                <AdminCursorPagination
+                  pageNumber={pagination.pageNumber}
+                  nextCursor={state.page.nextCursor}
+                  onPrevious={pagination.previous}
+                  onNext={pagination.next}
+                />
               </>
             )}
           </ListPageSection>
@@ -284,6 +328,12 @@ export default function InventoryPage() {
                   </TableBody>
                 </Table>
               )}
+              <AdminCursorPagination
+                pageNumber={ledgerPagination.pageNumber}
+                nextCursor={ledger?.nextCursor ?? null}
+                onPrevious={ledgerPagination.previous}
+                onNext={ledgerPagination.next}
+              />
               <p className="p-4 text-xs">
                 <Link href="/admin" className="text-[var(--fm-info)] underline">
                   Back to overview
@@ -291,6 +341,22 @@ export default function InventoryPage() {
               </p>
             </ListPageSection>
           ) : null}
+          <AdminConfirmationDialog
+            open={confirming !== null}
+            title="Confirm inventory adjustment"
+            resource={
+              confirming
+                ? `${confirming.productName} · ${adjustDelta[confirming.poolId] ?? ""} ${confirming.baseUnitSymbol}`
+                : "Inventory balance"
+            }
+            scope={locationId}
+            consequence="This writes an immutable inventory ledger movement and changes sellable stock."
+            pending={adjustmentIntent.pending}
+            onCancel={() => setConfirming(null)}
+            onConfirm={(confirmedReason) =>
+              confirming && void adjust(confirming.poolId, confirming.version, confirmedReason)
+            }
+          />
         </>
       ) : null}
     </div>

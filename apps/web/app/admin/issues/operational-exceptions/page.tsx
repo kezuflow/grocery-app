@@ -14,36 +14,46 @@ import {
 } from "../../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../../components/admin/use-admin-location";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../../components/admin/admin-controls";
 export default function OperationalExceptionsPage() {
   const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<OperationalExceptionPage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const payload = (await (
-        await fetch(`/api/admin/exceptions?locationId=${locationId ?? ""}&limit=50`)
-      ).json()) as RpcResult<OperationalExceptionPage>;
-      if (!payload.ok) {
-        setNotice(
-          payload.error.code === "FORBIDDEN"
-            ? "Operational exception access is not permitted for this scope."
-            : payload.error.message,
-        );
+  const pagination = useAdminPagination();
+  const load = useCallback(
+    async (cursor: string | null) => {
+      setState("loading");
+      try {
+        const payload = (await (
+          await fetch(
+            `/api/admin/exceptions?locationId=${locationId ?? ""}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+          )
+        ).json()) as RpcResult<OperationalExceptionPage>;
+        if (!payload.ok) {
+          setNotice(
+            payload.error.code === "FORBIDDEN"
+              ? "Operational exception access is not permitted for this scope."
+              : payload.error.message,
+          );
+          setState("error");
+          return;
+        }
+        setPage(payload.value);
+        setState("ready");
+      } catch {
+        setNotice("Network error loading operational exceptions.");
         setState("error");
-        return;
       }
-      setPage(payload.value);
-      setState("ready");
-    } catch {
-      setNotice("Network error loading operational exceptions.");
-      setState("error");
-    }
-  }, [locationId]);
+    },
+    [locationId],
+  );
   useEffect(() => {
-    if (locationId) void load();
-  }, [load]);
+    if (locationId) void load(pagination.cursor);
+  }, [load, locationId, pagination.cursor]);
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
@@ -61,7 +71,12 @@ export default function OperationalExceptionsPage() {
           <AlertTitle>Operational exceptions could not be loaded</AlertTitle>
           <AlertDescription>
             {notice}
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(pagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -132,6 +147,12 @@ export default function OperationalExceptionsPage() {
               </Table>
             </div>
           )}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={page.nextCursor}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </ListPageSection>
       ) : null}
     </div>

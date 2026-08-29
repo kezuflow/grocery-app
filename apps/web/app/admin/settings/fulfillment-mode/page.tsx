@@ -7,6 +7,7 @@ import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../../components/admin/use-admin-location";
+import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 export default function FulfillmentModePage() {
   const { locationId, label } = useAdminLocation();
   const [configuration, setConfiguration] = useState<FulfillmentModeConfigurationView | null>(null);
@@ -15,7 +16,7 @@ export default function FulfillmentModePage() {
   const [promiseMinutes, setPromiseMinutes] = useState("");
   const [capacity, setCapacity] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const saveIntent = useAdminCommandIntent();
   const load = useCallback(async () => {
     setState("loading");
     try {
@@ -55,21 +56,22 @@ export default function FulfillmentModePage() {
       setNotice("Promise and capacity must be positive integers when supplied.");
       return;
     }
-    if (!locationId || pending) return;
-    setPending(true);
-    const response = await fetch("/api/admin/fulfillment-mode", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        locationId,
-        fulfillmentMode: mode,
-        cadence: mode === "SCHEDULED" ? "WEEKLY" : null,
-        promiseMinutes: promise,
-        maxConcurrentInstantOrders: max,
-        expectedVersion: configuration.version,
-      }),
+    if (!locationId || saveIntent.pending) return;
+    const payload = await saveIntent.submit(async (idempotencyKey) => {
+      const response = await fetch("/api/admin/fulfillment-mode", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify({
+          locationId,
+          fulfillmentMode: mode,
+          cadence: mode === "SCHEDULED" ? "WEEKLY" : null,
+          promiseMinutes: promise,
+          maxConcurrentInstantOrders: max,
+          expectedVersion: configuration.version,
+        }),
+      });
+      return (await response.json()) as RpcResult<FulfillmentModeConfigurationView>;
     });
-    const payload = (await response.json()) as RpcResult<FulfillmentModeConfigurationView>;
     setNotice(payload.ok ? "Fulfillment mode configuration saved." : payload.error.message);
     if (payload.ok) {
       setConfiguration(payload.value);
@@ -80,7 +82,6 @@ export default function FulfillmentModePage() {
       (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT")
     )
       void load();
-    setPending(false);
   }
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
@@ -154,8 +155,8 @@ export default function FulfillmentModePage() {
             </label>
           </div>
           <div className="border-t border-[var(--fm-border)] p-4">
-            <Button disabled={pending || !locationId} onClick={() => void save()}>
-              {pending ? "Saving…" : "Save configuration"}
+            <Button disabled={saveIntent.pending || !locationId} onClick={() => void save()}>
+              {saveIntent.pending ? "Saving…" : "Save configuration"}
             </Button>
           </div>
         </ListPageSection>

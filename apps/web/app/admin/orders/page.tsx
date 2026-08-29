@@ -15,6 +15,10 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 type State =
   | { phase: "loading" }
@@ -25,34 +29,34 @@ export default function OrdersPage() {
   const [state, setState] = useState<State>({ phase: "loading" });
   const [page, setPage] = useState<AdminOrderPage | null>(null);
   const [status, setStatus] = useState("");
-  const load = useCallback(
-    async (nextStatus = status) => {
-      setState({ phase: "loading" });
-      try {
-        const query = new URLSearchParams({ limit: "50" });
-        if (nextStatus) query.set("status", nextStatus);
-        const payload = (await (
-          await fetch(`/api/admin/orders?${query}`)
-        ).json()) as RpcResult<AdminOrderPage>;
-        if (!payload.ok) {
-          setState({
-            phase: "error",
-            message: payload.error.message,
-            requestId: payload.error.requestId,
-          });
-          return;
-        }
-        setPage(payload.value);
-        setState({ phase: "ready" });
-      } catch {
-        setState({ phase: "error", message: "Network error loading orders." });
+  const [appliedStatus, setAppliedStatus] = useState("");
+  const pagination = useAdminPagination();
+  const load = useCallback(async (nextStatus: string, cursor: string | null) => {
+    setState({ phase: "loading" });
+    try {
+      const query = new URLSearchParams({ limit: "50" });
+      if (nextStatus) query.set("status", nextStatus);
+      if (cursor) query.set("cursor", cursor);
+      const payload = (await (
+        await fetch(`/api/admin/orders?${query}`)
+      ).json()) as RpcResult<AdminOrderPage>;
+      if (!payload.ok) {
+        setState({
+          phase: "error",
+          message: payload.error.message,
+          requestId: payload.error.requestId,
+        });
+        return;
       }
-    },
-    [status],
-  );
+      setPage(payload.value);
+      setState({ phase: "ready" });
+    } catch {
+      setState({ phase: "error", message: "Network error loading orders." });
+    }
+  }, []);
   useEffect(() => {
-    void load("");
-  }, [load]);
+    void load(appliedStatus, pagination.cursor);
+  }, [appliedStatus, load, pagination.cursor]);
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
@@ -85,7 +89,12 @@ export default function OrdersPage() {
               </>
             ) : null}
             <br />
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(appliedStatus, pagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -97,7 +106,8 @@ export default function OrdersPage() {
             className="flex gap-2 p-4"
             onSubmit={(event) => {
               event.preventDefault();
-              void load(status);
+              setAppliedStatus(status.trim());
+              pagination.reset();
             }}
           >
             <Input
@@ -117,7 +127,8 @@ export default function OrdersPage() {
                 variant="outline"
                 onClick={() => {
                   setStatus("");
-                  void load("");
+                  setAppliedStatus("");
+                  pagination.reset();
                 }}
               >
                 Clear
@@ -169,6 +180,12 @@ export default function OrdersPage() {
               </TableBody>
             </Table>
           )}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={page?.nextCursor ?? null}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </ListPageSection>
       ) : null}
     </div>

@@ -17,7 +17,12 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "../../../../../components/ui/breadcrumb";
-import { PageHeader, ListPageSection, StatusBadge } from "../../../../../components/admin/admin-shell";
+import {
+  PageHeader,
+  ListPageSection,
+  StatusBadge,
+} from "../../../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
 
 type LoadState =
   | { phase: "loading" }
@@ -35,6 +40,7 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
   const [description, setDescription] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const commandIntent = useAdminCommandIntent();
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -72,14 +78,14 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
   useEffect(() => load(), [load]);
 
   async function run(url: string, method: "POST" | "PUT" | "PATCH", body: unknown) {
-    const response = await fetch(url, {
-      method,
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify(body),
+    const payload = await commandIntent.submit(async (idempotencyKey) => {
+      const response = await fetch(url, {
+        method,
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify(body),
+      });
+      return (await response.json()) as RpcResult<unknown>;
     });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
     setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
     if (payload.ok) load();
   }

@@ -18,6 +18,7 @@ import {
   ListPageSection,
   StatusBadge,
 } from "../../../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
 
 type LoadState =
   | { phase: "loading" }
@@ -43,6 +44,7 @@ export default function ProductDetailPage({
   });
   const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const commandIntent = useAdminCommandIntent();
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -80,14 +82,14 @@ export default function ProductDetailPage({
   useEffect(() => load(), [load]);
 
   async function run(url: string, method: "POST" | "PATCH" | "PUT", body: unknown) {
-    const response = await fetch(url, {
-      method,
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify(body),
+    const payload = await commandIntent.submit(async (idempotencyKey) => {
+      const response = await fetch(url, {
+        method,
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify(body),
+      });
+      return (await response.json()) as RpcResult<unknown>;
     });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { code?: string; message?: string };
-    };
     setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
     if (payload.ok || payload.error?.code === "STALE_VERSION") load();
     return payload.ok;

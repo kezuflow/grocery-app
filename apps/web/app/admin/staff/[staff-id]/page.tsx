@@ -15,6 +15,10 @@ import {
   BreadcrumbSeparator,
 } from "../../../../components/ui/breadcrumb";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -30,44 +34,50 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
   const [marketId, setMarketId] = useState("");
   const [locationId, setLocationId] = useState("");
   const commandKeys = useRef(new Map<string, string>());
+  const rolePagination = useAdminPagination();
 
-  const load = useCallback(() => {
-    setState({ phase: "loading" });
-    void (async () => {
-      try {
-        const [staffResponse, rolesResponse] = await Promise.all([
-          fetch(`/api/admin/staff/${encodeURIComponent(staffId)}`),
-          fetch("/api/admin/roles?limit=100"),
-        ]);
-        const staffPayload = (await staffResponse.json()) as RpcResult<AdminStaffDetail>;
-        if (!staffPayload.ok) {
+  const load = useCallback(
+    (roleCursor: string | null) => {
+      setState({ phase: "loading" });
+      void (async () => {
+        try {
+          const [staffResponse, rolesResponse] = await Promise.all([
+            fetch(`/api/admin/staff/${encodeURIComponent(staffId)}`),
+            fetch(
+              `/api/admin/roles?limit=100${roleCursor ? `&cursor=${encodeURIComponent(roleCursor)}` : ""}`,
+            ),
+          ]);
+          const staffPayload = (await staffResponse.json()) as RpcResult<AdminStaffDetail>;
+          if (!staffPayload.ok) {
+            setState({
+              phase: "error",
+              message: staffPayload.error.message,
+              requestId: staffPayload.error.requestId,
+            });
+            return;
+          }
+          const rolesPayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
+          setDisplayName(staffPayload.value.displayName);
+          setMarketId(
+            staffPayload.value.scopes.find((scope) => scope.kind === "market")?.marketId ?? "",
+          );
+          setLocationId(
+            staffPayload.value.scopes.find((scope) => scope.kind === "location")?.locationId ?? "",
+          );
           setState({
-            phase: "error",
-            message: staffPayload.error.message,
-            requestId: staffPayload.error.requestId,
+            phase: "ready",
+            staff: staffPayload.value,
+            roles: rolesPayload.ok ? rolesPayload.value : { items: [], nextCursor: null },
           });
-          return;
+        } catch {
+          setState({ phase: "error", message: "Network error loading staff.", requestId: null });
         }
-        const rolesPayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
-        setDisplayName(staffPayload.value.displayName);
-        setMarketId(
-          staffPayload.value.scopes.find((scope) => scope.kind === "market")?.marketId ?? "",
-        );
-        setLocationId(
-          staffPayload.value.scopes.find((scope) => scope.kind === "location")?.locationId ?? "",
-        );
-        setState({
-          phase: "ready",
-          staff: staffPayload.value,
-          roles: rolesPayload.ok ? rolesPayload.value : { items: [], nextCursor: null },
-        });
-      } catch {
-        setState({ phase: "error", message: "Network error loading staff.", requestId: null });
-      }
-    })();
-  }, [staffId]);
+      })();
+    },
+    [staffId],
+  );
 
-  useEffect(() => load(), [load]);
+  useEffect(() => load(rolePagination.cursor), [load, rolePagination.cursor]);
 
   async function run(
     operation: string,
@@ -89,7 +99,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
     setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
     if (payload.ok) {
       commandKeys.current.delete(signature);
-      load();
+      load(rolePagination.cursor);
     }
     return payload.ok;
   }
@@ -237,6 +247,12 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
             Revoke sessions
           </Button>
         </div>
+        <AdminCursorPagination
+          pageNumber={rolePagination.pageNumber}
+          nextCursor={roles.nextCursor}
+          onPrevious={rolePagination.previous}
+          onNext={rolePagination.next}
+        />
       </ListPageSection>
 
       <ListPageSection

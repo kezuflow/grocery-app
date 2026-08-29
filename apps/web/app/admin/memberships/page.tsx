@@ -14,17 +14,26 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 export default function MembershipsPage() {
   const [page, setPage] = useState<AdminMembershipPage | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => {
+  const commandIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const load = useCallback(async (cursor: string | null) => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch("/api/admin/memberships?limit=50")
+        await fetch(
+          `/api/admin/memberships?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        )
       ).json()) as RpcResult<AdminMembershipPage>;
       if (!payload.ok) {
         setNotice(payload.error.message);
@@ -39,8 +48,8 @@ export default function MembershipsPage() {
     }
   }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(pagination.cursor);
+  }, [load, pagination.cursor]);
   async function change(
     subscriptionId: string,
     version: number,
@@ -50,23 +59,33 @@ export default function MembershipsPage() {
       setNotice("A reason is required.");
       return;
     }
-    const response = await fetch(
-      `/api/admin/memberships/${encodeURIComponent(subscriptionId)}/${action}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({
-          reason: reason.trim(),
-          expectedVersion: version,
-          ...(action === "cancel" ? { timing: "IMMEDIATE" } : {}),
-        }),
-      },
-    );
-    const payload = (await response.json()) as RpcResult<unknown>;
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await commandIntent.submit(async (idempotencyKey) => {
+        const response = await fetch(
+          `/api/admin/memberships/${encodeURIComponent(subscriptionId)}/${action}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+            body: JSON.stringify({
+              reason: reason.trim(),
+              expectedVersion: version,
+              ...(action === "cancel" ? { timing: "IMMEDIATE" } : {}),
+            }),
+          },
+        );
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice(
+        "Connection lost. Retry the same lifecycle action to safely reuse its request key.",
+      );
+      return;
+    }
     setNotice(payload.ok ? `Membership ${action}d.` : payload.error.message);
     if (payload.ok) {
       setReason("");
-      await load();
+      await load(pagination.cursor);
     }
   }
   return (
@@ -87,7 +106,12 @@ export default function MembershipsPage() {
           <AlertDescription>
             {notice}
             <br />
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(pagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -137,6 +161,7 @@ export default function MembershipsPage() {
                         <Button
                           size="sm"
                           variant="outline"
+                          disabled={commandIntent.pending}
                           onClick={() =>
                             void change(membership.subscriptionId, membership.version, "pause")
                           }
@@ -148,6 +173,7 @@ export default function MembershipsPage() {
                         <Button
                           size="sm"
                           variant="outline"
+                          disabled={commandIntent.pending}
                           onClick={() =>
                             void change(membership.subscriptionId, membership.version, "resume")
                           }
@@ -159,6 +185,7 @@ export default function MembershipsPage() {
                         <Button
                           size="sm"
                           variant="destructive"
+                          disabled={commandIntent.pending}
                           onClick={() =>
                             void change(membership.subscriptionId, membership.version, "cancel")
                           }
@@ -172,6 +199,12 @@ export default function MembershipsPage() {
               </TableBody>
             </Table>
           )}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={page.nextCursor}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </ListPageSection>
       ) : null}
     </div>

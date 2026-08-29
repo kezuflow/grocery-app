@@ -15,6 +15,11 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 const nextActions: Record<string, OrderIssueAction[]> = {
   SUBMITTED: ["CLAIM"],
@@ -28,11 +33,15 @@ export default function IssuesPage() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => {
+  const commandIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const load = useCallback(async (cursor: string | null) => {
     setState("loading");
     try {
       const payload = (await (
-        await fetch("/api/admin/order-issues?limit=50")
+        await fetch(
+          `/api/admin/order-issues?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        )
       ).json()) as RpcResult<AdminOrderIssuePage>;
       if (!payload.ok) {
         setNotice(payload.error.message);
@@ -47,25 +56,30 @@ export default function IssuesPage() {
     }
   }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(pagination.cursor);
+  }, [load, pagination.cursor]);
   async function act(issueId: string, action: OrderIssueAction, version: number) {
     if (!reason.trim()) {
       setNotice("A reason is required.");
       return;
     }
-    const response = await fetch(`/api/admin/order-issues/${encodeURIComponent(issueId)}/actions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({ action, reason: reason.trim(), expectedVersion: version }),
+    const payload = await commandIntent.submit(async (idempotencyKey) => {
+      const response = await fetch(
+        `/api/admin/order-issues/${encodeURIComponent(issueId)}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({ action, reason: reason.trim(), expectedVersion: version }),
+        },
+      );
+      return (await response.json()) as RpcResult<unknown>;
     });
-    const payload = (await response.json()) as RpcResult<unknown>;
     setNotice(
       payload.ok ? `Issue ${action.toLowerCase().replaceAll("_", " ")}d.` : payload.error.message,
     );
     if (payload.ok) {
       setReason("");
-      await load();
+      await load(pagination.cursor);
     }
   }
   return (
@@ -94,7 +108,12 @@ export default function IssuesPage() {
           <AlertDescription>
             {notice}
             <br />
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(pagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -143,6 +162,7 @@ export default function IssuesPage() {
                           key={action}
                           size="sm"
                           variant={action === "RESOLVE" ? "default" : "outline"}
+                          disabled={commandIntent.pending}
                           onClick={() => void act(issue.issueId, action, issue.version)}
                         >
                           {action.replaceAll("_", " ")}
@@ -154,6 +174,12 @@ export default function IssuesPage() {
               </TableBody>
             </Table>
           )}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={page.nextCursor}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </ListPageSection>
       ) : null}
     </div>

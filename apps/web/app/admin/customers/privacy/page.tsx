@@ -16,6 +16,11 @@ import {
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { CUSTOMER_SUB_NAVIGATION } from "../../../../components/admin/admin-navigation";
+import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -55,12 +60,16 @@ export default function PrivacyQueuePage() {
   const [statusFilter, setStatusFilter] = useState<string>("SUBMITTED");
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const commandIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
 
-  const load = useCallback((status: string) => {
+  const load = useCallback((status: string, cursor: string | null) => {
     setState({ phase: "loading" });
     void (async () => {
       try {
-        const response = await fetch(`/api/admin/privacy-requests?status=${status}&limit=50`);
+        const response = await fetch(
+          `/api/admin/privacy-requests?status=${status}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        );
         const payload = (await response.json()) as RpcResult<PrivacyRequestPage>;
         if (!payload.ok) {
           setState({
@@ -84,26 +93,26 @@ export default function PrivacyQueuePage() {
     })();
   }, []);
 
-  useEffect(() => load(statusFilter), [load, statusFilter]);
+  useEffect(() => load(statusFilter, pagination.cursor), [load, pagination.cursor, statusFilter]);
 
   async function apply(requestId: string, action: string, version: number) {
     if (reason.trim() === "") {
       setNotice("A reason is required for every action.");
       return;
     }
-    const response = await fetch(
-      `/api/admin/privacy-requests/${encodeURIComponent(requestId)}/actions`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ action, reason: reason.trim(), expectedVersion: version }),
-      },
-    );
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
+    const payload = await commandIntent.submit(async (idempotencyKey) => {
+      const response = await fetch(
+        `/api/admin/privacy-requests/${encodeURIComponent(requestId)}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({ action, reason: reason.trim(), expectedVersion: version }),
+        },
+      );
+      return (await response.json()) as RpcResult<unknown>;
+    });
     setNotice(payload.ok ? `Applied ${action}.` : (payload.error?.message ?? "The action failed."));
-    if (payload.ok) load(statusFilter);
+    if (payload.ok) load(statusFilter, pagination.cursor);
   }
 
   return (
@@ -171,7 +180,10 @@ export default function PrivacyQueuePage() {
                   key={status}
                   size="sm"
                   variant={statusFilter === status ? "default" : "outline"}
-                  onClick={() => setStatusFilter(status)}
+                  onClick={() => {
+                    setStatusFilter(status);
+                    pagination.reset();
+                  }}
                 >
                   {status}
                 </Button>
@@ -238,6 +250,7 @@ export default function PrivacyQueuePage() {
                               key={action}
                               size="sm"
                               variant="outline"
+                              disabled={commandIntent.pending}
                               onClick={() =>
                                 void apply(request.privacyRequestId, action, request.version)
                               }
@@ -255,6 +268,12 @@ export default function PrivacyQueuePage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={state.page.nextCursor}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         </>
       ) : null}

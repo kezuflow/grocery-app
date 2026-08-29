@@ -15,53 +15,71 @@ import {
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 export default function DeliveryPage() {
   const { locationId, label } = useAdminLocation();
   const [data, setData] = useState<DeliveryOperationsSummary | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  const [pending, setPending] = useState(false);
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const payload = (await (
-        await fetch(`/api/admin/delivery?locationId=${locationId ?? ""}&limit=50`)
-      ).json()) as RpcResult<DeliveryOperationsSummary>;
-      if (!payload.ok) {
-        setNotice(
-          payload.error.code === "FORBIDDEN"
-            ? "Delivery access is not permitted for this scope."
-            : payload.error.message,
-        );
+  const actionIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const load = useCallback(
+    async (cursor: string | null) => {
+      setState("loading");
+      try {
+        const payload = (await (
+          await fetch(
+            `/api/admin/delivery?locationId=${locationId ?? ""}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+          )
+        ).json()) as RpcResult<DeliveryOperationsSummary>;
+        if (!payload.ok) {
+          setNotice(
+            payload.error.code === "FORBIDDEN"
+              ? "Delivery access is not permitted for this scope."
+              : payload.error.message,
+          );
+          setState("error");
+          return;
+        }
+        setData(payload.value);
+        setState("ready");
+      } catch {
+        setNotice("Network error loading delivery operations.");
         setState("error");
-        return;
       }
-      setData(payload.value);
-      setState("ready");
-    } catch {
-      setNotice("Network error loading delivery operations.");
-      setState("error");
-    }
-  }, [locationId]);
+    },
+    [locationId],
+  );
   useEffect(() => {
-    if (locationId) void load();
-  }, [load]);
+    if (locationId) void load(pagination.cursor);
+  }, [load, locationId, pagination.cursor]);
   async function act(orderId: string, action: string, expectedVersion: number) {
-    if (!locationId || pending) return;
-    setPending(true);
-    const response = await fetch("/api/admin/delivery", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        locationId,
-        orderId,
-        action,
-        expectedVersion,
-        reason: reason.trim() || undefined,
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown>;
+    if (!locationId || actionIntent.pending) return;
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await actionIntent.submit(async (idempotencyKey) => {
+        const response = await fetch("/api/admin/delivery", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({
+            locationId,
+            orderId,
+            action,
+            expectedVersion,
+            reason: reason.trim() || undefined,
+          }),
+        });
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry the same action to safely reuse its request key.");
+      return;
+    }
     setNotice(
       payload.ok ? `Delivery action ${action.toLowerCase()} completed.` : payload.error.message,
     );
@@ -69,8 +87,7 @@ export default function DeliveryPage() {
       payload.ok ||
       (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
     )
-      void load();
-    setPending(false);
+      void load(pagination.cursor);
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
@@ -89,7 +106,12 @@ export default function DeliveryPage() {
           <AlertTitle>Delivery could not be loaded</AlertTitle>
           <AlertDescription>
             {notice}
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(pagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -144,7 +166,7 @@ export default function DeliveryPage() {
                             key={action}
                             size="sm"
                             variant={action === "MARK_DELIVERED" ? "default" : "outline"}
-                            disabled={pending}
+                            disabled={actionIntent.pending}
                             onClick={() => void act(item.orderId, action, item.version)}
                           >
                             {action}
@@ -157,6 +179,12 @@ export default function DeliveryPage() {
               </Table>
             </div>
           )}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={data.nextCursor}
+            onPrevious={pagination.previous}
+            onNext={pagination.next}
+          />
         </ListPageSection>
       ) : null}
     </div>

@@ -14,6 +14,12 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminConfirmationDialog,
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<AdminPaymentPage | null>(null);
@@ -22,14 +28,22 @@ export default function PaymentsPage() {
   const [reason, setReason] = useState("");
   const [refundIntent, setRefundIntent] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
-  const [refundReason, setRefundReason] = useState("");
+  const [confirmingRefund, setConfirmingRefund] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => {
+  const paymentPagination = useAdminPagination();
+  const reconciliationPagination = useAdminPagination();
+  const resolveIntent = useAdminCommandIntent();
+  const refundCommand = useAdminCommandIntent();
+  const load = useCallback(async (paymentCursor: string | null, caseCursor: string | null) => {
     setState("loading");
     try {
       const [paymentsResponse, casesResponse] = await Promise.all([
-        fetch("/api/admin/payments?limit=50"),
-        fetch("/api/admin/payments/reconciliation?status=OPEN&limit=50"),
+        fetch(
+          `/api/admin/payments?limit=50${paymentCursor ? `&cursor=${encodeURIComponent(paymentCursor)}` : ""}`,
+        ),
+        fetch(
+          `/api/admin/payments/reconciliation?status=OPEN&limit=50${caseCursor ? `&cursor=${encodeURIComponent(caseCursor)}` : ""}`,
+        ),
       ]);
       const paymentPayload = (await paymentsResponse.json()) as RpcResult<AdminPaymentPage>;
       const casePayload = (await casesResponse.json()) as RpcResult<AdminReconciliationPage>;
@@ -52,55 +66,66 @@ export default function PaymentsPage() {
     }
   }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(paymentPagination.cursor, reconciliationPagination.cursor);
+  }, [load, paymentPagination.cursor, reconciliationPagination.cursor]);
   async function resolve(caseId: string) {
     if (!reason.trim()) {
       setNotice("A resolution reason is required.");
       return;
     }
-    const response = await fetch(
-      `/api/admin/payments/reconciliation/${encodeURIComponent(caseId)}/resolve`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ reason: reason.trim() }),
-      },
-    );
-    const payload = (await response.json()) as RpcResult<unknown>;
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await resolveIntent.submit(async (idempotencyKey) => {
+        const response = await fetch(
+          `/api/admin/payments/reconciliation/${encodeURIComponent(caseId)}/resolve`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+            body: JSON.stringify({ reason: reason.trim() }),
+          },
+        );
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry to safely reuse the reconciliation request.");
+      return;
+    }
     setNotice(payload.ok ? "Reconciliation case resolved." : payload.error.message);
     if (payload.ok) {
       setReason("");
-      await load();
+      await load(paymentPagination.cursor, reconciliationPagination.cursor);
     }
   }
-  async function requestRefund() {
+  async function requestRefund(confirmedReason: string) {
     const amountMinor = Math.round(Number(refundAmount) * 100);
-    if (
-      !refundIntent.trim() ||
-      !Number.isInteger(amountMinor) ||
-      amountMinor <= 0 ||
-      !refundReason.trim()
-    ) {
+    if (!refundIntent.trim() || !Number.isInteger(amountMinor) || amountMinor <= 0) {
       setNotice("Payment intent, positive amount, and refund reason are required.");
       return;
     }
-    const response = await fetch("/api/admin/payments/refunds", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        paymentIntentId: refundIntent.trim(),
-        amountMinor,
-        reason: refundReason.trim(),
-      }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown>;
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await refundCommand.submit(async (idempotencyKey) => {
+        const response = await fetch("/api/admin/payments/refunds", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({
+            paymentIntentId: refundIntent.trim(),
+            amountMinor,
+            reason: confirmedReason,
+          }),
+        });
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry confirmation to safely reuse the refund request.");
+      return;
+    }
     setNotice(payload.ok ? "Refund request recorded." : payload.error.message);
     if (payload.ok) {
       setRefundIntent("");
       setRefundAmount("");
-      setRefundReason("");
-      await load();
+      setConfirmingRefund(false);
+      await load(paymentPagination.cursor, reconciliationPagination.cursor);
     }
   }
   return (
@@ -121,7 +146,12 @@ export default function PaymentsPage() {
           <AlertDescription>
             {notice}
             <br />
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(paymentPagination.cursor, reconciliationPagination.cursor)}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -169,6 +199,12 @@ export default function PaymentsPage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={paymentPagination.pageNumber}
+              nextCursor={payments.nextCursor}
+              onPrevious={paymentPagination.previous}
+              onNext={paymentPagination.next}
+            />
           </ListPageSection>
           <ListPageSection
             title="Open reconciliation cases"
@@ -203,7 +239,11 @@ export default function PaymentsPage() {
                       </TableCell>
                       <TableCell className="text-xs">{item.createdAt.slice(0, 10)}</TableCell>
                       <TableCell>
-                        <Button size="sm" onClick={() => void resolve(item.caseId)}>
+                        <Button
+                          size="sm"
+                          disabled={resolveIntent.pending}
+                          onClick={() => void resolve(item.caseId)}
+                        >
                           Resolve
                         </Button>
                       </TableCell>
@@ -212,6 +252,12 @@ export default function PaymentsPage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={reconciliationPagination.pageNumber}
+              nextCursor={cases.nextCursor}
+              onPrevious={reconciliationPagination.previous}
+              onNext={reconciliationPagination.next}
+            />
           </ListPageSection>
           <ListPageSection
             title="Request a refund"
@@ -231,17 +277,34 @@ export default function PaymentsPage() {
                 value={refundAmount}
                 onChange={(event) => setRefundAmount(event.target.value)}
               />
-              <Input
-                aria-label="Refund reason"
-                placeholder="reason"
-                value={refundReason}
-                onChange={(event) => setRefundReason(event.target.value)}
-              />
             </div>
             <div className="px-4 pb-4">
-              <Button onClick={() => void requestRefund()}>Request refund</Button>
+              <Button
+                variant="destructive"
+                disabled={refundCommand.pending}
+                onClick={() => {
+                  const amountMinor = Math.round(Number(refundAmount) * 100);
+                  if (!refundIntent.trim() || !Number.isInteger(amountMinor) || amountMinor <= 0) {
+                    setNotice("Payment intent and a positive amount are required.");
+                    return;
+                  }
+                  setConfirmingRefund(true);
+                }}
+              >
+                Request refund
+              </Button>
             </div>
           </ListPageSection>
+          <AdminConfirmationDialog
+            open={confirmingRefund}
+            title="Confirm refund request"
+            resource={`${refundIntent || "Payment intent"} · PHP ${refundAmount || "0"}`}
+            scope="Core-authorized payment scope"
+            consequence="This creates a financial refund request; provider confirmation determines the canonical outcome."
+            pending={refundCommand.pending}
+            onCancel={() => setConfirmingRefund(false)}
+            onConfirm={(confirmedReason) => void requestRefund(confirmedReason)}
+          />
         </>
       ) : null}
     </div>

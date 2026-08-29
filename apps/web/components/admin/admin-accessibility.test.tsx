@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
+import { AdminConfirmationDialog, AdminCursorPagination } from "./admin-controls";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
 vi.mock("../../app/admin/admin-context-provider", () => ({
@@ -149,5 +150,34 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("Select scope");
     expect(markup).toContain("Location One");
     expect(markup).toContain("Location Two");
+  });
+
+  it("renders labelled cursor controls and requires a reason for destructive confirmation", () => {
+    const pagination = renderToStaticMarkup(
+      createElement(AdminCursorPagination, {
+        pageNumber: 2,
+        nextCursor: "next-page",
+        onPrevious: vi.fn(),
+        onNext: vi.fn(),
+      }),
+    );
+    const confirmation = renderToStaticMarkup(
+      createElement(AdminConfirmationDialog, {
+        open: true,
+        title: "Confirm inventory adjustment",
+        resource: "Tomatoes · -10 GRAM",
+        scope: "Cebu Central",
+        consequence: "This writes an immutable inventory ledger movement.",
+        onCancel: vi.fn(),
+        onConfirm: vi.fn(),
+      }),
+    );
+    expect(pagination).toContain('aria-label="Results pagination"');
+    expect(pagination).toContain("Page 2");
+    expect(confirmation).toContain('role="alertdialog"');
+    expect(confirmation).toContain('aria-label="Confirmation reason"');
+    expect(confirmation).toContain("disabled");
+    expect(confirmation).toContain("Tomatoes · -10 GRAM");
+    expect(confirmation).toContain("Cebu Central");
   });
 });

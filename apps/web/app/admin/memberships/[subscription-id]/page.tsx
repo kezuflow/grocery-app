@@ -7,6 +7,7 @@ import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
+import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 
 export default function MembershipDetailPage({
   params,
@@ -18,6 +19,7 @@ export default function MembershipDetailPage({
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const commandIntent = useAdminCommandIntent();
   async function load(subscriptionId: string) {
     setState("loading");
     try {
@@ -47,16 +49,18 @@ export default function MembershipDetailPage({
       setNotice("A reason is required.");
       return;
     }
-    const response = await fetch(`/api/admin/memberships/${encodeURIComponent(id)}/${action}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        reason: reason.trim(),
-        expectedVersion: membership.version,
-        ...(action === "cancel" ? { timing: "IMMEDIATE" } : {}),
-      }),
+    const payload = await commandIntent.submit(async (idempotencyKey) => {
+      const response = await fetch(`/api/admin/memberships/${encodeURIComponent(id)}/${action}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify({
+          reason: reason.trim(),
+          expectedVersion: membership.version,
+          ...(action === "cancel" ? { timing: "IMMEDIATE" } : {}),
+        }),
+      });
+      return (await response.json()) as RpcResult<AdminMembershipSummary>;
     });
-    const payload = (await response.json()) as RpcResult<AdminMembershipSummary>;
     setNotice(payload.ok ? `Membership ${action} submitted.` : payload.error.message);
     if (payload.ok) {
       setReason("");

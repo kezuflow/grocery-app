@@ -16,6 +16,11 @@ import {
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
 import { CUSTOMER_SUB_NAVIGATION } from "../../../components/admin/admin-navigation";
+import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import {
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 
 type LoadState =
   | { phase: "loading" }
@@ -27,43 +32,60 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<AdminCustomerPage | null>(null);
   const [invitations, setInvitations] = useState<CustomerInvitationPage | null>(null);
   const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const inviteIntent = useAdminCommandIntent();
+  const pagination = useAdminPagination();
+  const invitationPagination = useAdminPagination();
 
-  const load = useCallback((search: string) => {
-    setState({ phase: "loading" });
-    void (async () => {
-      try {
-        const params = new URLSearchParams({ limit: "50" });
-        if (search.trim() !== "") params.set("query", search.trim());
-        const [customerResponse, invitationResponse] = await Promise.all([
-          fetch(`/api/admin/customers?${params}`),
-          fetch("/api/admin/customers/invitations"),
-        ]);
-        const customerPayload = (await customerResponse.json()) as RpcResult<AdminCustomerPage>;
-        if (!customerPayload.ok) {
+  const load = useCallback(
+    (search: string, cursor: string | null, invitationCursor: string | null) => {
+      setState({ phase: "loading" });
+      void (async () => {
+        try {
+          const params = new URLSearchParams({ limit: "50" });
+          if (search.trim() !== "") params.set("query", search.trim());
+          if (cursor) params.set("cursor", cursor);
+          const [customerResponse, invitationResponse] = await Promise.all([
+            fetch(`/api/admin/customers?${params}`),
+            fetch(
+              `/api/admin/customers/invitations${invitationCursor ? `?cursor=${encodeURIComponent(invitationCursor)}` : ""}`,
+            ),
+          ]);
+          const customerPayload = (await customerResponse.json()) as RpcResult<AdminCustomerPage>;
+          if (!customerPayload.ok) {
+            setState({
+              phase: "error",
+              message:
+                customerPayload.error.code === "FORBIDDEN"
+                  ? "Customer administration requires the customers.read capability with a global scope."
+                  : customerPayload.error.message,
+              requestId: customerPayload.error.requestId,
+            });
+            return;
+          }
+          const invitationPayload =
+            (await invitationResponse.json()) as RpcResult<CustomerInvitationPage>;
+          setCustomers(customerPayload.value);
+          setInvitations(invitationPayload.ok ? invitationPayload.value : null);
+          setState({ phase: "ready" });
+        } catch {
           setState({
             phase: "error",
-            message:
-              customerPayload.error.code === "FORBIDDEN"
-                ? "Customer administration requires the customers.read capability with a global scope."
-                : customerPayload.error.message,
-            requestId: customerPayload.error.requestId,
+            message: "Network error loading customers.",
+            requestId: null,
           });
-          return;
         }
-        const invitationPayload =
-          (await invitationResponse.json()) as RpcResult<CustomerInvitationPage>;
-        setCustomers(customerPayload.value);
-        setInvitations(invitationPayload.ok ? invitationPayload.value : null);
-        setState({ phase: "ready" });
-      } catch {
-        setState({ phase: "error", message: "Network error loading customers.", requestId: null });
-      }
-    })();
-  }, []);
+      })();
+    },
+    [],
+  );
 
-  useEffect(() => load(""), [load]);
+  useEffect(
+    () => load(appliedQuery, pagination.cursor, invitationPagination.cursor),
+    [appliedQuery, invitationPagination.cursor, load, pagination.cursor],
+  );
 
   async function invite(event: React.FormEvent) {
     event.preventDefault();
@@ -71,20 +93,26 @@ export default function CustomersPage() {
       setNotice("An email is required.");
       return;
     }
-    const response = await fetch("/api/admin/customers/invitations", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({ email: inviteEmail.trim() }),
-    });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
+    let payload: RpcResult<unknown>;
+    try {
+      payload = await inviteIntent.submit(async (idempotencyKey) => {
+        const response = await fetch("/api/admin/customers/invitations", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body: JSON.stringify({ email: inviteEmail.trim() }),
+        });
+        return (await response.json()) as RpcResult<unknown>;
+      });
+    } catch {
+      setNotice("Connection lost. Retry to safely reuse the same invitation request.");
+      return;
+    }
     setNotice(
       payload.ok ? "Invitation created." : (payload.error?.message ?? "The invitation failed."),
     );
     if (payload.ok) {
       setInviteEmail("");
-      load(query);
+      load(appliedQuery, pagination.cursor, invitationPagination.cursor);
     }
   }
 
@@ -157,8 +185,8 @@ export default function CustomersPage() {
                 onChange={(event) => setInviteEmail(event.target.value)}
                 className="sm:w-72"
               />
-              <Button type="submit" size="sm">
-                Send invitation
+              <Button type="submit" size="sm" disabled={inviteIntent.pending}>
+                {inviteIntent.pending ? "Sending…" : "Send invitation"}
               </Button>
               {invitations && invitations.items.length > 0 ? (
                 <span className="text-xs text-[var(--fm-text-muted)]">
@@ -167,6 +195,12 @@ export default function CustomersPage() {
                 </span>
               ) : null}
             </form>
+            <AdminCursorPagination
+              pageNumber={invitationPagination.pageNumber}
+              nextCursor={invitations?.nextCursor ?? null}
+              onPrevious={invitationPagination.previous}
+              onNext={invitationPagination.next}
+            />
           </ListPageSection>
 
           <ListPageSection title="Customers">
@@ -174,7 +208,8 @@ export default function CustomersPage() {
               className="flex gap-2 p-4 sm:items-center"
               onSubmit={(event) => {
                 event.preventDefault();
-                load(query);
+                setAppliedQuery(query.trim());
+                pagination.reset();
               }}
             >
               <Input
@@ -194,7 +229,8 @@ export default function CustomersPage() {
                   variant="outline"
                   onClick={() => {
                     setQuery("");
-                    load("");
+                    setAppliedQuery("");
+                    pagination.reset();
                   }}
                 >
                   Clear
@@ -244,6 +280,12 @@ export default function CustomersPage() {
                 </TableBody>
               </Table>
             )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={customers?.nextCursor ?? null}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         </>
       ) : null}
