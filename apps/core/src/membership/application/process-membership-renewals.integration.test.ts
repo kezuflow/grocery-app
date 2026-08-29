@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { processMembershipRenewals } from "./process-membership-renewals";
+import { processMembershipRenewals as processMembershipRenewalsCommand } from "./process-membership-renewals";
 import { startPromotionalTrial } from "./start-promotional-trial";
 import { getSubscriptionEligibility } from "./subscription-eligibility";
 import { addCalendarDays } from "../domain/billing-calendar";
@@ -51,6 +51,12 @@ function testRegistry(): ProviderRegistry {
   return new ProviderRegistry("test", [createMockPaymentProvider()]);
 }
 
+function processMembershipRenewals(database: D1Database, registry: ProviderRegistry, now: number) {
+  return processMembershipRenewalsCommand(database, registry, now, {
+    initiationEnabled: true,
+  });
+}
+
 function eligibilityQuery(customerIdOfRow: { customer_id: string }) {
   return {
     customerId: customerIdOfRow.customer_id,
@@ -84,6 +90,20 @@ async function renewalIntents(subscriptionId: string) {
 }
 
 describe("membership renewal processing", () => {
+  it("does not initiate a charge when ownership is disabled", async () => {
+    const subscriptionId = await seededTrial({ trialEnded: true });
+    const outcome = await processMembershipRenewalsCommand(env.DB, testRegistry(), Date.now(), {
+      initiationEnabled: false,
+    });
+    expect(outcome).toMatchObject({ initiated: 0, initiationSkipped: true });
+    expect(await renewalIntents(subscriptionId)).toHaveLength(0);
+    // Keep the shared Worker test database isolated from later renewal sweeps.
+    await env.DB.prepare(
+      "UPDATE subscription SET trial_ends_at=?, current_period_ends_at=? WHERE id=?",
+    )
+      .bind(Date.now() + DAY, Date.now() + DAY, subscriptionId)
+      .run();
+  });
   it("initiates the first renewal charge once at the trial boundary", async () => {
     const subscriptionId = await seededTrial({ trialEnded: true });
     const now = Date.now();

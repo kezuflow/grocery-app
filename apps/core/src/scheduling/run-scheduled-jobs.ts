@@ -1,8 +1,9 @@
 import { log } from "../observability";
+import { buildProviderRegistry } from "../payments/infrastructure/providers/runtime-providers";
 import {
-  buildProviderRegistry,
-  type RuntimePaymentsEnvironment,
-} from "../payments/infrastructure/providers/runtime-providers";
+  coreRuntimeConfiguration,
+  type CoreRuntimeEnvironment,
+} from "../runtime/runtime-configuration";
 import type { ProviderRegistry } from "../payments/infrastructure/providers/provider-registry";
 import { getJobsForCron } from "./job-registry";
 import type { ScheduledJob, ScheduledJobOutcome } from "./types";
@@ -57,13 +58,17 @@ export async function runRegisteredJobs(
   cronExpression: string,
   now: number,
   jobs: readonly ScheduledJob[] = getJobsForCron(cronExpression),
-  registry: ProviderRegistry = buildProviderRegistry({}),
+  registry: ProviderRegistry = buildProviderRegistry({
+    ENVIRONMENT: "development",
+    PAYMENT_PROVIDER: "disabled",
+  }),
+  renewalInitiationEnabled = false,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
     let outcome: ScheduledJobOutcome;
     try {
-      outcome = await job.run({ database, now, registry });
+      outcome = await job.run({ database, now, registry, renewalInitiationEnabled });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
     }
@@ -75,9 +80,17 @@ export async function runRegisteredJobs(
 
 /** Entrypoint-facing wrapper resolving the registry for a fired cron expression. */
 export async function runScheduledJobs(
-  env: RuntimePaymentsEnvironment & { DB: D1Database },
+  env: CoreRuntimeEnvironment & { DB: D1Database },
   cronExpression: string,
   now: number,
 ): Promise<ScheduledJobOutcome[]> {
-  return runRegisteredJobs(env.DB, cronExpression, now, undefined, buildProviderRegistry(env));
+  const runtime = coreRuntimeConfiguration(env);
+  return runRegisteredJobs(
+    env.DB,
+    cronExpression,
+    now,
+    undefined,
+    buildProviderRegistry(runtime),
+    runtime.renewals.initiationEnabled,
+  );
 }

@@ -26,6 +26,9 @@
     // Deterministic mock payments are local-only. Production must not inherit
     // this variable and fails closed until an approved provider exists.
     "PAYMENT_PROVIDER": "mock",
+    // Renewal initiation has a single explicit owner and stays fail-closed
+    // until a production payment provider and deployment rollout are approved.
+    "MEMBERSHIP_RENEWAL_INITIATION_ENABLED": "false",
     "ROUTE_DISTANCE_PROVIDER": "mapbox",
   },
   "secrets": {

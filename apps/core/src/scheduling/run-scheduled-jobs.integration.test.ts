@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { startPromotionalTrial } from "../membership/application/start-promotional-trial";
 import { SCHEDULED_CRON_EXPRESSIONS, getJobsForCron } from "./job-registry";
 import { runRegisteredJobs, runScheduledJobs } from "./run-scheduled-jobs";
+import { providerActionExpiryJob } from "./jobs/provider-action-expiry";
 import type { ScheduledJob, ScheduledJobOutcome } from "./types";
 
 const NOW = 1_700_000_000_000;
@@ -89,9 +90,11 @@ describe("scheduled job registry", () => {
     const everyMinute = getJobsForCron("* * * * *").map((job) => job.name);
     expect(everyMinute).toContain("checkout.hold-expiry");
     expect(everyMinute).toContain("membership.scheduled-cancellations");
+    expect(everyMinute).toContain("payments.provider-action-expiry");
     expect(everyMinute).toContain("commerce.cycle-cutoff");
     const quarterHour = getJobsForCron("*/15 * * * *").map((job) => job.name);
     expect(quarterHour).toContain("commerce.cycle-closeout");
+    expect(quarterHour).toContain("payments.provider-inbox-redrive");
   });
 
   it("returns no jobs and records nothing for an unregistered cron expression", async () => {
@@ -175,5 +178,72 @@ describe("runRegisteredJobs", () => {
         offset,
       );
     expect(appliedByMembershipJob(first, 0) + appliedByMembershipJob(second, 0)).toBe(1);
+  });
+
+  it("expires due provider actions through the scheduler and leaves future actions active", async () => {
+    const customerId = `cust-action-expiry-${crypto.randomUUID()}`;
+    const authorizationId = `authz-action-expiry-${crypto.randomUUID()}`;
+    const futureAuthorizationId = `authz-future-action-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+      ).bind(customerId, `auth-${customerId}`, NOW, NOW),
+      env.DB.prepare(
+        "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+      ).bind(
+        authorizationId,
+        customerId,
+        `mock-auth-${customerId}`,
+        `mock-method-${customerId}`,
+        NOW,
+        NOW,
+        NOW,
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
+      ).bind(
+        futureAuthorizationId,
+        customerId,
+        `mock-auth-${futureAuthorizationId}`,
+        `mock-method-${futureAuthorizationId}`,
+        NOW,
+        NOW,
+        NOW,
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_provider_action (id, payment_intent_id, authorization_id, provider, provider_reference, action_type, redirect_url, client_token, expires_at, status, created_at, updated_at) VALUES (?, NULL, ?, 'mock', ?, 'REDIRECT', ?, NULL, ?, 'ACTIVE', ?, ?)",
+      ).bind(
+        `expired-action-${customerId}`,
+        authorizationId,
+        `expired-reference-${customerId}`,
+        "https://pay.example/expired",
+        NOW - 1,
+        NOW - 10_000,
+        NOW - 10_000,
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_provider_action (id, payment_intent_id, authorization_id, provider, provider_reference, action_type, redirect_url, client_token, expires_at, status, created_at, updated_at) VALUES (?, NULL, ?, 'mock', ?, 'REDIRECT', ?, NULL, ?, 'ACTIVE', ?, ?)",
+      ).bind(
+        `future-action-${customerId}`,
+        futureAuthorizationId,
+        `future-reference-${customerId}`,
+        "https://pay.example/future",
+        NOW + 60_000,
+        NOW,
+        NOW,
+      ),
+    ]);
+
+    const [outcome] = await runRegisteredJobs(env.DB, "* * * * *", NOW, [providerActionExpiryJob]);
+    expect(outcome).toMatchObject({ status: "SUCCEEDED", affected: 1 });
+    const actions = await env.DB.prepare(
+      "SELECT provider_reference, status FROM payment_provider_action WHERE authorization_id IN (?, ?) ORDER BY provider_reference",
+    )
+      .bind(authorizationId, futureAuthorizationId)
+      .all<{ provider_reference: string; status: string }>();
+    expect(actions.results).toEqual([
+      { provider_reference: `expired-reference-${customerId}`, status: "EXPIRED" },
+      { provider_reference: `future-reference-${customerId}`, status: "ACTIVE" },
+    ]);
   });
 });

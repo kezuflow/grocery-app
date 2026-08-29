@@ -13,6 +13,7 @@ export const membershipRenewalsJob: ScheduledJob = {
       context.database,
       context.registry,
       context.now,
+      { initiationEnabled: context.renewalInitiationEnabled },
     );
     const affected = outcome.initiated + outcome.failureOutcomesApplied + outcome.graceExpired;
     if (outcome.initiationFailures > 0) {
@@ -23,6 +24,13 @@ export const membershipRenewalsJob: ScheduledJob = {
         detail: `${outcome.initiated} initiated, ${outcome.initiationFailures} initiation failures, ${outcome.failureOutcomesApplied} failure outcomes applied, ${outcome.graceExpired} grace expiries`,
       };
     }
+    if (outcome.initiationSkipped && affected === 0)
+      return {
+        status: "SKIPPED",
+        affected: 0,
+        errorCode: "RENEWAL_INITIATION_DISABLED",
+        detail: "Renewal initiation ownership is disabled; reconciliation found no due effects",
+      };
     return {
       status: "SUCCEEDED",
       affected,

@@ -1,9 +1,4 @@
-export type RuntimeEnvironment =
-  | "development"
-  | "test"
-  | "preview"
-  | "staging"
-  | "production";
+export type RuntimeEnvironment = "development" | "test" | "preview" | "staging" | "production";
 
 export type CoreRuntimeEnvironment = {
   ENVIRONMENT?: string;
@@ -13,6 +8,7 @@ export type CoreRuntimeEnvironment = {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   PAYMENT_PROVIDER?: string;
+  MEMBERSHIP_RENEWAL_INITIATION_ENABLED?: string;
 };
 
 export type CoreRuntimeConfiguration = {
@@ -27,6 +23,9 @@ export type CoreRuntimeConfiguration = {
   };
   payments: {
     providerCode: "mock" | null;
+  };
+  renewals: {
+    initiationEnabled: boolean;
   };
   readiness: {
     auth: boolean;
@@ -104,16 +103,11 @@ export function parseCoreRuntimeConfiguration(
     environment === "preview" || environment === "staging" || environment === "production";
 
   if (deployed && !env.BETTER_AUTH_SECRET) throw new Error("BETTER_AUTH_SECRET_REQUIRED");
-  if (deployed && env.BETTER_AUTH_SECRET!.length < 32)
-    throw new Error("BETTER_AUTH_SECRET_WEAK");
+  if (deployed && env.BETTER_AUTH_SECRET!.length < 32) throw new Error("BETTER_AUTH_SECRET_WEAK");
   const secret = env.BETTER_AUTH_SECRET || localSecret;
 
   if (deployed && !env.BETTER_AUTH_URL) throw new Error("BETTER_AUTH_URL_REQUIRED");
-  const baseUrl = origin(
-    env.BETTER_AUTH_URL || localOrigins[0],
-    "BETTER_AUTH_URL",
-    deployed,
-  );
+  const baseUrl = origin(env.BETTER_AUTH_URL || localOrigins[0], "BETTER_AUTH_URL", deployed);
   const configuredOrigins = trustedOrigins(env.TRUSTED_ORIGINS, deployed);
   const authOrigins = [baseUrl, ...configuredOrigins].filter(
     (candidate, index, all) => all.indexOf(candidate) === index,
@@ -137,6 +131,16 @@ export function parseCoreRuntimeConfiguration(
     throw new Error("PAYMENT_PROVIDER_INVALID");
   }
 
+  if (
+    env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED !== undefined &&
+    env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED !== "true" &&
+    env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED !== "false"
+  )
+    throw new Error("MEMBERSHIP_RENEWAL_INITIATION_ENABLED_INVALID");
+  const renewalInitiationEnabled = env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED === "true";
+  if (renewalInitiationEnabled && providerCode === null)
+    throw new Error("MEMBERSHIP_RENEWAL_INITIATION_REQUIRES_PAYMENT_PROVIDER");
+
   return {
     environment,
     deployed,
@@ -148,6 +152,7 @@ export function parseCoreRuntimeConfiguration(
       google,
     },
     payments: { providerCode },
+    renewals: { initiationEnabled: renewalInitiationEnabled },
     readiness: {
       auth: true,
       googleOauth: google !== null,

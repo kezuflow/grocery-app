@@ -237,7 +237,7 @@ Workflows are deferred. They may later orchestrate genuinely long-running procur
 
 ### Cron Triggers
 
-Cloudflare Cron Triggers are the approved time-driven execution mechanism. They own no domain state and contain no business rules: a scheduled handler dispatches through an explicit job registry to existing idempotent Core commands such as checkout/hold expiration, subscription renewal orchestration where application-owned, scheduled-cancellation application, dunning/grace processing, provider reconciliation/redrive, delivery-cycle cutoff and advancement/closeout, and reminder scheduling. Every invoked command keeps its normal authorization, idempotency, expected-version, and concurrency semantics.
+Cloudflare Cron Triggers are the approved time-driven execution mechanism. They own no domain state and contain no business rules: a scheduled handler dispatches through an explicit job registry to existing idempotent Core commands such as checkout/hold expiration, subscription renewal orchestration where application-owned, scheduled-cancellation application, dunning/grace processing, provider-inbox/reconciliation redrive, provider-action expiry, delivery-cycle cutoff and advancement/closeout, and reminder scheduling. Every invoked command keeps its normal authorization, idempotency, expected-version, and concurrency semantics. Provider-inbox redrive uses the same conditional lease and normalized-observation application path as webhook delivery. Renewal initiation is controlled by one fail-closed runtime ownership gate; disabling initiation never disables application of confirmed outcomes or grace-window expiry.
 
 ## vinext Compatibility Policy
 

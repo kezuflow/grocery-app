@@ -31,6 +31,7 @@ function dueBoundary(row: DueRenewalRow): number | null {
 export type RenewalStepOutcome = {
   initiated: number;
   initiationFailures: number;
+  initiationSkipped: boolean;
   failureOutcomesApplied: number;
   graceExpired: number;
 };
@@ -39,12 +40,20 @@ export async function processMembershipRenewals(
   database: D1Database,
   registry: ProviderRegistry,
   now: number,
+  options: { initiationEnabled: boolean },
   limit = 25,
 ): Promise<RenewalStepOutcome> {
-  const initiation = await initiateDueMembershipRenewals(database, registry, now, limit);
+  const initiation = options.initiationEnabled
+    ? await initiateDueMembershipRenewals(database, registry, now, limit)
+    : { initiated: 0, initiationFailures: 0 };
   const failureOutcomesApplied = await applyConfirmedRenewalFailures(database, now, limit);
   const graceExpired = await expireExhaustedGrace(database, now, limit);
-  return { ...initiation, failureOutcomesApplied, graceExpired };
+  return {
+    ...initiation,
+    initiationSkipped: !options.initiationEnabled,
+    failureOutcomesApplied,
+    graceExpired,
+  };
 }
 
 async function initiateDueMembershipRenewals(

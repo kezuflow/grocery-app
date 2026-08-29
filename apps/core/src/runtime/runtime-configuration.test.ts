@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  parseCoreRuntimeConfiguration,
-  parseRuntimeEnvironment,
-} from "./runtime-configuration";
+import { parseCoreRuntimeConfiguration, parseRuntimeEnvironment } from "./runtime-configuration";
 
 const strongSecret = "a-runtime-secret-with-at-least-32-characters";
 
@@ -112,5 +109,24 @@ describe("parseCoreRuntimeConfiguration", () => {
     });
     expect(config.readiness).toEqual({ auth: true, googleOauth: false, payments: false });
     expect(JSON.stringify(config.readiness)).not.toContain(strongSecret);
+  });
+
+  it("defaults renewal initiation off and requires an explicit configured owner", () => {
+    expect(
+      parseCoreRuntimeConfiguration({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }).renewals,
+    ).toEqual({ initiationEnabled: false });
+    expect(
+      parseCoreRuntimeConfiguration({
+        ENVIRONMENT: "test",
+        PAYMENT_PROVIDER: "mock",
+        MEMBERSHIP_RENEWAL_INITIATION_ENABLED: "true",
+      }).renewals,
+    ).toEqual({ initiationEnabled: true });
+    expect(() =>
+      parseCoreRuntimeConfiguration({
+        ENVIRONMENT: "test",
+        MEMBERSHIP_RENEWAL_INITIATION_ENABLED: "true",
+      }),
+    ).toThrow("MEMBERSHIP_RENEWAL_INITIATION_REQUIRES_PAYMENT_PROVIDER");
   });
 });
