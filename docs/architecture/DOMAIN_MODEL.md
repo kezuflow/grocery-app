@@ -291,8 +291,31 @@ The location-scoped process that turns a committed order into picked, packed, re
 ### DeliveryJob, DeliveryBatch, and DeliveryStop
 
 - `DeliveryJob` represents the delivery work created for an order.
-- `DeliveryStop` snapshots the destination, contact, instructions, sequence, events, and result.
-- `DeliveryBatch` groups jobs/stops for dispatch and rider assignment.
+- `DeliveryStop` snapshots the destination, coordinate, contact, instructions,
+  manual sequence, events, and result.
+- `DeliveryBatch` groups jobs/stops for dispatch and rider assignment. One batch
+  belongs to one fulfillment location and one compatible fulfillment-mode/cycle
+  context; `INSTANT` batches have no fabricated cycle.
+
+The Admin delivery map is a Delivery-owned, location-scoped read projection. It
+shows all open jobs in the selected mode/cycle context, including already
+assigned jobs, while Core derives which jobs are selectable and why. Protected
+recipient/contact/instruction detail is a separate authorized projection. Raw
+Order/address/contact/instruction snapshots, serviceability polygons,
+fulfillment-ranking rules, provider responses, and Better Auth rows are never
+map DTOs.
+
+Dispatch manually orders one to 24 selectable jobs. Route preview starts at the
+authoritative fulfillment location, loads immutable stop coordinates inside
+Core, follows the submitted order without optimization, and is informational:
+preview failure does not block assignment and preview success does not authorize
+it. The reviewed `CreateAndAssignDeliveryBatch` command takes canonical Rider and
+job identities plus expected job versions and one stable idempotency key. Core
+atomically validates location/mode/cycle compatibility, active Rider and scope,
+coordinates, legal states, versions, and conflicting assignments; it then
+creates the batch/stops/events, advances the legal batch and job transitions,
+and assigns the Rider. Any failed guard leaves no batch, stop, event, Rider, or
+job mutation.
 
 Route execution is not encoded by mutating raw order rows. Delivery events advance the delivery state machine and may cause order projections to change.
 
@@ -311,6 +334,12 @@ Promotion administration manages draft creation, versioned definition changes, a
 `AdminCustomerSummary` composes the Customer-owned profile fields permitted for staff with location, committed-order count, last order, lifetime spend, average order value, Membership/trial state, and creation date. `AdminCustomerDetail` may compose addresses, Orders, Membership, Promotion grants/redemptions, Payments summaries, delivery history, support-visible events, and audit history. These are read models over their authoritative contexts; Admin and Analytics never become Customer owners, and Better Auth rows are never used as the Customer database.
 
 Operational read models answer immediate-action questions such as orders waiting/picking/packing/out for delivery, late orders, failed payments, refund attention, shortages, receiving exceptions, rider assignments, and fulfillment exceptions. They expose legal `allowedActions` derived in Core, not arbitrary status setters.
+
+The map dispatch workspace follows the same ownership rule: `delivery.read` plus
+location scope controls map/detail access, while the atomic create-and-assign
+command requires `delivery.manage` plus location scope. Rider candidates are
+canonical active Rider records with Core-derived open workload, never Better
+Auth user identities supplied by Web.
 
 ### Analytics and MetricDefinition
 

@@ -213,11 +213,21 @@ Indexes: run/cycle/location/status, requirements/status, POs/supplier/status, re
 - `fulfillment_task_lines(id PK, task_id FK, order_item_id FK, required_base, picked_base, packed_base, status, version)`
 - `delivery_batches(id PK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, rider_id FK NULL, status, version, created_at, dispatched_at NULL, completed_at NULL)`
 - `delivery_jobs(id PK, order_id FK UNIQUE, batch_id FK NULL, fulfillment_mode INSTANT|SCHEDULED, promised_at NULL, delivery_window_snapshot_json NULL, status, sequence NULL, version, created_at, updated_at)`
-- `delivery_stops(id PK, delivery_job_id FK UNIQUE, address_snapshot_json, contact_snapshot_json, instructions_snapshot, status, arrived_at NULL, delivered_at NULL, failure_reason_code NULL, failure_notes NULL, version)`
+- `delivery_stops(id PK, delivery_job_id FK UNIQUE, delivery_batch_id FK NULL, sequence NULL, latitude, longitude, address_snapshot_json, contact_snapshot_json, instructions_snapshot, status, arrived_at NULL, delivered_at NULL, failure_reason_code NULL, failure_notes NULL, version, created_at, updated_at)`
 - `delivery_events(id PK, delivery_job_id FK, stop_id FK NULL, event_type, rider_id FK NULL, occurred_at, recorded_at, metadata_json, idempotency_key UNIQUE NULL)`
 - `delivery_proofs(id PK, delivery_stop_id FK, rider_id FK, delivered_at, r2_key NULL, recipient_name NULL, signature_r2_key NULL, metadata_json)`
 
 Indexes support cycle/location/status work queues, rider/current batches, and open delivery exceptions. Delivery status does not replace order/fulfillment state.
+
+Migration `0043_delivery_batches_and_map_stops.sql` is owned by the Delivery
+implementation phase and is not created by the contract phase. It must converge
+historical batches/stops onto the canonical rows above, permit null cycle only
+for `INSTANT`, materialize immutable stop coordinates and manual sequence, add
+canonical Rider/version/timestamp/event support, and backfill exactly one stop
+per legacy job. Any SQLite rebuild copies rows before replacement and preserves
+historical address/contact/instruction snapshots, proof JSON/files, events, and
+applied migration history. Active-context and Rider/open-batch indexes may be
+added, but neither a batch nor a Rider becomes the owner of Order state.
 
 ## Audit and Operational Reliability
 
@@ -265,5 +275,8 @@ Critical batches include:
 - conditional inventory balance plus ledger movement;
 - receiving acceptance plus inventory movement;
 - legal operational transition plus audit event.
+- atomic delivery batch creation, ordered stop materialization, legal batch/job
+  assignment transitions, canonical Rider assignment, delivery events, Audit,
+  and idempotency completion.
 
 Use conditional updates against expected state/version and verify affected-row counts for client/application/admin lifecycle commands. Duplicate idempotency keys with different request hashes are conflicts; identical replay returns the original result. Provider events use durable `(provider, provider_event_id)` deduplication and handler-side conditional updates; concurrent aggregate changes cause safe retry/reconciliation, never an invented webhook version.

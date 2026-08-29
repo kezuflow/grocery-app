@@ -18,6 +18,7 @@ export type * from "./payments";
 export type * from "./checkout";
 export type * from "./orders";
 export type * from "./operations";
+export type * from "./delivery-maps";
 
 import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult } from "./common";
 import type { Capability } from "./admin-foundation";

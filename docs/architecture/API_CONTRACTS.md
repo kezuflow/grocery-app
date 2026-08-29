@@ -416,13 +416,46 @@ Every command validates location scope and legal transition.
 
 - `admin.delivery.getOperationsSummary({ fulfillmentMode?, cycleId?, locationId? }) -> DeliveryOperationsSummary`
 - `admin.delivery.listExceptions(filters, page) -> DeliveryExceptionQueue`
-- `admin.delivery.createBatch({ cycleId, zoneId, locationId, jobIds, idempotencyKey }) -> DeliveryBatchView`
-- `admin.delivery.assignRider({ batchId, riderId, expectedVersion, idempotencyKey }) -> DeliveryBatchView`
+- `getDeliveryMap({ headers, requestId, locationId, fulfillmentMode, cycleId, statuses?, riderId? }) -> DeliveryMapView`
+- `getDeliveryMapDetail({ headers, requestId, locationId, fulfillmentMode, cycleId, jobId, expectedVersion }) -> DeliveryMapDetail`
+- `getEligibleRiders({ headers, requestId, locationId, fulfillmentMode, cycleId }) -> EligibleRiderView[]`
+- `previewDeliveryBatchRoute({ headers, requestId, locationId, fulfillmentMode, cycleId, orderedDeliveries }) -> BatchRoutePreview`
+- `createAndAssignDeliveryBatch({ headers, requestId, locationId, fulfillmentMode, cycleId, riderId, orderedDeliveries, idempotencyKey }) -> DeliveryBatchView`
 - `admin.delivery.reorderStops(...) -> DeliveryBatchView`
 - `admin.delivery.rescheduleJob(...) -> DeliveryJobView`
 - `admin.delivery.resolveFailure(...) -> DeliveryJobView`
 
-Cycle identity is required only for Scheduled operations. Instant delivery read models group by location/promise/deadline and rider assignment without inventing a cycle.
+`DeliveryMapPin` contains only job/order/batch identities, coordinate,
+fulfillment mode/cycle, status, purpose-built Rider display identity, aggregate
+version, and Core-derived `{ selectable, reason }`. `DeliveryMapView` is a
+bounded scoped pin collection. `DeliveryMapDetail` separately returns protected
+display address, recipient/contact, structured instructions, version, and
+Core-derived legal actions. `EligibleRiderView` contains canonical Rider
+identity plus open batch/delivery counts. None exposes raw snapshot JSON,
+polygon GeoJSON, provider data/tokens, Better Auth records, or ranking rules.
+
+Every `orderedDeliveries` entry is `{ jobId, expectedVersion }`; its array is the
+manual route order. Preview and assignment accept no origin or destination
+coordinates. `BatchRoutePreview` is a provider-neutral, non-authoritative
+GeoJSON LineString/meters/seconds/legs result with an explicit warning outcome;
+it never optimizes and warning results do not block assignment.
+
+`createAndAssignDeliveryBatch` accepts one to 24 unique jobs, one canonical
+Rider ID, and a caller-stable idempotency key. Core requires `delivery.manage`
+plus location scope and atomically validates common location/mode/cycle, legal
+job states, active Rider, coordinates, expected versions, and conflicting
+assignment before creating/readying/assigning the batch, stops, jobs, events,
+and audit. Identical replay returns the original result; a changed request hash
+returns `IDEMPOTENCY_CONFLICT`; a stale job returns `STALE_VERSION`; every
+failure leaves all selected jobs and batch records unchanged. Map/detail/rider
+reads require `delivery.read` plus location scope. Cycle identity is required
+for `SCHEDULED` and must be null for `INSTANT`.
+
+The superseded two-step `createBatch`/`assignRider` target is not a second
+dispatch authority. The currently implemented compatibility assignment by
+authentication user ID and raw-snapshot rider reads remain only until their
+callers migrate; the map workspace may not use them, and they must be removed
+with the compatibility surface.
 
 ## Rider Operations
 

@@ -184,6 +184,21 @@ IN_PROGRESS -> EXCEPTION -> IN_PROGRESS / COMPLETED
 
 Batch assignment requires rider capability and allowed scope. Reordering stops, changing riders, or moving jobs is an audited command with concurrency/version checks.
 
+`CreateAndAssignDeliveryBatch` is one reviewed, idempotent Delivery orchestration,
+not two client-visible commands. In one guarded transaction it creates a `DRAFT`
+batch, records the manually ordered stops, advances `DRAFT -> READY -> ASSIGNED`,
+and advances every selected job through its legal assignment transition. New
+jobs use `UNASSIGNED -> ASSIGNED`; retryable jobs must already have completed
+`FAILED -> RETRY_SCHEDULED` before `RETRY_SCHEDULED -> ASSIGNED`. All selected
+jobs must share the Core-resolved location and compatible mode/cycle context,
+have coordinates, match their expected versions, and be free of conflicting
+active assignment. A failed guard or concurrent compare-and-swap changes
+nothing. The intermediate batch states are recorded for audit but are not
+separate Web authorization points.
+
+Route preview causes no transition, never reorders stops, and neither authorizes
+nor blocks `CreateAndAssignDeliveryBatch`.
+
 ## Delivery Job / Stop
 
 ```text

@@ -23,6 +23,18 @@ import type { OperationsReadService, OperationsService } from "./operations";
 import type { PaymentsService } from "./payments";
 import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
 import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
+import type {
+  BatchRoutePreview,
+  CreateAndAssignDeliveryBatchRequest,
+  DeliveryBatchView,
+  DeliveryMapDetail,
+  DeliveryMapDetailRequest,
+  DeliveryMapRequest,
+  DeliveryMapView,
+  EligibleRiderView,
+  EligibleRidersRequest,
+  PreviewDeliveryBatchRouteRequest,
+} from "./delivery-maps";
 
 /**
  * The Core binding surface Core supplies today. The five operations commands
@@ -69,6 +81,22 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;
   /** Canonical payment intent creation for a quote (fail-closed without a provider). */
   createPaymentIntent(request: PaymentIntentCommandRequest): Promise<RpcResult<PaymentActionView>>;
+  /** Scoped open-delivery projection with Core-derived selectability. */
+  getDeliveryMap(request: DeliveryMapRequest): Promise<RpcResult<DeliveryMapView>>;
+  /** Protected delivery detail; raw snapshots never cross the binding. */
+  getDeliveryMapDetail(request: DeliveryMapDetailRequest): Promise<RpcResult<DeliveryMapDetail>>;
+  /** Canonical active rider candidates and current open workload. */
+  getEligibleRiders(
+    request: EligibleRidersRequest,
+  ): Promise<RpcResult<ReadonlyArray<EligibleRiderView>>>;
+  /** Non-authoritative preview of the submitted manual delivery order. */
+  previewDeliveryBatchRoute(
+    request: PreviewDeliveryBatchRouteRequest,
+  ): Promise<RpcResult<BatchRoutePreview>>;
+  /** Atomically creates one batch, its ordered stops, and the rider assignment. */
+  createAndAssignDeliveryBatch(
+    request: CreateAndAssignDeliveryBatchRequest,
+  ): Promise<RpcResult<DeliveryBatchView>>;
 }
 
 export type { AdminFoundationService } from "./admin-foundation";

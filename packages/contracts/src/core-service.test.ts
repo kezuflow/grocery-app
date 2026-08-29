@@ -24,6 +24,18 @@ import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
 import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
 import type { RpcResult } from "./common";
+import type {
+  BatchRoutePreview,
+  CreateAndAssignDeliveryBatchRequest,
+  DeliveryBatchView,
+  DeliveryMapDetail,
+  DeliveryMapDetailRequest,
+  DeliveryMapRequest,
+  DeliveryMapView,
+  EligibleRiderView,
+  EligibleRidersRequest,
+  PreviewDeliveryBatchRouteRequest,
+} from "./delivery-maps";
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
@@ -54,6 +66,46 @@ describe("domain-grouped core services", () => {
     >;
 
     void (true as AddressSearchSignature);
+    expect(true).toBe(true);
+  });
+
+  it("exposes the scoped dispatch map and atomic create-and-assign surface", () => {
+    type MapSignature = Expect<
+      Equal<
+        CoreServiceBinding["getDeliveryMap"],
+        (request: DeliveryMapRequest) => Promise<RpcResult<DeliveryMapView>>
+      >
+    >;
+    type DetailSignature = Expect<
+      Equal<
+        CoreServiceBinding["getDeliveryMapDetail"],
+        (request: DeliveryMapDetailRequest) => Promise<RpcResult<DeliveryMapDetail>>
+      >
+    >;
+    type RidersSignature = Expect<
+      Equal<
+        CoreServiceBinding["getEligibleRiders"],
+        (request: EligibleRidersRequest) => Promise<RpcResult<ReadonlyArray<EligibleRiderView>>>
+      >
+    >;
+    type PreviewSignature = Expect<
+      Equal<
+        CoreServiceBinding["previewDeliveryBatchRoute"],
+        (request: PreviewDeliveryBatchRouteRequest) => Promise<RpcResult<BatchRoutePreview>>
+      >
+    >;
+    type CreateSignature = Expect<
+      Equal<
+        CoreServiceBinding["createAndAssignDeliveryBatch"],
+        (request: CreateAndAssignDeliveryBatchRequest) => Promise<RpcResult<DeliveryBatchView>>
+      >
+    >;
+
+    void (true as MapSignature);
+    void (true as DetailSignature);
+    void (true as RidersSignature);
+    void (true as PreviewSignature);
+    void (true as CreateSignature);
     expect(true).toBe(true);
   });
 
