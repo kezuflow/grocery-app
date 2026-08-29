@@ -18,7 +18,11 @@ const quoteDependencies = {
 };
 
 let customerCounter = 0;
-async function seedBasket(options: { onHand: number; sourcing?: "STOCKED" | "MIXED" | "PLANNED" }) {
+async function seedBasket(options: {
+  onHand: number;
+  sourcing?: "STOCKED" | "MIXED" | "PLANNED";
+  quantity?: number;
+}) {
   const customerId = `cust-inst-${++customerCounter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
   await env.DB.prepare(
@@ -58,9 +62,9 @@ async function seedBasket(options: { onHand: number; sourcing?: "STOCKED" | "MIX
     .bind(cartId, customerId, LOCATION, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-red-onion-500g', 1)",
+    "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-red-onion-500g', ?)",
   )
-    .bind(cartId)
+    .bind(cartId, options.quantity ?? 5)
     .run();
   if (options.sourcing)
     await env.DB.prepare(
@@ -120,6 +124,34 @@ function command(customerId: string, cartId: string, addressId: string) {
 }
 
 describe("instant checkout quotes", () => {
+  it("rejects a basket below the market minimum before creating a quote or hold", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 100_000, quantity: 1 });
+
+    const result = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "MINIMUM_ORDER_NOT_MET" } });
+    const persisted = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
+    )
+      .bind(basket.cartId)
+      .first<{ count: number }>();
+    expect(persisted?.count).toBe(0);
+    const holds = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM checkout_inventory_holds WHERE checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?)",
+    )
+      .bind(basket.cartId)
+      .first<{ count: number }>();
+    expect(holds?.count).toBe(0);
+  });
+
   it("creates a no-cycle instant quote with fee, promise, and expiring holds", async () => {
     process.env;
     await seedBasket({ onHand: 100_000 });
@@ -192,7 +224,7 @@ describe("instant checkout quotes", () => {
     await env.DB.prepare(
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
-    const basket = await seedBasket({ onHand: 500 });
+    const basket = await seedBasket({ onHand: 2_500 });
     const first = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),

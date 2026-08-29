@@ -11,6 +11,7 @@ import {
 } from "./create-checkout-quote";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { deliveryFeeFailure } from "./delivery-fee-failure";
+import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 
 export type QuoteItem = {
   sku_id: string;
@@ -176,6 +177,48 @@ export async function createInstantQuote(
 
   const quoteId = crypto.randomUUID();
   const expiresAt = Date.now() + QUOTE_TTL_MS;
+  const financial = {
+    merchandiseSubtotalMinor: subtotalMinor,
+    itemDiscountMinor: 0,
+    orderDiscountMinor: 0,
+    deliverySubtotalMinor: deliveryFee.feeMinor,
+    deliveryDiscountMinor: 0,
+    serviceFeeMinor: 0,
+    taxMinor: 0,
+    totalMinor: subtotalMinor + deliveryFee.feeMinor,
+    currency: deliveryFee.snapshot.currency,
+  };
+  const decision = await resolveCheckoutDecision(database, {
+    marketId: routing.market_id,
+    financial,
+    evidence: {
+      lines,
+      addressSnapshot: address,
+      cycleSnapshot: {
+        zoneId: routing.zone_id,
+        locationId: routing.location_id,
+        locationName: routing.location_name,
+      },
+      fulfillmentSnapshot: {
+        fulfillmentMode: "INSTANT" as const,
+        promisedAt: new Date(now + routing.promise_minutes * 60_000).toISOString(),
+        sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
+        poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
+      },
+      deliveryFeeSnapshot: deliveryFee.snapshot,
+    },
+  });
+  if (!decision.eligible) {
+    const code = decision.failures[0] ?? "CONFIGURATION_ERROR";
+    return failure(
+      code,
+      code === "MINIMUM_ORDER_NOT_MET"
+        ? "Basket does not meet the market minimum"
+        : "Checkout market configuration is unavailable",
+      command.requestId,
+    );
+  }
+  const evidence = decision.evidence!;
   try {
     await database.batch([
       database
@@ -192,36 +235,17 @@ export async function createInstantQuote(
           addressId: command.addressId,
           deliveryCycleId: null,
           fulfillmentMode: "INSTANT",
-          currency: "PHP",
-          financial: {
-            merchandiseSubtotalMinor: subtotalMinor,
-            itemDiscountMinor: 0,
-            orderDiscountMinor: 0,
-            deliverySubtotalMinor: deliveryFee.feeMinor,
-            deliveryDiscountMinor: 0,
-            serviceFeeMinor: 0,
-            taxMinor: 0,
-            totalMinor: subtotalMinor + deliveryFee.feeMinor,
-            currency: "PHP",
-          },
+          currency: decision.currency,
+          financial,
           subtotalMinor,
           discountMinor: 0,
           deliveryFeeMinor: deliveryFee.feeMinor,
           totalMinor: subtotalMinor + deliveryFee.feeMinor,
-          lines,
-          addressSnapshot: address,
-          cycleSnapshot: {
-            zoneId: routing.zone_id,
-            locationId: routing.location_id,
-            locationName: routing.location_name,
-          },
-          fulfillmentSnapshot: {
-            fulfillmentMode: "INSTANT",
-            promisedAt: new Date(now + routing.promise_minutes * 60_000).toISOString(),
-            sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
-            poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
-          },
-          deliveryFeeSnapshot: deliveryFee.snapshot,
+          lines: evidence.lines,
+          addressSnapshot: evidence.addressSnapshot,
+          cycleSnapshot: evidence.cycleSnapshot,
+          fulfillmentSnapshot: evidence.fulfillmentSnapshot,
+          deliveryFeeSnapshot: evidence.deliveryFeeSnapshot,
           status: "ACTIVE",
           version: 1,
           expiresAt,

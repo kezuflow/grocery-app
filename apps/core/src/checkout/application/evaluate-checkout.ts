@@ -4,6 +4,7 @@ import { resolveServiceability } from "../../geography/serviceability";
 import { defaultCurrency } from "../../geography/market-defaults";
 import { checkoutEligibility } from "../../commerce/service";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
+import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 
 function failure(code: string, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -40,10 +41,13 @@ export async function evaluateCheckout(
       .bind(command.addressId, command.customerId)
       .first<{ latitude: number; longitude: number; delivery_zone_code: string | null }>(),
     database
-      .prepare("SELECT id, status, cutoff_at, capacity, allocated FROM delivery_cycle WHERE id=?")
+      .prepare(
+        "SELECT id, market_id, status, cutoff_at, capacity, allocated FROM delivery_cycle WHERE id=?",
+      )
       .bind(command.cycleId)
       .first<{
         id: string;
+        market_id: string;
         status: string;
         cutoff_at: number;
         capacity: number;
@@ -120,12 +124,30 @@ export async function evaluateCheckout(
   if (zoneCapacity?.remaining !== null && zoneCapacity?.remaining !== undefined) {
     if (zoneCapacity.remaining <= 0) failures.push("CYCLE_FULL");
   } else if (cycle && cycle.allocated >= cycle.capacity) failures.push("CYCLE_FULL");
-  if (!policy) failures.push("CONFIGURATION_ERROR");
   if (routing && !fee) failures.push("CONFIGURATION_ERROR");
-  if (policy && fee && policy.currency !== fee.currency) failures.push("CONFIGURATION_ERROR");
-  if (cart && policy && cart.total_minor < policy.minimum_basket_minor)
+  const financial = {
+    merchandiseSubtotalMinor: cart?.total_minor ?? 0,
+    itemDiscountMinor: 0,
+    orderDiscountMinor: 0,
+    deliverySubtotalMinor: fee?.fee_minor ?? 0,
+    deliveryDiscountMinor: 0,
+    serviceFeeMinor: 0,
+    taxMinor: 0,
+    totalMinor: (cart?.total_minor ?? 0) + (fee?.fee_minor ?? 0),
+    currency: fee?.currency ?? policy?.currency ?? "",
+  };
+  const decision = cycle
+    ? await resolveCheckoutDecision(database, {
+        marketId: cycle.market_id,
+        financial,
+        evidence: { fulfillmentMode: "SCHEDULED" as const },
+      })
+    : null;
+  for (const decisionFailure of decision?.failures ?? ["CONFIGURATION_ERROR" as const]) {
+    if (!failures.includes(decisionFailure)) failures.push(decisionFailure);
+  }
+  if (!cart && !failures.includes("MINIMUM_ORDER_NOT_MET"))
     failures.push("MINIMUM_ORDER_NOT_MET");
-  if (!cart) failures.push("MINIMUM_ORDER_NOT_MET");
   const totalMinor = (cart?.total_minor ?? 0) + (fee?.fee_minor ?? 0);
   return {
     ok: true as const,
@@ -133,7 +155,8 @@ export async function evaluateCheckout(
       eligible: failures.length === 0,
       failures,
       totalMinor,
-      currency: policy?.currency ?? fee?.currency ?? (await defaultCurrency(database)) ?? "",
+      currency:
+        decision?.currency || policy?.currency || fee?.currency || (await defaultCurrency(database)) || "",
     },
     requestId: command.requestId,
   };

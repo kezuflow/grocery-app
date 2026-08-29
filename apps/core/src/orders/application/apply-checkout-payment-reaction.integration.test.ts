@@ -17,6 +17,7 @@ async function seededCheckout(
   options: {
     sourcingMode?: "STOCKED" | "PLANNED" | "MIXED";
     onHand?: number;
+    quantity?: number;
   } = {},
 ) {
   const n = ++counter;
@@ -74,7 +75,7 @@ async function seededCheckout(
       .run();
   }
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO price_version (id, sku_id, market_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'PHP', 12000, 'STANDARD', 0, 1, 1)",
+    "INSERT OR IGNORE INTO price_version (id, sku_id, market_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'PHP', 15000, 'STANDARD', 0, 1, 1)",
   )
     .bind(crypto.randomUUID(), skuId)
     .run();
@@ -85,8 +86,8 @@ async function seededCheckout(
   )
     .bind(cartId, customerId, now, now)
     .run();
-  await env.DB.prepare("INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, ?, 4)")
-    .bind(cartId, skuId)
+  await env.DB.prepare("INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, ?, ?)")
+    .bind(cartId, skuId, options.quantity ?? 4)
     .run();
 
   return { customerId, cartId, addressId, skuId, poolId, subscriptionId };
@@ -115,12 +116,12 @@ async function createQuote(fixture: Awaited<ReturnType<typeof seededCheckout>>) 
 async function intentWithReaction(quoteId: string, customerId: string) {
   const intentId = crypto.randomUUID();
   await env.DB.prepare(
-    "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, 48000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
+    "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, 65000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
   )
     .bind(intentId, quoteId, customerId, `pi-${intentId}`, Date.now(), Date.now())
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 48000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
+    "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 65000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
   )
     .bind(
       `attempt-${intentId}`,
@@ -142,6 +143,20 @@ async function intentWithReaction(quoteId: string, customerId: string) {
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("rejects a scheduled basket below the market minimum", async () => {
+    const fixture = await seededCheckout({ quantity: 1 });
+
+    const quote = await createQuote(fixture);
+
+    expect(quote).toMatchObject({ ok: false, error: { code: "MINIMUM_ORDER_NOT_MET" } });
+    const persisted = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
+    )
+      .bind(fixture.cartId)
+      .first<{ count: number }>();
+    expect(persisted?.count).toBe(0);
+  });
+
   it("allows quote creation for PAST_DUE membership inside grace", async () => {
     const fixture = await seededCheckout();
     await env.DB.prepare(
@@ -241,8 +256,8 @@ describe("order commitment from canonical payment reactions", () => {
       }>();
     expect(order).toMatchObject({
       status: "COMMITTED",
-      total_minor: 53000,
-      merchandise_subtotal_minor: 48000,
+      total_minor: 65000,
+      merchandise_subtotal_minor: 60000,
       item_discount_minor: 0,
       order_discount_minor: 0,
       delivery_subtotal_minor: 5000,
