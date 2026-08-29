@@ -30,6 +30,7 @@ import { completeRecurringAuthorization as completeRecurringAuthorizationCommand
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
+  addressSearchRequestSchema,
   addressUpdateRequestSchema,
   authenticatedRequestSchema,
   catalogProductRequestSchema,
@@ -59,6 +60,8 @@ import { applicationContext } from "./auth/authorization";
 import { createAuth, type AuthEnvironment } from "./auth/service";
 import { iamSchema } from "./iam/schema";
 import { resolveServiceability } from "./geography/serviceability";
+import { buildGeocoderPort } from "./geography/infrastructure/runtime-geocoder";
+import { GeocoderError } from "./geography/infrastructure/mapbox-geocoder";
 import { activeMarketCode } from "./geography/market-defaults";
 import {
   CatalogValidationError,
@@ -1960,6 +1963,32 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       requestId: input.requestId,
     };
   }
+  async searchAddressCandidates(input: import("@freshmarkets/contracts").AddressSearchRequest) {
+    const validation = addressSearchRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const startedAt = Date.now();
+    try {
+      const candidates = await buildGeocoderPort(this.env).search(validation.data);
+      log("info", "geocoder.search", {
+        requestId: input.requestId,
+        operation: "forward_search",
+        durationMs: Date.now() - startedAt,
+        resultCategory: candidates.length === 0 ? "empty" : "success",
+      });
+      return { ok: true as const, value: candidates, requestId: input.requestId };
+    } catch (error) {
+      if (!(error instanceof GeocoderError)) throw error;
+      log("warn", "geocoder.search", {
+        requestId: input.requestId,
+        operation: "forward_search",
+        durationMs: Date.now() - startedAt,
+        resultCategory: "failure",
+        errorCode: error.code,
+      });
+      return fail(error.code, "Address search is temporarily unavailable", input.requestId);
+    }
+  }
   async searchCatalog(input: import("@freshmarkets/contracts").CatalogSearchRequest) {
     const validation = catalogSearchRequestSchema.safeParse(input);
     if (!validation.success)
@@ -2018,7 +2047,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    return createCustomerAddress(this.env.DB, { ...input, customerId: customer.value.customerId });
+    try {
+      return await createCustomerAddress(this.env.DB, buildGeocoderPort(this.env), {
+        ...input,
+        customerId: customer.value.customerId,
+      });
+    } catch (error) {
+      if (error instanceof GeocoderError)
+        return fail(error.code, "Address confirmation could not be finalized", input.requestId);
+      throw error;
+    }
   }
 
   async listCustomerAddresses(input: AuthenticatedRequest) {
@@ -2041,7 +2079,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    return updateCustomerAddress(this.env.DB, { ...input, customerId: customer.value.customerId });
+    try {
+      return await updateCustomerAddress(this.env.DB, buildGeocoderPort(this.env), {
+        ...input,
+        customerId: customer.value.customerId,
+      });
+    } catch (error) {
+      if (error instanceof GeocoderError)
+        return fail(error.code, "Address confirmation could not be finalized", input.requestId);
+      throw error;
+    }
   }
 
   async startTrial(input: import("@freshmarkets/contracts").StartTrialRequest) {

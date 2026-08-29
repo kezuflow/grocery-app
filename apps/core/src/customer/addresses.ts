@@ -1,12 +1,14 @@
 import type {
+  AddressComponents,
+  CoordinateConfirmationSource,
   CreateCustomerAddressRequest,
+  DeliveryInstructions,
   ServiceabilityFailureReason,
   UpdateCustomerAddressRequest,
 } from "@freshmarkets/contracts";
 import { drizzle } from "drizzle-orm/d1";
+import type { GeocoderPort, PermanentGeocode } from "../geography/ports/geocoder";
 import { resolveServiceability } from "../geography/serviceability";
-
-type Database = ReturnType<typeof drizzle>;
 
 type CustomerAddressRow = {
   id: string;
@@ -15,22 +17,31 @@ type CustomerAddressRow = {
   recipient: string;
   phone: string;
   address_json: string;
+  address_components_json: string | null;
+  barangay: string | null;
+  city: string | null;
+  postal_code: string | null;
   latitude: number;
   longitude: number;
+  geocode_provider: string | null;
+  geocode_reference: string | null;
+  confirmation_source: CoordinateConfirmationSource | null;
+  user_confirmed_at: number | null;
+  delivery_instructions_json: string | null;
   service_area_code: string | null;
   delivery_zone_code: string | null;
   resolution_version: number | null;
   serviceable: number | null;
   serviceability_reason: ServiceabilityFailureReason | null;
   notes: string | null;
-  status: string;
+  status: "active" | "disabled";
   version: number;
   created_at: number;
   updated_at: number;
 };
 
 const ADDRESS_COLUMNS =
-  "id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at";
+  "id, customer_id, label, recipient, phone, address_json, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, confirmation_source, user_confirmed_at, delivery_instructions_json, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at";
 
 function failure(code: string, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -41,6 +52,12 @@ export function customerAddressView(row: CustomerAddressRow) {
     id: row.id,
     label: row.label,
     recipient: row.recipient,
+    phone: row.phone,
+    components: parseComponents(row.address_components_json, row.address_json),
+    confirmationSource: row.confirmation_source,
+    confirmedAt:
+      row.user_confirmed_at === null ? null : new Date(row.user_confirmed_at).toISOString(),
+    instructions: parseInstructions(row.delivery_instructions_json),
     latitude: row.latitude,
     longitude: row.longitude,
     serviceable: row.serviceable === null ? null : row.serviceable === 1,
@@ -53,13 +70,10 @@ export function customerAddressView(row: CustomerAddressRow) {
   };
 }
 
-/**
- * Persist a saved address with Core's authoritative serviceability outcome.
- * Customers owns addresses; Geography owns the zone/service-area resolution
- * persisted alongside them.
- */
+/** Persist a saved address with Customers-owned fields and Geography-owned resolution. */
 export async function createCustomerAddress(
   database: D1Database,
+  geocoder: GeocoderPort,
   command: { customerId: string } & CreateCustomerAddressRequest,
 ): Promise<
   | { ok: true; value: ReturnType<typeof customerAddressView>; requestId: string }
@@ -69,9 +83,22 @@ export async function createCustomerAddress(
   if (!geo.ok) return { ok: false as const, error: geo.error };
   const id = crypto.randomUUID();
   const now = Date.now();
+  const structured = "components" in command && command.components !== undefined;
+  const confirmation = structured
+    ? await finalizeConfirmation(geocoder, {
+        latitude: command.latitude,
+        longitude: command.longitude,
+        components: command.components!,
+        source: command.confirmationSource!,
+        confirmedAt: now,
+      })
+    : null;
+  const addressJson =
+    command.addressJson ?? JSON.stringify(confirmation?.components ?? emptyLegacyComponents());
+
   await database
     .prepare(
-      "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)",
+      "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, confirmation_source, user_confirmed_at, delivery_instructions_json, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)",
     )
     .bind(
       id,
@@ -79,9 +106,18 @@ export async function createCustomerAddress(
       command.label,
       command.recipient,
       command.phone,
-      command.addressJson,
+      addressJson,
+      confirmation ? JSON.stringify(confirmation.components) : null,
+      confirmation?.components.barangay ?? null,
+      confirmation?.components.city ?? null,
+      confirmation?.components.postalCode ?? null,
       command.latitude,
       command.longitude,
+      confirmation?.provider ?? null,
+      confirmation?.providerReference ?? null,
+      confirmation?.source ?? null,
+      confirmation?.confirmedAt ?? null,
+      structured ? JSON.stringify(command.instructions) : null,
       geo.value.serviceArea?.code ?? null,
       geo.value.deliveryZone?.code ?? null,
       geo.value.serviceArea?.polygonVersion ?? null,
@@ -92,24 +128,14 @@ export async function createCustomerAddress(
       now,
     )
     .run();
-  return {
-    ok: true as const,
-    value: {
-      id,
-      label: command.label,
-      recipient: command.recipient,
-      latitude: command.latitude,
-      longitude: command.longitude,
-      serviceable: geo.value.serviceable,
-      serviceabilityReason: geo.value.reason,
-      serviceAreaCode: geo.value.serviceArea?.code ?? null,
-      deliveryZoneCode: geo.value.deliveryZone?.code ?? null,
-      resolutionVersion: geo.value.serviceArea?.polygonVersion ?? null,
-      status: "active",
-      version: 1,
-    },
-    requestId: command.requestId,
-  };
+
+  const row = await database
+    .prepare(`SELECT ${ADDRESS_COLUMNS} FROM customer_address WHERE id=? AND customer_id=?`)
+    .bind(id, command.customerId)
+    .first<CustomerAddressRow>();
+  if (!row)
+    return failure("INTERNAL_ERROR", "Created address could not be read", command.requestId);
+  return { ok: true as const, value: customerAddressView(row), requestId: command.requestId };
 }
 
 export async function listCustomerAddresses(
@@ -133,13 +159,10 @@ export async function listCustomerAddresses(
   };
 }
 
-/**
- * Owner-scoped optimistic-version address update. A coordinate change
- * re-resolves serviceability and persists the fresh outcome; unchanged
- * coordinates retain the stored resolution.
- */
+/** Owner-scoped optimistic update; coordinate changes always receive fresh serviceability. */
 export async function updateCustomerAddress(
   database: D1Database,
+  geocoder: GeocoderPort,
   command: { customerId: string } & UpdateCustomerAddressRequest,
 ): Promise<
   | { ok: true; value: ReturnType<typeof customerAddressView>; requestId: string }
@@ -188,24 +211,74 @@ export async function updateCustomerAddress(
     };
   }
 
+  const now = Date.now();
+  const currentComponents = parseComponents(current.address_components_json, current.address_json);
+  const confirmation = command.confirmationSource
+    ? await finalizeConfirmation(geocoder, {
+        latitude,
+        longitude,
+        components: command.components ?? currentComponents,
+        source: command.confirmationSource,
+        confirmedAt: now,
+      })
+    : null;
+  const components = confirmation?.components ?? command.components ?? currentComponents;
+  const instructions =
+    command.instructions ?? parseInstructions(current.delivery_instructions_json);
+  const canonicalFieldsPresent =
+    current.address_components_json !== null ||
+    command.components !== undefined ||
+    command.confirmationSource !== undefined ||
+    command.instructions !== undefined;
+  const geocodeProvider = confirmation
+    ? confirmation.provider
+    : locationChanged
+      ? null
+      : current.geocode_provider;
+  const geocodeReference = confirmation
+    ? confirmation.providerReference
+    : locationChanged
+      ? null
+      : current.geocode_reference;
+  const confirmationSource = confirmation
+    ? confirmation.source
+    : locationChanged
+      ? null
+      : current.confirmation_source;
+  const confirmedAt = confirmation
+    ? confirmation.confirmedAt
+    : locationChanged
+      ? null
+      : current.user_confirmed_at;
+  const addressJson = command.addressJson ?? current.address_json ?? JSON.stringify(components);
+
   const updated = await database
     .prepare(
-      "UPDATE customer_address SET label=?, recipient=?, phone=?, address_json=?, latitude=?, longitude=?, service_area_code=?, delivery_zone_code=?, resolution_version=?, serviceable=?, serviceability_reason=?, notes=?, version=version+1, updated_at=? WHERE id=? AND customer_id=? AND status='active' AND version=?",
+      "UPDATE customer_address SET label=?, recipient=?, phone=?, address_json=?, address_components_json=?, barangay=?, city=?, postal_code=?, latitude=?, longitude=?, geocode_provider=?, geocode_reference=?, confirmation_source=?, user_confirmed_at=?, delivery_instructions_json=?, service_area_code=?, delivery_zone_code=?, resolution_version=?, serviceable=?, serviceability_reason=?, notes=?, version=version+1, updated_at=? WHERE id=? AND customer_id=? AND status='active' AND version=?",
     )
     .bind(
       command.label ?? current.label,
       command.recipient ?? current.recipient,
       command.phone ?? current.phone,
-      command.addressJson ?? current.address_json,
+      addressJson,
+      canonicalFieldsPresent ? JSON.stringify(components) : null,
+      canonicalFieldsPresent ? components.barangay : null,
+      canonicalFieldsPresent ? components.city : null,
+      canonicalFieldsPresent ? components.postalCode : null,
       latitude,
       longitude,
+      geocodeProvider,
+      geocodeReference,
+      confirmationSource,
+      confirmedAt,
+      canonicalFieldsPresent ? JSON.stringify(instructions) : null,
       serviceability.serviceAreaCode,
       serviceability.deliveryZoneCode,
       serviceability.resolutionVersion,
       serviceability.serviceable,
       serviceability.reason,
       command.notes !== undefined ? command.notes : current.notes,
-      Date.now(),
+      now,
       current.id,
       command.customerId,
       command.expectedVersion,
@@ -221,4 +294,107 @@ export async function updateCustomerAddress(
   if (!row)
     return failure("INTERNAL_ERROR", "Updated address could not be read", command.requestId);
   return { ok: true as const, value: customerAddressView(row), requestId: command.requestId };
+}
+
+type FinalizedConfirmation = {
+  components: AddressComponents;
+  provider: string | null;
+  providerReference: string | null;
+  source: CoordinateConfirmationSource;
+  confirmedAt: number;
+};
+
+async function finalizeConfirmation(
+  geocoder: GeocoderPort,
+  input: {
+    latitude: number;
+    longitude: number;
+    components: AddressComponents;
+    source: CoordinateConfirmationSource;
+    confirmedAt: number;
+  },
+): Promise<FinalizedConfirmation> {
+  if (input.source !== "GEOCODER")
+    return {
+      components: input.components,
+      provider: null,
+      providerReference: null,
+      source: input.source,
+      confirmedAt: input.confirmedAt,
+    };
+  const permanent: PermanentGeocode = await geocoder.reversePermanent({
+    coordinate: { latitude: input.latitude, longitude: input.longitude },
+  });
+  return {
+    components: permanent.components,
+    provider: permanent.provider,
+    providerReference: permanent.providerReference,
+    source: input.source,
+    confirmedAt: input.confirmedAt,
+  };
+}
+
+function parseComponents(structuredJson: string | null, legacyJson: string): AddressComponents {
+  const structured = parseRecord(structuredJson);
+  if (isAddressComponents(structured)) return structured;
+  const legacy = parseRecord(legacyJson);
+  const addressLine1 = stringField(legacy, "addressLine1") ?? stringField(legacy, "line1") ?? "";
+  const city = stringField(legacy, "city") ?? addressLine1;
+  return {
+    addressLine1,
+    addressLine2: stringField(legacy, "addressLine2") ?? stringField(legacy, "line2"),
+    barangay: stringField(legacy, "barangay"),
+    city,
+    region: stringField(legacy, "region"),
+    postalCode: stringField(legacy, "postalCode"),
+    countryCode: stringField(legacy, "countryCode") ?? "PH",
+  };
+}
+
+function parseInstructions(value: string | null): DeliveryInstructions {
+  const parsed = parseRecord(value);
+  return {
+    buildingUnit: stringField(parsed, "buildingUnit"),
+    landmark: stringField(parsed, "landmark"),
+    gateGuard: stringField(parsed, "gateGuard"),
+    deliveryNote: stringField(parsed, "deliveryNote"),
+    recipientInstruction: stringField(parsed, "recipientInstruction"),
+  };
+}
+
+function emptyLegacyComponents(): AddressComponents {
+  return {
+    addressLine1: "",
+    addressLine2: null,
+    barangay: null,
+    city: "",
+    region: null,
+    postalCode: null,
+    countryCode: "PH",
+  };
+}
+
+function parseRecord(value: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function stringField(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function isAddressComponents(value: Record<string, unknown> | null): value is AddressComponents {
+  return (
+    typeof value?.addressLine1 === "string" &&
+    typeof value.city === "string" &&
+    typeof value.countryCode === "string"
+  );
 }

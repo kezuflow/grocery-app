@@ -21,6 +21,12 @@ export const serviceabilityRequestSchema = z.object({
   marketCode: identifierSchema.optional(),
 });
 
+export const addressSearchRequestSchema = z.object({
+  requestId: identifierSchema,
+  query: z.string().trim().min(1).max(200),
+  proximity: z.object({ latitude: coordinateSchema, longitude: coordinateSchema }).optional(),
+});
+
 const catalogSlugSchema = z
   .string()
   .trim()
@@ -49,15 +55,51 @@ export const catalogProductRequestSchema = z.object({
   locationId: identifierSchema.optional(),
 });
 
-export const addressRequestSchema = headersRequest.extend({
+const addressBaseSchema = headersRequest.extend({
   label: reasonSchema,
   recipient: reasonSchema,
   phone: reasonSchema,
-  addressJson: z.string().min(2),
   latitude: coordinateSchema,
   longitude: coordinateSchema,
   notes: z.string().max(1000).nullable().optional(),
 });
+
+const nullableAddressText = z.string().trim().max(500).nullable();
+const addressComponentsSchema = z.object({
+  addressLine1: z.string().trim().min(1).max(500),
+  addressLine2: nullableAddressText,
+  barangay: nullableAddressText,
+  city: z.string().trim().min(1).max(200),
+  region: nullableAddressText,
+  postalCode: z.string().trim().max(32).nullable(),
+  countryCode: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{2}$/),
+});
+const confirmationSourceSchema = z.enum(["GEOCODER", "USER_PIN", "DEVICE_LOCATION"]);
+const deliveryInstructionsSchema = z.object({
+  buildingUnit: nullableAddressText,
+  landmark: nullableAddressText,
+  gateGuard: nullableAddressText,
+  deliveryNote: z.string().trim().max(1000).nullable(),
+  recipientInstruction: z.string().trim().max(1000).nullable(),
+});
+
+export const addressRequestSchema = z.union([
+  addressBaseSchema.extend({
+    components: addressComponentsSchema,
+    confirmationSource: confirmationSourceSchema,
+    instructions: deliveryInstructionsSchema,
+    addressJson: z.string().min(2).optional(),
+  }),
+  addressBaseSchema.extend({
+    addressJson: z.string().min(2),
+    components: z.never().optional(),
+    confirmationSource: z.never().optional(),
+    instructions: z.never().optional(),
+  }),
+]);
 
 export const addressUpdateRequestSchema = headersRequest.extend({
   addressId: identifierSchema,
@@ -65,6 +107,9 @@ export const addressUpdateRequestSchema = headersRequest.extend({
   label: reasonSchema.optional(),
   recipient: reasonSchema.optional(),
   phone: reasonSchema.optional(),
+  components: addressComponentsSchema.optional(),
+  confirmationSource: confirmationSourceSchema.optional(),
+  instructions: deliveryInstructionsSchema.optional(),
   addressJson: z.string().min(2).optional(),
   latitude: coordinateSchema.optional(),
   longitude: coordinateSchema.optional(),

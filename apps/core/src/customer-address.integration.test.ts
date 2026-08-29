@@ -1,10 +1,36 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import type {
+  AddressComponents,
+  CoreServiceBinding,
+  DeliveryInstructions,
+} from "@freshmarkets/contracts";
+import { CoreEntrypoint } from "./index";
+import {
+  createCustomerAddress as createCustomerAddressCommand,
+  updateCustomerAddress as updateCustomerAddressCommand,
+} from "./customer/addresses";
+import type { GeocoderPort } from "./geography/ports/geocoder";
 
 const core = exports.default as unknown as CoreServiceBinding;
 const password = "correct-horse-battery-staple";
+const components: AddressComponents = {
+  addressLine1: "Ayala Center Cebu",
+  addressLine2: null,
+  barangay: "Luz",
+  city: "Cebu City",
+  region: "Central Visayas",
+  postalCode: "6000",
+  countryCode: "PH",
+};
+const instructions: DeliveryInstructions = {
+  buildingUnit: "Unit 4B",
+  landmark: "Across the public market",
+  gateGuard: null,
+  deliveryNote: "Call on arrival",
+  recipientInstruction: "Ask for Ana",
+};
 
 function requestId() {
   return crypto.randomUUID();
@@ -52,7 +78,161 @@ async function createAddress(request: ReturnType<Awaited<ReturnType<typeof accou
   });
 }
 
+async function customerIdFor(authUserId: string): Promise<string> {
+  const customer = await env.DB.prepare(
+    "SELECT c.id FROM customer c JOIN customer_principal p ON p.id=c.principal_id WHERE p.auth_user_id=?",
+  )
+    .bind(authUserId)
+    .first<{ id: string }>();
+  expect(customer?.id).toBeTruthy();
+  return customer!.id;
+}
+
+function geocoder(overrides: Partial<GeocoderPort> = {}): GeocoderPort {
+  return {
+    async search() {
+      return [];
+    },
+    async reversePermanent() {
+      throw new Error("Unexpected permanent reverse geocode");
+    },
+    ...overrides,
+  };
+}
+
 describe("Phase 4B customer addresses", () => {
+  it("permanently reverse-finalizes a geocoder-confirmed pin before inserting it", async () => {
+    const user = await account();
+    await core.listCustomerAddresses(user.request());
+    const customerId = await customerIdFor(user.userId);
+    const permanentComponents = { ...components, addressLine1: "Permanent entrance" };
+    let reverseCalls = 0;
+    const result = await createCustomerAddressCommand(
+      env.DB,
+      geocoder({
+        async reversePermanent(input) {
+          reverseCalls += 1;
+          expect(input.coordinate).toEqual({ latitude: 10.3173, longitude: 123.9058 });
+          const beforeInsert = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM customer_address WHERE customer_id=?",
+          )
+            .bind(customerId)
+            .first<{ count: number }>();
+          expect(beforeInsert?.count).toBe(0);
+          return {
+            provider: "MAPBOX",
+            providerReference: "mapbox.permanent.entrance",
+            displayAddress: "Permanent entrance, Cebu City",
+            coordinate: { latitude: 10.3, longitude: 123.8 },
+            components: permanentComponents,
+            accuracy: "rooftop",
+          };
+        },
+      }),
+      {
+        ...user.request(),
+        customerId,
+        label: "Home",
+        recipient: "Ana",
+        phone: "+639171234567",
+        latitude: 10.3173,
+        longitude: 123.9058,
+        components,
+        confirmationSource: "GEOCODER",
+        instructions,
+      },
+    );
+
+    expect(reverseCalls).toBe(1);
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        components: permanentComponents,
+        confirmationSource: "GEOCODER",
+        latitude: 10.3173,
+        longitude: 123.9058,
+      },
+    });
+    if (!result.ok) return;
+    expect(Date.parse(result.value.confirmedAt!)).not.toBeNaN();
+    const stored = await env.DB.prepare(
+      "SELECT geocode_provider, geocode_reference, latitude, longitude FROM customer_address WHERE id=?",
+    )
+      .bind(result.value.id)
+      .first<{
+        geocode_provider: string | null;
+        geocode_reference: string | null;
+        latitude: number;
+        longitude: number;
+      }>();
+    expect(stored).toEqual({
+      geocode_provider: "MAPBOX",
+      geocode_reference: "mapbox.permanent.entrance",
+      latitude: 10.3173,
+      longitude: 123.9058,
+    });
+  });
+
+  it("saves a user-positioned pin with structured fields and null provider metadata", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Home",
+      recipient: "Ana",
+      phone: "+639171234567",
+      latitude: 10.3173,
+      longitude: 123.9058,
+      components,
+      confirmationSource: "USER_PIN",
+      instructions,
+    });
+    expect(created).toMatchObject({
+      ok: true,
+      value: {
+        phone: "+639171234567",
+        components,
+        confirmationSource: "USER_PIN",
+        instructions,
+        serviceable: true,
+      },
+    });
+    if (!created.ok) return;
+    const stored = await env.DB.prepare(
+      "SELECT geocode_provider, geocode_reference, user_confirmed_at FROM customer_address WHERE id=?",
+    )
+      .bind(created.value.id)
+      .first<{
+        geocode_provider: string | null;
+        geocode_reference: string | null;
+        user_confirmed_at: number | null;
+      }>();
+    expect(stored).toMatchObject({ geocode_provider: null, geocode_reference: null });
+    expect(stored?.user_confirmed_at).toBeTypeOf("number");
+  });
+
+  it("persists an unserviceable structured address as unavailable", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Outside coverage",
+      recipient: "Ana",
+      phone: "+639171234567",
+      latitude: 11,
+      longitude: 124,
+      components: { ...components, city: "Outside Cebu" },
+      confirmationSource: "DEVICE_LOCATION",
+      instructions,
+    });
+    expect(created).toMatchObject({
+      ok: true,
+      value: {
+        status: "active",
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+      },
+    });
+  });
+
   it("lists an empty owner-scoped address collection and creates through the boundary", async () => {
     const user = await account();
     await expect(core.listCustomerAddresses(user.request())).resolves.toMatchObject({
@@ -235,5 +415,203 @@ describe("Phase 4B customer addresses", () => {
         serviceabilityReason: "OUTSIDE_SERVICE_AREA",
       },
     });
+  });
+
+  it("permanently re-resolves a geocoder-derived coordinate edit and keeps the pin authoritative", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Home",
+      recipient: "Ana",
+      phone: "+639171234567",
+      latitude: 10.3173,
+      longitude: 123.9058,
+      components,
+      confirmationSource: "USER_PIN",
+      instructions,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const customerId = await customerIdFor(user.userId);
+    let reverseCalls = 0;
+    const moved = await updateCustomerAddressCommand(
+      env.DB,
+      geocoder({
+        async reversePermanent(input) {
+          reverseCalls += 1;
+          expect(input.coordinate).toEqual({ latitude: 11, longitude: 124 });
+          return {
+            provider: "MAPBOX",
+            providerReference: "mapbox.permanent.moved",
+            displayAddress: "Moved pin",
+            coordinate: { latitude: 10.999, longitude: 123.999 },
+            components: { ...components, addressLine1: "Moved permanent address" },
+            accuracy: null,
+          };
+        },
+      }),
+      {
+        ...user.request(),
+        customerId,
+        addressId: created.value.id,
+        expectedVersion: created.value.version,
+        latitude: 11,
+        longitude: 124,
+        confirmationSource: "GEOCODER",
+      },
+    );
+    expect(reverseCalls).toBe(1);
+    expect(moved).toMatchObject({
+      ok: true,
+      value: {
+        latitude: 11,
+        longitude: 124,
+        components: { addressLine1: "Moved permanent address" },
+        confirmationSource: "GEOCODER",
+        serviceable: false,
+        status: "active",
+      },
+    });
+  });
+
+  it("searches candidates through the runtime geocoder without logging PII", async () => {
+    const sensitiveQuery = "Unit 4B, private family home";
+    const sensitiveDisplay = "Unit 4B, Private Family Home, Cebu City";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        features: [
+          {
+            id: "mapbox.address.private",
+            geometry: { type: "Point", coordinates: [123.9058, 10.3173] },
+            properties: {
+              mapbox_id: "mapbox.address.private",
+              feature_type: "address",
+              full_address: sensitiveDisplay,
+              name: "Private Family Home",
+              coordinates: { accuracy: "rooftop" },
+              context: {
+                address: { name: "Private Family Home" },
+                neighborhood: { name: "Luz" },
+                place: { name: "Cebu City" },
+                region: { name: "Central Visayas" },
+                postcode: { name: "6000" },
+                country: { name: "Philippines", country_code: "ph" },
+              },
+            },
+          },
+        ],
+      }),
+    );
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const entrypoint = new CoreEntrypoint(
+        {} as never,
+        {
+          DB: env.DB,
+          ENVIRONMENT: "test",
+          BETTER_AUTH_URL: "https://core.example.invalid",
+          TRUSTED_ORIGINS: "https://core.example.invalid",
+          PAYMENT_PROVIDER: "mock",
+          ROUTE_DISTANCE_PROVIDER: "mock",
+          MAPBOX_ACCESS_TOKEN: "test-secret-token",
+        } as never,
+      );
+      const result = await entrypoint.searchAddressCandidates({
+        requestId: requestId(),
+        query: sensitiveQuery,
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        value: [{ displayAddress: sensitiveDisplay, candidateKey: "mapbox.address.private" }],
+      });
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      const logs = logSpy.mock.calls.flat().join(" ");
+      expect(logs).not.toContain(sensitiveQuery);
+      expect(logs).not.toContain(sensitiveDisplay);
+      expect(logs).not.toContain("10.3173");
+      expect(logs).not.toContain("123.9058");
+      expect(logs).not.toContain("test-secret-token");
+    } finally {
+      fetchSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it("returns a stable PII-safe geocoder failure from candidate search", async () => {
+    const sensitiveQuery = "Private compound beside the blue gate";
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 429 }));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const entrypoint = new CoreEntrypoint(
+        {} as never,
+        {
+          DB: env.DB,
+          ENVIRONMENT: "test",
+          BETTER_AUTH_URL: "https://core.example.invalid",
+          TRUSTED_ORIGINS: "https://core.example.invalid",
+          PAYMENT_PROVIDER: "mock",
+          ROUTE_DISTANCE_PROVIDER: "mock",
+          MAPBOX_ACCESS_TOKEN: "test-secret-token",
+        } as never,
+      );
+      const result = await entrypoint.searchAddressCandidates({
+        requestId: requestId(),
+        query: sensitiveQuery,
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: "GEOCODER_RATE_LIMITED" } });
+      const logs = warnSpy.mock.calls.flat().join(" ");
+      expect(logs).toContain("GEOCODER_RATE_LIMITED");
+      expect(logs).not.toContain(sensitiveQuery);
+      expect(logs).not.toContain("test-secret-token");
+    } finally {
+      fetchSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("never rewrites an immutable committed order address snapshot after an address edit", async () => {
+    const user = await account();
+    const created = await core.createCustomerAddress({
+      ...user.request(),
+      label: "Home",
+      recipient: "Ana",
+      phone: "+639171234567",
+      latitude: 10.3173,
+      longitude: 123.9058,
+      components,
+      confirmationSource: "USER_PIN",
+      instructions,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const customerId = await customerIdFor(user.userId);
+    const paymentId = `payment-${crypto.randomUUID()}`;
+    const orderId = `order-${crypto.randomUUID()}`;
+    const snapshot = JSON.stringify(created.value);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, 0, 0)",
+      ).bind(paymentId, customerId, `provider-${paymentId}`, `idempotency-${paymentId}`),
+      env.DB.prepare(
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, 'cycle-next-cebu', 'SCHEDULED', ?, 'COMMITTED', 100, 'PHP', ?, 0, 1)",
+      ).bind(orderId, customerId, snapshot, paymentId),
+    ]);
+
+    const updated = await core.updateCustomerAddress({
+      ...user.request(),
+      addressId: created.value.id,
+      expectedVersion: created.value.version,
+      label: "Renamed after commitment",
+      instructions: { ...instructions, deliveryNote: "Changed after commitment" },
+    });
+    expect(updated.ok).toBe(true);
+    const storedOrder = await env.DB.prepare(
+      "SELECT address_snapshot_json FROM grocery_order WHERE id=?",
+    )
+      .bind(orderId)
+      .first<{ address_snapshot_json: string }>();
+    expect(storedOrder?.address_snapshot_json).toBe(snapshot);
   });
 });

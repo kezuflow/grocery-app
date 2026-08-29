@@ -212,6 +212,31 @@ assert.equal(
   "SCHEDULED",
 );
 assert.equal(populated.prepare("SELECT COUNT(*) AS count FROM order_item").get().count, 1);
+assert.deepEqual(
+  {
+    ...populated
+      .prepare(
+        `SELECT address_json, address_components_json, barangay, city, postal_code,
+                geocode_provider, geocode_reference, confirmation_source,
+                user_confirmed_at, delivery_instructions_json
+         FROM customer_address WHERE id='upgrade-address'`,
+      )
+      .get(),
+  },
+  {
+    address_json: "{}",
+    address_components_json: null,
+    barangay: null,
+    city: null,
+    postal_code: null,
+    geocode_provider: null,
+    geocode_reference: null,
+    confirmation_source: null,
+    user_confirmed_at: null,
+    delivery_instructions_json: null,
+  },
+  "0042 must preserve legacy addresses with nullable structured confirmation metadata",
+);
 assert.throws(() =>
   populated.exec(
     "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity) VALUES ('invalid-item', 'missing-order', 'sku-red-onion-500g', 'Onion', '500g', 'unit-gram', 1, 100, 100, 500)",
