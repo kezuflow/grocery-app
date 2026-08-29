@@ -33,7 +33,7 @@ endpoint was added.
 | Contracts | 14 files / 36 tests passed |
 | Web | 25 files / 114 tests passed |
 | Focused Core readiness | 2 files / 4 tests passed |
-| Full Core | Windows environment-limited: bounded run did not complete after repeated `.dev.vars` loading; no failure/crash output emitted |
+| Full Core | 89 files / 419 tests passed in 64.54s; exit 0 |
 | Workspace typechecks | All included projects passed |
 | Core/Web builds | Passed; Core Wrangler dry-run loaded declared bindings |
 | `vinext check` | 100% compatible, 9 supported, 0 partial, 0 issues |
