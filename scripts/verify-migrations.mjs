@@ -155,6 +155,83 @@ function assertProduceLaunch(database) {
   );
 }
 
+function commerceUpgradeSnapshot(database) {
+  const one = (sql) => ({ ...database.prepare(sql).get() });
+  return {
+    checkoutAttempt: one(
+      `SELECT id, customer_id, cart_id, address_id, cycle_id, zone_id, location_id,
+              quote_version, status, idempotency_key, expires_at, version, created_at, updated_at
+       FROM checkout_attempts WHERE id='upgrade-attempt'`,
+    ),
+    checkoutQuoteSnapshot: one(
+      `SELECT id, checkout_attempt_id, merchandise_minor, delivery_fee_minor,
+              discount_minor, total_minor, currency, item_snapshot_json,
+              eligibility_snapshot_json, created_at
+       FROM checkout_quote_snapshots WHERE id='upgrade-quote-snapshot'`,
+    ),
+    checkoutInventoryHold: one(
+      `SELECT id, checkout_attempt_id, inventory_pool_id, location_id, quantity,
+              status, created_at, updated_at
+       FROM checkout_inventory_holds WHERE id='upgrade-hold'`,
+    ),
+    order: one(
+      `SELECT id, customer_id, cycle_id, address_snapshot_json, status, total_minor,
+              currency, payment_id, created_at, version
+       FROM grocery_order WHERE id='upgrade-order'`,
+    ),
+    orderItem: one(
+      `SELECT id, order_id, sku_id, product_name_snapshot, variant_name_snapshot,
+              unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity
+       FROM order_item WHERE id='upgrade-item'`,
+    ),
+    inventoryReservation: one(
+      `SELECT id, order_id, location_id, inventory_pool_id, quantity, status
+       FROM inventory_reservation WHERE id='upgrade-reservation'`,
+    ),
+    committedDemand: one(
+      `SELECT id, order_id, delivery_cycle_id, location_id, inventory_pool_id, quantity, status
+       FROM committed_demand WHERE id='upgrade-demand'`,
+    ),
+    fulfillmentRecord: one(
+      `SELECT id, order_id, location_id, status, updated_at, version
+       FROM fulfillment_record WHERE id='upgrade-fulfillment'`,
+    ),
+    deliveryJob: one(
+      `SELECT id, order_id, cycle_id, rider_user_id, status, address_snapshot_json,
+              delivered_at, version
+       FROM delivery_job WHERE id='upgrade-job'`,
+    ),
+    deliveryStop: one(
+      `SELECT id, batch_id, delivery_job_id, sequence, status, proof_json
+       FROM delivery_stop WHERE id='upgrade-stop'`,
+    ),
+    legacyRefund: one(
+      `SELECT id, payment_id, order_id, amount_minor, currency, status, reason,
+              created_at, updated_at
+       FROM refund WHERE id='upgrade-legacy-refund'`,
+    ),
+    legacyAmendment: one(
+      `SELECT id, order_id, payment_id, total_minor, currency, status, created_at
+       FROM order_amendment WHERE id='upgrade-legacy-amendment'`,
+    ),
+    paidAmendment: one(
+      `SELECT id, order_id, status, currency, total_minor, payment_intent_id,
+              idempotency_key, created_at, updated_at
+       FROM paid_order_amendment WHERE id='upgrade-paid-amendment'`,
+    ),
+    paidAmendmentLine: one(
+      `SELECT id, amendment_id, sku_id, product_name_snapshot, variant_name_snapshot,
+              unit_snapshot, quantity, base_quantity, unit_price_minor,
+              line_total_minor, created_at
+       FROM paid_order_amendment_line WHERE id='upgrade-paid-amendment-line'`,
+    ),
+    inventoryReserved: one(
+      `SELECT reserved FROM inventory_balance
+       WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'`,
+    ),
+  };
+}
+
 const fresh = database();
 apply(fresh, migrations);
 assertFinalSchema(fresh);
@@ -164,7 +241,7 @@ fresh.close();
 const populated = database();
 apply(
   populated,
-  migrations.filter((migration) => migration.name <= "0021_instant_mode.sql"),
+  migrations.filter((migration) => migration.name <= "0020_email_auth.sql"),
 );
 populated.exec(`
   INSERT INTO customer (id, auth_user_id, status, created_at, updated_at)
@@ -182,6 +259,12 @@ populated.exec(`
   INSERT INTO checkout_quote
     (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, status, version, expires_at, idempotency_key, created_at, updated_at)
     VALUES ('upgrade-quote', 'upgrade-quote-attempt', 'upgrade-customer', 'upgrade-cart', 'upgrade-address', 'cycle-next-cebu', 'PHP', 100, 0, 50, 150, '[]', '{}', '{}', '{}', 'ACTIVE', 1, 9999999999999, 'upgrade-quote-key', 1, 1);
+  INSERT INTO checkout_quote_snapshots
+    (id, checkout_attempt_id, merchandise_minor, delivery_fee_minor, discount_minor, total_minor, currency, item_snapshot_json, eligibility_snapshot_json, created_at)
+    VALUES ('upgrade-quote-snapshot', 'upgrade-attempt', 100, 50, 0, 150, 'PHP', '[]', '{}', 1);
+  INSERT INTO checkout_inventory_holds
+    (id, checkout_attempt_id, inventory_pool_id, location_id, quantity, status, created_at, updated_at)
+    VALUES ('upgrade-hold', 'upgrade-attempt', 'pool-red-onion', 'location-cebu-central', 500, 'HELD', 1, 1);
   INSERT INTO payment_attempt
     (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at, version)
     VALUES ('upgrade-payment', 'upgrade-customer', 150, 'PHP', 'SUCCEEDED', 'mock', 'upgrade-payment-key', 1, 1, 1);
@@ -191,6 +274,12 @@ populated.exec(`
   INSERT INTO order_item
     (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity)
     VALUES ('upgrade-item', 'upgrade-order', 'sku-red-onion-500g', 'Onion', '500g', 'unit-gram', 1, 100, 100, 500);
+  INSERT INTO inventory_reservation
+    (id, order_id, location_id, inventory_pool_id, quantity, status)
+    VALUES ('upgrade-reservation', 'upgrade-order', 'location-cebu-central', 'pool-red-onion', 500, 'COMMITTED');
+  INSERT INTO committed_demand
+    (id, order_id, delivery_cycle_id, location_id, inventory_pool_id, quantity, status)
+    VALUES ('upgrade-demand', 'upgrade-order', 'cycle-next-cebu', 'location-cebu-central', 'pool-red-onion', 500, 'COMMITTED');
   INSERT INTO order_fulfillment_snapshot
     (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, fulfillment_mode, sourcing_modes_json, created_at)
     VALUES ('upgrade-order', 'location-cebu-central', 'cycle-next-cebu', 'zone-cebu-city-core', 1, 2, 'SCHEDULED', '[]', 1);
@@ -199,7 +288,34 @@ populated.exec(`
   INSERT INTO delivery_job
     (id, order_id, cycle_id, rider_user_id, status, address_snapshot_json, delivered_at, version)
     VALUES ('upgrade-job', 'upgrade-order', 'cycle-next-cebu', NULL, 'PENDING', '{}', NULL, 1);
+  INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at)
+    VALUES ('upgrade-batch', 'cycle-next-cebu', 'PLANNED', NULL, 1);
+  INSERT INTO delivery_stop
+    (id, batch_id, delivery_job_id, sequence, status, proof_json)
+    VALUES ('upgrade-stop', 'upgrade-batch', 'upgrade-job', 1, 'PENDING', '{}');
+  INSERT INTO refund
+    (id, payment_id, order_id, amount_minor, currency, status, reason, created_at, updated_at)
+    VALUES ('upgrade-legacy-refund', 'upgrade-payment', 'upgrade-order', 10, 'PHP', 'REQUESTED', 'test', 1, 1);
+  INSERT INTO order_amendment
+    (id, order_id, payment_id, total_minor, currency, status, created_at)
+    VALUES ('upgrade-legacy-amendment', 'upgrade-order', 'upgrade-payment', 25, 'PHP', 'COMMITTED', 1);
+  INSERT INTO paid_order_amendment
+    (id, order_id, status, currency, total_minor, payment_intent_id, idempotency_key, created_at, updated_at)
+    VALUES ('upgrade-paid-amendment', 'upgrade-order', 'DRAFT', 'PHP', 25, NULL, 'upgrade-amendment-key', 1, 1);
+  INSERT INTO paid_order_amendment_line
+    (id, amendment_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, base_quantity, unit_price_minor, line_total_minor, created_at)
+    VALUES ('upgrade-paid-amendment-line', 'upgrade-paid-amendment', 'sku-red-onion-500g', 'Onion', '500g', 'unit-gram', 1, 500, 25, 25, 1);
 `);
+const expectedCommerceGraph = commerceUpgradeSnapshot(populated);
+apply(
+  populated,
+  migrations.filter((migration) => migration.name === "0021_instant_mode.sql"),
+);
+assert.deepEqual(
+  commerceUpgradeSnapshot(populated),
+  expectedCommerceGraph,
+  "0021 must preserve the populated checkout/order dependency graph",
+);
 apply(
   populated,
   migrations.filter((migration) => migration.name > "0021_instant_mode.sql"),
@@ -327,4 +443,6 @@ assert.throws(
 );
 analyticsUpgrade.close();
 
-console.log("Migrations verified: fresh apply and populated 0021 -> 0022 upgrade are valid.");
+console.log(
+  "Migrations verified: fresh apply, populated 0020 -> current commerce upgrade, and populated 0032 -> 0033 analytics upgrade are valid.",
+);
