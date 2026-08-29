@@ -441,6 +441,109 @@ describe("Phase 4B customer addresses", () => {
     });
   });
 
+  it("uses saved component provenance for partial confirmed updates", async () => {
+    const user = await account();
+    await core.listCustomerAddresses(user.request());
+    const customerId = await customerIdFor(user.userId);
+    const permanentComponents = { ...components, addressLine1: "Partial saved entrance" };
+    const created = await createCustomerAddressCommand(
+      env.DB,
+      geocoder({
+        async reversePermanent(input) {
+          return {
+            provider: "MAPBOX",
+            providerReference: "mapbox.permanent.partial-saved",
+            displayAddress: "Partial saved entrance, Cebu City",
+            coordinate: input.coordinate,
+            components: permanentComponents,
+            accuracy: "rooftop",
+          };
+        },
+      }),
+      {
+        ...user.request(),
+        customerId,
+        label: "Home",
+        recipient: "Ana",
+        phone: "+639171234567",
+        latitude: 10.3173,
+        longitude: 123.9058,
+        components,
+        componentsSource: "TEMPORARY_GEOCODER",
+        confirmationSource: "GEOCODER",
+        instructions,
+      },
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const edited = await updateCustomerAddressCommand(env.DB, geocoder(), {
+      ...user.request(),
+      customerId,
+      addressId: created.value.id,
+      expectedVersion: created.value.version,
+      recipient: "Ana Partial",
+      latitude: created.value.latitude,
+      longitude: created.value.longitude,
+      confirmationSource: "GEOCODER",
+    });
+    expect(edited).toMatchObject({
+      ok: true,
+      value: { components: permanentComponents, confirmationSource: "GEOCODER" },
+    });
+    if (!edited.ok) return;
+    const retained = await env.DB.prepare(
+      "SELECT address_components_json, geocode_provider, geocode_reference FROM customer_address WHERE id=?",
+    )
+      .bind(edited.value.id)
+      .first<{
+        address_components_json: string;
+        geocode_provider: string | null;
+        geocode_reference: string | null;
+      }>();
+    expect(retained).toEqual({
+      address_components_json: JSON.stringify(permanentComponents),
+      geocode_provider: "MAPBOX",
+      geocode_reference: "mapbox.permanent.partial-saved",
+    });
+
+    let movedReverseCalls = 0;
+    const moved = await updateCustomerAddressCommand(
+      env.DB,
+      geocoder({
+        async reversePermanent(input) {
+          movedReverseCalls += 1;
+          expect(input.coordinate).toEqual({ latitude: 10.32, longitude: 123.91 });
+          return {
+            provider: "MAPBOX",
+            providerReference: "mapbox.permanent.partial-saved-moved",
+            displayAddress: "Moved partial saved entrance, Cebu City",
+            coordinate: input.coordinate,
+            components: { ...permanentComponents, addressLine1: "Moved partial saved entrance" },
+            accuracy: "rooftop",
+          };
+        },
+      }),
+      {
+        ...user.request(),
+        customerId,
+        addressId: edited.value.id,
+        expectedVersion: edited.value.version,
+        latitude: 10.32,
+        longitude: 123.91,
+        confirmationSource: "USER_PIN",
+      },
+    );
+    expect(movedReverseCalls).toBe(1);
+    expect(moved).toMatchObject({
+      ok: true,
+      value: {
+        components: { addressLine1: "Moved partial saved entrance" },
+        confirmationSource: "USER_PIN",
+      },
+    });
+  });
+
   it("retains permanent component metadata across saved edits and re-finalizes a later user-pin move", async () => {
     const user = await account();
     await core.listCustomerAddresses(user.request());

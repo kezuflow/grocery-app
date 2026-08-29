@@ -263,6 +263,7 @@ export async function updateCustomerAddress(
 
   const now = Date.now();
   const currentComponents = parseComponents(current.address_components_json, current.address_json);
+  const effectiveComponentsSource = command.componentsSource ?? "SAVED_ADDRESS";
   if (command.components !== undefined && command.componentsSource === undefined)
     return failure(
       "VALIDATION_FAILED",
@@ -290,7 +291,7 @@ export async function updateCustomerAddress(
         latitude,
         longitude,
         components: command.components ?? currentComponents,
-        componentsSource: command.componentsSource ?? "SAVED_ADDRESS",
+        componentsSource: effectiveComponentsSource,
         persistedProvider: current.geocode_provider,
         locationChanged,
         source: command.confirmationSource,
@@ -306,7 +307,7 @@ export async function updateCustomerAddress(
     command.confirmationSource !== undefined ||
     command.instructions !== undefined;
   const preserveSavedProvider =
-    command.componentsSource === "SAVED_ADDRESS" &&
+    effectiveComponentsSource === "SAVED_ADDRESS" &&
     !locationChanged &&
     confirmation?.provider === null;
   const geocodeProvider = confirmation

@@ -287,3 +287,56 @@ text, coordinates, provider payloads, secrets, or tokens to persistence or logs.
 or migration change, no new public API, and no Admin, Plan 2, or Rider/Plan 3 work. The four untracked
 Maps artifacts remain preserved and unstaged. External deployment concerns and the 19 pre-existing
 lint warnings remain unchanged.
+
+## Review fix round 3: preserve provider metadata on partial confirmed updates
+
+### Confirmed defect, RED, and ruling
+
+Review found an Important partial-update regression. `UpdateCustomerAddressRequest` supports an
+unchanged latitude/longitude pair plus `confirmationSource` while omitting components and
+`componentsSource`. Finalization correctly treated the omitted component source as
+`SAVED_ADDRESS` and made no provider call, but metadata preservation checked only the explicit
+command field. It therefore cleared the permanent provider/reference while retaining the saved
+components.
+
+Focused RED:
+
+- `pnpm --filter @freshmarkets/core exec vitest run src/customer-address.integration.test.ts` —
+  exit 1; 1 failed / 22 passed. The unchanged partial edit retained the exact component JSON but
+  changed `geocode_provider` and `geocode_reference` from their permanent values to null.
+
+The minimal fix computes one effective component source (`command.componentsSource ??
+SAVED_ADDRESS`) and uses it consistently for both permanent-finalization policy and provider
+metadata preservation. The regression proves an unchanged partial confirmed edit makes zero
+geocoder calls and preserves exact components/provider/reference. Its second half proves a moved
+partial saved-provider update is not a bypass: it calls permanent reverse exactly once at the new
+coordinate and retains the exact `USER_PIN` coordinate provenance. Focused GREEN was 23/23.
+
+The existing canonical `API_CONTRACTS.md`, `DOMAIN_MODEL.md`, and descriptive status already state
+the precise unchanged-saved preservation and moved-provider re-finalization rule, so no wording
+change was justified in this round.
+
+### Full Task 7 gate rerun
+
+All commands ran from the isolated `maps-program` worktree and were inspected directly:
+
+1. `pnpm format:check` — exit 0; 636 files.
+2. `pnpm naming:check` — exit 0.
+3. `pnpm migration:check` — exit 0; fresh apply and populated `0021 -> 0022` upgrade valid.
+4. `pnpm lint` — exit 0; 19 unchanged non-failing warnings, 0 errors.
+5. `pnpm typecheck` — exit 0; all six participating workspace projects.
+6. Focused Plan 1 tests — exit 0: contracts 10/10, Core 62/62, Web 42/42; aggregate
+   15 files and 114 tests.
+7. `pnpm test` — exit 0; 150 files and 747 tests: config 2, contracts 46, domain-shared 2,
+   validation 2, Web 183, Core 513.
+8. `pnpm --filter @freshmarkets/web check:vinext` — exit 0; 100% compatible, 12 supported,
+   0 partial, 0 issues; 55 pages, 2 layouts, 99 route handlers.
+9. `pnpm -r build` — exit 0; Core Wrangler dry-run and Web vinext build completed; existing
+   non-fatal chunk-size and plugin-timing advisories only.
+10. Managed `E2E_START_STACK=1` address-map Playwright — exit 0; 5 tests passed in 1.6 minutes.
+11. `git diff --check` — exit 0 before this report append.
+
+Port 3100 was released immediately before and after Playwright. No generated Worker/Playwright
+state, schema, migration, API, secret, token, candidate/provider payload, logging, Admin, Plan 2, or
+Rider/Plan 3 change was introduced. The four untracked Maps artifacts remain preserved and
+unstaged. External deployment concerns and the pre-existing lint/build advisories are unchanged.
