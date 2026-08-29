@@ -27,13 +27,6 @@ test("unauthenticated workspace state does not expose navigation", async ({ page
   await expect(page.getByRole("navigation", { name: "Admin navigation" })).toHaveCount(0);
 });
 
-test("authenticated keyboard and mobile assertions remain gated by auth email transport", async () => {
-  test.skip(
-    process.env.E2E_AUTH_EMAIL_CONFIGURED !== "1",
-    "Authenticated Admin shell checks require the provisioned local auth-email transport.",
-  );
-});
-
 test("authenticated shell supports keyboard focus, menu focus return, and responsive navigation", async ({
   page,
 }) => {
