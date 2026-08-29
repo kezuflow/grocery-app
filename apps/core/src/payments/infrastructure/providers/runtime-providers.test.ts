@@ -10,19 +10,28 @@ describe("runtime payment provider selection", () => {
     }
   });
 
-  it("fails closed when selection is absent, unknown, or production-like", () => {
+  it("fails closed when selection is absent", () => {
     for (const config of [
       { ENVIRONMENT: "development" },
-      { ENVIRONMENT: "development", PAYMENT_PROVIDER: "unapproved" },
-      { ENVIRONMENT: "production", PAYMENT_PROVIDER: "mock" },
-      { ENVIRONMENT: "preview", PAYMENT_PROVIDER: "mock" },
-      { PAYMENT_PROVIDER: "mock" },
+      { ENVIRONMENT: "development", PAYMENT_PROVIDER: "disabled" },
     ]) {
       expect(selectedPaymentProviderCode(config)).toBeNull();
       expect(() => buildProviderRegistry(config).require("mock")).toThrow(
         /PAYMENT_PROVIDER_UNCONFIGURED/,
       );
     }
+  });
+
+  it("rejects unknown selections, mock leakage, and an omitted environment", () => {
+    expect(() =>
+      selectedPaymentProviderCode({ ENVIRONMENT: "development", PAYMENT_PROVIDER: "unapproved" }),
+    ).toThrow("PAYMENT_PROVIDER_INVALID");
+    expect(() =>
+      selectedPaymentProviderCode({ ENVIRONMENT: "production", PAYMENT_PROVIDER: "mock" }),
+    ).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+    expect(() => selectedPaymentProviderCode({ PAYMENT_PROVIDER: "mock" })).toThrow(
+      "ENVIRONMENT_REQUIRED",
+    );
   });
 
   it("has no registration-order fallback", () => {

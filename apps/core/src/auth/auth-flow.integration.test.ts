@@ -210,14 +210,8 @@ describe("core auth flow", () => {
     const location = redirect.headers.get("location");
     expect(location).toContain("https://accounts.google.com");
 
-    const misconfigured = createAuthWithCapture([], { GOOGLE_CLIENT_ID: "client-id" });
-    const rejected = await misconfigured.handler(
-      new Request(`${baseUrl}/api/auth/sign-in/social`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: baseUrl },
-        body: JSON.stringify({ provider: "google", callbackURL: baseUrl }),
-      }),
+    expect(() => createAuthWithCapture([], { GOOGLE_CLIENT_ID: "client-id" })).toThrow(
+      "GOOGLE_OAUTH_CONFIGURATION_PARTIAL",
     );
-    expect(rejected.status).toBeGreaterThanOrEqual(400);
   });
 });

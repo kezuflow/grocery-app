@@ -7,9 +7,12 @@ import {
   type AuthEmailDelivery,
   type AuthEmailMessage,
 } from "./email-delivery";
-import { trustedOriginsForEnvironment } from "./origins";
 import { betterAuthSchema } from "./schema";
 import { iamSchema } from "../iam/schema";
+import {
+  coreRuntimeConfiguration,
+  type CoreRuntimeConfiguration,
+} from "../runtime/runtime-configuration";
 
 export type AuthEnvironment = {
   DB: D1Database;
@@ -23,20 +26,21 @@ export type AuthEnvironment = {
   AUTH_EMAIL_FROM?: string;
 };
 
-const localSecret = "freshmarkets-phase1-local-secret-change-me";
-
 export function createBetterAuthDatabase(env: AuthEnvironment) {
   return drizzle(env.DB, { schema: betterAuthSchema });
 }
 
 export function createAuth(
   env: AuthEnvironment,
-  dependencies?: { authEmailDelivery?: AuthEmailDelivery },
+  dependencies?: {
+    authEmailDelivery?: AuthEmailDelivery;
+    runtimeConfiguration?: CoreRuntimeConfiguration;
+  },
 ): Auth<any> {
   const betterAuthDatabase = createBetterAuthDatabase(env);
   const iamDatabase = drizzle(env.DB, { schema: iamSchema });
-  const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
-  const environment = env.ENVIRONMENT ?? "development";
+  const runtime =
+    dependencies?.runtimeConfiguration ?? coreRuntimeConfiguration(env);
   const authEmailDelivery = dependencies?.authEmailDelivery ?? createRuntimeAuthEmailDelivery(env);
   const deliverAuthEmail = (
     data: { user: { email: string }; url: string },
@@ -49,9 +53,9 @@ export function createAuth(
 
   return betterAuth({
     appName: "FreshMarkets",
-    baseURL: env.BETTER_AUTH_URL,
+    baseURL: runtime.auth.baseUrl,
     basePath: "/api/auth",
-    secret: env.BETTER_AUTH_SECRET ?? (environment === "production" ? undefined : localSecret),
+    secret: runtime.auth.secret,
     database: drizzleAdapter(betterAuthDatabase, {
       provider: "sqlite",
       schema: betterAuthSchema,
@@ -84,22 +88,22 @@ export function createAuth(
       sendOnSignUp: true,
       sendVerificationEmail: async (data) => deliverAuthEmail(data, "verification"),
     },
-    socialProviders: googleConfigured
+    socialProviders: runtime.auth.google
       ? {
           google: {
-            clientId: env.GOOGLE_CLIENT_ID!,
-            clientSecret: env.GOOGLE_CLIENT_SECRET!,
+            clientId: runtime.auth.google.clientId,
+            clientSecret: runtime.auth.google.clientSecret,
             requireEmailVerification: true,
           },
         }
       : {},
-    trustedOrigins: [...trustedOriginsForEnvironment(env)],
+    trustedOrigins: [...runtime.auth.trustedOrigins],
     advanced: {
-      useSecureCookies: environment === "production",
+      useSecureCookies: runtime.auth.secureCookies,
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: "lax",
-        secure: environment === "production",
+        secure: runtime.auth.secureCookies,
         path: "/",
       },
     },

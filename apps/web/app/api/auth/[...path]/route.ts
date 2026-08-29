@@ -1,12 +1,15 @@
 import { env } from "cloudflare:workers";
-import { proxyAuthRequest, resolvePublicAppOrigin } from "@/lib/auth/proxy";
+import { proxyAuthRequest } from "@/lib/auth/proxy";
 import { coreClient } from "@/lib/core-client/core";
+import { parseWebRuntimeConfiguration } from "@/lib/runtime/runtime-configuration";
+
+const runtime = parseWebRuntimeConfiguration(env);
 
 async function proxy(request: Request): Promise<Response> {
   return proxyAuthRequest(
     request,
     coreClient(env.CORE),
-    resolvePublicAppOrigin(env.PUBLIC_APP_ORIGIN),
+    runtime.publicAppOrigin,
   );
 }
 

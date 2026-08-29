@@ -13,7 +13,6 @@ import {
   analyticsMetricCategories,
   metricDefinitionStatuses,
 } from "@freshmarkets/contracts";
-import { runtimeEnvironment } from "@freshmarkets/config";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
 import {
   createCheckoutQuote as createCheckoutQuoteCommand,
@@ -229,6 +228,7 @@ import {
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
 } from "./admin/application/finance-commands";
 import { CoreContext } from "./entrypoint/context";
+import { coreRuntimeConfiguration } from "./runtime/runtime-configuration";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 import { buildRoutePreviewPort } from "./geography/infrastructure/runtime-route-preview";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
@@ -950,11 +950,12 @@ const issueActionSchema = authenticatedRequestSchema.extend({
 });
 
 export function buildHealthResponse(env: Env): CoreHealthResponse {
+  const runtime = coreRuntimeConfiguration(env);
   return {
     service: "core",
     status: "ok",
     contractVersion: CONTRACT_VERSION,
-    environment: runtimeEnvironment(env.ENVIRONMENT),
+    environment: runtime.environment === "test" ? "development" : runtime.environment,
     databaseBindingConfigured: Boolean(env.DB),
     timestamp: new Date().toISOString(),
   };
@@ -967,6 +968,7 @@ export function buildHealthResponse(env: Env): CoreHealthResponse {
  * domain behavior lives beside its context, never here.
  */
 export class CoreEntrypoint extends WorkerEntrypoint<Env> {
+  private readonly runtimeConfiguration = coreRuntimeConfiguration(this.env);
   private readonly context = new CoreContext(this.env as Env & AuthEnvironment, systemClock);
 
   async fetch(request: Request): Promise<Response> {
@@ -977,7 +979,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         headers: { "x-request-id": id },
       });
     if (path.startsWith("/webhooks/payments/"))
-      return handleProviderWebhook(this.env.DB, buildProviderRegistry(this.env), request);
+      return handleProviderWebhook(
+        this.env.DB,
+        buildProviderRegistry(this.runtimeConfiguration),
+        request,
+      );
     if (path.startsWith("/api/auth"))
       return createAuth(this.env as Env & AuthEnvironment).handler(request);
     return Response.json(
@@ -1020,7 +1026,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        environment: runtimeEnvironment(this.env.ENVIRONMENT),
+        environment:
+          this.runtimeConfiguration.environment === "test"
+            ? "development"
+            : this.runtimeConfiguration.environment,
       },
       validation.data,
     );
@@ -1033,7 +1042,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        environment: runtimeEnvironment(this.env.ENVIRONMENT),
+        environment:
+          this.runtimeConfiguration.environment === "test"
+            ? "development"
+            : this.runtimeConfiguration.environment,
       },
       validation.data,
     );
@@ -1888,7 +1900,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        payments: buildProviderRegistry(this.env),
+        payments: buildProviderRegistry(this.runtimeConfiguration),
       },
       validation.data,
     );
@@ -2197,8 +2209,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    const registry = buildProviderRegistry(this.env);
-    const providerCode = selectedPaymentProviderCode(this.env);
+    const registry = buildProviderRegistry(this.runtimeConfiguration);
+    const providerCode = selectedPaymentProviderCode(this.runtimeConfiguration);
     if (
       !providerCode ||
       (validation.data.providerCode && validation.data.providerCode !== providerCode)
@@ -2227,11 +2239,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
-    return completeRecurringAuthorizationCommand(this.env.DB, buildProviderRegistry(this.env), {
+    return completeRecurringAuthorizationCommand(
+      this.env.DB,
+      buildProviderRegistry(this.runtimeConfiguration),
+      {
       customerId: customer.value.customerId,
       authorizationId: validation.data.authorizationId!,
       requestId: input.requestId,
-    });
+      },
+    );
   }
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,
@@ -2319,7 +2335,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = createPaymentIntentSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const providerCode = selectedPaymentProviderCode(this.env);
+    const providerCode = selectedPaymentProviderCode(this.runtimeConfiguration);
     if (!providerCode || (input.providerCode && input.providerCode !== providerCode))
       return fail(
         "PAYMENT_PROVIDER_UNAVAILABLE",
@@ -2330,7 +2346,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!customer.ok) return customer;
     return createCheckoutPaymentIntent(
       this.env.DB,
-      buildProviderRegistry(this.env),
+      buildProviderRegistry(this.runtimeConfiguration),
       providerCode,
       buildRouteDistancePort(this.env),
       {

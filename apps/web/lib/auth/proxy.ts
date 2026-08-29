@@ -1,15 +1,7 @@
 import type { AuthRequest, AuthResponse, CoreServiceBinding } from "@freshmarkets/contracts";
+import { parseWebRuntimeConfiguration } from "../runtime/runtime-configuration";
 
 export type AuthProxyCore = Pick<CoreServiceBinding, "auth">;
-
-function isLoopbackHost(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]" ||
-    hostname === "::1"
-  );
-}
 
 /**
  * Validates the environment-configured public application origin. The forwarded
@@ -17,29 +9,16 @@ function isLoopbackHost(hostname: string): boolean {
  * headers. HTTP is allowed only for explicit loopback development origins.
  */
 export function resolvePublicAppOrigin(value: string | undefined): string {
-  if (!value) throw new Error("PUBLIC_APP_ORIGIN_REQUIRED");
-  let parsed: URL;
   try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error("PUBLIC_APP_ORIGIN_INVALID");
+    return parseWebRuntimeConfiguration({
+      ENVIRONMENT: "development",
+      PUBLIC_APP_ORIGIN: value,
+    }).publicAppOrigin;
+  } catch (error) {
+    if (error instanceof Error && error.message === "PUBLIC_APP_ORIGIN_INSECURE")
+      throw new Error("PUBLIC_APP_ORIGIN_INVALID");
+    throw error;
   }
-  if (
-    parsed.protocol !== "https:" &&
-    !(parsed.protocol === "http:" && isLoopbackHost(parsed.hostname))
-  ) {
-    throw new Error("PUBLIC_APP_ORIGIN_INVALID");
-  }
-  if (
-    parsed.username ||
-    parsed.password ||
-    parsed.pathname !== "/" ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    throw new Error("PUBLIC_APP_ORIGIN_INVALID");
-  }
-  return parsed.origin;
 }
 
 export async function proxyAuthRequest(

@@ -1,3 +1,5 @@
+import { parseRuntimeEnvironment } from "../runtime/runtime-configuration";
+
 export type AuthOriginEnvironment = {
   ENVIRONMENT?: string;
   BETTER_AUTH_URL?: string;
@@ -49,8 +51,10 @@ export function parseTrustedOrigins(value: string | undefined): readonly string[
 }
 
 export function trustedOriginsForEnvironment(env: AuthOriginEnvironment): readonly string[] {
-  const environment = env.ENVIRONMENT ?? "development";
-  if (environment === "production" && !env.BETTER_AUTH_URL) {
+  const environment = parseRuntimeEnvironment(env.ENVIRONMENT);
+  const deployed =
+    environment === "preview" || environment === "staging" || environment === "production";
+  if (deployed && !env.BETTER_AUTH_URL) {
     throw new Error("BETTER_AUTH_URL_REQUIRED");
   }
   const configured = parseTrustedOrigins(env.TRUSTED_ORIGINS);
@@ -58,6 +62,14 @@ export function trustedOriginsForEnvironment(env: AuthOriginEnvironment): readon
   const origins = [...base, ...configured].filter(
     (origin, index, all) => all.indexOf(origin) === index,
   );
-  if (origins.length > 0 || environment === "production") return origins;
+  if (
+    deployed &&
+    origins.some((candidate) => {
+      const parsed = new URL(candidate);
+      return parsed.protocol !== "https:" || isLoopbackHost(parsed.hostname);
+    })
+  )
+    throw new Error("TRUSTED_ORIGIN_INSECURE");
+  if (origins.length > 0 || deployed) return origins;
   return loopbackDevelopmentOrigins;
 }
