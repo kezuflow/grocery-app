@@ -12,6 +12,8 @@ type AnalyticsCore = {
   listMetricDefinitions(input: {
     requestId: string;
     headers: Readonly<Record<string, string>>;
+    category?: string;
+    status?: string;
   }): Promise<RpcResult<ReadonlyArray<MetricDefinitionView>>>;
   getAnalyticsOverview(input: {
     requestId: string;
@@ -387,6 +389,40 @@ describe("Core Analytics reads", () => {
         dimensions: [{ key: "promotionId", value: "promotion-1" }],
       }),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("keeps every blocked catalog metric explicitly unavailable with a stable reason", async () => {
+    const reader = await seedAnalyticsReader();
+    const definitions = await core.listMetricDefinitions({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+      status: "BLOCKED",
+    });
+    expect(definitions.ok).toBe(true);
+    if (!definitions.ok) return;
+    expect(definitions.value).toHaveLength(10);
+    for (const definition of definitions.value) {
+      expect(definition.availability).toBe("UNAVAILABLE");
+      expect(definition.unavailableReason).toBeTruthy();
+      await expect(
+        core.getMetricSeries({
+          requestId: crypto.randomUUID(),
+          headers: { cookie: reader.cookie },
+          metricCode: definition.code,
+          definitionVersion: definition.version,
+          window,
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          metricCode: definition.code,
+          definitionVersion: definition.version,
+          availability: "UNAVAILABLE",
+          points: [],
+          unavailableReason: definition.unavailableReason,
+        },
+      });
+    }
   });
 
   it("keeps source state read-only across Analytics requests", async () => {
