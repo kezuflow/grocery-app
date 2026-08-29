@@ -2,7 +2,12 @@
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { AdminProductDetail, AdminUnitSummary, RpcResult } from "@freshmarkets/contracts";
+import type {
+  AdminProductDetail,
+  AdminProductMediaView,
+  AdminUnitSummary,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
 import { Skeleton } from "../../../../../components/ui/skeleton";
@@ -39,7 +44,9 @@ export default function ProductDetailPage({
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
   const [confirmingStatus, setConfirmingStatus] = useState(false);
+  const [mediaToRemove, setMediaToRemove] = useState<AdminProductMediaView | null>(null);
   const statusCancelRef = useRef<HTMLButtonElement>(null);
+  const mediaRemoveCancelRef = useRef<HTMLButtonElement>(null);
   const [newSku, setNewSku] = useState({
     code: "",
     name: "",
@@ -94,8 +101,16 @@ export default function ProductDetailPage({
   useEffect(() => {
     if (confirmingStatus) statusCancelRef.current?.focus();
   }, [confirmingStatus]);
+  useEffect(() => {
+    if (mediaToRemove) mediaRemoveCancelRef.current?.focus();
+  }, [mediaToRemove]);
 
-  async function run(url: string, method: "POST" | "PATCH" | "PUT", body: unknown) {
+  async function run(
+    url: string,
+    method: "POST" | "PATCH" | "PUT" | "DELETE",
+    body: unknown,
+    successMessage = "Applied.",
+  ) {
     const payload = await commandIntent.submit(async (idempotencyKey) => {
       const response = await fetch(url, {
         method,
@@ -104,9 +119,38 @@ export default function ProductDetailPage({
       });
       return (await response.json()) as RpcResult<unknown>;
     });
-    setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
+    setNotice(payload.ok ? successMessage : (payload.error?.message ?? "The command failed."));
     if (payload.ok || payload.error?.code === "STALE_VERSION") load();
     return payload.ok;
+  }
+
+  async function uploadMedia(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    const file = fields.get("file");
+    const altText = fields.get("altText");
+    if (
+      !(file instanceof File) ||
+      file.size === 0 ||
+      typeof altText !== "string" ||
+      !altText.trim()
+    ) {
+      setNotice("An image and alt text are required.");
+      return;
+    }
+    fields.set("expectedProductVersion", String(product.version));
+    const payload = await commandIntent.submit(async (idempotencyKey) => {
+      const response = await fetch(`${BASE}/products/${encodeURIComponent(productId)}/media`, {
+        method: "POST",
+        headers: { "idempotency-key": idempotencyKey },
+        body: fields,
+      });
+      return (await response.json()) as RpcResult<AdminProductMediaView>;
+    });
+    setNotice(payload.ok ? "Media uploaded." : payload.error.message);
+    if (payload.ok) form.reset();
+    if (payload.ok || payload.error.code === "STALE_VERSION") load();
   }
 
   if (state.phase === "loading") {
@@ -136,6 +180,7 @@ export default function ProductDetailPage({
 
   const { product, units } = state;
   const from = searchParams.get("from");
+  const canManageProduct = product.allowedActions.includes("UPDATE");
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
@@ -153,7 +198,7 @@ export default function ProductDetailPage({
             <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
               {product.status}
             </StatusBadge>
-            {product.allowedActions.includes("UPDATE") ? (
+            {canManageProduct ? (
               <Button asChild variant="outline">
                 <Link
                   href={`/admin/catalog/products/${product.productId}/edit${from ? `?from=${encodeURIComponent(from)}` : ""}`}
@@ -207,13 +252,114 @@ export default function ProductDetailPage({
         </section>
       </div>
 
-      <ListPageSection title="Product media">
+      <ListPageSection
+        title="Product media"
+        description="Canonical images are validated in Core, stored in R2, and attached through guarded Product versions."
+      >
+        {canManageProduct ? (
+          <form
+            className="grid gap-3 border-b border-[var(--fm-border)] p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_7rem_8rem_auto] md:items-end"
+            onSubmit={uploadMedia}
+          >
+            <label className="grid gap-1 text-sm font-medium">
+              Product media image
+              <Input name="file" type="file" accept="image/jpeg,image/png,image/webp" required />
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Media alt text
+              <Input name="altText" maxLength={300} required />
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Media sort order
+              <Input name="sortOrder" type="number" min={0} max={10000} defaultValue={0} required />
+            </label>
+            <label className="flex h-10 items-center gap-2 text-sm font-medium">
+              <input name="isPrimary" type="checkbox" value="true" />
+              Primary image
+            </label>
+            <input name="isPrimary" type="hidden" value="false" />
+            <Button type="submit" disabled={commandIntent.pending}>
+              Upload media
+            </Button>
+          </form>
+        ) : null}
         {product.media.length ? (
           <ul className="divide-y divide-[var(--fm-border)]">
             {product.media.map((media) => (
-              <li key={media.mediaId} className="flex justify-between p-4 text-sm">
-                <span>{media.altText}</span>
-                <span>{media.isPrimary ? "Primary" : `Order ${media.sortOrder}`}</span>
+              <li key={`${media.mediaId}-${media.version}`} className="p-4 text-sm">
+                {canManageProduct ? (
+                  <form
+                    className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_7rem_8rem_auto_auto] md:items-end"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const fields = new FormData(event.currentTarget);
+                      void run(
+                        `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
+                        "PATCH",
+                        {
+                          altText: String(fields.get("altText") ?? ""),
+                          isPrimary: fields.get("isPrimary") === "true",
+                          sortOrder: Number(fields.get("sortOrder")),
+                          expectedProductVersion: product.version,
+                        },
+                        "Media updated.",
+                      );
+                    }}
+                  >
+                    <label className="grid gap-1 font-medium">
+                      Alt text for {media.altText}
+                      <Input name="altText" defaultValue={media.altText} maxLength={300} required />
+                    </label>
+                    <label className="grid gap-1 font-medium">
+                      Order for {media.altText}
+                      <Input
+                        name="sortOrder"
+                        type="number"
+                        min={0}
+                        max={10000}
+                        defaultValue={media.sortOrder}
+                        required
+                      />
+                    </label>
+                    <label className="flex h-10 items-center gap-2 font-medium">
+                      <input
+                        name="isPrimary"
+                        type="checkbox"
+                        value="true"
+                        defaultChecked={media.isPrimary}
+                      />
+                      Primary
+                    </label>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      disabled={commandIntent.pending}
+                      aria-label={`Save ${media.altText}`}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      disabled={commandIntent.pending}
+                      aria-label={`Review remove ${media.altText}`}
+                      onClick={() => setMediaToRemove(media)}
+                    >
+                      Remove
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{media.altText}</span>
+                    <span>{media.isPrimary ? "Primary" : `Order ${media.sortOrder}`}</span>
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
+                  {media.mimeType} · attachment v{media.version}
+                  {media.isPrimary ? " · Current primary" : ""}
+                </p>
               </li>
             ))}
           </ul>
@@ -221,6 +367,55 @@ export default function ProductDetailPage({
           <p className="p-5 text-sm text-[var(--fm-text-muted)]">No canonical media attached.</p>
         )}
       </ListPageSection>
+      {mediaToRemove ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setMediaToRemove(null);
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="media-removal-title"
+            aria-describedby="media-removal-description"
+            className="w-full max-w-md rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6 shadow-xl"
+          >
+            <h2 id="media-removal-title" className="text-lg font-semibold">
+              Remove {mediaToRemove.altText}?
+            </h2>
+            <p id="media-removal-description" className="mt-2 text-sm text-[var(--fm-text-muted)]">
+              This deactivates the canonical attachment before deleting its stored image. The image
+              disappears from active Product media and cannot be edited afterward.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                ref={mediaRemoveCancelRef}
+                variant="outline"
+                onClick={() => setMediaToRemove(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={commandIntent.pending}
+                onClick={() => {
+                  const media = mediaToRemove;
+                  setMediaToRemove(null);
+                  void run(
+                    `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
+                    "DELETE",
+                    { expectedProductVersion: product.version },
+                    "Media removed.",
+                  );
+                }}
+              >
+                Confirm media removal
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {product.allowedActions.includes("SET_STATUS") ? (
         <ListPageSection

@@ -58,7 +58,7 @@ All application bounded contexts below are authoritative modules inside `apps/co
 | Application IAM | Customer principals, staff/rider identities, roles, capabilities, market/location scopes, and authorization decisions | Authentication credentials/sessions and business aggregate state |
 | Customers | Customer profile and saved-address ownership | Authentication identity and serviceability policy |
 | Geography and Assignment | Markets, service areas, delivery zones, location capabilities, the single active `INSTANT`/`SCHEDULED` mode configuration per fulfillment location, serviceability, and fulfillment-location assignment | Customer-selected hubs, fulfillment execution, and catalog availability |
-| Catalog, Availability, and Pricing | Global products, controlled unit registry, persisted sellable SKUs and SKU-specific base consumption, canonical product media records (R2 object references, alt text, primary-image designation), plus market/location SKU price and availability policy | Physical stock, universal pack/bunch/tray conversions, committed order snapshots, and binary blob storage beyond validated metadata attachment |
+| Catalog, Availability, and Pricing | Global products, controlled unit registry, persisted sellable SKUs and SKU-specific base consumption, canonical Product media metadata plus validated R2 image storage, and market/location SKU price and availability policy | Physical stock, universal pack/bunch/tray conversions, committed order snapshots, arbitrary caller-controlled object keys, and public asset-serving policy |
 | Membership | Paid membership offer, subscriptions, eligibility, billing periods, and subscription lifecycle | Trial eligibility/grants, provider interactions, and payment state |
 | Promotions | Controlled benefit/rule definitions, eligibility, grants, redemptions, deterministic component-level stacking, and the introductory membership trial authority | Subscription state, arbitrary executable rules, and payment-provider operations |
 | Cart and Checkout | Versioned cart, mode-aware eligibility orchestration, immutable quote and financial breakdown, checkout attempt, and pre-payment recovery state | Canonical payment state and committed orders |
@@ -75,9 +75,11 @@ All application bounded contexts below are authoritative modules inside `apps/co
 
 The canonical membership, introductory-trial, payment-commitment, and subscription-lifecycle semantics are defined in `DOMAIN_MODEL.md` and `STATE_MACHINES.md`; this table establishes ownership only.
 
-### Temporary public-asset product media compatibility
+### Product media storage and storefront compatibility
 
-The launch produce catalog stores validated version-1 media metadata (`assetKey`, `altText`) in `product.image_metadata_json`, while the image binaries remain public static assets under Web's `/produce/*` path served from `apps/web/public`. Core validates asset keys and alt text before they ever reach a public DTO; invalid metadata resolves to a customer-safe placeholder instead of a guessed path. Canonical R2-backed `product_media` records with object references are the approved target state; moving these binaries to R2 and replacing the compatibility column is an explicitly deferred media-storage task and must not be re-decided per feature.
+Core owns the `PRODUCT_MEDIA` R2 binding and canonical `product_media` attachment records. Admin uploads cross the typed Service Binding as bounded bytes; Core validates MIME, content signature, size, alt text, ordering, authorization, idempotency, and Product version before attaching D1 metadata. Core alone generates `products/{productId}/{mediaId}` object keys. D1 is authoritative: failed attachment removes the newly stored object, and removal deactivates the guarded D1 record before deleting its R2 object.
+
+The launch produce storefront still reads validated version-1 compatibility metadata (`assetKey`, `altText`) from `product.image_metadata_json`, with binaries under Web's `/produce/*` public path. That compatibility read remains until a separately tested storefront-delivery migration consumes canonical R2 media; Admin authoring does not expose R2 credentials or invent a public asset URL.
 
 ## Recommended Repository Structure
 

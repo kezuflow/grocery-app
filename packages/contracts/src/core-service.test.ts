@@ -26,8 +26,7 @@ import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
 import type { RpcResult } from "./common";
 
 type Equal<Left, Right> =
-  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() =>
-    Value extends Right ? 1 : 2
+  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
     ? true
     : false;
 type Expect<Type extends true> = Type;
@@ -50,9 +49,7 @@ describe("domain-grouped core services", () => {
     type AddressSearchSignature = Expect<
       Equal<
         CoreServiceBinding["searchAddressCandidates"],
-        (
-          request: AddressSearchRequest,
-        ) => Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>
+        (request: AddressSearchRequest) => Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>
       >
     >;
 

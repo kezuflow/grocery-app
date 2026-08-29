@@ -17,8 +17,7 @@ import type {
 import type { RequestMeta } from "./common";
 
 type Equal<Left, Right> =
-  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() =>
-    Value extends Right ? 1 : 2
+  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
     ? true
     : false;
 type Expect<Type extends true> = Type;
@@ -55,11 +54,10 @@ describe("provider-neutral geography contracts", () => {
     const compilerPath = fileURLToPath(
       new URL("../node_modules/typescript/bin/tsc", import.meta.url),
     );
-    const result = spawnSync(
-      process.execPath,
-      [compilerPath, "--noEmit", "--pretty", "false"],
-      { cwd: process.cwd(), encoding: "utf8" },
-    );
+    const result = spawnSync(process.execPath, [compilerPath, "--noEmit", "--pretty", "false"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
 
     expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
   });
@@ -211,7 +209,7 @@ describe("provider-neutral geography contracts", () => {
       phone: "+639171234567",
       latitude: 10.3173,
       longitude: 123.9058,
-      addressJson: "{\"line1\":\"Cebu City\"}",
+      addressJson: '{"line1":"Cebu City"}',
     } satisfies CreateCustomerAddressRequest;
     // @ts-expect-error Legacy raw JSON cannot be mixed with partial structured address data.
     const invalidMixedCreate: CreateCustomerAddressRequest = {

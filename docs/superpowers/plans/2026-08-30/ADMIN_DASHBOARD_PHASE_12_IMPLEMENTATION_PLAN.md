@@ -201,27 +201,27 @@
 - Produces `uploadAdminProductMedia`, `updateAdminProductMedia`, and `removeAdminProductMedia` commands. Upload accepts validated image bytes, MIME type, alt text, primary flag, sort order, expected Product version, and idempotency key; returns `AdminProductMediaView`.
 - R2 object keys are Core-generated under `products/{productId}/{mediaId}`. D1 attachment is authoritative; failed attachment removes the just-uploaded object. Removal deactivates the row and deletes the blob only after the guarded D1 command succeeds.
 
-- [ ] **Step 1: Retrieve current Workers/R2 references and write failing binding, contract, integration, and route tests**
+- [x] **Step 1: Retrieve current Workers/R2 references and write failing binding, contract, integration, and route tests**
 
   Verify size/MIME limits, missing object/metadata cleanup, primary-image uniqueness, ordering, stale Product versions, authorization, changed-input replay, Audit, and no arbitrary object key input from Web.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
   Run: `pnpm --filter @freshmarkets/contracts test -- src/admin-catalog.test.ts && pnpm --filter @freshmarkets/core test -- src/admin/application/admin-catalog.integration.test.ts && pnpm --filter @freshmarkets/web test -- app/api/admin/catalog-routes.test.ts`.
 
-- [ ] **Step 3: Implement binding, media commands, and multipart BFF adapters**
+- [x] **Step 3: Implement binding, media commands, and multipart BFF adapters**
 
   Keep byte validation and R2 operations in Core. Web parses the same-origin multipart request and delegates typed bytes plus metadata through the Service Binding. No D1/R2 credential reaches Web.
 
-- [ ] **Step 4: Implement Product media management UI**
+- [x] **Step 4: Implement Product media management UI**
 
   Add upload, alt text, primary selection, ordering, and deactivation controls with exact impact confirmation and Core-returned state.
 
-- [ ] **Step 5: Run focused tests, type generation, build, and browser flow**
+- [x] **Step 5: Run focused tests, type generation, build, and browser flow**
 
   Run: `pnpm --filter @freshmarkets/core types && pnpm --filter @freshmarkets/core typecheck && pnpm --filter @freshmarkets/web typecheck && pnpm --filter @freshmarkets/web exec playwright test tests/admin-catalog.spec.ts`.
 
-- [ ] **Step 6: Review, record progress, commit, and push**
+- [x] **Step 6: Review, record progress, commit, and push**
 
   Commit `feat(catalog): manage canonical product media`, then push `origin main`.
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   catalogStatuses,
+  adminProductMediaMaxBytes,
+  adminProductMediaMimeTypes,
   sourcingModes,
   type AdminCategoryCreateRequest,
   type AdminCategoryDetail,
@@ -14,11 +16,51 @@ import {
   type AdminProductUpdateRequest,
   type AdminCatalogSkuSummary,
   type AdminSkuPriceRequest,
+  type AdminProductMediaRemoveRequest,
+  type AdminProductMediaUpdateRequest,
+  type AdminProductMediaUploadRequest,
 } from "./admin-catalog";
 
 describe("catalog contracts", () => {
   it("publishes the closed catalog status vocabulary", () => {
     expect(catalogStatuses).toEqual(["active", "inactive"]);
+  });
+
+  it("publishes bounded Product media commands without caller-controlled object keys", () => {
+    expect(adminProductMediaMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(adminProductMediaMaxBytes).toBe(5_242_880);
+    const upload = {
+      requestId: "request-media-upload",
+      headers: {},
+      productId: "prod-1",
+      bytes: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
+      mimeType: "image/jpeg",
+      altText: "Red onion",
+      isPrimary: true,
+      sortOrder: 1,
+      expectedProductVersion: 2,
+      idempotencyKey: "media-upload-1",
+    } satisfies AdminProductMediaUploadRequest;
+    void ({
+      requestId: "request-media-update",
+      headers: {},
+      productId: "prod-1",
+      mediaId: "media-1",
+      altText: "Red onions",
+      isPrimary: false,
+      sortOrder: 2,
+      expectedProductVersion: 3,
+      idempotencyKey: "media-update-1",
+    } satisfies AdminProductMediaUpdateRequest);
+    void ({
+      requestId: "request-media-remove",
+      headers: {},
+      productId: "prod-1",
+      mediaId: "media-1",
+      expectedProductVersion: 4,
+      idempotencyKey: "media-remove-1",
+    } satisfies AdminProductMediaRemoveRequest);
+    expect(upload).not.toHaveProperty("objectKey");
   });
 
   it("publishes canonical unit conversion and sourcing contracts", () => {

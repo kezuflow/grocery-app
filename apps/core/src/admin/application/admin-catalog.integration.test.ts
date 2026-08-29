@@ -794,3 +794,257 @@ describe("catalog administration", () => {
     ).toMatchObject({ ok: true, value: { status: "inactive" } });
   });
 });
+
+describe("Product media administration", () => {
+  const jpeg = () => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]).buffer;
+  const png = () => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]).buffer;
+
+  it("exposes the local Product media R2 binding and rejects invalid image payloads", async () => {
+    const bucket = (env as unknown as { PRODUCT_MEDIA?: R2Bucket }).PRODUCT_MEDIA;
+    expect(bucket).toBeDefined();
+    const manager = await seedManager();
+    const { productId } = await seedProduct();
+
+    const invalidSignature = await core.uploadAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      bytes: new Uint8Array([1, 2, 3]).buffer,
+      mimeType: "image/jpeg",
+      altText: "Invalid image",
+      isPrimary: false,
+      sortOrder: 0,
+      expectedProductVersion: 1,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    expect(invalidSignature).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+
+    const oversized = await core.uploadAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      bytes: new Uint8Array(5 * 1024 * 1024 + 1).buffer,
+      mimeType: "image/png",
+      altText: "Too large",
+      isPrimary: false,
+      sortOrder: 0,
+      expectedProductVersion: 1,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    expect(oversized).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("uploads generated R2 keys idempotently, orders media, and records Audit", async () => {
+    const bucket = (env as unknown as { PRODUCT_MEDIA: R2Bucket }).PRODUCT_MEDIA;
+    const manager = await seedManager();
+    const { productId } = await seedProduct();
+    const idempotencyKey = `media-${crypto.randomUUID()}`;
+    const firstRequest = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      bytes: jpeg(),
+      mimeType: "image/jpeg" as const,
+      altText: "Primary product photograph",
+      isPrimary: true,
+      sortOrder: 2,
+      expectedProductVersion: 1,
+      idempotencyKey,
+    };
+    const uploaded = await core.uploadAdminProductMedia(firstRequest);
+    expect(uploaded).toMatchObject({
+      ok: true,
+      value: { altText: "Primary product photograph", isPrimary: true, version: 1 },
+    });
+    if (!uploaded.ok) return;
+    const metadata = await env.DB.prepare(
+      "SELECT object_key AS objectKey, byte_size AS byteSize FROM product_media WHERE id=?",
+    )
+      .bind(uploaded.value.mediaId)
+      .first<{ objectKey: string; byteSize: number }>();
+    expect(metadata).toEqual({
+      objectKey: `products/${productId}/${uploaded.value.mediaId}`,
+      byteSize: 6,
+    });
+    expect(await bucket.head(metadata!.objectKey)).not.toBeNull();
+
+    const replay = await core.uploadAdminProductMedia({
+      ...firstRequest,
+      requestId: crypto.randomUUID(),
+      bytes: jpeg(),
+    });
+    expect(replay).toMatchObject({ ok: true, value: { mediaId: uploaded.value.mediaId } });
+    const changedReplay = await core.uploadAdminProductMedia({
+      ...firstRequest,
+      requestId: crypto.randomUUID(),
+      bytes: png(),
+      mimeType: "image/png",
+    });
+    expect(changedReplay).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    const audit = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action='CATALOG.PRODUCT_MEDIA_UPLOADED' AND aggregate_id=?",
+    )
+      .bind(uploaded.value.mediaId)
+      .first<{ count: number }>();
+    expect(audit?.count).toBe(1);
+    await env.DB.prepare("DELETE FROM product_media WHERE id=?").bind(uploaded.value.mediaId).run();
+    const missingMetadataReplay = await core.uploadAdminProductMedia({
+      ...firstRequest,
+      requestId: crypto.randomUUID(),
+      bytes: jpeg(),
+    });
+    expect(missingMetadataReplay).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(await bucket.head(metadata!.objectKey)).toBeNull();
+  });
+
+  it("deletes a just-uploaded object when authoritative D1 attachment fails", async () => {
+    const bucket = (env as unknown as { PRODUCT_MEDIA: R2Bucket }).PRODUCT_MEDIA;
+    const manager = await seedManager();
+    const { productId } = await seedProduct();
+    const triggerName = `reject_media_${crypto.randomUUID().replaceAll("-", "")}`;
+    await env.DB.prepare(
+      `CREATE TRIGGER ${triggerName} BEFORE INSERT ON product_media
+       WHEN NEW.product_id='${productId}' BEGIN SELECT RAISE(ABORT, 'forced attachment failure'); END`,
+    ).run();
+    try {
+      const result = await core.uploadAdminProductMedia({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        productId,
+        bytes: jpeg(),
+        mimeType: "image/jpeg",
+        altText: "Cleanup test",
+        isPrimary: false,
+        sortOrder: 0,
+        expectedProductVersion: 1,
+        idempotencyKey: `media-${crypto.randomUUID()}`,
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      const objects = await bucket.list({ prefix: `products/${productId}/` });
+      expect(objects.objects).toHaveLength(0);
+      const metadata = await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM product_media WHERE product_id=?",
+      )
+        .bind(productId)
+        .first<{ count: number }>();
+      expect(metadata?.count).toBe(0);
+    } finally {
+      await env.DB.prepare(`DROP TRIGGER ${triggerName}`).run();
+    }
+  });
+
+  it("enforces Product versions and one primary while updating and removing media", async () => {
+    const bucket = (env as unknown as { PRODUCT_MEDIA: R2Bucket }).PRODUCT_MEDIA;
+    const manager = await seedManager();
+    const { productId } = await seedProduct();
+    const upload = async (
+      altText: string,
+      isPrimary: boolean,
+      sortOrder: number,
+      expectedProductVersion: number,
+    ) =>
+      core.uploadAdminProductMedia({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        productId,
+        bytes: jpeg(),
+        mimeType: "image/jpeg",
+        altText,
+        isPrimary,
+        sortOrder,
+        expectedProductVersion,
+        idempotencyKey: `media-${crypto.randomUUID()}`,
+      });
+    const first = await upload("First", true, 3, 1);
+    const second = await upload("Second", true, 1, 2);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    const primaries = await env.DB.prepare(
+      "SELECT id FROM product_media WHERE product_id=? AND status='active' AND is_primary=1",
+    )
+      .bind(productId)
+      .all<{ id: string }>();
+    expect(primaries.results.map((row) => row.id)).toEqual([second.value.mediaId]);
+
+    const stale = await core.updateAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      mediaId: first.value.mediaId,
+      altText: "Stale",
+      isPrimary: false,
+      sortOrder: 9,
+      expectedProductVersion: 2,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    expect(stale).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+
+    const updated = await core.updateAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      mediaId: first.value.mediaId,
+      altText: "First reordered",
+      isPrimary: true,
+      sortOrder: 0,
+      expectedProductVersion: 3,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    expect(updated).toMatchObject({
+      ok: true,
+      value: { altText: "First reordered", isPrimary: true, sortOrder: 0, version: 3 },
+    });
+    const detail = await core.getAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: {
+        version: 4,
+        media: [
+          { mediaId: first.value.mediaId, isPrimary: true },
+          { mediaId: second.value.mediaId, isPrimary: false },
+        ],
+      },
+    });
+    const objectKey = `products/${productId}/${first.value.mediaId}`;
+    await bucket.delete(objectKey);
+    expect(await bucket.head(objectKey)).toBeNull();
+    const removed = await core.removeAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      mediaId: first.value.mediaId,
+      expectedProductVersion: 4,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    expect(removed).toMatchObject({ ok: true, value: { status: "inactive", version: 4 } });
+    expect(await bucket.head(objectKey)).toBeNull();
+  });
+
+  it("denies media mutation without global catalog management", async () => {
+    const locationStaff = await seedManager({ scope: "location" });
+    const { productId } = await seedProduct();
+    const denied = await core.uploadAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: locationStaff.cookie },
+      productId,
+      bytes: jpeg(),
+      mimeType: "image/jpeg",
+      altText: "Denied",
+      isPrimary: false,
+      sortOrder: 0,
+      expectedProductVersion: 1,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    expect(denied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+});

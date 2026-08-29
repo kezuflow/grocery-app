@@ -189,6 +189,11 @@ import {
   setAdminSkuPrice as setAdminSkuPriceCommand,
 } from "./admin/application/catalog-commands";
 import {
+  uploadAdminProductMedia as uploadAdminProductMediaCommand,
+  updateAdminProductMedia as updateAdminProductMediaCommand,
+  removeAdminProductMedia as removeAdminProductMediaCommand,
+} from "./admin/application/product-media";
+import {
   listAdminInventory as listAdminInventoryQuery,
   getAdminInventoryLedger as getAdminInventoryLedgerQuery,
 } from "./admin/application/catalog-reads";
@@ -651,6 +656,32 @@ const catalogProductStatusSchema = authenticatedRequestSchema.extend({
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogProductMediaMetadataSchema = authenticatedRequestSchema.extend({
+  productId: validationSchema.string().trim().min(1).max(200),
+  mediaId: validationSchema.string().trim().min(1).max(200),
+  altText: validationSchema.string().trim().min(1).max(300),
+  isPrimary: validationSchema.boolean(),
+  sortOrder: validationSchema.number().int().min(0).max(10_000),
+  expectedProductVersion: validationSchema.number().int().min(1),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const catalogProductMediaUploadSchema = catalogProductMediaMetadataSchema
+  .omit({ mediaId: true })
+  .extend({
+    bytes: validationSchema.instanceof(ArrayBuffer),
+    mimeType: validationSchema.enum(["image/jpeg", "image/png", "image/webp"]),
+  });
+
+const catalogProductMediaRemoveSchema = catalogProductMediaMetadataSchema.pick({
+  requestId: true,
+  headers: true,
+  productId: true,
+  mediaId: true,
+  expectedProductVersion: true,
+  idempotencyKey: true,
 });
 
 const catalogSkuCreateSchema = authenticatedRequestSchema.extend({
@@ -1485,6 +1516,51 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminProductStatusCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async uploadAdminProductMedia(
+    input: import("@freshmarkets/contracts").AdminProductMediaUploadRequest,
+  ) {
+    const validation = catalogProductMediaUploadSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return uploadAdminProductMediaCommand(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      validation.data,
+    );
+  }
+  async updateAdminProductMedia(
+    input: import("@freshmarkets/contracts").AdminProductMediaUpdateRequest,
+  ) {
+    const validation = catalogProductMediaMetadataSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateAdminProductMediaCommand(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      validation.data,
+    );
+  }
+  async removeAdminProductMedia(
+    input: import("@freshmarkets/contracts").AdminProductMediaRemoveRequest,
+  ) {
+    const validation = catalogProductMediaRemoveSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return removeAdminProductMediaCommand(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
       validation.data,
     );
   }

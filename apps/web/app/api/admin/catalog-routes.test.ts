@@ -13,6 +13,9 @@ const coreMocks = vi.hoisted(() => ({
   getAdminProduct: vi.fn(),
   updateAdminProduct: vi.fn(),
   setAdminProductStatus: vi.fn(),
+  uploadAdminProductMedia: vi.fn(),
+  updateAdminProductMedia: vi.fn(),
+  removeAdminProductMedia: vi.fn(),
   createAdminSku: vi.fn(),
   updateAdminSku: vi.fn(),
   setAdminSkuAvailability: vi.fn(),
@@ -35,6 +38,11 @@ import { GET as listUnits, POST as createUnit } from "./catalog/units/route";
 import { GET as listProducts, POST as createProduct } from "./catalog/products/route";
 import { GET as getProduct, PATCH as updateProduct } from "./catalog/products/[product-id]/route";
 import { POST as productStatus } from "./catalog/products/[product-id]/status/route";
+import { POST as uploadProductMedia } from "./catalog/products/[product-id]/media/route";
+import {
+  DELETE as removeProductMedia,
+  PATCH as updateProductMedia,
+} from "./catalog/products/[product-id]/media/[media-id]/route";
 import { POST as createSku } from "./catalog/skus/route";
 import { PATCH as updateSku } from "./catalog/skus/[sku-id]/route";
 import { PUT as setAvailability } from "./catalog/skus/[sku-id]/availability/route";
@@ -49,6 +57,9 @@ beforeEach(() => {
 const COOKIE = { cookie: "session=abc" };
 const categoryParams = { params: Promise.resolve({ "category-id": "category-1" }) };
 const productParams = { params: Promise.resolve({ "product-id": "prod-1" }) };
+const mediaParams = {
+  params: Promise.resolve({ "product-id": "prod-1", "media-id": "media-1" }),
+};
 const skuParams = { params: Promise.resolve({ "sku-id": "sku-1" }) };
 const poolParams = { params: Promise.resolve({ "inventory-pool-id": "pool-1" }) };
 
@@ -202,6 +213,73 @@ describe("catalog and inventory BFF routes", () => {
     expect(coreMocks.updateAdminProduct.mock.calls[0][0]).not.toHaveProperty(
       "arbitraryDatabaseField",
     );
+  });
+
+  it("parses bounded multipart Product media and delegates only canonical fields", async () => {
+    coreMocks.uploadAdminProductMedia.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.updateAdminProductMedia.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.removeAdminProductMedia.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([new Uint8Array([0xff, 0xd8, 0xff])], "onion.jpg", {
+        type: "image/jpeg",
+      }),
+    );
+    form.set("altText", "Red onion");
+    form.set("isPrimary", "true");
+    form.set("sortOrder", "2");
+    form.set("expectedProductVersion", "3");
+    form.set("objectKey", "caller/controlled/key");
+    await uploadProductMedia(
+      new Request("https://x/products/prod-1/media", {
+        method: "POST",
+        headers: { "idempotency-key": "media-upload-1", ...COOKIE },
+        body: form,
+      }),
+      productParams,
+    );
+    expect(coreMocks.uploadAdminProductMedia.mock.calls[0][0]).toMatchObject({
+      productId: "prod-1",
+      mimeType: "image/jpeg",
+      altText: "Red onion",
+      isPrimary: true,
+      sortOrder: 2,
+      expectedProductVersion: 3,
+      idempotencyKey: "media-upload-1",
+    });
+    expect(coreMocks.uploadAdminProductMedia.mock.calls[0][0].bytes).toBeInstanceOf(ArrayBuffer);
+    expect(coreMocks.uploadAdminProductMedia.mock.calls[0][0]).not.toHaveProperty("objectKey");
+
+    await updateProductMedia(
+      jsonRequest(
+        "https://x/products/prod-1/media/media-1",
+        { altText: "Updated onion", isPrimary: false, sortOrder: 4, expectedProductVersion: 4 },
+        "PATCH",
+      ),
+      mediaParams,
+    );
+    expect(coreMocks.updateAdminProductMedia.mock.calls[0][0]).toMatchObject({
+      productId: "prod-1",
+      mediaId: "media-1",
+      altText: "Updated onion",
+      expectedProductVersion: 4,
+    });
+
+    await removeProductMedia(
+      jsonRequest(
+        "https://x/products/prod-1/media/media-1",
+        { expectedProductVersion: 5, objectKey: "ignored" },
+        "DELETE",
+      ),
+      mediaParams,
+    );
+    expect(coreMocks.removeAdminProductMedia.mock.calls[0][0]).toMatchObject({
+      productId: "prod-1",
+      mediaId: "media-1",
+      expectedProductVersion: 5,
+    });
+    expect(coreMocks.removeAdminProductMedia.mock.calls[0][0]).not.toHaveProperty("objectKey");
   });
 
   it("delegates sku create/update/availability/price", async () => {

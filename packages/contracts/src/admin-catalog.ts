@@ -125,6 +125,10 @@ export type AdminProductMediaView = {
   version: number;
 };
 
+export const adminProductMediaMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
+export type AdminProductMediaMimeType = (typeof adminProductMediaMimeTypes)[number];
+export const adminProductMediaMaxBytes = 5 * 1024 * 1024;
+
 export type AdminProductInventoryPoolView = {
   inventoryPoolId: string;
   baseUnitId: string;
@@ -249,6 +253,34 @@ export type AdminProductStatusRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type AdminProductMediaUploadRequest = AuthenticatedRequest & {
+  productId: string;
+  bytes: ArrayBuffer;
+  mimeType: AdminProductMediaMimeType;
+  altText: string;
+  isPrimary: boolean;
+  sortOrder: number;
+  expectedProductVersion: number;
+  idempotencyKey: string;
+};
+
+export type AdminProductMediaUpdateRequest = AuthenticatedRequest & {
+  productId: string;
+  mediaId: string;
+  altText: string;
+  isPrimary: boolean;
+  sortOrder: number;
+  expectedProductVersion: number;
+  idempotencyKey: string;
+};
+
+export type AdminProductMediaRemoveRequest = AuthenticatedRequest & {
+  productId: string;
+  mediaId: string;
+  expectedProductVersion: number;
+  idempotencyKey: string;
+};
+
 export type AdminSkuCreateRequest = AuthenticatedRequest & {
   productId: string;
   code: string;
@@ -330,6 +362,15 @@ export type AdminCatalogService = {
   setAdminProductStatus(
     request: AdminProductStatusRequest,
   ): Promise<RpcResult<AdminProductSummary>>;
+  uploadAdminProductMedia(
+    request: AdminProductMediaUploadRequest,
+  ): Promise<RpcResult<AdminProductMediaView>>;
+  updateAdminProductMedia(
+    request: AdminProductMediaUpdateRequest,
+  ): Promise<RpcResult<AdminProductMediaView>>;
+  removeAdminProductMedia(
+    request: AdminProductMediaRemoveRequest,
+  ): Promise<RpcResult<AdminProductMediaView>>;
   createAdminSku(request: AdminSkuCreateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   updateAdminSku(request: AdminSkuUpdateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   setAdminSkuAvailability(

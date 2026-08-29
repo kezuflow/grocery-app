@@ -1,4 +1,5 @@
 import { expect, test } from "./admin-authenticated-fixture";
+import { resolve } from "node:path";
 
 /**
  * Catalog and Inventory workspace flows against a provisioned local stack.
@@ -76,6 +77,26 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await expect(
     adminPage.getByRole("heading", { level: 1, name: "E2E updated product" }),
   ).toBeVisible();
+  await adminPage
+    .getByLabel("Product media image")
+    .setInputFiles(resolve("public/produce/abiu.webp"));
+  await adminPage.getByLabel("Media alt text").fill("E2E product image");
+  await adminPage.getByLabel("Primary image").check();
+  await adminPage.getByLabel("Media sort order").fill("1");
+  await adminPage.getByRole("button", { name: "Upload media" }).click();
+  await expect(adminPage.getByText("Media uploaded.", { exact: true })).toBeVisible();
+  await expect(adminPage.getByLabel("Alt text for E2E product image")).toHaveValue(
+    "E2E product image",
+  );
+  await adminPage.getByLabel("Alt text for E2E product image").fill("E2E updated media");
+  await adminPage.getByRole("button", { name: "Save E2E product image" }).click();
+  await expect(adminPage.getByText("Media updated.", { exact: true })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Review remove E2E updated media" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText(
+    "deactivates the canonical attachment before deleting its stored image",
+  );
+  await adminPage.getByRole("button", { name: "Confirm media removal" }).click();
+  await expect(adminPage.getByText("Media removed.", { exact: true })).toBeVisible();
   await adminPage.getByLabel("Reason").fill("Lifecycle impact review");
   await adminPage.getByRole("button", { name: "Review deactivation" }).click();
   await expect(adminPage.getByRole("alertdialog")).toContainText(

@@ -35,6 +35,13 @@
   // API token. AUTH_EMAIL_FROM is deployment configuration and intentionally
   // has no source-controlled production default.
   "send_email": [{ "name": "EMAIL" }],
+  "r2_buckets": [
+    {
+      "binding": "PRODUCT_MEDIA",
+      "bucket_name": "freshmarkets-product-media-dev",
+      "preview_bucket_name": "freshmarkets-product-media-dev",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",
