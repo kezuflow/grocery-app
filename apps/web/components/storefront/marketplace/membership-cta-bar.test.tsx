@@ -28,4 +28,11 @@ describe("MembershipCtaBar", () => {
     expect(html).toContain('src="/illustrations/produce-box-cta.webp"');
     expect(html).toContain('aria-label="Dismiss membership offer"');
   });
+
+  it("anchors the dismiss button to the full sticky bar instead of the centered content", () => {
+    const html = renderToStaticMarkup(<MembershipCtaBar />);
+
+    expect(html).toMatch(/<\/div><button[^>]+aria-label="Dismiss membership offer"/);
+    expect(html).toMatch(/aria-label="Dismiss membership offer"[^>]+top-1\/2/);
+  });
 });

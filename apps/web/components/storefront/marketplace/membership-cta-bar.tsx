@@ -63,16 +63,16 @@ export function MembershipCtaBar() {
         >
           Start your free trial
         </Link>
-
-        <button
-          type="button"
-          aria-label="Dismiss membership offer"
-          onClick={dismiss}
-          className="absolute right-2 inline-flex size-10 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none sm:right-3"
-        >
-          <X className="size-5" aria-hidden="true" />
-        </button>
       </div>
+
+      <button
+        type="button"
+        aria-label="Dismiss membership offer"
+        onClick={dismiss}
+        className="absolute top-1/2 right-2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none sm:right-4"
+      >
+        <X className="size-5" aria-hidden="true" />
+      </button>
     </aside>
   );
 }
