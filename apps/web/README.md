@@ -14,6 +14,11 @@ vinext presentation Worker. Phase 1 contains browser auth screens and a thin Web
 
 The Web Worker has no D1 binding. Its `CORE` Service Binding targets `freshmarkets-core`.
 
+`MAPBOX_PUBLIC_ACCESS_TOKEN` is the only Mapbox token exposed to browser map components. It
+must be a read-only public token restricted in Mapbox to the exact local, preview, and production
+Web origins. The server-side `MAPBOX_ACCESS_TOKEN` remains a Core secret and must never be copied
+into Web configuration, client bundles, logs, or rendered error content.
+
 Browser auth requests use `http://localhost:3000/api/auth/*` in local development;
 the proxy forwards the configured public URL/origin/host and reproduces all Core
 response headers, including repeated `Set-Cookie` headers. `/api/auth-context`

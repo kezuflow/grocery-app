@@ -21,6 +21,9 @@
     // PUBLIC_APP_ORIGIN through environment configuration, never a source default.
     "PUBLIC_APP_ORIGIN": "http://localhost:3000",
     "ENVIRONMENT": "development",
+    // Browser-safe, read-only Mapbox token. Restrict it in Mapbox to the exact
+    // local, preview, and production Web origins; never put MAPBOX_ACCESS_TOKEN here.
+    "MAPBOX_PUBLIC_ACCESS_TOKEN": "",
   },
   "observability": {
     "enabled": true,
