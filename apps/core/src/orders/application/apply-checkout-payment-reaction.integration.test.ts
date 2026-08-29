@@ -28,10 +28,11 @@ async function seededCheckout(
   )
     .bind(customerId, authId, now, now)
     .run();
+  const subscriptionId = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, created_at, updated_at) VALUES (?, ?, (SELECT id FROM subscription_offer WHERE code='MEMBERSHIP_MONTHLY'), 'TRIALING', ?, ?, ?, ?)",
   )
-    .bind(crypto.randomUUID(), customerId, now, now + 86_400_000 * 30, now, now)
+    .bind(subscriptionId, customerId, now, now + 86_400_000 * 30, now, now)
     .run();
   const addressId = `addr-co-${n}`;
   await env.DB.prepare(
@@ -88,7 +89,7 @@ async function seededCheckout(
     .bind(cartId, skuId)
     .run();
 
-  return { customerId, cartId, addressId, skuId, poolId };
+  return { customerId, cartId, addressId, skuId, poolId, subscriptionId };
 }
 
 async function createQuote(fixture: Awaited<ReturnType<typeof seededCheckout>>) {
@@ -141,6 +142,43 @@ async function intentWithReaction(quoteId: string, customerId: string) {
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("allows quote creation for PAST_DUE membership inside grace", async () => {
+    const fixture = await seededCheckout();
+    await env.DB.prepare(
+      "UPDATE subscription SET status='PAST_DUE', trial_ends_at=?, grace_ends_at=?, version=version+1, updated_at=? WHERE id=?",
+    )
+      .bind(Date.now() - 1_000, Date.now() + 86_400_000, Date.now(), fixture.subscriptionId)
+      .run();
+
+    const quote = await createQuote(fixture);
+
+    expect(quote.ok).toBe(true);
+  });
+
+  it("allows commitment for PAST_DUE membership still inside grace", async () => {
+    const fixture = await seededCheckout();
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    await env.DB.prepare(
+      "UPDATE subscription SET status='PAST_DUE', trial_ends_at=?, grace_ends_at=?, version=version+1, updated_at=? WHERE id=?",
+    )
+      .bind(Date.now() - 1_000, Date.now() + 86_400_000, Date.now(), fixture.subscriptionId)
+      .run();
+    const { intentId, reactionId } = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+    );
+
+    const outcome = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+
+    expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
+  });
+
   it("ignores insufficient canonical states", async () => {
     const fixture = await seededCheckout();
     const quote = await createQuote(fixture);
@@ -157,9 +195,11 @@ describe("order commitment from canonical payment reactions", () => {
       canonicalPaymentState: "PROCESSING",
     });
     expect(outcome).toMatchObject({ applied: false, reason: "INSUFFICIENT_STATE" });
-    const orders = await env.DB.prepare("SELECT COUNT(*) AS count FROM grocery_order").first<{
-      count: number;
-    }>();
+    const orders = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM order_payment_reaction WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
     expect(orders?.count).toBe(0);
   });
 

@@ -8,6 +8,7 @@ import { createInstantQuote, type QuoteItem } from "./instant-quote";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { deliveryFeeFailure } from "./delivery-fee-failure";
+import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -69,13 +70,11 @@ export async function createCheckoutQuote(
   }
 
   // Membership entitlement at quote time.
-  const membership = await database
-    .prepare(
-      "SELECT status FROM subscription WHERE customer_id=? AND status IN ('TRIALING','ACTIVE') ORDER BY updated_at DESC LIMIT 1",
-    )
-    .bind(command.customerId)
-    .first<{ status: string }>();
-  if (!membership)
+  const membership = await evaluateSubscriptionEntitlement(database, {
+    customerId: command.customerId,
+    at: Date.now(),
+  });
+  if (!membership.eligible)
     return failure(
       "MEMBERSHIP_REQUIRED",
       "An active or trialing membership is required to check out",

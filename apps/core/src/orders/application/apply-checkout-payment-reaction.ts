@@ -1,6 +1,7 @@
 import { isSufficientForCommitment } from "../../payments/domain/payment";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
+import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 
 export type ApplyCheckoutPaymentReactionInput = {
   reactionId: string;
@@ -56,13 +57,12 @@ export async function applyCheckoutPaymentReaction(
     return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
 
   // Membership must still be entitled at the commitment boundary.
-  const membership = await database
-    .prepare(
-      "SELECT status FROM subscription WHERE customer_id=? AND status IN ('TRIALING','ACTIVE') LIMIT 1",
-    )
-    .bind(quote.customerId)
-    .first<{ status: string }>();
-  if (!membership) return recordException(database, input, "MEMBERSHIP_LOST", "MEMBERSHIP_LOST");
+  const membership = await evaluateSubscriptionEntitlement(database, {
+    customerId: quote.customerId,
+    at: now,
+  });
+  if (!membership.eligible)
+    return recordException(database, input, "MEMBERSHIP_LOST", "MEMBERSHIP_LOST");
 
   interface CycleSnapshot {
     cycleId: string;

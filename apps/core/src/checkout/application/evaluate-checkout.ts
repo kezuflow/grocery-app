@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { resolveServiceability } from "../../geography/serviceability";
 import { defaultCurrency } from "../../geography/market-defaults";
 import { checkoutEligibility } from "../../commerce/service";
+import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 
 function failure(code: string, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -31,12 +32,7 @@ export async function evaluateCheckout(
   const db = drizzle(database);
   const now = Date.now();
   const [subscription, address, cycle, policy] = await Promise.all([
-    database
-      .prepare(
-        "SELECT status, trial_ends_at FROM subscription WHERE customer_id=? ORDER BY updated_at DESC LIMIT 1",
-      )
-      .bind(command.customerId)
-      .first<{ status: string; trial_ends_at: number | null }>(),
+    evaluateSubscriptionEntitlement(database, { customerId: command.customerId, at: now }),
     database
       .prepare(
         "SELECT latitude, longitude, delivery_zone_code FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
@@ -113,11 +109,7 @@ export async function evaluateCheckout(
       latitude: address?.latitude ?? 0,
       longitude: address?.longitude ?? 0,
       customerId: command.customerId,
-      hasEligibleSubscription: Boolean(
-        subscription &&
-        ["ACTIVE", "TRIALING"].includes(subscription.status) &&
-        (!subscription.trial_ends_at || subscription.trial_ends_at > now),
-      ),
+      hasEligibleSubscription: subscription.eligible,
     },
     Boolean(geo?.ok && geo.value.serviceable),
   );

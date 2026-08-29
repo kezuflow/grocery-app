@@ -5,7 +5,11 @@ import { getSubscriptionEligibility } from "./subscription-eligibility";
 let customerCounter = 0;
 async function seedCustomerWithSubscription(
   status: string,
-  columns: { trialEndsAt?: number | null; graceEndsAt?: number | null },
+  columns: {
+    trialEndsAt?: number | null;
+    currentPeriodEndsAt?: number | null;
+    graceEndsAt?: number | null;
+  },
 ): Promise<string> {
   const customerId = `cust-elig-${++customerCounter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
@@ -18,7 +22,7 @@ async function seedCustomerWithSubscription(
     "SELECT id FROM subscription_offer WHERE code='MEMBERSHIP_MONTHLY'",
   ).first<{ id: string }>();
   await env.DB.prepare(
-    "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, grace_ends_at, cancel_at_period_end, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?)",
+    "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, current_period_ends_at, grace_ends_at, cancel_at_period_end, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?)",
   )
     .bind(
       crypto.randomUUID(),
@@ -27,6 +31,7 @@ async function seedCustomerWithSubscription(
       status,
       now,
       columns.trialEndsAt ?? null,
+      columns.currentPeriodEndsAt ?? null,
       columns.graceEndsAt ?? null,
       now,
       now,
@@ -58,6 +63,15 @@ describe("subscription checkout eligibility with grace", () => {
     });
     const result = await getSubscriptionEligibility(env.DB, query(customerId));
     expect(result.value).toMatchObject({ eligible: false, state: "TRIALING" });
+  });
+
+  it("keeps ACTIVE eligible after conversion even when its historical trial end passed", async () => {
+    const customerId = await seedCustomerWithSubscription("ACTIVE", {
+      trialEndsAt: Date.now() - 86_400_000,
+      currentPeriodEndsAt: Date.now() + 86_400_000,
+    });
+    const result = await getSubscriptionEligibility(env.DB, query(customerId));
+    expect(result.value).toMatchObject({ eligible: true, state: "ACTIVE" });
   });
 
   it("keeps PAST_DUE eligible inside its grace window", async () => {
