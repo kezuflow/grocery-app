@@ -28,6 +28,12 @@ export type CheckoutQuoteView = {
   attemptVersion: number;
   expiresAt: string;
   currency: string;
+  merchandiseSubtotalMinor: number;
+  itemDiscountMinor: number;
+  orderDiscountMinor: number;
+  deliveryDiscountMinor: number;
+  serviceFeeMinor: number;
+  taxMinor: number;
   subtotalMinor: number;
   discountMinor: number;
   deliveryFeeMinor: number;
@@ -301,6 +307,17 @@ async function createScheduledQuote(
           addressId: command.addressId,
           deliveryCycleId: command.deliveryCycleId,
           currency: "PHP",
+          financial: {
+            merchandiseSubtotalMinor: subtotalMinor,
+            itemDiscountMinor: 0,
+            orderDiscountMinor: 0,
+            deliverySubtotalMinor: deliveryFee.feeMinor,
+            deliveryDiscountMinor: 0,
+            serviceFeeMinor: 0,
+            taxMinor: 0,
+            totalMinor: subtotalMinor + deliveryFee.feeMinor,
+            currency: "PHP",
+          },
           subtotalMinor,
           discountMinor: 0,
           deliveryFeeMinor: deliveryFee.feeMinor,
@@ -396,6 +413,12 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
     attemptVersion: row.version,
     expiresAt: new Date(row.expiresAt).toISOString(),
     currency: row.currency,
+    merchandiseSubtotalMinor: row.financial.merchandiseSubtotalMinor,
+    itemDiscountMinor: row.financial.itemDiscountMinor,
+    orderDiscountMinor: row.financial.orderDiscountMinor,
+    deliveryDiscountMinor: row.financial.deliveryDiscountMinor,
+    serviceFeeMinor: row.financial.serviceFeeMinor,
+    taxMinor: row.financial.taxMinor,
     subtotalMinor: row.subtotalMinor,
     discountMinor: row.discountMinor,
     deliveryFeeMinor: row.deliveryFeeMinor,

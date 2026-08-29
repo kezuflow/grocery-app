@@ -221,10 +221,35 @@ describe("order commitment from canonical payment reactions", () => {
     expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
     if (!outcome.orderId) throw new Error("no order");
 
-    const order = await env.DB.prepare("SELECT status, total_minor FROM grocery_order WHERE id=?")
+    const order = await env.DB.prepare(
+      `SELECT status, total_minor, merchandise_subtotal_minor, item_discount_minor,
+              order_discount_minor, delivery_subtotal_minor, delivery_discount_minor,
+              service_fee_minor, tax_minor
+       FROM grocery_order WHERE id=?`,
+    )
       .bind(outcome.orderId)
-      .first<{ status: string; total_minor: number }>();
-    expect(order).toMatchObject({ status: "COMMITTED", total_minor: 53000 });
+      .first<{
+        status: string;
+        total_minor: number;
+        merchandise_subtotal_minor: number;
+        item_discount_minor: number;
+        order_discount_minor: number;
+        delivery_subtotal_minor: number;
+        delivery_discount_minor: number;
+        service_fee_minor: number;
+        tax_minor: number;
+      }>();
+    expect(order).toMatchObject({
+      status: "COMMITTED",
+      total_minor: 53000,
+      merchandise_subtotal_minor: 48000,
+      item_discount_minor: 0,
+      order_discount_minor: 0,
+      delivery_subtotal_minor: 5000,
+      delivery_discount_minor: 0,
+      service_fee_minor: 0,
+      tax_minor: 0,
+    });
     const items = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM order_item WHERE order_id=? AND base_quantity=2000",
     )

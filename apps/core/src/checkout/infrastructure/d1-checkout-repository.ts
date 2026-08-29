@@ -1,4 +1,8 @@
-import type { QuoteLine } from "../domain/quote";
+import {
+  assertQuoteFinancialSnapshot,
+  type QuoteFinancialSnapshot,
+  type QuoteLine,
+} from "../domain/quote";
 import type { DeliveryFeeSnapshot } from "../../geography/application/quote-delivery-fee";
 
 export type CheckoutQuoteRow = {
@@ -10,6 +14,7 @@ export type CheckoutQuoteRow = {
   deliveryCycleId: string | null;
   fulfillmentMode?: "INSTANT" | "SCHEDULED";
   currency: string;
+  financial: QuoteFinancialSnapshot;
   subtotalMinor: number;
   discountMinor: number;
   deliveryFeeMinor: number;
@@ -25,7 +30,7 @@ export type CheckoutQuoteRow = {
 };
 
 const COLUMNS =
-  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, status, version, expires_at";
+  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, status, version, expires_at";
 
 type RawRow = {
   id: string;
@@ -40,6 +45,13 @@ type RawRow = {
   discount_minor: number;
   delivery_fee_minor: number;
   total_minor: number;
+  merchandise_subtotal_minor: number;
+  item_discount_minor: number;
+  order_discount_minor: number;
+  delivery_subtotal_minor: number;
+  delivery_discount_minor: number;
+  service_fee_minor: number;
+  tax_minor: number;
   lines_json: string;
   address_snapshot_json: string | null;
   cycle_snapshot_json: string | null;
@@ -60,6 +72,17 @@ function map(row: RawRow): CheckoutQuoteRow {
     deliveryCycleId: row.delivery_cycle_id,
     fulfillmentMode: row.fulfillment_mode ?? "SCHEDULED",
     currency: row.currency,
+    financial: {
+      merchandiseSubtotalMinor: row.merchandise_subtotal_minor,
+      itemDiscountMinor: row.item_discount_minor,
+      orderDiscountMinor: row.order_discount_minor,
+      deliverySubtotalMinor: row.delivery_subtotal_minor,
+      deliveryDiscountMinor: row.delivery_discount_minor,
+      serviceFeeMinor: row.service_fee_minor,
+      taxMinor: row.tax_minor,
+      totalMinor: row.total_minor,
+      currency: row.currency,
+    },
     subtotalMinor: row.subtotal_minor,
     discountMinor: row.discount_minor,
     deliveryFeeMinor: row.delivery_fee_minor,
@@ -99,9 +122,29 @@ export function createCheckoutRepository(database: D1Database) {
       input: CheckoutQuoteRow & { idempotencyKey: string },
       now: number,
     ): D1PreparedStatement {
+      assertQuoteFinancialSnapshot(input.financial);
+      if (
+        input.currency !== input.financial.currency ||
+        input.subtotalMinor !== input.financial.merchandiseSubtotalMinor ||
+        input.discountMinor !==
+          input.financial.itemDiscountMinor + input.financial.orderDiscountMinor ||
+        input.deliveryFeeMinor !== input.financial.deliverySubtotalMinor ||
+        input.totalMinor !== input.financial.totalMinor
+      )
+        throw new Error("QUOTE_FINANCIAL_COMPATIBILITY_INVALID");
       return database
         .prepare(
-          "INSERT INTO checkout_quote (id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, status, version, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          `INSERT INTO checkout_quote (
+            id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id,
+            fulfillment_mode, currency, subtotal_minor, discount_minor,
+            delivery_fee_minor, total_minor, merchandise_subtotal_minor,
+            item_discount_minor, order_discount_minor, delivery_subtotal_minor,
+            delivery_discount_minor, service_fee_minor, tax_minor, lines_json,
+            address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json,
+            delivery_fee_snapshot_json, status, version, expires_at,
+            idempotency_key, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           input.id,
@@ -116,6 +159,13 @@ export function createCheckoutRepository(database: D1Database) {
           input.discountMinor,
           input.deliveryFeeMinor,
           input.totalMinor,
+          input.financial.merchandiseSubtotalMinor,
+          input.financial.itemDiscountMinor,
+          input.financial.orderDiscountMinor,
+          input.financial.deliverySubtotalMinor,
+          input.financial.deliveryDiscountMinor,
+          input.financial.serviceFeeMinor,
+          input.financial.taxMinor,
           JSON.stringify(input.lines),
           JSON.stringify(input.addressSnapshot ?? null),
           JSON.stringify(input.cycleSnapshot ?? null),

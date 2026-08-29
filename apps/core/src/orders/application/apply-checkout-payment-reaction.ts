@@ -148,12 +148,21 @@ export async function applyCheckoutPaymentReaction(
     // Unique payment-intent identity claims the entire commitment.
     database
       .prepare(
-        "INSERT INTO order_payment_reaction (id, payment_intent_id, reaction_id, order_id, applied_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO order_payment_reaction (id, payment_intent_id, reaction_id, order_id, checkout_quote_id, applied_at) VALUES (?, ?, ?, ?, ?, ?)",
       )
-      .bind(crypto.randomUUID(), input.paymentIntentId, input.reactionId, orderId, now),
+      .bind(crypto.randomUUID(), input.paymentIntentId, input.reactionId, orderId, quote.id, now),
     database
       .prepare(
-        "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at) SELECT ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, pa.id, ? FROM payment_attempt pa WHERE pa.payment_intent_id=? AND pa.status='SUCCEEDED' ORDER BY pa.created_at ASC LIMIT 1",
+        `INSERT INTO grocery_order (
+          id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json,
+          status, total_minor, currency, merchandise_subtotal_minor,
+          item_discount_minor, order_discount_minor, delivery_subtotal_minor,
+          delivery_discount_minor, service_fee_minor, tax_minor, payment_id, created_at
+        )
+        SELECT ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, pa.id, ?
+        FROM payment_attempt pa
+        WHERE pa.payment_intent_id=? AND pa.status='SUCCEEDED'
+        ORDER BY pa.created_at ASC LIMIT 1`,
       )
       .bind(
         orderId,
@@ -163,6 +172,13 @@ export async function applyCheckoutPaymentReaction(
         addressSnapshotJson,
         quote.totalMinor,
         quote.currency,
+        quote.financial.merchandiseSubtotalMinor,
+        quote.financial.itemDiscountMinor,
+        quote.financial.orderDiscountMinor,
+        quote.financial.deliverySubtotalMinor,
+        quote.financial.deliveryDiscountMinor,
+        quote.financial.serviceFeeMinor,
+        quote.financial.taxMinor,
         now,
         input.paymentIntentId,
       ),

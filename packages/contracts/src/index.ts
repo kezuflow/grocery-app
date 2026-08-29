@@ -358,7 +358,15 @@ export type CheckoutQuoteView = {
   attemptVersion: number;
   expiresAt: string;
   currency: string;
+  merchandiseSubtotalMinor: number;
+  itemDiscountMinor: number;
+  orderDiscountMinor: number;
+  deliveryDiscountMinor: number;
+  serviceFeeMinor: number;
+  taxMinor: number;
+  /** Compatibility projection; use merchandiseSubtotalMinor. */
   subtotalMinor: number;
+  /** Compatibility projection; equals itemDiscountMinor + orderDiscountMinor. */
   discountMinor: number;
   deliveryFeeMinor: number;
   totalMinor: number;
