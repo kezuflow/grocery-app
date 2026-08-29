@@ -29,6 +29,7 @@
 ### Task 1: Isolate the Admin theme and publish hierarchical navigation
 
 **Files:**
+
 - Modify: `packages/contracts/src/admin-foundation.ts`
 - Modify: `packages/contracts/src/admin-foundation.test.ts`
 - Modify: `apps/core/src/admin/application/get-admin-context.ts`
@@ -42,40 +43,42 @@
 - Test: `apps/web/tests/admin-foundation.spec.ts`
 
 **Interfaces:**
+
 - Produces `AdminNavigationSectionCode = "overview" | "commerce" | "operations" | "finance" | "administration"`.
 - Produces `AdminNavigationItem { code, label, href, section, parentCode, kind }`, where `kind` is `section|workspace|destination` and only Core constructs entries.
 - Produces `groupAdminNavigation(items)` and `mostSpecificActiveNavigation(items, pathname)` for presentation-only grouping and route matching.
 - Produces a 252px expanded sidebar, 72px collapsed rail, `fm-admin-sidebar-collapsed` browser preference, accessible group toggles/tooltips, and a mobile Sheet with no bottom navigation.
 
-- [ ] **Step 1: Write failing contract, Core, navigation, token-isolation, and browser tests**
+- [x] **Step 1: Write failing contract, Core, navigation, token-isolation, and browser tests**
 
   Add literal expectations for section/parent metadata, capability-filtered children, most-specific active matching, automatic parent expansion, persisted collapse, mobile Sheet focus restoration, and `.fm-admin`-scoped orange/chart variables. Assert storefront nodes do not inherit Admin accent variables.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
   Run: `pnpm --filter @freshmarkets/contracts test -- src/admin-foundation.test.ts && pnpm --filter @freshmarkets/core test -- src/admin/application/admin-context.integration.test.ts && pnpm --filter @freshmarkets/web test -- components/admin/admin-navigation.test.ts components/admin/admin-accessibility.test.tsx`
 
   Expected: the flat DTO has no hierarchy, the shell still renders the mobile bottom navigation, and Admin variables are globally rooted.
 
-- [ ] **Step 3: Implement the contract and Core navigation vocabulary**
+- [x] **Step 3: Implement the contract and Core navigation vocabulary**
 
   Publish closed section/kind types. Return Overview plus capability-authorized Commerce, Operations, Finance, and Administration parents/destinations in canonical order, including stable create/list destinations and no resource-ID routes.
 
-- [ ] **Step 4: Implement the scoped visual system and responsive shell**
+- [x] **Step 4: Implement the scoped visual system and responsive shell**
 
   Move the neutral canvas, orange accent, five orange chart colors, Admin dimensions, and Admin shadows into `.fm-admin`. Preserve semantic success/warning/danger/info colors. Render grouped desktop navigation with independent parent links/toggles, collapsed tooltips/flyouts, a sticky explicit scope header, and a mobile Sheet. Remove `AdminMobileNav`.
 
-- [ ] **Step 5: Run focused and browser tests and verify GREEN**
+- [x] **Step 5: Run focused and browser tests and verify GREEN**
 
   Run the Step 2 command, then `pnpm --filter @freshmarkets/web exec playwright test tests/admin-foundation.spec.ts`.
 
-- [ ] **Step 6: Review, record progress, commit, and push**
+- [x] **Step 6: Review, record progress, commit, and push**
 
   Compare the diff with `DESIGN.md` Global Shell and theme rules. Commit `feat(admin): add hierarchical operational shell`, then push `origin main`.
 
 ### Task 2: Add canonical Category hierarchy and guarded Category administration
 
 **Files:**
+
 - Create: `apps/core/migrations/0041_admin_catalog_authoring.sql`
 - Create: `apps/core/src/iam/admin-catalog-authoring-migration.integration.test.ts`
 - Modify: `packages/contracts/src/admin-catalog.ts`
@@ -95,6 +98,7 @@
 - Test: `apps/web/tests/admin-catalog.spec.ts`
 
 **Interfaces:**
+
 - Migration adds `category.parent_id`, `category.version`, and indexes for parent/order/status; it creates `product_media` in Task 4-compatible shape so one forward migration owns the approved Catalog authoring schema.
 - Produces `AdminCategoryDetail` with parent, children, contained product summaries, version, `allowedActions`, and recent Audit.
 - Produces `getAdminCategory`, `updateAdminCategory`, and `setAdminCategoryStatus` commands. Create/update accepts `parentCategoryId`, icon, and sort order; update/status require `expectedVersion`, `idempotencyKey`, and material status changes require `reason`.
@@ -126,6 +130,7 @@
 ### Task 3: Add guarded Product authoring and customer-facing details
 
 **Files:**
+
 - Modify: `packages/contracts/src/admin-catalog.ts`
 - Modify: `packages/contracts/src/admin-catalog.test.ts`
 - Modify: `apps/core/src/admin/application/catalog-reads.ts`
@@ -142,6 +147,7 @@
 - Test: `apps/web/tests/admin-catalog.spec.ts`
 
 **Interfaces:**
+
 - Produces `AdminProductCreateRequest` and `AdminProductUpdateRequest` for identity, category, description, ordered customer details, and inventory-pool base unit. Update requires expected version and stable idempotency.
 - Extends `AdminProductDetail` with category ID, customer details, media, inventory-pool/base-unit context, `allowedActions`, and recent Audit.
 - Produces `createAdminProduct` and `updateAdminProduct`; existing SKU, price, availability, and status commands remain separate.
@@ -173,6 +179,7 @@
 ### Task 4: Attach canonical R2-backed Product media
 
 **Files:**
+
 - Modify: `apps/core/wrangler.jsonc`
 - Regenerate: `apps/core/src/worker-configuration.d.ts`
 - Modify: `packages/contracts/src/admin-catalog.ts`
@@ -189,6 +196,7 @@
 - Modify: `docs/architecture/API_CONTRACTS.md`
 
 **Interfaces:**
+
 - Adds Core `PRODUCT_MEDIA: R2Bucket` binding.
 - Produces `uploadAdminProductMedia`, `updateAdminProductMedia`, and `removeAdminProductMedia` commands. Upload accepts validated image bytes, MIME type, alt text, primary flag, sort order, expected Product version, and idempotency key; returns `AdminProductMediaView`.
 - R2 object keys are Core-generated under `products/{productId}/{mediaId}`. D1 attachment is authoritative; failed attachment removes the just-uploaded object. Removal deactivates the row and deletes the blob only after the guarded D1 command succeeds.
@@ -220,6 +228,7 @@
 ### Task 5: Complete Order Detail and Payment workspaces
 
 **Files:**
+
 - Modify: `packages/contracts/src/admin-finance.ts`
 - Modify: `packages/contracts/src/admin-finance.test.ts`
 - Modify: `apps/core/src/admin/application/finance-reads.ts`
@@ -237,6 +246,7 @@
 - Test: `apps/web/tests/admin-finance.spec.ts`
 
 **Interfaces:**
+
 - Extends `AdminOrderDetail` with immutable financial components, item snapshots, Payments, amendments, fulfillment, delivery, exceptions, a merged ordered timeline, Audit, and Core-derived `allowedActions`.
 - Produces `AdminPaymentOverview`, `AdminPaymentDetail`, and `getAdminPayment`; detail includes canonical attempt/refund/event/reaction/reconciliation projections and allowed actions derived in Core.
 
@@ -265,6 +275,7 @@
 ### Task 6: Apply the unified Admin compositions and state model everywhere
 
 **Files:**
+
 - Modify: `apps/web/components/admin/admin-controls.tsx`
 - Create: `apps/web/components/admin/admin-data-table.tsx`
 - Create: `apps/web/components/admin/admin-page-state.tsx`
@@ -275,6 +286,7 @@
 - Modify: all `apps/web/tests/admin-*.spec.ts`
 
 **Interfaces:**
+
 - Produces shared `AdminDataTable`, `AdminPageState`, `AdminBreadcrumbs`, `FilterBar`, `ConfirmCommandDialog`, cursor controls, status/timeline/detail compositions, and live command-result announcements.
 - Every list consumes `nextCursor`, preserves filters/selected scope, and distinguishes no data, filtered empty, permission/scope empty, loading, and error.
 
@@ -301,6 +313,7 @@
 ### Task 7: Reconcile documentation and close the Phase 12 gate
 
 **Files:**
+
 - Modify: `docs/architecture/API_CONTRACTS.md`
 - Modify: `docs/architecture/DATA_MODEL.md`
 - Modify: `docs/product/IMPLEMENTATION_STATUS.md`
@@ -308,6 +321,7 @@
 - Create: `docs/superpowers/reports/ADMIN_DASHBOARD_PHASE_12_FINAL.md`
 
 **Interfaces:**
+
 - Produces an evidence report mapping every Phase 12 acceptance item and every required Admin screen to its contract, Core implementation, Web route/page, migration, and test.
 
 - [ ] **Step 1: Re-read the plan, `DESIGN.md`, `COMPONENTS.md`, Phase 12, and relevant canonical domain/API/data/state/MVP sections line by line**

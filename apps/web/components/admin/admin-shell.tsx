@@ -1,16 +1,26 @@
 "use client";
+
+import type { AdminSelectedScope } from "@freshmarkets/contracts";
+import { ChevronDown, ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
-import { useRef, type ReactNode } from "react";
-import { adminNavigationFromContext, type AdminNavigationEntry } from "./admin-navigation";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { adminSelectableScopes, useAdminContext } from "../../app/admin/admin-context-provider";
-import type { AdminSelectedScope } from "@freshmarkets/contracts";
-import { Skeleton } from "../ui/skeleton";
+import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../ui/sheet";
-import { cn } from "../../lib/utils";
+import { Skeleton } from "../ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import {
+  adminNavigationFromContext,
+  groupAdminNavigation,
+  mostSpecificActiveNavigation,
+  type AdminNavigationEntry,
+  type AdminNavigationParent,
+} from "./admin-navigation";
+
+const SIDEBAR_PREFERENCE_KEY = "fm-admin-sidebar-collapsed";
 
 function scopeSummary(scopes: ReadonlyArray<{ kind: string }>): string {
   if (scopes.some((scope) => scope.kind === "global")) return "Scope: Global";
@@ -22,11 +32,6 @@ function scopeSummary(scopes: ReadonlyArray<{ kind: string }>): string {
   return parts.length > 0 ? `Scope: ${parts.join(", ")}` : "Scope: none assigned";
 }
 
-/**
- * Shell chrome consuming only Core-provided navigation items and the explicit
- * scope summary. No permission is inferred here; unauthorized workspaces are
- * absent because Core never returned them.
- */
 export function AdminShell({
   children,
   items,
@@ -38,21 +43,31 @@ export function AdminShell({
   scopeLabel: string;
   environment: string;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY) === "true");
+  }, []);
+
+  function changeCollapsed(next: boolean) {
+    setCollapsed(next);
+    window.localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(next));
+  }
+
   return (
-    <div className="min-h-screen bg-[var(--fm-surface-soft)] text-[var(--fm-text)]">
+    <div className="min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
       <AdminHeader items={items} scopeLabel={scopeLabel} environment={environment} />
-      <div className="mx-auto flex w-full max-w-[var(--fm-container-admin)]">
-        <AdminSidebar items={items} />
+      <div className="flex w-full">
+        <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
         <main
           id="main-content"
           aria-labelledby="admin-page-title"
           tabIndex={-1}
-          className="min-w-0 flex-1 px-4 py-6 pb-20 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8 lg:pb-8"
+          className="min-w-0 flex-1 px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8"
         >
-          {children}
+          <div className="mx-auto w-full max-w-[var(--fm-container-admin)]">{children}</div>
         </main>
       </div>
-      <AdminMobileNav items={items} />
     </div>
   );
 }
@@ -76,21 +91,19 @@ function AdminHeader({
             className="text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)]"
           >
             FreshMarkets{" "}
-            <span className="hidden font-normal text-[var(--fm-text-muted)] sm:inline">
-              Operations
-            </span>
+            <span className="hidden font-normal text-[var(--fm-text-muted)] sm:inline">Admin</span>
           </Link>
         </div>
-        <div className="hidden items-center gap-2 text-xs text-[var(--fm-text-muted)] sm:flex">
+        <div className="flex items-center gap-2 text-xs text-[var(--fm-text-muted)]">
           <AdminScopeSelector fallbackLabel={scopeLabel} />
           {environment !== "production" ? (
-            <span className="rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] px-2 py-1 font-semibold uppercase tracking-wide text-[var(--fm-warning)]">
+            <span className="hidden rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] px-2 py-1 font-semibold uppercase tracking-wide text-[var(--fm-warning)] sm:inline-flex">
               {environment}
             </span>
           ) : null}
           <Link
             href="/"
-            className="rounded-[var(--fm-radius-control)] px-2 py-1 font-medium hover:bg-[var(--fm-hover)]"
+            className="hidden rounded-[var(--fm-radius-control)] px-2 py-1 font-medium hover:bg-[var(--fm-hover)] sm:inline-flex"
           >
             Marketplace
           </Link>
@@ -127,10 +140,10 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
   });
   return (
     <label className="flex items-center gap-2">
-      <span>Scope</span>
+      <span className="hidden sm:inline">Scope</span>
       <select
         aria-label="Active admin scope"
-        className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1"
+        className="max-w-40 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1"
         value={state.selectedScope ? JSON.stringify(state.selectedScope) : ""}
         onChange={(event) => {
           if (event.target.value) selectScope(JSON.parse(event.target.value) as AdminSelectedScope);
@@ -152,6 +165,7 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
 
 function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const groups = groupAdminNavigation(items);
   return (
     <Sheet>
       <SheetTrigger
@@ -163,6 +177,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
       </SheetTrigger>
       <SheetContent
         side="left"
+        aria-label="Admin navigation"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           triggerRef.current?.focus();
@@ -171,16 +186,20 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
         <SheetHeader>
           <SheetTitle>Admin navigation</SheetTitle>
         </SheetHeader>
-        <nav aria-label="Admin navigation" className="space-y-1">
-          {items.map((item) => (
-            <Link
-              key={item.code}
-              href={item.href}
-              className="flex items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
-            >
-              <item.icon className="size-4" aria-hidden="true" />
-              {item.label}
-            </Link>
+        <nav aria-label="Admin navigation" className="space-y-5">
+          {groups.map((group) => (
+            <div key={group.code}>
+              {group.code !== "overview" ? (
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+                  {group.label}
+                </p>
+              ) : null}
+              <div className="space-y-1">
+                {group.items.map((item) => (
+                  <MobileNavigationParent key={item.code} item={item} />
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
       </SheetContent>
@@ -188,65 +207,228 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
   );
 }
 
-function AdminSidebar({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
-  const pathname = usePathname();
+function MobileNavigationParent({ item }: { item: AdminNavigationParent }) {
   return (
-    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 border-r border-[var(--fm-border)] bg-white px-3 py-5 lg:block">
-      <nav aria-label="Admin navigation" className="space-y-1">
-        {items.map((item) => (
-          <Link
-            key={item.code}
-            href={item.href}
-            className={cn(
-              "flex items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]",
-              isActivePath(pathname, item.href) &&
-                "bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]",
-            )}
-            aria-current={isActivePath(pathname, item.href) ? "page" : undefined}
-          >
-            <item.icon className="size-4" aria-hidden="true" />
-            {item.label}
-          </Link>
-        ))}
-        {items.length === 0 ? (
-          <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">No workspaces permitted.</p>
-        ) : null}
-      </nav>
-    </aside>
+    <div>
+      <Link
+        href={item.href}
+        className="flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-semibold hover:bg-[var(--fm-hover)]"
+      >
+        <item.icon className="size-4" aria-hidden="true" />
+        {item.label}
+      </Link>
+      {item.children.length > 0 ? (
+        <div className="ml-8 border-l border-[var(--fm-border)] pl-2">
+          {item.children.map((child) => (
+            <Link
+              key={child.code}
+              href={child.href}
+              className="block min-h-10 rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]"
+            >
+              {child.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function AdminMobileNav({ items }: { items: ReadonlyArray<AdminNavigationEntry> }) {
+function AdminSidebar({
+  items,
+  collapsed,
+  onCollapsedChange,
+}: {
+  items: ReadonlyArray<AdminNavigationEntry>;
+  collapsed: boolean;
+  onCollapsedChange: (next: boolean) => void;
+}) {
   const pathname = usePathname();
+  const groups = groupAdminNavigation(items);
+  const active = mostSpecificActiveNavigation(items, pathname);
+  const initiallyOpen = useMemo(
+    () =>
+      new Set(
+        [active?.parentCode, active?.code].filter((value): value is string => Boolean(value)),
+      ),
+    [active?.code, active?.parentCode],
+  );
+  const [openParents, setOpenParents] = useState<ReadonlySet<string>>(initiallyOpen);
+
+  useEffect(() => {
+    if (!active) return;
+    setOpenParents((current) => new Set([...current, active.parentCode ?? active.code]));
+  }, [active?.code, active?.parentCode]);
+
   return (
-    <nav
-      aria-label="Mobile admin navigation"
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--fm-border)] bg-white py-2 lg:hidden"
-    >
-      {items.slice(0, 4).map((item) => (
+    <TooltipProvider>
+      <aside
+        className={cn(
+          "sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 border-r border-[var(--fm-border)] bg-white py-4 transition-[width] duration-200 lg:block",
+          collapsed
+            ? "w-[var(--fm-admin-sidebar-collapsed)] px-2"
+            : "w-[var(--fm-admin-sidebar-expanded)] px-3",
+        )}
+      >
+        <nav
+          aria-label="Admin navigation"
+          className="h-[calc(100%-3rem)] space-y-5 overflow-y-auto overflow-x-visible"
+        >
+          {groups.map((group) => (
+            <div key={group.code}>
+              {!collapsed && group.code !== "overview" ? (
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+                  {group.label}
+                </p>
+              ) : null}
+              <div className="space-y-1">
+                {group.items.map((item) => (
+                  <DesktopNavigationParent
+                    key={item.code}
+                    item={item}
+                    collapsed={collapsed}
+                    activeCode={active?.code ?? null}
+                    open={openParents.has(item.code)}
+                    onToggle={() =>
+                      setOpenParents((current) => {
+                        const next = new Set(current);
+                        if (next.has(item.code)) next.delete(item.code);
+                        else next.add(item.code);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+          {items.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
+              No workspaces permitted.
+            </p>
+          ) : null}
+        </nav>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
+          className={cn("mt-2 w-full", collapsed ? "px-0" : "justify-end")}
+          onClick={() => onCollapsedChange(!collapsed)}
+        >
+          {collapsed ? (
+            <ChevronRight className="size-4" />
+          ) : (
+            <>
+              <span className="sr-only">Collapse</span>
+              <ChevronLeft className="size-4" />
+            </>
+          )}
+        </Button>
+      </aside>
+    </TooltipProvider>
+  );
+}
+
+function DesktopNavigationParent({
+  item,
+  collapsed,
+  activeCode,
+  open,
+  onToggle,
+}: {
+  item: AdminNavigationParent;
+  collapsed: boolean;
+  activeCode: string | null;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const parentActive =
+    activeCode === item.code || item.children.some((child) => child.code === activeCode);
+  if (collapsed) {
+    return (
+      <div className="group relative">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              href={item.href}
+              aria-label={item.label}
+              aria-current={parentActive ? "page" : undefined}
+              className={cn(
+                "flex min-h-11 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]",
+                parentActive &&
+                  "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
+              )}
+            >
+              <item.icon className="size-5" aria-hidden="true" />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="right">{item.label}</TooltipContent>
+        </Tooltip>
+        {item.children.length > 0 ? (
+          <div className="invisible absolute left-full top-0 z-40 ml-2 w-52 rounded-lg border border-[var(--fm-border)] bg-white p-2 opacity-0 shadow-[var(--fm-shadow-overlay)] transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+            <p className="px-2 py-1 text-xs font-semibold">{item.label}</p>
+            {item.children.map((child) => (
+              <Link
+                key={child.code}
+                href={child.href}
+                className="block rounded px-2 py-2 text-sm hover:bg-[var(--fm-hover)]"
+              >
+                {child.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex items-center gap-1">
         <Link
-          key={item.code}
           href={item.href}
-          className="flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)]"
-          aria-current={isActivePath(pathname, item.href) ? "page" : undefined}
+          aria-current={activeCode === item.code ? "page" : undefined}
+          className={cn(
+            "flex min-h-10 flex-1 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2 text-sm font-semibold hover:bg-[var(--fm-hover)]",
+            parentActive && "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
+          )}
         >
           <item.icon className="size-4" aria-hidden="true" />
           {item.label}
         </Link>
-      ))}
-    </nav>
+        {item.children.length > 0 ? (
+          <button
+            type="button"
+            aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
+            aria-expanded={open}
+            className="rounded p-2 hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+            onClick={onToggle}
+          >
+            <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />
+          </button>
+        ) : null}
+      </div>
+      {open && item.children.length > 0 ? (
+        <div className="ml-5 border-l border-[var(--fm-border)] pl-3">
+          {item.children.map((child) => (
+            <Link
+              key={child.code}
+              href={child.href}
+              aria-current={activeCode === child.code ? "page" : undefined}
+              className={cn(
+                "block rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
+                activeCode === child.code && "font-semibold text-[var(--fm-admin-accent-strong)]",
+              )}
+            >
+              {child.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function isActivePath(pathname: string | null, href: string): boolean {
-  return pathname === href || (href !== "/admin" && pathname?.startsWith(`${href}/`) === true);
-}
-
-/**
- * Boundary between the Core-derived context and the shell: renders the
- * loading/unauthenticated/forbidden/error states and only mounts the shell
- * with Core-provided navigation once the context is ready.
- */
 export function AdminShellBoundary({ children }: { children: ReactNode }) {
   const { state, retry } = useAdminContext();
   if (state.phase === "loading") {
@@ -347,8 +529,8 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-4 border-b border-[var(--fm-border)] pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fm-text-muted)]">
-          Operations
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fm-admin-accent-strong)]">
+          FreshMarkets Admin
         </p>
         <h1
           id="admin-page-title"
@@ -383,7 +565,7 @@ export function ListPageSection({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
+    <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
       <div className="border-b border-[var(--fm-border)] px-4 py-3 sm:px-5">
         <h2 className="font-semibold">{title}</h2>
         {description ? (

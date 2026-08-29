@@ -139,6 +139,35 @@ body {
   font-family: var(--fm-font-body);
 }
 
+.fm-admin {
+  color-scheme: light;
+  --fm-admin-canvas: #f8fafc;
+  --fm-admin-surface: #ffffff;
+  --fm-admin-surface-muted: #f1f5f9;
+  --fm-admin-accent: #f97316;
+  --fm-admin-accent-strong: #c2410c;
+  --fm-admin-accent-soft: #fff7ed;
+  --fm-admin-chart-1: #ffedd5;
+  --fm-admin-chart-2: #fdba74;
+  --fm-admin-chart-3: #fb923c;
+  --fm-admin-chart-4: #ea580c;
+  --fm-admin-chart-5: #9a3412;
+  --fm-admin-sidebar-expanded: 252px;
+  --fm-admin-sidebar-collapsed: 72px;
+  --fm-background: var(--fm-admin-surface);
+  --fm-surface-soft: var(--fm-admin-canvas);
+  --fm-surface-muted: var(--fm-admin-surface-muted);
+  --fm-primary-lime: var(--fm-admin-accent);
+  --fm-primary-dark: #7c2d12;
+  --fm-focus: #c2410c;
+  --fm-hover: #fff7ed;
+  --fm-border: #e2e8f0;
+  --fm-shadow-card: 0 8px 24px rgb(15 23 42 / 6%);
+  --fm-shadow-header: 0 1px 0 rgb(15 23 42 / 8%);
+  background: var(--fm-admin-canvas);
+  color: #0f172a;
+}
+
 a {
   color: inherit;
 }

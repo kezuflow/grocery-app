@@ -1,9 +1,10 @@
-import type { AdminNavigationItem } from "@freshmarkets/contracts";
+import type { AdminNavigationItem, AdminNavigationSectionCode } from "@freshmarkets/contracts";
 import {
   BarChart3,
   Boxes,
   ClipboardList,
   CreditCard,
+  FolderTree,
   LayoutDashboard,
   PackageCheck,
   ScrollText,
@@ -15,33 +16,61 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-/**
- * Presentation mapping only: Core decides which workspaces exist and in what
- * payload order they arrive; this helper orders them canonically and attaches
- * icons. Unknown codes are dropped, never invented.
- */
 const CANONICAL_ORDER: ReadonlyArray<string> = [
   "overview",
+  "products",
+  "products-list",
+  "products-create",
+  "categories",
+  "categories-list",
+  "categories-create",
   "orders",
-  "catalog",
+  "orders-list",
+  "orders-issues",
+  "customers",
+  "customers-list",
+  "customers-privacy",
+  "memberships",
+  "promotions",
   "inventory",
   "procurement",
+  "receiving",
   "fulfillment",
   "delivery",
-  "customers",
-  "memberships",
   "payments",
-  "promotions",
+  "payments-overview",
+  "payments-transactions",
+  "payments-reconciliation",
   "analytics",
   "staff",
+  "staff-list",
+  "staff-roles",
   "audit",
   "settings",
+  "settings-fulfillment-mode",
 ];
+
+const SECTION_ORDER: ReadonlyArray<AdminNavigationSectionCode> = [
+  "overview",
+  "commerce",
+  "operations",
+  "finance",
+  "administration",
+];
+
+export const ADMIN_SECTION_LABELS: Readonly<Record<AdminNavigationSectionCode, string>> = {
+  overview: "Overview",
+  commerce: "Commerce",
+  operations: "Operations",
+  finance: "Finance",
+  administration: "Administration",
+};
 
 const ICONS: Partial<Record<string, LucideIcon>> = {
   overview: LayoutDashboard,
+  products: Boxes,
+  categories: FolderTree,
   orders: ClipboardList,
-  catalog: Boxes,
   inventory: Warehouse,
   procurement: PackageCheck,
   fulfillment: PackageCheck,
@@ -58,24 +87,61 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
 
 export type AdminNavigationEntry = AdminNavigationItem & { icon: LucideIcon };
 
-/** Workspace-scoped sub-navigation for the Staff & Access section. */
-export const STAFF_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [
-  { code: "staff", label: "Staff", href: "/admin/staff" },
-  { code: "staff-roles", label: "Roles", href: "/admin/staff/roles" },
-];
+export type AdminNavigationParent = AdminNavigationEntry & {
+  children: ReadonlyArray<AdminNavigationEntry>;
+};
 
-/** Workspace-scoped sub-navigation for the Customers section. */
-export const CUSTOMER_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [
-  { code: "customers", label: "Customers", href: "/admin/customers" },
-  { code: "customers-privacy", label: "Privacy queue", href: "/admin/customers/privacy" },
-];
+export type AdminNavigationGroup = {
+  code: AdminNavigationSectionCode;
+  label: string;
+  items: ReadonlyArray<AdminNavigationParent>;
+};
+
+/** Legacy exports remain empty so workspaces cannot invent child links in Web. */
+export const STAFF_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [];
+export const CUSTOMER_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [];
 
 export function adminNavigationFromContext(
   items: ReadonlyArray<AdminNavigationItem>,
 ): ReadonlyArray<AdminNavigationEntry> {
   return CANONICAL_ORDER.flatMap((code) => {
     const item = items.find((candidate) => candidate.code === code);
-    const icon = ICONS[code];
-    return item && icon ? [{ ...item, icon }] : [];
+    if (!item) return [];
+    const parent = item.parentCode
+      ? items.find((candidate) => candidate.code === item.parentCode)
+      : undefined;
+    const icon = ICONS[item.code] ?? (parent ? ICONS[parent.code] : undefined);
+    return icon ? [{ ...item, icon }] : [];
   });
+}
+
+export function groupAdminNavigation(
+  items: ReadonlyArray<AdminNavigationEntry>,
+): ReadonlyArray<AdminNavigationGroup> {
+  return SECTION_ORDER.flatMap((section) => {
+    const sectionItems = items.filter((item) => item.section === section);
+    const parents = sectionItems
+      .filter((item) => item.parentCode === null)
+      .map((item) => ({
+        ...item,
+        children: sectionItems.filter((candidate) => candidate.parentCode === item.code),
+      }));
+    return parents.length > 0
+      ? [{ code: section, label: ADMIN_SECTION_LABELS[section], items: parents }]
+      : [];
+  });
+}
+
+export function mostSpecificActiveNavigation(
+  items: ReadonlyArray<AdminNavigationEntry>,
+  pathname: string | null,
+): { code: string; parentCode: string | null } | null {
+  if (!pathname) return null;
+  const active = items
+    .filter(
+      (item) =>
+        pathname === item.href || (item.href !== "/admin" && pathname.startsWith(`${item.href}/`)),
+    )
+    .sort((left, right) => right.href.length - left.href.length)[0];
+  return active ? { code: active.code, parentCode: active.parentCode } : null;
 }

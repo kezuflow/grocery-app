@@ -40,6 +40,33 @@ test("the authenticated mobile navigation is keyboard and screen-reader accessib
   await expect(trigger).toBeVisible();
   await trigger.focus();
   await expect(trigger).toBeFocused();
+  await trigger.press("Enter");
+  await expect(adminPage.getByRole("dialog", { name: "Admin navigation" })).toBeVisible();
+  await adminPage.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
+
+test("the desktop shell persists its collapsed navigation preference", async ({ adminPage }) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  await adminPage.goto("/admin");
+  const collapse = adminPage.getByRole("button", { name: "Collapse admin navigation" });
+  await collapse.click();
+  await expect(adminPage.getByRole("button", { name: "Expand admin navigation" })).toBeVisible();
+  await adminPage.reload();
+  await expect(adminPage.getByRole("button", { name: "Expand admin navigation" })).toBeVisible();
+});
+
+test("admin accent tokens stay isolated from the storefront", async ({ adminPage, page }) => {
+  await adminPage.goto("/admin");
+  const adminAccent = await adminPage
+    .locator(".fm-admin")
+    .evaluate((element) => getComputedStyle(element).getPropertyValue("--fm-admin-accent").trim());
+  await page.goto("/");
+  const storefrontAccent = await page
+    .locator(".fm-storefront")
+    .evaluate((element) => getComputedStyle(element).getPropertyValue("--fm-admin-accent").trim());
+  expect(adminAccent).toBe("#f97316");
+  expect(storefrontAccent).toBe("");
 });
 
 test("a signed-in non-staff account sees the forbidden state with recovery guidance", async ({

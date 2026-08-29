@@ -125,9 +125,53 @@ describe("scoped admin context", () => {
     expect(context.value.navigation.map((item) => item.code)).toEqual(["overview", "audit"]);
     expect(context.value.navigation).toContainEqual({
       code: "audit",
-      label: "Audit",
+      label: "Audit log",
       href: "/admin/audit",
+      section: "administration",
+      parentCode: null,
+      kind: "workspace",
     });
+  });
+
+  it("publishes capability-filtered parent and child destinations with canonical sections", async () => {
+    const staff = await staffCookie({ permissionCodes: ["catalog.read", "payments.read"] });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+
+    expect(context.value.navigation).toContainEqual({
+      code: "products",
+      label: "Products",
+      href: "/admin/catalog/products",
+      section: "commerce",
+      parentCode: null,
+      kind: "workspace",
+    });
+    expect(context.value.navigation).toContainEqual({
+      code: "products-list",
+      label: "Product list",
+      href: "/admin/catalog/products",
+      section: "commerce",
+      parentCode: "products",
+      kind: "destination",
+    });
+    expect(context.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "products-create" }),
+    );
+    expect(context.value.navigation).toContainEqual({
+      code: "payments-transactions",
+      label: "Transactions",
+      href: "/admin/payments/transactions",
+      section: "finance",
+      parentCode: "payments",
+      kind: "destination",
+    });
+    expect(context.value.navigation).not.toContainEqual(
+      expect.objectContaining({ section: "operations" }),
+    );
   });
 
   it("returns only active markets and locations reachable by the assigned scope", async () => {

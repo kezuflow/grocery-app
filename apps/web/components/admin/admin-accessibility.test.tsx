@@ -29,9 +29,16 @@ const table = readFileSync(new URL("../ui/table.tsx", import.meta.url), "utf8");
 describe("shared Admin accessibility contract", () => {
   it("exposes labelled main content, active navigation, and a focusable mobile menu", () => {
     expect(shell).toMatch(/<main[^>]+aria-labelledby=/);
-    expect(shell).toMatch(/aria-current=\{isActive/);
+    expect(shell).toMatch(/aria-current=/);
     expect(shell).toMatch(/focus-visible:ring-2/);
     expect(shell).toMatch(/onCloseAutoFocus/);
+    expect(shell).not.toMatch(/Mobile admin navigation/);
+    expect(shell).toMatch(/fm-admin-sidebar-collapsed/);
+  });
+
+  it("keeps the Admin visual scope on the Admin layout boundary", () => {
+    const layout = readFileSync(new URL("../../app/admin/layout.tsx", import.meta.url), "utf8");
+    expect(layout).toMatch(/className="fm-admin/);
   });
 
   it("gives shell states headings and status semantics", () => {

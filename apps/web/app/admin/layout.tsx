@@ -9,8 +9,10 @@ import { AdminShellBoundary } from "../../components/admin/admin-shell";
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <AdminContextProvider>
-      <AdminShellBoundary>{children}</AdminShellBoundary>
-    </AdminContextProvider>
+    <div className="fm-admin min-h-screen">
+      <AdminContextProvider>
+        <AdminShellBoundary>{children}</AdminShellBoundary>
+      </AdminContextProvider>
+    </div>
   );
 }

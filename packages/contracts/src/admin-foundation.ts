@@ -44,10 +44,23 @@ export function isAdminCapability(value: string): value is Capability {
   return adminCapabilitySet.has(value);
 }
 
+export const adminNavigationSectionCodes = [
+  "overview",
+  "commerce",
+  "operations",
+  "finance",
+  "administration",
+] as const;
+
+export type AdminNavigationSectionCode = (typeof adminNavigationSectionCodes)[number];
+
 export type AdminNavigationItem = {
   code: string;
   label: string;
   href: string;
+  section: AdminNavigationSectionCode;
+  parentCode: string | null;
+  kind: "section" | "workspace" | "destination";
 };
 
 /** Staff session context derived in Core from Better Auth plus Application IAM. */
