@@ -34,7 +34,17 @@ export const unit = sqliteTable(
     name: text("name").notNull(),
     dimension: text("dimension", { enum: ["MASS", "COUNT", "VOLUME"] }).notNull(),
     symbol: text("symbol").notNull(),
+    canonicalBaseCode: text("canonical_base_code", {
+      enum: ["GRAM", "MILLILITER", "PIECE"],
+    }).notNull(),
+    conversionNumerator: integer("conversion_numerator").notNull().default(1),
+    conversionDenominator: integer("conversion_denominator").notNull().default(1),
+    status: text("status", { enum: ["active", "inactive"] })
+      .notNull()
+      .default("active"),
+    version: integer("version").notNull().default(1),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => ({ codeUnique: uniqueIndex("unit_code_unique").on(table.code) }),
 );
@@ -47,9 +57,14 @@ export const inventoryPool = sqliteTable(
     baseUnitId: text("base_unit_id")
       .notNull()
       .references(() => unit.id, { onDelete: "restrict" }),
-    sourcingMode: text("sourcing_mode", {
+    legacySourcingMode: text("sourcing_mode", {
       enum: ["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"],
     }).notNull(),
+    sourcingMode: text("canonical_sourcing_mode", {
+      enum: ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"],
+    })
+      .notNull()
+      .default("STOCKED"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
@@ -145,7 +160,7 @@ export const skuLocationAvailability = sqliteTable(
       enum: ["AVAILABLE", "UNAVAILABLE"],
     }).notNull(),
     sourcingMode: text("sourcing_mode", {
-      enum: ["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"],
+      enum: ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"],
     }).notNull(),
     version: integer("version").notNull().default(1),
   },
