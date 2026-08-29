@@ -10,6 +10,7 @@ export * from "./admin-finance";
 export * from "./admin-operations";
 export * from "./admin-analytics";
 export * from "./states";
+export type * from "./geography";
 export type * from "./auth";
 export type * from "./catalog";
 export type * from "./membership";
@@ -20,6 +21,12 @@ export type * from "./operations";
 
 import type { AppErrorCode, AppError, CoreHealthResponse, RequestMeta, RpcResult } from "./common";
 import type { Capability } from "./admin-foundation";
+import type {
+  AddressComponents,
+  Coordinate,
+  CoordinateConfirmationSource,
+  DeliveryInstructions,
+} from "./geography";
 import type {
   CustomerAddressStatus,
   DeliveryAction,
@@ -82,11 +89,6 @@ export type ApplicationContext = {
   principal: AuthenticatedPrincipal | null;
   capabilities: ReadonlyArray<Capability>;
   scopes: ReadonlyArray<Scope>;
-};
-
-export type Coordinate = {
-  latitude: number;
-  longitude: number;
 };
 
 export type ServiceabilityFailureReason =
@@ -252,21 +254,43 @@ export type CatalogProductRequest = RequestMeta & {
 export type AuthenticatedRequest = RequestMeta & {
   headers: Readonly<Record<string, string>>;
 };
-export type CreateCustomerAddressRequest = AuthenticatedRequest & {
+
+type CustomerAddressCreateBase = AuthenticatedRequest & {
   label: string;
   recipient: string;
   phone: string;
-  addressJson: string;
   latitude: number;
   longitude: number;
   notes?: string | null;
 };
+
+export type CreateCustomerAddressRequest = CustomerAddressCreateBase &
+  (
+    | {
+        components: AddressComponents;
+        confirmationSource: CoordinateConfirmationSource;
+        instructions: DeliveryInstructions;
+        /** Historical compatibility input; new callers omit it. */
+        addressJson?: string;
+      }
+    | {
+        /** Historical compatibility input for callers not yet migrated to structured fields. */
+        addressJson: string;
+        components?: AddressComponents;
+        confirmationSource?: CoordinateConfirmationSource;
+        instructions?: DeliveryInstructions;
+      }
+  );
 export type UpdateCustomerAddressRequest = AuthenticatedRequest & {
   addressId: string;
   expectedVersion: number;
   label?: string;
   recipient?: string;
   phone?: string;
+  components?: AddressComponents;
+  confirmationSource?: CoordinateConfirmationSource;
+  instructions?: DeliveryInstructions;
+  /** Historical compatibility input; new callers use structured components. */
   addressJson?: string;
   latitude?: number;
   longitude?: number;
@@ -276,6 +300,11 @@ export type CustomerAddressView = {
   id: string;
   label: string;
   recipient: string;
+  phone: string;
+  components: AddressComponents;
+  confirmationSource: CoordinateConfirmationSource | null;
+  confirmedAt: string | null;
+  instructions: DeliveryInstructions;
   latitude: number;
   longitude: number;
   serviceable: boolean | null;

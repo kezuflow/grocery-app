@@ -22,6 +22,15 @@ import type {
 import type { SubscriptionSummary } from "./membership";
 import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
+import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
+import type { RpcResult } from "./common";
+
+type Equal<Left, Right> =
+  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() =>
+    Value extends Right ? 1 : 2
+    ? true
+    : false;
+type Expect<Type extends true> = Type;
 
 type HasCommitMockOrder<T> = "commitMockOrder" extends keyof T ? true : false;
 type StartTrialParam = Parameters<MembershipService["startTrial"]>[0];
@@ -37,6 +46,20 @@ type HasGenericStringAction = {
 }[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
+  it("exposes provider-neutral address search on the Core binding", () => {
+    type AddressSearchSignature = Expect<
+      Equal<
+        CoreServiceBinding["searchAddressCandidates"],
+        (
+          request: AddressSearchRequest,
+        ) => Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>
+      >
+    >;
+
+    void (true as AddressSearchSignature);
+    expect(true).toBe(true);
+  });
+
   it("keeps mock commitment out of every contract surface", () => {
     const absentFromCheckout: HasCommitMockOrder<CheckoutService> = false;
     expect(absentFromCheckout).toBe(false);
@@ -100,6 +123,16 @@ describe("domain-grouped core services", () => {
     // assignable to the full binding (structural composition).
     const binding = {
       ...({} as ImplementedCoreService),
+      searchAddressCandidates: async (
+        request: AddressSearchRequest,
+      ): Promise<
+        | { ok: true; value: ReadonlyArray<AddressSearchCandidate>; requestId: string }
+        | { ok: false; error: never }
+      > => ({
+        ok: true,
+        value: [],
+        requestId: request.requestId,
+      }),
       createCheckoutQuote: async () => ({
         ok: true,
         value: {

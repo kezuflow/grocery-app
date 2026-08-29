@@ -1,4 +1,5 @@
 import type { RpcResult } from "./common";
+import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
 import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
@@ -59,6 +60,10 @@ export interface ImplementedCoreService
  * here.
  */
 export interface CoreServiceBinding extends ImplementedCoreService {
+  /** Temporary provider-neutral candidates for the active address-editing session. */
+  searchAddressCandidates(
+    request: AddressSearchRequest,
+  ): Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>;
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
   refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;

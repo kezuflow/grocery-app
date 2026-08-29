@@ -40,7 +40,7 @@ Serviceability and assignment are separate:
 
 Text fields such as city or barangay are descriptive and never authoritative geofence proof.
 
-Coordinates used for a saved address must come from a provider candidate or user-positioned pin and record an explicit user confirmation time. A geocoder suggests coordinates; Core polygon evaluation remains authoritative. Polygon versions are returned with resolution so callers can detect and refresh stale geography.
+Coordinates used for a saved address must come from a provider candidate, a user-positioned pin, or an explicitly accepted device location and record both confirmation source and confirmation time. Address search candidates are temporary interaction data: they are neither persistence records nor serviceability decisions. A geocoder suggests coordinates; Core performs any provider-required permanent finalization before storing provider-derived metadata, and Core polygon evaluation remains authoritative. Polygon versions are returned with resolution so callers can detect and refresh stale geography.
 
 ### DeliveryCycle
 
@@ -69,7 +69,7 @@ explicitly unresolved and are never inferred from area/zone codes. Coordinates a
 changes location-relevant fields. Updates use optimistic version checks and never
 rewrite historical order snapshots.
 
-A saved delivery destination with recipient, phone, structured components, barangay/city labels, coordinates, delivery notes, geocoder metadata, and most recently resolved service area/zone. Serviceability is revalidated for checkout.
+A saved delivery destination with recipient, phone, provider-neutral structured components, coordinates, confirmation provenance, delivery instructions, optional permanently resolved geocoder metadata, and most recently resolved service area/zone. Structured components include address lines, barangay, city, region, postal code, and country code. Delivery instructions separately model building/unit, landmark, gate/guard guidance, delivery note, and recipient guidance. Historical raw address JSON remains only as a compatibility column/input seam and is not returned as the canonical address view. Serviceability is revalidated for checkout.
 
 Orders snapshot addresses. Editing a saved address never rewrites an existing order.
 

@@ -67,7 +67,7 @@ address-owned.
 
 ## Customers and Addresses
 
-- `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, user_confirmed_at, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, serviceable NULL, serviceability_reason NULL, notes, status, version, created_at, updated_at)`
+- `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider NULL, geocode_reference NULL, confirmation_source GEOCODER|USER_PIN|DEVICE_LOCATION NULL, user_confirmed_at NULL, delivery_instructions_json, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, serviceable NULL, serviceability_reason NULL, notes, address_json compatibility NULL, status, version, created_at, updated_at)`
 - `customer_invitations(id PK, email_normalized, status PENDING|ACCEPTED|EXPIRED|REVOKED, invited_by_staff_id FK, expires_at, accepted_customer_id FK NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
 - `privacy_requests(id PK, customer_id FK, request_type ACCESS|CORRECTION|CLOSURE|ANONYMIZATION, status SUBMITTED|VERIFYING|APPROVED|REJECTED|PROCESSING|COMPLETED|ESCALATED, requested_at, verified_at NULL, resolved_at NULL, assigned_staff_id FK NULL, reason NULL, resolution_json NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
 - `customer_support_notes(id PK, customer_id FK, author_staff_id FK, body, visibility SUPPORT, created_at)` when the good-to-have notes capability is approved for implementation; notes are append-only corrections rather than silent edits.
@@ -76,6 +76,12 @@ address-owned.
 Core address reads and writes are scoped through the authenticated customer resolver.
 Address updates use a conditional `(id, customer_id, status, version)` predicate;
 serviceability fields are updated only from Core's resolution result.
+
+Temporary geocoder candidates and provider responses are never stored. When a confirmed
+coordinate is geocoder-derived, Core completes the provider's permanent finalization before
+writing provider metadata. User-pin and device-location confirmations may persist structured
+first-party fields with null provider metadata. Compatibility `address_json` supports legacy
+rows and callers only; canonical reads use structured components and instructions.
 
 Indexes: customer/status, last resolved zone, and optional coordinate bounding fields. Address edits create a new version/update saved data but never touch order snapshots.
 

@@ -40,6 +40,7 @@ Core owns:
 - Better Auth and authentication persistence;
 - application authorization and staff/customer context;
 - commands, queries, policies, domain services, and legal transitions;
+- provider-neutral geocoding ports, permanent provider finalization, and authoritative polygon-based serviceability;
 - checkout eligibility and orchestration;
 - pricing, subscriptions, promotions, payments, orders, inventory, procurement, receiving, fulfillment, delivery, and audit behavior;
 - D1 repositories and external-provider integrations;
@@ -132,6 +133,7 @@ Rules:
 - Commands return stable results or domain error codes.
 - Queries return purpose-built read models.
 - Context passed to Core includes correlation metadata and the authenticated session/principal where applicable.
+- Address search returns provider-neutral, session-scoped candidates. Temporary provider responses are never persisted, cached across sessions, or logged; Core performs any provider-required permanent lookup before persisting provider-derived address data.
 - Public Core HTTP surface is narrow: provider webhooks, health/operational endpoints where needed, and no general customer REST API.
 
 ## Authentication Architecture
@@ -248,6 +250,7 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 - Emit structured JSON logs with correlation/request IDs, actor/principal IDs where safe, command/query name, aggregate identifiers, duration, result, and stable error code.
 - Enable Cloudflare Worker observability with an intentional sampling policy.
 - Trace checkout attempts, provider payment references, webhook event IDs, order commitment, refunds, queue jobs, and reconciliation outcomes.
+- Geocoding logs may include operation, duration, result category, and stable error code, but never address text, contact data, coordinates, provider payloads, or temporary candidate contents.
 - Keep audit events separate from diagnostic logs. Audit events are durable business records.
 - Every externally replayable command requires an idempotency key or provider event identity.
 - External provider events are durably deduplicated by `(provider, providerEventId)`. They do not carry an application `expectedVersion`; handlers use current-state validation and conditional aggregate version updates, then safely retry or reconcile after concurrent changes.

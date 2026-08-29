@@ -95,22 +95,38 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 
 ## Serviceability
 
+- `geography.searchAddressCandidates({ requestId, query, proximity? }) -> AddressSearchCandidate[]`
 - `serviceability.resolveCoordinates({ latitude, longitude, addressComponents? }) -> ServiceabilityResult`
+
+`AddressSearchCandidate` is provider-neutral and contains an opaque session candidate key,
+display address, coordinate, structured address components, and nullable accuracy. Search
+results exist only for the active interaction and may not be persisted, cached across sessions,
+or logged. Candidate selection is not serviceability proof. Core finalizes provider-derived
+coordinates under the provider's permanent-storage rules before any saved-address write.
 
 `ServiceabilityResult` includes `serviceable`, stable failure reason, market/area/zone display context, active polygon versions, resolution-change detection, and a mode-aware fulfillment-eligibility summary. Internal polygon GeoJSON, location codes, active-mode configuration IDs, and ranking rules are never exposed. Customers do not select a location; Core resolves eligible operations context internally and always re-resolves at checkout.
 
 Saved-address commands are customer-boundary operations:
 
 - `addresses.listMine({ headers }) -> CustomerAddressView[]`
-- `addresses.create({ label, recipient, phone, addressJson, latitude, longitude, notes? }) -> CustomerAddressView`
+- `addresses.create({ label, recipient, phone, components, latitude, longitude, confirmationSource, instructions, notes?, addressJson? }) -> CustomerAddressView`
 - `addresses.update({ addressId, expectedVersion, changed address fields }) -> CustomerAddressView`
+
+`AddressComponents` contains `addressLine1`, nullable `addressLine2`, nullable `barangay`,
+`city`, nullable `region`, nullable `postalCode`, and `countryCode`. `confirmationSource` is
+`GEOCODER`, `USER_PIN`, or `DEVICE_LOCATION`. `DeliveryInstructions` contains nullable
+`buildingUnit`, `landmark`, `gateGuard`, `deliveryNote`, and `recipientInstruction`. The
+deprecated `addressJson` input is a compatibility seam only; new clients send structured
+fields, and raw address JSON is never returned in `CustomerAddressView`.
 
 Core derives the customer from the Better Auth session, verifies address ownership,
 and never accepts a client-selected customer or principal ID. Address updates require
 `expectedVersion`; stale writes return `STALE_VERSION`. Coordinate changes re-run
 authoritative serviceability resolution, while service-area, delivery-zone, resolution
 version, status, and other serviceability fields are server-derived. The address view
-returns the persisted resolver `serviceable` outcome and failure reason. Both are null
+returns recipient phone, structured components, confirmation source/time, delivery
+instructions, and the persisted resolver `serviceable` outcome and failure reason. The
+serviceability values are null
 only for legacy rows that have not yet been authoritatively re-resolved; code presence
 is never treated as proof of serviceability.
 
