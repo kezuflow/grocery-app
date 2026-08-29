@@ -25,7 +25,7 @@ export type CreatedPaymentAction = {
   actionType: "NONE" | "REDIRECT" | "SDK";
   redirectUrl: string | null;
   clientToken: string | null;
-  expiresAt: number | null;
+  expiresAt: string | null;
 };
 
 function failure(code: string, message: string, requestId: string) {
@@ -80,15 +80,26 @@ export async function createPayment(
         "Idempotency key was used with a different payment",
         command.requestId,
       );
+    const state = toActionState(existing.status);
+    const action =
+      state === "REQUIRES_ACTION"
+        ? await repository.findActiveProviderAction(existing.id, Date.now())
+        : null;
+    if (state === "REQUIRES_ACTION" && !action)
+      return failure(
+        "PAYMENT_ACTION_EXPIRED",
+        "The payment continuation expired; start a new payment command",
+        command.requestId,
+      );
     return {
       ok: true,
       value: {
         paymentIntentId: existing.id,
-        state: toActionState(existing.status),
-        actionType: actionStateToClientAction(toActionState(existing.status)),
-        redirectUrl: null,
-        clientToken: null,
-        expiresAt: null,
+        state,
+        actionType: action?.actionType ?? "NONE",
+        redirectUrl: action?.redirectUrl ?? null,
+        clientToken: action?.clientToken ?? null,
+        expiresAt: action ? new Date(action.expiresAt).toISOString() : null,
       },
       requestId: command.requestId,
     };
@@ -177,16 +188,19 @@ export async function createPayment(
       returnUrl: command.returnUrl,
       idempotencyKey: command.idempotencyKey,
     });
-  } catch {
-    await database
-      .prepare(
-        "UPDATE payment_intent SET status='FAILED', version=version+1, updated_at=? WHERE id=? AND status='INITIATED'",
-      )
-      .bind(Date.now(), intentId)
-      .run();
+  } catch (error) {
+    await repository.recordReconciliationCase({
+      intentId,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({
+        provider: provider.code,
+        reason: error instanceof Error ? error.message : String(error),
+      }),
+      now: Date.now(),
+    });
     return failure(
-      "PAYMENT_FAILED",
-      "The payment provider rejected the payment creation",
+      "PAYMENT_OUTCOME_UNRESOLVED",
+      "The provider outcome is unknown; reconciliation is required",
       command.requestId,
     );
   }
@@ -206,8 +220,32 @@ export async function createPayment(
   }
 
   const nextState = providerResult.actionType === "NONE" ? "PROCESSING" : "REQUIRES_ACTION";
+  if (
+    providerResult.actionType !== "NONE" &&
+    (!providerResult.expiresAt ||
+      providerResult.expiresAt <= Date.now() ||
+      (providerResult.actionType === "REDIRECT" && !providerResult.redirectUrl) ||
+      (providerResult.actionType === "SDK" && !providerResult.clientToken))
+  ) {
+    await repository.recordReconciliationCase({
+      intentId,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({
+        provider: provider.code,
+        providerReference: providerResult.providerReference,
+        reason: "INVALID_PROVIDER_ACTION",
+      }),
+      now: Date.now(),
+    });
+    return failure(
+      "PAYMENT_OUTCOME_UNRESOLVED",
+      "The provider returned an unusable continuation; reconciliation is required",
+      command.requestId,
+    );
+  }
   try {
-    await database.batch([
+    const persistedAt = Date.now();
+    const statements = [
       repository.recordAttempt({
         attemptId: crypto.randomUUID(),
         intentId,
@@ -217,16 +255,30 @@ export async function createPayment(
         status: nextState,
         provider: provider.code,
         providerReference: providerResult.providerReference,
-        now: Date.now(),
+        now: persistedAt,
       }),
       repository.updateIntentStatusCas({
         intentId,
         expectedVersion: 1,
         fromStatus: "INITIATED",
         toStatus: nextState,
-        now: Date.now(),
+        now: persistedAt,
       }),
-    ]);
+    ];
+    if (providerResult.actionType !== "NONE")
+      statements.push(
+        repository.recordProviderActionStatement({
+          paymentIntentId: intentId,
+          provider: provider.code,
+          providerReference: providerResult.providerReference,
+          actionType: providerResult.actionType,
+          redirectUrl: providerResult.redirectUrl,
+          clientToken: providerResult.clientToken,
+          expiresAt: providerResult.expiresAt!,
+          now: persistedAt,
+        }),
+      );
+    await database.batch(statements);
   } catch (error) {
     await repository.recordReconciliationCase({
       intentId,
@@ -239,8 +291,8 @@ export async function createPayment(
       now: Date.now(),
     });
     return failure(
-      "CONFLICT",
-      "Payment created but persistence failed; reconciliation required",
+      "PAYMENT_OUTCOME_UNRESOLVED",
+      "Payment created but persistence is unresolved; reconciliation is required",
       command.requestId,
     );
   }
@@ -254,7 +306,9 @@ export async function createPayment(
       actionType: providerResult.actionType,
       redirectUrl: providerResult.redirectUrl,
       clientToken: providerResult.clientToken,
-      expiresAt: providerResult.expiresAt,
+      expiresAt: providerResult.expiresAt
+        ? new Date(providerResult.expiresAt).toISOString()
+        : null,
     },
     requestId: command.requestId,
   };
@@ -270,10 +324,4 @@ function toActionState(status: string): CreatedPaymentAction["state"] {
     default:
       return "PROCESSING";
   }
-}
-
-function actionStateToClientAction(
-  state: CreatedPaymentAction["state"],
-): "NONE" | "REDIRECT" | "SDK" {
-  return state === "REQUIRES_ACTION" ? "REDIRECT" : "NONE";
 }

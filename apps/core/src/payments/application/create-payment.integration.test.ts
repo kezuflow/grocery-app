@@ -6,6 +6,8 @@ import {
   MockProviderEnvironmentError,
   ProviderRegistry,
 } from "../infrastructure/providers/provider-registry";
+import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
+import { applyObservationToIntents } from "./apply-observation";
 
 let customerIdCounter = 0;
 async function seedCustomer(): Promise<string> {
@@ -126,8 +128,65 @@ describe("payment intent creation", () => {
     expect(replay.ok).toBe(true);
     if (!first.ok || !replay.ok) return;
     expect(replay.value.paymentIntentId).toBe(first.value.paymentIntentId);
+    expect(replay.value.actionType).toBe("REDIRECT");
+    expect(replay.value.redirectUrl).toBe(first.value.redirectUrl);
+    expect(replay.value.redirectUrl).not.toBeNull();
+    expect(replay.value.expiresAt).toBe(first.value.expiresAt);
     const { attempts } = await intentRows(attempt.idempotencyKey);
     expect(attempts).toBe(1);
+  });
+
+  it("records a provider timeout as unresolved instead of definitive failure", async () => {
+    const attempt = await command();
+    const timedOutProvider = {
+      ...createMockPaymentProvider(),
+      async createPayment(): Promise<never> {
+        throw new Error("provider timeout");
+      },
+    };
+
+    const result = await createPayment(
+      env.DB,
+      new ProviderRegistry("test", [timedOutProvider]),
+      attempt,
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "PAYMENT_OUTCOME_UNRESOLVED" },
+    });
+    const intent = await env.DB.prepare(
+      "SELECT id, status FROM payment_intent WHERE idempotency_key=?",
+    )
+      .bind(attempt.idempotencyKey)
+      .first<{ id: string; status: string }>();
+    expect(intent?.status).toBe("INITIATED");
+    const reconciliation = await env.DB.prepare(
+      "SELECT category, status FROM payment_reconciliation_case WHERE payment_intent_id=?",
+    )
+      .bind(intent!.id)
+      .first<{ category: string; status: string }>();
+    expect(reconciliation).toEqual({ category: "AMBIGUOUS_OUTCOME", status: "OPEN" });
+  });
+
+  it("consumes the stored continuation when a terminal provider outcome lands", async () => {
+    const attempt = await command();
+    const created = await createPayment(env.DB, testRegistry(), attempt);
+    if (!created.ok) throw new Error(created.error.message);
+    const intent = await createPaymentRepository(env.DB).findIntentById(
+      created.value.paymentIntentId,
+    );
+    if (!intent) throw new Error("intent not found");
+
+    const applied = await applyObservationToIntents(env.DB, [intent], "SUCCEEDED");
+
+    expect(applied.processingStatus).toBe("APPLIED");
+    const action = await env.DB.prepare(
+      "SELECT status FROM payment_provider_action WHERE payment_intent_id=?",
+    )
+      .bind(intent.id)
+      .first<{ status: string }>();
+    expect(action?.status).toBe("CONSUMED");
   });
 
   it("rejects key reuse with a different payload", async () => {

@@ -88,6 +88,12 @@ export async function applyObservationToIntents(
       expectedVersion: version,
       expectedStatus: currentStatus,
       nextStatus,
+      now,
+      consumeProviderActions:
+        finalHop &&
+        ["SUCCEEDED", "FAILED", "EXPIRED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(
+          canonicalState,
+        ),
       reaction:
         sufficient && !["PARTIALLY_REFUNDED", "REFUNDED"].includes(currentStatus)
           ? {

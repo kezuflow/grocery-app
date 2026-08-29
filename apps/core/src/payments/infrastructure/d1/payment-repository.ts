@@ -23,6 +23,13 @@ export type CreateIntentInput = {
   idempotencyKey: string;
 };
 
+export type ProviderActionRow = {
+  actionType: "REDIRECT" | "SDK";
+  redirectUrl: string | null;
+  clientToken: string | null;
+  expiresAt: number;
+};
+
 export function createPaymentRepository(database: D1Database) {
   return {
     async findIntentByIdempotencyKey(idempotencyKey: string): Promise<PaymentIntentRow | null> {
@@ -154,6 +161,70 @@ export function createPaymentRepository(database: D1Database) {
         .bind(customerId, provider)
         .first<{ provider_customer_ref: string }>()
         .then((row) => row?.provider_customer_ref ?? null);
+    },
+    async findActiveProviderAction(
+      paymentIntentId: string,
+      now: number,
+    ): Promise<ProviderActionRow | null> {
+      await database
+        .prepare(
+          "UPDATE payment_provider_action SET status='EXPIRED', updated_at=? WHERE payment_intent_id=? AND status='ACTIVE' AND expires_at<=?",
+        )
+        .bind(now, paymentIntentId, now)
+        .run();
+      const row = await database
+        .prepare(
+          "SELECT action_type, redirect_url, client_token, expires_at FROM payment_provider_action WHERE payment_intent_id=? AND status='ACTIVE' AND expires_at>?",
+        )
+        .bind(paymentIntentId, now)
+        .first<{
+          action_type: "REDIRECT" | "SDK";
+          redirect_url: string | null;
+          client_token: string | null;
+          expires_at: number;
+        }>();
+      return row
+        ? {
+            actionType: row.action_type,
+            redirectUrl: row.redirect_url,
+            clientToken: row.client_token,
+            expiresAt: row.expires_at,
+          }
+        : null;
+    },
+    recordProviderActionStatement(input: {
+      paymentIntentId: string;
+      provider: string;
+      providerReference: string;
+      actionType: "REDIRECT" | "SDK";
+      redirectUrl: string | null;
+      clientToken: string | null;
+      expiresAt: number;
+      now: number;
+    }): D1PreparedStatement {
+      return database
+        .prepare(
+          "INSERT INTO payment_provider_action (id, payment_intent_id, authorization_id, provider, provider_reference, action_type, redirect_url, client_token, expires_at, status, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)",
+        )
+        .bind(
+          crypto.randomUUID(),
+          input.paymentIntentId,
+          input.provider,
+          input.providerReference,
+          input.actionType,
+          input.redirectUrl,
+          input.clientToken,
+          input.expiresAt,
+          input.now,
+          input.now,
+        );
+    },
+    consumeProviderActionsStatement(paymentIntentId: string, now: number): D1PreparedStatement {
+      return database
+        .prepare(
+          "UPDATE payment_provider_action SET status='CONSUMED', updated_at=? WHERE payment_intent_id=? AND status='ACTIVE'",
+        )
+        .bind(now, paymentIntentId);
     },
     recordAttempt(input: {
       attemptId: string;
@@ -298,6 +369,8 @@ export function extendPaymentRepository(database: D1Database) {
       expectedVersion: number;
       expectedStatus: string;
       nextStatus: string;
+      now: number;
+      consumeProviderActions: boolean;
       reaction: {
         reactionType: string;
         subjectType: string;
@@ -313,14 +386,14 @@ export function extendPaymentRepository(database: D1Database) {
           )
           .bind(
             input.nextStatus,
-            input.reaction?.now ?? Date.now(),
+            input.now,
             input.intentId,
             input.expectedVersion,
             input.expectedStatus,
           ),
         database
           .prepare("UPDATE payment_attempt SET status=?, updated_at=? WHERE payment_intent_id=?")
-          .bind(input.nextStatus, input.reaction?.now ?? Date.now(), input.intentId),
+          .bind(input.nextStatus, input.now, input.intentId),
       ];
       if (input.reaction)
         statements.push(
@@ -339,6 +412,8 @@ export function extendPaymentRepository(database: D1Database) {
               input.reaction.now,
             ),
         );
+      if (input.consumeProviderActions)
+        statements.push(base.consumeProviderActionsStatement(input.intentId, input.now));
       return database
         .batch(statements)
         .then((results) => (results[0]?.meta?.changes ?? 0) === 1)
