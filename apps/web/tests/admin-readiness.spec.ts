@@ -92,8 +92,11 @@ test("authenticated shell supports keyboard focus, menu focus return, and respon
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByRole("navigation", { name: "Admin navigation" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Overview" }).first()).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  const overview = page.getByRole("link", { name: "Overview" }).first();
+  await expect(overview).toHaveAttribute("aria-current", "page");
+  await overview.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(overview).toBeFocused();
+  await expect(page.getByRole("status", { name: "Clear" })).toBeVisible();
 });

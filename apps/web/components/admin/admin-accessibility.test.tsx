@@ -75,13 +75,9 @@ describe("shared Admin accessibility contract", () => {
           "div",
           { "aria-label": "Order queue" },
           createElement(
-            "table",
+            "thead",
             null,
-            createElement(
-              "thead",
-              null,
-              createElement("tr", null, createElement("th", { scope: "col" }, "Status")),
-            ),
+            createElement("tr", null, createElement("th", { scope: "col" }, "Status")),
           ),
         ),
       ),
