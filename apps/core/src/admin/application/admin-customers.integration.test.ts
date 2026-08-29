@@ -116,15 +116,24 @@ describe("customer crm reads", () => {
     const customerId = await seedCustomer({ userId: customerUserId });
     const now = Date.now();
     const paymentId = `pay-${crypto.randomUUID().slice(0, 8)}`;
-    await env.DB.prepare(
-      "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
-    )
-      .bind(paymentId, customerId, `pay-key-${crypto.randomUUID()}`, now, now)
-      .run();
+    const pendingPaymentId = `pay-${crypto.randomUUID().slice(0, 8)}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
+      ).bind(paymentId, customerId, `pay-key-${crypto.randomUUID()}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 100, 'PHP', 'PENDING', 'mock', ?, ?, ?)",
+      ).bind(pendingPaymentId, customerId, `pay-key-${crypto.randomUUID()}`, now, now),
+    ]);
     await env.DB.prepare(
       "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, (SELECT id FROM delivery_cycle LIMIT 1), '{}', 'COMMITTED', 100, 'PHP', ?, ?, 1)",
     )
       .bind(`ord-${crypto.randomUUID().slice(0, 8)}`, customerId, paymentId, now)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, (SELECT id FROM delivery_cycle LIMIT 1), '{}', 'PENDING_PAYMENT', 100, 'PHP', ?, ?, 1)",
+    )
+      .bind(`draft-${crypto.randomUUID().slice(0, 8)}`, customerId, pendingPaymentId, now + 60_000)
       .run();
 
     const page = await core.listAdminCustomers({
@@ -137,12 +146,13 @@ describe("customer crm reads", () => {
     const summary = page.value.items.find((item) => item.customerId === customerId);
     expect(summary).toBeDefined();
     expect(summary).toMatchObject({ accessStatus: "active", orderCount: 1, version: 1 });
+    expect(summary!.lastOrderAt).toBe(new Date(now).toISOString());
     expect(summary!.email).toContain("@");
 
     const detail = await core.getAdminCustomer({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
-      customerId,
+      customerId: `  ${customerId}  `,
     });
     expect(detail.ok).toBe(true);
     if (!detail.ok) return;

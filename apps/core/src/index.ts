@@ -8,6 +8,8 @@ import {
   type AuthenticatedRequest,
   type CoreHealthResponse,
   type RequestMeta,
+  adminCapabilityCodes,
+  analyticsDimensionKeys,
 } from "@freshmarkets/contracts";
 import { runtimeEnvironment } from "@freshmarkets/config";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
@@ -247,7 +249,7 @@ const analyticsWindowSchema = validationSchema.object({
 const analyticsDimensionsSchema = validationSchema
   .array(
     validationSchema.object({
-      key: validationSchema.string().trim().min(1).max(100),
+      key: validationSchema.enum(analyticsDimensionKeys),
       value: validationSchema.string().trim().min(1).max(200),
     }),
   )
@@ -358,7 +360,7 @@ const roleCreateRequestSchema = authenticatedRequestSchema.extend({
   code: roleCodeSchema,
   name: validationSchema.string().trim().min(1).max(120),
   description: validationSchema.string().trim().max(300),
-  capabilityCodes: validationSchema.array(validationSchema.string().trim().min(1).max(100)).max(50),
+  capabilityCodes: validationSchema.array(validationSchema.enum(adminCapabilityCodes)).max(50),
   idempotencyKey: idempotencyKeySchema,
 });
 
@@ -372,7 +374,7 @@ const roleUpdateRequestSchema = authenticatedRequestSchema.extend({
 
 const roleCapabilitiesRequestSchema = authenticatedRequestSchema.extend({
   roleId: validationSchema.string().trim().min(1).max(200),
-  capabilityCodes: validationSchema.array(validationSchema.string().trim().min(1).max(100)).max(50),
+  capabilityCodes: validationSchema.array(validationSchema.enum(adminCapabilityCodes)).max(50),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });
@@ -458,6 +460,11 @@ const promotionListRequestSchema = authenticatedRequestSchema.extend({
 
 const promotionDetailRequestSchema = authenticatedRequestSchema.extend({
   promotionId: validationSchema.string().trim().min(1).max(200),
+});
+
+const promotionHistoryRequestSchema = promotionDetailRequestSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 
 const promotionCreateRequestSchema = authenticatedRequestSchema.extend({
@@ -849,7 +856,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         environment: runtimeEnvironment(this.env.ENVIRONMENT),
       },
-      input,
+      validation.data,
     );
   }
   async listAdminScopes(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
@@ -862,7 +869,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         environment: runtimeEnvironment(this.env.ENVIRONMENT),
       },
-      input,
+      validation.data,
     );
   }
   async listMetricDefinitions(
@@ -873,7 +880,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAnalyticsMetricDefinitions(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getOverview(input: import("@freshmarkets/contracts").AnalyticsOverviewRequest) {
@@ -882,7 +889,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAnalyticsOverview(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAnalyticsOverview(input: import("@freshmarkets/contracts").AnalyticsOverviewRequest) {
@@ -894,7 +901,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getMetricSeries(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getMetricSeries(input: import("@freshmarkets/contracts").MetricSeriesRequest) {
@@ -906,7 +913,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminAuditEventsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminAuditEvent(input: import("@freshmarkets/contracts").AdminAuditDetailRequest) {
@@ -915,7 +922,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminAuditEventQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminStaff(input: import("@freshmarkets/contracts").AdminStaffListRequest) {
@@ -924,7 +931,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminStaffQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminStaff(input: import("@freshmarkets/contracts").AdminStaffDetailRequest) {
@@ -933,7 +940,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminStaffQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminStaffInvitations(
@@ -944,7 +951,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminStaffInvitationsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async inviteAdminStaff(input: import("@freshmarkets/contracts").AdminStaffInviteRequest) {
@@ -953,7 +960,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return inviteAdminStaffCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async revokeAdminStaffInvitation(
@@ -964,7 +971,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return revokeAdminStaffInvitationCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async updateAdminStaff(input: import("@freshmarkets/contracts").AdminStaffUpdateRequest) {
@@ -973,7 +980,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return updateAdminStaffCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async changeAdminStaffAccess(
@@ -984,7 +991,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return changeAdminStaffAccessCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async setAdminStaffRoles(input: import("@freshmarkets/contracts").AdminStaffRolesRequest) {
@@ -993,7 +1000,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminStaffRolesCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async setAdminStaffScopes(input: import("@freshmarkets/contracts").AdminStaffScopesRequest) {
@@ -1002,7 +1009,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminStaffScopesCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async revokeAdminStaffSessions(
@@ -1013,7 +1020,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return revokeAdminStaffSessionsCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminRoles(input: import("@freshmarkets/contracts").AdminRoleListRequest) {
@@ -1022,7 +1029,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminRolesQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminRole(input: import("@freshmarkets/contracts").AdminRoleDetailRequest) {
@@ -1031,7 +1038,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminRoleQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async createAdminRole(input: import("@freshmarkets/contracts").AdminRoleCreateRequest) {
@@ -1040,7 +1047,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return createAdminRoleCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async updateAdminRole(input: import("@freshmarkets/contracts").AdminRoleUpdateRequest) {
@@ -1049,7 +1056,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return updateAdminRoleCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async setAdminRoleCapabilities(
@@ -1060,7 +1067,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminRoleCapabilitiesCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async archiveAdminRole(input: import("@freshmarkets/contracts").AdminRoleArchiveRequest) {
@@ -1069,7 +1076,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return archiveAdminRoleCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listCapabilityDefinitions(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
@@ -1078,7 +1085,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listCapabilityDefinitionsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminCustomers(input: import("@freshmarkets/contracts").AdminCustomerListRequest) {
@@ -1087,7 +1094,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminCustomersQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminCustomer(input: import("@freshmarkets/contracts").AdminCustomerDetailRequest) {
@@ -1096,7 +1103,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminCustomerQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listCustomerInvitations(
@@ -1107,7 +1114,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listCustomerInvitationsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async inviteCustomer(input: import("@freshmarkets/contracts").AdminCustomerInviteRequest) {
@@ -1116,7 +1123,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return inviteCustomerCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async changeCustomerAccess(
@@ -1127,7 +1134,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return changeCustomerAccessCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async revokeCustomerSessions(
@@ -1138,7 +1145,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return revokeCustomerSessionsCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async requestCustomerClosure(
@@ -1149,7 +1156,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return requestCustomerClosureCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listPrivacyRequests(input: import("@freshmarkets/contracts").AdminPrivacyListRequest) {
@@ -1158,7 +1165,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listPrivacyRequestsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async applyPrivacyAction(input: import("@freshmarkets/contracts").AdminPrivacyActionRequest) {
@@ -1167,7 +1174,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return applyPrivacyActionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminPromotions(input: import("@freshmarkets/contracts").AdminPromotionListRequest) {
@@ -1176,7 +1183,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminPromotionsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionDetailRequest) {
@@ -1185,7 +1192,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminPromotionQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async createAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionCreateRequest) {
@@ -1194,7 +1201,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return createAdminPromotionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async updateAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionUpdateRequest) {
@@ -1203,7 +1210,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return updateAdminPromotionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async changeAdminPromotionStatus(
@@ -1214,7 +1221,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return changeAdminPromotionStatusCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async previewAdminPromotion(
@@ -1225,7 +1232,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return previewAdminPromotionQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async grantAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionGrantRequest) {
@@ -1234,7 +1241,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return grantAdminPromotionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listPromotionGrants(
@@ -1243,12 +1250,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       limit?: number;
     },
   ) {
-    const validation = promotionListRequestSchema.safeParse(input);
+    const validation = promotionHistoryRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listPromotionGrantsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listPromotionRedemptions(
@@ -1257,12 +1264,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       limit?: number;
     },
   ) {
-    const validation = promotionListRequestSchema.safeParse(input);
+    const validation = promotionHistoryRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listPromotionRedemptionsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminCategories(input: import("@freshmarkets/contracts").AdminCategoryListRequest) {
@@ -1271,7 +1278,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminCategoriesQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async createAdminCategory(input: import("@freshmarkets/contracts").AdminCategoryCreateRequest) {
@@ -1280,7 +1287,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return createAdminCategoryCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminUnits(input: import("@freshmarkets/contracts").AdminUnitListRequest) {
@@ -1289,7 +1296,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminUnitsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async createAdminUnit(input: import("@freshmarkets/contracts").AdminUnitCreateRequest) {
@@ -1298,7 +1305,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return createAdminUnitCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminProducts(input: import("@freshmarkets/contracts").AdminProductListRequest) {
@@ -1307,7 +1314,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminProductsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminProduct(input: import("@freshmarkets/contracts").AdminProductDetailRequest) {
@@ -1316,7 +1323,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminProductQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async setAdminProductStatus(input: import("@freshmarkets/contracts").AdminProductStatusRequest) {
@@ -1325,7 +1332,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminProductStatusCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async createAdminSku(input: import("@freshmarkets/contracts").AdminSkuCreateRequest) {
@@ -1334,7 +1341,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return createAdminSkuCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async updateAdminSku(input: import("@freshmarkets/contracts").AdminSkuUpdateRequest) {
@@ -1343,7 +1350,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return updateAdminSkuCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async setAdminSkuAvailability(
@@ -1354,7 +1361,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminSkuAvailabilityCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async setAdminSkuPrice(input: import("@freshmarkets/contracts").AdminSkuPriceRequest) {
@@ -1363,7 +1370,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminSkuPriceCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminInventory(input: import("@freshmarkets/contracts").AdminInventoryListRequest) {
@@ -1372,7 +1379,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminInventoryQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminInventoryLedger(
@@ -1383,7 +1390,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminInventoryLedgerQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getFulfillmentMode(
@@ -1394,7 +1401,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminFulfillmentMode(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async activateFulfillmentMode(
@@ -1405,7 +1412,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return activateAdminFulfillmentMode(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async aggregateAdminProcurementDemand(
@@ -1416,7 +1423,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return aggregateAdminProcurementDemand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async startAdminReceiving(input: import("@freshmarkets/contracts").StartAdminReceivingRequest) {
@@ -1425,7 +1432,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return startAdminReceiving(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async recordAdminReceivedLine(
@@ -1436,7 +1443,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return recordAdminReceivedLine(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async completeAdminReceiving(
@@ -1447,7 +1454,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return completeAdminReceiving(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async advanceAdminFulfillment(
@@ -1458,7 +1465,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return advanceAdminFulfillment(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async advanceAdminDelivery(input: import("@freshmarkets/contracts").AdvanceAdminDeliveryRequest) {
@@ -1467,7 +1474,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return advanceAdminDelivery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async resolveAdminOperationalException(
@@ -1478,7 +1485,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return resolveAdminOperationalException(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listProcurementRequirements(
@@ -1489,7 +1496,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminProcurementRequirements(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listReceivingSessions(
@@ -1500,7 +1507,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminReceivingSessions(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listFulfillmentQueue(
@@ -1511,7 +1518,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminFulfillmentQueue(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listDeliveryOperations(
@@ -1522,7 +1529,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminDeliveryOperations(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listOperationalExceptions(
@@ -1533,7 +1540,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminOperationalExceptions(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminOrders(input: import("@freshmarkets/contracts").AdminOrderListRequest) {
@@ -1542,7 +1549,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminOrdersQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminOrder(input: import("@freshmarkets/contracts").AdminOrderDetailRequest) {
@@ -1551,7 +1558,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminOrderQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async cancelAdminOrder(input: import("@freshmarkets/contracts").AdminOrderCancelRequest) {
@@ -1564,7 +1571,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         payments: buildProviderRegistry(this.env),
       },
-      input,
+      validation.data,
     );
   }
   async listAdminPayments(input: import("@freshmarkets/contracts").AdminPaymentListRequest) {
@@ -1573,7 +1580,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminPaymentsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async requestAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRequest) {
@@ -1582,7 +1589,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return requestAdminRefundCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminReconciliationCases(
@@ -1593,7 +1600,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminReconciliationCasesQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async resolveAdminReconciliationCase(
@@ -1604,7 +1611,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return resolveAdminReconciliationCaseCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async listAdminMemberships(input: import("@freshmarkets/contracts").AdminMembershipListRequest) {
@@ -1613,7 +1620,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminMembershipsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminMembership(input: import("@freshmarkets/contracts").AdminMembershipDetailRequest) {
@@ -1622,7 +1629,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminMembershipQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async pauseAdminMembership(
@@ -1633,7 +1640,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return changeAdminMembershipCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
       "PAUSE",
     );
   }
@@ -1645,7 +1652,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return changeAdminMembershipCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
       "RESUME",
     );
   }
@@ -1657,7 +1664,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return changeAdminMembershipCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
       "CANCEL",
     );
   }
@@ -1667,7 +1674,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminOrderIssuesQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async getAdminOrderIssue(input: import("@freshmarkets/contracts").AdminOrderIssueDetailRequest) {
@@ -1676,7 +1683,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminOrderIssueQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async applyAdminOrderIssueAction(
@@ -1687,7 +1694,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return applyAdminOrderIssueActionCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+      validation.data,
     );
   }
   async resolveServiceability(input: import("@freshmarkets/contracts").ServiceabilityRequest) {

@@ -38,14 +38,24 @@ export async function GET(request: Request) {
   const limit = parseLimit(params);
   if (limit instanceof Response) return limit;
   const statusParam = params.get("status");
-  const status =
-    statusParam !== null && (PRIVACY_STATUSES as readonly string[]).includes(statusParam)
-      ? (statusParam as (typeof PRIVACY_STATUSES)[number])
-      : undefined;
+  if (statusParam !== null && !(PRIVACY_STATUSES as readonly string[]).includes(statusParam)) {
+    return Response.json(
+      {
+        ok: false as const,
+        error: {
+          code: "VALIDATION_FAILED" as const,
+          message: "status is not a recognized privacy request state",
+          requestId: crypto.randomUUID(),
+        },
+      },
+      { status: 400 },
+    );
+  }
+  const status = statusParam as (typeof PRIVACY_STATUSES)[number] | null;
   const result = await coreClient(env.CORE).listPrivacyRequests({
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
-    status,
+    status: status ?? undefined,
     cursor: params.get("cursor") ?? undefined,
     limit,
   });

@@ -43,9 +43,15 @@ function jsonRequest(url: string, body: unknown): Request {
 
 describe("customer crm BFF routes", () => {
   it("delegates the customer list with query parameters and cookies", async () => {
-    coreMocks.listAdminCustomers.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.listAdminCustomers.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
     const response = await listCustomers(
-      new Request("https://freshmarkets.ph/api/admin/customers?query=alice&limit=10", { headers: COOKIE }),
+      new Request("https://freshmarkets.ph/api/admin/customers?query=alice&limit=10", {
+        headers: COOKIE,
+      }),
     );
     expect(response.status).toBe(200);
     const input = coreMocks.listAdminCustomers.mock.calls[0][0] as Record<string, unknown>;
@@ -75,12 +81,24 @@ describe("customer crm BFF routes", () => {
   });
 
   it("delegates invitation creation and the invitation queue", async () => {
-    coreMocks.inviteCustomer.mockResolvedValue({ ok: true, value: { invitationId: "i1" }, requestId: "r" });
-    coreMocks.listCustomerInvitations.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.inviteCustomer.mockResolvedValue({
+      ok: true,
+      value: { invitationId: "i1" },
+      requestId: "r",
+    });
+    coreMocks.listCustomerInvitations.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
     await invite(
-      jsonRequest("https://freshmarkets.ph/api/admin/customers/invitations", { email: "a@example.com" }),
+      jsonRequest("https://freshmarkets.ph/api/admin/customers/invitations", {
+        email: "a@example.com",
+      }),
     );
-    await listInvitations(new Request("https://freshmarkets.ph/api/admin/customers/invitations", { headers: COOKIE }));
+    await listInvitations(
+      new Request("https://freshmarkets.ph/api/admin/customers/invitations", { headers: COOKIE }),
+    );
     expect(coreMocks.inviteCustomer.mock.calls[0][0]).toMatchObject({
       email: "a@example.com",
       idempotencyKey: "idem-1",
@@ -90,7 +108,11 @@ describe("customer crm BFF routes", () => {
 
   it("delegates access change, session revocation, and closure requests with the path id", async () => {
     coreMocks.changeCustomerAccess.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-    coreMocks.revokeCustomerSessions.mockResolvedValue({ ok: true, value: { revokedSessionCount: 1 }, requestId: "r" });
+    coreMocks.revokeCustomerSessions.mockResolvedValue({
+      ok: true,
+      value: { revokedSessionCount: 1 },
+      requestId: "r",
+    });
     coreMocks.requestCustomerClosure.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
     await changeAccess(
@@ -102,7 +124,9 @@ describe("customer crm BFF routes", () => {
       customerParams,
     );
     await revokeSessions(
-      jsonRequest("https://freshmarkets.ph/api/admin/customers/cust-1/sessions/revoke", { reason: "takeover" }),
+      jsonRequest("https://freshmarkets.ph/api/admin/customers/cust-1/sessions/revoke", {
+        reason: "takeover",
+      }),
       customerParams,
     );
     await closureRequest(
@@ -129,11 +153,17 @@ describe("customer crm BFF routes", () => {
   });
 
   it("delegates the privacy queue and closed actions", async () => {
-    coreMocks.listPrivacyRequests.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.listPrivacyRequests.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
     coreMocks.applyPrivacyAction.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
     await listPrivacy(
-      new Request("https://freshmarkets.ph/api/admin/privacy-requests?status=SUBMITTED", { headers: COOKIE }),
+      new Request("https://freshmarkets.ph/api/admin/privacy-requests?status=SUBMITTED", {
+        headers: COOKIE,
+      }),
     );
     await privacyAction(
       jsonRequest("https://freshmarkets.ph/api/admin/privacy-requests/pr-1/actions", {
@@ -160,5 +190,17 @@ describe("customer crm BFF routes", () => {
     const body = (await response.json()) as { error: { code: string } };
     expect(body.error.code).toBe("VALIDATION_FAILED");
     expect(coreMocks.listAdminCustomers).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an unknown privacy status without calling Core", async () => {
+    const response = await listPrivacy(
+      new Request("https://freshmarkets.ph/api/admin/privacy-requests?status=UNKNOWN", {
+        headers: COOKIE,
+      }),
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("VALIDATION_FAILED");
+    expect(coreMocks.listPrivacyRequests).not.toHaveBeenCalled();
   });
 });

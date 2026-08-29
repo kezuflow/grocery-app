@@ -33,8 +33,10 @@ const CUSTOMER_SELECT = `
          cp.status AS accessStatus, c.version, c.created_at AS createdAt,
          (SELECT s.status FROM subscription s WHERE s.customer_id = c.id
           ORDER BY s.created_at DESC LIMIT 1) AS subscriptionState,
-         (SELECT COUNT(*) FROM grocery_order o WHERE o.customer_id = c.id) AS orderCount,
-         (SELECT MAX(o.created_at) FROM grocery_order o WHERE o.customer_id = c.id) AS lastOrderAt
+         (SELECT COUNT(*) FROM grocery_order o
+          WHERE o.customer_id = c.id AND o.status NOT IN ('DRAFT', 'PENDING_PAYMENT', 'EXPIRED')) AS orderCount,
+         (SELECT MAX(o.created_at) FROM grocery_order o
+          WHERE o.customer_id = c.id AND o.status NOT IN ('DRAFT', 'PENDING_PAYMENT', 'EXPIRED')) AS lastOrderAt
   FROM customer c
   JOIN customer_principal cp ON cp.id = c.principal_id
   JOIN user u ON u.id = c.auth_user_id`;
@@ -91,7 +93,11 @@ export async function listAdminCustomers(
   if (query.length > 100) {
     return {
       ok: false,
-      error: { code: "VALIDATION_FAILED", message: "query is too long", requestId: request.requestId },
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "query is too long",
+        requestId: request.requestId,
+      },
     };
   }
 
