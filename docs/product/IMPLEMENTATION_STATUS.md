@@ -1,7 +1,14 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-08-29. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-08-30. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
+
+## Admin Operations UI Phase 12 (2026-08-30)
+
+- The approved Admin screen inventory is implemented through the typed Web-to-Core Service Binding: Core-authorized hierarchical navigation; Catalog Product and Category list/create/detail/edit/lifecycle; canonical R2-backed Product media administration; complete Order and Payment workspaces; and the existing Customer/Privacy, Membership, Promotion, Inventory, Procurement/Receiving, Fulfillment, Delivery, exception, Analytics, Staff/Role, Audit, and fulfillment-mode surfaces.
+- Migration `0041_admin_catalog_authoring.sql` adds guarded Category hierarchy/version fields and the canonical `product_media` association. Product media bytes are validated and stored through Core's `PRODUCT_MEDIA` R2 binding; Web has no D1 or R2 authority. The version-controlled storefront image metadata path remains compatibility-only until public Catalog delivery consumes canonical R2 media.
+- Order detail composes immutable quote/order financial and item snapshots, Payments, amendments, fulfillment, delivery, exceptions, timeline, Core-derived actions, and Audit. Payment overview/detail composes canonical intent, attempt, refund, provider-safe event, reaction, and reconciliation projections; provider references, provider-event identifiers, hashes/payloads, and reconciliation JSON do not leave Core.
+- Shared Admin compositions provide Core-derived breadcrumbs, typed responsive tables, explicit loading/empty/filtered/scope/error states, cursor controls, exact-impact confirmations, detail/timeline layouts, and live command results. The complete deterministic Admin Playwright set passed against the managed vinext + Core/D1 stack; exact final evidence is recorded in `docs/superpowers/reports/ADMIN_DASHBOARD_PHASE_12_FINAL.md`.
 
 ## Admin and Platform Readiness Slice 9 (2026-08-29)
 
@@ -21,7 +28,7 @@ Status date: 2026-08-29. This file is descriptive evidence only. The canonical d
   `AVAILABLE` state through `sku_location_availability`; Scheduled display ignores on-hand inventory.
 - Storefront browsing uses Core's bounded `getMarketplaceHome` rails and database-side cursor
   pagination; Web renders Core media/details with no slug-image map and placeholder fallback.
-- Media binaries remain public Web assets pending the deferred R2 `product_media` migration.
+- Launch storefront binaries remain version-controlled Web assets as a compatibility path; canonical Admin-managed Product media now uses the Core-owned R2 `product_media` association from migration `0041`.
 - Known local-stack limitation: committed migration `0021_instant_mode.sql` cannot apply to dev
   databases containing pre-existing grocery orders because of its unconditional `DROP TABLE
 grocery_order` history; fresh or migrated-at-the-time environments are unaffected.
@@ -114,8 +121,9 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   keyset ledger). Catalog authorization is `catalog.read`/`catalog.manage` + global scope;
   inventory reads are `inventory.read` + operational location scope; the existing
   `inventory.adjust` command keeps its own guards.
-- Deferred: media administration (canonical R2 media remains a deferred migration), bulk import,
-  detail authoring, and purchase/receiving surfaces.
+- Phase 12 adds canonical R2 media administration plus Product/Category detail authoring and
+  hierarchy. Bulk import remains deferred; purchase/receiving surfaces remain owned by
+  Procurement/Receiving.
 - Web adds ten thin BFF adapters and the Catalog workspace (categories/units/products + product
   detail with SKU authoring, versioned pricing, availability toggles) and the Inventory workspace
   (location balances, guarded adjustments, ledger inspection).
@@ -149,6 +157,9 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
   customer order-issue read models and commands. Order cancellation delegates to the canonical
   command; refunds remain `REQUESTED` until provider confirmation; Membership recovery remains
   deferred.
+- Phase 12 completes the Order and Payment operational projections and dedicated Payment Overview,
+  Transactions, Detail, and Reconciliation routes. Allowed actions now combine lifecycle policy
+  with the caller's actual command capability, and raw provider/reconciliation storage is withheld.
 - Migration `0030_order_issues.sql` and its integration coverage are present. Issue actions use a
   closed lifecycle and never authorize refunds.
 - Web provides thin BFF adapters plus Orders/detail, Payments, Memberships/detail, and Issues
@@ -240,7 +251,7 @@ grocery_order` history; fresh or migrated-at-the-time environments are unaffecte
 | Membership                 | Provider-neutral states, trial/authorization/renewal test seams                    | Approved production mandates and automatic charges           |
 | Operations                 | Scoped commands/read models and local integration tests                            | Complete staff/rider authenticated Playwright acceptance     |
 | Notifications              | Auth verification/reset only                                                       | Product notification Program 6                               |
-| Programs 6-14              | No completion claim                                                                | Planned product scope remains unfinished                     |
+| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright | Production deployment acceptance remains external           |
 
 ## Verification truthfulness
 

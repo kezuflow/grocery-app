@@ -113,7 +113,7 @@ Indexes: customer/state, next billing, trial end, scheduled cancellation, and on
 - `skus(id PK, product_id FK, inventory_pool_id FK, code UNIQUE, display_name, merchandising_label NULL, sell_quantity, sell_unit_id FK, inventory_quantity_base, status, sort_order, version)` where sell/base quantities are positive integers and persisted configuration is authoritative.
 - `location_availability(sku_id FK, location_id FK, sourcing_mode, status, safety_buffer_base, minimum_stock_base, version, PRIMARY KEY(sku_id, location_id))`
 - `prices(id PK, sku_id FK, market_id FK, location_id FK NULL, price_type, amount_minor, currency, valid_from, valid_to NULL, version, created_at)`
-- `product_media(id PK, product_id FK, r2_key, media_type, alt_text, sort_order, status)`
+- `product_media(id PK, product_id FK, object_key UNIQUE, mime_type, byte_size, alt_text, is_primary, sort_order, status active|inactive, version, created_at, updated_at)`
 
 Indexes: product/category/status, SKU/product/status, availability/location/status/mode, active prices by SKU/market/location/time. Core prevents overlapping active price records for the same precedence key.
 
@@ -124,7 +124,7 @@ The launch implementation adds normalized detail and SKU-level availability stor
 - `sku_location_availability(sku_id FK, location_id FK, availability_status AVAILABLE|UNAVAILABLE, sourcing_mode, version, PRIMARY KEY(sku_id, location_id))`, the display authority for Scheduled Cebu availability. It is admin-flag driven and never derived from on-hand inventory quantities.
 - `sku.merchandising_label NULL`, `sku.sell_quantity`, `sku.version` extend persisted variant configuration; merchandising labels such as `Pack`/`Bunch` remain customer copy, never conversion units. Staff-assembled packs persist one exact gram recipe (`sell_quantity = inventory_quantity_base`) while customers see only approximate contents notes.
 
-Until the deferred R2 migration, `product.image_metadata_json` holds a validated versioned `{version:1, assetKey, altText}` record pointing at Web's public produce assets; it is a compatibility attachment, not the canonical `product_media` table, and Core rejects malformed or unsafe payloads to public consumers.
+`product_media` is the canonical Admin-managed media association. Core generates its R2 object key, validates bytes and metadata, permits at most one active primary image per Product, and treats the D1 association as authoritative. `product.image_metadata_json` remains a read-only compatibility attachment for the version-controlled launch storefront assets until public Catalog delivery is migrated to serve canonical R2 media; it does not override `product_media`, and Core rejects malformed or unsafe compatibility metadata.
 
 `category.icon_asset_key` is optional constrained presentation metadata containing a bare `.svg` filename. The SVG binaries are version-controlled Web assets under `public/category-icons`; Core applies its stricter lowercase kebab-case allow-list before resolving a public `iconSrc` and returns `null` for missing or invalid metadata. Category names remain the accessible labels, so decorative icons do not duplicate spoken text.
 

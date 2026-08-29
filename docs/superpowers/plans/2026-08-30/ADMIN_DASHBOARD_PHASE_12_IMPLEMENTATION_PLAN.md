@@ -262,7 +262,7 @@
 
 - [x] **Step 4: Implement Overview, Transactions, Detail, and Reconciliation screens**
 
-  Refund/retry/reconcile remain contextual commands with confirmation, stable intent keys, current allowed actions, and recoverable conflict/error UI. Keep `/admin/payments` as a compatibility redirect or overview shell.
+  Refund and reconciliation resolution remain contextual Admin commands with confirmation, stable intent keys, current allowed actions, and recoverable conflict/error UI. Downstream payment-reaction retry remains the Core-owned scheduled redrive path and is visible in the detail/reconciliation projections; Admin must not invent a second provider or reaction retry owner. Keep `/admin/payments` as a compatibility redirect or overview shell.
 
 - [x] **Step 5: Run focused route/browser tests and verify GREEN**
 
@@ -324,11 +324,11 @@
 
 - Produces an evidence report mapping every Phase 12 acceptance item and every required Admin screen to its contract, Core implementation, Web route/page, migration, and test.
 
-- [ ] **Step 1: Re-read the plan, `DESIGN.md`, `COMPONENTS.md`, Phase 12, and relevant canonical domain/API/data/state/MVP sections line by line**
+- [x] **Step 1: Re-read the plan, `DESIGN.md`, `COMPONENTS.md`, Phase 12, and relevant canonical domain/API/data/state/MVP sections line by line**
 
-- [ ] **Step 2: Correct descriptive/canonical documentation only where implemented terminology or contract/schema shape changed**
+- [x] **Step 2: Correct descriptive/canonical documentation only where implemented terminology or contract/schema shape changed**
 
-- [ ] **Step 3: Run the complete validation matrix**
+- [x] **Step 3: Run the complete validation matrix**
 
   Run:
 
@@ -344,11 +344,11 @@
   pnpm --filter @freshmarkets/web exec playwright test tests/admin-*.spec.ts
   ```
 
-- [ ] **Step 4: Inspect the complete diff and request independent code review**
+- [x] **Step 4: Inspect the complete diff and request independent code review**
 
   Use `superpowers:requesting-code-review`; resolve every Critical and Important finding, rerun affected checks, and record Minor residual risks.
 
-- [ ] **Step 5: Use `superpowers:verification-before-completion` and rerun the complete validation matrix**
+- [x] **Step 5: Use `superpowers:verification-before-completion` and rerun the complete validation matrix**
 
 - [ ] **Step 6: Commit documentation/evidence, push, and verify remote parity**
 
@@ -356,12 +356,12 @@
 
 ## Final Acceptance Checklist
 
-- [ ] `.fm-admin` owns the neutral/orange light theme and five-step orange chart palette without changing storefront styling.
-- [ ] Core-authorized grouped navigation, 252px/72px desktop modes, mobile Sheet, route specificity, persistence, keyboard/focus behavior, and explicit scope selection pass.
-- [ ] Product and Category list/add/detail/edit flows are Core-backed and cover hierarchy, lifecycle, details, variants, exact consumption, prices, availability/sourcing, canonical media, and Audit.
-- [ ] Order detail composes immutable financial/item snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and Audit; Admin cannot create Orders.
-- [ ] Payment overview, transactions, detail, reconciliation, refund/retry/reconcile commands use canonical provider-confirmed state.
-- [ ] Every remaining Admin workspace uses the unified responsive/state/accessibility model and reachable cursor pagination.
-- [ ] No raw D1/R2/provider type reaches contracts or UI; Web has no authoritative data access or invented authorization.
-- [ ] Migration, focused tests, Worker-local tests, vinext checks, builds, and Admin Playwright flows pass.
+- [x] `.fm-admin` owns the neutral/orange light theme and five-step orange chart palette without changing storefront styling.
+- [x] Core-authorized grouped navigation, 252px/72px desktop modes, mobile Sheet, route specificity, persistence, keyboard/focus behavior, and explicit scope selection pass.
+- [x] Product and Category list/add/detail/edit flows are Core-backed and cover hierarchy, lifecycle, details, variants, exact consumption, prices, availability/sourcing, canonical media, and Audit.
+- [x] Order detail composes immutable financial/item snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and Audit; Admin cannot create Orders.
+- [x] Payment overview, transactions, detail, reconciliation, contextual refund/reconciliation commands, and Core-owned reaction retry use canonical provider-confirmed state.
+- [x] Every remaining Admin workspace uses the unified responsive/state/accessibility model and reachable cursor pagination.
+- [x] No raw D1/R2/provider type reaches contracts or UI; Web has no authoritative data access or invented authorization.
+- [x] Migration, focused tests, Worker-local tests, vinext checks, builds, and Admin Playwright flows pass.
 - [ ] Full verification is fresh, the worktree is clean, and all verified commits are pushed to `origin/main`.
