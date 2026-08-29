@@ -245,22 +245,6 @@ CREATE TABLE inventory_reservation (
 INSERT INTO inventory_reservation SELECT * FROM inventory_reservation_0021_backup;
 DROP TABLE inventory_reservation_0021_backup;
 CREATE INDEX inventory_reservation_order_idx ON inventory_reservation(order_id, status);
-CREATE TRIGGER inventory_reservation_guard
-BEFORE INSERT ON inventory_reservation
-BEGIN
-  SELECT CASE WHEN NOT EXISTS (
-    SELECT 1 FROM inventory_balance
-    WHERE location_id = NEW.location_id
-      AND inventory_pool_id = NEW.inventory_pool_id
-      AND on_hand - reserved >= NEW.quantity
-  ) THEN RAISE(ABORT, 'INSUFFICIENT_STOCK') END;
-END;
-CREATE TRIGGER inventory_reservation_increment
-AFTER INSERT ON inventory_reservation
-BEGIN
-  UPDATE inventory_balance SET reserved = reserved + NEW.quantity
-  WHERE location_id = NEW.location_id AND inventory_pool_id = NEW.inventory_pool_id;
-END;
 
 CREATE TABLE committed_demand (
   id TEXT PRIMARY KEY,
