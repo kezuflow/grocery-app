@@ -128,18 +128,27 @@ describe("generateProduceCatalogSql", () => {
       expect(holders[0]).toContain("'OPERATIONS'");
     }
     expect(
-      sql.split("\n").some((line) =>
-        line.includes("'CUSTOMER'") && line.includes("Approximately 10–15 chili peppers"),
-      ),
+      sql
+        .split("\n")
+        .some(
+          (line) =>
+            line.includes("'CUSTOMER'") && line.includes("Approximately 10–15 chili peppers"),
+        ),
     ).toBe(true);
   });
 
   it("reconciles the launch taxonomy and grants Cebu availability and prices", () => {
     const sql = generateProduceCatalogSql(manifest(), OPTIONS);
     expect(sql).toContain("UPDATE category SET code = 'FRUITS'");
-    expect(sql).toContain("INSERT OR IGNORE INTO category (id, code, name, slug, status, sort_order, created_at, updated_at)");
-    expect(sql).toContain(`VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-papaya', 'AVAILABLE', 'PLANNED_PROCUREMENT', 0);`);
-    expect(sql).toContain(`VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-chili-pepper-fruit-siling-labuyo', 'AVAILABLE', 'PLANNED_PROCUREMENT', 0);`);
+    expect(sql).toContain(
+      "INSERT OR IGNORE INTO category (id, code, name, slug, status, sort_order, created_at, updated_at)",
+    );
+    expect(sql).toContain(
+      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-papaya', 'AVAILABLE', 'PLANNED', 0);`,
+    );
+    expect(sql).toContain(
+      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-chili-pepper-fruit-siling-labuyo', 'AVAILABLE', 'PLANNED', 0);`,
+    );
     expect(sql).toContain(MARKET_METRO_CEBU);
     const availabilityLines = sql
       .split("\n")

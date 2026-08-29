@@ -29,16 +29,21 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (
     typeof body?.code !== "string" ||
-    typeof body?.name !== "string" ||
+    typeof body?.displayName !== "string" ||
     (body?.dimension !== "MASS" && body?.dimension !== "COUNT" && body?.dimension !== "VOLUME") ||
-    typeof body?.symbol !== "string"
+    (body?.canonicalBaseCode !== "GRAM" &&
+      body?.canonicalBaseCode !== "MILLILITER" &&
+      body?.canonicalBaseCode !== "PIECE") ||
+    !Number.isInteger(body?.conversionNumerator) ||
+    !Number.isInteger(body?.conversionDenominator)
   ) {
     return Response.json(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "code, name, dimension, and symbol are required",
+          message:
+            "Canonical unit code, display name, dimension, base, and conversion are required",
           requestId: crypto.randomUUID(),
         },
       },
@@ -49,9 +54,11 @@ export async function POST(request: Request) {
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
     code: body.code,
-    name: body.name,
+    displayName: body.displayName,
     dimension: body.dimension,
-    symbol: body.symbol,
+    canonicalBaseCode: body.canonicalBaseCode,
+    conversionNumerator: body.conversionNumerator as number,
+    conversionDenominator: body.conversionDenominator as number,
     idempotencyKey,
   });
   return Response.json(result);

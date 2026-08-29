@@ -51,7 +51,11 @@ function jsonRequest(url: string, body: unknown, method = "POST"): Request {
 
 describe("catalog and inventory BFF routes", () => {
   it("delegates category and unit reads/creates", async () => {
-    coreMocks.listAdminCategories.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.listAdminCategories.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
     coreMocks.createAdminCategory.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
     coreMocks.listAdminUnits.mockResolvedValue({ ok: true, value: [], requestId: "r" });
     coreMocks.createAdminUnit.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
@@ -62,22 +66,40 @@ describe("catalog and inventory BFF routes", () => {
     );
     await listUnits(new Request("https://x/units", { headers: COOKIE }));
     await createUnit(
-      jsonRequest("https://x/units", { code: "U_1", name: "U", dimension: "MASS", symbol: "u" }),
+      jsonRequest("https://x/units", {
+        code: "U_1",
+        displayName: "Unit",
+        dimension: "MASS",
+        canonicalBaseCode: "GRAM",
+        conversionNumerator: 1,
+        conversionDenominator: 1,
+      }),
     );
 
-    expect(coreMocks.createAdminCategory.mock.calls[0][0]).toMatchObject({ code: "T_1", idempotencyKey: "idem-1" });
+    expect(coreMocks.createAdminCategory.mock.calls[0][0]).toMatchObject({
+      code: "T_1",
+      idempotencyKey: "idem-1",
+    });
     expect(coreMocks.createAdminUnit.mock.calls[0][0]).toMatchObject({ dimension: "MASS" });
   });
 
   it("delegates product list/detail/status", async () => {
-    coreMocks.listAdminProducts.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.listAdminProducts.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
     coreMocks.getAdminProduct.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
     coreMocks.setAdminProductStatus.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
     await listProducts(new Request("https://x/products?query=onion", { headers: COOKIE }));
     await getProduct(new Request("https://x/products/p1", { headers: COOKIE }), productParams);
     await productStatus(
-      jsonRequest("https://x/products/p1/status", { status: "inactive", reason: "pause", expectedVersion: 1 }),
+      jsonRequest("https://x/products/p1/status", {
+        status: "inactive",
+        reason: "pause",
+        expectedVersion: 1,
+      }),
       productParams,
     );
 
@@ -100,20 +122,29 @@ describe("catalog and inventory BFF routes", () => {
         code: "S1",
         name: "250 g",
         sellableUnitId: "u1",
+        sellQuantity: 250,
         consumptionBaseQuantity: 250,
       }),
     );
     await updateSku(
-      jsonRequest("https://x/skus/sku-1", { merchandisingLabel: "Pack", expectedVersion: 1 }, "PATCH"),
+      jsonRequest(
+        "https://x/skus/sku-1",
+        { merchandisingLabel: "Pack", expectedVersion: 1 },
+        "PATCH",
+      ),
       skuParams,
     );
     await setAvailability(
-      jsonRequest("https://x/skus/sku-1/availability", {
-        locationId: "location-cebu-central",
-        availabilityStatus: "AVAILABLE",
-        sourcingMode: "STOCKED",
-        expectedVersion: 0,
-      }, "PUT"),
+      jsonRequest(
+        "https://x/skus/sku-1/availability",
+        {
+          locationId: "location-cebu-central",
+          availabilityStatus: "AVAILABLE",
+          sourcingMode: "STOCKED",
+          expectedVersion: 0,
+        },
+        "PUT",
+      ),
       skuParams,
     );
     await setPrice(
@@ -133,14 +164,24 @@ describe("catalog and inventory BFF routes", () => {
   });
 
   it("delegates inventory list and ledger with location", async () => {
-    coreMocks.listAdminInventory.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
-    coreMocks.getAdminInventoryLedger.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
+    coreMocks.listAdminInventory.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
+    coreMocks.getAdminInventoryLedger.mockResolvedValue({
+      ok: true,
+      value: { items: [] },
+      requestId: "r",
+    });
 
     await listInventory(
       new Request("https://x/inventory?locationId=location-cebu-central", { headers: COOKIE }),
     );
     await getLedger(
-      new Request("https://x/inventory/pool-1/ledger?locationId=location-cebu-central", { headers: COOKIE }),
+      new Request("https://x/inventory/pool-1/ledger?locationId=location-cebu-central", {
+        headers: COOKIE,
+      }),
       poolParams,
     );
 

@@ -13,7 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../../components/ui/table";
-import { PageHeader, ListPageSection, StatusBadge } from "../../../../../components/admin/admin-shell";
+import {
+  PageHeader,
+  ListPageSection,
+  StatusBadge,
+} from "../../../../../components/admin/admin-shell";
 
 type LoadState =
   | { phase: "loading" }
@@ -30,7 +34,13 @@ export default function ProductDetailPage({
   const { "product-id": productId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
-  const [newSku, setNewSku] = useState({ code: "", name: "", unitId: "", consumption: "" });
+  const [newSku, setNewSku] = useState({
+    code: "",
+    name: "",
+    unitId: "",
+    sellQuantity: "",
+    consumption: "",
+  });
   const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -176,9 +186,10 @@ export default function ProductDetailPage({
               newSku.code.trim() === "" ||
               newSku.name.trim() === "" ||
               !unit ||
+              Number.isNaN(Number(newSku.sellQuantity)) ||
               Number.isNaN(Number(newSku.consumption))
             ) {
-              setNotice("Code, name, unit, and numeric consumption are required.");
+              setNotice("Code, name, unit, sell quantity, and base consumption are required.");
               return;
             }
             void run(`${BASE}/skus`, "POST", {
@@ -186,6 +197,7 @@ export default function ProductDetailPage({
               code: newSku.code.trim().toUpperCase(),
               name: newSku.name.trim(),
               sellableUnitId: unit.unitId,
+              sellQuantity: Math.round(Number(newSku.sellQuantity)),
               consumptionBaseQuantity: Math.round(Number(newSku.consumption)),
             });
           }}
@@ -217,6 +229,13 @@ export default function ProductDetailPage({
               </option>
             ))}
           </select>
+          <Input
+            aria-label="Sell quantity"
+            placeholder="sell qty"
+            value={newSku.sellQuantity}
+            onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
+            className="sm:w-24"
+          />
           <Input
             aria-label="Base consumption"
             placeholder="base qty"

@@ -82,7 +82,7 @@ export async function applyCheckoutPaymentReaction(
   const cycleSnapshot = routingSnapshot;
 
   const fulfillment = quote.fulfillmentSnapshot as {
-    sourcingModes: Array<"STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID">;
+    sourcingModes: Array<"STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED">;
     poolIds: string[];
   } | null;
 
@@ -90,14 +90,14 @@ export async function applyCheckoutPaymentReaction(
   type PoolPlan = {
     poolId: string;
     requestedBase: number;
-    sourcingMode: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+    sourcingMode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
     availableBase: number;
   };
   const pools = new Map<string, PoolPlan>();
   for (const line of quote.lines) {
     const skuPool = await database
       .prepare(
-        "SELECT p.inventory_pool_id AS pool_id, ip.sourcing_mode AS sourcing_mode FROM sku s JOIN product p ON p.id=s.product_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE s.id=?",
+        "SELECT p.inventory_pool_id AS pool_id, ip.canonical_sourcing_mode AS sourcing_mode FROM sku s JOIN product p ON p.id=s.product_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE s.id=?",
       )
       .bind(line.skuId)
       .first<{ pool_id: string; sourcing_mode: PoolPlan["sourcingMode"] }>();
@@ -113,8 +113,10 @@ export async function applyCheckoutPaymentReaction(
     plan.requestedBase += line.baseQuantity;
     pools.set(skuPool.pool_id, plan);
   }
+  if ([...pools.values()].some((plan) => plan.sourcingMode === "ON_DEMAND"))
+    return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
   for (const plan of pools.values()) {
-    if (plan.sourcingMode === "PLANNED_PROCUREMENT") continue;
+    if (plan.sourcingMode === "PLANNED") continue;
     const balance = await database
       .prepare(
         "SELECT MAX(0, on_hand-reserved) AS available FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?",
@@ -255,7 +257,7 @@ export async function applyCheckoutPaymentReaction(
     let plannedBase = 0;
     if (plan.sourcingMode === "STOCKED") {
       reservedBase = plan.requestedBase;
-    } else if (plan.sourcingMode === "PLANNED_PROCUREMENT") {
+    } else if (plan.sourcingMode === "PLANNED") {
       plannedBase = plan.requestedBase;
     } else {
       reservedBase = Math.min(plan.requestedBase, plan.availableBase);
@@ -313,7 +315,7 @@ export async function applyCheckoutPaymentReaction(
     const reserved =
       plan.sourcingMode === "STOCKED"
         ? plan.requestedBase
-        : plan.sourcingMode === "HYBRID"
+        : plan.sourcingMode === "MIXED"
           ? Math.min(plan.requestedBase, plan.availableBase)
           : 0;
     return reserved > 0;
@@ -404,7 +406,12 @@ async function recordFinanceExceptionRow(
 async function recordException(
   database: D1Database,
   input: ApplyCheckoutPaymentReactionInput,
-  kind: "QUOTE_EXPIRED" | "MEMBERSHIP_LOST" | "CYCLE_CLOSED" | "INSTANT_MODE_UNAVAILABLE",
+  kind:
+    | "QUOTE_EXPIRED"
+    | "MEMBERSHIP_LOST"
+    | "CYCLE_CLOSED"
+    | "INSTANT_MODE_UNAVAILABLE"
+    | "SOURCING_MODE_UNAVAILABLE",
   reason: OrderCommittedOutcome["reason"],
 ): Promise<OrderCommittedOutcome> {
   await recordFinanceExceptionRow(database, input, kind, reason, Date.now());

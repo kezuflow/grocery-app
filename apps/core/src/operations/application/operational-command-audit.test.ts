@@ -38,6 +38,18 @@ async function staffCookie(options: { permissionCode: string; locationId?: strin
     .bind(options.permissionCode)
     .first<{ id: string }>();
   const permissionId = permission?.id ?? crypto.randomUUID();
+  const locationId = options.locationId ?? "location-cebu-central";
+  if (locationId === "location-other-empty") {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO fulfillment_location
+         (id, market_id, code, name, type, address_json, latitude, longitude,
+          status, version, created_at, updated_at)
+       VALUES (?, 'market-metro-cebu', 'OTHER_EMPTY', 'Other Empty',
+               'FULFILLMENT_CENTER', NULL, 10.3, 123.9, 'active', 1, ?, ?)`,
+    )
+      .bind(locationId, now, now)
+      .run();
+  }
   await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO staff_identity (id, auth_user_id, display_name, status, created_at, updated_at) VALUES (?, ?, 'Ops Staff', 'active', ?, ?)",
@@ -57,7 +69,7 @@ async function staffCookie(options: { permissionCode: string; locationId?: strin
     ),
     env.DB.prepare(
       "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'location', NULL, ?)",
-    ).bind(crypto.randomUUID(), staffId, options.locationId ?? "location-cebu-central"),
+    ).bind(crypto.randomUUID(), staffId, locationId),
   ]);
   return cookie;
 }

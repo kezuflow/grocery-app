@@ -99,7 +99,8 @@ export async function createCheckoutQuote(
   const cartItems = await database
     .prepare(
       `SELECT ci.sku_id, ci.quantity, s.name AS variant_name, s.sellable_unit_id AS unit, s.consumption_base_quantity,
-              p.id AS product_id, p.name AS product_name, p.inventory_pool_id, ip.sourcing_mode
+              p.id AS product_id, p.name AS product_name, p.inventory_pool_id,
+              ip.canonical_sourcing_mode AS sourcing_mode
        FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
        JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE ci.cart_id=?`,
     )
@@ -113,10 +114,16 @@ export async function createCheckoutQuote(
       product_id: string;
       product_name: string;
       inventory_pool_id: string;
-      sourcing_mode: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+      sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
     }>();
   if (cartItems.results.length === 0)
     return failure("VALIDATION_FAILED", "Cart is empty", command.requestId);
+  if (cartItems.results.some((item) => item.sourcing_mode === "ON_DEMAND"))
+    return failure(
+      "UNAVAILABLE_ITEM",
+      "On-demand sourcing is not configured for MVP checkout",
+      command.requestId,
+    );
 
   // Address serviceability evidence shared by both fulfillment modes.
   const address = await database

@@ -3,6 +3,12 @@ import type { AuthenticatedRequest, RpcResult } from "./index";
 export const catalogStatuses = ["active", "inactive"] as const;
 export type CatalogStatus = (typeof catalogStatuses)[number];
 
+export const sourcingModes = ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"] as const;
+export type SourcingMode = (typeof sourcingModes)[number];
+
+export const canonicalBaseUnitCodes = ["GRAM", "MILLILITER", "PIECE"] as const;
+export type CanonicalBaseUnitCode = (typeof canonicalBaseUnitCodes)[number];
+
 export type AdminCategorySummary = {
   categoryId: string;
   code: string;
@@ -20,9 +26,13 @@ export type AdminCategoryPage = {
 export type AdminUnitSummary = {
   unitId: string;
   code: string;
-  name: string;
+  displayName: string;
   dimension: "MASS" | "COUNT" | "VOLUME";
-  symbol: string;
+  canonicalBaseCode: CanonicalBaseUnitCode;
+  conversionNumerator: number;
+  conversionDenominator: number;
+  status: CatalogStatus;
+  version: number;
 };
 
 export type AdminProductSummary = {
@@ -109,9 +119,11 @@ export type AdminCategoryCreateRequest = AuthenticatedRequest & {
 export type AdminUnitListRequest = AuthenticatedRequest;
 export type AdminUnitCreateRequest = AuthenticatedRequest & {
   code: string;
-  name: string;
+  displayName: string;
   dimension: "MASS" | "COUNT" | "VOLUME";
-  symbol: string;
+  canonicalBaseCode: CanonicalBaseUnitCode;
+  conversionNumerator: number;
+  conversionDenominator: number;
   idempotencyKey: string;
 };
 
@@ -138,6 +150,7 @@ export type AdminSkuCreateRequest = AuthenticatedRequest & {
   code: string;
   name: string;
   sellableUnitId: string;
+  sellQuantity: number;
   consumptionBaseQuantity: number;
   merchandisingLabel?: string | null;
   sortOrder?: number;
@@ -158,7 +171,7 @@ export type AdminSkuAvailabilityRequest = AuthenticatedRequest & {
   skuId: string;
   locationId: string;
   availabilityStatus: "AVAILABLE" | "UNAVAILABLE";
-  sourcingMode: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+  sourcingMode: SourcingMode;
   expectedVersion: number;
   idempotencyKey: string;
 };
@@ -201,16 +214,12 @@ export type AdminCatalogService = {
   setAdminProductStatus(
     request: AdminProductStatusRequest,
   ): Promise<RpcResult<AdminProductSummary>>;
-  createAdminSku(
-    request: AdminSkuCreateRequest,
-  ): Promise<RpcResult<AdminCatalogSkuSummary>>;
+  createAdminSku(request: AdminSkuCreateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   updateAdminSku(request: AdminSkuUpdateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   setAdminSkuAvailability(
     request: AdminSkuAvailabilityRequest,
   ): Promise<RpcResult<AdminCatalogSkuSummary>>;
-  setAdminSkuPrice(
-    request: AdminSkuPriceRequest,
-  ): Promise<RpcResult<AdminCatalogSkuSummary>>;
+  setAdminSkuPrice(request: AdminSkuPriceRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
 };
 
 /**

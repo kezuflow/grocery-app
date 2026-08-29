@@ -65,7 +65,12 @@ export async function listAdminUnits(
   if (!access.ok) return access;
   const rows = await deps.db
     .prepare(
-      "SELECT id AS unitId, code, name, dimension, symbol FROM unit ORDER BY dimension, code",
+      `SELECT id AS unitId, code, name AS displayName, dimension,
+              canonical_base_code AS canonicalBaseCode,
+              conversion_numerator AS conversionNumerator,
+              conversion_denominator AS conversionDenominator,
+              status, version
+       FROM unit ORDER BY dimension, code`,
     )
     .all<AdminUnitSummary>();
   return { ok: true, value: rows.results, requestId: request.requestId };

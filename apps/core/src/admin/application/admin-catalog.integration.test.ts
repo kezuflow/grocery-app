@@ -177,9 +177,11 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       code: `BAD_${crypto.randomUUID().slice(0, 12)}`,
-      name: "Bad unit",
+      displayName: "Bad unit",
       dimension: "LIQUID" as never,
-      symbol: "x",
+      canonicalBaseCode: "MILLILITER",
+      conversionNumerator: 1,
+      conversionDenominator: 1,
       idempotencyKey: `unit-${crypto.randomUUID()}`,
     });
     expect(invalidUnit).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
@@ -188,14 +190,23 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       code: `TSP_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
-      name: "Teaspoon",
+      displayName: "Teaspoon",
       dimension: "VOLUME",
-      symbol: "tsp",
+      canonicalBaseCode: "MILLILITER",
+      conversionNumerator: 5,
+      conversionDenominator: 1,
       idempotencyKey: `unit-${crypto.randomUUID()}`,
     });
     expect(unit.ok).toBe(true);
     if (!unit.ok) return;
-    expect(unit.value).toMatchObject({ dimension: "VOLUME", symbol: "tsp" });
+    expect(unit.value).toMatchObject({
+      dimension: "VOLUME",
+      canonicalBaseCode: "MILLILITER",
+      conversionNumerator: 5,
+      conversionDenominator: 1,
+      status: "active",
+      version: 1,
+    });
 
     const units = await core.listAdminUnits({
       requestId: crypto.randomUUID(),
@@ -224,10 +235,27 @@ describe("catalog administration", () => {
       code: `MISMATCH_${crypto.randomUUID().slice(0, 12)}`,
       name: "1 piece",
       sellableUnitId: pieceUnitId,
+      sellQuantity: 1,
       consumptionBaseQuantity: 1,
       idempotencyKey: `sku-${crypto.randomUUID()}`,
     });
     expect(dimensionMismatch).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const conversionMismatch = await core.createAdminSku({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      code: `BAD_CONVERSION_${crypto.randomUUID().slice(0, 12)}`,
+      name: "Bad kilogram",
+      sellableUnitId: unitKgId,
+      sellQuantity: 1,
+      consumptionBaseQuantity: 999,
+      idempotencyKey: `sku-${crypto.randomUUID()}`,
+    });
+    expect(conversionMismatch).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
 
     const sku = await core.createAdminSku({
       requestId: crypto.randomUUID(),
@@ -236,6 +264,7 @@ describe("catalog administration", () => {
       code: `TP_${crypto.randomUUID().slice(0, 12).toUpperCase()}`,
       name: "250 g",
       sellableUnitId: unitGramId,
+      sellQuantity: 250,
       consumptionBaseQuantity: 250,
       idempotencyKey: `sku-${crypto.randomUUID()}`,
     });

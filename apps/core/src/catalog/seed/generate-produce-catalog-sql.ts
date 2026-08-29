@@ -20,7 +20,7 @@ import {
  * - Existing SKUs receive price version 2 with prior open-ended Metro Cebu
  *   STANDARD rows closed; brand-new SKUs start at version 1.
  * - Sourcing stays in the stored compatibility vocabulary of
- *   `PLANNED_PROCUREMENT`; it never reaches public DTOs.
+ *   `PLANNED`; it never conflates sourcing with fulfillment mode.
  */
 
 export const MARKET_METRO_CEBU = "market-metro-cebu";
@@ -66,7 +66,10 @@ export function sqlQuote(value: string): string {
 }
 
 function kebab(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 /** Canonical deterministic ordering: category, product name, then product ID. */
@@ -102,7 +105,7 @@ export function generateProduceCatalogSql(
   push("-- Deterministic additive seed for the complete produce launch catalog:");
   push("-- launch taxonomy reconciliation, product/media/detail rows, fixed");
   push("-- piece/weight/pack/bunch SKUs, Cebu availability, and versioned Metro");
-  push("-- Cebu STANDARD prices. Sourcing vocabulary remains PLANNED_PROCUREMENT.");
+  push("-- Cebu STANDARD prices. Sourcing vocabulary remains PLANNED.");
   push("");
 
   /* ---------------- Category taxonomy reconciliation ---------------- */
@@ -121,12 +124,13 @@ export function generateProduceCatalogSql(
   }
   push(
     ...LEGACY_CATEGORY_IDS_TO_DEACTIVATE.map(
-      (id) =>
-        `UPDATE category SET status = 'inactive', updated_at = 0 WHERE id = ${sqlQuote(id)};`,
+      (id) => `UPDATE category SET status = 'inactive', updated_at = 0 WHERE id = ${sqlQuote(id)};`,
     ),
   );
   // The non-produce farm-eggs product stays browsable under the specialty rail.
-  push(`UPDATE product SET category_id = 'category-native-specialty-produce' WHERE id = 'product-eggs';`);
+  push(
+    `UPDATE product SET category_id = 'category-native-specialty-produce' WHERE id = 'product-eggs';`,
+  );
   push("");
 
   const skuDeactivations: string[] = [];
@@ -148,14 +152,22 @@ export function generateProduceCatalogSql(
       push(
         `UPDATE product SET category_id = ${sqlQuote(categoryId)}, description = ${sqlQuote(product.description)}, status = 'active', image_metadata_json = ${sqlQuote(mediaJson)} WHERE id = ${sqlQuote(productId)};`,
       );
-      push(`UPDATE inventory_pool SET sourcing_mode = 'PLANNED_PROCUREMENT', base_unit_id = ${sqlQuote(baseUnitId)} WHERE id = ${sqlQuote(poolId)};`);
+      push(
+        `UPDATE inventory_pool SET sourcing_mode = 'PLANNED_PROCUREMENT', canonical_sourcing_mode = 'PLANNED', base_unit_id = ${sqlQuote(baseUnitId)} WHERE id = ${sqlQuote(poolId)};`,
+      );
     } else {
-      push(`INSERT OR IGNORE INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (${sqlQuote(poolId)}, ${sqlQuote(productId)}, ${sqlQuote(baseUnitId)}, 'PLANNED_PROCUREMENT', 0, 0);`);
-      push(`INSERT OR IGNORE INTO product (id, category_id, inventory_pool_id, slug, name, description, status, image_metadata_json, created_at, updated_at) VALUES (${[productId, categoryId, poolId, product.slug, product.name, product.description, "active", mediaJson].map(sqlQuote).join(", ")}, 0, 0);`);
+      push(
+        `INSERT OR IGNORE INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (${sqlQuote(poolId)}, ${sqlQuote(productId)}, ${sqlQuote(baseUnitId)}, 'PLANNED_PROCUREMENT', 'PLANNED', 0, 0);`,
+      );
+      push(
+        `INSERT OR IGNORE INTO product (id, category_id, inventory_pool_id, slug, name, description, status, image_metadata_json, created_at, updated_at) VALUES (${[productId, categoryId, poolId, product.slug, product.name, product.description, "active", mediaJson].map(sqlQuote).join(", ")}, 0, 0);`,
+      );
     }
 
     for (const detail of [...product.details].sort((a, b) => a.sortOrder - b.sortOrder)) {
-      push(`INSERT OR IGNORE INTO product_detail (id, product_id, label, value, sort_order) VALUES (${["detail-product-" + kebab(product.slug + "-" + detail.label), productId, detail.label, detail.value, detail.sortOrder].map((v) => (typeof v === "number" ? String(v) : sqlQuote(v))).join(", ")});`);
+      push(
+        `INSERT OR IGNORE INTO product_detail (id, product_id, label, value, sort_order) VALUES (${["detail-product-" + kebab(product.slug + "-" + detail.label), productId, detail.label, detail.value, detail.sortOrder].map((v) => (typeof v === "number" ? String(v) : sqlQuote(v))).join(", ")});`,
+      );
     }
 
     const legacyPrefix = `sku-${product.slug}-`;
@@ -170,7 +182,9 @@ export function generateProduceCatalogSql(
     }
 
     // Product-level Cebu availability remains for compatibility reads.
-    push(`INSERT OR IGNORE INTO location_product_availability (location_id, product_id, availability_status, sourcing_mode, valid_from) VALUES (${[LOCATION_CEBU_CENTRAL, productId, "AVAILABLE", "PLANNED_PROCUREMENT"].map(sqlQuote).join(", ")}, 0);`);
+    push(
+      `INSERT OR IGNORE INTO location_product_availability (location_id, product_id, availability_status, sourcing_mode, valid_from) VALUES (${[LOCATION_CEBU_CENTRAL, productId, "AVAILABLE", "PLANNED"].map(sqlQuote).join(", ")}, 0);`,
+    );
 
     for (const variant of sortedVariants(product)) {
       if (!existingSkus.has(variant.id)) {
@@ -193,26 +207,44 @@ export function generateProduceCatalogSql(
             "active",
             variant.sortOrder,
             1,
-          ].map((value) => (value === null ? "NULL" : typeof value === "number" ? String(value) : sqlQuote(String(value)))).join(", ")}, 0, 0);`,
+          ]
+            .map((value) =>
+              value === null
+                ? "NULL"
+                : typeof value === "number"
+                  ? String(value)
+                  : sqlQuote(String(value)),
+            )
+            .join(", ")}, 0, 0);`,
         );
       }
 
       if (variant.customerContentsNote) {
-        push(`INSERT OR IGNORE INTO sku_detail (id, sku_id, audience, label, value, sort_order) VALUES (${[`${variant.id}-detail-customer`, variant.id, "CUSTOMER", "Contents", variant.customerContentsNote].map((v) => sqlQuote(String(v))).join(", ")}, 1);`);
+        push(
+          `INSERT OR IGNORE INTO sku_detail (id, sku_id, audience, label, value, sort_order) VALUES (${[`${variant.id}-detail-customer`, variant.id, "CUSTOMER", "Contents", variant.customerContentsNote].map((v) => sqlQuote(String(v))).join(", ")}, 1);`,
+        );
       }
       if (variant.packingInstruction) {
-        push(`INSERT OR IGNORE INTO sku_detail (id, sku_id, audience, label, value, sort_order) VALUES (${[`${variant.id}-detail-operations`, variant.id, "OPERATIONS", "Packing instruction", variant.packingInstruction].map((v) => sqlQuote(String(v))).join(", ")}, 1);`);
+        push(
+          `INSERT OR IGNORE INTO sku_detail (id, sku_id, audience, label, value, sort_order) VALUES (${[`${variant.id}-detail-operations`, variant.id, "OPERATIONS", "Packing instruction", variant.packingInstruction].map((v) => sqlQuote(String(v))).join(", ")}, 1);`,
+        );
       }
 
-      push(`INSERT OR IGNORE INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (${[variant.id, LOCATION_CEBU_CENTRAL, "AVAILABLE", "PLANNED_PROCUREMENT"].map(sqlQuote).join(", ")}, 1);`);
+      push(
+        `INSERT OR IGNORE INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (${[variant.id, LOCATION_CEBU_CENTRAL, "AVAILABLE", "PLANNED"].map(sqlQuote).join(", ")}, 1);`,
+      );
 
       const isReused = existingSkus.has(variant.id);
       const priceVersion = isReused ? 2 : 1;
       if (isReused) {
-        push(`UPDATE price_version SET valid_to = 1 WHERE sku_id = ${sqlQuote(variant.id)} AND valid_to IS NULL AND market_id = ${sqlQuote(MARKET_METRO_CEBU)} AND price_type = 'STANDARD';`);
+        push(
+          `UPDATE price_version SET valid_to = 1 WHERE sku_id = ${sqlQuote(variant.id)} AND valid_to IS NULL AND market_id = ${sqlQuote(MARKET_METRO_CEBU)} AND price_type = 'STANDARD';`,
+        );
       }
       const priceId = `price-${kebab(variant.code)}-v${priceVersion}`;
-      push(`INSERT OR IGNORE INTO price_version (id, sku_id, currency, amount_minor, valid_from, market_id, location_id, price_type, version, created_at) VALUES (${[priceId, variant.id, "PHP", variant.priceMinor, 1, MARKET_METRO_CEBU, null, "STANDARD", priceVersion, 0].map((value) => (value === null ? "NULL" : typeof value === "number" ? String(value) : sqlQuote(String(value)))).join(", ")});`);
+      push(
+        `INSERT OR IGNORE INTO price_version (id, sku_id, currency, amount_minor, valid_from, market_id, location_id, price_type, version, created_at) VALUES (${[priceId, variant.id, "PHP", variant.priceMinor, 1, MARKET_METRO_CEBU, null, "STANDARD", priceVersion, 0].map((value) => (value === null ? "NULL" : typeof value === "number" ? String(value) : sqlQuote(String(value)))).join(", ")});`,
+      );
     }
     push("");
   }

@@ -15,7 +15,7 @@ let counter = 0;
 
 async function seededCheckout(
   options: {
-    sourcingMode?: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+    sourcingMode?: "STOCKED" | "PLANNED" | "MIXED";
     onHand?: number;
   } = {},
 ) {
@@ -46,7 +46,7 @@ async function seededCheckout(
   const productId = `product-co-${suffix}`;
   const skuId = `sku-co-${suffix}`;
   await env.DB.prepare(
-    "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'unit-gram', ?, 1, 1)",
+    "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, 'unit-gram', 'STOCKED', ?, 1, 1)",
   )
     .bind(poolId, productId, options.sourcingMode ?? "STOCKED")
     .run();
@@ -65,7 +65,7 @@ async function seededCheckout(
   )
     .bind(productId)
     .run();
-  if (options.sourcingMode !== "PLANNED_PROCUREMENT") {
+  if (options.sourcingMode !== "PLANNED") {
     await env.DB.prepare(
       "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) VALUES ('location-cebu-central', ?, ?, 0, 1)",
     )
@@ -219,7 +219,7 @@ describe("order commitment from canonical payment reactions", () => {
   });
 
   it("creates committed demand for planned procurement and splits hybrid", async () => {
-    const planned = await seededCheckout({ sourcingMode: "PLANNED_PROCUREMENT" });
+    const planned = await seededCheckout({ sourcingMode: "PLANNED" });
     const plannedQuote = await createQuote(planned);
     if (!plannedQuote.ok) throw new Error(JSON.stringify(plannedQuote.error));
     const plannedIntent = await intentWithReaction(plannedQuote.value.quoteId, planned.customerId);
@@ -237,7 +237,7 @@ describe("order commitment from canonical payment reactions", () => {
       .first<{ total: number }>();
     expect(demand?.total).toBe(2000);
 
-    const hybrid = await seededCheckout({ sourcingMode: "HYBRID", onHand: 1500 });
+    const hybrid = await seededCheckout({ sourcingMode: "MIXED", onHand: 1500 });
     const hybridQuote = await createQuote(hybrid);
     if (!hybridQuote.ok) throw new Error(JSON.stringify(hybridQuote.error));
     const hybridIntent = await intentWithReaction(hybridQuote.value.quoteId, hybrid.customerId);

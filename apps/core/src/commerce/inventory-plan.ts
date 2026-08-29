@@ -1,4 +1,4 @@
-export type SourcingMode = "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+export type SourcingMode = "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 
 export type InventoryRequirementInput = {
   inventoryPoolId: string;
@@ -38,12 +38,14 @@ export function buildInventoryCommitPlan(
   const balanceByPool = new Map(balances.map((balance) => [balance.inventoryPoolId, balance]));
   const insufficientStock: string[] = [];
   const plans = [...grouped].map(([inventoryPoolId, requirement]) => {
+    if (requirement.sourcingMode === "ON_DEMAND")
+      throw new Error(`ON_DEMAND_SOURCING_NOT_CONFIGURED:${inventoryPoolId}`);
     const balance = balanceByPool.get(inventoryPoolId);
     const available = Math.max(0, (balance?.onHand ?? 0) - (balance?.reserved ?? 0));
     if (requirement.sourcingMode === "STOCKED" && available < requirement.requestedBase)
       insufficientStock.push(inventoryPoolId);
     const reservedBase =
-      requirement.sourcingMode === "PLANNED_PROCUREMENT"
+      requirement.sourcingMode === "PLANNED"
         ? 0
         : requirement.sourcingMode === "STOCKED"
           ? requirement.requestedBase

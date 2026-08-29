@@ -154,7 +154,7 @@ export async function createAdminCategory(
   return { ok: true, value: created, requestId: request.requestId };
 }
 
-/** Create a controlled unit. Same-dimension use is enforced at SKU creation. */
+/** Create a controlled unit with an exact conversion to its dimension's canonical base. */
 export async function createAdminUnit(
   deps: CatalogAdministrationDeps,
   request: AdminUnitCreateRequest,
@@ -162,11 +162,27 @@ export async function createAdminUnit(
   const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
   if (!access.ok) return access;
 
-  const code = request.code.trim();
-  const name = request.name.trim();
-  const symbol = request.symbol.trim();
-  if (!/^[A-Z][A-Z0-9_]*$/.test(code) || name === "" || symbol === "") {
-    return failure("VALIDATION_FAILED", "code, name, and symbol are required", request.requestId);
+  const code = request.code.trim().toUpperCase();
+  const displayName = request.displayName.trim();
+  const requiredBaseByDimension = {
+    MASS: "GRAM",
+    COUNT: "PIECE",
+    VOLUME: "MILLILITER",
+  } as const;
+  if (
+    !/^[A-Z][A-Z0-9_]*$/.test(code) ||
+    displayName === "" ||
+    requiredBaseByDimension[request.dimension] !== request.canonicalBaseCode ||
+    !Number.isSafeInteger(request.conversionNumerator) ||
+    request.conversionNumerator <= 0 ||
+    !Number.isSafeInteger(request.conversionDenominator) ||
+    request.conversionDenominator <= 0
+  ) {
+    return failure(
+      "VALIDATION_FAILED",
+      "A valid code, display name, same-dimension canonical base, and positive exact conversion are required",
+      request.requestId,
+    );
   }
 
   const now = Date.now();
@@ -177,9 +193,11 @@ export async function createAdminUnit(
     request.idempotencyKey,
     {
       code,
-      name,
+      displayName,
       dimension: request.dimension,
-      symbol,
+      canonicalBaseCode: request.canonicalBaseCode,
+      conversionNumerator: request.conversionNumerator,
+      conversionDenominator: request.conversionDenominator,
     },
   );
   if (!claim.claimed) {
@@ -192,7 +210,13 @@ export async function createAdminUnit(
     }
     if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
       const existing = await deps.db
-        .prepare("SELECT id AS unitId, code, name, dimension, symbol FROM unit WHERE id = ?")
+        .prepare(
+          `SELECT id AS unitId, code, name AS displayName, dimension,
+                  canonical_base_code AS canonicalBaseCode,
+                  conversion_numerator AS conversionNumerator,
+                  conversion_denominator AS conversionDenominator,
+                  status, version FROM unit WHERE id = ?`,
+        )
         .bind(claim.existing.resultReference)
         .first<AdminUnitSummary>();
       if (existing) return { ok: true, value: existing, requestId: request.requestId };
@@ -205,15 +229,36 @@ export async function createAdminUnit(
     await deps.db.batch([
       deps.db
         .prepare(
-          "INSERT INTO unit (id, code, name, dimension, symbol, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          `INSERT INTO unit
+             (id, code, name, dimension, symbol, canonical_base_code,
+              conversion_numerator, conversion_denominator, status, version,
+              created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)`,
         )
-        .bind(unitId, code, name, request.dimension, symbol, now),
+        .bind(
+          unitId,
+          code,
+          displayName,
+          request.dimension,
+          code,
+          request.canonicalBaseCode,
+          request.conversionNumerator,
+          request.conversionDenominator,
+          now,
+          now,
+        ),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "CATALOG.UNIT_CREATED",
         resourceType: "unit",
         resourceId: unitId,
-        details: { code, dimension: request.dimension },
+        details: {
+          code,
+          dimension: request.dimension,
+          canonicalBaseCode: request.canonicalBaseCode,
+          conversionNumerator: request.conversionNumerator,
+          conversionDenominator: request.conversionDenominator,
+        },
         correlationId: request.requestId,
         occurredAt: now,
       }),
@@ -232,7 +277,13 @@ export async function createAdminUnit(
   }
 
   const created = await deps.db
-    .prepare("SELECT id AS unitId, code, name, dimension, symbol FROM unit WHERE id = ?")
+    .prepare(
+      `SELECT id AS unitId, code, name AS displayName, dimension,
+              canonical_base_code AS canonicalBaseCode,
+              conversion_numerator AS conversionNumerator,
+              conversion_denominator AS conversionDenominator,
+              status, version FROM unit WHERE id = ?`,
+    )
     .bind(unitId)
     .first<AdminUnitSummary>();
   if (!created) {
@@ -349,12 +400,14 @@ export async function createAdminSku(
   if (
     code === "" ||
     name === "" ||
-    !Number.isInteger(request.consumptionBaseQuantity) ||
+    !Number.isSafeInteger(request.sellQuantity) ||
+    request.sellQuantity <= 0 ||
+    !Number.isSafeInteger(request.consumptionBaseQuantity) ||
     request.consumptionBaseQuantity <= 0
   ) {
     return failure(
       "VALIDATION_FAILED",
-      "code, name, and positive consumptionBaseQuantity are required",
+      "code, name, positive sellQuantity, and positive consumptionBaseQuantity are required",
       request.requestId,
     );
   }
@@ -370,15 +423,37 @@ export async function createAdminSku(
     .first<{ poolId: string; baseUnitId: string; baseDimension: string }>();
   if (!pool) return failure("NOT_FOUND", "Product not found", request.requestId);
   const sellableUnit = await deps.db
-    .prepare("SELECT dimension FROM unit WHERE id = ?")
+    .prepare(
+      `SELECT dimension, conversion_numerator AS conversionNumerator,
+              conversion_denominator AS conversionDenominator, status
+       FROM unit WHERE id = ?`,
+    )
     .bind(request.sellableUnitId)
-    .first<{ dimension: string }>();
+    .first<{
+      dimension: string;
+      conversionNumerator: number;
+      conversionDenominator: number;
+      status: "active" | "inactive";
+    }>();
   if (!sellableUnit)
     return failure("VALIDATION_FAILED", "Unknown sellable unit", request.requestId);
   if (sellableUnit.dimension !== pool.baseDimension) {
     return failure(
       "VALIDATION_FAILED",
       "Sellable unit dimension must match the product pool's base dimension",
+      request.requestId,
+    );
+  }
+  const convertedNumerator = request.sellQuantity * sellableUnit.conversionNumerator;
+  if (
+    sellableUnit.status !== "active" ||
+    !Number.isSafeInteger(convertedNumerator) ||
+    convertedNumerator % sellableUnit.conversionDenominator !== 0 ||
+    convertedNumerator / sellableUnit.conversionDenominator !== request.consumptionBaseQuantity
+  ) {
+    return failure(
+      "VALIDATION_FAILED",
+      "Sell quantity must convert exactly to the declared base consumption using an active unit",
       request.requestId,
     );
   }
@@ -394,6 +469,7 @@ export async function createAdminSku(
       code,
       name,
       sellableUnitId: request.sellableUnitId,
+      sellQuantity: request.sellQuantity,
       consumptionBaseQuantity: request.consumptionBaseQuantity,
       merchandisingLabel: request.merchandisingLabel ?? null,
       sortOrder: request.sortOrder ?? 0,
@@ -418,7 +494,7 @@ export async function createAdminSku(
     await deps.db.batch([
       deps.db
         .prepare(
-          "INSERT INTO sku (id, product_id, code, name, sellable_unit_id, consumption_base_quantity, status, sort_order, merchandising_label, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, 1, ?, ?)",
+          "INSERT INTO sku (id, product_id, code, name, sellable_unit_id, sell_quantity, consumption_base_quantity, status, sort_order, merchandising_label, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 1, ?, ?)",
         )
         .bind(
           skuId,
@@ -426,6 +502,7 @@ export async function createAdminSku(
           code,
           name,
           request.sellableUnitId,
+          request.sellQuantity,
           request.consumptionBaseQuantity,
           request.sortOrder ?? 0,
           request.merchandisingLabel ?? null,
@@ -440,6 +517,7 @@ export async function createAdminSku(
         details: {
           code,
           productId: request.productId,
+          sellQuantity: request.sellQuantity,
           consumptionBaseQuantity: request.consumptionBaseQuantity,
         },
         correlationId: request.requestId,

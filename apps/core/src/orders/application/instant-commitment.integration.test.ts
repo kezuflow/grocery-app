@@ -82,7 +82,7 @@ async function seededInstantQuote(): Promise<{ quoteId: string; customerId: stri
     .bind(cartId)
     .run();
   await env.DB.prepare(
-    "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
   ).run();
   await env.DB.prepare(
     "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved) VALUES (?, 'pool-red-onion', 1000000, 0) ON CONFLICT(location_id, inventory_pool_id) DO UPDATE SET on_hand=1000000",

@@ -1,7 +1,7 @@
 import { isSufficientForCommitment } from "../../payments/domain/payment";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 
-type PoolSourcing = "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+type PoolSourcing = "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 
 export type ApplyAmendmentPaymentReactionInput = {
   reactionId: string;
@@ -12,7 +12,12 @@ export type ApplyAmendmentPaymentReactionInput = {
 
 export type AmendmentReactionOutcome = {
   applied: boolean;
-  reason: "APPLIED" | "ALREADY_APPLIED" | "INSUFFICIENT_STATE" | "CAS_CONFLICT";
+  reason:
+    | "APPLIED"
+    | "ALREADY_APPLIED"
+    | "INSUFFICIENT_STATE"
+    | "CAS_CONFLICT"
+    | "SOURCING_UNAVAILABLE";
 };
 
 /**
@@ -50,7 +55,7 @@ export async function applyAmendmentPaymentReaction(
   const lines = await database
     .prepare(
       `SELECT l.sku_id, l.quantity, l.base_quantity, p.inventory_pool_id AS pool_id,
-              ip.sourcing_mode AS sourcing_mode
+              ip.canonical_sourcing_mode AS sourcing_mode
        FROM paid_order_amendment_line l JOIN sku s ON s.id=l.sku_id
        JOIN product p ON p.id=s.product_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
        WHERE l.amendment_id=?`,
@@ -84,9 +89,11 @@ export async function applyAmendmentPaymentReaction(
     entry.requested += line.base_quantity;
     perPool.set(line.pool_id, entry);
   }
+  if ([...perPool.values()].some((plan) => plan.mode === "ON_DEMAND"))
+    return { applied: false, reason: "SOURCING_UNAVAILABLE" };
   for (const [poolId, plan] of perPool) {
     const available =
-      plan.mode === "PLANNED_PROCUREMENT"
+      plan.mode === "PLANNED"
         ? 0
         : ((
             await database

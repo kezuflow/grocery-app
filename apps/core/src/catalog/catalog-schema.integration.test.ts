@@ -7,9 +7,7 @@ async function columns(table: string): Promise<string[]> {
 }
 
 async function tableExists(table: string): Promise<boolean> {
-  const row = await env.DB.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-  )
+  const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
     .bind(table)
     .first<{ name: string }>();
   return row?.name === table;
@@ -31,7 +29,7 @@ async function seedChiliSku(): Promise<void> {
   for (const statement of cleanup) await statement.run();
   const statements = [
     env.DB.prepare(
-      "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES ('schema-test-pool-chili', ?, 'unit-gram', 'PLANNED_PROCUREMENT', 0, 0)",
+      "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES ('schema-test-pool-chili', ?, 'unit-gram', 'PLANNED_PROCUREMENT', 'PLANNED', 0, 0)",
     ).bind(CHILI_PRODUCT_ID),
     env.DB.prepare(
       "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, description, status, created_at, updated_at) VALUES (?, 'category-fresh-produce', 'schema-test-pool-chili', 'schema-test-chili', 'Siling Labuyo', 'Fresh local chili peppers.', 'active', 0, 0)",
@@ -46,7 +44,7 @@ async function seedChiliSku(): Promise<void> {
       "INSERT INTO sku_detail (id, sku_id, audience, label, value, sort_order) VALUES ('schema-test-chili-operations', ?, 'OPERATIONS', 'Packing instruction', 'Pack 100 g per bag.', 1)",
     ).bind(CHILI_SKU_ID),
     env.DB.prepare(
-      "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'AVAILABLE', 'PLANNED_PROCUREMENT', 1)",
+      "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'AVAILABLE', 'PLANNED', 1)",
     ).bind(CHILI_SKU_ID),
   ];
   for (const statement of statements) await statement.run();
@@ -68,6 +66,38 @@ describe("catalog detail and SKU-availability schema", () => {
   it("adds SKU merchandising, sell-quantity, and version columns", async () => {
     expect(await columns("sku")).toEqual(
       expect.arrayContaining(["merchandising_label", "sell_quantity", "version"]),
+    );
+  });
+
+  it("stores exact canonical unit conversions and lifecycle versions", async () => {
+    expect(await columns("unit")).toEqual(
+      expect.arrayContaining([
+        "canonical_base_code",
+        "conversion_numerator",
+        "conversion_denominator",
+        "status",
+        "version",
+      ]),
+    );
+    const kilogram = await env.DB.prepare(
+      "SELECT canonical_base_code, conversion_numerator, conversion_denominator FROM unit WHERE id='unit-kilogram'",
+    ).first<Record<string, unknown>>();
+    expect(kilogram).toEqual({
+      canonical_base_code: "GRAM",
+      conversion_numerator: 1000,
+      conversion_denominator: 1,
+    });
+    const invalidSourcing = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM inventory_pool WHERE canonical_sourcing_mode NOT IN ('STOCKED', 'PLANNED', 'ON_DEMAND', 'MIXED')",
+    ).first<{ count: number }>();
+    expect(invalidSourcing?.count).toBe(0);
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='ON_DEMAND' WHERE id='schema-test-pool-chili'",
+    ).run();
+    await rejects(
+      env.DB.prepare(
+        "UPDATE inventory_pool SET canonical_sourcing_mode='HYBRID' WHERE id='schema-test-pool-chili'",
+      ),
     );
   });
 
@@ -110,21 +140,17 @@ describe("catalog detail and SKU-availability schema", () => {
       ).bind(CHILI_SKU_ID),
     );
     await rejects(
-      env.DB.prepare(
-        "UPDATE sku SET sell_quantity = 0 WHERE id = ?",
-      ).bind(CHILI_SKU_ID),
+      env.DB.prepare("UPDATE sku SET sell_quantity = 0 WHERE id = ?").bind(CHILI_SKU_ID),
     );
-    await rejects(
-      env.DB.prepare("UPDATE sku SET version = 0 WHERE id = ?").bind(CHILI_SKU_ID),
-    );
+    await rejects(env.DB.prepare("UPDATE sku SET version = 0 WHERE id = ?").bind(CHILI_SKU_ID));
     await rejects(
       env.DB.prepare(
-        "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'MAYBE', 'PLANNED_PROCUREMENT', 1)",
+        "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'MAYBE', 'PLANNED', 1)",
       ).bind(CHILI_SKU_ID),
     );
     await rejects(
       env.DB.prepare(
-        "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'AVAILABLE', 'ON_DEMAND', 1)",
+        "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'AVAILABLE', 'BULK', 1)",
       ).bind(CHILI_SKU_ID),
     );
     await rejects(

@@ -555,9 +555,11 @@ const catalogUnitCreateSchema = authenticatedRequestSchema.extend({
     .min(1)
     .max(30)
     .regex(/^[A-Z][A-Z0-9_]*$/, "expected UPPER_SNAKE_CASE code"),
-  name: validationSchema.string().trim().min(1).max(60),
+  displayName: validationSchema.string().trim().min(1).max(60),
   dimension: validationSchema.enum(["MASS", "COUNT", "VOLUME"]),
-  symbol: validationSchema.string().trim().min(1).max(10),
+  canonicalBaseCode: validationSchema.enum(["GRAM", "MILLILITER", "PIECE"]),
+  conversionNumerator: validationSchema.number().int().min(1),
+  conversionDenominator: validationSchema.number().int().min(1),
   idempotencyKey: idempotencyKeySchema,
 });
 
@@ -584,6 +586,7 @@ const catalogSkuCreateSchema = authenticatedRequestSchema.extend({
   code: validationSchema.string().trim().min(1).max(80),
   name: validationSchema.string().trim().min(1).max(120),
   sellableUnitId: validationSchema.string().trim().min(1).max(200),
+  sellQuantity: validationSchema.number().int().min(1),
   consumptionBaseQuantity: validationSchema.number().int().min(1),
   merchandisingLabel: validationSchema.string().trim().max(60).nullable().optional(),
   sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
@@ -604,7 +607,7 @@ const catalogSkuAvailabilitySchema = authenticatedRequestSchema.extend({
   skuId: validationSchema.string().trim().min(1).max(200),
   locationId: validationSchema.string().trim().min(1).max(200),
   availabilityStatus: validationSchema.enum(["AVAILABLE", "UNAVAILABLE"]),
-  sourcingMode: validationSchema.enum(["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"]),
+  sourcingMode: validationSchema.enum(["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"]),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });

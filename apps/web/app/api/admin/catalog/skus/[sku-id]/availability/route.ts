@@ -24,8 +24,9 @@ export async function PUT(request: Request, context: { params: Promise<{ "sku-id
     typeof body?.locationId !== "string" ||
     (body?.availabilityStatus !== "AVAILABLE" && body?.availabilityStatus !== "UNAVAILABLE") ||
     (body?.sourcingMode !== "STOCKED" &&
-      body?.sourcingMode !== "PLANNED_PROCUREMENT" &&
-      body?.sourcingMode !== "HYBRID") ||
+      body?.sourcingMode !== "PLANNED" &&
+      body?.sourcingMode !== "ON_DEMAND" &&
+      body?.sourcingMode !== "MIXED") ||
     !Number.isInteger(body?.expectedVersion)
   ) {
     return Response.json(

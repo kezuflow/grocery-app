@@ -21,7 +21,7 @@ export type QuoteItem = {
   product_id: string;
   product_name: string;
   inventory_pool_id: string;
-  sourcing_mode: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID";
+  sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 };
 
 function failure(code: string, message: string, requestId: string) {

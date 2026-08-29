@@ -18,10 +18,7 @@ const quoteDependencies = {
 };
 
 let customerCounter = 0;
-async function seedBasket(options: {
-  onHand: number;
-  sourcing?: "STOCKED" | "HYBRID" | "PLANNED_PROCUREMENT";
-}) {
+async function seedBasket(options: { onHand: number; sourcing?: "STOCKED" | "MIXED" | "PLANNED" }) {
   const customerId = `cust-inst-${++customerCounter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
   await env.DB.prepare(
@@ -66,7 +63,9 @@ async function seedBasket(options: {
     .bind(cartId)
     .run();
   if (options.sourcing)
-    await env.DB.prepare("UPDATE inventory_pool SET sourcing_mode=? WHERE id='pool-red-onion'")
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode=? WHERE id='pool-red-onion'",
+    )
       .bind(options.sourcing)
       .run();
   await env.DB.prepare(
@@ -127,7 +126,7 @@ describe("instant checkout quotes", () => {
     await configureInstant();
     // Restore STOCKED sourcing so the instant path accepts the item.
     await env.DB.prepare(
-      "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
     const basket = await seedBasket({ onHand: 100_000 });
     const result = await createCheckoutQuote(
@@ -174,7 +173,7 @@ describe("instant checkout quotes", () => {
   it("refuses instant quotes when usable stocked supply is short", async () => {
     await configureInstant();
     await env.DB.prepare(
-      "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
     const basket = await seedBasket({ onHand: 100 });
     const result = await createCheckoutQuote(
@@ -191,7 +190,7 @@ describe("instant checkout quotes", () => {
       "UPDATE checkout_inventory_holds SET status='EXPIRED' WHERE status='HELD'",
     ).run();
     await env.DB.prepare(
-      "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
     const basket = await seedBasket({ onHand: 500 });
     const first = await createCheckoutQuote(
@@ -221,7 +220,7 @@ describe("instant checkout quotes", () => {
 
   it("refuses non-stocked sourcing from the instant path", async () => {
     await configureInstant();
-    const basket = await seedBasket({ onHand: 100_000, sourcing: "PLANNED_PROCUREMENT" });
+    const basket = await seedBasket({ onHand: 100_000, sourcing: "PLANNED" });
     const result = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
@@ -229,7 +228,7 @@ describe("instant checkout quotes", () => {
     );
     expect(result).toMatchObject({ ok: false, error: { code: "UNAVAILABLE_ITEM" } });
     await env.DB.prepare(
-      "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
   });
 
@@ -251,7 +250,7 @@ describe("instant checkout quotes", () => {
       requestId: crypto.randomUUID(),
     });
     await env.DB.prepare(
-      "UPDATE inventory_pool SET sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
     const basket = await seedBasket({ onHand: 100_000 });
     const result = await createCheckoutQuote(

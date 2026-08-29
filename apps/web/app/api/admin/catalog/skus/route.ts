@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     typeof body?.code !== "string" ||
     typeof body?.name !== "string" ||
     typeof body?.sellableUnitId !== "string" ||
+    !Number.isInteger(body?.sellQuantity) ||
     !Number.isInteger(body?.consumptionBaseQuantity)
   ) {
     return Response.json(
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
         error: {
           code: "VALIDATION_FAILED" as const,
           message:
-            "productId, code, name, sellableUnitId, and integer consumptionBaseQuantity are required",
+            "productId, code, name, sellableUnitId, sellQuantity, and consumptionBaseQuantity are required",
           requestId: crypto.randomUUID(),
         },
       },
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     code: body.code,
     name: body.name,
     sellableUnitId: body.sellableUnitId,
+    sellQuantity: body.sellQuantity as number,
     consumptionBaseQuantity: body.consumptionBaseQuantity as number,
     merchandisingLabel:
       typeof body.merchandisingLabel === "string" ? body.merchandisingLabel : null,

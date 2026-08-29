@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   catalogStatuses,
+  sourcingModes,
+  type AdminUnitCreateRequest,
+  type AdminUnitSummary,
   type AdminProductDetail,
   type AdminCatalogSkuSummary,
 } from "./admin-catalog";
@@ -8,6 +11,32 @@ import {
 describe("catalog contracts", () => {
   it("publishes the closed catalog status vocabulary", () => {
     expect(catalogStatuses).toEqual(["active", "inactive"]);
+  });
+
+  it("publishes canonical unit conversion and sourcing contracts", () => {
+    expect(sourcingModes).toEqual(["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"]);
+    void ({
+      requestId: "request-1",
+      headers: {},
+      code: "KG",
+      displayName: "Kilogram",
+      dimension: "MASS",
+      canonicalBaseCode: "GRAM",
+      conversionNumerator: 1000,
+      conversionDenominator: 1,
+      idempotencyKey: "unit-1",
+    } satisfies AdminUnitCreateRequest);
+    void ({
+      unitId: "unit-kilogram",
+      code: "KG",
+      displayName: "Kilogram",
+      dimension: "MASS",
+      canonicalBaseCode: "GRAM",
+      conversionNumerator: 1000,
+      conversionDenominator: 1,
+      status: "active",
+      version: 1,
+    } satisfies AdminUnitSummary);
   });
 
   it("keeps catalog payloads as purpose-built DTOs", () => {

@@ -99,8 +99,8 @@ async function checkoutFixture(quantity: number) {
   };
 }
 
-async function setSourcingMode(mode: "STOCKED" | "PLANNED_PROCUREMENT" | "HYBRID") {
-  await env.DB.prepare("UPDATE inventory_pool SET sourcing_mode=? WHERE id=?")
+async function setSourcingMode(mode: "STOCKED" | "PLANNED" | "MIXED") {
+  await env.DB.prepare("UPDATE inventory_pool SET canonical_sourcing_mode=? WHERE id=?")
     .bind(mode, poolId)
     .run();
 }
@@ -219,12 +219,12 @@ describe("reservation and committed-demand separation", () => {
       expect(reservations?.total).toBe(2000);
       expect(demand?.count).toBe(0);
     } finally {
-      await setSourcingMode("HYBRID");
+      await setSourcingMode("MIXED");
     }
   });
 
   it("creates committed demand only for planned procurement", async () => {
-    await setSourcingMode("PLANNED_PROCUREMENT");
+    await setSourcingMode("PLANNED");
     try {
       const fixture = await checkoutFixture(4);
       const committed = await commit(fixture);
@@ -243,12 +243,12 @@ describe("reservation and committed-demand separation", () => {
       expect(demand?.total).toBe(2000);
       expect(reservations?.count).toBe(0);
     } finally {
-      await setSourcingMode("HYBRID");
+      await setSourcingMode("MIXED");
     }
   });
 
   it("splits hybrid sourcing into disjoint exact quantities that reconcile", async () => {
-    await setSourcingMode("HYBRID");
+    await setSourcingMode("MIXED");
     await setBalance(1500);
     const ledgerBefore = await holdLedgerSum();
     const fixture = await checkoutFixture(4);
@@ -285,7 +285,7 @@ describe("reservation and committed-demand separation", () => {
       expect(balance?.reserved ?? 0).toBeLessThanOrEqual(balance?.on_hand ?? 0);
       expect(balance?.reserved ?? 0).toBe(2000);
     } finally {
-      await setSourcingMode("HYBRID");
+      await setSourcingMode("MIXED");
     }
   });
 });
