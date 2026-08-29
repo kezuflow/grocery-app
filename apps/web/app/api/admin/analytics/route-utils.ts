@@ -61,18 +61,24 @@ export function parseDimensions(
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return invalid("dimensions must be a JSON array");
+    if (!Array.isArray(parsed) || parsed.length > 4)
+      return invalid("dimensions must be a JSON array with at most four entries");
     const dimensions: AnalyticsDimension[] = [];
+    const keys = new Set<string>();
     for (const item of parsed) {
       if (
         typeof item !== "object" ||
         item === null ||
         typeof (item as { key?: unknown }).key !== "string" ||
         typeof (item as { value?: unknown }).value !== "string" ||
-        !DIMENSION_KEYS.has((item as { key: string }).key as AnalyticsDimensionKey)
+        !DIMENSION_KEYS.has((item as { key: string }).key as AnalyticsDimensionKey) ||
+        (item as { value: string }).value.length === 0 ||
+        (item as { value: string }).value.length > 200 ||
+        keys.has((item as { key: string }).key)
       ) {
-        return invalid("dimensions contain an unsupported key or value");
+        return invalid("dimensions contain an unsupported, duplicate, or oversized entry");
       }
+      keys.add((item as { key: string }).key);
       dimensions.push({
         key: (item as { key: AnalyticsDimensionKey }).key,
         value: (item as { value: string }).value,
