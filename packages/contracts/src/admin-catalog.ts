@@ -92,6 +92,7 @@ export type AdminCatalogSkuSummary = {
 
 export type AdminProductDetail = {
   productId: string;
+  categoryId: string;
   slug: string;
   name: string;
   description: string | null;
@@ -99,7 +100,36 @@ export type AdminProductDetail = {
   categoryName: string;
   status: CatalogStatus;
   version: number;
+  customerDetails: ReadonlyArray<AdminProductCustomerDetail>;
+  media: ReadonlyArray<AdminProductMediaView>;
+  inventoryPool: AdminProductInventoryPoolView;
+  allowedActions: ReadonlyArray<"UPDATE" | "SET_STATUS">;
+  recentAudit: ReadonlyArray<AdminAuditEventListItem>;
   skus: ReadonlyArray<AdminCatalogSkuSummary>;
+};
+
+export type AdminProductCustomerDetail = {
+  detailId: string;
+  label: string;
+  value: string;
+  sortOrder: number;
+};
+
+export type AdminProductMediaView = {
+  mediaId: string;
+  mimeType: string;
+  altText: string;
+  isPrimary: boolean;
+  sortOrder: number;
+  status: CatalogStatus;
+  version: number;
+};
+
+export type AdminProductInventoryPoolView = {
+  inventoryPoolId: string;
+  baseUnitId: string;
+  baseUnitCode: CanonicalBaseUnitCode;
+  baseUnitSymbol: string;
 };
 
 export type AdminInventoryItem = {
@@ -178,6 +208,33 @@ export type AdminProductListRequest = AuthenticatedRequest & {
   query?: string;
   cursor?: string;
   limit?: number;
+};
+
+export type AdminProductCustomerDetailInput = {
+  label: string;
+  value: string;
+  sortOrder: number;
+};
+
+export type AdminProductCreateRequest = AuthenticatedRequest & {
+  categoryId: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  customerDetails: ReadonlyArray<AdminProductCustomerDetailInput>;
+  inventoryBaseUnitId: string;
+  idempotencyKey: string;
+};
+
+export type AdminProductUpdateRequest = AuthenticatedRequest & {
+  productId: string;
+  categoryId: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  customerDetails: ReadonlyArray<AdminProductCustomerDetailInput>;
+  expectedVersion: number;
+  idempotencyKey: string;
 };
 
 export type AdminProductDetailRequest = AuthenticatedRequest & {
@@ -267,7 +324,9 @@ export type AdminCatalogService = {
   listAdminUnits(request: AdminUnitListRequest): Promise<RpcResult<AdminUnitSummary[]>>;
   createAdminUnit(request: AdminUnitCreateRequest): Promise<RpcResult<AdminUnitSummary>>;
   listAdminProducts(request: AdminProductListRequest): Promise<RpcResult<AdminProductPage>>;
+  createAdminProduct(request: AdminProductCreateRequest): Promise<RpcResult<AdminProductSummary>>;
   getAdminProduct(request: AdminProductDetailRequest): Promise<RpcResult<AdminProductDetail>>;
+  updateAdminProduct(request: AdminProductUpdateRequest): Promise<RpcResult<AdminProductSummary>>;
   setAdminProductStatus(
     request: AdminProductStatusRequest,
   ): Promise<RpcResult<AdminProductSummary>>;

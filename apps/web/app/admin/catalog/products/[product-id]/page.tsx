@@ -1,5 +1,7 @@
 "use client";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { AdminProductDetail, AdminUnitSummary, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
@@ -33,8 +35,11 @@ export default function ProductDetailPage({
   params: Promise<{ "product-id": string }>;
 }) {
   const { "product-id": productId } = use(params);
+  const searchParams = useSearchParams();
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
+  const [confirmingStatus, setConfirmingStatus] = useState(false);
+  const statusCancelRef = useRef<HTMLButtonElement>(null);
   const [newSku, setNewSku] = useState({
     code: "",
     name: "",
@@ -43,7 +48,13 @@ export default function ProductDetailPage({
     consumption: "",
   });
   const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(
+    searchParams.get("created")
+      ? "Product created."
+      : searchParams.get("updated")
+        ? "Product updated."
+        : null,
+  );
   const commandIntent = useAdminCommandIntent();
 
   const load = useCallback(() => {
@@ -80,6 +91,9 @@ export default function ProductDetailPage({
   }, [productId]);
 
   useEffect(() => load(), [load]);
+  useEffect(() => {
+    if (confirmingStatus) statusCancelRef.current?.focus();
+  }, [confirmingStatus]);
 
   async function run(url: string, method: "POST" | "PATCH" | "PUT", body: unknown) {
     const payload = await commandIntent.submit(async (idempotencyKey) => {
@@ -121,16 +135,34 @@ export default function ProductDetailPage({
   }
 
   const { product, units } = state;
+  const from = searchParams.get("from");
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
+      <nav className="text-sm text-[var(--fm-text-muted)]">
+        <Link className="underline" href={`/admin/catalog/products${from ? `?${from}` : ""}`}>
+          Products
+        </Link>{" "}
+        / {product.name}
+      </nav>
       <PageHeader
         title={product.name}
         description={`${product.categoryName} · ${product.slug}`}
         action={
-          <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
-            {product.status}
-          </StatusBadge>
+          <span className="flex items-center gap-2">
+            <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
+              {product.status}
+            </StatusBadge>
+            {product.allowedActions.includes("UPDATE") ? (
+              <Button asChild variant="outline">
+                <Link
+                  href={`/admin/catalog/products/${product.productId}/edit${from ? `?from=${encodeURIComponent(from)}` : ""}`}
+                >
+                  Edit product
+                </Link>
+              </Button>
+            ) : null}
+          </span>
         }
       />
 
@@ -143,37 +175,82 @@ export default function ProductDetailPage({
         </p>
       ) : null}
 
-      <ListPageSection
-        title="Product status"
-        description="Inactive products leave all storefront surfaces."
-      >
-        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-          <Input
-            aria-label="Reason"
-            placeholder="reason (required)"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className="sm:w-72"
-          />
-          <Button
-            size="sm"
-            variant={product.status === "active" ? "destructive" : "default"}
-            onClick={() => {
-              if (reason.trim() === "") {
-                setNotice("A reason is required.");
-                return;
-              }
-              void run(`${BASE}/products/${encodeURIComponent(productId)}/status`, "POST", {
-                status: product.status === "active" ? "inactive" : "active",
-                reason: reason.trim(),
-                expectedVersion: product.version,
-              });
-            }}
-          >
-            {product.status === "active" ? "Deactivate" : "Activate"}
-          </Button>
-        </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 lg:col-span-2">
+          <h2 className="font-semibold">Customer-facing details</h2>
+          {product.description ? (
+            <p className="mt-3 text-sm">{product.description}</p>
+          ) : (
+            <p className="mt-3 text-sm text-[var(--fm-text-muted)]">No description provided.</p>
+          )}
+          {product.customerDetails.length ? (
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              {product.customerDetails.map((detail) => (
+                <div key={detail.detailId}>
+                  <dt className="text-xs font-semibold text-[var(--fm-text-muted)]">
+                    {detail.label}
+                  </dt>
+                  <dd className="text-sm">{detail.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+        </section>
+        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5">
+          <h2 className="font-semibold">Inventory pool</h2>
+          <p className="mt-2 text-sm">
+            Base unit: {product.inventoryPool.baseUnitCode} ({product.inventoryPool.baseUnitSymbol})
+          </p>
+          <p className="mt-1 font-mono text-xs text-[var(--fm-text-muted)]">
+            {product.inventoryPool.inventoryPoolId}
+          </p>
+        </section>
+      </div>
+
+      <ListPageSection title="Product media">
+        {product.media.length ? (
+          <ul className="divide-y divide-[var(--fm-border)]">
+            {product.media.map((media) => (
+              <li key={media.mediaId} className="flex justify-between p-4 text-sm">
+                <span>{media.altText}</span>
+                <span>{media.isPrimary ? "Primary" : `Order ${media.sortOrder}`}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No canonical media attached.</p>
+        )}
       </ListPageSection>
+
+      {product.allowedActions.includes("SET_STATUS") ? (
+        <ListPageSection
+          title="Product status"
+          description="Inactive products leave all storefront surfaces. Historical snapshots remain intact."
+        >
+          <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+            <Input
+              aria-label="Reason"
+              placeholder="reason (required)"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="sm:w-72"
+            />
+            <Button
+              size="sm"
+              variant={product.status === "active" ? "destructive" : "default"}
+              onClick={() => {
+                if (reason.trim() === "") {
+                  setNotice("A reason is required.");
+                  return;
+                }
+                setConfirmingStatus(true);
+              }}
+            >
+              {product.status === "active" ? "Review deactivation" : "Review activation"}
+            </Button>
+          </div>
+        </ListPageSection>
+      ) : null}
 
       <ListPageSection
         title="SKUs"
@@ -342,6 +419,75 @@ export default function ProductDetailPage({
           </Table>
         )}
       </ListPageSection>
+      <ListPageSection title="Recent audit">
+        {product.recentAudit.length ? (
+          <ol className="divide-y divide-[var(--fm-border)]">
+            {product.recentAudit.map((audit) => (
+              <li key={audit.auditEventId} className="p-4 text-sm">
+                <span className="font-medium">{audit.action}</span>
+                <span className="block text-[var(--fm-text-muted)]">
+                  {new Date(audit.occurredAt).toLocaleString()} ·{" "}
+                  {audit.correlationId ?? "No request reference"}
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
+        )}
+      </ListPageSection>
+      {confirmingStatus ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setConfirmingStatus(false);
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="product-status-confirmation-title"
+            aria-describedby="product-status-confirmation-description"
+            className="w-full max-w-md rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6 shadow-xl"
+          >
+            <h2 id="product-status-confirmation-title" className="text-lg font-semibold">
+              {product.status === "active" ? "Deactivate product?" : "Activate product?"}
+            </h2>
+            <p
+              id="product-status-confirmation-description"
+              className="mt-2 text-sm text-[var(--fm-text-muted)]"
+            >
+              {product.status === "active"
+                ? "The Product leaves storefront availability. Variants, prices, inventory history, and committed order snapshots remain intact."
+                : "The Product becomes active, while each SKU price and location availability remains independently authoritative."}
+            </p>
+            <p className="mt-3 rounded bg-[var(--fm-surface-soft)] p-3 text-sm">Reason: {reason}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                ref={statusCancelRef}
+                variant="outline"
+                onClick={() => setConfirmingStatus(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant={product.status === "active" ? "destructive" : "default"}
+                disabled={commandIntent.pending}
+                onClick={() => {
+                  setConfirmingStatus(false);
+                  void run(`${BASE}/products/${encodeURIComponent(productId)}/status`, "POST", {
+                    status: product.status === "active" ? "inactive" : "active",
+                    reason: reason.trim(),
+                    expectedVersion: product.version,
+                  });
+                }}
+              >
+                {product.status === "active" ? "Confirm deactivation" : "Confirm activation"}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

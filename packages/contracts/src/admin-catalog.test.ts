@@ -10,6 +10,8 @@ import {
   type AdminUnitCreateRequest,
   type AdminUnitSummary,
   type AdminProductDetail,
+  type AdminProductCreateRequest,
+  type AdminProductUpdateRequest,
   type AdminCatalogSkuSummary,
   type AdminSkuPriceRequest,
 } from "./admin-catalog";
@@ -94,6 +96,29 @@ describe("catalog contracts", () => {
       recentAudit: [],
     } satisfies AdminCategoryDetail);
     void ({
+      requestId: "request-product-create",
+      headers: {},
+      categoryId: "category-produce",
+      slug: "red-onion",
+      name: "Red onion",
+      description: "Fresh red onions.",
+      customerDetails: [{ label: "Storage", value: "Keep cool.", sortOrder: 1 }],
+      inventoryBaseUnitId: "unit-gram",
+      idempotencyKey: "product-create-1",
+    } satisfies AdminProductCreateRequest);
+    void ({
+      requestId: "request-product-update",
+      headers: {},
+      productId: "prod-1",
+      categoryId: "category-produce",
+      slug: "red-onion",
+      name: "Red Onion",
+      description: null,
+      customerDetails: [],
+      expectedVersion: 2,
+      idempotencyKey: "product-update-1",
+    } satisfies AdminProductUpdateRequest);
+    void ({
       requestId: "request-price",
       headers: {},
       skuId: "sku-1",
@@ -125,6 +150,7 @@ describe("catalog contracts", () => {
     } satisfies AdminCatalogSkuSummary);
     void ({
       productId: "prod-1",
+      categoryId: "category-produce",
       slug: "red-onion",
       name: "Red Onion",
       description: null,
@@ -132,6 +158,16 @@ describe("catalog contracts", () => {
       categoryName: "Fresh produce",
       status: "active",
       version: 2,
+      customerDetails: [],
+      media: [],
+      inventoryPool: {
+        inventoryPoolId: "pool-1",
+        baseUnitId: "unit-gram",
+        baseUnitCode: "GRAM",
+        baseUnitSymbol: "g",
+      },
+      allowedActions: ["UPDATE", "SET_STATUS"],
+      recentAudit: [],
       skus: [],
     } satisfies AdminProductDetail);
   });

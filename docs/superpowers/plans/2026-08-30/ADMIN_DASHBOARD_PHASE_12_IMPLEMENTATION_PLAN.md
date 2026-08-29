@@ -152,27 +152,27 @@
 - Extends `AdminProductDetail` with category ID, customer details, media, inventory-pool/base-unit context, `allowedActions`, and recent Audit.
 - Produces `createAdminProduct` and `updateAdminProduct`; existing SKU, price, availability, and status commands remain separate.
 
-- [ ] **Step 1: Write failing contract/Core tests for create, update, replay, stale writes, authorization, and historical deactivation**
+- [x] **Step 1: Write failing contract/Core tests for create, update, replay, stale writes, authorization, and historical deactivation**
 
   Use real D1 fixtures. Assert changed-input replay conflicts, a stale update writes no Audit/success record, a deactivated referenced Product remains readable from historical Order snapshots, and Web cannot submit arbitrary fields.
 
-- [ ] **Step 2: Verify RED with contract and Core suites**
+- [x] **Step 2: Verify RED with contract and Core suites**
 
   Run: `pnpm --filter @freshmarkets/contracts test -- src/admin-catalog.test.ts && pnpm --filter @freshmarkets/core test -- src/admin/application/admin-catalog.integration.test.ts`.
 
-- [ ] **Step 3: Implement purpose-built Product commands and enriched reads**
+- [x] **Step 3: Implement purpose-built Product commands and enriched reads**
 
   Atomically create Product plus inventory pool and ordered details. Update identity/details through a version guard and Audit; preserve SKU/price/availability as their own commands and never modify committed snapshots.
 
-- [ ] **Step 4: Implement Product list/add/detail/edit flows**
+- [x] **Step 4: Implement Product list/add/detail/edit flows**
 
   Preserve list filters in links/breadcrumbs. Detail composes variants, exact base consumption, prices, location sourcing/availability, media, lifecycle, and Audit; all forms retain intent across recoverable errors.
 
-- [ ] **Step 5: Run focused Web and browser tests and verify GREEN**
+- [x] **Step 5: Run focused Web and browser tests and verify GREEN**
 
   Run: `pnpm --filter @freshmarkets/web test -- app/api/admin/catalog-routes.test.ts components/admin && pnpm --filter @freshmarkets/web exec playwright test tests/admin-catalog.spec.ts`.
 
-- [ ] **Step 6: Review, record progress, commit, and push**
+- [x] **Step 6: Review, record progress, commit, and push**
 
   Commit `feat(catalog): add product authoring workspaces`, then push `origin main`.
 

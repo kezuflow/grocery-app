@@ -87,6 +87,7 @@ async function seedManager(options: { scope?: "global" | "location" } = {}): Pro
 
 /** Seed one product (no SKUs) with an active category and gram pool. */
 async function seedProduct(): Promise<{
+  categoryId: string;
   productId: string;
   poolId: string;
   unitGramId: string;
@@ -129,10 +130,164 @@ async function seedProduct(): Promise<{
       now,
     ),
   ]);
-  return { productId, poolId, unitGramId, unitKgId };
+  return { categoryId, productId, poolId, unitGramId, unitKgId };
 }
 
 describe("catalog administration", () => {
+  it("creates and updates a Product with ordered customer details and guarded replay", async () => {
+    const manager = await seedManager();
+    const seeded = await seedProduct();
+    const createKey = `product-${crypto.randomUUID()}`;
+    const created = await core.createAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: seeded.categoryId,
+      slug: `authored-${crypto.randomUUID().slice(0, 12)}`,
+      name: "Authored Product",
+      description: "Customer description",
+      customerDetails: [
+        { label: "Storage", value: "Keep refrigerated.", sortOrder: 2 },
+        { label: "Contents", value: "One product.", sortOrder: 1 },
+      ],
+      inventoryBaseUnitId: "unit-gram",
+      idempotencyKey: createKey,
+    });
+    expect(created, JSON.stringify(created)).toMatchObject({
+      ok: true,
+      value: { name: "Authored Product", version: 1 },
+    });
+    if (!created.ok) return;
+    const replay = await core.createAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: seeded.categoryId,
+      slug: created.value.slug,
+      name: "Authored Product",
+      description: "Customer description",
+      customerDetails: [
+        { label: "Storage", value: "Keep refrigerated.", sortOrder: 2 },
+        { label: "Contents", value: "One product.", sortOrder: 1 },
+      ],
+      inventoryBaseUnitId: "unit-gram",
+      idempotencyKey: createKey,
+    });
+    expect(replay).toMatchObject({ ok: true, value: { productId: created.value.productId } });
+    await env.DB.prepare("UPDATE category SET status='inactive' WHERE id=?")
+      .bind(seeded.categoryId)
+      .run();
+    const replayAfterCategoryChange = await core.createAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: seeded.categoryId,
+      slug: created.value.slug,
+      name: "Authored Product",
+      description: "Customer description",
+      customerDetails: [
+        { label: "Storage", value: "Keep refrigerated.", sortOrder: 2 },
+        { label: "Contents", value: "One product.", sortOrder: 1 },
+      ],
+      inventoryBaseUnitId: "unit-gram",
+      idempotencyKey: createKey,
+    });
+    expect(replayAfterCategoryChange).toMatchObject({
+      ok: true,
+      value: { productId: created.value.productId },
+    });
+    await env.DB.prepare("UPDATE category SET status='active' WHERE id=?")
+      .bind(seeded.categoryId)
+      .run();
+    const changedReplay = await core.createAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      categoryId: seeded.categoryId,
+      slug: created.value.slug,
+      name: "Changed replay",
+      description: "Customer description",
+      customerDetails: [],
+      inventoryBaseUnitId: "unit-gram",
+      idempotencyKey: createKey,
+    });
+    expect(changedReplay).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+
+    const detail = await core.getAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId: created.value.productId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: {
+        categoryId: seeded.categoryId,
+        customerDetails: [{ label: "Contents" }, { label: "Storage" }],
+        inventoryPool: { baseUnitId: "unit-gram" },
+        allowedActions: ["UPDATE", "SET_STATUS"],
+      },
+    });
+
+    const staleKey = `product-${crypto.randomUUID()}`;
+    const stale = await core.updateAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId: created.value.productId,
+      categoryId: seeded.categoryId,
+      slug: created.value.slug,
+      name: "Stale Product",
+      description: null,
+      customerDetails: [],
+      expectedVersion: 99,
+      idempotencyKey: staleKey,
+    });
+    expect(stale).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    const staleWrites = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action='CATALOG.PRODUCT_UPDATED' AND idempotency_key=?",
+    )
+      .bind(staleKey)
+      .first<{ count: number }>();
+    expect(staleWrites?.count).toBe(0);
+
+    const updateKey = `product-${crypto.randomUUID()}`;
+    const updated = await core.updateAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId: created.value.productId,
+      categoryId: seeded.categoryId,
+      slug: created.value.slug,
+      name: "Updated Product",
+      description: null,
+      customerDetails: [{ label: "Contents", value: "Updated contents.", sortOrder: 1 }],
+      expectedVersion: 1,
+      idempotencyKey: updateKey,
+    });
+    expect(updated).toMatchObject({ ok: true, value: { name: "Updated Product", version: 2 } });
+    const updatedReplay = await core.updateAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId: created.value.productId,
+      categoryId: seeded.categoryId,
+      slug: created.value.slug,
+      name: "Updated Product",
+      description: null,
+      customerDetails: [{ label: "Contents", value: "Updated contents.", sortOrder: 1 }],
+      expectedVersion: 1,
+      idempotencyKey: updateKey,
+    });
+    expect(updatedReplay).toMatchObject({ ok: true, value: { version: 2 } });
+
+    const locationOnly = await seedManager({ scope: "location" });
+    expect(
+      await core.createAdminProduct({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: locationOnly.cookie },
+        categoryId: seeded.categoryId,
+        slug: `denied-${crypto.randomUUID().slice(0, 12)}`,
+        name: "Denied Product",
+        description: null,
+        customerDetails: [],
+        inventoryBaseUnitId: "unit-gram",
+        idempotencyKey: `product-${crypto.randomUUID()}`,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
   it("creates, reads, updates, and deactivates a hierarchy with guarded versions", async () => {
     const manager = await seedManager();
     const parent = await core.createAdminCategory({
@@ -565,6 +720,25 @@ describe("catalog administration", () => {
   it("toggles product status with reasons and guards", async () => {
     const manager = await seedManager();
     const { productId } = await seedProduct();
+    const customerId = crypto.randomUUID();
+    const paymentId = crypto.randomUUID();
+    const orderId = crypto.randomUUID();
+    const snapshotName = "Historical Product Snapshot";
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+      ).bind(customerId, crypto.randomUUID(), now, now),
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
+      ).bind(paymentId, customerId, crypto.randomUUID(), now, now),
+      env.DB.prepare(
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, 'cycle-next-cebu', '{}', 'COMMITTED', 100, 'PHP', ?, ?, 1)",
+      ).bind(orderId, customerId, paymentId, now),
+      env.DB.prepare(
+        "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity) VALUES (?, ?, ?, ?, 'Historical variant', 'g', 1, 100, 100, 1)",
+      ).bind(crypto.randomUUID(), orderId, `historical-${productId}`, snapshotName),
+    ]);
 
     const sameState = await core.setAdminProductStatus({
       requestId: crypto.randomUUID(),
@@ -605,5 +779,18 @@ describe("catalog administration", () => {
       "SELECT reason FROM audit_event WHERE action = 'CATALOG.PRODUCT_STATUS_CHANGED' ORDER BY occurred_at DESC LIMIT 1",
     ).first<{ reason: string | null }>();
     expect(auditRow?.reason).toBe("seasonal pause");
+    const historical = await env.DB.prepare(
+      "SELECT product_name_snapshot AS productName FROM order_item WHERE order_id=?",
+    )
+      .bind(orderId)
+      .first<{ productName: string }>();
+    expect(historical?.productName).toBe(snapshotName);
+    expect(
+      await core.getAdminProduct({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        productId,
+      }),
+    ).toMatchObject({ ok: true, value: { status: "inactive" } });
   });
 });

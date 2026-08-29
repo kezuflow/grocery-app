@@ -302,14 +302,19 @@ export async function getAdminProduct(
   const marketId = await defaultMarketId(deps.db);
   const product = await deps.db
     .prepare(
-      `SELECT p.id AS productId, p.slug, p.name, p.description, c.code AS categoryCode,
-              c.name AS categoryName, p.status, p.version
+      `SELECT p.id AS productId, p.category_id AS categoryId, p.slug, p.name, p.description,
+              c.code AS categoryCode, c.name AS categoryName, p.status, p.version,
+              ip.id AS inventoryPoolId, u.id AS baseUnitId,
+              u.canonical_base_code AS baseUnitCode, u.symbol AS baseUnitSymbol
        FROM product p JOIN category c ON c.id = p.category_id
+       JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+       JOIN unit u ON u.id=ip.base_unit_id
        WHERE p.id = ?`,
     )
     .bind(request.productId)
     .first<{
       productId: string;
+      categoryId: string;
       slug: string;
       name: string;
       description: string | null;
@@ -317,6 +322,10 @@ export async function getAdminProduct(
       categoryName: string;
       status: "active" | "inactive";
       version: number;
+      inventoryPoolId: string;
+      baseUnitId: string;
+      baseUnitCode: "GRAM" | "MILLILITER" | "PIECE";
+      baseUnitSymbol: string;
     }>();
   if (!product) {
     return {
@@ -354,9 +363,63 @@ export async function getAdminProduct(
     .bind(marketId ?? "", now, now, DEFAULT_FULFILLMENT_LOCATION_ID, request.productId)
     .all<SkuRow>();
 
+  const [details, media, audits, manage] = await Promise.all([
+    deps.db
+      .prepare(
+        "SELECT id AS detailId, label, value, sort_order AS sortOrder FROM product_detail WHERE product_id=? ORDER BY sort_order, id",
+      )
+      .bind(request.productId)
+      .all<AdminProductDetail["customerDetails"][number]>(),
+    deps.db
+      .prepare(
+        `SELECT id AS mediaId, mime_type AS mimeType, alt_text AS altText,
+                is_primary AS isPrimary, sort_order AS sortOrder, status, version
+         FROM product_media WHERE product_id=? AND status='active' ORDER BY is_primary DESC, sort_order, id`,
+      )
+      .bind(request.productId)
+      .all<Omit<AdminProductDetail["media"][number], "isPrimary"> & { isPrimary: number }>(),
+    deps.db
+      .prepare(
+        `SELECT id AS auditEventId, occurred_at AS occurredAt, actor_user_id AS actorId,
+                action, aggregate_type AS resourceType, aggregate_id AS resourceId,
+                market_id AS marketId, location_id AS locationId, reason, correlation_id AS correlationId
+         FROM audit_event WHERE aggregate_type='product' AND aggregate_id=?
+         ORDER BY occurred_at DESC, id DESC LIMIT 10`,
+      )
+      .bind(request.productId)
+      .all<
+        Omit<AdminProductDetail["recentAudit"][number], "occurredAt"> & { occurredAt: number }
+      >(),
+    resolveCatalogAdministrationAccess(deps, request, "catalog.manage"),
+  ]);
+
   return {
     ok: true,
-    value: { ...product, skus: skus.results },
+    value: {
+      productId: product.productId,
+      categoryId: product.categoryId,
+      slug: product.slug,
+      name: product.name,
+      description: product.description,
+      categoryCode: product.categoryCode,
+      categoryName: product.categoryName,
+      status: product.status,
+      version: product.version,
+      customerDetails: details.results,
+      media: media.results.map((item) => ({ ...item, isPrimary: item.isPrimary === 1 })),
+      inventoryPool: {
+        inventoryPoolId: product.inventoryPoolId,
+        baseUnitId: product.baseUnitId,
+        baseUnitCode: product.baseUnitCode,
+        baseUnitSymbol: product.baseUnitSymbol,
+      },
+      allowedActions: manage.ok ? ["UPDATE", "SET_STATUS"] : [],
+      recentAudit: audits.results.map((audit) => ({
+        ...audit,
+        occurredAt: new Date(audit.occurredAt).toISOString(),
+      })),
+      skus: skus.results,
+    },
     requestId: request.requestId,
   };
 }

@@ -5,7 +5,10 @@ import type {
   AdminCategoryUpdateRequest,
   AdminCatalogSkuSummary,
   AdminProductStatusRequest,
+  AdminProductCreateRequest,
+  AdminProductCustomerDetailInput,
   AdminProductSummary,
+  AdminProductUpdateRequest,
   AdminSkuAvailabilityRequest,
   AdminSkuCreateRequest,
   AdminSkuUpdateRequest,
@@ -73,6 +76,46 @@ async function readCategorySummary(
   return row
     ? { ok: true, value: row, requestId }
     : failure("NOT_FOUND", "Category not found", requestId);
+}
+
+function normalizeProductDetails(
+  details: ReadonlyArray<AdminProductCustomerDetailInput>,
+): AdminProductCustomerDetailInput[] | null {
+  if (details.length > 20) return null;
+  const normalized = details
+    .map((detail) => ({
+      label: detail.label.trim(),
+      value: detail.value.trim(),
+      sortOrder: detail.sortOrder,
+    }))
+    .sort(
+      (left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label),
+    );
+  const labels = new Set<string>();
+  for (const detail of normalized) {
+    const labelKey = detail.label.toLocaleLowerCase();
+    if (
+      detail.label === "" ||
+      detail.label.length > 80 ||
+      detail.value === "" ||
+      detail.value.length > 1000 ||
+      !Number.isSafeInteger(detail.sortOrder) ||
+      detail.sortOrder < 0 ||
+      labels.has(labelKey)
+    )
+      return null;
+    labels.add(labelKey);
+  }
+  return normalized;
+}
+
+function validProductIdentity(name: string, slug: string, description: string | null): boolean {
+  return (
+    name !== "" &&
+    name.length <= 160 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) &&
+    (description === null || description.length <= 2000)
+  );
 }
 
 /** Create an active category over the closed status vocabulary. */
@@ -404,6 +447,264 @@ export async function setAdminCategoryStatus(
     return failure("STALE_VERSION", "Category changed; refresh before retrying", request.requestId);
   }
   return readCategorySummary(deps, request.categoryId, request.requestId);
+}
+
+/** Create a Product, its shared inventory pool, and ordered customer details atomically. */
+export async function createAdminProduct(
+  deps: CatalogAdministrationDeps,
+  request: AdminProductCreateRequest,
+): Promise<RpcResult<AdminProductSummary>> {
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  if (!access.ok) return access;
+  const name = request.name.trim();
+  const slug = request.slug.trim();
+  const description = request.description?.trim() || null;
+  const details = normalizeProductDetails(request.customerDetails);
+  if (!validProductIdentity(name, slug, description) || !details)
+    return failure(
+      "VALIDATION_FAILED",
+      "Product identity or customer details are invalid",
+      request.requestId,
+    );
+  const now = Date.now();
+  const scope = "admin.catalog.product.create";
+  const canonical = {
+    categoryId: request.categoryId,
+    slug,
+    name,
+    description,
+    customerDetails: details,
+    inventoryBaseUnitId: request.inventoryBaseUnitId,
+  };
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    scope,
+    request.idempotencyKey,
+    canonical,
+  );
+  if (!claim.claimed) {
+    if (claim.existing && claim.existing.requestHash !== claim.hash)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
+    if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference)
+      return readProductSummary(deps, claim.existing.resultReference, request.requestId);
+    return failure("CONFLICT", "The create command is still processing", request.requestId);
+  }
+  const [category, baseUnit] = await Promise.all([
+    deps.db
+      .prepare("SELECT id FROM category WHERE id=? AND status='active'")
+      .bind(request.categoryId)
+      .first<{ id: string }>(),
+    deps.db
+      .prepare(
+        `SELECT id FROM unit WHERE id=? AND status='active'
+         AND code=canonical_base_code AND conversion_numerator=1 AND conversion_denominator=1`,
+      )
+      .bind(request.inventoryBaseUnitId)
+      .first<{ id: string }>(),
+  ]);
+  if (!category || !baseUnit) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    return failure(
+      "VALIDATION_FAILED",
+      "An active category and canonical base unit are required",
+      request.requestId,
+    );
+  }
+  const productId = crypto.randomUUID();
+  const inventoryPoolId = crypto.randomUUID();
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(
+          `INSERT INTO inventory_pool
+             (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at)
+           VALUES (?, ?, ?, 'STOCKED', 'STOCKED', ?, ?)`,
+        )
+        .bind(inventoryPoolId, productId, request.inventoryBaseUnitId, now, now),
+      deps.db
+        .prepare(
+          `INSERT INTO product
+             (id, category_id, inventory_pool_id, slug, name, description, status, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)`,
+        )
+        .bind(productId, request.categoryId, inventoryPoolId, slug, name, description, now, now),
+      ...details.map((detail) =>
+        deps.db
+          .prepare(
+            "INSERT INTO product_detail (id, product_id, label, value, sort_order) VALUES (?, ?, ?, ?, ?)",
+          )
+          .bind(crypto.randomUUID(), productId, detail.label, detail.value, detail.sortOrder),
+      ),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.PRODUCT_CREATED",
+        resourceType: "product",
+        resourceId: productId,
+        details: canonical,
+        correlationId: request.requestId,
+        idempotencyKey: request.idempotencyKey,
+        occurredAt: now,
+      }),
+      idempotencyComplete(deps.db, scope, request.idempotencyKey, productId, now),
+    ]);
+  } catch (error) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("UNIQUE"))
+      return failure(
+        "CONFLICT",
+        "A Product with this slug or detail label already exists",
+        request.requestId,
+      );
+    return failure("CONFLICT", "The Product could not be created", request.requestId);
+  }
+  return readProductSummary(deps, productId, request.requestId);
+}
+
+/** Update Product identity and customer details under one version guard. */
+export async function updateAdminProduct(
+  deps: CatalogAdministrationDeps,
+  request: AdminProductUpdateRequest,
+): Promise<RpcResult<AdminProductSummary>> {
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  if (!access.ok) return access;
+  const name = request.name.trim();
+  const slug = request.slug.trim();
+  const description = request.description?.trim() || null;
+  const details = normalizeProductDetails(request.customerDetails);
+  if (!validProductIdentity(name, slug, description) || !details)
+    return failure(
+      "VALIDATION_FAILED",
+      "Product identity or customer details are invalid",
+      request.requestId,
+    );
+  const current = await deps.db
+    .prepare(
+      "SELECT category_id AS categoryId, slug, name, description, status, version FROM product WHERE id=?",
+    )
+    .bind(request.productId)
+    .first<{
+      categoryId: string;
+      slug: string;
+      name: string;
+      description: string | null;
+      status: "active" | "inactive";
+      version: number;
+    }>();
+  if (!current) return failure("NOT_FOUND", "Product not found", request.requestId);
+  const category = await deps.db
+    .prepare("SELECT id FROM category WHERE id=?")
+    .bind(request.categoryId)
+    .first<{ id: string }>();
+  if (!category) return failure("VALIDATION_FAILED", "Category does not exist", request.requestId);
+  const currentDetails = await deps.db
+    .prepare(
+      "SELECT label, value, sort_order AS sortOrder FROM product_detail WHERE product_id=? ORDER BY sort_order, id",
+    )
+    .bind(request.productId)
+    .all<AdminProductCustomerDetailInput>();
+  const now = Date.now();
+  const scope = "admin.catalog.product.update";
+  const canonical = {
+    productId: request.productId,
+    categoryId: request.categoryId,
+    slug,
+    name,
+    description,
+    customerDetails: details,
+    expectedVersion: request.expectedVersion,
+  };
+  const claim = await claimCommandIdempotency(
+    deps.db,
+    () => now,
+    scope,
+    request.idempotencyKey,
+    canonical,
+  );
+  if (!claim.claimed) {
+    if (claim.existing && claim.existing.requestHash !== claim.hash)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
+    if (claim.existing?.status === "SUCCEEDED")
+      return readProductSummary(deps, request.productId, request.requestId);
+    return failure("CONFLICT", "The update command is still processing", request.requestId);
+  }
+  if (current.version !== request.expectedVersion) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    return failure("STALE_VERSION", "Product changed; refresh before retrying", request.requestId);
+  }
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(
+          `UPDATE product SET category_id=?, slug=?, name=?, description=?, version=version+1, updated_at=?
+           WHERE id=? AND version=?`,
+        )
+        .bind(
+          request.categoryId,
+          slug,
+          name,
+          description,
+          now,
+          request.productId,
+          request.expectedVersion,
+        ),
+      deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
+      deps.db.prepare("DELETE FROM product_detail WHERE product_id=?").bind(request.productId),
+      ...details.map((detail) =>
+        deps.db
+          .prepare(
+            "INSERT INTO product_detail (id, product_id, label, value, sort_order) VALUES (?, ?, ?, ?, ?)",
+          )
+          .bind(
+            crypto.randomUUID(),
+            request.productId,
+            detail.label,
+            detail.value,
+            detail.sortOrder,
+          ),
+      ),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.PRODUCT_UPDATED",
+        resourceType: "product",
+        resourceId: request.productId,
+        before: { ...current, customerDetails: currentDetails.results },
+        after: {
+          categoryId: request.categoryId,
+          slug,
+          name,
+          description,
+          customerDetails: details,
+          status: current.status,
+          version: current.version + 1,
+        },
+        correlationId: request.requestId,
+        idempotencyKey: request.idempotencyKey,
+        occurredAt: now,
+      }),
+      idempotencyComplete(deps.db, scope, request.idempotencyKey, request.productId, now),
+    ]);
+  } catch (error) {
+    await idempotencyFailed(deps.db, scope, request.idempotencyKey);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("UNIQUE"))
+      return failure(
+        "CONFLICT",
+        "A Product with this slug or detail label already exists",
+        request.requestId,
+      );
+    return failure("STALE_VERSION", "Product changed; refresh before retrying", request.requestId);
+  }
+  return readProductSummary(deps, request.productId, request.requestId);
 }
 
 /** Create a controlled unit with an exact conversion to its dimension's canonical base. */

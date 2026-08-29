@@ -42,6 +42,48 @@ test("a provisioned Staff reader can scan the Category workspace", async ({ admi
   await expect(adminPage.getByRole("table", { name: "Categories" })).toBeVisible();
 });
 
+test("a provisioned Staff reader can scan the Product workspace", async ({ adminPage }) => {
+  await adminPage.goto("/admin/catalog/products");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+  await expect(
+    adminPage.locator("#main-content").getByRole("link", { name: "Add product" }),
+  ).toBeVisible();
+  await expect(adminPage.getByRole("table", { name: "Products" })).toBeVisible();
+});
+
+test("a Product manager can create, inspect, and edit customer-facing details", async ({
+  adminPage,
+}) => {
+  const suffix = crypto.randomUUID();
+  await adminPage.goto("/admin/catalog/products/new");
+  await adminPage.getByLabel("Product name").fill("E2E authored product");
+  await adminPage.getByLabel("Product slug").fill(`e2e-authored-${suffix}`);
+  await adminPage.getByLabel("Product description").fill("A customer-facing description.");
+  await adminPage.getByLabel("Product category").selectOption({ index: 1 });
+  await adminPage.getByLabel("Inventory base unit").selectOption("unit-gram");
+  await adminPage.getByLabel("Detail label 1").fill("Storage");
+  await adminPage.getByLabel("Detail value 1").fill("Keep refrigerated.");
+  await adminPage.getByRole("button", { name: "Create product" }).click();
+  await expect(adminPage.getByText("Product created.", { exact: true })).toBeVisible();
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "E2E authored product" }),
+  ).toBeVisible();
+  await expect(adminPage.getByText("Keep refrigerated.")).toBeVisible();
+  await adminPage.getByRole("link", { name: "Edit product" }).click();
+  await adminPage.getByLabel("Product name").fill("E2E updated product");
+  await adminPage.getByRole("button", { name: "Save product" }).click();
+  await expect(adminPage.getByText("Product updated.", { exact: true })).toBeVisible();
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "E2E updated product" }),
+  ).toBeVisible();
+  await adminPage.getByLabel("Reason").fill("Lifecycle impact review");
+  await adminPage.getByRole("button", { name: "Review deactivation" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText(
+    "committed order snapshots remain intact",
+  );
+  await adminPage.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("a category manager can create and inspect a Category", async ({ adminPage }) => {
   const suffix = crypto.randomUUID();
   await adminPage.goto("/admin/catalog/categories/new");

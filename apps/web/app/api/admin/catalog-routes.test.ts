@@ -9,7 +9,9 @@ const coreMocks = vi.hoisted(() => ({
   listAdminUnits: vi.fn(),
   createAdminUnit: vi.fn(),
   listAdminProducts: vi.fn(),
+  createAdminProduct: vi.fn(),
   getAdminProduct: vi.fn(),
+  updateAdminProduct: vi.fn(),
   setAdminProductStatus: vi.fn(),
   createAdminSku: vi.fn(),
   updateAdminSku: vi.fn(),
@@ -30,8 +32,8 @@ import {
 } from "./catalog/categories/[category-id]/route";
 import { POST as categoryStatus } from "./catalog/categories/[category-id]/status/route";
 import { GET as listUnits, POST as createUnit } from "./catalog/units/route";
-import { GET as listProducts } from "./catalog/products/route";
-import { GET as getProduct } from "./catalog/products/[product-id]/route";
+import { GET as listProducts, POST as createProduct } from "./catalog/products/route";
+import { GET as getProduct, PATCH as updateProduct } from "./catalog/products/[product-id]/route";
 import { POST as productStatus } from "./catalog/products/[product-id]/status/route";
 import { POST as createSku } from "./catalog/skus/route";
 import { PATCH as updateSku } from "./catalog/skus/[sku-id]/route";
@@ -164,6 +166,42 @@ describe("catalog and inventory BFF routes", () => {
       productId: "prod-1",
       status: "inactive",
     });
+  });
+
+  it("whitelists and delegates Product create and update fields", async () => {
+    coreMocks.createAdminProduct.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.updateAdminProduct.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    const createBody = {
+      categoryId: "category-1",
+      slug: "red-onion",
+      name: "Red onion",
+      description: null,
+      customerDetails: [{ label: "Storage", value: "Keep cool", sortOrder: 1 }],
+      inventoryBaseUnitId: "unit-gram",
+      status: "inactive",
+    };
+    await createProduct(jsonRequest("https://x/products", createBody));
+    await updateProduct(
+      jsonRequest(
+        "https://x/products/prod-1",
+        { ...createBody, expectedVersion: 2, arbitraryDatabaseField: "not allowed" },
+        "PATCH",
+      ),
+      productParams,
+    );
+    expect(coreMocks.createAdminProduct.mock.calls[0][0]).toMatchObject({
+      categoryId: "category-1",
+      inventoryBaseUnitId: "unit-gram",
+      idempotencyKey: "idem-1",
+    });
+    expect(coreMocks.createAdminProduct.mock.calls[0][0]).not.toHaveProperty("status");
+    expect(coreMocks.updateAdminProduct.mock.calls[0][0]).toMatchObject({
+      productId: "prod-1",
+      expectedVersion: 2,
+    });
+    expect(coreMocks.updateAdminProduct.mock.calls[0][0]).not.toHaveProperty(
+      "arbitraryDatabaseField",
+    );
   });
 
   it("delegates sku create/update/availability/price", async () => {

@@ -49,19 +49,19 @@ export async function resolveCatalogAdministrationAccess(
   }
   const holdsCapability = context.value.capabilities.includes(capability);
   const globalScope = context.value.scopes.some((scope) => scope.kind === "global");
-  let locationAuthorized = true;
+  let scopeAuthorized = globalScope;
   if (capability === "inventory.read" && inventoryLocationId !== undefined) {
     const marketRow = await deps.db
       .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
       .bind(inventoryLocationId)
       .first<{ market_id: string }>();
-    locationAuthorized = hasOperationalScope(
+    scopeAuthorized = hasOperationalScope(
       context.value.scopes,
       inventoryLocationId,
       marketRow?.market_id,
     );
   }
-  if (!holdsCapability || (!globalScope && !locationAuthorized)) {
+  if (!holdsCapability || !scopeAuthorized) {
     return {
       ok: false,
       error: {
