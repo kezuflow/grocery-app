@@ -181,6 +181,8 @@ Indexes: provider/reference, payment intent/subject/status, refund/payment/statu
 
 Migration `0043_financial_safety.sql` adds explicit quote/order monetary components, accepted-Quote identity on order reactions, and resumable provider actions. Migration `0044_finance_exception_taxonomy.sql` preserves historical finance exceptions while adding stable post-payment capacity, consumed-Quote, Instant-mode, and sourcing exception categories. Scheduled capacity allocation and Quote consumption use guarded updates followed by transactional abort sentinels so a zero-row compare-and-swap rolls back every dependent Order snapshot/effect.
 
+Migration `0045_cart_and_inbox_reliability.sql` reconciles historical duplicate `ACTIVE` carts before adding a partial unique customer index. The newest cart wins deterministically; its quantities remain authoritative and SKUs absent from it are copied from the newest older active cart that carries them. Superseded carts remain as history and a payload-safe domain event records the repair. The same migration adds bounded normalized-observation, retry-availability, and conditional-lease fields to the provider inbox; raw webhook request bodies remain forbidden.
+
 ## Promotions
 
 - `promotions(id PK, code UNIQUE NULL, name, status, starts_at, ends_at, global_usage_limit NULL, per_customer_usage_limit NULL, automatic, priority, version)`

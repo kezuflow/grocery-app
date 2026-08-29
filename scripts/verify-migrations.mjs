@@ -443,6 +443,77 @@ assert.throws(
 );
 analyticsUpgrade.close();
 
+// A live database can contain duplicate ACTIVE carts because the historical
+// schema had only a non-unique customer/status index. Verify the 0045
+// reconciliation chooses the newest cart, preserves/merges lines, records safe
+// evidence, and only then establishes the uniqueness invariant.
+const cartUpgrade = database();
+apply(
+  cartUpgrade,
+  migrations.filter((migration) => migration.name <= "0044_finance_exception_taxonomy.sql"),
+);
+cartUpgrade.exec(`
+  INSERT INTO customer (id, auth_user_id, status, created_at, updated_at)
+    VALUES ('cart-upgrade-customer', 'cart-upgrade-auth', 'active', 1, 1);
+  INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at) VALUES
+    ('cart-upgrade-old', 'cart-upgrade-customer', 'location-cebu-central', 'ACTIVE', 1, 1, 1),
+    ('cart-upgrade-middle', 'cart-upgrade-customer', 'location-cebu-central', 'ACTIVE', 1, 2, 2),
+    ('cart-upgrade-winner', 'cart-upgrade-customer', 'location-cebu-central', 'ACTIVE', 4, 3, 3);
+  INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES
+    ('cart-upgrade-old', 'sku-red-onion-500g', 2),
+    ('cart-upgrade-old', 'sku-eggs-6', 3),
+    ('cart-upgrade-middle', 'sku-red-onion-500g', 4),
+    ('cart-upgrade-winner', 'sku-red-onion-500g', 7);
+`);
+apply(
+  cartUpgrade,
+  migrations.filter((migration) => migration.name === "0045_cart_and_inbox_reliability.sql"),
+);
+assert.deepEqual(
+  cartUpgrade
+    .prepare(
+      `SELECT id, status, version FROM cart
+       WHERE customer_id='cart-upgrade-customer'
+       ORDER BY id`,
+    )
+    .all()
+    .map((row) => ({ ...row })),
+  [
+    { id: "cart-upgrade-middle", status: "SUPERSEDED", version: 2 },
+    { id: "cart-upgrade-old", status: "SUPERSEDED", version: 2 },
+    { id: "cart-upgrade-winner", status: "ACTIVE", version: 4 },
+  ],
+);
+assert.deepEqual(
+  cartUpgrade
+    .prepare(
+      `SELECT sku_id, quantity FROM cart_item
+       WHERE cart_id='cart-upgrade-winner' ORDER BY sku_id`,
+    )
+    .all()
+    .map((row) => ({ ...row })),
+  [
+    { sku_id: "sku-eggs-6", quantity: 3 },
+    { sku_id: "sku-red-onion-500g", quantity: 7 },
+  ],
+  "0045 must retain the winning cart value and merge SKUs absent from it",
+);
+assert.equal(
+  cartUpgrade
+    .prepare(
+      "SELECT COUNT(*) AS count FROM domain_event WHERE aggregate_id='cart-upgrade-winner' AND event_type='DUPLICATE_ACTIVE_CARTS_RECONCILED'",
+    )
+    .get().count,
+  1,
+);
+assert.throws(() =>
+  cartUpgrade.exec(
+    "INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at) VALUES ('cart-upgrade-duplicate', 'cart-upgrade-customer', 'location-cebu-central', 'ACTIVE', 1, 4, 4)",
+  ),
+);
+assert.deepEqual(cartUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
+cartUpgrade.close();
+
 console.log(
-  "Migrations verified: fresh apply, populated 0020 -> current commerce upgrade, and populated 0032 -> 0033 analytics upgrade are valid.",
+  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, and 0044 -> 0045 cart reliability upgrades are valid.",
 );
