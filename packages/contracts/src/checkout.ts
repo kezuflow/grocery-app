@@ -89,7 +89,8 @@ export type CheckoutQuoteCommandRequest = AuthenticatedRequest & {
   cartId: string;
   cartVersion: number;
   addressId: string;
-  deliveryCycleId: string;
+  /** Null selects Instant fulfillment; a cycle id selects Scheduled. */
+  deliveryCycleId: string | null;
   idempotencyKey: string;
 };
 

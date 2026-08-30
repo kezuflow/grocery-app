@@ -5,7 +5,7 @@
 **Review date:** 2026-08-30
 
 **Scope:** Whole repository except the separately owned Admin Dashboard and Maps programs
-**Status:** Programs 1–2 implemented and verified; Programs 3–4 approved and sequenced after Maps integration
+**Status:** Programs 1–3 implemented; Program 4 approved and next in sequence
 
 ## Executive assessment
 
@@ -18,7 +18,10 @@ The review found four material classes of work:
 3. architecture-boundary, request-security, correlation, readiness, and maintainability hardening; and
 4. incomplete customer MVP behavior already promised by the canonical product documents.
 
-The first two classes are implemented in the protective remediation worktree and have passed complete Core/Web verification plus a managed live storefront flow. The remaining two have approved, task-level, test-driven implementation plans but intentionally wait for the concurrent Maps task to release shared entrypoints, contracts, checkout, CSP, and Web shell files.
+The first three classes are implemented in the protective remediation worktree. Programs 1–2 have
+complete Core/Web verification, and Program 3 has repository-wide unit/integration verification plus
+live request-nonce auth, Admin, and Maps/serviceability acceptance. Program 4 retains its approved,
+task-level, test-driven implementation plan and is the remaining product-completion program.
 
 ## What is strong today
 
@@ -60,8 +63,8 @@ The first two classes are implemented in the protective remediation worktree and
 | High | A first-touch cart race could create multiple active carts; mutation lacked complete version/idempotency semantics. | Split customer state and lost concurrent updates. | Fixed with reconciliation/index, first-touch conflict handling, expected versions, and stable idempotency. |
 | High | Provider inbox retry records lacked durable lease/redrive/escalation behavior. | Webhooks could remain indefinitely unprocessed or process concurrently. | Fixed with normalized observations, leases, bounded backoff, scheduler redrive, and one-time escalation. |
 | High | Renewal initiation ownership was ambiguous and scheduler recovery incomplete. | Duplicate/misowned billing attempts or missed confirmed outcomes. | Fixed with explicit disabled-by-default ownership gate; outcome/dunning/grace recovery continues independently. |
-| High | The Core entrypoint and legacy contract barrel are collision hotspots with weak executable layer enforcement. | Review difficulty, cross-context coupling, and repeated concurrent conflicts. | Program 3 planned; waits for Maps shared-file ownership to finish. |
-| High | Public request bodies are inconsistently bounded and Web security/correlation policy is incomplete. | Memory abuse, unsafe media/body handling, inconsistent CSP/headers, weak incident traceability. | Program 3 planned with incremental readers, route migration, header tests, and one request ID end to end. |
+| High | The Core entrypoint and legacy contract barrel are collision hotspots with weak executable layer enforcement. | Review difficulty, cross-context coupling, and repeated concurrent conflicts. | Fixed for the authorized non-Admin/non-Maps transport through bounded adapters, contract manifests, and an AST architecture gate; excluded entrypoint methods remain explicit. |
+| High | Public request bodies are inconsistently bounded and Web security/correlation policy is incomplete. | Memory abuse, unsafe media/body handling, inconsistent CSP/headers, weak incident traceability. | Fixed for authorized route families with incremental bounded readers, UUID correlation, request-nonce CSP, and live hydration acceptance; excluded Admin/Maps direct reads remain owner follow-up. |
 | High | Customer Membership, promotion checkout, order detail, reorder, issues, abandonment, amendments, notifications, invoice readiness, and explicit mode selection are incomplete. | Canonical MVP cannot be considered launch-complete. | Program 4 planned as thirteen vertical, test-driven slices after Program 3. |
 | Medium | Catalog generation depended on migrations beyond the schema boundary it owns; storefront assertions and dependency audit were stale. | Generator breakage from unrelated later schema and false verification failures. | Fixed; owned-boundary generation, current assertions, and a narrow esbuild override now pass. |
 | Medium | Production lint/generated-type/readiness warnings and transport duplication remain. | Operational noise and slower safe changes. | Included in Program 3 acceptance. |
@@ -101,23 +104,18 @@ The completed work now guarantees:
 
 Completion commit: `b287303`.
 
-## Remaining approved work
-
 ### Program 3 — Architecture and security hardening
 
-The approved plan will:
+Program 3 is implemented. It adds bounded-context RPC adapters without changing the two-Worker
+deployment, an exhaustive contract/runtime manifest, an AST architecture gate, incremental bounded
+body readers for authorized routes, end-to-end UUID request correlation, request-nonce CSP through
+vinext's supported proxy path, distinct liveness/readiness, safe observability checks, regenerated
+Worker types, and representative live auth/Admin/Maps acceptance.
 
-- decompose the single Core Service Binding implementation into bounded-context RPC adapters while retaining one `WorkerEntrypoint`;
-- make contract files authoritative and prove entrypoint conformance at compile time;
-- add an AST-based import/architecture verifier;
-- replace unbounded public JSON/text reads with incremental size/content-type validation;
-- complete production CSP and standard security headers while preserving landed Maps sources;
-- carry one validated request ID from Web through Core/provider/reconciliation and back;
-- separate liveness from bounded readiness and provider capability readiness;
-- regenerate Worker types and close actionable production warnings; and
-- verify auth redirects, payment webhooks, Service Bindings, D1, cron, and representative browser flows.
+Implementation report:
+`docs/superpowers/reports/ARCHITECTURE_SECURITY_HARDENING_FINAL.md`.
 
-Plan: `docs/superpowers/plans/2026-08-30/ARCHITECTURE_SECURITY_HARDENING_IMPLEMENTATION.md`.
+## Remaining approved work
 
 ### Program 4 — Customer MVP completion
 
@@ -139,18 +137,19 @@ Plan: `docs/superpowers/plans/2026-08-30/CUSTOMER_MVP_COMPLETION_IMPLEMENTATION.
 
 ## Verification evidence for completed programs
 
-At Program 2 closeout:
+At Program 3 closeout:
 
-- shared contract/package tests passed;
-- Core passed 104 files and 572 tests;
-- Web passed 37 files and 176 tests;
-- typecheck, naming, migration, and catalog checks passed;
-- Core and Web production builds passed;
-- dependency audit reported zero advisories;
-- the managed live storefront Playwright flow passed 17 of 17 tests with no skipped acceptance counted as complete; and
-- a targeted format check across 198 remediation-owned files passed.
-
-The root format gate remained red only in three then-concurrent Admin-owned files and was not masked or rewritten by this program. Those files are re-evaluated after Admin/Maps integration before Program 3 begins.
+- formatting, naming, migration, catalog, architecture, readiness/security, lint, typecheck, and
+  diff checks pass;
+- the complete inventory passes 1,260 unit/integration tests across 197 files (Contracts 59,
+  validation 2, shared domain 2, Web 453, Core 742, and configuration 2);
+- Core and Web production builds pass, vinext reports 100% compatibility with 14 supported checks,
+  and the dependency audit reports no known vulnerabilities;
+- the pre-review deterministic browser matrix passed 78 tests with one established Rider auth-email
+  skip; and
+- post-review live acceptance proves the per-request nonce and matching vinext inline scripts with
+  zero CSP violations, plus authenticated Admin and public Maps/serviceability hydration under that
+  policy.
 
 ## Systems-design recommendations
 
@@ -180,4 +179,8 @@ Until those are approved, production paths must remain unavailable or readiness-
 
 ## Integration risk and control
 
-The remediation range is isolated from base commit `5dd450e`. Current Maps overlap is limited to the Core entrypoint, shared validation, contract barrel, and canonical/status documentation. After Maps finishes, the range is replayed commit-by-commit onto current `main`; conflicts preserve landed Admin/Maps behavior and reapply each remediation invariant deliberately. Program 3 begins only after a complete integrated naming/migration/catalog/type/test/build baseline is green.
+The remediation range is integrated over the Admin/Maps base
+`98c23789c2a2bf245fbdc18c1d461941718acd94` in a protective worktree. Conflicts preserved the exact
+Admin/Maps migration blobs, Mapbox CSP sources, thin Web routes, bounded pagination, and Rider
+authority. The checked-in architecture gate and final blob/hash checks make those preservation
+constraints executable before the range lands on `main`.

@@ -6,6 +6,7 @@ describe("provider webhook route", () => {
     // The automated harness runs as the test environment, where the mock
     // adapter registers through the runtime construction point; an
     // unregistered code proves the fail-closed webhook path.
+    const requestId = crypto.randomUUID();
     const response = await SELF.fetch(
       "https://core.example.invalid/webhooks/payments/never-registered",
       {
@@ -14,14 +15,20 @@ describe("provider webhook route", () => {
           "content-type": "application/json",
           "x-mock-signature": "x",
           "x-mock-timestamp": "0",
+          "x-request-id": requestId,
         },
         body: "{}",
       },
     );
     expect(response.status).toBe(503);
-    const body = (await response.json()) as { ok: boolean; error: { code: string } };
+    expect(response.headers.get("x-request-id")).toBe(requestId);
+    const body = (await response.json()) as {
+      ok: boolean;
+      error: { code: string; requestId: string };
+    };
     expect(body.ok).toBe(false);
     expect(body.error.code).toBe("PAYMENT_PROVIDER_UNCONFIGURED");
+    expect(body.error.requestId).toBe(requestId);
   });
 
   it("returns not found for non-matching paths and methods", async () => {

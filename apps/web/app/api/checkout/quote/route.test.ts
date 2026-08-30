@@ -52,6 +52,18 @@ describe("checkout quote route", () => {
     expect(forwarded.cartVersion).toBe(2);
   });
 
+  it("selects Instant checkout by forwarding a null cycle when cycleId is omitted", async () => {
+    requireIdempotencyKey.mockReturnValue("instant-stable-key");
+    createCheckoutQuote.mockResolvedValue({ ok: true, value: { quoteId: "q-instant" } });
+
+    const response = await post({ cartId: "c1", cartVersion: 2, addressId: "a1" });
+
+    expect(response.status).toBe(200);
+    expect(createCheckoutQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryCycleId: null }),
+    );
+  });
+
   it("rejects a missing idempotency key with 400 before calling Core", async () => {
     requireIdempotencyKey.mockImplementation(() => {
       throw new Error("IDEMPOTENCY_KEY_REQUIRED");

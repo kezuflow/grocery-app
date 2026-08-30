@@ -40,6 +40,10 @@ describe("Core observability boundary", () => {
       requestId(
         new Request("https://core.invalid", { headers: { "x-request-id": "safe-id:123" } }),
       ),
-    ).toBe("safe-id:123");
+    ).toBe(generated);
+    const valid = "ddeb27fb-d9a0-4b8d-8c15-0f765799db42";
+    expect(
+      requestId(new Request("https://core.invalid", { headers: { "x-request-id": valid } })),
+    ).toBe(valid);
   });
 });

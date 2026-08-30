@@ -19,6 +19,7 @@ import type {
   OrdersService,
   PaymentsService,
 } from "./core-service";
+import type { CheckoutQuoteCommandRequest } from "./checkout";
 import type { SubscriptionSummary } from "./membership";
 import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
@@ -136,6 +137,20 @@ describe("domain-grouped core services", () => {
     const absentFromCheckout: HasCommitMockOrder<CheckoutService> = false;
     expect(absentFromCheckout).toBe(false);
     expect("commitMockOrder" in ({} as Record<string, never>)).toBe(false);
+  });
+
+  it("represents Instant checkout without a Scheduled cycle", () => {
+    const request = {
+      requestId: "request-1",
+      headers: {},
+      cartId: "cart-1",
+      cartVersion: 1,
+      addressId: "address-1",
+      deliveryCycleId: null,
+      idempotencyKey: "instant-quote-1",
+    } satisfies CheckoutQuoteCommandRequest;
+
+    expect(request.deliveryCycleId).toBeNull();
   });
 
   it("keeps provider payment references out of membership commands", () => {

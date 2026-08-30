@@ -35,8 +35,15 @@ bounded adapters.
 - Migrated the authorized non-Admin/non-Maps public command routes to bounded parsing and a single
   validated UUID request context that is forwarded to Core and returned in safe success/error
   responses. Admin and Maps routes retain their handed-off transport behavior by explicit scope.
-- Added environment-safe CSP, referrer, MIME-sniffing, framing, permissions, and deployed-only HSTS
-  policy. Production contains no `unsafe-eval`.
+- Added a request-nonce CSP, referrer, MIME-sniffing, framing, permissions, and deployed-only HSTS
+  policy. The supported vinext/Next 16 proxy path applies one cryptographically random nonce to the
+  response policy and every inline RSC/bootstrap script; no environment permits `script-src`
+  `unsafe-inline` or `unsafe-eval`. Live auth, Admin, and Maps/serviceability hydration passes.
+- Closed independent-review blockers: Instant inventory holds now perform an atomic transaction-local
+  availability guard; null-cycle Instant quote selection is reachable through contracts and Web;
+  refund claims fail before reservation when provider infrastructure is unavailable and partial
+  successes advance through `REFUNDED`; Scheduled order snapshots retain the quoted delivery date;
+  and provider webhooks preserve their validated UUID through ingestion and responses.
 - Added separate Core liveness and readiness contracts. Liveness performs no dependency work;
   readiness uses bounded D1/config/provider capability checks and exposes no secrets.
 - Added redacted structured-observability enforcement, explicit Wrangler log/trace sampling, current
@@ -55,6 +62,7 @@ bounded adapters.
 - `apps/web/lib/http/bounded-body.ts`
 - `apps/web/lib/http/request-context.ts`
 - `apps/web/lib/security/headers.ts`
+- `apps/web/proxy.ts`
 - `docs/operations/DEPLOYMENT_RUNBOOK.md`
 
 ## Data and migration impact
@@ -84,15 +92,18 @@ are preserved. Web continues to call Core only through the Service Binding.
 
 - Formatting, naming, migration, catalog, architecture, readiness/security, lint, typecheck, and
   diff checks pass.
-- The complete unit/integration run passes 1,246 tests across 177 files: Contracts 58, validation 2,
-  shared domain 2, Web 445 across 52 files, and Core 737 across 125 files, plus two configuration
-  tests.
+- The complete unit/integration inventory passes 1,260 tests across 197 files: Contracts 59,
+  validation 2, shared domain 2, Web 453 across 52 files, Core 742 across 125 files, and two
+  configuration tests. Core's migration-heavy Worker/D1 fixtures use a bounded ten-second timeout
+  to avoid scheduler-load sensitivity; the full Core run passes 742/742 under that checked-in gate.
 - Core and Web production dry-run builds pass.
-- vinext reports 100% compatibility: 12 supported, zero partial, zero issues.
+- vinext reports 100% compatibility: 14 supported, zero partial, zero issues, including the supported
+  Next 16 `proxy.ts` and `next/server` nonce path.
 - `pnpm audit --audit-level moderate` reports no known vulnerabilities.
-- The deterministic Web/Core/D1 Playwright stack passes 78 browser tests. One Rider empty-state test
-  is an established explicit skip because its auth-email fixture is not configured; the other Rider
-  flows and all Maps, storefront, and Admin transport acceptance in the suite pass.
+- The pre-review deterministic Web/Core/D1 Playwright matrix passed 78 browser tests with one
+  established Rider auth-email skip. After the nonce correction, a dedicated CSP browser test proves
+  a fresh response nonce, matching inline-script nonces, client hydration, and zero CSP violations;
+  authenticated Admin and public Maps/serviceability representatives also pass under that policy.
 - The Web build emits a non-failing chunk-size advisory. This is a performance optimization target,
   not a correctness or compatibility failure.
 

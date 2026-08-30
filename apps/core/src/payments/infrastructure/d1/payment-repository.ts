@@ -749,14 +749,22 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
             : null,
         );
     },
-    succeededRefundSum(intentId: string): Promise<number> {
+    refreshIntentRefundState(intentId: string, now: number): Promise<number> {
       return database
         .prepare(
-          "SELECT COALESCE(SUM(amount_minor),0) AS total FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED'",
+          `UPDATE payment_intent
+           SET status=CASE
+                 WHEN (SELECT COALESCE(SUM(amount_minor),0) FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED') >= amount_minor
+                   THEN 'REFUNDED'
+                 ELSE 'PARTIALLY_REFUNDED'
+               END,
+               version=version+1,
+               updated_at=?
+           WHERE id=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED')`,
         )
-        .bind(intentId)
-        .first<{ total: number }>()
-        .then((row) => row?.total ?? 0);
+        .bind(intentId, now, intentId)
+        .run()
+        .then((result) => result.meta?.changes ?? 0);
     },
   };
 }

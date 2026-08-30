@@ -287,6 +287,11 @@ Web emits a complete environment-safe security policy: CSP defaults and frame/ob
 restrictions, referrer policy, MIME sniffing prevention, least-privilege browser permissions, and
 HSTS only for deployed HTTPS environments. The approved Mapbox worker/image/connect sources stay
 exact. Production CSP never permits `unsafe-eval`.
+Every rendered page receives a cryptographically random request nonce through vinext's supported
+Next 16 proxy path. `script-src` permits self-hosted scripts and only inline scripts carrying that
+nonce; it permits neither `unsafe-inline` nor `unsafe-eval` in any environment. Static Next headers
+do not carry request-varying CSP. Live storefront-auth, Admin, and Maps/serviceability hydration
+flows verify the nonce policy while deployed HTTPS environments alone receive HSTS.
 
 ## MVP Versus Future Scaling
 

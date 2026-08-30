@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
-import { resolveSecurityHeaderEnvironment, webSecurityHeaders } from "./lib/security/headers";
+import { resolveSecurityHeaderEnvironment, webStaticSecurityHeaders } from "./lib/security/headers";
 
-const securityHeaders = webSecurityHeaders(resolveSecurityHeaderEnvironment(process.env));
+const securityHeaders = webStaticSecurityHeaders(resolveSecurityHeaderEnvironment(process.env));
 
 const nextConfig: NextConfig = {
   async headers() {

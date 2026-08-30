@@ -105,19 +105,10 @@ export async function applyVerifiedProviderEvent(
       return result(event, "RETRY_REQUIRED", refund.paymentIntentId, event.canonicalState);
     }
     if (event.canonicalState === "SUCCEEDED") {
-      const intent = await refunds.findIntentById(refund.paymentIntentId);
-      if (intent && intent.status === "SUCCEEDED") {
-        const total = await refunds.succeededRefundSum(intent.id);
-        await refunds
-          .updateIntentStatusCas({
-            intentId: intent.id,
-            expectedVersion: intent.version,
-            fromStatus: "SUCCEEDED",
-            toStatus: total >= intent.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED",
-            now,
-          })
-          .run();
-      }
+      // Recompute from canonical SUCCEEDED refund rows in one guarded SQL
+      // statement. Each concurrent refund completion performs this after its
+      // own refund CAS, so the last writer necessarily sees the final sum.
+      await refunds.refreshIntentRefundState(refund.paymentIntentId, now);
     }
     await finish("APPLIED");
     return result(event, "APPLIED", refund.paymentIntentId, event.canonicalState);
@@ -189,8 +180,10 @@ export async function ingestProviderEvent(
   providerCode: string,
   headers: Headers,
   rawBody: string,
+  requestId: string = crypto.randomUUID(),
 ): Promise<
-  { ok: true; value: ProviderEventResult } | { ok: false; error: { code: string; message: string } }
+  | { ok: true; value: ProviderEventResult }
+  | { ok: false; error: { code: string; message: string; requestId: string } }
 > {
   let provider;
   try {
@@ -201,6 +194,7 @@ export async function ingestProviderEvent(
       error: {
         code: "PAYMENT_PROVIDER_UNCONFIGURED",
         message: `No payment provider is configured for '${providerCode}'`,
+        requestId,
       },
     };
   }
@@ -211,6 +205,7 @@ export async function ingestProviderEvent(
       error: {
         code: "WEBHOOK_VERIFICATION_FAILED",
         message: `Provider event rejected: ${verification.reason}`,
+        requestId,
       },
     };
 
@@ -251,6 +246,7 @@ export async function ingestProviderEvent(
   if (inbox.processingStatus === "APPLIED" || inbox.processingStatus === "DUPLICATE") {
     recordFinancialEvent({
       event: "provider_observation_replayed",
+      requestId,
       scope: "payments.ingest",
       provider: event.provider,
       aggregateId: event.providerEventId,

@@ -13,10 +13,15 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
   transport is composed through bounded auth, catalog, membership, checkout, Payments, Orders, and
   Operations adapters over one cached Core dependency context. Admin and Maps transport remains
   behaviorally pinned in the entrypoint pending its independent owner-approved mechanical move.
-- Auth, payment-webhook, and customer command bodies are byte-bounded before parsing; exact webhook
-  signature text is retained. Web uses one validated UUID correlation ID through Core and back.
-- Web security headers now include a complete CSP and browser hardening policy with deployed-only
-  HSTS. The approved Mapbox worker/image/connect directives are unchanged.
+- Auth, payment-webhook, and authorized non-Maps customer command bodies are byte-bounded before
+  parsing; exact webhook signature text is retained. Web uses one validated UUID correlation ID
+  through Core and back, including provider-webhook ingress. Direct Admin/Maps body reads remain an
+  explicit owner follow-up under the user's exclusion.
+- Web security headers now include a complete request-nonce CSP and browser hardening policy with
+  deployed-only HSTS. vinext receives the same cryptographically random nonce through the supported
+  Next 16 proxy path and applies it to every inline RSC/bootstrap script; no environment permits
+  `script-src` inline/eval wildcards. The approved Mapbox worker/image/connect directives are
+  unchanged, and live auth, Admin, and serviceability hydration passes under the nonce policy.
 - Core liveness is dependency-free; readiness safely probes runtime configuration, D1, payment
   provider code/capabilities, and renewal initiation. Structured telemetry redacts sensitive
   fields, a static security gate blocks unsafe log calls, and both Workers explicitly retain all
@@ -273,7 +278,9 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
   outcomes remain processing with reconciliation rather than being mislabeled failed.
 - Paid Order commitment aborts atomically on a lost Quote or Scheduled-capacity compare-and-swap,
   recording stable finance exceptions. Refund requests reserve captured value with one guarded
-  insert across REQUESTED/APPROVED/PROCESSING/ESCALATED/SUCCEEDED states.
+  insert across REQUESTED/APPROVED/PROCESSING/ESCALATED/SUCCEEDED states. Provider availability is
+  resolved before a new claim, orphaned REQUESTED replays escalate visibly, and successive partial
+  successes recompute the payment aggregate through `REFUNDED`.
 - A production grocery payment provider, production recurring mandates, automatic renewal charging,
   and real-provider retry ownership are not selected or implemented. Existing membership renewal and
   authorization code is a provider-neutral mock-tested seam, not a production billing capability.
@@ -281,6 +288,9 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 ### Checkout and delivery pricing
 
 - Catalog prices are admin-managed. Cart display prices neither lock price nor reserve inventory.
+- Instant quote creation accepts an explicit null cycle and uses a transaction-local D1 guard so
+  concurrent carts cannot hold the same final inventory units. Scheduled commitment preserves the
+  quoted delivery date independently from its cutoff.
 - Core recalculates price, promotions, stock, serviceability, and delivery fee before payment. A
   changed total returns `PRICE_CHANGED` and requires explicit customer acceptance of a new quote.
 - Delivery configuration is versioned per market/location and stores integer minimum and

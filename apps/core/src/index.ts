@@ -950,6 +950,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         this.env.DB,
         buildProviderRegistry(this.runtimeConfiguration()),
         request,
+        id,
       );
     if (path.startsWith("/api/auth"))
       return createAuth(this.env as Env & AuthEnvironment).handler(request);

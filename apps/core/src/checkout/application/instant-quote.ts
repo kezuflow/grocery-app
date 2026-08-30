@@ -227,6 +227,26 @@ export async function createInstantQuote(
           "UPDATE checkout_inventory_holds SET status='EXPIRED', updated_at=? WHERE status='HELD' AND checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?)",
         )
         .bind(now, command.cartId),
+      // The earlier read provides a fast customer-facing failure, but only
+      // this transaction-local guard is authoritative. D1 serializes the
+      // batch, so two carts cannot both insert holds against the same final
+      // usable units after observing availability concurrently.
+      ...[...demandByPool.entries()].map(([poolId, baseQuantity]) =>
+        database
+          .prepare(
+            `INSERT INTO commitment_abort (id)
+             SELECT -6 WHERE NOT EXISTS (
+               SELECT 1 FROM inventory_balance b
+               WHERE b.location_id=? AND b.inventory_pool_id=?
+                 AND b.on_hand - b.reserved - COALESCE((
+                   SELECT SUM(h.quantity) FROM checkout_inventory_holds h
+                   WHERE h.inventory_pool_id=b.inventory_pool_id
+                     AND h.location_id=b.location_id AND h.status='HELD'
+                 ), 0) >= ?
+             )`,
+          )
+          .bind(routing.location_id, poolId, baseQuantity),
+      ),
       repository.insertQuote(
         {
           id: quoteId,
@@ -285,6 +305,12 @@ export async function createInstantQuote(
       const replayed = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
       if (replayed) return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
     }
+    if (message.includes("CHECK constraint failed: id = 0") || message.includes("commitment_abort"))
+      return failure(
+        "INSUFFICIENT_STOCK",
+        "Not enough stock for instant delivery",
+        command.requestId,
+      );
     throw error;
   }
   const stored = await repository.findQuoteById(quoteId);

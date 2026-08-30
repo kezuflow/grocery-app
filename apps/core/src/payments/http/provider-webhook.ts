@@ -15,13 +15,15 @@ export async function handleProviderWebhook(
   database: D1Database,
   registry: PaymentProviderRegistry,
   request: Request,
+  requestId: string,
 ): Promise<Response> {
   const path = new URL(request.url).pathname;
   const match = WEBHOOK_PATH.exec(path);
   if (!match || request.method !== "POST") {
-    return Response.json(
-      { error: { code: "NOT_FOUND", message: "Unknown webhook route" } },
-      { status: 404 },
+    return webhookJson(
+      { error: { code: "NOT_FOUND", message: "Unknown webhook route", requestId } },
+      requestId,
+      404,
     );
   }
   const body = await readBoundedText(request, {
@@ -29,7 +31,11 @@ export async function handleProviderWebhook(
     contentTypes: ["application/json"],
   });
   if (!body.ok) {
-    return Response.json({ ok: false, error: body.error }, { status: body.error.status });
+    return webhookJson(
+      { ok: false, error: { ...body.error, requestId } },
+      requestId,
+      body.error.status,
+    );
   }
   const outcome = await ingestProviderEvent(
     database,
@@ -37,6 +43,7 @@ export async function handleProviderWebhook(
     match[1],
     request.headers,
     body.value,
+    requestId,
   );
   if (!outcome.ok) {
     const status =
@@ -45,7 +52,7 @@ export async function handleProviderWebhook(
         : outcome.error.code === "WEBHOOK_VERIFICATION_FAILED"
           ? 400
           : 500;
-    return Response.json({ ok: false, error: outcome.error }, { status });
+    return webhookJson({ ok: false, error: outcome.error }, requestId, status);
   }
   const status =
     outcome.value.processingStatus === "RETRY_REQUIRED"
@@ -53,5 +60,9 @@ export async function handleProviderWebhook(
       : outcome.value.processingStatus === "REJECTED"
         ? 400
         : 200;
-  return Response.json({ ok: true, value: outcome.value }, { status });
+  return webhookJson({ ok: true, value: outcome.value, requestId }, requestId, status);
+}
+
+function webhookJson(body: unknown, requestId: string, status: number): Response {
+  return Response.json(body, { status, headers: { "x-request-id": requestId } });
 }

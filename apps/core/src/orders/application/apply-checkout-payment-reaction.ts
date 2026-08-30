@@ -68,6 +68,7 @@ export async function applyCheckoutPaymentReaction(
   interface CycleSnapshot {
     cycleId: string;
     cutoffAt: string;
+    deliveryDate: string;
     zoneId: string;
     locationId: string;
     locationName: string;
@@ -207,7 +208,7 @@ export async function applyCheckoutPaymentReaction(
             cycleSnapshot.cycleId,
             cycleSnapshot.zoneId,
             Date.parse(cycleSnapshot.cutoffAt),
-            Date.parse(cycleSnapshot.cutoffAt),
+            Date.parse(cycleSnapshot.deliveryDate),
             JSON.stringify(fulfillment?.sourcingModes ?? []),
             JSON.stringify(quote.deliveryFeeSnapshot),
             now,

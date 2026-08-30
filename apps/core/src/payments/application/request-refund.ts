@@ -62,57 +62,93 @@ export async function requestRefund(
         "Idempotency key was used with a different refund",
         command.requestId,
       );
-    return { ok: true, value: toView(replay), requestId: command.requestId };
+    if (replay.status !== "REQUESTED")
+      return { ok: true, value: toView(replay), requestId: command.requestId };
   }
-  if (!["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(intent.status))
+  if (!replay && !["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(intent.status))
     return failure(
       "ILLEGAL_TRANSITION",
       "Only captured payments can be refunded",
       command.requestId,
     );
 
-  const refundId = crypto.randomUUID();
   const now = Date.now();
-  const claimed = await repository.claimRefundBudget({
-    refundId,
-    intentId: intent.id,
-    amountMinor: command.amountMinor,
-    reason: command.reason,
-    idempotencyKey: command.idempotencyKey,
-    now,
-  });
-  if (!claimed) {
-    const concurrentReplay = await repository.findRefundByIdempotencyKey(command.idempotencyKey);
-    if (concurrentReplay)
-      return { ok: true, value: toView(concurrentReplay), requestId: command.requestId };
-    recordFinancialEvent({
-      event: "refund_budget_rejected",
-      requestId: command.requestId,
-      scope: "refunds.request",
-      aggregateId: intent.id,
-      outcomeCode: "REFUND_AMOUNT_UNAVAILABLE",
-    });
-    return failure(
-      "REFUND_AMOUNT_UNAVAILABLE",
-      "Refund exceeds the currently refundable captured amount",
-      command.requestId,
-    );
-  }
-
-  // The provider reference travels with the captured payment attempt.
+  // Resolve the provider seam before reserving refundable value. A durable
+  // REQUESTED replay is resumed with the same provider idempotency key; if its
+  // seam disappeared, escalate it instead of leaving budget silently claimed.
   const attempt = await database
     .prepare(
       "SELECT provider, provider_reference FROM payment_attempt WHERE payment_intent_id=? ORDER BY created_at DESC LIMIT 1",
     )
     .bind(intent.id)
     .first<{ provider: string; provider_reference: string }>();
-  if (!attempt)
+  if (!attempt) {
+    if (replay)
+      await escalateRequestedRefund(
+        database,
+        repository,
+        replay.id,
+        replay.version,
+        intent.id,
+        "PROVIDER_ATTEMPT_MISSING",
+        now,
+      );
     return failure(
       "CONFIGURATION_ERROR",
       "No provider attempt is linked to this payment",
       command.requestId,
     );
-  const provider = registry.require(attempt.provider);
+  }
+  let provider;
+  try {
+    provider = registry.require(attempt.provider);
+  } catch {
+    if (replay)
+      await escalateRequestedRefund(
+        database,
+        repository,
+        replay.id,
+        replay.version,
+        intent.id,
+        "PAYMENT_PROVIDER_UNCONFIGURED",
+        now,
+      );
+    return failure(
+      "PAYMENT_PROVIDER_UNCONFIGURED",
+      "The captured payment provider is not configured",
+      command.requestId,
+    );
+  }
+
+  const refundId = replay?.id ?? crypto.randomUUID();
+  const requestedVersion = replay?.version ?? 1;
+  if (!replay) {
+    const claimed = await repository.claimRefundBudget({
+      refundId,
+      intentId: intent.id,
+      amountMinor: command.amountMinor,
+      reason: command.reason,
+      idempotencyKey: command.idempotencyKey,
+      now,
+    });
+    if (!claimed) {
+      const concurrentReplay = await repository.findRefundByIdempotencyKey(command.idempotencyKey);
+      if (concurrentReplay)
+        return { ok: true, value: toView(concurrentReplay), requestId: command.requestId };
+      recordFinancialEvent({
+        event: "refund_budget_rejected",
+        requestId: command.requestId,
+        scope: "refunds.request",
+        aggregateId: intent.id,
+        outcomeCode: "REFUND_AMOUNT_UNAVAILABLE",
+      });
+      return failure(
+        "REFUND_AMOUNT_UNAVAILABLE",
+        "Refund exceeds the currently refundable captured amount",
+        command.requestId,
+      );
+    }
+  }
 
   try {
     const outcome = await provider.requestRefund({
@@ -124,7 +160,7 @@ export async function requestRefund(
     if (!outcome.ok) {
       await repository.updateRefundStatusCas({
         refundId,
-        expectedVersion: 1,
+        expectedVersion: requestedVersion,
         fromStatus: "REQUESTED",
         toStatus: "REJECTED",
         now,
@@ -137,7 +173,7 @@ export async function requestRefund(
     }
     const processing = await repository.updateRefundStatusCas({
       refundId,
-      expectedVersion: 1,
+      expectedVersion: requestedVersion,
       fromStatus: "REQUESTED",
       toStatus: "PROCESSING",
       providerRefundReference: outcome.providerRefundReference,
@@ -156,7 +192,7 @@ export async function requestRefund(
     // retrying with a new identity.
     await repository.updateRefundStatusCas({
       refundId,
-      expectedVersion: 1,
+      expectedVersion: requestedVersion,
       fromStatus: "REQUESTED",
       toStatus: "ESCALATED",
       now: Date.now(),
@@ -184,6 +220,30 @@ export async function requestRefund(
       command.requestId,
     );
   }
+}
+
+async function escalateRequestedRefund(
+  database: D1Database,
+  repository: ReturnType<typeof extendPaymentRepositoryForRefunds>,
+  refundId: string,
+  expectedVersion: number,
+  intentId: string,
+  reason: string,
+  now: number,
+): Promise<void> {
+  await repository.updateRefundStatusCas({
+    refundId,
+    expectedVersion,
+    fromStatus: "REQUESTED",
+    toStatus: "ESCALATED",
+    now,
+  });
+  await repository.recordReconciliationCase({
+    intentId,
+    category: "REFUND_UNRESOLVED",
+    detailsJson: JSON.stringify({ refundId, reason }),
+    now,
+  });
 }
 
 function toView(row: RefundRowLike): RefundView {

@@ -208,6 +208,7 @@ Cart `quantity` is an integer count of the configured SKU, never kilograms/liter
 ## Checkout Eligibility and Quote
 
 - `checkout.evaluate({ cartId, addressId, fulfillmentOptionId, promotionCodes? }) -> CheckoutEligibilityView`
+- `checkout.createQuote({ cartId, cartVersion, addressId, deliveryCycleId, idempotencyKey }) -> CheckoutQuoteView`, where `deliveryCycleId: null` selects `INSTANT` and a non-empty cycle identifier selects `SCHEDULED`.
 - `checkout.refreshQuote({ checkoutAttemptId }) -> CheckoutQuoteView`
 
 The view reports each eligibility dimension, explicit financial components, price/availability changes, resolved serviceability, selected `INSTANT`/`SCHEDULED` option, delivery promise, Instant hold status or Scheduled cycle/capacity status, applied/rejected Promotions by price component, and available alternatives. Sensitive location-selection rules remain internal.
@@ -226,6 +227,7 @@ The authoritative service validates authenticated Customer, subscription, cart, 
 Core receives payment provider webhooks through a signed public webhook handler rather than Web RPC:
 
 - verify signature and timestamp;
+- preserve one validated UUID request ID through verification, ingestion logs, and the HTTP response;
 - insert `(provider, providerEventId)` into the durable Payments inbox exactly once;
 - persist only the bounded provider-neutral observation plus payload hash, never the raw webhook body;
 - conditionally lease due `RECEIVED`/`RETRY_REQUIRED` rows so redelivery and scheduled redrive share one application path;
@@ -247,7 +249,7 @@ Stable financial-safety failures include `TRIAL_ENDED`, `SUBSCRIPTION_GRACE_ENDE
 
 `OrderCommitmentResult` is either the existing/new committed order summary or a stable actionable exception. Duplicate requests return the same logical result. If mode-specific inventory/capacity is unavailable before charge, return valid fulfillment alternatives without exposing or asking the customer to select a location. If canonical payment commitment succeeds but the downstream Membership/Order command cannot complete, preserve the payment observation and retry the same idempotent commitment. Bounded failure creates a visible finance/reconciliation exception. A second payment/order and automatic refund are forbidden unless a separately approved recovery command explicitly authorizes them.
 
-For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiring exact-base-unit inventory hold and commitment converts it into a committed reservation. For `SCHEDULED`, commitment uses the selected cycle/window, cutoff, capacity, and configured reservation/demand policy. The committed result snapshots fulfillment mode, resolved location/zone/service area, promise/window/ETA, optional Scheduled cycle identifiers, SKU conversion, Promotions, all monetary components, and the accepted provider-neutral route/delivery-fee calculation.
+For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiring exact-base-unit inventory hold; the transaction-local availability guard prevents concurrent carts from holding the same final units, and commitment converts the winning hold into a committed reservation. For `SCHEDULED`, commitment uses the selected cycle/window, cutoff, capacity, and configured reservation/demand policy. The committed result snapshots fulfillment mode, resolved location/zone/service area, distinct cutoff and delivery instants, promise/window/ETA, optional Scheduled cycle identifiers, SKU conversion, Promotions, all monetary components, and the accepted provider-neutral route/delivery-fee calculation.
 
 ## Customer Orders and Amendments
 

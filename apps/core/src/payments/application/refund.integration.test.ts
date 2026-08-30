@@ -161,6 +161,75 @@ describe("non-synthetic refunds", () => {
     expect(row?.status).not.toBe("SUCCEEDED");
   });
 
+  it("does not reserve refundable value when no provider attempt is available", async () => {
+    const { intentId } = await succeededIntent();
+    await env.DB.prepare("DELETE FROM payment_attempt WHERE payment_intent_id=?")
+      .bind(intentId)
+      .run();
+
+    const result = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));
+
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFIGURATION_ERROR" } });
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_refund WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(row?.count).toBe(0);
+  });
+
+  it("does not reserve refundable value when the captured provider is disabled", async () => {
+    const { intentId } = await succeededIntent();
+    await env.DB.prepare("UPDATE payment_attempt SET provider='disabled' WHERE payment_intent_id=?")
+      .bind(intentId)
+      .run();
+
+    const result = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "PAYMENT_PROVIDER_UNCONFIGURED" },
+    });
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_refund WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(row?.count).toBe(0);
+  });
+
+  it("escalates a replayed REQUESTED refund when its provider seam is unavailable", async () => {
+    const { intentId } = await succeededIntent();
+    const idempotencyKey = `orphan-${crypto.randomUUID()}`;
+    const refundId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 5000, 'PHP', 'REQUESTED', 'orphaned', ?, 1, ?, ?)",
+    )
+      .bind(refundId, intentId, idempotencyKey, Date.now(), Date.now())
+      .run();
+    await env.DB.prepare("DELETE FROM payment_attempt WHERE payment_intent_id=?")
+      .bind(intentId)
+      .run();
+
+    const result = await requestRefund(
+      env.DB,
+      testRegistry(),
+      refundCommand(intentId, { idempotencyKey }),
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFIGURATION_ERROR" } });
+    const row = await env.DB.prepare("SELECT status FROM payment_refund WHERE id=?")
+      .bind(refundId)
+      .first<{ status: string }>();
+    expect(row?.status).toBe("ESCALATED");
+    const reconciliation = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REFUND_UNRESOLVED'",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(reconciliation?.count).toBe(1);
+  });
+
   it("rejects refunds above the captured amount and illegal intent states", async () => {
     const { intentId } = await succeededIntent();
     const over = await requestRefund(
@@ -265,5 +334,73 @@ describe("non-synthetic refunds", () => {
       .bind(intentId)
       .first<{ status: string }>();
     expect(intentRow?.status).toBe("PARTIALLY_REFUNDED");
+  });
+
+  it("advances a partially refunded payment to REFUNDED after the remaining refund succeeds", async () => {
+    const { intentId } = await succeededIntent();
+    const first = await requestRefund(
+      env.DB,
+      testRegistry(),
+      refundCommand(intentId, { amountMinor: 12_000 }),
+    );
+    if (!first.ok) throw new Error(JSON.stringify(first.error));
+    const firstStored = await env.DB.prepare(
+      "SELECT provider_refund_reference FROM payment_refund WHERE id=?",
+    )
+      .bind(first.value.refundId)
+      .first<{ provider_refund_reference: string }>();
+    const firstBody = JSON.stringify({
+      eventId: `evt-${crypto.randomUUID()}`,
+      kind: "refund",
+      refundReference: firstStored!.provider_refund_reference,
+      vendorState: "paid",
+      amountMinor: 12_000,
+      currency: "PHP",
+    });
+    await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      new Headers({
+        "x-mock-signature": await mockSignatureFor(firstBody),
+        "x-mock-timestamp": String(Date.now()),
+      }),
+      firstBody,
+    );
+
+    const second = await requestRefund(
+      env.DB,
+      testRegistry(),
+      refundCommand(intentId, { amountMinor: 8_000 }),
+    );
+    if (!second.ok) throw new Error(JSON.stringify(second.error));
+    const secondStored = await env.DB.prepare(
+      "SELECT provider_refund_reference FROM payment_refund WHERE id=?",
+    )
+      .bind(second.value.refundId)
+      .first<{ provider_refund_reference: string }>();
+    const secondBody = JSON.stringify({
+      eventId: `evt-${crypto.randomUUID()}`,
+      kind: "refund",
+      refundReference: secondStored!.provider_refund_reference,
+      vendorState: "paid",
+      amountMinor: 8_000,
+      currency: "PHP",
+    });
+    await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      new Headers({
+        "x-mock-signature": await mockSignatureFor(secondBody),
+        "x-mock-timestamp": String(Date.now()),
+      }),
+      secondBody,
+    );
+
+    const intent = await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+      .bind(intentId)
+      .first<{ status: string }>();
+    expect(intent?.status).toBe("REFUNDED");
   });
 });

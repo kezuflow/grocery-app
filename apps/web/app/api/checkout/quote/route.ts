@@ -14,7 +14,7 @@ const bodySchema = z.object({
   cartId: z.string().trim().min(1),
   cartVersion: z.coerce.number().int().positive(),
   addressId: z.string().trim().min(1),
-  cycleId: z.string().trim().min(1),
+  cycleId: z.string().trim().min(1).optional(),
 });
 
 export async function POST(request: Request) {
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       cartId: parsed.value.cartId,
       cartVersion: parsed.value.cartVersion,
       addressId: parsed.value.addressId,
-      deliveryCycleId: parsed.value.cycleId,
+      deliveryCycleId: parsed.value.cycleId ?? null,
       idempotencyKey,
     }),
     context.requestId,

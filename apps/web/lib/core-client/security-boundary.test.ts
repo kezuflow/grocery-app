@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import nextConfig from "../../next.config";
-import { resolveSecurityHeaderEnvironment, webSecurityHeaders } from "../security/headers";
+import { resolveSecurityHeaderEnvironment, webStaticSecurityHeaders } from "../security/headers";
 import { requestHeaders } from "./request";
 
 describe("Core client request boundary", () => {
@@ -63,7 +63,7 @@ describe("Core client request boundary", () => {
     expect(configuredHeaders).toEqual([
       {
         source: "/:path*",
-        headers: webSecurityHeaders(resolveSecurityHeaderEnvironment(process.env)),
+        headers: webStaticSecurityHeaders(resolveSecurityHeaderEnvironment(process.env)),
       },
     ]);
 

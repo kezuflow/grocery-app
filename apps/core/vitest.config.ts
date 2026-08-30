@@ -33,6 +33,10 @@ export default defineConfig({
     }),
   ],
   test: {
+    // Migration-heavy Worker/D1 integration fixtures can approach Vitest's
+    // five-second default under full-suite parallel load; retain a bounded
+    // timeout without making those checks scheduler-sensitive.
+    testTimeout: 10_000,
     typecheck: {
       enabled: false,
     },

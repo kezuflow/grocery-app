@@ -272,8 +272,8 @@ export const createCheckoutQuoteSchema = headersRequest.extend({
   cartId: identifierSchema,
   cartVersion: positiveIntegerSchema,
   addressId: identifierSchema,
-  // Absent selects the INSTANT path at an instant-enabled location.
-  deliveryCycleId: identifierSchema.optional(),
+  // Null selects the INSTANT path at an instant-enabled location.
+  deliveryCycleId: identifierSchema.nullable(),
   idempotencyKey: idempotencyKeySchema,
 });
 

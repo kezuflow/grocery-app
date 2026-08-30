@@ -215,6 +215,43 @@ describe("instant checkout quotes", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "INSUFFICIENT_STOCK" } });
   });
 
+  it("atomically allows only one of two carts to hold the final stocked quantity", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE checkout_inventory_holds SET status='EXPIRED' WHERE status='HELD'",
+    ).run();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const firstBasket = await seedBasket({ onHand: 2_500 });
+    const secondBasket = await seedBasket({ onHand: 2_500 });
+
+    const outcomes = await Promise.all([
+      createCheckoutQuote(
+        env.DB,
+        command(firstBasket.customerId, firstBasket.cartId, firstBasket.addressId),
+        quoteDependencies,
+      ),
+      createCheckoutQuote(
+        env.DB,
+        command(secondBasket.customerId, secondBasket.cartId, secondBasket.addressId),
+        quoteDependencies,
+      ),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1);
+    expect(outcomes.find((outcome) => !outcome.ok)).toMatchObject({
+      ok: false,
+      error: { code: "INSUFFICIENT_STOCK" },
+    });
+    const held = await env.DB.prepare(
+      "SELECT COALESCE(SUM(quantity),0) AS quantity FROM checkout_inventory_holds WHERE inventory_pool_id='pool-red-onion' AND location_id=? AND status='HELD'",
+    )
+      .bind(LOCATION)
+      .first<{ quantity: number }>();
+    expect(held?.quantity).toBe(2_500);
+  });
+
   it("re-quotes the same cart without its prior hold consuming the available stock", async () => {
     await configureInstant();
     await env.DB.prepare(

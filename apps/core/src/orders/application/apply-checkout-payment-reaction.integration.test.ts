@@ -265,6 +265,24 @@ describe("order commitment from canonical payment reactions", () => {
       service_fee_minor: 0,
       tax_minor: 0,
     });
+    const quoteSnapshot = await env.DB.prepare(
+      "SELECT cycle_snapshot_json FROM checkout_quote WHERE id=?",
+    )
+      .bind(quote.value.quoteId)
+      .first<{ cycle_snapshot_json: string }>();
+    const fulfillmentSnapshot = await env.DB.prepare(
+      "SELECT cutoff_at, delivery_date FROM order_fulfillment_snapshot WHERE order_id=?",
+    )
+      .bind(outcome.orderId)
+      .first<{ cutoff_at: number; delivery_date: number }>();
+    const expectedCycle = JSON.parse(quoteSnapshot!.cycle_snapshot_json) as {
+      cutoffAt: string;
+      deliveryDate: string;
+    };
+    expect(fulfillmentSnapshot).toEqual({
+      cutoff_at: Date.parse(expectedCycle.cutoffAt),
+      delivery_date: Date.parse(expectedCycle.deliveryDate),
+    });
     const items = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM order_item WHERE order_id=? AND base_quantity=2000",
     )

@@ -3,7 +3,7 @@ import { SELF } from "cloudflare:test";
 
 describe("Worker-local readiness smoke", () => {
   it("returns structured health JSON with the caller request reference", async () => {
-    const requestId = "worker-smoke-health";
+    const requestId = "53eb71a9-03a7-475b-a30d-7fbfb83ddc79";
     const response = await SELF.fetch("https://core.example.invalid/health", {
       headers: { "x-request-id": requestId },
     });
@@ -26,7 +26,7 @@ describe("Worker-local readiness smoke", () => {
   });
 
   it("returns dependency readiness separately from liveness", async () => {
-    const requestId = "worker-smoke-readiness";
+    const requestId = "ec9bb7de-cdd1-4ee8-bf0a-15c3dd4b1a30";
     const response = await SELF.fetch("https://core.example.invalid/ready", {
       headers: { "x-request-id": requestId },
     });

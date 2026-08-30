@@ -10,10 +10,17 @@ const MAPBOX_CONTENT_SECURITY_DIRECTIVES = [
 
 const DEPLOYED_ENVIRONMENTS = new Set<WebRuntimeEnvironment>(["preview", "staging", "production"]);
 
-export function webSecurityHeaders(environment: WebRuntimeEnvironment): WebSecurityHeader[] {
-  const contentSecurityPolicy = [
+export function webContentSecurityPolicy(
+  _environment: WebRuntimeEnvironment,
+  scriptNonce?: string,
+): string {
+  if (!scriptNonce) {
+    throw new Error("SCRIPT_NONCE_REQUIRED");
+  }
+
+  return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    `script-src 'self' 'nonce-${scriptNonce}'`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     ...MAPBOX_CONTENT_SECURITY_DIRECTIVES,
@@ -22,9 +29,16 @@ export function webSecurityHeaders(environment: WebRuntimeEnvironment): WebSecur
     "frame-ancestors 'none'",
     "form-action 'self'",
   ].join("; ");
+}
+
+export function createScriptNonce(randomUuid: () => string = () => crypto.randomUUID()): string {
+  return randomUuid().replaceAll("-", "");
+}
+
+function nonCspSecurityHeaders(environment: WebRuntimeEnvironment): WebSecurityHeader[] {
+  const deployed = DEPLOYED_ENVIRONMENTS.has(environment);
 
   const headers: WebSecurityHeader[] = [
-    { key: "Content-Security-Policy", value: contentSecurityPolicy },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     { key: "X-Content-Type-Options", value: "nosniff" },
     {
@@ -33,7 +47,7 @@ export function webSecurityHeaders(environment: WebRuntimeEnvironment): WebSecur
     },
   ];
 
-  if (DEPLOYED_ENVIRONMENTS.has(environment)) {
+  if (deployed) {
     headers.push({
       key: "Strict-Transport-Security",
       value: "max-age=63072000; includeSubDomains; preload",
@@ -41,6 +55,23 @@ export function webSecurityHeaders(environment: WebRuntimeEnvironment): WebSecur
   }
 
   return headers;
+}
+
+export function webSecurityHeaders(
+  environment: WebRuntimeEnvironment,
+  scriptNonce?: string,
+): WebSecurityHeader[] {
+  return [
+    {
+      key: "Content-Security-Policy",
+      value: webContentSecurityPolicy(environment, scriptNonce),
+    },
+    ...nonCspSecurityHeaders(environment),
+  ];
+}
+
+export function webStaticSecurityHeaders(environment: WebRuntimeEnvironment): WebSecurityHeader[] {
+  return nonCspSecurityHeaders(environment);
 }
 
 export function resolveSecurityHeaderEnvironment(env: {
