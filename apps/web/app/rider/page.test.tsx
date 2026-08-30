@@ -575,8 +575,8 @@ describe("RiderPage batch workflow", () => {
     act(() => secondMount.root.unmount());
   });
 
-  it("reconciles an ambiguous intent when a fresh batch read shows the job vanished", async () => {
-    const current = delivery({ jobId: "vanished", sequence: 1 });
+  it("retains an ambiguous intent through an empty filtered projection and recovers when unchanged job reappears", async () => {
+    const current = delivery({ jobId: "temporarily-absent", sequence: 1 });
     const firstFetch = vi
       .fn()
       .mockResolvedValueOnce(rpc(batches(current)))
@@ -602,8 +602,16 @@ describe("RiderPage batch workflow", () => {
     const storedValues = Array.from({ length: window.sessionStorage.length }, (_, index) =>
       window.sessionStorage.getItem(window.sessionStorage.key(index)!),
     );
-    expect(storedValues.join(" ")).not.toContain(firstKey);
+    expect(storedValues.join(" ")).toContain(firstKey);
     act(() => secondMount.root.unmount());
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(rpc(batches(current))));
+    const thirdMount = await mount();
+    await flush();
+    expect(thirdMount.container.querySelector('[role="status"]')?.textContent).toContain(
+      "Recovered an unfinished delivery update",
+    );
+    act(() => thirdMount.root.unmount());
   });
 
   it.each([
@@ -653,6 +661,49 @@ describe("RiderPage batch workflow", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
     act(() => root.unmount());
   });
+
+  it.each([
+    ["mismatched order identity", "MARK_EN_ROUTE", "order-other", "EN_ROUTE"],
+    ["wrong En Route target", "MARK_EN_ROUTE", "order-semantic", "ARRIVED"],
+    ["wrong Arrived target", "MARK_ARRIVED", "order-semantic", "EN_ROUTE"],
+    ["wrong Delivered target", "MARK_DELIVERED", "order-semantic", "FAILED"],
+    ["wrong Failed target", "MARK_FAILED", "order-semantic", "DELIVERED"],
+    ["unknown target", "MARK_EN_ROUTE", "order-semantic", "TELEPORTED"],
+  ] as const)(
+    "treats semantic success with %s as ambiguous",
+    async (_case, action, returnedId, returnedStatus) => {
+      const current = delivery({
+        jobId: "semantic",
+        sequence: 1,
+        orderId: "order-semantic",
+        allowedActions: [action],
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(rpc(batches(current)))
+        .mockResolvedValueOnce(
+          Response.json({
+            ok: true,
+            value: { id: returnedId, status: returnedStatus },
+            requestId: "command",
+          }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const { container, root } = await mount();
+      await flush();
+
+      act(() =>
+        container.querySelector<HTMLButtonElement>(`[data-rider-action="${action}"]`)!.click(),
+      );
+      await flush();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "result is uncertain",
+      );
+      act(() => root.unmount());
+    },
+  );
 
   it("blocks and announces when a new intent cannot be safely persisted", async () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {

@@ -209,7 +209,34 @@ export function createRiderCommandIntentStore(options?: {
   }
   const inFlight = new Map<string, string>();
 
-  function commit(candidate: StoredIntents): "committed" | "too-large" | "unavailable" {
+  function latestForMutation(): StoredIntents | null {
+    if (!persistent) return intents;
+    if (persistenceBroken) return null;
+    try {
+      const raw = storage!.getItem(STORAGE_KEY);
+      if (!raw) {
+        intents = {};
+        return intents;
+      }
+      const parsed = parseStoredIntents(raw);
+      if (parsed) {
+        intents = parsed;
+        return intents;
+      }
+      try {
+        storage!.removeItem(STORAGE_KEY);
+        intents = {};
+        return intents;
+      } catch {
+        persistenceBroken = true;
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  function write(candidate: StoredIntents): "committed" | "too-large" | "unavailable" {
     const raw = serialize(candidate);
     if (!raw) return "too-large";
     if (persistenceBroken) return "unavailable";
@@ -231,10 +258,12 @@ export function createRiderCommandIntentStore(options?: {
 
   return {
     begin(command: RiderCommandEvidence) {
+      const latest = latestForMutation();
+      if (!latest) {
+        return { status: "blocked" as const, reason: "PERSISTENCE_UNAVAILABLE" as const };
+      }
       const fingerprint = fingerprintFor(command);
-      const existingForJob = Object.values(intents).find(
-        (intent) => intent.jobId === command.jobId,
-      );
+      const existingForJob = Object.values(latest).find((intent) => intent.jobId === command.jobId);
       if (existingForJob && existingForJob.fingerprint !== fingerprint) {
         return { status: "blocked" as const, reason: "UNRESOLVED_JOB_INTENT" as const };
       }
@@ -257,7 +286,7 @@ export function createRiderCommandIntentStore(options?: {
           recovered: true,
         };
       }
-      if (Object.keys(intents).length >= MAX_INTENTS) {
+      if (Object.keys(latest).length >= MAX_INTENTS) {
         return { status: "blocked" as const, reason: "CAPACITY_REACHED" as const };
       }
       const identity = identityFor(command);
@@ -271,7 +300,7 @@ export function createRiderCommandIntentStore(options?: {
       if (parseStoredIntent(identity, intent) === null) {
         return { status: "blocked" as const, reason: "INVALID_EVIDENCE" as const };
       }
-      const result = commit({ ...intents, [identity]: intent });
+      const result = write({ ...latest, [identity]: intent });
       if (result === "too-large") {
         return { status: "blocked" as const, reason: "CAPACITY_REACHED" as const };
       }
@@ -296,25 +325,31 @@ export function createRiderCommandIntentStore(options?: {
       const clearable =
         outcome === "success" || outcome === "stale" || outcome === "idempotency-conflict";
       if (clearable) {
+        const latest = latestForMutation();
+        if (!latest) return { refresh: true };
         const identity = identityFor(command);
-        if (intents[identity]?.fingerprint === fingerprint) {
-          const candidate = { ...intents };
+        if (latest[identity]?.fingerprint === fingerprint) {
+          const candidate = { ...latest };
           delete candidate[identity];
-          commit(candidate);
+          write(candidate);
         }
       }
       return { refresh: clearable || outcome === "processing" };
     },
 
     reconcile(authoritativeJobs: ReadonlyArray<RiderAuthoritativeJob>) {
+      const observed = intents;
+      const latest = latestForMutation();
+      if (!latest) return { cleared: 0, retained: Object.keys(intents).length };
       const byJobId = new Map(authoritativeJobs.map((job) => [job.jobId, job]));
-      const candidate = { ...intents };
-      const originalCount = Object.keys(intents).length;
+      const candidate = { ...latest };
+      const originalCount = Object.keys(latest).length;
       let changed = false;
-      for (const [identity, intent] of Object.entries(intents)) {
+      for (const [identity, intent] of Object.entries(observed)) {
+        if (latest[identity]?.fingerprint !== intent.fingerprint) continue;
         const job = byJobId.get(intent.jobId);
+        if (!job) continue;
         const unchanged =
-          job &&
           job.orderId === intent.orderId &&
           job.expectedVersion === intent.expectedVersion &&
           job.status === intent.status &&
@@ -327,7 +362,7 @@ export function createRiderCommandIntentStore(options?: {
           changed = true;
         }
       }
-      if (changed && commit(candidate) !== "committed") {
+      if (changed && write(candidate) !== "committed") {
         return { cleared: 0, retained: Object.keys(intents).length };
       }
       return {

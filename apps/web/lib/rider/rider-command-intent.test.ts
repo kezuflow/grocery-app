@@ -249,7 +249,6 @@ describe("rider command intent store", () => {
   });
 
   it.each([
-    ["vanished", []],
     ["version advanced", [{ ...command, expectedVersion: 8 }]],
     ["status advanced", [{ ...command, status: "EN_ROUTE" }]],
     ["action set changed", [{ ...command, allowedActions: ["MARK_FAILED"] }]],
@@ -263,6 +262,143 @@ describe("rider command intent store", () => {
 
     expect(reconcile(store, jobs)).toEqual({ cleared: 1, retained: 0 });
     expect(store.hasRecoverable(command)).toBe(false);
+  });
+
+  it("retains an unresolved intent when the filtered projection omits its job", () => {
+    const storage = memoryStorage();
+    const store = createRiderCommandIntentStore({ storage, createKey: () => "uuid-1" });
+    store.begin(command);
+    store.settle(command, "ambiguous");
+
+    expect(reconcile(store, [])).toEqual({ cleared: 0, retained: 1 });
+    expect(store.hasRecoverable(command)).toBe(true);
+    expect(reconcile(store, [command])).toEqual({ cleared: 0, retained: 1 });
+    expect(store.begin(command)).toMatchObject({
+      status: "started",
+      idempotencyKey: "delivery-uuid-1",
+      recovered: true,
+    });
+  });
+
+  it("retains absence but clears once a reappearing job proves changed state", () => {
+    let sequence = 0;
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => `uuid-${++sequence}`,
+    });
+    store.begin(command);
+    store.settle(command, "ambiguous");
+
+    expect(reconcile(store, [])).toEqual({ cleared: 0, retained: 1 });
+    const changed = {
+      ...command,
+      expectedVersion: 8,
+      status: "EN_ROUTE",
+      allowedActions: ["MARK_ARRIVED"] as const,
+    };
+    expect(reconcile(store, [changed])).toEqual({ cleared: 1, retained: 0 });
+    expect(store.begin({ ...changed, action: "MARK_ARRIVED" })).toMatchObject({
+      status: "started",
+      idempotencyKey: "delivery-uuid-2",
+      recovered: false,
+    });
+  });
+
+  it("rebases a late terminal clear and preserves another store's newer intent", () => {
+    const storage = memoryStorage();
+    const storeA = createRiderCommandIntentStore({ storage, createKey: () => "uuid-a" });
+    const jobA = { ...command, jobId: "job-a", orderId: "order-a" };
+    storeA.begin(jobA);
+    const storeB = createRiderCommandIntentStore({ storage, createKey: () => "uuid-b" });
+    const jobB = { ...command, jobId: "job-b", orderId: "order-b" };
+    storeB.begin(jobB);
+
+    storeA.settle(jobA, "success");
+
+    const reloaded = createRiderCommandIntentStore({ storage, createKey: () => "unused" });
+    expect(reloaded.hasRecoverable(jobA)).toBe(false);
+    expect(reloaded.hasRecoverable(jobB)).toBe(true);
+  });
+
+  it("rebases late reconciliation and preserves another store's newer intent", () => {
+    const storage = memoryStorage();
+    const jobA = { ...command, jobId: "job-a", orderId: "order-a" };
+    const storeA = createRiderCommandIntentStore({ storage, createKey: () => "uuid-a" });
+    storeA.begin(jobA);
+    storeA.settle(jobA, "ambiguous");
+    const storeB = createRiderCommandIntentStore({ storage, createKey: () => "uuid-b" });
+    const jobB = { ...command, jobId: "job-b", orderId: "order-b" };
+    storeB.begin(jobB);
+
+    reconcile(storeA, [{ ...jobA, expectedVersion: 8 }, jobB]);
+
+    const reloaded = createRiderCommandIntentStore({ storage, createKey: () => "unused" });
+    expect(reloaded.hasRecoverable(jobA)).toBe(false);
+    expect(reloaded.hasRecoverable(jobB)).toBe(true);
+  });
+
+  it("rebases late admission and preserves intents admitted by another store", () => {
+    const storage = memoryStorage();
+    const jobA = { ...command, jobId: "job-a", orderId: "order-a" };
+    const storeA = createRiderCommandIntentStore({ storage, createKey: () => "uuid-a" });
+    storeA.begin(jobA);
+    const storeB = createRiderCommandIntentStore({ storage, createKey: () => "uuid-b" });
+    const jobB = { ...command, jobId: "job-b", orderId: "order-b" };
+    storeB.begin(jobB);
+    const jobC = { ...command, jobId: "job-c", orderId: "order-c" };
+
+    expect(storeA.begin(jobC)).toMatchObject({ status: "started" });
+
+    const reloaded = createRiderCommandIntentStore({ storage, createKey: () => "unused" });
+    expect(reloaded.hasRecoverable(jobA)).toBe(true);
+    expect(reloaded.hasRecoverable(jobB)).toBe(true);
+    expect(reloaded.hasRecoverable(jobC)).toBe(true);
+  });
+
+  it("never lets a stale terminal result clear a newer mismatched fingerprint", () => {
+    const storage = memoryStorage();
+    const oldCommand = { ...command, jobId: "shared-job", orderId: "shared-order" };
+    const storeA = createRiderCommandIntentStore({ storage, createKey: () => "uuid-old" });
+    storeA.begin(oldCommand);
+    storeA.settle(oldCommand, "ambiguous");
+    const storeB = createRiderCommandIntentStore({ storage, createKey: () => "uuid-new" });
+    storeB.settle(oldCommand, "success");
+    const changed = {
+      ...oldCommand,
+      action: "MARK_ARRIVED" as const,
+      expectedVersion: 8,
+      status: "EN_ROUTE",
+      allowedActions: ["MARK_ARRIVED"] as const,
+    };
+    storeB.begin(changed);
+
+    storeA.settle(oldCommand, "success");
+
+    const reloaded = createRiderCommandIntentStore({ storage, createKey: () => "unused" });
+    expect(reloaded.hasRecoverable(changed)).toBe(true);
+  });
+
+  it("never lets stale reconciliation clear a newer mismatched fingerprint", () => {
+    const storage = memoryStorage();
+    const oldCommand = { ...command, jobId: "shared-job", orderId: "shared-order" };
+    const storeA = createRiderCommandIntentStore({ storage, createKey: () => "uuid-old" });
+    storeA.begin(oldCommand);
+    storeA.settle(oldCommand, "ambiguous");
+    const storeB = createRiderCommandIntentStore({ storage, createKey: () => "uuid-new" });
+    storeB.settle(oldCommand, "success");
+    const changed = {
+      ...oldCommand,
+      action: "MARK_ARRIVED" as const,
+      expectedVersion: 8,
+      status: "EN_ROUTE",
+      allowedActions: ["MARK_ARRIVED"] as const,
+    };
+    storeB.begin(changed);
+
+    reconcile(storeA, [oldCommand]);
+
+    const reloaded = createRiderCommandIntentStore({ storage, createKey: () => "unused" });
+    expect(reloaded.hasRecoverable(changed)).toBe(true);
   });
 
   it("falls back to memory when storage is unavailable before initialization", () => {

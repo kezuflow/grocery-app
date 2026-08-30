@@ -50,6 +50,13 @@ const ACTION_LABELS: Record<RiderAction, string> = {
   MARK_FAILED: "Failed",
 };
 
+const ACTION_TARGET_STATUS: Record<RiderAction, string> = {
+  MARK_EN_ROUTE: "EN_ROUTE",
+  MARK_ARRIVED: "ARRIVED",
+  MARK_DELIVERED: "DELIVERED",
+  MARK_FAILED: "FAILED",
+};
+
 function displayStatus(status: string): string {
   return status.replaceAll("_", " ").toLowerCase();
 }
@@ -93,7 +100,10 @@ function hasStringDetails(value: unknown): boolean {
   );
 }
 
-function parseRiderCommandResult(value: unknown): RiderCommandResult {
+function parseRiderCommandResult(
+  value: unknown,
+  command: RiderCommandEvidence,
+): RiderCommandResult {
   if (!isRecord(value) || typeof value.ok !== "boolean") throw new Error("invalid envelope");
   if (value.ok === true) {
     if (
@@ -102,7 +112,9 @@ function parseRiderCommandResult(value: unknown): RiderCommandResult {
       !isRecord(value.value) ||
       !hasOnlyKeys(value.value, ["id", "status"]) ||
       !isNonEmptyString(value.value.id) ||
-      !isNonEmptyString(value.value.status)
+      !isNonEmptyString(value.value.status) ||
+      value.value.id !== command.orderId ||
+      value.value.status !== ACTION_TARGET_STATUS[command.action]
     )
       throw new Error("invalid success envelope");
     return {
@@ -223,7 +235,7 @@ export default function RiderPage() {
           body: JSON.stringify({ orderId: delivery.orderId, action }),
         },
       );
-      const result = parseRiderCommandResult(await response.json());
+      const result = parseRiderCommandResult(await response.json(), evidence);
       const outcome = result.ok
         ? "success"
         : result.error?.code === "STALE_VERSION"
