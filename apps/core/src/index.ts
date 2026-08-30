@@ -1,7 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type AppErrorCode,
-  CONTRACT_VERSION,
   type AuthContextRequest,
   type AuthRequest,
   type AuthResponse,
@@ -33,11 +32,8 @@ import {
   addressSearchRequestSchema,
   addressUpdateRequestSchema,
   authenticatedRequestSchema,
-  catalogProductRequestSchema,
-  catalogSearchRequestSchema,
   createCheckoutQuoteSchema,
   createPaymentIntentSchema,
-  marketplaceHomeRequestSchema,
   refreshCheckoutQuoteSchema,
   checkoutRequestSchema,
   deliveryCommandSchema,
@@ -52,24 +48,13 @@ import {
 import { createCheckoutPaymentIntent } from "./payments/application/create-checkout-payment-intent";
 import { adjustInventory as adjustInventoryCommand } from "./inventory/application/adjust-inventory";
 import { handleProviderWebhook } from "./payments/http/provider-webhook";
-import { startPromotionalTrial as startPromotionalTrialCommand } from "./membership/application/start-promotional-trial";
-import { getSubscriptionEligibility } from "./membership/application/subscription-eligibility";
 import { drizzle } from "drizzle-orm/d1";
 import { log, requestId } from "./observability";
-import { applicationContext } from "./auth/authorization";
 import { createAuth, type AuthEnvironment } from "./auth/service";
-import { iamSchema } from "./iam/schema";
 import { resolveServiceability } from "./geography/serviceability";
 import { buildGeocoderPort } from "./geography/infrastructure/runtime-geocoder";
 import { GeocoderError } from "./geography/infrastructure/mapbox-geocoder";
 import { activeMarketCode } from "./geography/market-defaults";
-import {
-  CatalogValidationError,
-  getMarketplaceHome,
-  getProduct,
-  listCategories,
-  searchCatalog,
-} from "./catalog/service";
 import { listDeliveryCycles as listDeliveryCyclesQuery } from "./commerce/cycle-queries";
 import {
   getCart as getCartQuery,
@@ -226,9 +211,12 @@ import {
   changeAdminMembership as changeAdminMembershipCommand,
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
 } from "./admin/application/finance-commands";
-import { CoreContext } from "./entrypoint/context";
-import { coreRuntimeConfiguration } from "./runtime/runtime-configuration";
+import { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
+import { createCoreRpcContext } from "./entrypoint/context";
+import { createAuthRpc } from "./entrypoint/auth-rpc";
+import { createCatalogRpc } from "./entrypoint/catalog-rpc";
+import { createMembershipRpc } from "./entrypoint/membership-rpc";
 import { buildRoutePreviewPort } from "./geography/infrastructure/runtime-route-preview";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
 import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
@@ -948,77 +936,7 @@ const issueActionSchema = authenticatedRequestSchema.extend({
   idempotencyKey: idempotencyKeySchema,
 });
 
-export function buildHealthResponse(env: Env): CoreHealthResponse {
-  const configuredEnvironment = env.ENVIRONMENT as string | undefined;
-  const environment =
-    configuredEnvironment === "test" ? "development" : (configuredEnvironment ?? "unknown");
-  return {
-    service: "core",
-    status: "ok",
-    contractVersion: CONTRACT_VERSION,
-    environment,
-    databaseBindingConfigured: Boolean(env.DB),
-    timestamp: new Date().toISOString(),
-  };
-}
-
-export async function buildReadinessResponse(env: Env): Promise<CoreReadinessResponse> {
-  let environment: string = env.ENVIRONMENT ?? "unconfigured";
-  let runtimeConfiguration: "ready" | "not_ready" = "not_ready";
-  let paymentProvider: CoreReadinessResponse["checks"]["paymentProvider"] = {
-    status: "not_ready",
-    code: null,
-    capabilities: [],
-    renewalInitiationEnabled: false,
-  };
-  try {
-    const runtime = coreRuntimeConfiguration(env);
-    environment = runtime.environment === "test" ? "development" : runtime.environment;
-    runtimeConfiguration = "ready";
-    const code = selectedPaymentProviderCode(runtime);
-    const provider = code ? buildProviderRegistry(runtime).get(code) : null;
-    paymentProvider = {
-      status: provider ? "ready" : "not_ready",
-      code: provider?.code ?? null,
-      capabilities: provider
-        ? [
-            "PAYMENT_CREATE",
-            "RECURRING_AUTHORIZATION",
-            "WEBHOOK_VERIFICATION",
-            "PAYMENT_LOOKUP",
-            "REFUND_REQUEST",
-          ]
-        : [],
-      renewalInitiationEnabled: runtime.renewals.initiationEnabled,
-    };
-  } catch {
-    // Readiness is a safe deployment signal. Configuration details stay in
-    // controlled startup/deployment logs and never cross this public DTO.
-  }
-
-  let database: "ready" | "not_ready" = "not_ready";
-  try {
-    if (env.DB) {
-      const probe = await env.DB.prepare("SELECT 1 AS ready").first<{ ready: number }>();
-      if (probe?.ready === 1) database = "ready";
-    }
-  } catch {
-    // Do not expose provider errors, database identifiers, or query details.
-  }
-
-  const checks = { runtimeConfiguration, database, paymentProvider } as const;
-  return {
-    service: "core",
-    status:
-      runtimeConfiguration === "ready" && database === "ready" && paymentProvider.status === "ready"
-        ? "ready"
-        : "not_ready",
-    contractVersion: CONTRACT_VERSION,
-    environment,
-    checks,
-    timestamp: new Date().toISOString(),
-  };
-}
+export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 
 /**
  * Worker transport and dependency composition only. Every RPC validates its
@@ -1027,8 +945,15 @@ export async function buildReadinessResponse(env: Env): Promise<CoreReadinessRes
  * domain behavior lives beside its context, never here.
  */
 export class CoreEntrypoint extends WorkerEntrypoint<Env> {
-  private readonly runtimeConfiguration = () => coreRuntimeConfiguration(this.env);
-  private readonly context = new CoreContext(this.env as Env & AuthEnvironment, systemClock);
+  private readonly rpcContext = createCoreRpcContext(
+    this.env as Env & AuthEnvironment,
+    systemClock,
+  );
+  private readonly runtimeConfiguration = this.rpcContext.runtimeConfiguration;
+  private readonly context = this.rpcContext.access;
+  private readonly authRpc = createAuthRpc(this.rpcContext);
+  private readonly catalogRpc = createCatalogRpc(this.rpcContext);
+  private readonly membershipRpc = createMembershipRpc(this.rpcContext);
 
   async fetch(request: Request): Promise<Response> {
     const id = requestId(request);
@@ -1080,22 +1005,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return response;
   }
   async auth(input: AuthRequest): Promise<AuthResponse> {
-    const request = new Request(input.url, {
-      method: input.method,
-      headers: new Headers(input.headers),
-      body:
-        input.body && input.method !== "GET" && input.method !== "HEAD" ? input.body : undefined,
-    });
-    return serializeAuthResponse(
-      await createAuth(this.env as Env & AuthEnvironment).handler(request),
-    );
+    return this.authRpc.auth(input);
   }
   async getApplicationContext(input: AuthContextRequest) {
-    return applicationContext(
-      createAuth(this.env as Env & AuthEnvironment),
-      drizzle(this.env.DB, { schema: iamSchema }),
-      input,
-    );
+    return this.authRpc.getApplicationContext(input);
   }
   async getAdminContext(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
     const validation = authenticatedRequestSchema.safeParse(input);
@@ -2158,53 +2071,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     }
   }
   async searchCatalog(input: import("@freshmarkets/contracts").CatalogSearchRequest) {
-    const validation = catalogSearchRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    try {
-      return {
-        ok: true as const,
-        value: await searchCatalog(this.env.DB, input),
-        requestId: input.requestId,
-      };
-    } catch (error) {
-      if (error instanceof CatalogValidationError)
-        return fail("VALIDATION_FAILED", error.message, input.requestId);
-      throw error;
-    }
+    return this.catalogRpc.searchCatalog(input);
   }
   async getMarketplaceHome(input: import("@freshmarkets/contracts").MarketplaceHomeRequest) {
-    const validation = marketplaceHomeRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    try {
-      return {
-        ok: true as const,
-        value: await getMarketplaceHome(this.env.DB, input),
-        requestId: input.requestId,
-      };
-    } catch (error) {
-      if (error instanceof CatalogValidationError)
-        return fail("VALIDATION_FAILED", error.message, input.requestId);
-      throw error;
-    }
+    return this.catalogRpc.getMarketplaceHome(input);
   }
   async getCatalogProduct(input: import("@freshmarkets/contracts").CatalogProductRequest) {
-    const validation = catalogProductRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return {
-      ok: true as const,
-      value: await getProduct(this.env.DB, input.slug, input.locationId),
-      requestId: input.requestId,
-    };
+    return this.catalogRpc.getCatalogProduct(input);
   }
   async listCategories(input: RequestMeta) {
-    return {
-      ok: true as const,
-      value: await listCategories(this.env.DB),
-      requestId: input.requestId,
-    };
+    return this.catalogRpc.listCategories(input);
   }
 
   async createCustomerAddress(
@@ -2260,18 +2136,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   async startTrial(input: import("@freshmarkets/contracts").StartTrialRequest) {
-    const validation = authenticatedRequestSchema
-      .extend({ idempotencyKey: idempotencyKeySchema })
-      .safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return startPromotionalTrialCommand(this.env.DB, {
-      customerId: customer.value.customerId,
-      idempotencyKey: input.idempotencyKey!,
-      requestId: input.requestId,
-    });
+    return this.membershipRpc.startTrial(input);
   }
   async beginRecurringAuthorization(
     input: import("@freshmarkets/contracts").BeginRecurringAuthorizationRequest,
@@ -2331,12 +2196,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,
   ) {
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return getSubscriptionEligibility(this.env.DB, {
-      ...input,
-      customerId: customer.value.customerId,
-    });
+    return this.membershipRpc.getSubscriptionEligibility(input);
   }
   async listDeliveryCycles(input: import("@freshmarkets/contracts").DeliveryCycleRequest) {
     return listDeliveryCyclesQuery(
@@ -2685,13 +2545,4 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
-async function serializeAuthResponse(response: Response): Promise<AuthResponse> {
-  const headers: Array<readonly [string, string]> = [];
-  response.headers.forEach((value, key) => {
-    if (key.toLowerCase() !== "set-cookie") headers.push([key, value]);
-  });
-  for (const cookie of response.headers.getSetCookie?.() ?? [])
-    headers.push(["set-cookie", cookie]);
-  return { status: response.status, headers, body: await response.text() };
-}
 export default CoreEntrypoint;

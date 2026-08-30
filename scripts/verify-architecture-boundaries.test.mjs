@@ -58,6 +58,16 @@ test("rejects payment-provider adapters outside Payments", () => {
   );
 });
 
+test("allows the explicit runtime provider-readiness composition root", () => {
+  assert.deepEqual(
+    analyzeSourceFile(
+      "apps/core/src/runtime/readiness.ts",
+      'import { buildProviderRegistry } from "../payments/infrastructure/providers/runtime-providers";',
+    ),
+    [],
+  );
+});
+
 test("rejects SQL execution from entrypoint composition", () => {
   assert.equal(
     violation(

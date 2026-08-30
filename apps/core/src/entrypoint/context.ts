@@ -6,6 +6,10 @@ import { applicationContext, hasOperationalScope } from "../auth/authorization";
 import { createAuth, type AuthEnvironment } from "../auth/service";
 import { iamSchema } from "../iam/schema";
 import {
+  coreRuntimeConfiguration,
+  type CoreRuntimeConfiguration,
+} from "../runtime/runtime-configuration";
+import {
   activeFulfillmentLocationId,
   activeMarketCode,
   fulfillmentLocationMarketId,
@@ -133,6 +137,28 @@ export class CoreContext {
 
 export function createCoreContext(env: Env & AuthEnvironment, clock?: Clock): CoreContext {
   return new CoreContext(env, clock);
+}
+
+/** Stable dependency composition shared by bounded RPC transport adapters. */
+export type CoreRpcContext = Readonly<{
+  env: Env & AuthEnvironment;
+  access: CoreContext;
+  auth: ReturnType<typeof createAuth>;
+  iamDatabase: ReturnType<typeof drizzle<typeof iamSchema>>;
+  runtimeConfiguration: () => CoreRuntimeConfiguration;
+}>;
+
+export function createCoreRpcContext(
+  env: Env & AuthEnvironment,
+  clock: Clock = systemClock,
+): CoreRpcContext {
+  return {
+    env,
+    access: createCoreContext(env, clock),
+    auth: createAuth(env),
+    iamDatabase: drizzle(env.DB, { schema: iamSchema }),
+    runtimeConfiguration: () => coreRuntimeConfiguration(env),
+  };
 }
 
 export type { AuthenticatedCustomer, SessionUser };
