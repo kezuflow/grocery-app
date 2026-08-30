@@ -241,7 +241,7 @@ Cart, subscriptions, checkout, procurement, or physical inventory balances.
 
 ### Purpose
 
-Add commerce customer state, paid membership semantics, and the introductory promotional entitlement required for purchase eligibility.
+Add commerce customer state, paid membership semantics, and the introductory promotional entitlement required for Scheduled purchase eligibility.
 
 ### Dependencies
 
@@ -250,14 +250,14 @@ Phases 1–3.
 ### Domain/application work
 
 - Customer profile and address domain.
-- One paid membership offer at PHP 299.00 per calendar billing month.
+- One paid calendar-month membership offer with a global effective-dated price/currency and per-Subscription agreed-price snapshot. Ordinary price changes apply only to new Subscriptions.
 - Subscription aggregate, canonical lifecycle/eligibility policy, scheduled-cancellation metadata, and guarded lifecycle commands.
 - Promotions-owned one-per-customer introductory grant/redemption that permits `TRIALING` for exactly one calendar billing month. Calculate in the Market business timezone, clamp to the target month's final valid day when necessary, and persist UTC instants.
 - Membership reaction ports for canonical Payments outcomes; no payment-provider payload or vendor state enters Membership.
 
 ### D1/data changes
 
-- Customer/address/membership-offer/subscription tables and indexes.
+- Customer/address/membership-offer/global-price-version/subscription tables and indexes, including agreed price version/amount/currency on Subscription.
 - The minimal promotion definition, grant, and redemption persistence required for the introductory membership trial. Membership offers contain no `trial_days` authority.
 
 ### RPC/contracts
@@ -267,7 +267,7 @@ Phases 1–3.
 
 ### Web/UI work
 
-- Account, addresses, paid membership offer, introductory promotion terms, billing state, scheduled-cancellation state, and gated purchase messaging.
+- Account, addresses, current paid membership offer, introductory promotion terms, agreed billing state, scheduled-cancellation state, and Scheduled-only gated purchase messaging.
 
 ### Cloudflare resources
 
@@ -332,11 +332,11 @@ Phases 2–5.
 
 ### Domain/application work
 
-- Versioned cart, quote, eligibility policy, minimum basket, price revalidation, provider-neutral route distance, versioned integer delivery fee, and promotion seam. Cart prices are advisory and have no guarantee countdown.
+- Versioned cart, quote, mode-aware eligibility policy, minimum basket, price revalidation, provider-neutral route distance, versioned integer delivery fee, global effective-dated Instant Service Fee (`FLAT`/`PERCENTAGE`/`MIXED`), and promotion seam. Cart prices are advisory and have no guarantee countdown.
 
 ### D1/data changes
 
-- Cart, cart-item, checkout-attempt, quote snapshot, delivery-fee configuration and immutable delivery-calculation snapshot tables.
+- Cart, cart-item, checkout-attempt, quote snapshot, delivery-fee configuration, global Service Fee configuration, and immutable delivery/Service-Fee calculation snapshot tables.
 
 ### RPC/contracts
 
@@ -344,7 +344,7 @@ Phases 2–5.
 
 ### Web/UI work
 
-- Cart, address/cycle context, quote breakdown, subscription gate, and checkout readiness states.
+- Cart, address/cycle context, quote breakdown, Instant FreshMarkets Service Fee, Scheduled subscription gate, and checkout readiness states.
 
 ### Cloudflare resources
 
@@ -352,7 +352,7 @@ Phases 2–5.
 
 ### Tests and acceptance
 
-- Every eligibility condition, price changes requiring explicit total re-acceptance, unavailable SKU, expired quote, stale cart, cycle cutoff, route timeout/NoRoute/malformed/missing configuration, integer minimum/per-kilometer fee, and subscription gate.
+- Every eligibility condition, Instant-without-membership and Scheduled membership gate, price or Service Fee changes requiring explicit total re-acceptance, unavailable SKU, expired quote, stale cart, cycle cutoff, route timeout/NoRoute/malformed/missing configuration, and exact integer delivery/Service-Fee calculations.
 
 ### Not in this phase
 

@@ -99,11 +99,11 @@ A task-focused operational identity, normally also linked to an authenticated us
 
 ### MembershipOffer
 
-The current commercial membership is a single paid offer priced at PHP 299.00 (`29900` minor units) per calendar billing month. An offer defines the recurring membership fee and billing interval; it does not embed trial entitlement. A free trial is not a separate zero-price plan and is never inferred from an offer field such as `trial_days`.
+The current commercial membership is one paid calendar-month offer with one global effective-dated price and currency. An active price version applies to new Subscriptions; each Subscription snapshots its agreed price-version identity, amount, and currency at enrollment and retains those terms until a separately authorized migration with advance notice. An ordinary price change never reprices existing Subscriptions. An offer does not embed trial entitlement. A free trial is not a separate zero-price plan and is never inferred from an offer field such as `trial_days`.
 
 ### Subscription
 
-A recurring membership agreement separate from individual orders. Its canonical states are `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`; `STATE_MACHINES.md` is authoritative for legal transitions. Only `TRIALING`, `ACTIVE`, and `PAST_DUE` inside its grace window may be checkout-eligible, and effective timestamps still apply.
+A recurring membership agreement separate from individual orders. Its canonical states are `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`; `STATE_MACHINES.md` is authoritative for legal transitions. Only `TRIALING`, `ACTIVE`, and `PAST_DUE` inside its grace window may authorize `SCHEDULED` checkout, and effective timestamps still apply. `INSTANT` checkout does not require a Subscription.
 
 `CANCELED` and `EXPIRED` are distinct terminal states. `CANCELED` records intentional termination by a customer, staff member, policy, or an effective scheduled cancellation. `EXPIRED` records entitlement that naturally ended without continuation. Cancel-at-period-end is intent metadata (`cancelAtPeriodEnd`, `scheduledCancellationAt`/`endsAt`) while the subscription remains in its currently entitled state; an explicit time-driven command transitions it to `CANCELED` at the effective instant.
 
@@ -115,7 +115,7 @@ Introductory-trial abuse policy: one introductory trial per application customer
 
 Calendar-month calculation uses the Market's configured business timezone. Core converts the activation instant to that timezone, adds one calendar month while preserving local wall-clock time, clamps a day that does not exist in the target month to that month's final valid day, then persists `trialStartsAt` and `trialEndsAt` as UTC instants. For the The current release market this timezone is `Asia/Manila`. A fixed 14-day or 30-day duration is not equivalent.
 
-Invariant: authentication alone never permits purchase. Core must resolve the Customer and validate subscription eligibility during checkout commitment.
+Invariant: authentication alone identifies the customer but does not bypass Core commerce policy. Core resolves the Customer for every checkout and validates Subscription eligibility at quote, payment revalidation, and commitment only when the resolved fulfillment mode is `SCHEDULED`; authenticated `INSTANT` commerce is pay-as-you-go.
 
 Paid activation requires a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. Payment initiation, a browser return, or a vendor status copied directly into Membership cannot activate a paid subscription. For the current release, a provider's captured/success outcome maps through its adapter to canonical Payments `SUCCEEDED`, after which an explicit idempotent Membership command may transition the subscription.
 
@@ -172,7 +172,7 @@ An editable pre-commit basket associated with a customer/market. A customer has 
 An application orchestration, not a database entity exposed to UI. The authoritative eligibility service validates:
 
 - authenticated Customer;
-- eligible subscription;
+- eligible subscription for `SCHEDULED`; no membership requirement for `INSTANT`;
 - cart and current SKU availability;
 - current pricing and minimum merchandise amount;
 - address coordinates and active service area/zone;
@@ -181,9 +181,12 @@ An application orchestration, not a database entity exposed to UI. The authorita
 - for `SCHEDULED`, an eligible cycle/window, cutoff, concurrency-safe capacity, and demand/procurement policy;
 - promotion eligibility/stacking;
 - current provider-neutral road-route distance and the effective versioned market/location delivery-fee configuration;
+- for `INSTANT`, the one effective global FreshMarkets Service Fee configuration for the quote currency;
 - payment readiness.
 
-A quote is time/version-bound and must be recalculated before payment from current prices, discounts, stock, serviceability, route distance, delivery-fee configuration, and mode-specific eligibility. If the current total differs from the customer-accepted total, payment is not created and the customer must explicitly accept the replacement quote. Its financial breakdown keeps merchandise subtotal, item discount, order discount, delivery fee, delivery discount, service fee where applicable, tax where applicable, and final total as distinct integer-minor-unit components.
+A quote is time/version-bound and must be recalculated before payment from current prices, discounts, stock, serviceability, route distance, delivery-fee configuration, mode-specific membership eligibility, and the active `INSTANT` Service Fee configuration where applicable. If the current total or fee evidence differs from the customer-accepted quote, payment is not created and the customer must explicitly accept the replacement quote. Its financial breakdown keeps merchandise subtotal, item discount, order discount, delivery fee, delivery discount, Service Fee where applicable, tax where applicable, pre-Service-Fee total, and final total as distinct integer-minor-unit components.
+
+The FreshMarkets Service Fee is an application charge, not a payment-provider processing fee. One global effective-dated configuration supports `FLAT`, `PERCENTAGE`, and `MIXED`. It applies only to `INSTANT`; `SCHEDULED` has no Service Fee because membership governs that model. The percentage basis is the complete payable amount before the Service Fee: merchandise subtotal minus item and order discounts, plus delivery subtotal minus delivery discount, plus tax. Percentage uses integer basis points and rounds upward to the next minor unit when fractional; `MIXED` adds the flat component. Quote and Order snapshots preserve the configuration ID/version, inputs, base, and exact result.
 
 Delivery pricing is versioned per market/fulfillment location and stores a minimum fee and per-kilometer rate in integer minor units. Core computes `ceil(routeDistanceMeters * perKilometerRateMinor / 1000)` and applies the configured minimum. Route failure or missing configuration fails checkout closed. Domain snapshots store distance meters, rates, calculated fee, configuration version, and provider-neutral road-route/driving metadata; they never store adapter-specific vocabulary.
 
@@ -207,7 +210,7 @@ Payments is a bounded context separate from Membership and Orders. `PaymentInten
 
 A provider adapter translates provider states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; The current release treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state. If an Order reaction fails after success is observed, Payments preserves that observation and Core retries the same idempotent commitment. Bounded failure creates a reconciliation exception; no second payment/order or automatic refund is inferred.
 
-Checkout entitlement is one executable Membership policy evaluated at an exact instant. `TRIALING` requires an unexpired `trialEndsAt`; `ACTIVE` uses the current paid period and is not invalidated by a historical trial timestamp; `PAST_DUE` requires an unexpired grace timestamp. Quote and commitment share this policy. The market minimum applies to pre-discount merchandise subtotal only: delivery, service fees, and tax never satisfy it.
+Scheduled checkout entitlement is one executable Membership policy evaluated at an exact instant. `TRIALING` requires an unexpired `trialEndsAt`; `ACTIVE` uses the current paid period and is not invalidated by a historical trial timestamp; `PAST_DUE` requires an unexpired grace timestamp. Scheduled quote, payment revalidation, and commitment share this policy; Instant skips it. The market minimum applies to pre-discount merchandise subtotal only: delivery, Service Fees, and tax never satisfy it.
 
 Provider-side payment and recurring-authorization creation are resumable commands. Core claims application idempotency before an external side effect, durably stores any unexpired redirect/SDK continuation, and returns that same continuation on identical replay. A thrown provider call or a provider-accepted result whose local persistence is uncertain remains `INITIATED`/`PROCESSING` with reconciliation evidence; it is never converted to definitive `FAILED` without authoritative evidence.
 

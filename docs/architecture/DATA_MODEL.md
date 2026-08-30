@@ -92,11 +92,12 @@ Customer or Staff invitation records coordinate application provisioning but nev
 
 ## Subscriptions
 
-- `membership_offers(id PK, code UNIQUE, name, membership_fee_minor, currency, billing_interval, status, version)`
-- `subscriptions(id PK, customer_id FK, offer_id FK, state, trial_starts_at NULL, trial_ends_at NULL, billing_starts_at NULL, current_period_starts_at NULL, current_period_ends_at NULL, next_billing_at NULL, paused_at NULL, resume_at NULL, cancel_at_period_end, cancellation_requested_at NULL, scheduled_cancellation_at NULL, ended_at NULL, version, created_at, updated_at)`
+- `membership_offers(id PK, code UNIQUE, name, membership_fee_minor compatibility seed, currency compatibility seed, billing_interval, status, version)`
+- `membership_price_versions(id PK, offer_id FK, amount_minor, currency, effective_from, effective_to NULL, version, created_by_staff_id NULL, created_at)`
+- `subscriptions(id PK, customer_id FK, offer_id FK, agreed_price_version_id FK, agreed_amount_minor, agreed_currency, state, trial_starts_at NULL, trial_ends_at NULL, billing_starts_at NULL, current_period_starts_at NULL, current_period_ends_at NULL, next_billing_at NULL, paused_at NULL, resume_at NULL, cancel_at_period_end, cancellation_requested_at NULL, scheduled_cancellation_at NULL, ended_at NULL, version, created_at, updated_at)`
 - `subscription_events(id PK, subscription_id FK, type, occurred_at, payment_id NULL, promotion_redemption_id NULL, metadata_json, idempotency_key UNIQUE NULL)`
 
-The current active offer is PHP `29900` minor units per `CALENDAR_MONTH`. Offers do not contain `trial_days` or another field that grants trial eligibility. The subscription vocabulary is exactly `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`; `CANCELED` and `EXPIRED` are terminal.
+Exactly one global membership price version is current for the paid `CALENDAR_MONTH` offer. Price versions are effective-dated and non-overlapping. Enrollment copies the selected price-version ID, amount, and currency to the Subscription; renewal reads only that agreed snapshot. Closing the current range and adding a new version changes new-enrollment pricing without rewriting existing Subscriptions. Offers do not contain `trial_days` or another field that grants trial eligibility. The subscription vocabulary is exactly `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`; `CANCELED` and `EXPIRED` are terminal.
 
 `cancel_at_period_end` and `scheduled_cancellation_at` represent cancellation intent without prematurely changing an entitled state. When the scheduled instant arrives, a guarded command transitions the aggregate to `CANCELED`. `ended_at` records the actual terminal transition instant.
 
@@ -133,18 +134,19 @@ The launch implementation adds normalized detail and SKU-level availability stor
 ## Delivery Pricing, Scheduled Cycles, and Capacity
 
 - `delivery_fee_configurations(id PK, market_id FK, location_id FK, currency, minimum_delivery_fee_minor, per_kilometer_rate_minor, status ACTIVE|RETIRED, version, effective_from, effective_to NULL, created_at, updated_at, UNIQUE(location_id, version))`
+- `service_fee_configurations(id PK, fee_type FLAT|PERCENTAGE|MIXED, flat_minor, percentage_basis_points, currency, effective_from, effective_to NULL, version, created_by_staff_id NULL, reason, created_at)`
 - `delivery_cycles(id PK, market_id FK, code, order_open_at, cutoff_at, procurement_start_at, receiving_start_at, packing_start_at, dispatch_at, delivery_start_at, delivery_end_at, status, version, UNIQUE(market_id, code))`
 - `delivery_cycle_zones(cycle_id FK, zone_id FK, location_id FK, capacity_limit, allocated_count, status, version, PRIMARY KEY(cycle_id, zone_id, location_id))`
 - `capacity_allocations(id PK, cycle_id FK, zone_id FK, location_id FK, checkout_attempt_id FK, order_id FK NULL, units, status, expires_at NULL, created_at, UNIQUE(checkout_attempt_id), UNIQUE(order_id))`
 
-Delivery-fee configuration applies to both modes and is selected by effective market/location version. Money and rates use integers; Core derives the fee from provider-neutral road-route meters and snapshots the selected configuration and calculation. Cycle/capacity tables apply only to `SCHEDULED`. Capacity commitment uses a conditional update (`allocated_count + requested <= capacity_limit`) and allocation insert in one D1 transactional batch. Temporary capacity holds, if used, have short expiry and an idempotent cleanup command; current release should prefer allocating at the latest safe payment boundary to minimize hold complexity. `INSTANT` never receives a fabricated cycle row.
+Delivery-fee configuration applies to both modes and is selected by effective market/location version. The FreshMarkets Service Fee has one global effective-dated current configuration and applies only to `INSTANT`; its currency must match the Quote currency. `FLAT` stores a positive flat amount and zero basis points, `PERCENTAGE` stores zero flat amount and positive basis points, and `MIXED` stores both positive components. Money and rates use integers; Core derives and snapshots each selected configuration and calculation. Cycle/capacity tables apply only to `SCHEDULED`. Capacity commitment uses a conditional update (`allocated_count + requested <= capacity_limit`) and allocation insert in one D1 transactional batch. Temporary capacity holds, if used, have short expiry and an idempotent cleanup command; current release should prefer allocating at the latest safe payment boundary to minimize hold complexity. `INSTANT` never receives a fabricated cycle row.
 
 ## Cart and Checkout Attempts
 
 - `carts(id PK, customer_id FK, market_id FK, status, version, created_at, updated_at)`
 - `cart_items(id PK, cart_id FK, sku_id FK, quantity_sellable, UNIQUE(cart_id, sku_id))`
 - `checkout_attempts(id PK, customer_id FK, cart_id FK, address_id FK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, fulfillment_configuration_id FK, quote_version, status, idempotency_key UNIQUE, expires_at, version, created_at, updated_at)` with `cycle_id` required only for `SCHEDULED`.
-- `checkout_quote_snapshots(id PK, checkout_attempt_id FK, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, service_fee_minor, tax_minor, final_total_minor, currency, item_snapshot_json, promotion_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, eligibility_snapshot_json, created_at)`
+- `checkout_quote_snapshots(id PK, checkout_attempt_id FK, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, tax_minor, pre_service_fee_total_minor, service_fee_minor, service_fee_configuration_id FK NULL, service_fee_snapshot_json NULL, final_total_minor, currency, item_snapshot_json, promotion_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, eligibility_snapshot_json, created_at)`
 - `inventory_holds(id PK, checkout_attempt_id FK, inventory_pool_id FK, location_id FK, quantity_base, status, expires_at, converted_reservation_id FK NULL, version, created_at, UNIQUE(checkout_attempt_id, inventory_pool_id))` for `INSTANT` stock-backed attempts.
 
 Cart rows create no authoritative hold, capacity, reservation, or demand. `INSTANT` checkout-attempt creation/refresh may atomically create or replace expiring `inventory_holds`; commitment converts valid holds into committed reservations exactly once. `SCHEDULED` capacity and demand/reservation effects follow the cycle policy.
@@ -153,7 +155,7 @@ Core provisions first-touch carts through the partial unique active-cart index, 
 
 ## Orders and Amendments
 
-- `orders(id PK, order_number UNIQUE, customer_id FK, market_id FK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, fulfillment_configuration_id FK, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, service_fee_minor, tax_minor, final_total_minor, currency, address_snapshot_json, fulfillment_promise_snapshot_json, delivery_fee_snapshot_json, cycle_snapshot_json NULL, fulfillment_context_snapshot_json, committed_at, version, created_at, updated_at)`
+- `orders(id PK, order_number UNIQUE, customer_id FK, market_id FK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, fulfillment_configuration_id FK, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, tax_minor, pre_service_fee_total_minor, service_fee_minor, service_fee_configuration_id FK NULL, service_fee_snapshot_json NULL, final_total_minor, currency, address_snapshot_json, fulfillment_promise_snapshot_json, delivery_fee_snapshot_json, cycle_snapshot_json NULL, fulfillment_context_snapshot_json, committed_at, version, created_at, updated_at)`
 - `order_items(id PK, order_id FK, sku_id FK NULL, inventory_pool_id FK NULL, product_name_snapshot, sku_code_snapshot, sku_label_snapshot, sell_quantity_snapshot, sell_unit_snapshot_json, quantity_sellable, inventory_quantity_base_each, quantity_base_total, unit_price_minor, item_discount_minor, order_discount_allocation_minor, line_total_minor, sourcing_mode_snapshot, tax_snapshot_json NULL)`
 - `order_amendments(id PK, original_order_id FK, amendment_number, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, service_fee_minor, tax_minor, final_total_minor, currency, committed_at NULL, version, UNIQUE(original_order_id, amendment_number))`
 - `order_amendment_items(...)` with the same historical line snapshot semantics.
@@ -166,7 +168,7 @@ use the immutable Order ID as their explicit legacy display identity rather than
 inventing a number. Delivery map detail may continue to expose null for those
 historical rows.
 
-Indexes: customer/committed time, unique payment intent/attempt commitment, optional cycle/status, fulfillment mode/location/status. Order fulfillment, route/delivery-fee calculation, SKU conversion, Promotion, and financial-component snapshots are immutable after commitment; corrections use amendments, adjustment records, and events. Changing fulfillment or delivery-price configuration, cadence, units, SKU size, price, or Promotion later does not rewrite history.
+Indexes: customer/committed time, unique payment intent/attempt commitment, optional cycle/status, fulfillment mode/location/status. Order fulfillment, route/delivery-fee calculation, Instant Service Fee calculation, SKU conversion, Promotion, and financial-component snapshots are immutable after commitment; corrections use amendments, adjustment records, and events. Changing fulfillment, delivery-price or Service Fee configuration, cadence, units, SKU size, price, or Promotion later does not rewrite history.
 
 ## Payments and Refunds
 

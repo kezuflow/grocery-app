@@ -288,6 +288,19 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 ### Checkout and delivery pricing
 
 - Catalog prices are admin-managed. Cart display prices neither lock price nor reserve inventory.
+- Instant checkout is authenticated pay-as-you-go and no longer requires membership. Scheduled quote,
+  payment revalidation, and commitment retain the exact-instant Membership entitlement gate.
+- Migration `0048_membership_and_service_fee.sql` adds one global effective-dated Membership price
+  stream, agreed price snapshots on Subscriptions, and one global effective-dated Instant-only
+  FreshMarkets Service Fee configuration. Existing Subscriptions retain their agreed amount and
+  currency; ordinary price changes affect only new enrollment.
+- The Service Fee supports `FLAT`, `PERCENTAGE`, and `MIXED`; the percentage basis is the complete
+  payable amount before the Service Fee and uses exact integer ceiling arithmetic. Quotes and Orders
+  snapshot its configuration and calculation. Payment-time revalidation returns `PRICE_CHANGED`
+  when fee evidence is stale. Scheduled checkout records no Service Fee.
+- Core publishes global-scope `memberships.read`/`memberships.manage` and
+  `payments.read`/`payments.manage` configuration RPCs. The separate Admin Dashboard UI workstream is
+  unchanged.
 - Instant quote creation accepts an explicit null cycle and uses a transaction-local D1 guard so
   concurrent carts cannot hold the same final inventory units. Scheduled commitment preserves the
   quoted delivery date independently from its cutoff.
