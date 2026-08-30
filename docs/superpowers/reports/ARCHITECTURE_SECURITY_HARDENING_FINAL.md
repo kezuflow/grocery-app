@@ -12,10 +12,11 @@ non-Maps scope. FreshMarkets remains a two-Worker Cloudflare modular monolith: W
 BFF and Core remains the sole application, authorization, D1, provider, and lifecycle authority.
 No microservice, public business HTTP API, Durable Object, Workflow, KV, or Queue was introduced.
 
-The work made the intended boundaries executable, bounded public request bodies, unified request
-correlation, completed Web security headers, separated liveness from dependency readiness, added
-safe observability checks, regenerated Worker binding types, and reduced the Core entrypoint by
-moving non-excluded RPC transport groups into bounded adapters.
+The work made the intended boundaries executable, bounded public request bodies in the authorized
+non-Admin/non-Maps route families, unified request correlation, completed Web security headers,
+separated liveness from dependency readiness, added safe observability checks, regenerated Worker
+binding types, and reduced the Core entrypoint by moving non-excluded RPC transport groups into
+bounded adapters.
 
 ## Implemented work
 
@@ -31,8 +32,9 @@ moving non-excluded RPC transport groups into bounded adapters.
   or schema ownership.
 - Added incremental byte-bounded request readers with early `Content-Length`, media-type, malformed
   body, multibyte, streaming overflow, and exact webhook-body coverage.
-- Migrated public command routes to bounded parsing and a single validated UUID request context that
-  is forwarded to Core and returned in safe success/error responses.
+- Migrated the authorized non-Admin/non-Maps public command routes to bounded parsing and a single
+  validated UUID request context that is forwarded to Core and returned in safe success/error
+  responses. Admin and Maps routes retain their handed-off transport behavior by explicit scope.
 - Added environment-safe CSP, referrer, MIME-sniffing, framing, permissions, and deployed-only HSTS
   policy. Production contains no `unsafe-eval`.
 - Added separate Core liveness and readiness contracts. Liveness performs no dependency work;
@@ -107,6 +109,9 @@ the hardening was limited to mechanical transport/header compatibility and unuse
 - The original decomposition plan proposed extracting Admin and Maps RPC transports too. The user
   explicitly excluded those simultaneous programs, so their methods remain in the Core entrypoint.
   `apps/core/src/index.ts` is therefore 2,355 lines rather than a fully forwarding-only shell.
+- Admin and Maps route families still contain handed-off direct `request.json()` calls. They were not
+  rewritten in this program because doing so would edit the explicitly excluded surfaces; they remain
+  a bounded-body follow-up for their respective owners.
 - The complete Customer MVP program remains separate and unimplemented. Membership customer UX,
   checkout promotion redemption, customer order detail/timeline/reorder/issues, abandonment and
   cancellation availability, additive amendments, durable notifications, invoice readiness, and
