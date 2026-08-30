@@ -118,6 +118,43 @@ export type DeliveryBatchView = {
   completedAt: string | null;
 };
 
+/** Immutable assigned-stop projection for the authenticated canonical Rider. */
+export type RiderDeliveryView = {
+  jobId: string;
+  stopId: string;
+  orderId: string;
+  sequence: number;
+  status: DeliveryJobState;
+  destination: {
+    coordinate: Coordinate | null;
+    displayAddress: string;
+    recipient: string;
+    phone: string;
+    instructions: DeliveryInstructions;
+  };
+  jobVersion: number;
+  stopVersion: number;
+  /** Legal Rider actions for the current stop; upcoming stops expose none. */
+  allowedActions: ReadonlyArray<
+    "MARK_EN_ROUTE" | "MARK_ARRIVED" | "MARK_DELIVERED" | "MARK_FAILED"
+  >;
+};
+
+/** One assigned operational batch in its exact immutable fulfillment context. */
+export type RiderBatchView = {
+  batchId: string;
+  locationId: string;
+  status: "ASSIGNED" | "DISPATCHED" | "IN_PROGRESS" | "EXCEPTION";
+  version: number;
+  currentDelivery: RiderDeliveryView | null;
+  upcomingDeliveries: ReadonlyArray<RiderDeliveryView>;
+} & (
+  | { fulfillmentMode: "INSTANT"; cycleId: null }
+  | { fulfillmentMode: "SCHEDULED"; cycleId: string }
+);
+
+export type RiderBatchList = { batches: ReadonlyArray<RiderBatchView> };
+
 type DeliveryDispatchContext = { locationId: string } & (
   | { fulfillmentMode: "INSTANT"; cycleId: null }
   | { fulfillmentMode: "SCHEDULED"; cycleId: string }

@@ -35,6 +35,7 @@ import type {
   EligibleRiderView,
   EligibleRidersRequest,
   PreviewDeliveryBatchRouteRequest,
+  RiderBatchList,
 } from "./delivery-maps";
 
 type Equal<Left, Right> =
@@ -100,12 +101,19 @@ describe("domain-grouped core services", () => {
         (request: CreateAndAssignDeliveryBatchRequest) => Promise<RpcResult<DeliveryBatchView>>
       >
     >;
+    type RiderBatchesSignature = Expect<
+      Equal<
+        CoreServiceBinding["getRiderBatches"],
+        (request: import("./index").AuthenticatedRequest) => Promise<RpcResult<RiderBatchList>>
+      >
+    >;
 
     void (true as MapSignature);
     void (true as DetailSignature);
     void (true as RidersSignature);
     void (true as PreviewSignature);
     void (true as CreateSignature);
+    void (true as RiderBatchesSignature);
     expect(true).toBe(true);
   });
 

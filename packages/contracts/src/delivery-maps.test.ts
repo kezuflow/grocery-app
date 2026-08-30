@@ -14,6 +14,9 @@ import type {
   EligibleRidersRequest,
   OrderedDeliveryVersion,
   PreviewDeliveryBatchRouteRequest,
+  RiderBatchList,
+  RiderBatchView,
+  RiderDeliveryView,
 } from "./index";
 
 type Equal<Left, Right> =
@@ -69,6 +72,105 @@ type ExpectedCreateAndAssignRequest = AuthenticatedRequest & {
 };
 
 describe("delivery map and atomic dispatch contracts", () => {
+  it("keeps the rider batch and immutable current-delivery shapes exact", () => {
+    type ExpectedRiderDeliveryView = {
+      jobId: string;
+      stopId: string;
+      orderId: string;
+      sequence: number;
+      status: import("./states").DeliveryJobState;
+      destination: {
+        coordinate: Coordinate | null;
+        displayAddress: string;
+        recipient: string;
+        phone: string;
+        instructions: {
+          buildingUnit: string | null;
+          landmark: string | null;
+          gateGuard: string | null;
+          deliveryNote: string | null;
+          recipientInstruction: string | null;
+        };
+      };
+      jobVersion: number;
+      stopVersion: number;
+      allowedActions: ReadonlyArray<
+        "MARK_EN_ROUTE" | "MARK_ARRIVED" | "MARK_DELIVERED" | "MARK_FAILED"
+      >;
+    };
+    type ExpectedRiderBatchView = {
+      batchId: string;
+      locationId: string;
+      status: "ASSIGNED" | "DISPATCHED" | "IN_PROGRESS" | "EXCEPTION";
+      version: number;
+      currentDelivery: RiderDeliveryView | null;
+      upcomingDeliveries: ReadonlyArray<RiderDeliveryView>;
+    } & (
+      | { fulfillmentMode: "INSTANT"; cycleId: null }
+      | { fulfillmentMode: "SCHEDULED"; cycleId: string }
+    );
+    type ExpectedRiderBatchList = { batches: ReadonlyArray<RiderBatchView> };
+
+    type ExactDelivery = Expect<Equal<RiderDeliveryView, ExpectedRiderDeliveryView>>;
+    type ExactBatch = Expect<Equal<RiderBatchView, ExpectedRiderBatchView>>;
+    type ExactList = Expect<Equal<RiderBatchList, ExpectedRiderBatchList>>;
+
+    void (true as ExactDelivery);
+    void (true as ExactBatch);
+    void (true as ExactList);
+    expect(true).toBe(true);
+  });
+
+  it("exposes only immutable rider delivery fields and Core-derived actions", () => {
+    const delivery: RiderDeliveryView = {
+      jobId: "job-1",
+      stopId: "stop-1",
+      orderId: "order-1",
+      sequence: 2,
+      status: "ARRIVED",
+      destination: {
+        coordinate: { latitude: 10.3157, longitude: 123.8854 },
+        displayAddress: "1 Mango Avenue, Cebu City, Cebu, 6000, PH",
+        recipient: "Alex D.",
+        phone: "+639171234567",
+        instructions: {
+          buildingUnit: "Unit 2",
+          landmark: "Blue gate",
+          gateGuard: null,
+          deliveryNote: "Call on arrival",
+          recipientInstruction: null,
+        },
+      },
+      jobVersion: 7,
+      stopVersion: 5,
+      allowedActions: ["MARK_DELIVERED", "MARK_FAILED"],
+    };
+    const batch: RiderBatchView = {
+      batchId: "batch-1",
+      locationId: "location-1",
+      fulfillmentMode: "SCHEDULED",
+      cycleId: "cycle-1",
+      status: "IN_PROGRESS",
+      version: 3,
+      currentDelivery: delivery,
+      upcomingDeliveries: [{ ...delivery, jobId: "job-2", sequence: 3, allowedActions: [] }],
+    };
+    const list: RiderBatchList = { batches: [batch] };
+
+    expect(list.batches[0]?.currentDelivery?.jobVersion).toBe(7);
+    expect(list.batches[0]?.upcomingDeliveries[0]?.sequence).toBe(3);
+    void ({
+      ...delivery,
+      // @ts-expect-error Rider delivery DTOs never expose raw immutable snapshot JSON.
+      addressSnapshotJson: "{}",
+    } satisfies RiderDeliveryView);
+    void ({
+      ...delivery,
+      // @ts-expect-error Rider reads never accept or expose authentication user IDs.
+      riderAuthUserId: "auth-user-1",
+    } satisfies RiderDeliveryView);
+  });
+
   it("keeps the approved pin and ordered command shapes exact", () => {
     type ExactPin = Expect<Equal<DeliveryMapPin, ExpectedDeliveryMapPin>>;
     type ExactDetail = Expect<Equal<DeliveryMapDetail, ExpectedDeliveryMapDetail>>;

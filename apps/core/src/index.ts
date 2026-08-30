@@ -95,6 +95,7 @@ import {
   allowedDeliveryActions,
 } from "./delivery/application/list-delivery-dispatch";
 import { listRiderJobs } from "./delivery/application/list-rider-jobs";
+import { getRiderBatches as getRiderBatchesQuery } from "./delivery/application/get-rider-batches";
 import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
 import { getDeliveryMap as getDeliveryMapQuery } from "./delivery/application/get-delivery-map";
 import { getDeliveryMapDetail as getDeliveryMapDetailQuery } from "./delivery/application/get-delivery-map-detail";
@@ -2536,6 +2537,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       value: { jobs: await listRiderJobs(this.env.DB, { riderAuthUserId: session.id }) },
       requestId: input.requestId,
     };
+  }
+
+  /** Assigned operational batches for the authenticated active canonical Rider. */
+  async getRiderBatches(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const session = await this.context.session(input);
+    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
+    return getRiderBatchesQuery(this.env.DB, {
+      riderAuthUserId: session.id,
+      requestId: input.requestId,
+    });
   }
 
   /**

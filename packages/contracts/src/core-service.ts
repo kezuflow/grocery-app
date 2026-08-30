@@ -34,6 +34,7 @@ import type {
   EligibleRiderView,
   EligibleRidersRequest,
   PreviewDeliveryBatchRouteRequest,
+  RiderBatchList,
 } from "./delivery-maps";
 
 /**
@@ -97,6 +98,10 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   createAndAssignDeliveryBatch(
     request: CreateAndAssignDeliveryBatchRequest,
   ): Promise<RpcResult<DeliveryBatchView>>;
+  /** Assigned operational batches for the authenticated active canonical Rider. */
+  getRiderBatches(
+    request: import("./index").AuthenticatedRequest,
+  ): Promise<RpcResult<RiderBatchList>>;
 }
 
 export type { AdminFoundationService } from "./admin-foundation";
