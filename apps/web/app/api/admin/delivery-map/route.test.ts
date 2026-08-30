@@ -318,6 +318,32 @@ describe("GET /api/admin/delivery-map", () => {
     });
   });
 
+  it("rejects an oversized physical pin array before traversing any entry", async () => {
+    let deepEntryReads = 0;
+    const oversizedPins = new Proxy(
+      Array.from({ length: 251 }, (_, index) => mapPin(`job-${index.toString().padStart(4, "0")}`)),
+      {
+        get(target, property, receiver) {
+          if (typeof property === "string" && /^\d+$/.test(property)) deepEntryReads += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    core.getDeliveryMap.mockResolvedValue({
+      ok: true,
+      value: mapPage(oversizedPins, null, { totalCount: 251 }),
+      requestId: "core-map-oversized-page",
+    });
+    const response = await getMap(
+      new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+    expect(deepEntryReads).toBe(0);
+  });
+
   it("forwards one generated request identity, only safe headers, Instant context, and optional filters", async () => {
     const response = await getMap(
       new Request(
@@ -861,6 +887,34 @@ describe("/api/admin/delivery-batches", () => {
       ok: false,
       error: { code: "INTERNAL_ERROR" },
     });
+  });
+
+  it("rejects an oversized physical Rider array before traversing any entry", async () => {
+    let deepEntryReads = 0;
+    const oversizedRiders = new Proxy(
+      Array.from({ length: 201 }, (_, index) =>
+        rider(`rider-${index.toString().padStart(4, "0")}`),
+      ),
+      {
+        get(target, property, receiver) {
+          if (typeof property === "string" && /^\d+$/.test(property)) deepEntryReads += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    core.getEligibleRiders.mockResolvedValue({
+      ok: true,
+      value: riderPage(oversizedRiders, null, { totalCount: 201 }),
+      requestId: "core-riders-oversized-page",
+    });
+    const response = await getRiders(
+      new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+    expect(deepEntryReads).toBe(0);
   });
 
   it("GET calls only getEligibleRiders with exact Instant context", async () => {

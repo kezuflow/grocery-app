@@ -6,6 +6,7 @@ import type {
   DeliveryMapRequest,
 } from "@freshmarkets/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
+import { eligibleRiderReadSql } from "./get-eligible-riders";
 
 const core = exports.default as unknown as CoreServiceBinding;
 const CENTRAL = "location-cebu-central";
@@ -576,6 +577,24 @@ describe("scoped delivery map reads", () => {
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
+  it("uses set-based Rider workload aggregates with constant source scans", async () => {
+    for (const hasCursor of [false, true]) {
+      const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${eligibleRiderReadSql(hasCursor)}`)
+        .bind(...(hasCursor ? ["rider-cursor", 201] : [201]))
+        .all<{ detail: string }>();
+      const details = plan.results.map((row) => row.detail);
+      expect(details.some((detail) => /CORRELATED SCALAR SUBQUERY/i.test(detail))).toBe(false);
+      const batchAccesses = details.filter((detail) =>
+        /\b(?:SCAN|SEARCH) (?:delivery_batch|batch)\b/i.test(detail),
+      );
+      const deliveryAccesses = details.filter((detail) =>
+        /\b(?:SCAN|SEARCH) (?:delivery_job|job)\b/i.test(detail),
+      );
+      expect(batchAccesses).toHaveLength(1);
+      expect(deliveryAccesses).toHaveLength(1);
+    }
+  });
+
   it("traverses every delivery and Rider page exactly once using immutable canonical IDs", async () => {
     const statements: D1PreparedStatement[] = [];
     for (let index = 0; index < 1_001; index += 1) {
@@ -606,14 +625,45 @@ describe("scoped delivery map reads", () => {
         ),
       );
     }
-    for (let index = 0; index < 501; index += 1) {
+    for (let index = 0; index < 1_997; index += 1) {
       const suffix = index.toString().padStart(4, "0");
       statements.push(
         env.DB.prepare(
           "INSERT INTO rider_identity (id, staff_id, auth_user_id, display_name, preferred_location_id, status, version, created_at, updated_at) VALUES (?, NULL, NULL, ?, NULL, 'ACTIVE', 1, ?, ?)",
         ).bind(
           `page-rider-${suffix}`,
-          `Page Rider ${(500 - index).toString().padStart(4, "0")}`,
+          `Page Rider ${(1_996 - index).toString().padStart(4, "0")}`,
+          NOW,
+          NOW,
+        ),
+      );
+    }
+    for (let index = 0; index < 5_000; index += 1) {
+      const suffix = index.toString().padStart(4, "0");
+      const riderSuffix = (index % 1_997).toString().padStart(4, "0");
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, rider_id, status, context_resolution_status, version, created_at, updated_at) VALUES (?, 'SCHEDULED', ?, ?, ?, ?, 'ASSIGNED', 'RESOLVED', 1, ?, ?)",
+        ).bind(
+          `workload-batch-${suffix}`,
+          CYCLE,
+          CENTRAL,
+          ZONE,
+          `page-rider-${riderSuffix}`,
+          NOW,
+          NOW,
+        ),
+        env.DB.prepare(
+          "INSERT INTO delivery_job (id, order_id, batch_id, sequence, cycle_id, fulfillment_mode, location_id, zone_id, rider_id, status, context_resolution_status, address_snapshot_json, version, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 'SCHEDULED', ?, ?, ?, 'ASSIGNED', 'RESOLVED', ?, 1, ?, ?)",
+        ).bind(
+          `workload-job-${suffix}`,
+          `workload-order-${suffix}`,
+          `workload-batch-${suffix}`,
+          CYCLE,
+          CENTRAL,
+          ZONE,
+          `page-rider-${riderSuffix}`,
+          addressSnapshot,
           NOW,
           NOW,
         ),
@@ -652,9 +702,14 @@ describe("scoped delivery map reads", () => {
       core.getDeliveryMap(scheduledRequest({ cursor: "not-an-opaque-cursor" })),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
-    const riderIds: string[] = [];
+    const riderViews: Array<{
+      riderId: string;
+      openBatchCount: number;
+      openDeliveryCount: number;
+    }> = [];
     let riderCursor: string | undefined;
     let riderRevision: string | undefined;
+    const riderTraversalStartedAt = performance.now();
     for (let page = 0; page < 10; page += 1) {
       const result = await core.getEligibleRiders(
         scheduledRequest(riderCursor ? { cursor: riderCursor } : {}),
@@ -663,17 +718,26 @@ describe("scoped delivery map reads", () => {
       if (!result.ok) return;
       riderRevision ??= result.value.projectionRevision;
       expect(result.value.projectionRevision).toBe(riderRevision);
-      expect(result.value.totalCount).toBeGreaterThan(500);
-      riderIds.push(...result.value.riders.map((rider) => rider.riderId));
+      expect(result.value.totalCount).toBe(2_000);
+      riderViews.push(...result.value.riders);
       if (result.value.complete) break;
       expect(result.value.nextCursor).toEqual(expect.any(String));
       riderCursor = result.value.nextCursor!;
     }
+    const riderTraversalDurationMs = Math.round(performance.now() - riderTraversalStartedAt);
+    console.info(
+      JSON.stringify({ event: "rider_near_ceiling_traversal", riderTraversalDurationMs }),
+    );
+    const riderIds = riderViews.map((rider) => rider.riderId);
     const seededRiderIds = riderIds.filter((id) => id.startsWith("page-rider-"));
-    expect(seededRiderIds).toHaveLength(501);
-    expect(new Set(seededRiderIds).size).toBe(501);
+    expect(seededRiderIds).toHaveLength(1_997);
+    expect(new Set(seededRiderIds).size).toBe(1_997);
     expect(seededRiderIds).toEqual([...seededRiderIds].sort());
-    expect(seededRiderIds.at(-1)).toBe("page-rider-0500");
+    expect(seededRiderIds.at(-1)).toBe("page-rider-1996");
+    expect(riderViews.find((rider) => rider.riderId === "page-rider-0000")).toMatchObject({
+      openBatchCount: 3,
+      openDeliveryCount: 3,
+    });
     await expect(
       core.getEligibleRiders(scheduledRequest({ cursor: "not-an-opaque-cursor" })),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
@@ -711,7 +775,7 @@ describe("scoped delivery map reads", () => {
       core.getEligibleRiders(scheduledRequest({ cursor: firstRiders.value.nextCursor! })),
     ).resolves.toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
     await env.DB.prepare(
-      "UPDATE rider_identity SET display_name='Page Rider 0100', version=version-1, updated_at=? WHERE id='page-rider-0400'",
+      "UPDATE rider_identity SET display_name='Page Rider 1596', version=version-1, updated_at=? WHERE id='page-rider-0400'",
     )
       .bind(NOW)
       .run();

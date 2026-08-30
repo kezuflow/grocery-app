@@ -19,8 +19,6 @@ const QUERY_KEYS = new Set(["locationId", "fulfillmentMode", "cycleId", "statuse
 const DELIVERY_MAP_MAX_CORE_PAGE_CALLS = 20;
 const DELIVERY_MAP_MAX_PAGE_ITEMS = 250;
 const DELIVERY_MAP_MAX_ITEMS = 5_000;
-const DELIVERY_MAP_ENTRY_WORK_UNITS = 24;
-const DELIVERY_MAP_MAX_VALIDATION_WORK_UNITS = 121_000;
 const DELIVERY_STATUSES = new Set<string>(deliveryJobStates);
 
 export async function GET(request: Request) {
@@ -49,13 +47,12 @@ export async function GET(request: Request) {
   let projectionRevision: string | null = null;
   let totalCount: number | null = null;
   let generatedAt: string | null = null;
-  let validationWorkUnits = 0;
   for (let call = 0; call < DELIVERY_MAP_MAX_CORE_PAGE_CALLS; call += 1) {
     const result = await core.getDeliveryMap({ ...baseRequest, ...(cursor ? { cursor } : {}) });
     if (!result.ok) return Response.json(result);
     const page = result.value;
     if (
-      !isDeliveryMapPage(page, context) ||
+      !isDeliveryMapPageEnvelope(page, context) ||
       page.complete !== (page.nextCursor === null) ||
       page.pins.length > DELIVERY_MAP_MAX_PAGE_ITEMS ||
       page.totalCount > DELIVERY_MAP_MAX_ITEMS ||
@@ -64,8 +61,7 @@ export async function GET(request: Request) {
     ) {
       return Response.json(paginationFailure(requestId));
     }
-    validationWorkUnits += page.pins.length * DELIVERY_MAP_ENTRY_WORK_UNITS + 1;
-    if (validationWorkUnits > DELIVERY_MAP_MAX_VALIDATION_WORK_UNITS) {
+    if (!page.pins.every((pin) => isDeliveryMapPin(pin, context))) {
       return Response.json(paginationFailure(requestId));
     }
     projectionRevision ??= page.projectionRevision;
@@ -110,10 +106,12 @@ export async function GET(request: Request) {
   return Response.json(paginationFailure(requestId));
 }
 
-function isDeliveryMapPage(
+type DeliveryMapPageEnvelope = Omit<DeliveryMapView, "pins"> & { pins: unknown[] };
+
+function isDeliveryMapPageEnvelope(
   value: unknown,
   context: { locationId: string; fulfillmentMode: "INSTANT" | "SCHEDULED"; cycleId: string | null },
-): value is DeliveryMapView {
+): value is DeliveryMapPageEnvelope {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [
@@ -129,13 +127,12 @@ function isDeliveryMapPage(
     ])
   )
     return false;
-  const page = value as Partial<DeliveryMapView>;
+  const page = value as Partial<DeliveryMapPageEnvelope>;
   return (
     page.locationId === context.locationId &&
     page.fulfillmentMode === context.fulfillmentMode &&
     page.cycleId === context.cycleId &&
     Array.isArray(page.pins) &&
-    page.pins.every((pin) => isDeliveryMapPin(pin, context)) &&
     typeof page.complete === "boolean" &&
     (page.nextCursor === null ||
       (typeof page.nextCursor === "string" &&

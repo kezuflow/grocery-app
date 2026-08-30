@@ -15,33 +15,43 @@ type EligibleRiderRow = {
   open_delivery_count: number;
 };
 
-const ELIGIBLE_RIDER_SELECT = `SELECT rider.id AS rider_id, rider.display_name,
+const ELIGIBLE_RIDER_SELECT = `WITH open_batch_workload AS (
+         SELECT rider_id, COUNT(*) AS open_batch_count
+         FROM delivery_batch
+         WHERE rider_id IS NOT NULL
+           AND context_resolution_status='RESOLVED'
+           AND status NOT IN ('COMPLETED','CANCELED')
+         GROUP BY rider_id
+       ), open_delivery_workload AS (
+         SELECT rider_id, COUNT(*) AS open_delivery_count
+         FROM delivery_job
+         WHERE rider_id IS NOT NULL
+           AND context_resolution_status='RESOLVED'
+           AND status NOT IN ('DELIVERED','CANCELED','ESCALATED')
+         GROUP BY rider_id
+       )
+       SELECT rider.id AS rider_id, rider.display_name,
               rider.version, rider.updated_at,
-              (
-                SELECT COUNT(*) FROM delivery_batch batch
-                WHERE batch.rider_id=rider.id
-                  AND batch.context_resolution_status='RESOLVED'
-                  AND batch.status NOT IN ('COMPLETED','CANCELED')
-              ) AS open_batch_count,
-              (
-                SELECT COUNT(*) FROM delivery_job job
-                WHERE job.rider_id=rider.id
-                  AND job.context_resolution_status='RESOLVED'
-                  AND job.status NOT IN ('DELIVERED','CANCELED','ESCALATED')
-              ) AS open_delivery_count
+              COALESCE(open_batch_workload.open_batch_count, 0) AS open_batch_count,
+              COALESCE(open_delivery_workload.open_delivery_count, 0) AS open_delivery_count
        FROM rider_identity rider
+       LEFT JOIN open_batch_workload ON open_batch_workload.rider_id=rider.id
+       LEFT JOIN open_delivery_workload ON open_delivery_workload.rider_id=rider.id
        WHERE rider.status='ACTIVE'`;
+
+export function eligibleRiderReadSql(hasCursor: boolean): string {
+  return `${ELIGIBLE_RIDER_SELECT}
+         ${hasCursor ? "AND rider.id>?" : ""}
+       ORDER BY rider.id ASC
+       LIMIT ?`;
+}
 
 async function readProjectionRevision(
   db: D1Database,
   cursorScope: string,
 ): Promise<{ revision: string; rows: EligibleRiderRow[] } | null> {
   const result = await db
-    .prepare(
-      `${ELIGIBLE_RIDER_SELECT}
-       ORDER BY rider.id ASC
-       LIMIT ?`,
-    )
+    .prepare(eligibleRiderReadSql(false))
     .bind(ELIGIBLE_RIDER_PROJECTION_ITEM_LIMIT + 1)
     .all<EligibleRiderRow>();
   if (result.results.length > ELIGIBLE_RIDER_PROJECTION_ITEM_LIMIT) return null;
@@ -109,17 +119,11 @@ export async function getEligibleRiders(
       },
     };
   }
-  const cursorClause = cursor ? "AND rider.id>?" : "";
   const bindings: unknown[] = [];
   if (cursor) bindings.push(cursor.id);
   bindings.push(ELIGIBLE_RIDER_PAGE_SIZE + 1);
   const rows = await deps.db
-    .prepare(
-      `${ELIGIBLE_RIDER_SELECT}
-         ${cursorClause}
-       ORDER BY rider.id ASC
-       LIMIT ?`,
-    )
+    .prepare(eligibleRiderReadSql(cursor !== null))
     .bind(...bindings)
     .all<EligibleRiderRow>();
   const after = await readProjectionRevision(deps.db, cursorScope);

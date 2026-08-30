@@ -451,13 +451,16 @@ application revision evidence and does not claim a cross-request D1 snapshot.
 
 Thin Admin Web adapters follow continuations only within explicit ceilings:
 20 Core pages of at most 250 entries and 5,000 total delivery entries, or 10
-Core pages of at most 200 entries and 2,000 total Riders, plus named validation-
-work budgets. They return a complete set only after revision, watermark,
+Core pages of at most 200 entries and 2,000 total Riders. They reject an
+oversized physical page array before traversing or validating its entries and
+return a complete set only after revision, watermark,
 count, strict DTO shape, uniqueness, monotonic immutable-ID progress, cursor,
 and completion evidence all agree. Repeated or uniquely changing cursors with
 no entity progress, empty non-terminal pages, duplicate/regressing IDs,
 malformed entries, mixed revisions/watermarks, contradictory completion, and
-any call/page/item/work overflow fail closed with no partial response. After a
+any call/page/item overflow fail closed with no partial response. Eligible Rider
+workload counts and their revision evidence are computed from set-based grouped
+batch and delivery aggregates joined by canonical Rider ID. After a
 complete immutable-ID traversal, Web may sort the Rider result by display name
 and Rider ID for presentation. The operational tradeoff is deliberate: very
 large or concurrently changing contexts require an Admin refresh instead of

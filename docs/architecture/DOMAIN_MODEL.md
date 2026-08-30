@@ -311,11 +311,13 @@ candidate reads are bounded keyset pages with explicit continuation/completeness
 evidence over immutable canonical IDs. Core binds continuations to an
 authoritative digest and total count of the complete filtered delivery or
 eligible Rider/workload projection; a cross-page revision change requires a
-typed refresh. The thin Web adapter uses fixed call/page/item/work ceilings,
-strictly validates monotonic unique entities and freshness evidence, and
-retrieves the full selected operational context before presenting queue and
-Rider counts as complete. Mutable Rider display names affect presentation only
-after complete ID traversal.
+typed refresh. Rider workload calculation uses set-based grouped batch and
+delivery aggregates joined by canonical Rider ID. The thin Web adapter uses
+fixed call/page/item ceilings, rejects oversized physical page arrays before
+entry traversal, strictly validates monotonic unique entities and freshness
+evidence, and retrieves the full selected operational context before presenting
+queue and Rider counts as complete. Mutable Rider display names affect
+presentation only after complete ID traversal.
 
 Order still owns a persisted human-readable global order number as part of the
 canonical commitment. Until the current physical Orders implementation lands

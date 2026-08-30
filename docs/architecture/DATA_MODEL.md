@@ -241,8 +241,11 @@ Rider identity/version plus its projected open batch and delivery counts. Core
 recomputes this evidence around each page and returns `STALE_VERSION` when it
 changes rather than claiming a D1 snapshot across calls. `totalCount`, explicit
 completion, and the delivery source watermark supply independent completeness
-and freshness checks. Web follows pages within fixed call/page/item/validation-
-work ceilings, rejects malformed or non-monotonic evidence, and only sorts the
+and freshness checks. Eligible Rider workload counts are set-based grouped
+aggregates over open batches and deliveries joined by canonical Rider ID for
+both revision calculation and page projection. Web follows pages within fixed
+call/page/item ceilings, rejects oversized physical arrays before entry
+traversal, rejects malformed or non-monotonic evidence, and only sorts the
 complete Rider result by `(display_name, id)` for presentation. This bounded
 fail-closed design may require an Admin refresh under concurrent mutation or
 exceptionally large contexts. Rider `preferred_location_id` remains descriptive

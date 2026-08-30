@@ -16,8 +16,6 @@ const GET_QUERY_KEYS = new Set(["locationId", "fulfillmentMode", "cycleId"]);
 const ELIGIBLE_RIDER_MAX_CORE_PAGE_CALLS = 10;
 const ELIGIBLE_RIDER_MAX_PAGE_ITEMS = 200;
 const ELIGIBLE_RIDER_MAX_ITEMS = 2_000;
-const ELIGIBLE_RIDER_ENTRY_WORK_UNITS = 8;
-const ELIGIBLE_RIDER_MAX_VALIDATION_WORK_UNITS = 16_100;
 
 const commandSchema = z.union([
   dispatchContextSchema.options[0]
@@ -53,13 +51,12 @@ export async function GET(request: Request) {
   let lastRiderId: string | null = null;
   let projectionRevision: string | null = null;
   let totalCount: number | null = null;
-  let validationWorkUnits = 0;
   for (let call = 0; call < ELIGIBLE_RIDER_MAX_CORE_PAGE_CALLS; call += 1) {
     const result = await core.getEligibleRiders({ ...baseRequest, ...(cursor ? { cursor } : {}) });
     if (!result.ok) return Response.json(result);
     const page = result.value;
     if (
-      !isEligibleRiderPage(page) ||
+      !isEligibleRiderPageEnvelope(page) ||
       page.complete !== (page.nextCursor === null) ||
       page.riders.length > ELIGIBLE_RIDER_MAX_PAGE_ITEMS ||
       page.totalCount > ELIGIBLE_RIDER_MAX_ITEMS ||
@@ -68,8 +65,7 @@ export async function GET(request: Request) {
     ) {
       return Response.json(paginationFailure(requestId));
     }
-    validationWorkUnits += page.riders.length * ELIGIBLE_RIDER_ENTRY_WORK_UNITS + 1;
-    if (validationWorkUnits > ELIGIBLE_RIDER_MAX_VALIDATION_WORK_UNITS) {
+    if (!page.riders.every(isEligibleRider)) {
       return Response.json(paginationFailure(requestId));
     }
     projectionRevision ??= page.projectionRevision;
@@ -110,16 +106,17 @@ export async function GET(request: Request) {
   return Response.json(paginationFailure(requestId));
 }
 
-function isEligibleRiderPage(value: unknown): value is EligibleRiderPage {
+type EligibleRiderPageEnvelope = Omit<EligibleRiderPage, "riders"> & { riders: unknown[] };
+
+function isEligibleRiderPageEnvelope(value: unknown): value is EligibleRiderPageEnvelope {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, ["riders", "nextCursor", "complete", "projectionRevision", "totalCount"])
   )
     return false;
-  const page = value as Partial<EligibleRiderPage>;
+  const page = value as Partial<EligibleRiderPageEnvelope>;
   return (
     Array.isArray(page.riders) &&
-    page.riders.every(isEligibleRider) &&
     typeof page.complete === "boolean" &&
     (page.nextCursor === null ||
       (typeof page.nextCursor === "string" &&
