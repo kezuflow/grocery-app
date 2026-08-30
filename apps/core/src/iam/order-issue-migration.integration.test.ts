@@ -26,6 +26,18 @@ async function seedParents(): Promise<{ orderId: string; customerId: string }> {
 }
 
 describe("order issue migration 0030", () => {
+  it("keeps staff cancellation evidence in canonical Audit ownership", async () => {
+    const cancellationIndexes = await env.DB.prepare(
+      "PRAGMA index_list(order_cancellation_refund_member)",
+    ).all<{ name: string; unique: number }>();
+    expect(cancellationIndexes.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "order_cancellation_refund_member_payment_unique" }),
+        expect.objectContaining({ name: "order_cancellation_refund_member_refund_unique" }),
+      ]),
+    );
+  });
+
   it("creates the order issue queue table with closed vocabularies", async () => {
     const columns = await env.DB.prepare("PRAGMA table_info(order_issue)").all<{ name: string }>();
     expect(columns.results.map((row) => row.name)).toEqual(

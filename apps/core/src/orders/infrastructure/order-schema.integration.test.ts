@@ -30,4 +30,34 @@ describe("orders snapshot integrity schema", () => {
       ]),
     );
   });
+
+  it("persists one coordinated cancellation and its exact refund members", async () => {
+    const cancellationColumns = (
+      await env.DB.prepare("PRAGMA table_info(order_cancellation)").all<{ name: string }>()
+    ).results.map((column) => column.name);
+    expect(cancellationColumns).toEqual(
+      expect.arrayContaining([
+        "order_id",
+        "actor_type",
+        "cause",
+        "status",
+        "retained_service_fee_minor",
+        "required_refund_minor",
+      ]),
+    );
+    const memberColumns = (
+      await env.DB.prepare("PRAGMA table_info(order_cancellation_refund_member)").all<{
+        name: string;
+      }>()
+    ).results.map((column) => column.name);
+    expect(memberColumns).toEqual(
+      expect.arrayContaining([
+        "cancellation_id",
+        "payment_intent_id",
+        "required_amount_minor",
+        "refund_id",
+        "status",
+      ]),
+    );
+  });
 });
