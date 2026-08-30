@@ -184,3 +184,58 @@ location/zone legacy batch remains outside the confirmed fixture set; 0043 deter
 the first ranked stop context and retains every source row in compatibility history, so rollout
 does not abort or erase the conflicting evidence. Later operational reads must continue to treat
 legacy `EXCEPTION` work as non-assignable until explicitly reconciled.
+
+## Review fix round 2
+
+The previously documented mixed-context concern is resolved in this round. A hostile full-chain
+fixture was written before the migration change and produced a genuine RED: 0043 aborted on its
+mode/cycle check when a schema-valid legacy batch contained only Instant jobs but retained the
+legacy batch's mandatory Scheduled-era cycle. The expanded fixture now contains 23 jobs, nine
+batches, and 23 original stops and varies stop IDs so both Instant-first and Scheduled-first
+mixed batches, plus both location-orderings, produce the same result.
+
+0043 now selects exactly one canonical source stop per job into a migration staging relation,
+validates every job's mode/cycle/location/zone evidence and referenced identities, and aggregates
+the complete chosen-job set for each batch. All-Instant batches become `INSTANT` with a null cycle.
+All-Scheduled batches resolve only when every job is resolved, every job shares one cycle,
+location, and zone, and the shared cycle matches the historical batch cycle. Mixed modes,
+different cycles, different locations/zones, missing snapshots, missing cycles, or missing
+location/zone identities deterministically become `LEGACY_UNRESOLVED` + `EXCEPTION` with null
+canonical cycle/location/zone; no stop ID ordering and no invented hub decides the result.
+
+`delivery_job` now has an explicit `context_resolution_status`. Resolved rows require FK-backed
+location and zone plus the canonical mode/cycle relationship. Invalid historical job context is
+normalized to a null-context Scheduled compatibility representation with `ESCALATED` status and
+is indexed behind its resolution status so later Task 3 selection can fail closed. New resolved
+jobs and batches remain strict. Existing tests that manually insert post-0043 active jobs were
+updated only to provide their already-known canonical location/zone identities; no runtime
+command, query, route, provider, or UI behavior was added.
+
+The new append-only `delivery_job_compatibility_history` copies every original legacy job column
+before context, status, or version normalization. The migration fixture asserts exact 23/23/23
+job/stop history preservation, exact all-Instant batch cycle evidence, exact invalid and mixed-job
+bytes, its index, and update/delete rejection. Existing batch/stop compatibility histories still
+retain every source row, including duplicate stops, malformed sequences/statuses, and proof bytes.
+
+Address extraction now accepts coordinates only when both are numeric and within latitude/
+longitude bounds; out-of-range, one-sided, and non-number inputs become a null coordinate pair
+without changing the raw address snapshot. A JSON `null` structured-instructions value is treated
+as absent and falls back exactly to legacy notes. Empty/whitespace historical Delivery event types
+map to `LEGACY_COMPATIBILITY` in the canonical append-only event while the original `domain_event`
+row and payload remain unchanged.
+
+Round-two evidence:
+
+- RED: the hostile full-chain fixture failed applying 0043 with the expected mode/cycle CHECK
+  violation before production SQL changed.
+- Focused hostile migration GREEN: one file, one test.
+- Migration, commitment, and affected compatibility regression set: eight files, 42 tests passed.
+- Full Core suite: 95 files, 514 tests passed.
+- Format, naming, migration verification, workspace typecheck, lint, Core Worker dry-run build, and
+  diff validation were rerun after this report append and before the separate round-two commit.
+
+The only remaining compatibility boundary is intentional: valid individual jobs may retain their
+factual contexts while belonging to a batch whose aggregate context is
+`LEGACY_UNRESOLVED`. Task 3 must require both job and batch resolution before selection or
+assignment. Original conflicting evidence remains available in the three append-only compatibility
+history tables for explicit operational reconciliation.

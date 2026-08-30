@@ -96,7 +96,7 @@ describe("converged operational exceptions", () => {
         "INSERT OR REPLACE INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTED', ?, 1)",
       ).bind(`fulfillment-${suffix}`, orderId, Date.now()),
       env.DB.prepare(
-        "INSERT OR REPLACE INTO delivery_job (id, order_id, cycle_id, rider_user_id, status, address_snapshot_json, version) VALUES (?, ?, ?, NULL, 'FAILED', '{}', 1)",
+        "INSERT OR REPLACE INTO delivery_job (id, order_id, cycle_id, location_id, zone_id, rider_user_id, status, address_snapshot_json, version) VALUES (?, ?, ?, 'location-cebu-central', 'zone-cebu-city-core', NULL, 'FAILED', '{}', 1)",
       ).bind(`delivery-${suffix}`, orderId, "cycle-next-cebu"),
     ]);
     const rows = await listOperationalExceptions(env.DB, { locationId: "location-cebu-central" });

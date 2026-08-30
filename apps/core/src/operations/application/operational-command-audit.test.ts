@@ -204,7 +204,7 @@ describe("operational command authorization and integrity matrix", () => {
       .bind(crypto.randomUUID(), orderId, now)
       .run();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO delivery_job (id, order_id, cycle_id, status, address_snapshot_json, version) SELECT ?, ?, (SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1), 'UNASSIGNED', '{}', 1",
+      "INSERT OR IGNORE INTO delivery_job (id, order_id, cycle_id, location_id, zone_id, status, address_snapshot_json, version) SELECT ?, ?, (SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1), 'location-cebu-central', 'zone-cebu-city-core', 'UNASSIGNED', '{}', 1",
     )
       .bind(crypto.randomUUID(), orderId)
       .run();

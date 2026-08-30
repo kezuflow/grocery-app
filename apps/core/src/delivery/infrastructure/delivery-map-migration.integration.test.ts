@@ -15,6 +15,12 @@ const legacyNotesAddress =
   '{"recipient":"Nora Notes","phone":"09170000004","latitude":10.3201,"longitude":123.8931,"notes":"Ring old bell","address_json":"{\\"line1\\":\\"Pre-0042 legacy\\"}"}';
 const malformedProof =
   '{"legacy":"malformed-stop-history","status":"not-canonical","sequence":"raw"}';
+const nullInstructionsAddress =
+  '{"recipient":"Null Note","phone":"09170000005","latitude":91,"longitude":123.9,"delivery_instructions_json":null,"notes":"Use legacy null fallback"}';
+const oneSidedCoordinateAddress =
+  '{"recipient":"One Side","phone":"09170000006","latitude":10.4,"notes":"One-sided coordinate"}';
+const nonNumericCoordinateAddress =
+  '{"recipient":"Non Numeric","phone":"09170000007","latitude":"north","longitude":123.9}';
 
 async function rejects(sql: string, bindings: readonly unknown[] = []): Promise<void> {
   let rejected = false;
@@ -30,6 +36,9 @@ async function rejects(sql: string, bindings: readonly unknown[] = []): Promise<
 
 async function seedPre0043CompatibilityRows(): Promise<void> {
   await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO fulfillment_location (id, market_id, code, name, type, address_json, latitude, longitude, status, version, created_at, updated_at) VALUES ('location-cebu-west', 'market-metro-cebu', 'CEBU-WEST-TEST', 'Cebu West Test', 'DISPATCH_ONLY', NULL, 10.31, 123.82, 'active', 1, 90, 90)",
+    ),
     env.DB.prepare(
       "INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES ('auth-rider-legacy', 'Legacy Rider', 'legacy-rider@example.com', 1, 100, 100)",
     ),
@@ -148,6 +157,294 @@ async function seedPre0043CompatibilityRows(): Promise<void> {
     env.DB.prepare(
       "INSERT INTO delivery_stop (id, batch_id, delivery_job_id, sequence, status, proof_json, version) VALUES ('stop-delivery-duplicate-b-unbatched', NULL, 'job-delivery-duplicate-b', 5, 'FAILED', ?, 16)",
     ).bind('{"duplicate":"b-unbatched"}'),
+    ...[
+      ["job-all-instant-a", "order-all-instant-a", null, "INSTANT", instantAddress, 400],
+      ["job-all-instant-z", "order-all-instant-z", null, "INSTANT", instantAddress, 401],
+      ["job-mixed-a-instant", "order-mixed-a-instant", null, "INSTANT", instantAddress, 402],
+      [
+        "job-mixed-a-scheduled",
+        "order-mixed-a-scheduled",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        403,
+      ],
+      [
+        "job-mixed-z-scheduled",
+        "order-mixed-z-scheduled",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        404,
+      ],
+      ["job-mixed-z-instant", "order-mixed-z-instant", null, "INSTANT", instantAddress, 405],
+      [
+        "job-context-a-west",
+        "order-context-a-west",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        406,
+      ],
+      [
+        "job-context-z-central",
+        "order-context-z-central",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        407,
+      ],
+      [
+        "job-context-reverse-a-central",
+        "order-context-reverse-a-central",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        412,
+      ],
+      [
+        "job-context-reverse-z-west",
+        "order-context-reverse-z-west",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        413,
+      ],
+      [
+        "job-cycle-a-next",
+        "order-cycle-a-next",
+        "cycle-next-cebu",
+        "SCHEDULED",
+        scheduledAddress,
+        414,
+      ],
+      [
+        "job-cycle-z-other",
+        "order-cycle-z-other",
+        "cycle-delivery-no-capacity",
+        "SCHEDULED",
+        scheduledAddress,
+        415,
+      ],
+      [
+        "job-invalid-context",
+        "order-invalid-context",
+        "cycle-does-not-exist",
+        "SCHEDULED",
+        scheduledAddress,
+        408,
+      ],
+      [
+        "job-bad-coordinate-range",
+        "order-bad-coordinate-range",
+        null,
+        "INSTANT",
+        nullInstructionsAddress,
+        409,
+      ],
+      [
+        "job-bad-coordinate-one-sided",
+        "order-bad-coordinate-one-sided",
+        null,
+        "INSTANT",
+        oneSidedCoordinateAddress,
+        410,
+      ],
+      [
+        "job-bad-coordinate-nonnumeric",
+        "order-bad-coordinate-nonnumeric",
+        null,
+        "INSTANT",
+        nonNumericCoordinateAddress,
+        411,
+      ],
+    ].map(([jobId, orderId, cycleId, mode, address, timestamp]) =>
+      env.DB.prepare(
+        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 'UNASSIGNED', ?, NULL, 1, ?, ?)",
+      ).bind(jobId, orderId, cycleId, mode, address, timestamp, Number(timestamp) + 1),
+    ),
+    ...[
+      ["order-all-instant-a", "location-cebu-central", null, "zone-cebu-city-core", "INSTANT", 400],
+      ["order-all-instant-z", "location-cebu-central", null, "zone-cebu-city-core", "INSTANT", 401],
+      [
+        "order-mixed-a-instant",
+        "location-cebu-central",
+        null,
+        "zone-cebu-city-core",
+        "INSTANT",
+        402,
+      ],
+      [
+        "order-mixed-a-scheduled",
+        "location-cebu-central",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        403,
+      ],
+      [
+        "order-mixed-z-scheduled",
+        "location-cebu-central",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        404,
+      ],
+      [
+        "order-mixed-z-instant",
+        "location-cebu-central",
+        null,
+        "zone-cebu-city-core",
+        "INSTANT",
+        405,
+      ],
+      [
+        "order-context-a-west",
+        "location-cebu-west",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        406,
+      ],
+      [
+        "order-context-z-central",
+        "location-cebu-central",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        407,
+      ],
+      [
+        "order-context-reverse-a-central",
+        "location-cebu-central",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        412,
+      ],
+      [
+        "order-context-reverse-z-west",
+        "location-cebu-west",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        413,
+      ],
+      [
+        "order-cycle-a-next",
+        "location-cebu-central",
+        "cycle-next-cebu",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        414,
+      ],
+      [
+        "order-cycle-z-other",
+        "location-cebu-central",
+        "cycle-delivery-no-capacity",
+        "zone-cebu-city-core",
+        "SCHEDULED",
+        415,
+      ],
+      [
+        "order-invalid-context",
+        "location-does-not-exist",
+        "cycle-next-cebu",
+        "zone-does-not-exist",
+        "SCHEDULED",
+        408,
+      ],
+      [
+        "order-bad-coordinate-range",
+        "location-cebu-central",
+        null,
+        "zone-cebu-city-core",
+        "INSTANT",
+        409,
+      ],
+      [
+        "order-bad-coordinate-one-sided",
+        "location-cebu-central",
+        null,
+        "zone-cebu-city-core",
+        "INSTANT",
+        410,
+      ],
+      [
+        "order-bad-coordinate-nonnumeric",
+        "location-cebu-central",
+        null,
+        "zone-cebu-city-core",
+        "INSTANT",
+        411,
+      ],
+    ].map(([orderId, locationId, cycleId, zoneId, mode, timestamp]) =>
+      env.DB.prepare(
+        "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES (?, ?, ?, ?, ?, ?, 500, ?, '[]', ?)",
+      ).bind(
+        orderId,
+        locationId,
+        cycleId,
+        zoneId,
+        mode === "SCHEDULED" ? 450 : null,
+        mode === "SCHEDULED" ? 500 : null,
+        mode,
+        timestamp,
+      ),
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-all-instant', 'cycle-next-cebu', 'READY', NULL, 390, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-mixed-instant-first', 'cycle-next-cebu', 'READY', NULL, 391, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-mixed-scheduled-first', 'cycle-next-cebu', 'READY', NULL, 392, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-context-disagreement', 'cycle-next-cebu', 'READY', NULL, 393, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-context-disagreement-reverse', 'cycle-next-cebu', 'READY', NULL, 394, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-cycle-disagreement', 'cycle-next-cebu', 'READY', NULL, 395, 1)",
+    ),
+    ...[
+      ["z-stop-all-instant-a", "batch-all-instant", "job-all-instant-a", 1],
+      ["a-stop-all-instant-z", "batch-all-instant", "job-all-instant-z", 2],
+      ["a-stop-mixed-a-instant", "batch-mixed-instant-first", "job-mixed-a-instant", 1],
+      ["z-stop-mixed-a-scheduled", "batch-mixed-instant-first", "job-mixed-a-scheduled", 2],
+      ["a-stop-mixed-z-scheduled", "batch-mixed-scheduled-first", "job-mixed-z-scheduled", 1],
+      ["z-stop-mixed-z-instant", "batch-mixed-scheduled-first", "job-mixed-z-instant", 2],
+      ["a-stop-context-west", "batch-context-disagreement", "job-context-a-west", 1],
+      ["z-stop-context-central", "batch-context-disagreement", "job-context-z-central", 2],
+      [
+        "a-stop-context-reverse-central",
+        "batch-context-disagreement-reverse",
+        "job-context-reverse-a-central",
+        1,
+      ],
+      [
+        "z-stop-context-reverse-west",
+        "batch-context-disagreement-reverse",
+        "job-context-reverse-z-west",
+        2,
+      ],
+      ["a-stop-cycle-next", "batch-cycle-disagreement", "job-cycle-a-next", 1],
+      ["z-stop-cycle-other", "batch-cycle-disagreement", "job-cycle-z-other", 2],
+      ["stop-invalid-context", null, "job-invalid-context", null],
+      ["stop-bad-coordinate-range", null, "job-bad-coordinate-range", null],
+      ["stop-bad-coordinate-one-sided", null, "job-bad-coordinate-one-sided", null],
+      ["stop-bad-coordinate-nonnumeric", null, "job-bad-coordinate-nonnumeric", null],
+    ].map(([stopId, batchId, jobId, sequence]) =>
+      env.DB.prepare(
+        "INSERT INTO delivery_stop (id, batch_id, delivery_job_id, sequence, status, proof_json, version) VALUES (?, ?, ?, ?, 'UNASSIGNED', NULL, 1)",
+      ).bind(stopId, batchId, jobId, sequence),
+    ),
+    env.DB.prepare(
+      "INSERT INTO domain_event (id, aggregate_type, aggregate_id, event_type, payload_json, occurred_at) VALUES ('event-delivery-empty-type', 'DELIVERY_JOB', 'job-bad-coordinate-range', '', '{\"legacy\":\"empty-event-type\"}', 409)",
+    ),
   ]);
 }
 
@@ -177,17 +474,27 @@ describe("canonical delivery batch migration 0043", () => {
     const counts = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM delivery_job) AS jobs, (SELECT COUNT(*) FROM delivery_batch) AS batches, (SELECT COUNT(*) FROM delivery_stop) AS stops, (SELECT COUNT(DISTINCT delivery_job_id) FROM delivery_stop) AS stopped_jobs",
     ).first<{ jobs: number; batches: number; stops: number; stopped_jobs: number }>();
-    expect(counts).toEqual({ jobs: 7, batches: 3, stops: 7, stopped_jobs: 7 });
+    expect(counts).toEqual({ jobs: 23, batches: 9, stops: 23, stopped_jobs: 23 });
 
     const historyCounts = await env.DB.prepare(
-      "SELECT (SELECT COUNT(*) FROM delivery_batch_compatibility_history) AS batches, (SELECT COUNT(*) FROM delivery_stop_compatibility_history) AS stops",
-    ).first<{ batches: number; stops: number }>();
-    expect(historyCounts).toEqual({ batches: 3, stops: 7 });
+      "SELECT (SELECT COUNT(*) FROM delivery_batch_compatibility_history) AS batches, (SELECT COUNT(*) FROM delivery_job_compatibility_history) AS jobs, (SELECT COUNT(*) FROM delivery_stop_compatibility_history) AS stops",
+    ).first<{ batches: number; jobs: number; stops: number }>();
+    expect(historyCounts).toEqual({ batches: 9, jobs: 23, stops: 23 });
     expect(
       await env.DB.prepare(
         "SELECT original_status, original_rider_user_id FROM delivery_batch_compatibility_history WHERE delivery_batch_id='batch-delivery-empty-unresolved'",
       ).first<Record<string, unknown>>(),
     ).toEqual({ original_status: "MYSTERY", original_rider_user_id: "auth-rider-missing" });
+    expect(
+      await env.DB.prepare(
+        "SELECT original_cycle_id, original_status, original_created_at, original_version FROM delivery_batch_compatibility_history WHERE delivery_batch_id='batch-all-instant'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      original_cycle_id: "cycle-next-cebu",
+      original_status: "READY",
+      original_created_at: 390,
+      original_version: 1,
+    });
     expect(
       await env.DB.prepare(
         "SELECT original_batch_id, original_sequence, original_status, proof_json FROM delivery_stop_compatibility_history WHERE delivery_stop_id='stop-delivery-duplicate-a-assigned'",
@@ -198,13 +505,106 @@ describe("canonical delivery batch migration 0043", () => {
       original_status: "PENDING",
       proof_json: malformedProof,
     });
+    expect(
+      await env.DB.prepare(
+        "SELECT original_order_id, original_cycle_id, original_fulfillment_mode, original_rider_user_id, original_status, original_address_snapshot_json, original_delivered_at, original_version, original_created_at, original_updated_at FROM delivery_job_compatibility_history WHERE delivery_job_id='job-invalid-context'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      original_order_id: "order-invalid-context",
+      original_cycle_id: "cycle-does-not-exist",
+      original_fulfillment_mode: "SCHEDULED",
+      original_rider_user_id: null,
+      original_status: "UNASSIGNED",
+      original_address_snapshot_json: scheduledAddress,
+      original_delivered_at: null,
+      original_version: 1,
+      original_created_at: 408,
+      original_updated_at: 409,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT original_cycle_id, original_fulfillment_mode, original_address_snapshot_json FROM delivery_job_compatibility_history WHERE delivery_job_id='job-mixed-a-instant'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      original_cycle_id: null,
+      original_fulfillment_mode: "INSTANT",
+      original_address_snapshot_json: instantAddress,
+    });
+
+    expect(
+      await env.DB.prepare(
+        "SELECT fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status FROM delivery_batch WHERE id='batch-all-instant'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      fulfillment_mode: "INSTANT",
+      cycle_id: null,
+      location_id: "location-cebu-central",
+      zone_id: "zone-cebu-city-core",
+      status: "READY",
+      context_resolution_status: "RESOLVED",
+    });
+    const mixedBatches = await env.DB.prepare(
+      "SELECT id, fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status FROM delivery_batch WHERE id IN ('batch-mixed-instant-first','batch-mixed-scheduled-first') ORDER BY id",
+    ).all<Record<string, unknown>>();
+    expect(mixedBatches.results).toEqual([
+      {
+        id: "batch-mixed-instant-first",
+        fulfillment_mode: "SCHEDULED",
+        cycle_id: null,
+        location_id: null,
+        zone_id: null,
+        status: "EXCEPTION",
+        context_resolution_status: "LEGACY_UNRESOLVED",
+      },
+      {
+        id: "batch-mixed-scheduled-first",
+        fulfillment_mode: "SCHEDULED",
+        cycle_id: null,
+        location_id: null,
+        zone_id: null,
+        status: "EXCEPTION",
+        context_resolution_status: "LEGACY_UNRESOLVED",
+      },
+    ]);
+    const contextDisagreementBatches = await env.DB.prepare(
+      "SELECT id, fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status FROM delivery_batch WHERE id IN ('batch-context-disagreement','batch-context-disagreement-reverse','batch-cycle-disagreement') ORDER BY id",
+    ).all<Record<string, unknown>>();
+    expect(contextDisagreementBatches.results).toEqual([
+      {
+        id: "batch-context-disagreement",
+        fulfillment_mode: "SCHEDULED",
+        cycle_id: null,
+        location_id: null,
+        zone_id: null,
+        status: "EXCEPTION",
+        context_resolution_status: "LEGACY_UNRESOLVED",
+      },
+      {
+        id: "batch-context-disagreement-reverse",
+        fulfillment_mode: "SCHEDULED",
+        cycle_id: null,
+        location_id: null,
+        zone_id: null,
+        status: "EXCEPTION",
+        context_resolution_status: "LEGACY_UNRESOLVED",
+      },
+      {
+        id: "batch-cycle-disagreement",
+        fulfillment_mode: "SCHEDULED",
+        cycle_id: null,
+        location_id: null,
+        zone_id: null,
+        status: "EXCEPTION",
+        context_resolution_status: "LEGACY_UNRESOLVED",
+      },
+    ]);
 
     const unresolvedBatch = await env.DB.prepare(
       "SELECT fulfillment_mode, cycle_id, location_id, zone_id, rider_id, rider_user_id, status, context_resolution_status FROM delivery_batch WHERE id='batch-delivery-empty-unresolved'",
     ).first<Record<string, unknown>>();
     expect(unresolvedBatch).toEqual({
       fulfillment_mode: "SCHEDULED",
-      cycle_id: "cycle-delivery-no-capacity",
+      cycle_id: null,
       location_id: null,
       zone_id: null,
       rider_id: null,
@@ -235,6 +635,40 @@ describe("canonical delivery batch migration 0043", () => {
       address_snapshot_json: legacyNotesAddress,
       instructions_snapshot: '{"deliveryNote":"Ring old bell"}',
     });
+    const invalidContextJob = await env.DB.prepare(
+      "SELECT fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status FROM delivery_job WHERE id='job-invalid-context'",
+    ).first<Record<string, unknown>>();
+    expect(invalidContextJob).toEqual({
+      fulfillment_mode: "SCHEDULED",
+      cycle_id: null,
+      location_id: null,
+      zone_id: null,
+      status: "ESCALATED",
+      context_resolution_status: "LEGACY_UNRESOLVED",
+    });
+    const invalidCoordinates = await env.DB.prepare(
+      "SELECT delivery_job_id, latitude, longitude, instructions_snapshot FROM delivery_stop WHERE delivery_job_id IN ('job-bad-coordinate-range','job-bad-coordinate-one-sided','job-bad-coordinate-nonnumeric') ORDER BY delivery_job_id",
+    ).all<Record<string, unknown>>();
+    expect(invalidCoordinates.results).toEqual([
+      {
+        delivery_job_id: "job-bad-coordinate-nonnumeric",
+        latitude: null,
+        longitude: null,
+        instructions_snapshot: null,
+      },
+      {
+        delivery_job_id: "job-bad-coordinate-one-sided",
+        latitude: null,
+        longitude: null,
+        instructions_snapshot: '{"deliveryNote":"One-sided coordinate"}',
+      },
+      {
+        delivery_job_id: "job-bad-coordinate-range",
+        latitude: null,
+        longitude: null,
+        instructions_snapshot: '{"deliveryNote":"Use legacy null fallback"}',
+      },
+    ]);
     expect(
       await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM delivery_stop WHERE delivery_job_id IN ('job-delivery-duplicate-a','job-delivery-duplicate-b')",
@@ -355,6 +789,19 @@ describe("canonical delivery batch migration 0043", () => {
     ).toEqual({ payload_json: eventJson });
     expect(
       await env.DB.prepare(
+        "SELECT event_type, metadata_json FROM delivery_event WHERE id='event-delivery-empty-type'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      event_type: "LEGACY_COMPATIBILITY",
+      metadata_json: '{"legacy":"empty-event-type"}',
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT event_type, payload_json FROM domain_event WHERE id='event-delivery-empty-type'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({ event_type: "", payload_json: '{"legacy":"empty-event-type"}' });
+    expect(
+      await env.DB.prepare(
         "SELECT metadata_json, delivered_at, rider_id FROM delivery_proof WHERE delivery_stop_id='stop-delivery-legacy'",
       ).first<Record<string, unknown>>(),
     ).toEqual({
@@ -376,6 +823,12 @@ describe("canonical delivery batch migration 0043", () => {
       "DELETE FROM delivery_batch_compatibility_history WHERE delivery_batch_id='batch-delivery-legacy'",
     );
     await rejects(
+      "UPDATE delivery_job_compatibility_history SET original_status='CHANGED' WHERE delivery_job_id='job-invalid-context'",
+    );
+    await rejects(
+      "DELETE FROM delivery_job_compatibility_history WHERE delivery_job_id='job-invalid-context'",
+    );
+    await rejects(
       "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, status, version, created_at, updated_at) VALUES ('invalid-instant-cycle', 'INSTANT', 'cycle-next-cebu', 'location-cebu-central', 'zone-cebu-city-core', 'DRAFT', 1, 1, 1)",
     );
     await rejects(
@@ -389,7 +842,7 @@ describe("canonical delivery batch migration 0043", () => {
     );
 
     const indexes = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('delivery_batch','delivery_job','delivery_stop','delivery_event','delivery_batch_compatibility_history','delivery_stop_compatibility_history') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('delivery_batch','delivery_job','delivery_stop','delivery_event','delivery_batch_compatibility_history','delivery_job_compatibility_history','delivery_stop_compatibility_history') ORDER BY name",
     ).all<{ name: string }>();
     expect(indexes.results.map((row) => row.name)).toEqual(
       expect.arrayContaining([
@@ -402,13 +855,14 @@ describe("canonical delivery batch migration 0043", () => {
         "delivery_event_job_time_idx",
         "delivery_event_idempotency_unique",
         "delivery_batch_compatibility_history_cycle_idx",
+        "delivery_job_compatibility_history_order_idx",
         "delivery_stop_compatibility_history_batch_sequence_idx",
         "delivery_stop_compatibility_history_job_idx",
       ]),
     );
 
     const triggers = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('delivery_job','delivery_batch','delivery_stop','delivery_event','delivery_batch_compatibility_history','delivery_stop_compatibility_history') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('delivery_job','delivery_batch','delivery_stop','delivery_event','delivery_batch_compatibility_history','delivery_job_compatibility_history','delivery_stop_compatibility_history') ORDER BY name",
     ).all<{ name: string }>();
     expect(triggers.results.map((row) => row.name)).toEqual(
       expect.arrayContaining([
@@ -423,6 +877,8 @@ describe("canonical delivery batch migration 0043", () => {
         "delivery_stop_immutable_destination_update",
         "delivery_batch_compatibility_history_append_only_delete",
         "delivery_batch_compatibility_history_append_only_update",
+        "delivery_job_compatibility_history_append_only_delete",
+        "delivery_job_compatibility_history_append_only_update",
         "delivery_stop_compatibility_history_append_only_delete",
         "delivery_stop_compatibility_history_append_only_update",
       ]),
@@ -430,6 +886,9 @@ describe("canonical delivery batch migration 0043", () => {
 
     await rejects(
       "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status, version, created_at, updated_at) VALUES ('invalid-new-unresolved', 'SCHEDULED', 'cycle-next-cebu', NULL, NULL, 'DRAFT', 'RESOLVED', 1, 1, 1)",
+    );
+    await rejects(
+      "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status, context_resolution_status, address_snapshot_json, version, created_at, updated_at) VALUES ('invalid-new-job-context', 'invalid-new-job-order', NULL, 'SCHEDULED', NULL, NULL, 'UNASSIGNED', 'RESOLVED', '{}', 1, 1, 1)",
     );
 
     const foreignKeyCheck = await env.DB.prepare("PRAGMA foreign_key_check").all();

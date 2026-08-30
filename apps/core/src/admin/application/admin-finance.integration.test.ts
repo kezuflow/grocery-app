@@ -276,7 +276,7 @@ describe("finance administration", () => {
         "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'PICKING', ?, 2)",
       ).bind(crypto.randomUUID(), orderId, now),
       env.DB.prepare(
-        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES (?, ?, 'cycle-next-cebu', 'SCHEDULED', 'rider-1', 'ASSIGNED', '{}', NULL, 3, ?, ?)",
+        "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES (?, ?, 'cycle-next-cebu', 'SCHEDULED', 'location-cebu-central', 'zone-cebu-city-core', 'rider-1', 'ASSIGNED', '{}', NULL, 3, ?, ?)",
       ).bind(crypto.randomUUID(), orderId, now, now),
       env.DB.prepare(
         "INSERT INTO paid_order_amendment (id, order_id, status, currency, total_minor, payment_intent_id, idempotency_key, created_at, updated_at) VALUES (?, ?, 'COMMITTED', 'PHP', 5000, ?, ?, ?, ?)",

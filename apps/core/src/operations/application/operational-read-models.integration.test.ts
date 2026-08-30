@@ -87,21 +87,34 @@ async function seedOperationalRow(options: {
   const unique = ++queueCounter;
   const orderId = `ord-board-${unique}-${crypto.randomUUID().slice(0, 6)}`;
   const now = Date.now();
+  const locationId = options.locationId ?? "location-cebu-central";
+  if (locationId === "location-other-empty") {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO fulfillment_location
+         (id, market_id, code, name, type, address_json, latitude, longitude,
+          status, version, created_at, updated_at)
+       VALUES (?, 'market-metro-cebu', 'OTHER_EMPTY', 'Other Empty',
+               'FULFILLMENT_CENTER', NULL, 10.3, 123.9, 'active', 1, ?, ?)`,
+    )
+      .bind(locationId, now, now)
+      .run();
+  }
   await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, ?, ?, ?, 1)",
     ).bind(
       crypto.randomUUID(),
       orderId,
-      options.locationId ?? "location-cebu-central",
+      locationId,
       options.fulfillmentStatus ?? "NOT_STARTED",
       now,
     ),
     env.DB.prepare(
-      "INSERT INTO delivery_job (id, order_id, cycle_id, rider_user_id, status, address_snapshot_json, delivered_at, version) VALUES (?, ?, 'cycle-next-cebu', ?, ?, '{}', NULL, 1)",
+      "INSERT INTO delivery_job (id, order_id, cycle_id, location_id, zone_id, rider_user_id, status, address_snapshot_json, delivered_at, version) VALUES (?, ?, 'cycle-next-cebu', ?, 'zone-cebu-city-core', ?, ?, '{}', NULL, 1)",
     ).bind(
       crypto.randomUUID(),
       orderId,
+      locationId,
       options.riderAuthUserId ?? null,
       options.deliveryStatus ?? "UNASSIGNED",
     ),

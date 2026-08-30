@@ -29,6 +29,7 @@ SELECT
     FROM delivery_job job
     JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id = job.order_id
     WHERE job.rider_user_id = staff.auth_user_id
+      AND EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.id = snapshot.location_id)
     ORDER BY job.created_at, job.id
     LIMIT 1
   ),
@@ -80,148 +81,33 @@ INSERT INTO delivery_stop_compatibility_history
 SELECT id, batch_id, delivery_job_id, sequence, status, proof_json, version, 0
 FROM delivery_stop_legacy_0043;
 
-CREATE TABLE delivery_batch (
-  id TEXT PRIMARY KEY NOT NULL,
-  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED'
-    CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
-  cycle_id TEXT REFERENCES delivery_cycle(id) ON DELETE RESTRICT,
-  location_id TEXT REFERENCES fulfillment_location(id) ON DELETE RESTRICT,
-  zone_id TEXT REFERENCES delivery_zone(id) ON DELETE RESTRICT,
-  rider_id TEXT REFERENCES rider_identity(id) ON DELETE RESTRICT,
-  rider_user_id TEXT,
-  status TEXT NOT NULL CHECK (
-    status IN ('DRAFT', 'READY', 'ASSIGNED', 'DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED', 'EXCEPTION')
-  ),
-  context_resolution_status TEXT NOT NULL DEFAULT 'RESOLVED'
-    CHECK (context_resolution_status IN ('RESOLVED', 'LEGACY_UNRESOLVED')),
-  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
-  created_at INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER NOT NULL DEFAULT 0,
-  dispatched_at INTEGER,
-  completed_at INTEGER,
-  CHECK (
-    (fulfillment_mode = 'INSTANT' AND cycle_id IS NULL)
-    OR (fulfillment_mode = 'SCHEDULED' AND cycle_id IS NOT NULL)
-  ),
-  CHECK (
-    (context_resolution_status = 'RESOLVED' AND location_id IS NOT NULL)
-    OR (
-      context_resolution_status = 'LEGACY_UNRESOLVED'
-      AND location_id IS NULL
-      AND zone_id IS NULL
-      AND status = 'EXCEPTION'
-    )
-  ),
-  CHECK (completed_at IS NULL OR completed_at >= created_at),
-  CHECK (dispatched_at IS NULL OR dispatched_at >= created_at)
+CREATE TABLE delivery_job_compatibility_history (
+  delivery_job_id TEXT PRIMARY KEY NOT NULL,
+  original_order_id TEXT NOT NULL,
+  original_cycle_id TEXT,
+  original_fulfillment_mode TEXT NOT NULL,
+  original_rider_user_id TEXT,
+  original_status TEXT NOT NULL,
+  original_address_snapshot_json TEXT NOT NULL,
+  original_delivered_at INTEGER,
+  original_version INTEGER NOT NULL,
+  original_created_at INTEGER NOT NULL,
+  original_updated_at INTEGER NOT NULL,
+  preserved_at INTEGER NOT NULL DEFAULT 0
 );
 
-WITH batch_context AS (
-  SELECT
-    batch.id,
-    (
-      SELECT job.fulfillment_mode
-      FROM delivery_stop_legacy_0043 stop
-      JOIN delivery_job_legacy_0043 job ON job.id = stop.delivery_job_id
-      WHERE stop.batch_id = batch.id
-      ORDER BY stop.id
-      LIMIT 1
-    ) AS fulfillment_mode,
-    (
-      SELECT snapshot.location_id
-      FROM delivery_stop_legacy_0043 stop
-      JOIN delivery_job_legacy_0043 job ON job.id = stop.delivery_job_id
-      JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id = job.order_id
-      WHERE stop.batch_id = batch.id
-      ORDER BY stop.id
-      LIMIT 1
-    ) AS location_id,
-    (
-      SELECT snapshot.zone_id
-      FROM delivery_stop_legacy_0043 stop
-      JOIN delivery_job_legacy_0043 job ON job.id = stop.delivery_job_id
-      JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id = job.order_id
-      WHERE stop.batch_id = batch.id
-      ORDER BY stop.id
-      LIMIT 1
-    ) AS zone_id,
-    (
-      SELECT MAX(job.updated_at)
-      FROM delivery_stop_legacy_0043 stop
-      JOIN delivery_job_legacy_0043 job ON job.id = stop.delivery_job_id
-      WHERE stop.batch_id = batch.id
-    ) AS last_job_update,
-    (
-      SELECT MAX(job.delivered_at)
-      FROM delivery_stop_legacy_0043 stop
-      JOIN delivery_job_legacy_0043 job ON job.id = stop.delivery_job_id
-      WHERE stop.batch_id = batch.id
-    ) AS last_delivery
-  FROM delivery_batch_legacy_0043 batch
-)
-INSERT INTO delivery_batch
-  (id, fulfillment_mode, cycle_id, location_id, zone_id, rider_id,
-   rider_user_id, status, context_resolution_status, version, created_at,
-   updated_at, dispatched_at, completed_at)
-SELECT
-  batch.id,
-  COALESCE(context.fulfillment_mode, 'SCHEDULED'),
-  batch.cycle_id,
-  context.location_id,
-  context.zone_id,
-  (SELECT rider.id FROM rider_identity rider WHERE rider.auth_user_id = batch.rider_user_id),
-  batch.rider_user_id,
-  CASE
-    WHEN context.location_id IS NULL THEN 'EXCEPTION'
-    WHEN batch.status IN ('DRAFT', 'READY', 'ASSIGNED', 'DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED', 'EXCEPTION') THEN batch.status
-    ELSE 'EXCEPTION'
-  END,
-  CASE WHEN context.location_id IS NULL THEN 'LEGACY_UNRESOLVED' ELSE 'RESOLVED' END,
-  CASE WHEN batch.version > 0 THEN batch.version ELSE 1 END,
-  batch.created_at,
-  COALESCE(context.last_job_update, batch.created_at),
-  CASE
-    WHEN context.location_id IS NOT NULL
-      AND batch.status IN ('DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'EXCEPTION')
-      THEN batch.created_at
-    ELSE NULL
-  END,
-  CASE
-    WHEN context.location_id IS NOT NULL AND batch.status = 'COMPLETED'
-      THEN context.last_delivery
-    ELSE NULL
-  END
-FROM delivery_batch_legacy_0043 batch
-JOIN batch_context context ON context.id = batch.id;
+INSERT INTO delivery_job_compatibility_history
+  (delivery_job_id, original_order_id, original_cycle_id,
+   original_fulfillment_mode, original_rider_user_id, original_status,
+   original_address_snapshot_json, original_delivered_at, original_version,
+   original_created_at, original_updated_at, preserved_at)
+SELECT id, order_id, cycle_id, fulfillment_mode, rider_user_id, status,
+       address_snapshot_json, delivered_at, version, created_at, updated_at, 0
+FROM delivery_job_legacy_0043;
 
-CREATE TABLE delivery_job (
-  id TEXT PRIMARY KEY NOT NULL,
-  order_id TEXT NOT NULL UNIQUE,
-  batch_id TEXT REFERENCES delivery_batch(id) ON DELETE RESTRICT,
-  sequence INTEGER CHECK (sequence IS NULL OR sequence > 0),
-  cycle_id TEXT REFERENCES delivery_cycle(id) ON DELETE RESTRICT,
-  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED'
-    CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
-  location_id TEXT REFERENCES fulfillment_location(id) ON DELETE RESTRICT,
-  zone_id TEXT REFERENCES delivery_zone(id) ON DELETE RESTRICT,
-  rider_id TEXT REFERENCES rider_identity(id) ON DELETE RESTRICT,
-  rider_user_id TEXT,
-  promised_at INTEGER,
-  status TEXT NOT NULL CHECK (
-    status IN ('UNASSIGNED', 'ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'DELIVERED', 'FAILED', 'RETRY_SCHEDULED', 'ESCALATED', 'CANCELED')
-  ),
-  address_snapshot_json TEXT NOT NULL,
-  delivered_at INTEGER,
-  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
-  created_at INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER NOT NULL DEFAULT 0,
-  CHECK (
-    (fulfillment_mode = 'INSTANT' AND cycle_id IS NULL)
-    OR (fulfillment_mode = 'SCHEDULED' AND cycle_id IS NOT NULL)
-  ),
-  CHECK ((batch_id IS NULL) = (sequence IS NULL))
-);
-
+-- Reconcile one stop per job first. Batch context is then aggregated from the
+-- complete chosen-job set, never from whichever stop id happens to sort first.
+CREATE TABLE delivery_job_stage_0043 AS
 WITH ranked_stops AS (
   SELECT
     stop.*,
@@ -253,35 +139,240 @@ sequenced_stops AS (
       )
     END AS canonical_sequence
   FROM chosen_stops chosen
+),
+job_evidence AS (
+  SELECT
+    job.*,
+    selected.id AS selected_stop_id,
+    selected.batch_id AS selected_batch_id,
+    selected.canonical_sequence,
+    selected.status AS selected_stop_status,
+    selected.proof_json AS selected_stop_proof_json,
+    selected.version AS selected_stop_version,
+    snapshot.location_id AS snapshot_location_id,
+    snapshot.zone_id AS snapshot_zone_id,
+    snapshot.cycle_id AS snapshot_cycle_id,
+    snapshot.fulfillment_mode AS snapshot_fulfillment_mode,
+    snapshot.promised_at AS snapshot_promised_at,
+    CASE
+      WHEN job.fulfillment_mode = 'INSTANT'
+        AND job.cycle_id IS NULL
+        AND snapshot.fulfillment_mode = 'INSTANT'
+        AND snapshot.cycle_id IS NULL
+        AND EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.id = snapshot.location_id)
+        AND EXISTS (SELECT 1 FROM delivery_zone zone WHERE zone.id = snapshot.zone_id)
+        THEN 1
+      WHEN job.fulfillment_mode = 'SCHEDULED'
+        AND job.cycle_id IS NOT NULL
+        AND snapshot.fulfillment_mode = 'SCHEDULED'
+        AND snapshot.cycle_id = job.cycle_id
+        AND EXISTS (SELECT 1 FROM delivery_cycle cycle WHERE cycle.id = job.cycle_id)
+        AND EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.id = snapshot.location_id)
+        AND EXISTS (SELECT 1 FROM delivery_zone zone WHERE zone.id = snapshot.zone_id)
+        THEN 1
+      ELSE 0
+    END AS context_is_resolved
+  FROM delivery_job_legacy_0043 job
+  LEFT JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id = job.order_id
+  LEFT JOIN sequenced_stops selected ON selected.delivery_job_id = job.id
 )
+SELECT * FROM job_evidence;
+
+CREATE TABLE delivery_batch (
+  id TEXT PRIMARY KEY NOT NULL,
+  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED'
+    CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
+  cycle_id TEXT REFERENCES delivery_cycle(id) ON DELETE RESTRICT,
+  location_id TEXT REFERENCES fulfillment_location(id) ON DELETE RESTRICT,
+  zone_id TEXT REFERENCES delivery_zone(id) ON DELETE RESTRICT,
+  rider_id TEXT REFERENCES rider_identity(id) ON DELETE RESTRICT,
+  rider_user_id TEXT,
+  status TEXT NOT NULL CHECK (
+    status IN ('DRAFT', 'READY', 'ASSIGNED', 'DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED', 'EXCEPTION')
+  ),
+  context_resolution_status TEXT NOT NULL DEFAULT 'RESOLVED'
+    CHECK (context_resolution_status IN ('RESOLVED', 'LEGACY_UNRESOLVED')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  dispatched_at INTEGER,
+  completed_at INTEGER,
+  CHECK (
+    (
+      context_resolution_status = 'RESOLVED'
+      AND location_id IS NOT NULL
+      AND zone_id IS NOT NULL
+      AND (
+        (fulfillment_mode = 'INSTANT' AND cycle_id IS NULL)
+        OR (fulfillment_mode = 'SCHEDULED' AND cycle_id IS NOT NULL)
+      )
+    )
+    OR (
+      context_resolution_status = 'LEGACY_UNRESOLVED'
+      AND fulfillment_mode = 'SCHEDULED'
+      AND cycle_id IS NULL
+      AND location_id IS NULL
+      AND zone_id IS NULL
+      AND status = 'EXCEPTION'
+    )
+  ),
+  CHECK (completed_at IS NULL OR completed_at >= created_at),
+  CHECK (dispatched_at IS NULL OR dispatched_at >= created_at)
+);
+
+WITH batch_evidence AS (
+  SELECT
+    batch.id,
+    COUNT(stage.id) AS chosen_job_count,
+    COALESCE(SUM(stage.context_is_resolved), 0) AS resolved_job_count,
+    MIN(stage.fulfillment_mode) AS minimum_mode,
+    MAX(stage.fulfillment_mode) AS maximum_mode,
+    MIN(CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_location_id END) AS minimum_location_id,
+    MAX(CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_location_id END) AS maximum_location_id,
+    MIN(CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_zone_id END) AS minimum_zone_id,
+    MAX(CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_zone_id END) AS maximum_zone_id,
+    MIN(CASE WHEN stage.context_is_resolved = 1 THEN stage.cycle_id END) AS minimum_cycle_id,
+    MAX(CASE WHEN stage.context_is_resolved = 1 THEN stage.cycle_id END) AS maximum_cycle_id,
+    MAX(stage.updated_at) AS last_job_update,
+    MAX(stage.delivered_at) AS last_delivery
+  FROM delivery_batch_legacy_0043 batch
+  LEFT JOIN delivery_job_stage_0043 stage ON stage.selected_batch_id = batch.id
+  GROUP BY batch.id
+),
+resolved_batch AS (
+  SELECT
+    batch.*,
+    evidence.*,
+    CASE
+      WHEN evidence.chosen_job_count = 0 THEN 0
+      WHEN evidence.resolved_job_count <> evidence.chosen_job_count THEN 0
+      WHEN evidence.minimum_mode <> evidence.maximum_mode THEN 0
+      WHEN evidence.minimum_location_id IS NULL
+        OR evidence.minimum_location_id <> evidence.maximum_location_id THEN 0
+      WHEN evidence.minimum_zone_id IS NULL
+        OR evidence.minimum_zone_id <> evidence.maximum_zone_id THEN 0
+      WHEN evidence.minimum_mode = 'INSTANT' THEN 1
+      WHEN evidence.minimum_mode = 'SCHEDULED'
+        AND evidence.minimum_cycle_id IS NOT NULL
+        AND evidence.minimum_cycle_id = evidence.maximum_cycle_id
+        AND batch.cycle_id = evidence.minimum_cycle_id THEN 1
+      ELSE 0
+    END AS context_is_resolved
+  FROM delivery_batch_legacy_0043 batch
+  JOIN batch_evidence evidence ON evidence.id = batch.id
+)
+INSERT INTO delivery_batch
+  (id, fulfillment_mode, cycle_id, location_id, zone_id, rider_id,
+   rider_user_id, status, context_resolution_status, version, created_at,
+   updated_at, dispatched_at, completed_at)
+SELECT
+  batch.id,
+  CASE WHEN batch.context_is_resolved = 1 THEN batch.minimum_mode ELSE 'SCHEDULED' END,
+  CASE
+    WHEN batch.context_is_resolved = 1 AND batch.minimum_mode = 'SCHEDULED'
+      THEN batch.minimum_cycle_id
+    ELSE NULL
+  END,
+  CASE WHEN batch.context_is_resolved = 1 THEN batch.minimum_location_id ELSE NULL END,
+  CASE WHEN batch.context_is_resolved = 1 THEN batch.minimum_zone_id ELSE NULL END,
+  (SELECT rider.id FROM rider_identity rider WHERE rider.auth_user_id = batch.rider_user_id),
+  batch.rider_user_id,
+  CASE
+    WHEN batch.context_is_resolved = 0 THEN 'EXCEPTION'
+    WHEN batch.status IN ('DRAFT', 'READY', 'ASSIGNED', 'DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED', 'EXCEPTION') THEN batch.status
+    ELSE 'EXCEPTION'
+  END,
+  CASE WHEN batch.context_is_resolved = 1 THEN 'RESOLVED' ELSE 'LEGACY_UNRESOLVED' END,
+  CASE WHEN batch.version > 0 THEN batch.version ELSE 1 END,
+  batch.created_at,
+  COALESCE(batch.last_job_update, batch.created_at),
+  CASE
+    WHEN batch.context_is_resolved = 1
+      AND batch.status IN ('DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'EXCEPTION')
+      THEN batch.created_at
+    ELSE NULL
+  END,
+  CASE
+    WHEN batch.context_is_resolved = 1 AND batch.status = 'COMPLETED'
+      THEN batch.last_delivery
+    ELSE NULL
+  END
+FROM resolved_batch batch;
+
+CREATE TABLE delivery_job (
+  id TEXT PRIMARY KEY NOT NULL,
+  order_id TEXT NOT NULL UNIQUE,
+  batch_id TEXT REFERENCES delivery_batch(id) ON DELETE RESTRICT,
+  sequence INTEGER CHECK (sequence IS NULL OR sequence > 0),
+  cycle_id TEXT REFERENCES delivery_cycle(id) ON DELETE RESTRICT,
+  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED'
+    CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
+  location_id TEXT REFERENCES fulfillment_location(id) ON DELETE RESTRICT,
+  zone_id TEXT REFERENCES delivery_zone(id) ON DELETE RESTRICT,
+  rider_id TEXT REFERENCES rider_identity(id) ON DELETE RESTRICT,
+  rider_user_id TEXT,
+  promised_at INTEGER,
+  status TEXT NOT NULL CHECK (
+    status IN ('UNASSIGNED', 'ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'DELIVERED', 'FAILED', 'RETRY_SCHEDULED', 'ESCALATED', 'CANCELED')
+  ),
+  context_resolution_status TEXT NOT NULL DEFAULT 'RESOLVED'
+    CHECK (context_resolution_status IN ('RESOLVED', 'LEGACY_UNRESOLVED')),
+  address_snapshot_json TEXT NOT NULL,
+  delivered_at INTEGER,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  CHECK (
+    (
+      context_resolution_status = 'RESOLVED'
+      AND location_id IS NOT NULL
+      AND zone_id IS NOT NULL
+      AND (
+        (fulfillment_mode = 'INSTANT' AND cycle_id IS NULL)
+        OR (fulfillment_mode = 'SCHEDULED' AND cycle_id IS NOT NULL)
+      )
+    )
+    OR (
+      context_resolution_status = 'LEGACY_UNRESOLVED'
+      AND fulfillment_mode = 'SCHEDULED'
+      AND cycle_id IS NULL
+      AND location_id IS NULL
+      AND zone_id IS NULL
+      AND status = 'ESCALATED'
+    )
+  ),
+  CHECK ((batch_id IS NULL) = (sequence IS NULL))
+);
+
 INSERT INTO delivery_job
   (id, order_id, batch_id, sequence, cycle_id, fulfillment_mode, location_id,
    zone_id, rider_id, rider_user_id, promised_at, status,
-   address_snapshot_json, delivered_at, version, created_at, updated_at)
+   context_resolution_status, address_snapshot_json, delivered_at, version,
+   created_at, updated_at)
 SELECT
-  job.id,
-  job.order_id,
-  selected.batch_id,
-  selected.canonical_sequence,
-  job.cycle_id,
-  job.fulfillment_mode,
-  snapshot.location_id,
-  snapshot.zone_id,
-  (SELECT rider.id FROM rider_identity rider WHERE rider.auth_user_id = job.rider_user_id),
-  job.rider_user_id,
-  snapshot.promised_at,
+  stage.id,
+  stage.order_id,
+  stage.selected_batch_id,
+  stage.canonical_sequence,
+  CASE WHEN stage.context_is_resolved = 1 THEN stage.cycle_id ELSE NULL END,
+  CASE WHEN stage.context_is_resolved = 1 THEN stage.fulfillment_mode ELSE 'SCHEDULED' END,
+  CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_location_id ELSE NULL END,
+  CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_zone_id ELSE NULL END,
+  (SELECT rider.id FROM rider_identity rider WHERE rider.auth_user_id = stage.rider_user_id),
+  stage.rider_user_id,
+  CASE WHEN stage.context_is_resolved = 1 THEN stage.snapshot_promised_at ELSE NULL END,
   CASE
-    WHEN job.status IN ('UNASSIGNED', 'ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'DELIVERED', 'FAILED', 'RETRY_SCHEDULED', 'ESCALATED', 'CANCELED') THEN job.status
+    WHEN stage.context_is_resolved = 0 THEN 'ESCALATED'
+    WHEN stage.status IN ('UNASSIGNED', 'ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'DELIVERED', 'FAILED', 'RETRY_SCHEDULED', 'ESCALATED', 'CANCELED') THEN stage.status
     ELSE 'ESCALATED'
   END,
-  job.address_snapshot_json,
-  job.delivered_at,
-  CASE WHEN job.version > 0 THEN job.version ELSE 1 END,
-  job.created_at,
-  job.updated_at
-FROM delivery_job_legacy_0043 job
-LEFT JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id = job.order_id
-LEFT JOIN sequenced_stops selected ON selected.delivery_job_id = job.id;
+  CASE WHEN stage.context_is_resolved = 1 THEN 'RESOLVED' ELSE 'LEGACY_UNRESOLVED' END,
+  stage.address_snapshot_json,
+  stage.delivered_at,
+  CASE WHEN stage.version > 0 THEN stage.version ELSE 1 END,
+  stage.created_at,
+  stage.updated_at
+FROM delivery_job_stage_0043 stage;
 
 CREATE TABLE delivery_stop (
   id TEXT PRIMARY KEY NOT NULL,
@@ -333,10 +424,24 @@ SELECT
   job.id,
   job.batch_id,
   job.sequence,
-  CASE WHEN json_valid(job.address_snapshot_json)
-    THEN json_extract(job.address_snapshot_json, '$.latitude') ELSE NULL END,
-  CASE WHEN json_valid(job.address_snapshot_json)
-    THEN json_extract(job.address_snapshot_json, '$.longitude') ELSE NULL END,
+  CASE
+    WHEN json_valid(job.address_snapshot_json)
+      AND json_type(job.address_snapshot_json, '$.latitude') IN ('integer', 'real')
+      AND json_type(job.address_snapshot_json, '$.longitude') IN ('integer', 'real')
+      AND json_extract(job.address_snapshot_json, '$.latitude') BETWEEN -90 AND 90
+      AND json_extract(job.address_snapshot_json, '$.longitude') BETWEEN -180 AND 180
+      THEN json_extract(job.address_snapshot_json, '$.latitude')
+    ELSE NULL
+  END,
+  CASE
+    WHEN json_valid(job.address_snapshot_json)
+      AND json_type(job.address_snapshot_json, '$.latitude') IN ('integer', 'real')
+      AND json_type(job.address_snapshot_json, '$.longitude') IN ('integer', 'real')
+      AND json_extract(job.address_snapshot_json, '$.latitude') BETWEEN -90 AND 90
+      AND json_extract(job.address_snapshot_json, '$.longitude') BETWEEN -180 AND 180
+      THEN json_extract(job.address_snapshot_json, '$.longitude')
+    ELSE NULL
+  END,
   job.address_snapshot_json,
   CASE
     WHEN json_valid(job.address_snapshot_json) THEN json_object(
@@ -348,6 +453,7 @@ SELECT
   CASE
     WHEN NOT json_valid(job.address_snapshot_json) THEN NULL
     WHEN json_type(job.address_snapshot_json, '$.delivery_instructions_json') IS NOT NULL
+      AND json_type(job.address_snapshot_json, '$.delivery_instructions_json') <> 'null'
       THEN json_extract(job.address_snapshot_json, '$.delivery_instructions_json')
     WHEN json_extract(job.address_snapshot_json, '$.notes') IS NOT NULL
       THEN json_object(
@@ -430,7 +536,8 @@ SELECT
   event.aggregate_id,
   stop.id,
   job.rider_id,
-  event.event_type,
+  CASE WHEN length(trim(event.event_type)) > 0
+    THEN event.event_type ELSE 'LEGACY_COMPATIBILITY' END,
   event.occurred_at,
   event.occurred_at,
   event.payload_json,
@@ -469,6 +576,7 @@ FROM delivery_stop stop
 JOIN delivery_job job ON job.id = stop.delivery_job_id
 WHERE stop.proof_json IS NOT NULL;
 
+DROP TABLE delivery_job_stage_0043;
 DROP TABLE delivery_stop_legacy_0043;
 DROP TABLE delivery_job_legacy_0043;
 DROP TABLE delivery_batch_legacy_0043;
@@ -487,7 +595,7 @@ CREATE INDEX delivery_batch_rider_open_idx
     AND context_resolution_status = 'RESOLVED'
     AND status NOT IN ('COMPLETED', 'CANCELED');
 CREATE INDEX delivery_job_context_status_idx
-  ON delivery_job(location_id, fulfillment_mode, cycle_id, zone_id, status, id);
+  ON delivery_job(context_resolution_status, location_id, fulfillment_mode, cycle_id, zone_id, status, id);
 CREATE INDEX delivery_job_batch_sequence_idx
   ON delivery_job(batch_id, sequence, id) WHERE batch_id IS NOT NULL;
 CREATE UNIQUE INDEX delivery_stop_job_unique ON delivery_stop(delivery_job_id);
@@ -501,6 +609,8 @@ CREATE INDEX delivery_proof_rider_time_idx
   ON delivery_proof(rider_id, delivered_at, id);
 CREATE INDEX delivery_batch_compatibility_history_cycle_idx
   ON delivery_batch_compatibility_history(original_cycle_id, delivery_batch_id);
+CREATE INDEX delivery_job_compatibility_history_order_idx
+  ON delivery_job_compatibility_history(original_order_id, delivery_job_id);
 CREATE INDEX delivery_stop_compatibility_history_job_idx
   ON delivery_stop_compatibility_history(delivery_job_id, delivery_stop_id);
 CREATE INDEX delivery_stop_compatibility_history_batch_sequence_idx
@@ -560,6 +670,14 @@ BEGIN SELECT RAISE(ABORT, 'DELIVERY_COMPATIBILITY_HISTORY_APPEND_ONLY'); END;
 
 CREATE TRIGGER delivery_batch_compatibility_history_append_only_delete
 BEFORE DELETE ON delivery_batch_compatibility_history
+BEGIN SELECT RAISE(ABORT, 'DELIVERY_COMPATIBILITY_HISTORY_APPEND_ONLY'); END;
+
+CREATE TRIGGER delivery_job_compatibility_history_append_only_update
+BEFORE UPDATE ON delivery_job_compatibility_history
+BEGIN SELECT RAISE(ABORT, 'DELIVERY_COMPATIBILITY_HISTORY_APPEND_ONLY'); END;
+
+CREATE TRIGGER delivery_job_compatibility_history_append_only_delete
+BEFORE DELETE ON delivery_job_compatibility_history
 BEGIN SELECT RAISE(ABORT, 'DELIVERY_COMPATIBILITY_HISTORY_APPEND_ONLY'); END;
 
 CREATE TRIGGER delivery_stop_compatibility_history_append_only_update
