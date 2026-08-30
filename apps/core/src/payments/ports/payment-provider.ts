@@ -1,5 +1,15 @@
 import type { PaymentDomainState } from "../domain/payment";
 
+export type ProviderSettlementObservation = {
+  grossMinor: number;
+  processingCostMinor: number;
+  withholdingMinor: number;
+  adjustmentMinor: number;
+  netMinor: number;
+  currency: string;
+  observedAt: number;
+};
+
 export type VerifiedProviderEvent = {
   provider: string;
   providerEventId: string;

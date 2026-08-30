@@ -52,6 +52,15 @@ describe("payments context persistence", () => {
       expect.arrayContaining(["id", "payment_intent_id", "category", "status", "details_json"]),
     );
     expect(await tableColumns("payment_attempt")).toContain("payment_intent_id");
+    expect(await tableColumns("payment_settlement_observation")).toEqual(
+      expect.arrayContaining([
+        "gross_minor",
+        "processing_cost_minor",
+        "withholding_minor",
+        "adjustment_minor",
+        "net_minor",
+      ]),
+    );
   });
 
   it("deduplicates provider events on (provider, provider_event_id)", async () => {
