@@ -55,10 +55,8 @@ test("requires distinct liveness and readiness surfaces", () => {
       new Map([
         ["packages/contracts/src/common.ts", "type CoreReadinessResponse = {}"],
         ["packages/contracts/src/core-service.ts", 'const methods = ["readiness"]'],
-        [
-          "apps/core/src/index.ts",
-          'path === "/health"; path === "/ready"; db.prepare("SELECT 1 AS ready")',
-        ],
+        ["apps/core/src/index.ts", 'path === "/health"; path === "/ready"'],
+        ["apps/core/src/runtime/readiness.ts", 'db.prepare("SELECT 1 AS ready")'],
       ]),
     ),
     [],

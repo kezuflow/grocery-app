@@ -3,6 +3,28 @@
 Status date: 2026-08-30. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
+## Architecture and security hardening (2026-08-30)
+
+- Shared contracts are decomposed by bounded context and paired with an exhaustive 136-method
+  runtime manifest. Core conformance tests prove the implemented Service Binding surface exactly;
+  Web's sole opaque generated-binding cast is localized and tested.
+- The TypeScript-scanner architecture gate rejects forbidden Web/Core, contract/infrastructure,
+  layer-direction, provider, entrypoint-SQL, and row-contract dependencies. Non-Admin/non-Maps RPC
+  transport is composed through bounded auth, catalog, membership, checkout, Payments, Orders, and
+  Operations adapters over one cached Core dependency context. Admin and Maps transport remains
+  behaviorally pinned in the entrypoint pending its independent owner-approved mechanical move.
+- Auth, payment-webhook, and customer command bodies are byte-bounded before parsing; exact webhook
+  signature text is retained. Web uses one validated UUID correlation ID through Core and back.
+- Web security headers now include a complete CSP and browser hardening policy with deployed-only
+  HSTS. The approved Mapbox worker/image/connect directives are unchanged.
+- Core liveness is dependency-free; readiness safely probes runtime configuration, D1, payment
+  provider code/capabilities, and renewal initiation. Structured telemetry redacts sensitive
+  fields, a static security gate blocks unsafe log calls, and both Workers explicitly retain all
+  logs while sampling five percent of traces.
+- Wrangler 4.125.0 regenerated and verified both Worker binding declarations. Architecture,
+  readiness, lint, focused adapter/domain, type, vinext, and build gates pass for this batch; the
+  final repository-wide acceptance evidence is recorded only after the full matrix runs.
+
 ## Mapbox Customer Address Flow (2026-08-30)
 
 - Customer address search now uses a private POST/no-store Web adapter and Core's provider-neutral
@@ -316,16 +338,16 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 
 ## Maturity by area
 
-| Area                       | Current evidence                                                                   | Not established                                              |
-| -------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests            | Production deployment acceptance                             |
-| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                 | Production sender/domain and OAuth configuration             |
-| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                       | Approved production polygons/geocoder and Mapbox secret      |
-| Checkout/orders            | Authoritative quote revalidation, mock payment reaction, immutable order snapshots | Full authenticated browser acceptance and production payment |
-| Membership                 | Provider-neutral states, trial/authorization/renewal test seams                    | Approved production mandates and automatic charges           |
-| Operations                 | Scoped commands/read models and local integration tests                            | Complete staff/rider authenticated Playwright acceptance     |
-| Notifications              | Auth verification/reset only                                                       | Product notification Program 6                               |
-| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright | Production deployment acceptance remains external           |
+| Area                       | Current evidence                                                                     | Not established                                              |
+| -------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests              | Production deployment acceptance                             |
+| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                   | Production sender/domain and OAuth configuration             |
+| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                         | Approved production polygons/geocoder and Mapbox secret      |
+| Checkout/orders            | Authoritative quote revalidation, mock payment reaction, immutable order snapshots   | Full authenticated browser acceptance and production payment |
+| Membership                 | Provider-neutral states, trial/authorization/renewal test seams                      | Approved production mandates and automatic charges           |
+| Operations                 | Scoped commands/read models and local integration tests                              | Complete staff/rider authenticated Playwright acceptance     |
+| Notifications              | Auth verification/reset only                                                         | Product notification Program 6                               |
+| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright | Production deployment acceptance remains external            |
 
 ## Verification truthfulness
 

@@ -52,26 +52,26 @@ Core is a modular monolith. Modules have explicit application/domain/repository 
 
 All application bounded contexts below are authoritative modules inside `apps/core`; a context boundary does not imply a separate deployment. A record or transition has one owner. Other contexts react through explicit application commands or consume purpose-built read models rather than mutating the owner's storage.
 
-| Bounded context | Authoritative responsibility | Explicit exclusions |
-|---|---|---|
-| Identity/Auth | Better Auth users, credentials/accounts, sessions, email verification, password reset, OAuth, and configured authentication infrastructure | Customer profiles, authorization, membership, promotions, payments, orders, or operations |
-| Application IAM | Customer principals, staff/rider identities, roles, capabilities, market/location scopes, and authorization decisions | Authentication credentials/sessions and business aggregate state |
-| Customers | Customer profile and saved-address ownership | Authentication identity and serviceability policy |
-| Geography and Assignment | Markets, service areas, delivery zones, location capabilities, the single active `INSTANT`/`SCHEDULED` mode configuration per fulfillment location, serviceability, and fulfillment-location assignment | Customer-selected hubs, fulfillment execution, and catalog availability |
+| Bounded context                    | Authoritative responsibility                                                                                                                                                                                                  | Explicit exclusions                                                                                                                                        |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity/Auth                      | Better Auth users, credentials/accounts, sessions, email verification, password reset, OAuth, and configured authentication infrastructure                                                                                    | Customer profiles, authorization, membership, promotions, payments, orders, or operations                                                                  |
+| Application IAM                    | Customer principals, staff/rider identities, roles, capabilities, market/location scopes, and authorization decisions                                                                                                         | Authentication credentials/sessions and business aggregate state                                                                                           |
+| Customers                          | Customer profile and saved-address ownership                                                                                                                                                                                  | Authentication identity and serviceability policy                                                                                                          |
+| Geography and Assignment           | Markets, service areas, delivery zones, location capabilities, the single active `INSTANT`/`SCHEDULED` mode configuration per fulfillment location, serviceability, and fulfillment-location assignment                       | Customer-selected hubs, fulfillment execution, and catalog availability                                                                                    |
 | Catalog, Availability, and Pricing | Global products, controlled unit registry, persisted sellable SKUs and SKU-specific base consumption, canonical Product media metadata plus validated R2 image storage, and market/location SKU price and availability policy | Physical stock, universal pack/bunch/tray conversions, committed order snapshots, arbitrary caller-controlled object keys, and public asset-serving policy |
-| Membership | Paid membership offer, subscriptions, eligibility, billing periods, and subscription lifecycle | Trial eligibility/grants, provider interactions, and payment state |
-| Promotions | Controlled benefit/rule definitions, eligibility, grants, redemptions, deterministic component-level stacking, and the introductory membership trial authority | Subscription state, arbitrary executable rules, and payment-provider operations |
-| Cart and Checkout | Versioned cart, mode-aware eligibility orchestration, immutable quote and financial breakdown, checkout attempt, and pre-payment recovery state | Canonical payment state and committed orders |
-| Payments and Refunds | Provider-neutral payment intents/attempts, commitment policy, provider adapters/mappings, event inbox, refunds, and reconciliation | Membership and order lifecycle ownership |
-| Orders and Amendments | Immutable paid order commitment, snapshots, cancellation policy, and additive amendments | Provider financial state and physical fulfillment execution |
-| Delivery Cycles and Capacity | `SCHEDULED` cadence/window/cutoff lifecycle and cycle-zone-location capacity allocation | `INSTANT` fulfillment, order, procurement, and delivery execution states |
-| Inventory | Integer location inventory positions, expiring Instant checkout holds, committed stocked reservations, planned-demand distinction, and append-only movements | Unit/SKU definitions, procurement approval, and fulfillment workflow state |
-| Procurement and Receiving | Demand aggregation, requirements, purchasing, receipt/discrepancy state, and supply exceptions | Direct unexplained inventory mutation |
-| Fulfillment | Explicit `INSTANT`/`SCHEDULED` policies after location resolution plus picking, shortage, packing, and handoff state | Location mode configuration, Order financial truth, and delivery execution |
-| Delivery and Rider Work | Delivery jobs/batches/stops, assignments, rider events, retries, and delivery exceptions | Raw order-state mutation and payment/refund policy |
-| Notifications | Transactional message rendering (minimal launch set: email), delivery attempts with status, and notification scheduling metadata | Owning or mutating any business aggregate state; notifications communicate authoritative state and never decide it |
-| Audit and Reliability | Durable audit history, command idempotency, outbox/inbox processing metadata, and operational exceptions | Owning another context's business state |
-| Analytics and Reporting | Derived operational/business projections, canonical versioned metric definitions, aggregation, and reporting read models | Authoritative Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state |
+| Membership                         | Paid membership offer, subscriptions, eligibility, billing periods, and subscription lifecycle                                                                                                                                | Trial eligibility/grants, provider interactions, and payment state                                                                                         |
+| Promotions                         | Controlled benefit/rule definitions, eligibility, grants, redemptions, deterministic component-level stacking, and the introductory membership trial authority                                                                | Subscription state, arbitrary executable rules, and payment-provider operations                                                                            |
+| Cart and Checkout                  | Versioned cart, mode-aware eligibility orchestration, immutable quote and financial breakdown, checkout attempt, and pre-payment recovery state                                                                               | Canonical payment state and committed orders                                                                                                               |
+| Payments and Refunds               | Provider-neutral payment intents/attempts, commitment policy, provider adapters/mappings, event inbox, refunds, and reconciliation                                                                                            | Membership and order lifecycle ownership                                                                                                                   |
+| Orders and Amendments              | Immutable paid order commitment, snapshots, cancellation policy, and additive amendments                                                                                                                                      | Provider financial state and physical fulfillment execution                                                                                                |
+| Delivery Cycles and Capacity       | `SCHEDULED` cadence/window/cutoff lifecycle and cycle-zone-location capacity allocation                                                                                                                                       | `INSTANT` fulfillment, order, procurement, and delivery execution states                                                                                   |
+| Inventory                          | Integer location inventory positions, expiring Instant checkout holds, committed stocked reservations, planned-demand distinction, and append-only movements                                                                  | Unit/SKU definitions, procurement approval, and fulfillment workflow state                                                                                 |
+| Procurement and Receiving          | Demand aggregation, requirements, purchasing, receipt/discrepancy state, and supply exceptions                                                                                                                                | Direct unexplained inventory mutation                                                                                                                      |
+| Fulfillment                        | Explicit `INSTANT`/`SCHEDULED` policies after location resolution plus picking, shortage, packing, and handoff state                                                                                                          | Location mode configuration, Order financial truth, and delivery execution                                                                                 |
+| Delivery and Rider Work            | Delivery jobs/batches/stops, assignments, rider events, retries, and delivery exceptions                                                                                                                                      | Raw order-state mutation and payment/refund policy                                                                                                         |
+| Notifications                      | Transactional message rendering (minimal launch set: email), delivery attempts with status, and notification scheduling metadata                                                                                              | Owning or mutating any business aggregate state; notifications communicate authoritative state and never decide it                                         |
+| Audit and Reliability              | Durable audit history, command idempotency, outbox/inbox processing metadata, and operational exceptions                                                                                                                      | Owning another context's business state                                                                                                                    |
+| Analytics and Reporting            | Derived operational/business projections, canonical versioned metric definitions, aggregation, and reporting read models                                                                                                      | Authoritative Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state                                                   |
 
 The canonical membership, introductory-trial, payment-commitment, and subscription-lifecycle semantics are defined in `DOMAIN_MODEL.md` and `STATE_MACHINES.md`; this table establishes ownership only.
 
@@ -135,6 +135,8 @@ Rules:
 - Commands return stable results or domain error codes.
 - Queries return purpose-built read models.
 - Context passed to Core includes correlation metadata and the authenticated session/principal where applicable.
+- Web accepts only a bounded UUID correlation header, replaces invalid values, and forwards one request ID in both the typed input and approved header set. The same ID is returned on success and safe error responses.
+- Public JSON/auth/webhook bodies are byte-bounded before parsing or signature verification. Unsupported media types, oversized bodies, malformed JSON, and schema failures remain distinct transport outcomes; raw bodies are never logged.
 - Address search returns provider-neutral, session-scoped candidates. Temporary provider responses are never persisted, cached across sessions, or logged; Core performs any provider-required permanent lookup before persisting provider-derived address data.
 - Public Core HTTP surface is narrow: provider webhooks, health/operational endpoints where needed, and no general customer REST API.
 
@@ -200,6 +202,14 @@ Forbidden paths include UI to arbitrary route to raw SQL, UI-owned payment rules
 
 These boundaries are executable. `pnpm architecture:check` scans every tracked TypeScript/TSX source file with the TypeScript compiler scanner and rejects Web-to-Core source imports, infrastructure-bearing contracts, outward domain/application dependencies, provider-adapter leakage, SQL in Core entrypoint adapters, and exported contract row types. The verifier owns its narrowly documented runtime-composition exceptions; a violation is repaired behind a port or DTO rather than allowlisted for historical convenience. Fixture tests pin each stable diagnostic code and line number.
 
+Core RPC transport is composed from bounded adapters under `apps/core/src/entrypoint`. A shared
+`CoreRpcContext` creates and caches the authoritative auth, database, runtime, Payments registry,
+and route-distance dependencies; adapters validate transport input, resolve application context,
+and delegate once to the owning command/query. `CoreEntrypoint` preserves the exact Service Binding
+method surface and Worker lifecycle. The landed Admin and Maps transport groups remain pinned in
+the composition root until their independent workstreams authorize a mechanical move; they may
+not be used as precedent for adding new business logic there.
+
 ## Read and Write Architecture
 
 Use pragmatic CQRS-lite:
@@ -252,6 +262,9 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 ## Observability and Production Basics
 
 - Emit structured JSON logs with correlation/request IDs, actor/principal IDs where safe, command/query name, aggregate identifiers, duration, result, and stable error code.
+- All general Core telemetry crosses the redacting observability helper. Cookie, authorization,
+  token, secret, password/reset, action URL, webhook/provider payload, and precise-address fields
+  are forbidden by runtime redaction plus `pnpm readiness:check` static analysis.
 - Enable Cloudflare Worker observability with an intentional sampling policy.
 - Trace checkout attempts, provider payment references, webhook event IDs, order commitment, refunds, queue jobs, and reconciliation outcomes.
 - Geocoding logs may include operation, duration, result category, and stable error code, but never address text, contact data, coordinates, provider payloads, or temporary candidate contents.
@@ -262,6 +275,18 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 - Secrets live in Cloudflare secret bindings, never source/config.
 - Define migration, backup/export, restoration, failed-job, webhook-replay, and reconciliation runbooks before production launch.
 - Apply rate limits at abuse-sensitive public boundaries such as login, registration, reset, checkout attempts, and webhook ingress where justified.
+
+Liveness and dependency readiness are different contracts. `/health` and `health()` perform no
+dependency call and only prove that the Worker can execute. `/ready` and `readiness()` perform a
+bounded D1 probe and report safe runtime/Payments capability state; unavailable configuration,
+database, or payment-provider capability returns `not_ready` (HTTP 503 on the HTTP surface).
+Readiness never returns secret values, provider payloads, database identifiers, or failure detail.
+Traffic promotion requires readiness, not liveness.
+
+Web emits a complete environment-safe security policy: CSP defaults and frame/object/base/form
+restrictions, referrer policy, MIME sniffing prevention, least-privilege browser permissions, and
+HSTS only for deployed HTTPS environments. The approved Mapbox worker/image/connect sources stay
+exact. Production CSP never permits `unsafe-eval`.
 
 ## MVP Versus Future Scaling
 

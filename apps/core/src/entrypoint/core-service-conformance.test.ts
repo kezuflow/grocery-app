@@ -1,9 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import {
-  coreServiceMethodNames,
-  type CoreServiceBinding,
-} from "@freshmarkets/contracts";
+import { coreServiceMethodNames, type CoreServiceBinding } from "@freshmarkets/contracts";
 import { CoreEntrypoint } from "../index";
 
 const lifecycleMethods = ["fetch", "scheduled"] as const;
@@ -35,8 +32,8 @@ describe("Core Service Binding conformance", () => {
   });
 
   it("detects an advertised method without a runtime implementation", () => {
-    expect(missingMethods([...coreServiceMethodNames, "advertisedButMissing"], CoreEntrypoint.prototype)).toEqual([
-      "advertisedButMissing",
-    ]);
+    expect(
+      missingMethods([...coreServiceMethodNames, "advertisedButMissing"], CoreEntrypoint.prototype),
+    ).toEqual(["advertisedButMissing"]);
   });
 });

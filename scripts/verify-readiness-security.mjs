@@ -119,12 +119,13 @@ export function verifyReadinessSurface(files) {
   const common = files.get("packages/contracts/src/common.ts") ?? "";
   const service = files.get("packages/contracts/src/core-service.ts") ?? "";
   const entrypoint = files.get("apps/core/src/index.ts") ?? "";
+  const readiness = files.get("apps/core/src/runtime/readiness.ts") ?? "";
   const failures = [];
   if (!common.includes("CoreReadinessResponse")) failures.push("Readiness DTO is missing");
   if (!service.includes('"readiness"')) failures.push("Readiness RPC is missing from the manifest");
   if (!entrypoint.includes('path === "/health"')) failures.push("Liveness route is missing");
   if (!entrypoint.includes('path === "/ready"')) failures.push("Readiness route is missing");
-  if (!entrypoint.includes("SELECT 1 AS ready"))
+  if (!readiness.includes("SELECT 1 AS ready"))
     failures.push("Bounded D1 readiness probe is missing");
   return failures;
 }
@@ -163,6 +164,7 @@ function main() {
     "packages/contracts/src/common.ts",
     "packages/contracts/src/core-service.ts",
     "apps/core/src/index.ts",
+    "apps/core/src/runtime/readiness.ts",
   ]) {
     files.set(fileName, readFileSync(path.join(repositoryRoot, fileName), "utf8"));
   }

@@ -34,6 +34,18 @@ coverage, trigger replacement, cycle-zone capacity, checkout attempts and quote
 snapshots, payment events/webhooks, the inventory ledger, and complete flow and
 concurrency test coverage.
 
+## Architecture and Security Hardening Pass (2026-08-30)
+
+The integrated post-Admin/post-Maps baseline now enforces contract/runtime conformance,
+TypeScript dependency direction, bounded auth/webhook/customer command bodies, one-ID Web/Core
+correlation, environment-safe browser headers, separate liveness/readiness, redacted telemetry,
+explicit Worker log/trace sampling, generated-binding freshness, and zero lint warnings. Core's
+non-Admin/non-Maps auth, catalog, membership, checkout, payment, customer-order, inventory,
+procurement, and fulfillment transports are bounded adapters over a shared dependency context.
+Admin and Maps behavior remains independently pinned while its transport awaits owner-authorized
+mechanical extraction. This pass changes no locked business invariant and does not claim that later
+customer product phases are complete.
+
 ## Remediation Pass 2 — Commerce Invariants (2026-08-26)
 
 The second bounded pass moves the existing compatibility checkout path onto the

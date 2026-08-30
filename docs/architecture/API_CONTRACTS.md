@@ -54,6 +54,31 @@ Core derives authentication/session context from the forwarded browser request/s
 
 Error responses contain a code, safe user-facing message/key, request ID, field details when appropriate, and optional recovery metadata such as alternate cycles. They do not expose SQL/provider internals.
 
+Web computes one request context at the public boundary. A caller UUID may be preserved; invalid,
+oversized, or non-UUID values are replaced. The selected ID is the `requestId` in the RPC input,
+overrides forwarded `x-request-id`, is returned as the response header, and appears in safe error
+JSON. Customer command JSON is limited to 16 KiB unless a route family documents a narrower or
+larger bound; auth and payment webhooks are limited to 256 KiB, and auth responses to 1 MiB.
+`415` means an unsupported content type, `413` means the declared or streamed byte limit was
+exceeded, and `400` means body-read, JSON, or schema failure. Provider signatures consume the
+exact bounded raw webhook text.
+
+The runtime `coreServiceMethodNames` manifest is exhaustive with `CoreServiceBinding`. Deployment
+conformance tests prove that Core implements every advertised method, advertises no missing method,
+and exposes only those methods plus the Worker lifecycle.
+
+### Liveness and readiness
+
+- `health({ requestId? }) -> CoreHealthResponse` is liveness. It performs no D1/provider probe.
+- `readiness({ requestId? }) -> CoreReadinessResponse` is traffic readiness. It reports only
+  `runtimeConfiguration`, bounded `database`, and provider-neutral `paymentProvider` state.
+
+`paymentProvider` includes `status`, configured `code`, the closed capabilities
+`PAYMENT_CREATE`, `RECURRING_AUTHORIZATION`, `WEBHOOK_VERIFICATION`, `PAYMENT_LOOKUP`, and
+`REFUND_REQUEST` when implemented, plus `renewalInitiationEnabled`. Missing critical capability is
+`not_ready`; neither environment names nor browser state infer provider readiness. The HTTP
+`/ready` adapter returns 503 for `not_ready` and preserves the request reference.
+
 Client/application/admin lifecycle commands require a stable idempotency key and `expectedVersion` where concurrent mutation is possible. Provider webhook events are a different boundary: they require signed authenticity plus unique `(provider, providerEventId)` identity, and they never accept or invent `expectedVersion`. Core performs current-state validation and compare-and-swap internally and records retry/reconciliation state when a concurrent command wins.
 
 ## Authentication Boundary

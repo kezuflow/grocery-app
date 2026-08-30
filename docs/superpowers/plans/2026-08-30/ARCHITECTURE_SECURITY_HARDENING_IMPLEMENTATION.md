@@ -10,6 +10,19 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-30/ARCHITECTURE_SECURITY_HARDENING_DESIGN.md`
 
+## Closeout Status
+
+- [x] Tasks 1–3: integrated baseline, executable dependency rules, and exact contract/runtime conformance.
+- [x] Tasks 4–5 authorized scope: non-Admin/non-Maps RPC adapters and structural boundary tests.
+- [ ] Tasks 4–5 excluded scope: Admin and Maps transport extraction was deliberately not performed because the user excluded both simultaneous programs.
+- [x] Tasks 6–9: bounded bodies, request correlation, security headers, readiness, observability, generated types, and warning hygiene.
+- [x] Task 10 documentation and acceptance matrix, including the deterministic managed-stack browser run.
+- [ ] Task 10 landing commit and integration to `main` (performed only after independent review).
+
+The unchecked excluded-scope item is a documented plan deviation, not remaining authorization. The
+Core composition boundary test locks the resulting exception so later work cannot mistake it for an
+unreviewed architecture decision.
+
 ## Global Constraints
 
 - Do not begin shared-file implementation until both Admin Dashboard and Maps work are committed to `main` and this remediation history is replayed onto that state.
