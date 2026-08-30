@@ -3,14 +3,18 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
   CartView,
+  CheckoutQuoteView,
   CustomerAddressView,
   DeliveryCycleView,
+  PaymentActionView,
   RpcResult,
 } from "@freshmarkets/contracts";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 import { OrderSummary } from "../../components/storefront/marketplace/order-summary";
 import { AddressEditor } from "../../components/storefront/address/address-editor";
 import { AddressList } from "../../components/storefront/address/address-list";
+import { PromotionEntry } from "../../components/storefront/checkout/promotion-entry";
+import { CheckoutTotalReview } from "../../components/storefront/checkout/checkout-total-review";
 import { fetchCart } from "../../lib/storefront/cart-client";
 export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: string }) {
   const [cart, setCart] = useState<CartView | null>(null);
@@ -25,13 +29,21 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
   const selectedAddressId = useRef("");
   const selectedCycleId = useRef("");
   const [status, setStatus] = useState("");
-  const [pendingQuote, setPendingQuote] = useState<{
-    quoteId: string;
-    totalMinor: number;
-    currency: string;
-    input: { addressId: string; cycleId: string; cartVersion: number };
-    attemptKey: string;
-  } | null>(null);
+  const [promotionCodes, setPromotionCodes] = useState<readonly string[]>([]);
+  const promotionCodesRef = useRef<readonly string[]>([]);
+  const [acceptingPayment, setAcceptingPayment] = useState(false);
+  const [pendingQuote, setPendingQuote] = useState<
+    | (CheckoutQuoteView & {
+        input: {
+          addressId: string;
+          cycleId: string;
+          cartVersion: number;
+          promotionCodes: readonly string[];
+        };
+        attemptKey: string;
+      })
+    | null
+  >(null);
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const addressLoadGeneration = useRef(0);
   useEffect(() => {
@@ -98,11 +110,17 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     attemptKey.current = `checkout-${crypto.randomUUID()}`;
   }
 
-  function quoteInputIsCurrent(input: { addressId: string; cycleId: string; cartVersion: number }) {
+  function quoteInputIsCurrent(input: {
+    addressId: string;
+    cycleId: string;
+    cartVersion: number;
+    promotionCodes: readonly string[];
+  }) {
     return (
       input.addressId === selectedAddressId.current &&
       input.cycleId === selectedCycleId.current &&
-      input.cartVersion === cart?.version
+      input.cartVersion === cart?.version &&
+      input.promotionCodes.join("\u0000") === promotionCodesRef.current.join("\u0000")
     );
   }
 
@@ -134,7 +152,12 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       invalidatePendingQuote();
       setStatus("Checking the selected delivery window and current total.");
     }
-    const quoteInput = { addressId: selectedAddressId.current, cycleId, cartVersion: cart.version };
+    const quoteInput = {
+      addressId: selectedAddressId.current,
+      cycleId,
+      cartVersion: cart.version,
+      promotionCodes: promotionCodesRef.current,
+    };
     const quoteAttemptKey = attemptKey.current;
     const eligibilityResponse = await fetch("/api/commerce/checkout", {
       method: "POST",
@@ -169,13 +192,10 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
         cartVersion: cart.version,
         addressId,
         cycleId,
+        promotionCodes: promotionCodesRef.current,
       }),
     });
-    const quoteResult = (await quoteResponse.json()) as {
-      ok: boolean;
-      value?: { quoteId: string; totalMinor: number; currency: string };
-      error?: { code: string; message: string };
-    };
+    const quoteResult = (await quoteResponse.json()) as RpcResult<CheckoutQuoteView>;
     if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
     if (!quoteResult.ok) {
       setPendingQuote(null);
@@ -201,6 +221,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     }
     // 2) Canonical payment intent. Order commitment happens in Core from the
     // provider-confirmed payment reaction — never from this browser.
+    setAcceptingPayment(true);
     const paymentResponse = await fetch("/api/checkout/payment", {
       method: "POST",
       headers: {
@@ -209,18 +230,30 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       },
       body: JSON.stringify({
         checkoutAttemptId: pendingQuote.quoteId,
+        expectedQuoteVersion: pendingQuote.attemptVersion,
+        expectedPriceAcceptanceVersion: pendingQuote.priceAcceptanceVersion,
+        expectedCurrency: pendingQuote.currency,
+        expectedMerchandiseSubtotalMinor: pendingQuote.merchandiseSubtotalMinor,
+        expectedItemDiscountMinor: pendingQuote.itemDiscountMinor,
+        expectedOrderDiscountMinor: pendingQuote.orderDiscountMinor,
+        expectedDeliverySubtotalMinor: pendingQuote.deliverySubtotalMinor,
+        expectedDeliveryFeeMinor: pendingQuote.deliveryFeeMinor,
+        expectedDeliveryDiscountMinor: pendingQuote.deliveryDiscountMinor,
+        expectedServiceFeeMinor: pendingQuote.serviceFeeMinor,
+        expectedTaxMinor: pendingQuote.taxMinor,
         expectedTotalMinor: pendingQuote.totalMinor,
         returnUrl: window.location.origin + "/orders",
       }),
     });
-    const paymentResult = (await paymentResponse.json()) as {
-      ok: boolean;
-      error?: { code: string; message: string };
-    };
+    const paymentResult = (await paymentResponse.json()) as RpcResult<PaymentActionView>;
+    setAcceptingPayment(false);
     if (paymentResult.ok) {
-      setStatus("Payment started. Your order appears here once payment is confirmed.");
-      setPendingQuote(null);
-      attemptKey.current = `checkout-${crypto.randomUUID()}`;
+      if (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) {
+        setStatus("Payment is ready. Redirecting to the secure payment page…");
+        window.location.assign(paymentResult.value.redirectUrl);
+      } else {
+        setStatus("Payment started. Keep this page open while the provider confirms it.");
+      }
     } else {
       if (paymentResult.error?.code === "PRICE_CHANGED") {
         setPendingQuote(null);
@@ -331,6 +364,28 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
               </div>
             </section>
 
+            <PromotionEntry
+              codes={promotionCodes}
+              feedback={pendingQuote?.promotionFeedback ?? []}
+              disabled={guest || acceptingPayment}
+              onAdd={(code) => {
+                const next = [...promotionCodesRef.current, code];
+                promotionCodesRef.current = next;
+                setPromotionCodes(next);
+                invalidatePendingQuote();
+                setStatus(`${code} added. Review the total again to check the promotion.`);
+              }}
+              onRemove={(code) => {
+                const next = promotionCodesRef.current.filter(
+                  (currentCode) => currentCode !== code,
+                );
+                promotionCodesRef.current = next;
+                setPromotionCodes(next);
+                invalidatePendingQuote();
+                setStatus(`${code} removed. Review the total again.`);
+              }}
+            />
+
             <section className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
               <div className="flex items-start gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--fm-primary-dark)] text-sm font-bold text-white">
@@ -374,32 +429,11 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
             </section>
 
             {pendingQuote ? (
-              <section
-                className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-5 sm:p-6"
-                aria-label="Order total review"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--fm-success)] text-sm font-bold text-white">
-                    3
-                  </span>
-                  <div>
-                    <h2 className="text-lg font-bold">Payment review</h2>
-                    <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                      Core returned the current authoritative total. Accept it to start payment.
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-5 text-2xl font-bold tabular-nums">
-                  {pendingQuote.currency} {(pendingQuote.totalMinor / 100).toFixed(2)}
-                </p>
-                <button
-                  type="button"
-                  onClick={confirmPayment}
-                  className="mt-4 inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-5 text-sm font-bold text-[var(--fm-primary-dark)] hover:bg-[#c4fa69]"
-                >
-                  Accept total and continue to payment
-                </button>
-              </section>
+              <CheckoutTotalReview
+                quote={pendingQuote}
+                onAccept={confirmPayment}
+                accepting={acceptingPayment}
+              />
             ) : null}
             {status ? (
               <p
@@ -415,6 +449,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
             <OrderSummary
               cart={cart}
               totalMinor={pendingQuote?.totalMinor}
+              quote={pendingQuote ?? undefined}
               actionLabel={
                 guest
                   ? "Sign in to continue"

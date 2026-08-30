@@ -285,6 +285,17 @@ export const refreshCheckoutQuoteSchema = headersRequest.extend({
 
 export const createPaymentIntentSchema = headersRequest.extend({
   checkoutAttemptId: identifierSchema,
+  expectedQuoteVersion: positiveIntegerSchema,
+  expectedPriceAcceptanceVersion: positiveIntegerSchema,
+  expectedCurrency: z.string().trim().min(3).max(3),
+  expectedMerchandiseSubtotalMinor: z.number().int().nonnegative(),
+  expectedItemDiscountMinor: z.number().int().nonnegative(),
+  expectedOrderDiscountMinor: z.number().int().nonnegative(),
+  expectedDeliverySubtotalMinor: z.number().int().nonnegative(),
+  expectedDeliveryFeeMinor: z.number().int().nonnegative(),
+  expectedDeliveryDiscountMinor: z.number().int().nonnegative(),
+  expectedServiceFeeMinor: z.number().int().nonnegative(),
+  expectedTaxMinor: z.number().int().nonnegative(),
   expectedTotalMinor: z.number().int().nonnegative(),
   returnUrl: z.string().url().max(2000),
   idempotencyKey: idempotencyKeySchema,

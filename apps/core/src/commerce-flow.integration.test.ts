@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import type { CheckoutQuoteView, CoreServiceBinding } from "@freshmarkets/contracts";
 import { mockSignatureFor } from "./payments/infrastructure/providers/mock-payment-provider";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { redrivePaymentReactions } from "./payments/application/redrive-payment-reactions";
@@ -11,6 +11,23 @@ const password = "correct-horse-battery-staple";
 
 function requestId() {
   return crypto.randomUUID();
+}
+
+function acceptedPrice(quote: CheckoutQuoteView) {
+  return {
+    expectedQuoteVersion: quote.attemptVersion,
+    expectedPriceAcceptanceVersion: quote.priceAcceptanceVersion,
+    expectedCurrency: quote.currency,
+    expectedMerchandiseSubtotalMinor: quote.merchandiseSubtotalMinor,
+    expectedItemDiscountMinor: quote.itemDiscountMinor,
+    expectedOrderDiscountMinor: quote.orderDiscountMinor,
+    expectedDeliverySubtotalMinor: quote.deliverySubtotalMinor,
+    expectedDeliveryFeeMinor: quote.deliveryFeeMinor,
+    expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
+    expectedServiceFeeMinor: quote.serviceFeeMinor,
+    expectedTaxMinor: quote.taxMinor,
+    expectedTotalMinor: quote.totalMinor,
+  };
 }
 
 /** Program 3: the trial gate requires a recurring-capable authorization. */
@@ -149,7 +166,7 @@ describe("customer checkout flow", () => {
       headers,
       requestId: requestId(),
       checkoutAttemptId: quote.value.quoteId,
-      expectedTotalMinor: quote.value.totalMinor,
+      ...acceptedPrice(quote.value),
       returnUrl: "https://freshmarkets.example.invalid/orders",
       idempotencyKey: `flow-rejected-${crypto.randomUUID()}`,
     });
@@ -178,11 +195,32 @@ describe("customer checkout flow", () => {
       .first<{ count: number }>();
 
     const paymentKey = `flow-payment-${crypto.randomUUID()}`;
+    const staleAcceptance = await core.createPaymentIntent({
+      headers,
+      requestId: requestId(),
+      checkoutAttemptId: acceptedQuote.value.quoteId,
+      ...acceptedPrice(acceptedQuote.value),
+      expectedQuoteVersion: acceptedQuote.value.attemptVersion + 1,
+      returnUrl: "https://freshmarkets.example.invalid/orders",
+      idempotencyKey: `flow-stale-${crypto.randomUUID()}`,
+    });
+    const partialAcceptance = await core.createPaymentIntent({
+      headers,
+      requestId: requestId(),
+      checkoutAttemptId: acceptedQuote.value.quoteId,
+      ...acceptedPrice(acceptedQuote.value),
+      expectedOrderDiscountMinor: acceptedQuote.value.orderDiscountMinor + 1,
+      returnUrl: "https://freshmarkets.example.invalid/orders",
+      idempotencyKey: `flow-partial-${crypto.randomUUID()}`,
+    });
+    expect(staleAcceptance).toMatchObject({ ok: false, error: { code: "PRICE_CHANGED" } });
+    expect(partialAcceptance).toMatchObject({ ok: false, error: { code: "PRICE_CHANGED" } });
+
     const payment = await core.createPaymentIntent({
       headers,
       requestId: requestId(),
       checkoutAttemptId: acceptedQuote.value.quoteId,
-      expectedTotalMinor: acceptedQuote.value.totalMinor,
+      ...acceptedPrice(acceptedQuote.value),
       returnUrl: "https://freshmarkets.example.invalid/orders",
       idempotencyKey: paymentKey,
     });
@@ -283,13 +321,26 @@ describe("customer checkout flow", () => {
       headers,
       requestId: requestId(),
       checkoutAttemptId: acceptedQuote.value.quoteId,
-      expectedTotalMinor: acceptedQuote.value.totalMinor,
+      ...acceptedPrice(acceptedQuote.value),
       returnUrl: "https://freshmarkets.example.invalid/orders",
       idempotencyKey: paymentKey,
     });
     expect(paymentReplay).toMatchObject({
       ok: true,
       value: { paymentIntentId: payment.value.paymentIntentId },
+    });
+    const conflictingReplay = await core.createPaymentIntent({
+      headers,
+      requestId: requestId(),
+      checkoutAttemptId: acceptedQuote.value.quoteId,
+      ...acceptedPrice(acceptedQuote.value),
+      expectedDeliveryDiscountMinor: acceptedQuote.value.deliveryDiscountMinor + 1,
+      returnUrl: "https://freshmarkets.example.invalid/orders",
+      idempotencyKey: paymentKey,
+    });
+    expect(conflictingReplay).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
     });
     const quotesAfterReplay = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",

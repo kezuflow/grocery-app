@@ -64,6 +64,45 @@ describe("checkout quote route", () => {
     );
   });
 
+  it("normalizes and forwards a bounded set of promotion codes", async () => {
+    requireIdempotencyKey.mockReturnValue("promotion-key");
+    createCheckoutQuote.mockResolvedValue({ ok: true, value: { quoteId: "q-promotion" } });
+
+    const response = await post({
+      cartId: "c1",
+      cartVersion: 2,
+      addressId: "a1",
+      cycleId: "cy1",
+      promotionCodes: [" save10 ", "Delivery-Free"],
+    });
+
+    expect(response.status).toBe(200);
+    expect(createCheckoutQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ promotionCodes: ["SAVE10", "DELIVERY-FREE"] }),
+    );
+  });
+
+  it("rejects too many or oversized promotion codes before calling Core", async () => {
+    requireIdempotencyKey.mockReturnValue("bounded-key");
+
+    const tooMany = await post({
+      cartId: "c1",
+      cartVersion: 2,
+      addressId: "a1",
+      promotionCodes: ["A", "B", "C", "D", "E", "F"],
+    });
+    const tooLong = await post({
+      cartId: "c1",
+      cartVersion: 2,
+      addressId: "a1",
+      promotionCodes: ["X".repeat(65)],
+    });
+
+    expect(tooMany.status).toBe(400);
+    expect(tooLong.status).toBe(400);
+    expect(createCheckoutQuote).not.toHaveBeenCalled();
+  });
+
   it("rejects a missing idempotency key with 400 before calling Core", async () => {
     requireIdempotencyKey.mockImplementation(() => {
       throw new Error("IDEMPOTENCY_KEY_REQUIRED");

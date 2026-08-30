@@ -153,14 +153,40 @@ function successfulFetch(options?: {
       );
     if (path === "/api/checkout/quote") {
       options?.onQuote?.(init);
-      const cycleId = (JSON.parse(String(init?.body)) as { cycleId: string }).cycleId;
+      const input = JSON.parse(String(init?.body)) as {
+        cycleId: string;
+        promotionCodes?: string[];
+      };
+      const cycleId = input.cycleId;
+      const totalMinor = cycleId === "cycle-1" ? 32000 : 33000;
       return Promise.resolve(
         json({
           ok: true,
           value: {
             quoteId: `quote-${cycleId}`,
-            totalMinor: cycleId === "cycle-1" ? 32000 : 33000,
+            attemptVersion: 1,
+            priceAcceptanceVersion: 1,
+            expiresAt: "2026-09-01T00:00:00.000Z",
             currency: "PHP",
+            merchandiseSubtotalMinor: 30000,
+            itemDiscountMinor: 0,
+            orderDiscountMinor: 0,
+            deliverySubtotalMinor: totalMinor - 30000,
+            deliveryDiscountMinor: 0,
+            serviceFeeMinor: 0,
+            taxMinor: 0,
+            subtotalMinor: 30000,
+            discountMinor: 0,
+            deliveryFeeMinor: totalMinor - 30000,
+            totalMinor,
+            lines: [],
+            requestedPromotionCodes: input.promotionCodes ?? [],
+            promotionFeedback: (input.promotionCodes ?? []).map((code) => ({
+              code,
+              status: "APPLIED",
+              message: "Promotion applied",
+            })),
+            promotionApplications: [],
           },
         }),
       );
@@ -291,6 +317,45 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
     expect(container.textContent).toContain("PHP 330.00");
+  });
+
+  it("normalizes promotion input and invalidates an accepted quote when codes change", async () => {
+    const quoteBodies: Array<{ promotionCodes?: string[] }> = [];
+    vi.stubGlobal(
+      "fetch",
+      successfulFetch({
+        onQuote: (init) => quoteBodies.push(JSON.parse(String(init?.body))),
+      }),
+    );
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+
+    choose(container, "Home");
+    click(container, "Cycle One");
+    await flush();
+    expect(container.textContent).toContain("Payment review");
+
+    const input = container.querySelector<HTMLInputElement>("#promotion-code");
+    if (!input) throw new Error("Missing promotion input");
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        " save10 ",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    click(container, "Add code");
+    await flush();
+
+    expect(container.textContent).not.toContain("Payment review");
+    expect(container.textContent).toContain("SAVE10 added");
+    click(container, "Cycle One");
+    await flush();
+    expect(quoteBodies.at(-1)?.promotionCodes).toEqual(["SAVE10"]);
+
+    click(container, "Remove SAVE10 promotion code");
+    expect(container.textContent).not.toContain("Payment review");
   });
 
   it("ignores an older initial address response after a current post-save refresh", async () => {

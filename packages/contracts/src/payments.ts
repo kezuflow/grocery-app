@@ -111,6 +111,17 @@ export type PaymentsService = {
 
 export type PaymentIntentCommandRequest = AuthenticatedRequest & {
   checkoutAttemptId: string;
+  expectedQuoteVersion: number;
+  expectedPriceAcceptanceVersion: number;
+  expectedCurrency: string;
+  expectedMerchandiseSubtotalMinor: number;
+  expectedItemDiscountMinor: number;
+  expectedOrderDiscountMinor: number;
+  expectedDeliverySubtotalMinor: number;
+  expectedDeliveryFeeMinor: number;
+  expectedDeliveryDiscountMinor: number;
+  expectedServiceFeeMinor: number;
+  expectedTaxMinor: number;
   expectedTotalMinor: number;
   providerCode?: string;
   returnUrl: string;

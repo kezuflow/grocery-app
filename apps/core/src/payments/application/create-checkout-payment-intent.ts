@@ -15,6 +15,30 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
+function acceptedPriceMatches(
+  command: PaymentIntentCommandRequest,
+  quote: Awaited<ReturnType<ReturnType<typeof createCheckoutRepository>["findQuoteById"]>> & {},
+  allowCommittedReplay = false,
+): boolean {
+  return (
+    (command.expectedQuoteVersion === quote.version ||
+      (allowCommittedReplay &&
+        quote.status === "CONSUMED" &&
+        command.expectedQuoteVersion + 1 === quote.version)) &&
+    command.expectedPriceAcceptanceVersion === quote.priceAcceptanceVersion &&
+    command.expectedCurrency === quote.currency &&
+    command.expectedMerchandiseSubtotalMinor === quote.financial.merchandiseSubtotalMinor &&
+    command.expectedItemDiscountMinor === quote.financial.itemDiscountMinor &&
+    command.expectedOrderDiscountMinor === quote.financial.orderDiscountMinor &&
+    command.expectedDeliverySubtotalMinor === quote.financial.deliverySubtotalMinor &&
+    command.expectedDeliveryFeeMinor === quote.deliveryFeeMinor &&
+    command.expectedDeliveryDiscountMinor === quote.financial.deliveryDiscountMinor &&
+    command.expectedServiceFeeMinor === quote.financial.serviceFeeMinor &&
+    command.expectedTaxMinor === quote.financial.taxMinor &&
+    command.expectedTotalMinor === quote.financial.totalMinor
+  );
+}
+
 /**
  * Start a grocery-checkout payment for an ACTIVE quote owned by the
  * requesting customer. The composition root supplies the explicitly selected
@@ -29,13 +53,18 @@ export async function createCheckoutPaymentIntent(
 ): Promise<RpcResult<PaymentActionView>> {
   const paymentRepository = createPaymentRepository(database);
   const existing = await paymentRepository.findIntentByIdempotencyKey(command.idempotencyKey);
+  const repository = createCheckoutRepository(database);
+  const quote = await repository.findQuoteById(command.checkoutAttemptId);
   if (existing) {
     if (
       existing.purpose !== "GROCERY_CHECKOUT" ||
       existing.subjectType !== "checkout_quote" ||
       existing.subjectId !== command.checkoutAttemptId ||
       existing.customerId !== command.customerId ||
-      existing.amountMinor !== command.expectedTotalMinor
+      existing.amountMinor !== command.expectedTotalMinor ||
+      existing.currency !== command.expectedCurrency ||
+      !quote ||
+      !acceptedPriceMatches(command, quote, true)
     )
       return failure(
         "IDEMPOTENCY_CONFLICT",
@@ -56,8 +85,6 @@ export async function createCheckoutPaymentIntent(
     });
   }
 
-  const repository = createCheckoutRepository(database);
-  const quote = await repository.findQuoteById(command.checkoutAttemptId);
   if (
     !quote ||
     quote.customerId !== command.customerId ||
@@ -65,7 +92,7 @@ export async function createCheckoutPaymentIntent(
     quote.expiresAt <= Date.now()
   )
     return failure("CONFLICT", "A valid quote is required to start payment", command.requestId);
-  if (command.expectedTotalMinor !== quote.totalMinor)
+  if (!acceptedPriceMatches(command, quote))
     return failure(
       "PRICE_CHANGED",
       "Order total changed; review and accept the current total",

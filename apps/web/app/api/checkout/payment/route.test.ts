@@ -24,6 +24,61 @@ beforeEach(() => {
 });
 
 describe("checkout payment route", () => {
+  const acceptedPrice = {
+    expectedQuoteVersion: 1,
+    expectedPriceAcceptanceVersion: 2,
+    expectedCurrency: "PHP",
+    expectedMerchandiseSubtotalMinor: 10_000,
+    expectedItemDiscountMinor: 100,
+    expectedOrderDiscountMinor: 900,
+    expectedDeliverySubtotalMinor: 500,
+    expectedDeliveryFeeMinor: 0,
+    expectedDeliveryDiscountMinor: 500,
+    expectedServiceFeeMinor: 0,
+    expectedTaxMinor: 0,
+    expectedTotalMinor: 9_000,
+  };
+
+  it("forwards the accepted quote version and every explicit financial component", async () => {
+    requireIdempotencyKey.mockReturnValue("accepted-price-key");
+    createPaymentIntent.mockResolvedValue({ ok: true, value: { state: "REQUIRES_ACTION" } });
+
+    const response = await POST(
+      new Request("https://freshmarkets.ph/api/checkout/payment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          checkoutAttemptId: "q-accepted",
+          ...acceptedPrice,
+          returnUrl: "https://freshmarkets.ph/orders",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(createPaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ checkoutAttemptId: "q-accepted", ...acceptedPrice }),
+    );
+  });
+
+  it("rejects an incomplete or stale-version acceptance before Core", async () => {
+    requireIdempotencyKey.mockReturnValue("incomplete-key");
+    const response = await POST(
+      new Request("https://freshmarkets.ph/api/checkout/payment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          checkoutAttemptId: "q-stale",
+          expectedTotalMinor: 9_000,
+          returnUrl: "https://freshmarkets.ph/orders",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(createPaymentIntent).not.toHaveBeenCalled();
+  });
+
   it("surfaces provider-unavailable as 503 without implying success", async () => {
     requireIdempotencyKey.mockReturnValue("k1");
     createPaymentIntent.mockResolvedValue({
@@ -36,7 +91,7 @@ describe("checkout payment route", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           checkoutAttemptId: "q1",
-          expectedTotalMinor: 100,
+          ...acceptedPrice,
           returnUrl: "https://x/orders",
         }),
       }),
@@ -65,7 +120,7 @@ describe("checkout payment route", () => {
         headers: { "content-type": "application/json", "idempotency-key": "k2" },
         body: JSON.stringify({
           checkoutAttemptId: "q1",
-          expectedTotalMinor: 100,
+          ...acceptedPrice,
           returnUrl: "https://x/orders",
         }),
       }),
@@ -96,7 +151,7 @@ describe("checkout payment route", () => {
         headers: { "content-type": "application/json", "idempotency-key": "same-key" },
         body: JSON.stringify({
           checkoutAttemptId: "q-replay",
-          expectedTotalMinor: 100,
+          ...acceptedPrice,
           returnUrl: "https://freshmarkets.ph/orders",
         }),
       });

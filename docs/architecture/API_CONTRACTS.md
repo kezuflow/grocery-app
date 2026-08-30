@@ -220,7 +220,7 @@ The authoritative service validates authenticated Customer, subscription, cart, 
 ## Checkout, Payment, and Order Commitment
 
 - `checkout.createAttempt({ cartId, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutAttemptView`
-- `checkout.createPayment({ checkoutAttemptId, expectedTotalMinor, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
+- `checkout.createPayment({ checkoutAttemptId, expectedQuoteVersion, expectedPriceAcceptanceVersion, expectedCurrency, expectedMerchandiseSubtotalMinor, expectedItemDiscountMinor, expectedOrderDiscountMinor, expectedDeliverySubtotalMinor, expectedDeliveryFeeMinor, expectedDeliveryDiscountMinor, expectedServiceFeeMinor, expectedTaxMinor, expectedTotalMinor, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 - `checkout.getAttempt({ checkoutAttemptId }) -> CheckoutAttemptView`
 - `checkout.recoverCommitment({ checkoutAttemptId }) -> OrderCommitmentResult`
 
@@ -243,7 +243,7 @@ Retry availability uses bounded backoff. Expired leases are reclaimable; competi
 
 The registered scheduler reclaims provider-inbox work every fifteen minutes and expires due provider redirect/SDK actions every minute. Renewal initiation remains disabled unless the closed runtime configuration explicitly assigns application ownership and a configured provider exists; confirmed payment outcomes, dunning, and grace expiry continue independently of that initiation gate.
 
-Immediately before a new payment creation, Core recalculates current catalog prices, discounts, stock/hold, serviceability, route-based delivery fee, membership entitlement, and fulfillment eligibility without persisting or superseding another Quote. `expectedTotalMinor` and every explicit component must equal the accepted Quote; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must request/present a replacement quote for explicit acceptance. Identical payment replay is resolved first and retains `checkout_quote/<accepted quote id>` as its subject even after commitment consumes that Quote.
+Immediately before a new payment creation, Core recalculates current catalog prices, discounts, stock/hold, serviceability, route-based delivery fee, membership entitlement, and fulfillment eligibility without persisting or superseding another Quote. The accepted quote aggregate version, price-acceptance version, currency, `expectedTotalMinor`, and every explicit component must equal the accepted Quote; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must request/present a replacement quote for explicit acceptance. Identical payment replay retains the original accepted version and `checkout_quote/<accepted quote id>` as its subject even after the one guarded commitment transition consumes that Quote; a replay with changed accepted components is an idempotency conflict.
 
 Stable financial-safety failures include `TRIAL_ENDED`, `SUBSCRIPTION_GRACE_ENDED`, `MINIMUM_ORDER_NOT_MET`, `CAPACITY_UNAVAILABLE`, `PAYMENT_OUTCOME_UNRESOLVED`, `AUTHORIZATION_OUTCOME_UNRESOLVED`, `PAYMENT_ACTION_EXPIRED`, `AUTHORIZATION_ACTION_EXPIRED`, and `REFUND_AMOUNT_UNAVAILABLE`. Ambiguous provider outcomes preserve their application identity and reconciliation state; clients must not retry under a new identity merely because a response was lost.
 

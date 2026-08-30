@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Info, ShoppingBasket } from "lucide-react";
-import type { CartView } from "@freshmarkets/contracts";
+import type { CartView, CheckoutQuoteView } from "@freshmarkets/contracts";
 import { cn } from "../../../lib/utils";
 
 function money(value: number, currency: string): string {
@@ -19,6 +19,7 @@ export function OrderSummary({
   disabled = false,
   note,
   totalMinor,
+  quote,
 }: {
   cart: CartView | null;
   actionLabel: string;
@@ -27,6 +28,7 @@ export function OrderSummary({
   disabled?: boolean;
   note?: string;
   totalMinor?: number;
+  quote?: CheckoutQuoteView;
 }) {
   const currency = cart?.currency ?? "PHP";
   const subtotal = cart?.totalMinor ?? 0;
@@ -55,10 +57,33 @@ export function OrderSummary({
             {money(subtotal, currency)}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
-          <span>Delivery fee</span>
-          <span className="font-medium text-[var(--fm-text)]">Calculated at checkout</span>
-        </div>
+        {quote ? (
+          <>
+            <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+              <span>Merchandise discount</span>
+              <span className="font-medium tabular-nums text-[var(--fm-success)]">
+                −{money(quote.itemDiscountMinor + quote.orderDiscountMinor, currency)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+              <span>Delivery</span>
+              <span className="font-medium tabular-nums text-[var(--fm-text)]">
+                {money(quote.deliverySubtotalMinor, currency)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+              <span>Delivery discount</span>
+              <span className="font-medium tabular-nums text-[var(--fm-success)]">
+                −{money(quote.deliveryDiscountMinor, currency)}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+            <span>Delivery fee</span>
+            <span className="font-medium text-[var(--fm-text)]">Calculated at checkout</span>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-4 border-t border-[var(--fm-border)] pt-3 text-base font-bold">
           <span>Total</span>
           <span className="tabular-nums">{money(total, currency)}</span>
