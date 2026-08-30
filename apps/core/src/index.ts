@@ -100,6 +100,10 @@ import { getDeliveryMap as getDeliveryMapQuery } from "./delivery/application/ge
 import { getDeliveryMapDetail as getDeliveryMapDetailQuery } from "./delivery/application/get-delivery-map-detail";
 import { getEligibleRiders as getEligibleRidersQuery } from "./delivery/application/get-eligible-riders";
 import { previewDeliveryBatchRoute as previewDeliveryBatchRouteQuery } from "./delivery/application/preview-delivery-batch-route";
+import {
+  createAndAssignDeliveryBatch as createAndAssignDeliveryBatchCommand,
+  isExactCreateAndAssignRequest,
+} from "./delivery/application/create-and-assign-delivery-batch";
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import {
@@ -1824,6 +1828,24 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         now: () => this.context.now(),
         routePreview: buildRoutePreviewPort(this.env),
+      },
+      input,
+    );
+  }
+  async createAndAssignDeliveryBatch(
+    input: import("@freshmarkets/contracts").CreateAndAssignDeliveryBatchRequest,
+  ) {
+    const requestId =
+      input !== null && typeof input === "object" && typeof input.requestId === "string"
+        ? input.requestId
+        : "unknown";
+    if (!isExactCreateAndAssignRequest(input))
+      return fail("VALIDATION_FAILED", "Create-and-assign request is invalid", requestId);
+    return createAndAssignDeliveryBatchCommand(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        now: () => this.context.now(),
       },
       input,
     );

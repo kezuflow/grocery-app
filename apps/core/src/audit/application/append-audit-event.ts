@@ -12,6 +12,8 @@ export type AuditEventAppend = {
   correlationId: string;
   idempotencyKey?: string | null;
   occurredAt: number;
+  marketId?: string | null;
+  locationId?: string | null;
 };
 
 export type AuditAppendGuard = {
@@ -21,7 +23,7 @@ export type AuditAppendGuard = {
 
 const AUDIT_COLUMNS =
   "(id, actor_user_id, action, aggregate_type, aggregate_id, details_json, idempotency_key, before_json, after_json, reason, market_id, location_id, correlation_id, occurred_at)";
-const AUDIT_VALUES = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)";
+const AUDIT_VALUES = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 function auditBinds(event: AuditEventAppend): unknown[] {
   return [
@@ -35,6 +37,8 @@ function auditBinds(event: AuditEventAppend): unknown[] {
     event.before === undefined || event.before === null ? null : JSON.stringify(event.before),
     event.after === undefined || event.after === null ? null : JSON.stringify(event.after),
     event.reason ?? null,
+    event.marketId ?? null,
+    event.locationId ?? null,
     event.correlationId,
     event.occurredAt,
   ];
