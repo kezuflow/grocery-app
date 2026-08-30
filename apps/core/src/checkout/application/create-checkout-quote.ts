@@ -48,6 +48,7 @@ export type CheckoutQuoteView = {
   deliverySubtotalMinor: number;
   deliveryDiscountMinor: number;
   serviceFeeMinor: number;
+  preServiceFeeTotalMinor: number;
   taxMinor: number;
   subtotalMinor: number;
   discountMinor: number;
@@ -100,18 +101,6 @@ export async function createCheckoutQuote(
       );
     return { ok: true, value: viewFrom(existing), requestId: command.requestId };
   }
-
-  // Membership entitlement at quote time.
-  const membership = await evaluateSubscriptionEntitlement(database, {
-    customerId: command.customerId,
-    at: Date.now(),
-  });
-  if (!membership.eligible)
-    return failure(
-      "MEMBERSHIP_REQUIRED",
-      "An active or trialing membership is required to check out",
-      command.requestId,
-    );
 
   // Cart identity and version.
   const cart = await database
@@ -204,6 +193,17 @@ async function createScheduledQuote(
   },
   dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
+  const membership = await evaluateSubscriptionEntitlement(database, {
+    customerId: command.customerId,
+    at: Date.now(),
+  });
+  if (!membership.eligible)
+    return failure(
+      "MEMBERSHIP_REQUIRED",
+      "Scheduled delivery requires an active or trialing membership",
+      command.requestId,
+    );
+
   // Cycle must be open and before cutoff.
   const cycle = await database
     .prepare(
@@ -369,6 +369,7 @@ async function createScheduledQuote(
     totalMinor: subtotalMinor - merchandiseDiscount + deliveryFee.feeMinor - deliveryDiscount,
     currency: deliveryFee.snapshot.currency,
   };
+  const preServiceFeeTotalMinor = financial.totalMinor;
   const decision = await resolveCheckoutDecision(database, {
     marketId: cycle.market_id,
     financial,
@@ -415,6 +416,9 @@ async function createScheduledQuote(
           deliveryCycleId: command.deliveryCycleId,
           currency: decision.currency,
           financial,
+          preServiceFeeTotalMinor,
+          serviceFeeConfigurationId: null,
+          serviceFeeSnapshot: null,
           subtotalMinor,
           discountMinor: merchandiseDiscount,
           deliveryFeeMinor: deliveryFee.feeMinor,
@@ -517,6 +521,7 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
     deliverySubtotalMinor: row.financial.deliverySubtotalMinor,
     deliveryDiscountMinor: row.financial.deliveryDiscountMinor,
     serviceFeeMinor: row.financial.serviceFeeMinor,
+    preServiceFeeTotalMinor: row.preServiceFeeTotalMinor,
     taxMinor: row.financial.taxMinor,
     subtotalMinor: row.subtotalMinor,
     discountMinor: row.discountMinor,

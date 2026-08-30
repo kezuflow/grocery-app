@@ -8,6 +8,7 @@ import type {
   CheckoutPromotionApplicationView,
   PromotionCodeFeedback,
 } from "@freshmarkets/contracts";
+import type { ServiceFeeCalculation } from "../domain/service-fee";
 
 export type CheckoutQuoteRow = {
   id: string;
@@ -19,6 +20,9 @@ export type CheckoutQuoteRow = {
   fulfillmentMode?: "INSTANT" | "SCHEDULED";
   currency: string;
   financial: QuoteFinancialSnapshot;
+  preServiceFeeTotalMinor: number;
+  serviceFeeConfigurationId: string | null;
+  serviceFeeSnapshot: ServiceFeeCalculation | null;
   subtotalMinor: number;
   discountMinor: number;
   deliveryFeeMinor: number;
@@ -38,7 +42,7 @@ export type CheckoutQuoteRow = {
 };
 
 const COLUMNS =
-  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, requested_promotion_codes_json, promotion_feedback_json, promotion_applications_json, price_acceptance_version, status, version, expires_at";
+  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, pre_service_fee_total_minor, service_fee_configuration_id, service_fee_snapshot_json, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, requested_promotion_codes_json, promotion_feedback_json, promotion_applications_json, price_acceptance_version, status, version, expires_at";
 
 type RawRow = {
   id: string;
@@ -60,6 +64,9 @@ type RawRow = {
   delivery_discount_minor: number;
   service_fee_minor: number;
   tax_minor: number;
+  pre_service_fee_total_minor: number;
+  service_fee_configuration_id: string | null;
+  service_fee_snapshot_json: string | null;
   lines_json: string;
   address_snapshot_json: string | null;
   cycle_snapshot_json: string | null;
@@ -95,6 +102,11 @@ function map(row: RawRow): CheckoutQuoteRow {
       totalMinor: row.total_minor,
       currency: row.currency,
     },
+    preServiceFeeTotalMinor: row.pre_service_fee_total_minor,
+    serviceFeeConfigurationId: row.service_fee_configuration_id,
+    serviceFeeSnapshot: row.service_fee_snapshot_json
+      ? (JSON.parse(row.service_fee_snapshot_json) as ServiceFeeCalculation)
+      : null,
     subtotalMinor: row.subtotal_minor,
     discountMinor: row.discount_minor,
     deliveryFeeMinor: row.delivery_fee_minor,
@@ -150,6 +162,18 @@ export function createCheckoutRepository(database: D1Database) {
         input.totalMinor !== input.financial.totalMinor
       )
         throw new Error("QUOTE_FINANCIAL_COMPATIBILITY_INVALID");
+      if (
+        input.preServiceFeeTotalMinor + input.financial.serviceFeeMinor !== input.totalMinor ||
+        (input.financial.serviceFeeMinor === 0 &&
+          (input.serviceFeeConfigurationId !== null || input.serviceFeeSnapshot !== null)) ||
+        (input.financial.serviceFeeMinor > 0 &&
+          (input.serviceFeeConfigurationId === null ||
+            input.serviceFeeSnapshot === null ||
+            input.serviceFeeSnapshot.configurationId !== input.serviceFeeConfigurationId ||
+            input.serviceFeeSnapshot.baseMinor !== input.preServiceFeeTotalMinor ||
+            input.serviceFeeSnapshot.feeMinor !== input.financial.serviceFeeMinor))
+      )
+        throw new Error("QUOTE_SERVICE_FEE_EVIDENCE_INVALID");
       return database
         .prepare(
           `INSERT INTO checkout_quote (
@@ -157,14 +181,16 @@ export function createCheckoutRepository(database: D1Database) {
             fulfillment_mode, currency, subtotal_minor, discount_minor,
             delivery_fee_minor, total_minor, merchandise_subtotal_minor,
             item_discount_minor, order_discount_minor, delivery_subtotal_minor,
-            delivery_discount_minor, service_fee_minor, tax_minor, lines_json,
+            delivery_discount_minor, service_fee_minor, tax_minor,
+            pre_service_fee_total_minor, service_fee_configuration_id,
+            service_fee_snapshot_json, lines_json,
             address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json,
             delivery_fee_snapshot_json, requested_promotion_codes_json,
             promotion_feedback_json, promotion_applications_json,
             price_acceptance_version, status, version, expires_at,
             idempotency_key, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           input.id,
@@ -186,6 +212,9 @@ export function createCheckoutRepository(database: D1Database) {
           input.financial.deliveryDiscountMinor,
           input.financial.serviceFeeMinor,
           input.financial.taxMinor,
+          input.preServiceFeeTotalMinor,
+          input.serviceFeeConfigurationId,
+          input.serviceFeeSnapshot === null ? null : JSON.stringify(input.serviceFeeSnapshot),
           JSON.stringify(input.lines),
           JSON.stringify(input.addressSnapshot ?? null),
           JSON.stringify(input.cycleSnapshot ?? null),

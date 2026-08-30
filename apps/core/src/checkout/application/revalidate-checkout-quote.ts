@@ -5,6 +5,7 @@ import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
+import { resolveServiceFee } from "./resolve-service-fee";
 
 type RevalidationFailure = {
   ok: false;
@@ -45,12 +46,14 @@ export async function revalidateCheckoutQuote(
   routeDistance: RouteDistancePort,
   now = Date.now(),
 ): Promise<{ ok: true } | RevalidationFailure> {
-  const entitlement = await evaluateSubscriptionEntitlement(database, {
-    customerId: quote.customerId,
-    at: now,
-  });
-  if (!entitlement.eligible)
-    return rejected("MEMBERSHIP_REQUIRED", "Membership is no longer eligible for checkout");
+  if (quote.fulfillmentMode !== "INSTANT") {
+    const entitlement = await evaluateSubscriptionEntitlement(database, {
+      customerId: quote.customerId,
+      at: now,
+    });
+    if (!entitlement.eligible)
+      return rejected("MEMBERSHIP_REQUIRED", "Membership is no longer eligible for checkout");
+  }
 
   const [cart, address, liveItems] = await Promise.all([
     database
@@ -232,20 +235,38 @@ export async function revalidateCheckoutQuote(
   const deliveryDiscount =
     promotions.applications.find((application) => application.component === "DELIVERY")
       ?.amountMinor ?? 0;
+  const preServiceFeeTotalMinor =
+    subtotalMinor -
+    quote.financial.itemDiscountMinor -
+    merchandiseDiscount +
+    deliveryFee.feeMinor -
+    deliveryDiscount +
+    quote.financial.taxMinor;
+  let serviceFeeMinor = 0;
+  if (quote.fulfillmentMode === "INSTANT") {
+    const serviceFee = await resolveServiceFee(database, {
+      currency: deliveryFee.snapshot.currency,
+      baseMinor: preServiceFeeTotalMinor,
+      at: now,
+    });
+    if (!serviceFee.ok)
+      return rejected("PRICE_CHANGED", "FreshMarkets Service Fee changed; accept a new quote");
+    if (
+      quote.preServiceFeeTotalMinor !== preServiceFeeTotalMinor ||
+      quote.serviceFeeConfigurationId !== serviceFee.value.configurationId ||
+      JSON.stringify(quote.serviceFeeSnapshot) !== JSON.stringify(serviceFee.value)
+    )
+      return rejected("PRICE_CHANGED", "FreshMarkets Service Fee changed; accept a new quote");
+    serviceFeeMinor = serviceFee.value.feeMinor;
+  }
   const currentFinancial = {
     ...quote.financial,
     merchandiseSubtotalMinor: subtotalMinor,
     orderDiscountMinor: merchandiseDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
-    totalMinor:
-      subtotalMinor -
-      quote.financial.itemDiscountMinor -
-      merchandiseDiscount +
-      deliveryFee.feeMinor -
-      deliveryDiscount +
-      quote.financial.serviceFeeMinor +
-      quote.financial.taxMinor,
+    serviceFeeMinor,
+    totalMinor: preServiceFeeTotalMinor + serviceFeeMinor,
     currency: deliveryFee.snapshot.currency,
   };
   const decision = await resolveCheckoutDecision(database, {

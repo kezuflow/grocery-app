@@ -7,6 +7,8 @@ import {
 } from "../../fulfillment/application/location-mode";
 import { startPromotionalTrial } from ".././../membership/application/start-promotional-trial";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
+import { createCheckoutRepository } from "../infrastructure/d1-checkout-repository";
+import { revalidateCheckoutQuote } from "./revalidate-checkout-quote";
 
 const LOCATION = "location-cebu-central";
 const ZONE_CODE = "CEBU_CITY_CORE";
@@ -22,6 +24,7 @@ async function seedBasket(options: {
   onHand: number;
   sourcing?: "STOCKED" | "MIXED" | "PLANNED";
   quantity?: number;
+  member?: boolean;
 }) {
   const customerId = `cust-inst-${++customerCounter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
@@ -30,25 +33,27 @@ async function seedBasket(options: {
   )
     .bind(customerId, `auth-${customerId}`, now, now)
     .run();
-  await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
-  )
-    .bind(
-      `authz-${customerId}`,
-      customerId,
-      `mock_auth_${customerId}`,
-      `mock_method_${customerId}`,
-      now,
-      now,
-      now,
+  if (options.member !== false) {
+    await env.DB.prepare(
+      "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
     )
-    .run();
-  const trial = await startPromotionalTrial(env.DB, {
-    customerId,
-    idempotencyKey: `trial-${crypto.randomUUID()}`,
-    requestId: crypto.randomUUID(),
-  });
-  if (!trial.ok) throw new Error(`fixture failed: ${trial.error.message}`);
+      .bind(
+        `authz-${customerId}`,
+        customerId,
+        `mock_auth_${customerId}`,
+        `mock_method_${customerId}`,
+        now,
+        now,
+        now,
+      )
+      .run();
+    const trial = await startPromotionalTrial(env.DB, {
+      customerId,
+      idempotencyKey: `trial-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    });
+    if (!trial.ok) throw new Error(`fixture failed: ${trial.error.message}`);
+  }
   const addressId = `addr-${customerId}`;
   await env.DB.prepare(
     "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'Inst Test', '09000000000', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'active', 1, ?, ?)",
@@ -81,6 +86,15 @@ async function seedBasket(options: {
 }
 
 async function configureInstant(): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO service_fee_configuration
+      (id, fee_type, flat_minor, percentage_basis_points, currency,
+       effective_from, effective_to, version, reason, created_at)
+     VALUES ('instant-fee-v1', 'MIXED', 500, 300, 'PHP', ?, NULL, 1, 'test fee', ?)`,
+  )
+    .bind(now - 1_000, now)
+    .run();
   const current = await getLocationMode(env.DB, {
     locationId: LOCATION,
     requestId: crypto.randomUUID(),
@@ -169,7 +183,11 @@ describe("instant checkout quotes", () => {
     if (!result.ok) return;
 
     const row = await env.DB.prepare(
-      "SELECT delivery_cycle_id, fulfillment_mode, total_minor, subtotal_minor, delivery_fee_minor, fulfillment_snapshot_json FROM checkout_quote WHERE id=?",
+      `SELECT delivery_cycle_id, fulfillment_mode, total_minor, subtotal_minor,
+              delivery_fee_minor, pre_service_fee_total_minor, service_fee_minor,
+              service_fee_configuration_id, service_fee_snapshot_json,
+              fulfillment_snapshot_json
+       FROM checkout_quote WHERE id=?`,
     )
       .bind(result.value.quoteId)
       .first<{
@@ -178,10 +196,23 @@ describe("instant checkout quotes", () => {
         total_minor: number;
         subtotal_minor: number;
         delivery_fee_minor: number;
+        pre_service_fee_total_minor: number;
+        service_fee_minor: number;
+        service_fee_configuration_id: string;
+        service_fee_snapshot_json: string;
         fulfillment_snapshot_json: string;
       }>();
     expect(row).toMatchObject({ delivery_cycle_id: null, fulfillment_mode: "INSTANT" });
-    expect(row?.total_minor).toBe((row?.subtotal_minor ?? 0) + (row?.delivery_fee_minor ?? 0));
+    expect(row?.service_fee_configuration_id).toBe("instant-fee-v1");
+    expect(row?.service_fee_minor).toBeGreaterThan(500);
+    expect(row?.total_minor).toBe(
+      (row?.pre_service_fee_total_minor ?? 0) + (row?.service_fee_minor ?? 0),
+    );
+    expect(JSON.parse(row!.service_fee_snapshot_json)).toMatchObject({
+      configurationId: "instant-fee-v1",
+      baseMinor: row?.pre_service_fee_total_minor,
+      feeMinor: row?.service_fee_minor,
+    });
     const snapshot = JSON.parse(row!.fulfillment_snapshot_json) as { promisedAt: string };
     expect(Date.parse(snapshot.promisedAt)).toBeGreaterThan(Date.now() + 60 * 60_000);
     expect(Date.parse(snapshot.promisedAt)).toBeLessThan(Date.now() + 120 * 60_000);
@@ -199,6 +230,71 @@ describe("instant checkout quotes", () => {
       quoteDependencies,
     );
     void replay;
+  });
+
+  it("allows Instant checkout without membership and applies the active Service Fee", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const result = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { serviceFeeMinor: expect.any(Number) },
+    });
+    if (result.ok) expect(result.value.serviceFeeMinor).toBeGreaterThan(0);
+  });
+
+  it("rejects Scheduled checkout without eligible membership", async () => {
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const result = await createCheckoutQuote(
+      env.DB,
+      {
+        ...command(basket.customerId, basket.cartId, basket.addressId),
+        deliveryCycleId: "cycle-next-cebu",
+      },
+      quoteDependencies,
+    );
+    expect(result).toMatchObject({ ok: false, error: { code: "MEMBERSHIP_REQUIRED" } });
+  });
+
+  it("requires a replacement quote when the effective Service Fee changes", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const created = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE service_fee_configuration SET effective_to=? WHERE id='instant-fee-v1'",
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO service_fee_configuration
+          (id, fee_type, flat_minor, percentage_basis_points, currency,
+           effective_from, effective_to, version, reason, created_at)
+         VALUES ('instant-fee-v2', 'FLAT', 900, 0, 'PHP', ?, NULL, 2, 'changed fee', ?)`,
+      ).bind(now, now),
+    ]);
+    const quote = await createCheckoutRepository(env.DB).findQuoteById(created.value.quoteId);
+    expect(quote).not.toBeNull();
+    expect(
+      await revalidateCheckoutQuote(env.DB, quote!, quoteDependencies.routeDistance, now + 1),
+    ).toMatchObject({ ok: false, code: "PRICE_CHANGED" });
   });
 
   it("refuses instant quotes when usable stocked supply is short", async () => {

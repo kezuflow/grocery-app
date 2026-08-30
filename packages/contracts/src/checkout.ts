@@ -158,6 +158,7 @@ export type CheckoutQuoteView = {
   deliverySubtotalMinor: number;
   deliveryDiscountMinor: number;
   serviceFeeMinor: number;
+  preServiceFeeTotalMinor: number;
   taxMinor: number;
   subtotalMinor: number;
   discountMinor: number;

@@ -96,10 +96,12 @@ export function CheckoutTotalReview({
         ) : (
           <p className="text-xs text-[var(--fm-text-muted)]">No delivery promotion applied.</p>
         )}
-        <div className="flex justify-between gap-4">
-          <dt>Service fee</dt>
-          <dd className="tabular-nums">{money(quote.serviceFeeMinor, quote.currency)}</dd>
-        </div>
+        {quote.serviceFeeMinor > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt>FreshMarkets Service Fee</dt>
+            <dd className="tabular-nums">{money(quote.serviceFeeMinor, quote.currency)}</dd>
+          </div>
+        ) : null}
         <div className="flex justify-between gap-4">
           <dt>Tax</dt>
           <dd className="tabular-nums">{money(quote.taxMinor, quote.currency)}</dd>

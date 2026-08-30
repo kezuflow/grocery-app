@@ -57,14 +57,18 @@ export async function applyCheckoutPaymentReaction(
   const quote = await repository.findQuoteById(input.checkoutAttemptId);
   if (!quote || quote.status !== "ACTIVE" || quote.expiresAt <= now)
     return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
+  const instant = quote.fulfillmentMode === "INSTANT";
 
-  // Membership must still be entitled at the commitment boundary.
-  const membership = await evaluateSubscriptionEntitlement(database, {
-    customerId: quote.customerId,
-    at: now,
-  });
-  if (!membership.eligible)
-    return recordException(database, input, "MEMBERSHIP_LOST", "MEMBERSHIP_LOST");
+  // Scheduled membership must still be entitled at commitment. Instant is
+  // authenticated pay-as-you-go commerce and has no membership gate.
+  if (!instant) {
+    const membership = await evaluateSubscriptionEntitlement(database, {
+      customerId: quote.customerId,
+      at: now,
+    });
+    if (!membership.eligible)
+      return recordException(database, input, "MEMBERSHIP_LOST", "MEMBERSHIP_LOST");
+  }
 
   const promotionClaims = await database
     .prepare(
@@ -110,7 +114,6 @@ export async function applyCheckoutPaymentReaction(
     [key: string]: unknown;
   }
   const routingSnapshot = quote.cycleSnapshot as CycleSnapshot | null;
-  const instant = quote.fulfillmentMode === "INSTANT";
   if (!instant) {
     if (!routingSnapshot || Date.parse(routingSnapshot.cutoffAt) <= now)
       return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
@@ -198,10 +201,13 @@ export async function applyCheckoutPaymentReaction(
           id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json,
           status, total_minor, currency, merchandise_subtotal_minor,
           item_discount_minor, order_discount_minor, delivery_subtotal_minor,
-          delivery_discount_minor, service_fee_minor, tax_minor, order_number,
+          delivery_discount_minor, service_fee_minor, pre_service_fee_total_minor,
+          service_fee_configuration_id, service_fee_snapshot_json,
+          tax_minor, order_number,
           committed_at, payment_id, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, pa.id, ?
+        SELECT ?, ?, ?, ?, ?, 'COMMITTED',
+               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, pa.id, ?
         FROM payment_attempt pa
         WHERE pa.payment_intent_id=? AND pa.status='SUCCEEDED'
         ORDER BY pa.created_at ASC LIMIT 1`,
@@ -220,6 +226,9 @@ export async function applyCheckoutPaymentReaction(
         quote.financial.deliverySubtotalMinor,
         quote.financial.deliveryDiscountMinor,
         quote.financial.serviceFeeMinor,
+        quote.preServiceFeeTotalMinor,
+        quote.serviceFeeConfigurationId,
+        quote.serviceFeeSnapshot === null ? null : JSON.stringify(quote.serviceFeeSnapshot),
         quote.financial.taxMinor,
         orderNumber,
         now,

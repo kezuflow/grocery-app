@@ -20,6 +20,15 @@ const ZONE_CODE = "CEBU_CITY_CORE";
 let counter = 0;
 
 async function configureInstant(maxOrders = 25): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO service_fee_configuration
+      (id, fee_type, flat_minor, percentage_basis_points, currency,
+       effective_from, effective_to, version, reason, created_at)
+     VALUES ('instant-commit-fee-v1', 'MIXED', 500, 300, 'PHP', ?, NULL, 1, 'test fee', ?)`,
+  )
+    .bind(now - 1_000, now)
+    .run();
   const current = await getLocationMode(env.DB, {
     locationId: LOCATION,
     requestId: crypto.randomUUID(),
@@ -37,7 +46,7 @@ async function configureInstant(maxOrders = 25): Promise<void> {
   if (!result.ok) throw new Error(`mode config failed: ${result.error.message}`);
 }
 
-async function seededInstantQuote(): Promise<{ quoteId: string; customerId: string }> {
+async function seededInstantQuote(member = true): Promise<{ quoteId: string; customerId: string }> {
   const customerId = `cust-cmt-${++counter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
   await env.DB.prepare(
@@ -45,25 +54,27 @@ async function seededInstantQuote(): Promise<{ quoteId: string; customerId: stri
   )
     .bind(customerId, `auth-${customerId}`, now, now)
     .run();
-  await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
-  )
-    .bind(
-      `authz-${customerId}`,
-      customerId,
-      `mock_auth_${customerId}`,
-      `mock_method_${customerId}`,
-      now,
-      now,
-      now,
+  if (member) {
+    await env.DB.prepare(
+      "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
     )
-    .run();
-  const trial = await startPromotionalTrial(env.DB, {
-    customerId,
-    idempotencyKey: `trial-${crypto.randomUUID()}`,
-    requestId: crypto.randomUUID(),
-  });
-  if (!trial.ok) throw new Error("fixture failed");
+      .bind(
+        `authz-${customerId}`,
+        customerId,
+        `mock_auth_${customerId}`,
+        `mock_method_${customerId}`,
+        now,
+        now,
+        now,
+      )
+      .run();
+    const trial = await startPromotionalTrial(env.DB, {
+      customerId,
+      idempotencyKey: `trial-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    });
+    if (!trial.ok) throw new Error("fixture failed");
+  }
   const addressId = `addr-${customerId}`;
   await env.DB.prepare(
     "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'C', '09', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'Call on arrival', 'active', 1, ?, ?)",
@@ -127,7 +138,7 @@ async function seedReaction(quoteId: string) {
 describe("instant order commitment", () => {
   it("commits a no-cycle order with promise snapshot, converted holds, and reservation", async () => {
     await configureInstant();
-    const { quoteId } = await seededInstantQuote();
+    const { quoteId } = await seededInstantQuote(false);
     const { reactionId, intentId } = await seedReaction(quoteId);
     const outcome = await applyCheckoutPaymentReaction(env.DB, {
       reactionId,
@@ -138,11 +149,31 @@ describe("instant order commitment", () => {
     expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
     const orderId = outcome.orderId!;
     const order = await env.DB.prepare(
-      "SELECT cycle_id, fulfillment_mode FROM grocery_order WHERE id=?",
+      `SELECT cycle_id, fulfillment_mode, pre_service_fee_total_minor,
+              service_fee_minor, service_fee_configuration_id,
+              service_fee_snapshot_json
+       FROM grocery_order WHERE id=?`,
     )
       .bind(orderId)
-      .first<{ cycle_id: string | null; fulfillment_mode: string }>();
-    expect(order).toMatchObject({ cycle_id: null, fulfillment_mode: "INSTANT" });
+      .first<{
+        cycle_id: string | null;
+        fulfillment_mode: string;
+        pre_service_fee_total_minor: number;
+        service_fee_minor: number;
+        service_fee_configuration_id: string;
+        service_fee_snapshot_json: string;
+      }>();
+    expect(order).toMatchObject({
+      cycle_id: null,
+      fulfillment_mode: "INSTANT",
+      service_fee_configuration_id: "instant-commit-fee-v1",
+    });
+    expect(order?.service_fee_minor).toBeGreaterThan(0);
+    expect(JSON.parse(order!.service_fee_snapshot_json)).toMatchObject({
+      configurationId: "instant-commit-fee-v1",
+      baseMinor: order?.pre_service_fee_total_minor,
+      feeMinor: order?.service_fee_minor,
+    });
     const snapshot = await env.DB.prepare(
       "SELECT promised_at, cycle_id FROM order_fulfillment_snapshot WHERE order_id=?",
     )

@@ -17,6 +17,7 @@ import {
   evaluateCheckoutPromotions,
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
+import { resolveServiceFee } from "./resolve-service-fee";
 
 export type QuoteItem = {
   sku_id: string;
@@ -218,15 +219,24 @@ export async function createInstantQuote(
     amountMinor: application.amountMinor,
     automatic: application.automatic,
   }));
+  const preServiceFeeTotalMinor =
+    subtotalMinor - merchandiseDiscount + deliveryFee.feeMinor - deliveryDiscount;
+  const serviceFee = await resolveServiceFee(database, {
+    currency: deliveryFee.snapshot.currency,
+    baseMinor: preServiceFeeTotalMinor,
+    at: now,
+  });
+  if (!serviceFee.ok)
+    return failure(serviceFee.error.code, serviceFee.error.message, command.requestId);
   const financial = {
     merchandiseSubtotalMinor: subtotalMinor,
     itemDiscountMinor: 0,
     orderDiscountMinor: merchandiseDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
-    serviceFeeMinor: 0,
+    serviceFeeMinor: serviceFee.value.feeMinor,
     taxMinor: 0,
-    totalMinor: subtotalMinor - merchandiseDiscount + deliveryFee.feeMinor - deliveryDiscount,
+    totalMinor: preServiceFeeTotalMinor + serviceFee.value.feeMinor,
     currency: deliveryFee.snapshot.currency,
   };
   const decision = await resolveCheckoutDecision(database, {
@@ -299,6 +309,9 @@ export async function createInstantQuote(
           fulfillmentMode: "INSTANT",
           currency: decision.currency,
           financial,
+          preServiceFeeTotalMinor,
+          serviceFeeConfigurationId: serviceFee.value.configurationId,
+          serviceFeeSnapshot: serviceFee.value,
           subtotalMinor,
           discountMinor: merchandiseDiscount,
           deliveryFeeMinor: deliveryFee.feeMinor,
@@ -384,6 +397,7 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
     deliverySubtotalMinor: row.financial.deliverySubtotalMinor,
     deliveryDiscountMinor: row.financial.deliveryDiscountMinor,
     serviceFeeMinor: row.financial.serviceFeeMinor,
+    preServiceFeeTotalMinor: row.preServiceFeeTotalMinor,
     taxMinor: row.financial.taxMinor,
     subtotalMinor: row.subtotalMinor,
     discountMinor: row.discountMinor,
