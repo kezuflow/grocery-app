@@ -57,7 +57,7 @@ export class MapboxRoutePreview implements RoutePreviewPort {
     } catch {
       throw new RoutePreviewError("ROUTE_INVALID_RESPONSE");
     }
-    if (isRecord(payload) && payload.code === "NoRoute")
+    if (isRecord(payload) && (payload.code === "NoRoute" || payload.code === "NoSegment"))
       throw new RoutePreviewError("ROUTE_NOT_FOUND");
     if (!isRecord(payload) || payload.code !== "Ok" || !Array.isArray(payload.routes))
       throw new RoutePreviewError("ROUTE_INVALID_RESPONSE");

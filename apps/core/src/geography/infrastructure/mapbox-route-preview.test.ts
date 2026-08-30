@@ -145,6 +145,7 @@ describe("Mapbox route-preview adapter", () => {
 
   it.each([
     [Response.json({ code: "NoRoute", routes: [] }), "ROUTE_NOT_FOUND"],
+    [Response.json({ code: "NoSegment", routes: [] }), "ROUTE_NOT_FOUND"],
     [new Response("unavailable", { status: 503 }), "ROUTE_UNAVAILABLE"],
     [new Response("not-json"), "ROUTE_INVALID_RESPONSE"],
     [Response.json(null), "ROUTE_INVALID_RESPONSE"],
