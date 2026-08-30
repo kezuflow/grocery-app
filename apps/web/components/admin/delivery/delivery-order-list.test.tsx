@@ -113,4 +113,40 @@ describe("DeliveryOrderList", () => {
     act(() => root.unmount());
     container.remove();
   });
+
+  it("focuses an enabled Up control after moving a delivery into the final position", async () => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const initial = [
+      { jobId: "job-1", status: "UNASSIGNED", version: 1 },
+      { jobId: "job-2", status: "UNASSIGNED", version: 1 },
+      { jobId: "job-3", status: "UNASSIGNED", version: 1 },
+    ];
+    function Harness() {
+      const [deliveries, setDeliveries] = useState(initial);
+      return (
+        <DeliveryOrderList deliveries={deliveries} onReorder={(next) => setDeliveries([...next])} />
+      );
+    }
+    act(() => root.render(<Harness />));
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Move job-2 down"]')!.click(),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(Array.from(container.querySelectorAll("li")).map((row) => row.textContent)).toEqual([
+      expect.stringContaining("job-1"),
+      expect.stringContaining("job-3"),
+      expect.stringContaining("job-2"),
+    ]);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Move job-2 up");
+    expect((document.activeElement as HTMLButtonElement).disabled).toBe(false);
+    act(() => root.unmount());
+    container.remove();
+  });
 });

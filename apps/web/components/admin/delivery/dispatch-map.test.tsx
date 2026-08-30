@@ -960,14 +960,14 @@ describe("DispatchMap", () => {
       {
         jobId: "retry",
         orderId: "o2",
-        batchId: null,
+        batchId: "b2",
         coordinate,
         fulfillmentMode: "INSTANT" as const,
         cycleId: null,
         status: "RETRY_SCHEDULED",
-        rider: null,
+        rider: { riderId: "rider-retry", displayName: "Retry Rider" },
         version: 1,
-        selection: { selectable: true, reason: null },
+        selection: { selectable: false, reason: "ACTIVE_BATCH_CONFLICT" },
       },
       {
         jobId: "blocked",

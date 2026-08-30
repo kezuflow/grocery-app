@@ -31,11 +31,18 @@ export function DeliveryOrderList({
     if (!item) return;
     next.splice(destination, 0, item);
     onReorder(next);
-    queueMicrotask(() =>
-      listRef.current
-        ?.querySelector<HTMLButtonElement>(`[data-order-focus="${item.jobId}"]`)
-        ?.focus(),
-    );
+    queueMicrotask(() => {
+      const controls = Array.from(
+        listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+      );
+      const down = controls.find(
+        (control) => control.ariaLabel === `Move ${item.jobId} down` && !control.disabled,
+      );
+      const up = controls.find(
+        (control) => control.ariaLabel === `Move ${item.jobId} up` && !control.disabled,
+      );
+      (down ?? up)?.focus();
+    });
   }
 
   function drop(targetId: string) {
@@ -85,7 +92,6 @@ export function DeliveryOrderList({
             size="icon-sm"
             variant="outline"
             aria-label={`Move ${delivery.jobId} down`}
-            data-order-focus={delivery.jobId}
             disabled={disabled || index === deliveries.length - 1}
             onClick={() => move(index, 1)}
           >

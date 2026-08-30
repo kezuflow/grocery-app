@@ -60,8 +60,8 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
 }
 
 function pointTone(pin: DeliveryMapPin): "available" | "retry" | "assigned" | "blocked" {
-  if (pin.rider || ["ASSIGNED", "EN_ROUTE", "ARRIVED"].includes(pin.status)) return "assigned";
   if (["FAILED", "RETRY_SCHEDULED", "ESCALATED"].includes(pin.status)) return "retry";
+  if (pin.rider || ["ASSIGNED", "EN_ROUTE", "ARRIVED"].includes(pin.status)) return "assigned";
   if (!pin.selection.selectable) return "blocked";
   return "available";
 }
