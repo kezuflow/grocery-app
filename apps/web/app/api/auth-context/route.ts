@@ -1,16 +1,12 @@
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
+import { jsonWithRequestId, webRequestContext } from "@/lib/http/request-context";
 
 export async function GET(request: Request): Promise<Response> {
-  const headers: Record<string, string> = {};
-  request.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
+  const context = webRequestContext(request);
   const result = await coreClient(env.CORE).getApplicationContext({
-    headers,
-    requestId: request.headers.get("x-request-id") ?? crypto.randomUUID(),
+    headers: context.coreHeaders,
+    requestId: context.requestId,
   });
-  return Response.json(result, {
-    headers: { "x-request-id": request.headers.get("x-request-id") ?? "" },
-  });
+  return jsonWithRequestId(result, context.requestId);
 }

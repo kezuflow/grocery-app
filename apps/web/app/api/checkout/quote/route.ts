@@ -1,8 +1,14 @@
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
-import { requestHeaders } from "@/lib/core-client/request";
 import { requireIdempotencyKey } from "@/lib/core-client/commands";
+import { readBoundedJson } from "@/lib/http/bounded-body";
+import {
+  boundedBodyErrorResponse,
+  jsonWithRequestId,
+  webRequestContext,
+} from "@/lib/http/request-context";
+const QUOTE_COMMAND_MAX_BYTES = 16 * 1024;
 
 const bodySchema = z.object({
   cartId: z.string().trim().min(1),
@@ -12,30 +18,36 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
-    return Response.json(
-      { ok: false, error: { code: "VALIDATION_FAILED", message: "Invalid quote request" } },
-      { status: 400 },
-    );
+  const context = webRequestContext(request);
+  const parsed = await readBoundedJson(request, bodySchema, { maxBytes: QUOTE_COMMAND_MAX_BYTES });
+  if (!parsed.ok) return boundedBodyErrorResponse(parsed.error, context.requestId);
   let idempotencyKey: string;
   try {
     idempotencyKey = requireIdempotencyKey(request);
   } catch (error) {
-    return Response.json(
-      { ok: false, error: { code: "VALIDATION_FAILED", message: (error as Error).message } },
+    return jsonWithRequestId(
+      {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: (error as Error).message,
+          requestId: context.requestId,
+        },
+      },
+      context.requestId,
       { status: 400 },
     );
   }
-  return Response.json(
+  return jsonWithRequestId(
     await coreClient(env.CORE).createCheckoutQuote({
-      requestId: crypto.randomUUID(),
-      headers: requestHeaders(request),
-      cartId: parsed.data.cartId,
-      cartVersion: parsed.data.cartVersion,
-      addressId: parsed.data.addressId,
-      deliveryCycleId: parsed.data.cycleId,
+      requestId: context.requestId,
+      headers: context.coreHeaders,
+      cartId: parsed.value.cartId,
+      cartVersion: parsed.value.cartVersion,
+      addressId: parsed.value.addressId,
+      deliveryCycleId: parsed.value.cycleId,
       idempotencyKey,
     }),
+    context.requestId,
   );
 }

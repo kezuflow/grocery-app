@@ -1,30 +1,27 @@
 import { env } from "cloudflare:workers";
-import { requestHeaders } from "@/lib/core-client/request";
 import { coreClient } from "@/lib/core-client/core";
+import { z } from "@freshmarkets/validation";
+import { readBoundedJson } from "@/lib/http/bounded-body";
+import {
+  boundedBodyErrorResponse,
+  jsonWithRequestId,
+  webRequestContext,
+} from "@/lib/http/request-context";
+const AUTHORIZATION_COMMAND_MAX_BYTES = 16 * 1024;
+const bodySchema = z.object({ authorizationId: z.string().trim().min(1) });
 
 // Confirms the pending recurring authorization from a verified provider
 // lookup after the customer returns from instrument collection.
 export async function POST(request: Request): Promise<Response> {
-  let authorizationId: unknown;
-  try {
-    const body = (await request.json()) as { authorizationId?: unknown };
-    authorizationId = body.authorizationId;
-  } catch {
-    authorizationId = undefined;
-  }
-  if (typeof authorizationId !== "string" || authorizationId.trim() === "") {
-    return Response.json(
-      {
-        ok: false,
-        error: { code: "VALIDATION_FAILED", message: "authorizationId is required" },
-      },
-      { status: 400 },
-    );
-  }
-  const result = await coreClient(env.CORE).completeRecurringAuthorization({
-    requestId: crypto.randomUUID(),
-    headers: requestHeaders(request),
-    authorizationId,
+  const context = webRequestContext(request);
+  const body = await readBoundedJson(request, bodySchema, {
+    maxBytes: AUTHORIZATION_COMMAND_MAX_BYTES,
   });
-  return Response.json(result);
+  if (!body.ok) return boundedBodyErrorResponse(body.error, context.requestId);
+  const result = await coreClient(env.CORE).completeRecurringAuthorization({
+    requestId: context.requestId,
+    headers: context.coreHeaders,
+    authorizationId: body.value.authorizationId,
+  });
+  return jsonWithRequestId(result, context.requestId);
 }

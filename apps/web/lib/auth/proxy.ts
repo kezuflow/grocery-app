@@ -1,6 +1,7 @@
 import type { AuthRequest, AuthResponse, CoreServiceBinding } from "@freshmarkets/contracts";
 import { parseWebRuntimeConfiguration } from "../runtime/runtime-configuration";
 import { readBoundedText } from "../http/bounded-body";
+import { webRequestContext } from "../http/request-context";
 
 export type AuthProxyCore = Pick<CoreServiceBinding, "auth">;
 export const AUTH_REQUEST_MAX_BYTES = 256 * 1024;
@@ -29,6 +30,7 @@ export async function proxyAuthRequest(
   core: AuthProxyCore,
   publicAppOrigin: string,
 ): Promise<Response> {
+  const context = webRequestContext(request);
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => {
     headers[key.toLowerCase()] = value;
@@ -37,6 +39,7 @@ export async function proxyAuthRequest(
   headers["x-forwarded-host"] = publicUrl.host;
   headers["x-forwarded-proto"] = publicUrl.protocol.replace(":", "");
   headers["x-forwarded-origin"] = publicAppOrigin;
+  headers["x-request-id"] = context.requestId;
 
   let body: string | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -50,7 +53,10 @@ export async function proxyAuthRequest(
       ],
     });
     if (!bounded.ok) {
-      return Response.json({ error: bounded.error }, { status: bounded.error.status });
+      return Response.json(
+        { error: { ...bounded.error, requestId: context.requestId } },
+        { status: bounded.error.status, headers: { "x-request-id": context.requestId } },
+      );
     }
     body = bounded.value;
   }
@@ -65,12 +71,17 @@ export async function proxyAuthRequest(
   if (new TextEncoder().encode(result.body).byteLength > AUTH_RESPONSE_MAX_BYTES) {
     return Response.json(
       {
-        error: { code: "AUTH_RESPONSE_TOO_LARGE", message: "Authentication response was rejected" },
+        error: {
+          code: "AUTH_RESPONSE_TOO_LARGE",
+          message: "Authentication response was rejected",
+          requestId: context.requestId,
+        },
       },
-      { status: 502 },
+      { status: 502, headers: { "x-request-id": context.requestId } },
     );
   }
   const responseHeaders = new Headers();
   for (const [key, value] of result.headers) responseHeaders.append(key, value);
+  responseHeaders.set("x-request-id", context.requestId);
   return new Response(result.body || null, { status: result.status, headers: responseHeaders });
 }

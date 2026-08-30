@@ -1,7 +1,13 @@
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
-import { requestHeaders } from "../../../../lib/core-client/request";
 import { coreClient } from "@/lib/core-client/core";
+import { readBoundedJson } from "@/lib/http/bounded-body";
+import {
+  boundedBodyErrorResponse,
+  jsonWithRequestId,
+  webRequestContext,
+} from "@/lib/http/request-context";
+const CHECKOUT_COMMAND_MAX_BYTES = 16 * 1024;
 const checkoutBodySchema = z.object({
   cartId: z.string().trim().min(1),
   addressId: z.string().trim().min(1),
@@ -10,15 +16,14 @@ const checkoutBodySchema = z.object({
   idempotencyKey: z.string().trim().min(1).optional(),
 });
 export async function POST(request: Request) {
-  const parsed = checkoutBodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
-    return Response.json(
-      { ok: false, error: { code: "VALIDATION_FAILED", message: "Invalid checkout request" } },
-      { status: 400 },
-    );
-  const body = parsed.data;
+  const context = webRequestContext(request);
+  const parsed = await readBoundedJson(request, checkoutBodySchema, {
+    maxBytes: CHECKOUT_COMMAND_MAX_BYTES,
+  });
+  if (!parsed.ok) return boundedBodyErrorResponse(parsed.error, context.requestId);
+  const body = parsed.value;
   if (body.commit)
-    return Response.json(
+    return jsonWithRequestId(
       {
         ok: false,
         error: {
@@ -27,15 +32,16 @@ export async function POST(request: Request) {
             "Mock commitment was removed; use /api/checkout/quote and /api/checkout/payment.",
         },
       },
+      context.requestId,
       { status: 410 },
     );
   const input = {
-    requestId: crypto.randomUUID(),
-    headers: requestHeaders(request),
+    requestId: context.requestId,
+    headers: context.coreHeaders,
     cartId: body.cartId,
     addressId: body.addressId,
     cycleId: body.cycleId,
   };
   const core = coreClient(env.CORE);
-  return Response.json(await core.evaluateCheckout(input));
+  return jsonWithRequestId(await core.evaluateCheckout(input), context.requestId);
 }

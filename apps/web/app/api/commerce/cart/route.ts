@@ -1,7 +1,13 @@
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
-import { requestHeaders } from "../../../../lib/core-client/request";
 import { coreClient } from "@/lib/core-client/core";
+import { readBoundedJson } from "@/lib/http/bounded-body";
+import {
+  boundedBodyErrorResponse,
+  jsonWithRequestId,
+  webRequestContext,
+} from "@/lib/http/request-context";
+const CART_COMMAND_MAX_BYTES = 16 * 1024;
 const cartBodySchema = z.object({
   cartId: z.string().trim().min(1),
   skuId: z.string().trim().min(1),
@@ -10,30 +16,32 @@ const cartBodySchema = z.object({
   idempotencyKey: z.string().trim().min(8),
 });
 export async function GET(request: Request) {
-  return Response.json(
+  const context = webRequestContext(request);
+  return jsonWithRequestId(
     await coreClient(env.CORE).getCart({
-      requestId: crypto.randomUUID(),
-      headers: requestHeaders(request),
+      requestId: context.requestId,
+      headers: context.coreHeaders,
     }),
+    context.requestId,
   );
 }
 export async function POST(request: Request) {
-  const parsed = cartBodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
-    return Response.json(
-      { ok: false, error: { code: "VALIDATION_FAILED", message: "Invalid cart request" } },
-      { status: 400 },
-    );
-  const body = parsed.data;
-  return Response.json(
+  const context = webRequestContext(request);
+  const parsed = await readBoundedJson(request, cartBodySchema, {
+    maxBytes: CART_COMMAND_MAX_BYTES,
+  });
+  if (!parsed.ok) return boundedBodyErrorResponse(parsed.error, context.requestId);
+  const body = parsed.value;
+  return jsonWithRequestId(
     await coreClient(env.CORE).setCartItem({
-      requestId: crypto.randomUUID(),
-      headers: requestHeaders(request),
+      requestId: context.requestId,
+      headers: context.coreHeaders,
       cartId: body.cartId,
       skuId: body.skuId,
       quantity: body.quantity,
       expectedVersion: body.expectedVersion,
       idempotencyKey: body.idempotencyKey,
     }),
+    context.requestId,
   );
 }
