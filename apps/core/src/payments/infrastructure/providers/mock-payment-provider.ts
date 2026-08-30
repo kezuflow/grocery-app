@@ -5,8 +5,10 @@ import type {
   ProviderEventVerificationSuccess,
   PaymentProvider,
   ProviderPaymentView,
+  ProviderSettlementObservation,
 } from "../../ports/payment-provider";
 import type { PaymentDomainState } from "../../domain/payment";
+import { validateSettlement } from "../../domain/settlement";
 
 const mockObservedStates = new WeakMap<PaymentProvider, Map<string, PaymentDomainState>>();
 const mockFailingRefunds = new WeakMap<PaymentProvider, Set<string>>();
@@ -152,6 +154,7 @@ export function createMockPaymentProvider(): PaymentProvider {
         currency?: string;
         kind?: string;
         refundReference?: string;
+        settlement?: Partial<ProviderSettlementObservation> | null;
       };
       try {
         parsed = JSON.parse(rawBody);
@@ -165,6 +168,42 @@ export function createMockPaymentProvider(): PaymentProvider {
         parsed.vendorState === "__observed__" && parsed.reference
           ? (observedStates.get(parsed.reference) ?? null)
           : mapVendorState(parsed.vendorState ?? "");
+      const currency = parsed.currency ?? "PHP";
+      let settlement: ProviderSettlementObservation | undefined;
+      if (parsed.settlement !== undefined) {
+        const candidate = parsed.settlement;
+        if (
+          candidate === null ||
+          typeof candidate !== "object" ||
+          typeof candidate.grossMinor !== "number" ||
+          typeof candidate.processingCostMinor !== "number" ||
+          typeof candidate.withholdingMinor !== "number" ||
+          typeof candidate.adjustmentMinor !== "number" ||
+          typeof candidate.netMinor !== "number" ||
+          !validateSettlement({
+            grossMinor: candidate.grossMinor,
+            processingCostMinor: candidate.processingCostMinor,
+            withholdingMinor: candidate.withholdingMinor,
+            adjustmentMinor: candidate.adjustmentMinor,
+            netMinor: candidate.netMinor,
+          }) ||
+          candidate.grossMinor !== parsed.amountMinor
+        ) {
+          return {
+            ok: false,
+            reason: "UNKNOWN_EVENT_TYPE",
+          } satisfies ProviderEventVerificationFailure;
+        }
+        settlement = {
+          grossMinor: candidate.grossMinor,
+          processingCostMinor: candidate.processingCostMinor,
+          withholdingMinor: candidate.withholdingMinor,
+          adjustmentMinor: candidate.adjustmentMinor,
+          netMinor: candidate.netMinor,
+          currency,
+          observedAt: timestamp,
+        };
+      }
       if (
         !parsed.eventId ||
         !canonicalState ||
@@ -185,10 +224,11 @@ export function createMockPaymentProvider(): PaymentProvider {
           observedAt: timestamp,
           canonicalState,
           amountMinor: parsed.amountMinor,
-          currency: parsed.currency ?? "PHP",
+          currency,
           payloadHash: await sha256Hex(rawBody),
           kind: parsed.kind === "refund" ? "refund" : "payment",
           refundReference: parsed.refundReference ?? null,
+          settlement,
         },
       } satisfies ProviderEventVerificationSuccess;
     },

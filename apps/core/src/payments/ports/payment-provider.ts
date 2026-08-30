@@ -22,6 +22,8 @@ export type VerifiedProviderEvent = {
   kind: "payment" | "refund";
   /** Present when kind === "refund": the provider-side refund identity. */
   refundReference: string | null;
+  /** Optional immutable financial evidence supplied by a verified provider event. */
+  settlement?: ProviderSettlementObservation;
 };
 
 export type ProviderEventVerificationFailure = {

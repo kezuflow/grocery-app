@@ -59,6 +59,68 @@ describe("mock payment provider contract", () => {
     expect(staleResult).toMatchObject({ ok: false, reason: "INVALID_TIMESTAMP" });
   });
 
+  it("trusts only signed settlement evidence with exact arithmetic", async () => {
+    const valid = await signedRequest({
+      eventId: `evt-${crypto.randomUUID()}`,
+      reference: "mock_pay_settlement-1",
+      vendorState: "paid",
+      amountMinor: 100_000,
+      currency: "PHP",
+      settlement: {
+        grossMinor: 100_000,
+        processingCostMinor: 4_500,
+        withholdingMinor: 0,
+        adjustmentMinor: 0,
+        netMinor: 95_500,
+      },
+    });
+    const verified = await provider.verifyAndParseEvent(valid.headers, valid.rawBody);
+    expect(verified).toMatchObject({
+      ok: true,
+      event: {
+        settlement: {
+          grossMinor: 100_000,
+          processingCostMinor: 4_500,
+          withholdingMinor: 0,
+          adjustmentMinor: 0,
+          netMinor: 95_500,
+          currency: "PHP",
+        },
+      },
+    });
+
+    const invalid = await signedRequest({
+      eventId: `evt-${crypto.randomUUID()}`,
+      reference: "mock_pay_settlement-2",
+      vendorState: "paid",
+      amountMinor: 100_000,
+      currency: "PHP",
+      settlement: {
+        grossMinor: 100_000,
+        processingCostMinor: 4_500,
+        withholdingMinor: 0,
+        adjustmentMinor: 0,
+        netMinor: 100_000,
+      },
+    });
+    expect(await provider.verifyAndParseEvent(invalid.headers, invalid.rawBody)).toMatchObject({
+      ok: false,
+      reason: "UNKNOWN_EVENT_TYPE",
+    });
+
+    const nullSettlement = await signedRequest({
+      eventId: `evt-${crypto.randomUUID()}`,
+      reference: "mock_pay_settlement-3",
+      vendorState: "paid",
+      amountMinor: 100_000,
+      currency: "PHP",
+      settlement: null,
+    });
+    await expect(
+      provider.verifyAndParseEvent(nullSettlement.headers, nullSettlement.rawBody),
+    ).resolves.toMatchObject({ ok: false, reason: "UNKNOWN_EVENT_TYPE" });
+  });
+
   it("rejects unparseable payloads and unknown vendor states after signature verification", async () => {
     const garbage = "not-json";
     const garbageHeaders = new Headers({

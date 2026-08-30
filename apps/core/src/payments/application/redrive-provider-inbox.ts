@@ -2,6 +2,7 @@ import type { PaymentDomainState } from "../domain/payment";
 import type { VerifiedProviderEvent } from "../ports/payment-provider";
 import { extendPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { applyVerifiedProviderEvent } from "./ingest-provider-event";
+import { validateSettlement } from "../domain/settlement";
 
 const canonicalStates = new Set<PaymentDomainState>([
   "INITIATED",
@@ -31,6 +32,21 @@ function observation(value: string): VerifiedProviderEvent | null {
       !(typeof parsed.refundReference === "string" || parsed.refundReference === null)
     )
       return null;
+    if (parsed.settlement !== undefined && parsed.settlement !== null) {
+      const settlement = parsed.settlement;
+      if (
+        typeof settlement !== "object" ||
+        typeof settlement.grossMinor !== "number" ||
+        typeof settlement.processingCostMinor !== "number" ||
+        typeof settlement.withholdingMinor !== "number" ||
+        typeof settlement.adjustmentMinor !== "number" ||
+        typeof settlement.netMinor !== "number" ||
+        typeof settlement.currency !== "string" ||
+        typeof settlement.observedAt !== "number" ||
+        !validateSettlement(settlement)
+      )
+        return null;
+    }
     return parsed as VerifiedProviderEvent;
   } catch {
     return null;

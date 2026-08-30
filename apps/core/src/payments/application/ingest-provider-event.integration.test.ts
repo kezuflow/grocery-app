@@ -63,6 +63,16 @@ function eventFor(reference: string) {
   };
 }
 
+function settlementFor(grossMinor = 29_900) {
+  return {
+    grossMinor,
+    processingCostMinor: 1_200,
+    withholdingMinor: 0,
+    adjustmentMinor: 0,
+    netMinor: grossMinor - 1_200,
+  };
+}
+
 async function inboxCount(providerEventId: string) {
   const row = await env.DB.prepare(
     "SELECT COUNT(*) AS count FROM payment_provider_event_inbox WHERE provider='mock' AND provider_event_id=?",
@@ -167,6 +177,151 @@ describe("provider event ingestion", () => {
       .bind(intent.paymentIntentId)
       .first<{ count: number }>();
     expect(reactionTotal?.count).toBe(1);
+  });
+
+  it("persists verified settlement evidence once with the mapped Payment", async () => {
+    const intent = await seededIntent();
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(intent.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    const event = {
+      ...eventFor(attempt!.provider_reference),
+      settlement: settlementFor(),
+    };
+    const signed = await signedEvent(event);
+
+    const first = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      signed.headers,
+      signed.rawBody,
+    );
+    expect(first).toMatchObject({
+      ok: true,
+      value: { processingStatus: "APPLIED", paymentIntentId: intent.paymentIntentId },
+    });
+
+    const observation = await env.DB.prepare(
+      "SELECT provider, provider_event_id, payment_intent_id, gross_minor, processing_cost_minor, withholding_minor, adjustment_minor, net_minor, currency FROM payment_settlement_observation WHERE provider='mock' AND provider_event_id=?",
+    )
+      .bind(event.eventId)
+      .first<{
+        provider: string;
+        provider_event_id: string;
+        payment_intent_id: string;
+        gross_minor: number;
+        processing_cost_minor: number;
+        withholding_minor: number;
+        adjustment_minor: number;
+        net_minor: number;
+        currency: string;
+      }>();
+    expect(observation).toEqual({
+      provider: "mock",
+      provider_event_id: event.eventId,
+      payment_intent_id: intent.paymentIntentId,
+      gross_minor: 29_900,
+      processing_cost_minor: 1_200,
+      withholding_minor: 0,
+      adjustment_minor: 0,
+      net_minor: 28_700,
+      currency: "PHP",
+    });
+
+    const duplicate = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      signed.headers,
+      signed.rawBody,
+    );
+    expect(duplicate).toMatchObject({ ok: true, value: { processingStatus: "DUPLICATE" } });
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_settlement_observation WHERE provider='mock' AND provider_event_id=? AND payment_intent_id=?",
+    )
+      .bind(event.eventId, intent.paymentIntentId)
+      .first<{ count: number }>();
+    expect(count?.count).toBe(1);
+  });
+
+  it("rejects invalid settlement arithmetic before changing Payment state", async () => {
+    const intent = await seededIntent();
+    const before = await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+      .bind(intent.paymentIntentId)
+      .first<{ status: string }>();
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(intent.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    const event = {
+      ...eventFor(attempt!.provider_reference),
+      settlement: { ...settlementFor(), netMinor: 29_900 },
+    };
+    const signed = await signedEvent(event);
+
+    const outcome = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      signed.headers,
+      signed.rawBody,
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      error: { code: "WEBHOOK_VERIFICATION_FAILED" },
+    });
+    const stored = await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+      .bind(intent.paymentIntentId)
+      .first<{ status: string }>();
+    expect(stored?.status).toBe(before?.status);
+    expect(await inboxCount(event.eventId)).toBe(0);
+  });
+
+  it("reconciles signed settlement evidence that disagrees with the mapped Payment", async () => {
+    const intent = await seededIntent();
+    const before = await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+      .bind(intent.paymentIntentId)
+      .first<{ status: string }>();
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(intent.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    const event = {
+      ...eventFor(attempt!.provider_reference),
+      amountMinor: 30_000,
+      settlement: settlementFor(30_000),
+    };
+    const signed = await signedEvent(event);
+
+    const outcome = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      signed.headers,
+      signed.rawBody,
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: {
+        processingStatus: "RECONCILIATION_REQUIRED",
+        paymentIntentId: intent.paymentIntentId,
+      },
+    });
+    const stored = await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+      .bind(intent.paymentIntentId)
+      .first<{ status: string }>();
+    expect(stored?.status).toBe(before?.status);
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_settlement_observation WHERE payment_intent_id=?",
+    )
+      .bind(intent.paymentIntentId)
+      .first<{ count: number }>();
+    expect(count?.count).toBe(0);
   });
 
   it("flags the same event identity with a different payload as rejected", async () => {
@@ -286,7 +441,10 @@ describe("provider event ingestion", () => {
     )
       .bind(created.value.paymentIntentId)
       .first<{ provider_reference: string }>();
-    const paid = await signedEvent(eventFor(attemptRow!.provider_reference));
+    const paid = await signedEvent({
+      ...eventFor(attemptRow!.provider_reference),
+      amountMinor: 15_000,
+    });
     const outcome = await ingestProviderEvent(
       env.DB,
       testRegistry(),

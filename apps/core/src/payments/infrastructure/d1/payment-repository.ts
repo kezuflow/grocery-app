@@ -1,3 +1,5 @@
+import type { ProviderSettlementObservation } from "../../ports/payment-provider";
+
 export type PaymentIntentRow = {
   id: string;
   purpose: string;
@@ -560,6 +562,67 @@ export function extendPaymentRepository(database: D1Database) {
         leaseExpiresAt: row.lease_expires_at,
       }));
     },
+    recordSettlementObservationStatement(input: {
+      provider: string;
+      providerEventId: string;
+      paymentIntentId: string;
+      settlement: ProviderSettlementObservation;
+      now: number;
+      paymentGuard?: { version: number; status: string };
+      refundGuard?: { refundId: string; version: number; status: string };
+    }): D1PreparedStatement {
+      const guard = input.paymentGuard;
+      const refundGuard = input.refundGuard;
+      return database
+        .prepare(
+          `INSERT OR IGNORE INTO payment_settlement_observation (
+             id, provider, provider_event_id, payment_intent_id,
+             gross_minor, processing_cost_minor, withholding_minor,
+             adjustment_minor, net_minor, currency, observed_at, created_at
+           )
+           SELECT ?, ?, ?, pi.id, ?, ?, ?, ?, ?, ?, ?, ?
+           FROM payment_intent pi
+           WHERE pi.id=?
+             AND (? IS NULL OR (pi.version=? AND pi.status=?))
+             AND (? IS NULL OR EXISTS (
+               SELECT 1 FROM payment_refund pr
+               WHERE pr.id=? AND pr.payment_intent_id=pi.id
+                 AND pr.version=? AND pr.status=?
+             ))`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          input.provider,
+          input.providerEventId,
+          input.settlement.grossMinor,
+          input.settlement.processingCostMinor,
+          input.settlement.withholdingMinor,
+          input.settlement.adjustmentMinor,
+          input.settlement.netMinor,
+          input.settlement.currency,
+          input.settlement.observedAt,
+          input.now,
+          input.paymentIntentId,
+          guard ? 1 : null,
+          guard?.version ?? null,
+          guard?.status ?? null,
+          refundGuard ? 1 : null,
+          refundGuard?.refundId ?? null,
+          refundGuard?.version ?? null,
+          refundGuard?.status ?? null,
+        );
+    },
+    recordSettlementObservation(input: {
+      provider: string;
+      providerEventId: string;
+      paymentIntentId: string;
+      settlement: ProviderSettlementObservation;
+      now: number;
+    }): Promise<number> {
+      return this.recordSettlementObservationStatement(input)
+        .run()
+        .then((result) => result.meta?.changes ?? 0);
+    },
     applyObservationWithReaction(input: {
       intentId: string;
       expectedVersion: number;
@@ -574,6 +637,13 @@ export function extendPaymentRepository(database: D1Database) {
         idempotencyKey: string;
         now: number;
       } | null;
+      settlementObservation?: {
+        provider: string;
+        providerEventId: string;
+        paymentIntentId: string;
+        settlement: ProviderSettlementObservation;
+        now: number;
+      };
     }): Promise<boolean> {
       const statements: D1PreparedStatement[] = [
         database
@@ -610,6 +680,16 @@ export function extendPaymentRepository(database: D1Database) {
         );
       if (input.consumeProviderActions)
         statements.push(base.consumeProviderActionsStatement(input.intentId, input.now));
+      if (input.settlementObservation)
+        statements.push(
+          this.recordSettlementObservationStatement({
+            ...input.settlementObservation,
+            paymentGuard: {
+              version: input.expectedVersion + 1,
+              status: input.nextStatus,
+            },
+          }),
+        );
       return database
         .batch(statements)
         .then((results) => (results[0]?.meta?.changes ?? 0) === 1)
@@ -703,9 +783,16 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
       fromStatus: string;
       toStatus: string;
       providerRefundReference?: string | null;
+      settlementObservation?: {
+        provider: string;
+        providerEventId: string;
+        paymentIntentId: string;
+        settlement: ProviderSettlementObservation;
+        now: number;
+      };
       now: number;
     }): Promise<number> {
-      return database
+      const update = database
         .prepare(
           "UPDATE payment_refund SET status=?, provider_refund_reference=COALESCE(?, provider_refund_reference), version=version+1, updated_at=? WHERE id=? AND version=? AND status=?",
         )
@@ -716,9 +803,18 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
           input.refundId,
           input.expectedVersion,
           input.fromStatus,
-        )
-        .run()
-        .then((result) => result.meta?.changes ?? 0);
+        );
+      if (!input.settlementObservation)
+        return update.run().then((result) => result.meta?.changes ?? 0);
+      const settlement = base.recordSettlementObservationStatement({
+        ...input.settlementObservation,
+        refundGuard: {
+          refundId: input.refundId,
+          version: input.expectedVersion + 1,
+          status: input.toStatus,
+        },
+      });
+      return database.batch([update, settlement]).then((results) => results[0]?.meta?.changes ?? 0);
     },
     findRefundByProviderReference(refundReference: string): Promise<RefundRow | null> {
       return database

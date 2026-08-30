@@ -52,6 +52,7 @@ export function normalizedProviderObservation(event: VerifiedProviderEvent): str
     payloadHash: event.payloadHash,
     kind: event.kind,
     refundReference: event.refundReference,
+    settlement: event.settlement ?? null,
   });
 }
 
@@ -89,7 +90,29 @@ export async function applyVerifiedProviderEvent(
       await finish("RECONCILIATION_REQUIRED", "REFUND_UNMAPPED");
       return result(event, "RECONCILIATION_REQUIRED");
     }
+    if (refund.amountMinor !== event.amountMinor || refund.currency !== event.currency) {
+      await repository.recordReconciliationCase({
+        intentId: refund.paymentIntentId,
+        category: "AMBIGUOUS_OUTCOME",
+        detailsJson: JSON.stringify({
+          provider: event.provider,
+          providerEventId: event.providerEventId,
+          kind: event.kind,
+        }),
+        now,
+      });
+      await finish("RECONCILIATION_REQUIRED", "AMOUNT_OR_CURRENCY_MISMATCH");
+      return result(event, "RECONCILIATION_REQUIRED", refund.paymentIntentId, event.canonicalState);
+    }
     if (refund.status === event.canonicalState) {
+      if (event.settlement)
+        await repository.recordSettlementObservation({
+          provider: event.provider,
+          providerEventId: event.providerEventId,
+          paymentIntentId: refund.paymentIntentId,
+          settlement: event.settlement,
+          now,
+        });
       await finish("APPLIED");
       return result(event, "DUPLICATE", refund.paymentIntentId, event.canonicalState);
     }
@@ -98,6 +121,15 @@ export async function applyVerifiedProviderEvent(
       expectedVersion: refund.version,
       fromStatus: refund.status,
       toStatus: event.canonicalState,
+      settlementObservation: event.settlement
+        ? {
+            provider: event.provider,
+            providerEventId: event.providerEventId,
+            paymentIntentId: refund.paymentIntentId,
+            settlement: event.settlement,
+            now,
+          }
+        : undefined,
       now,
     });
     if (changed !== 1) {
@@ -133,7 +165,33 @@ export async function applyVerifiedProviderEvent(
     return result(event, "RECONCILIATION_REQUIRED");
   }
 
-  const application = await applyObservationToIntents(database, intents, event.canonicalState);
+  if (intents[0].amountMinor !== event.amountMinor || intents[0].currency !== event.currency) {
+    await repository.recordReconciliationCase({
+      intentId: intents[0].id,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({
+        provider: event.provider,
+        providerEventId: event.providerEventId,
+        kind: event.kind,
+      }),
+      now,
+    });
+    await finish("RECONCILIATION_REQUIRED", "AMOUNT_OR_CURRENCY_MISMATCH");
+    return result(event, "RECONCILIATION_REQUIRED", intents[0].id, event.canonicalState);
+  }
+
+  const application = await applyObservationToIntents(
+    database,
+    intents,
+    event.canonicalState,
+    event.settlement
+      ? {
+          provider: event.provider,
+          providerEventId: event.providerEventId,
+          settlement: event.settlement,
+        }
+      : undefined,
+  );
   if (application.processingStatus === "RECONCILIATION_REQUIRED") {
     await finish("RECONCILIATION_REQUIRED", "ILLEGAL_TRANSITION");
     return result(

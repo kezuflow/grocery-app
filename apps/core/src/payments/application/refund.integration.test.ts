@@ -9,6 +9,7 @@ import {
   setMockRefundFailure,
 } from "../infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
 
 const sharedMock = createMockPaymentProvider();
 function testRegistry(): ProviderRegistry {
@@ -88,6 +89,43 @@ function refundCommand(
 }
 
 describe("non-synthetic refunds", () => {
+  it("does not persist settlement evidence when the refund compare-and-swap loses", async () => {
+    const { intentId } = await succeededIntent();
+    const created = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const repository = extendPaymentRepositoryForRefunds(env.DB);
+    const changed = await repository.updateRefundStatusCas({
+      refundId: created.value.refundId,
+      expectedVersion: 999,
+      fromStatus: "PROCESSING",
+      toStatus: "SUCCEEDED",
+      now: Date.now(),
+      settlementObservation: {
+        provider: "mock",
+        providerEventId: `evt-${crypto.randomUUID()}`,
+        paymentIntentId: intentId,
+        settlement: {
+          grossMinor: 5_000,
+          processingCostMinor: 100,
+          withholdingMinor: 0,
+          adjustmentMinor: 0,
+          netMinor: 4_900,
+          currency: "PHP",
+          observedAt: Date.now(),
+        },
+        now: Date.now(),
+      },
+    });
+    expect(changed).toBe(0);
+    const settlementCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_settlement_observation WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(settlementCount?.count).toBe(0);
+  });
+
   it("reserves outstanding ESCALATED refund value", async () => {
     const { intentId } = await succeededIntent();
     await env.DB.prepare(
@@ -306,13 +344,21 @@ describe("non-synthetic refunds", () => {
       .bind(created.value.refundId)
       .first<{ provider_refund_reference: string }>();
 
+    const providerEventId = `evt-${crypto.randomUUID()}`;
     const rawBody = JSON.stringify({
-      eventId: `evt-${crypto.randomUUID()}`,
+      eventId: providerEventId,
       kind: "refund",
       refundReference: stored!.provider_refund_reference,
       vendorState: "paid",
       amountMinor: 5000,
       currency: "PHP",
+      settlement: {
+        grossMinor: 5_000,
+        processingCostMinor: 100,
+        withholdingMinor: 0,
+        adjustmentMinor: 0,
+        netMinor: 4_900,
+      },
     });
     const outcome = await ingestProviderEvent(
       env.DB,
@@ -334,6 +380,42 @@ describe("non-synthetic refunds", () => {
       .bind(intentId)
       .first<{ status: string }>();
     expect(intentRow?.status).toBe("PARTIALLY_REFUNDED");
+    const settlement = await env.DB.prepare(
+      "SELECT payment_intent_id, gross_minor, processing_cost_minor, net_minor FROM payment_settlement_observation WHERE provider='mock' AND provider_event_id=?",
+    )
+      .bind(providerEventId)
+      .first<{
+        payment_intent_id: string;
+        gross_minor: number;
+        processing_cost_minor: number;
+        net_minor: number;
+      }>();
+    expect(settlement).toEqual({
+      payment_intent_id: intentId,
+      gross_minor: 5_000,
+      processing_cost_minor: 100,
+      net_minor: 4_900,
+    });
+
+    const replayEventId = `evt-${crypto.randomUUID()}`;
+    const replayBody = rawBody.replace(providerEventId, replayEventId);
+    const replay = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      new Headers({
+        "x-mock-signature": await mockSignatureFor(replayBody),
+        "x-mock-timestamp": String(Date.now()),
+      }),
+      replayBody,
+    );
+    expect(replay).toMatchObject({ ok: true, value: { processingStatus: "DUPLICATE" } });
+    const settlementCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_settlement_observation WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ count: number }>();
+    expect(settlementCount?.count).toBe(2);
   });
 
   it("advances a partially refunded payment to REFUNDED after the remaining refund succeeds", async () => {

@@ -5,6 +5,7 @@ import {
 } from "../domain/payment";
 import { extendPaymentRepository } from "../infrastructure/d1/payment-repository";
 import type { PaymentIntentRow } from "../infrastructure/d1/payment-repository";
+import type { ProviderSettlementObservation } from "../ports/payment-provider";
 import { recordFinancialEvent } from "./financial-observability";
 
 export type ObservationApplication = {
@@ -37,6 +38,11 @@ export async function applyObservationToIntents(
   database: D1Database,
   intents: readonly PaymentIntentRow[],
   canonicalState: PaymentDomainState,
+  settlementContext?: {
+    provider: string;
+    providerEventId: string;
+    settlement: ProviderSettlementObservation;
+  },
 ): Promise<ObservationApplication> {
   const repository = extendPaymentRepository(database);
   const now = Date.now();
@@ -59,6 +65,12 @@ export async function applyObservationToIntents(
 
   const intent = intents[0];
   if (intent.status === canonicalState) {
+    if (settlementContext)
+      await repository.recordSettlementObservation({
+        ...settlementContext,
+        paymentIntentId: intent.id,
+        now,
+      });
     recordFinancialEvent({
       event: "provider_observation_replayed",
       scope: "payments.observe",
@@ -112,6 +124,14 @@ export async function applyObservationToIntents(
               now,
             }
           : null,
+      settlementObservation:
+        finalHop && settlementContext
+          ? {
+              ...settlementContext,
+              paymentIntentId: intent.id,
+              now,
+            }
+          : undefined,
     });
     if (!applied) {
       recordFinancialEvent({

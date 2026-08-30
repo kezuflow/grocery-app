@@ -1,32 +1,4 @@
-import type { ProviderSettlementObservation } from "../ports/payment-provider";
-
-type SettlementAmounts = Pick<
-  ProviderSettlementObservation,
-  | "grossMinor"
-  | "processingCostMinor"
-  | "withholdingMinor"
-  | "adjustmentMinor"
-  | "netMinor"
->;
-
-export function validateSettlement(settlement: SettlementAmounts): boolean {
-  const amounts = [
-    settlement.grossMinor,
-    settlement.processingCostMinor,
-    settlement.withholdingMinor,
-    settlement.adjustmentMinor,
-    settlement.netMinor,
-  ];
-  if (amounts.some((amount) => !Number.isSafeInteger(amount) || amount < 0)) return false;
-
-  return (
-    BigInt(settlement.netMinor) ===
-    BigInt(settlement.grossMinor) -
-      BigInt(settlement.processingCostMinor) -
-      BigInt(settlement.withholdingMinor) +
-      BigInt(settlement.adjustmentMinor)
-  );
-}
+export { validateSettlement } from "../domain/settlement";
 
 export type FinancialEventName =
   | "payment_command_replayed"
