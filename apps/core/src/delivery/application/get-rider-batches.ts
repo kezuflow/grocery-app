@@ -224,6 +224,24 @@ export async function getRiderBatches(
              )
            )
          )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM delivery_stop claimed_stop
+           JOIN delivery_job claimed_job ON claimed_job.id=claimed_stop.delivery_job_id
+           WHERE claimed_stop.batch_id=batch.id AND (
+             claimed_job.batch_id IS NOT batch.id
+             OR claimed_stop.sequence IS NOT claimed_job.sequence
+             OR claimed_stop.status IS NOT claimed_job.status
+             OR claimed_job.rider_id IS NOT batch.rider_id
+             OR claimed_job.location_id IS NOT batch.location_id
+             OR claimed_job.zone_id IS NOT batch.zone_id
+             OR claimed_job.fulfillment_mode IS NOT batch.fulfillment_mode
+             OR claimed_job.context_resolution_status<>'RESOLVED'
+             OR (batch.fulfillment_mode='INSTANT' AND claimed_job.cycle_id IS NOT NULL)
+             OR (batch.fulfillment_mode='SCHEDULED'
+               AND (batch.cycle_id IS NULL OR claimed_job.cycle_id IS NOT batch.cycle_id))
+           )
+         )
        ORDER BY batch.created_at, batch.id, stop.sequence, job.id`,
     )
     .bind(rider.id)

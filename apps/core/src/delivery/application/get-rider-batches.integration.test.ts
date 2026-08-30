@@ -363,4 +363,34 @@ describe("assigned rider batch read model", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "INTERNAL_ERROR" } });
     expect(JSON.stringify(result)).not.toContain("raw-private-malformed-json");
   });
+
+  it("excludes a batch when another Rider's stop falsely claims it", async () => {
+    await insertBatch({
+      batchId: "rider-batch-hostile-stop-target",
+      riderId: "rider-batches-active",
+    });
+    await insertDelivery({
+      id: "rider-job-hostile-stop-target",
+      batchId: "rider-batch-hostile-stop-target",
+      riderId: "rider-batches-active",
+      sequence: 1,
+      status: "ASSIGNED",
+    });
+    await env.DB.prepare(
+      "UPDATE delivery_stop SET batch_id='rider-batch-hostile-stop-target',sequence=2 WHERE id='stop-rider-job-other'",
+    ).run();
+
+    try {
+      const result = await core.getRiderBatches(request());
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) return;
+      expect(result.value.batches.map((batch) => batch.batchId)).not.toContain(
+        "rider-batch-hostile-stop-target",
+      );
+    } finally {
+      await env.DB.prepare(
+        "UPDATE delivery_stop SET batch_id='rider-batch-other',sequence=1 WHERE id='stop-rider-job-other'",
+      ).run();
+    }
+  });
 });
