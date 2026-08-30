@@ -250,6 +250,22 @@ Core receives payment provider webhooks through a signed public webhook handler 
 
 Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for the current release; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Membership or Order DTOs.
 
+Verified provider events may include a provider-neutral settlement observation containing gross,
+processing-cost, withholding, adjustment, net, currency, and observation time. Core accepts the
+observation only when exact integer arithmetic is valid and its amount/currency agree with the
+owned Payment or Refund. Settlement evidence is immutable financial observability; it neither
+changes the customer-facing FreshMarkets Service Fee nor authorizes a Payment transition by itself.
+Invalid or mismatched evidence fails closed into reconciliation without mutating canonical state.
+
+`payments.simulateMockProviderEvent({ providerReference, outcome, idempotencyKey }) -> MockPaymentSimulationView`
+is a constrained authenticated development/test command. Core resolves the owned existing mock
+Payment server-side, derives its amount, currency, Customer, event identity, and zero-cost mock
+settlement, creates a signed mock-provider event, and sends it through the normal inbox and reaction
+path. The client may choose only `SUCCEEDED`, `FAILED`, or `EXPIRED`; it cannot submit financial or
+identity fields. The matching Web page and route are `404` in preview, staging, and production, and
+the mock provider is never registered there. PayMongo integration, payload mapping, credentials,
+production mandates, and actual processing-cost behavior remain deferred until provider approval.
+
 Retry availability uses bounded backoff. Expired leases are reclaimable; competing Workers cannot both own an observation. Retry age/attempt exhaustion transitions the inbox row to `RECONCILIATION_REQUIRED` and creates one operationally visible case, so recovery does not depend on the provider sending the event again.
 
 The registered scheduler reclaims provider-inbox work every fifteen minutes and expires due provider redirect/SDK actions every minute. Renewal initiation remains disabled unless the closed runtime configuration explicitly assigns application ownership and a configured provider exists; confirmed payment outcomes, dunning, and grace expiry continue independently of that initiation gate.

@@ -34,6 +34,20 @@ describe("runtime payment provider selection", () => {
     );
   });
 
+  it.each(["preview", "staging", "production"])(
+    "never registers the mock provider in %s",
+    (environment) => {
+      expect(() =>
+        buildProviderRegistry({ ENVIRONMENT: environment, PAYMENT_PROVIDER: "mock" }),
+      ).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+      const disabled = buildProviderRegistry({
+        ENVIRONMENT: environment,
+        PAYMENT_PROVIDER: "disabled",
+      });
+      expect(() => disabled.require("mock")).toThrow(/PAYMENT_PROVIDER_UNCONFIGURED/);
+    },
+  );
+
   it("has no registration-order fallback", () => {
     const registry = buildProviderRegistry({
       ENVIRONMENT: "test",

@@ -1,6 +1,6 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-08-30. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-08-31. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
 ## Architecture and security hardening (2026-08-30)
@@ -262,8 +262,13 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 
 - The deterministic `mock` provider is the only runtime payment adapter. It is selected explicitly
   and is limited to `development` and `test`; every other environment fails closed.
-- Core and Web can execute a local checkout through quote acceptance, mock payment intent, signed
-  provider event, durable payment observation, reaction redrive, and exactly one committed order.
+- Core and Web can execute a local Instant checkout through quote acceptance, mock payment intent,
+  an authenticated same-origin simulator, signed provider event, durable payment and settlement
+  observations, and exactly one committed order. The simulator derives all financial/identity
+  fields in Core and accepts only success, failure, or expiry.
+- Managed vinext + Core/D1 Playwright proves approval commits only after the verified event, browser
+  return without an event cannot commit, and decline remains uncommitted. Preview, staging, and
+  production reject mock registration and expose neither simulator page nor route.
 - Duplicate commands, provider events, and redrives cannot create a second canonical payment or
   order.
 - If payment succeeds and commitment fails, the same reaction is retried. Bounded failures create a
@@ -276,14 +281,19 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 - Provider-customer mappings are executed before provider calls. Recurring authorization claims its
   idempotency key before the external call. Thrown/locally ambiguous payment and authorization
   outcomes remain processing with reconciliation rather than being mislabeled failed.
+- Migration `0049_payment_settlement_observations.sql` records immutable provider-neutral gross,
+  processing-cost, withholding, adjustment, and net observations only after verified exact
+  arithmetic and Payment/Refund amount/currency agreement. Actual provider processing cost remains
+  separate from the customer-facing FreshMarkets Service Fee.
 - Paid Order commitment aborts atomically on a lost Quote or Scheduled-capacity compare-and-swap,
   recording stable finance exceptions. Refund requests reserve captured value with one guarded
   insert across REQUESTED/APPROVED/PROCESSING/ESCALATED/SUCCEEDED states. Provider availability is
   resolved before a new claim, orphaned REQUESTED replays escalate visibly, and successive partial
   successes recompute the payment aggregate through `REFUNDED`.
-- A production grocery payment provider, production recurring mandates, automatic renewal charging,
-  and real-provider retry ownership are not selected or implemented. Existing membership renewal and
-  authorization code is a provider-neutral mock-tested seam, not a production billing capability.
+- PayMongo or another production grocery payment provider, production recurring mandates, automatic
+  renewal charging, and real-provider retry ownership are not selected or implemented. Existing
+  membership renewal and authorization code is a provider-neutral mock-tested seam, not a production
+  billing capability; no guessed PayMongo payload, credential, or processing-cost behavior exists.
 
 ### Checkout and delivery pricing
 

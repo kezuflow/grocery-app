@@ -36,6 +36,19 @@ describe("mock payment provider contract", () => {
     expect(result.redirectUrl).toBeTruthy();
   });
 
+  it("keeps scheduler-owned non-browser returns deterministic", async () => {
+    const result = await provider.createPayment({
+      providerCustomerId: "mock_cust_renewal",
+      amountMinor: 29_900,
+      currency: "PHP",
+      returnUrl: "urn:freshmarkets:membership:renewal",
+      idempotencyKey: `renewal-contract-${crypto.randomUUID()}`,
+    });
+    expect(result).toMatchObject({ ok: true, actionType: "REDIRECT" });
+    if (!result.ok) return;
+    expect(result.redirectUrl).toContain("mock.pay.invalid");
+  });
+
   it("verifies signed events and rejects tampered or stale ingress", async () => {
     const body = {
       eventId: `evt-${crypto.randomUUID()}`,

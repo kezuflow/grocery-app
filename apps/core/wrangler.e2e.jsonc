@@ -13,7 +13,7 @@
     "BETTER_AUTH_URL": "http://localhost:3100",
     "TRUSTED_ORIGINS": "http://localhost:3100",
     "PAYMENT_PROVIDER": "mock",
-    "ROUTE_DISTANCE_PROVIDER": "mapbox",
+    "ROUTE_DISTANCE_PROVIDER": "mock",
   },
   "r2_buckets": [
     {

@@ -178,6 +178,7 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 - `payment_provider_actions(id PK, payment_intent_id FK NULL, authorization_id FK NULL, provider, provider_reference, action_type REDIRECT|SDK, redirect_url NULL, client_token NULL, expires_at, status ACTIVE|CONSUMED|EXPIRED, created_at, updated_at)` with exactly one payment/authorization owner, action-type-specific continuation data, and at most one active action per owner.
 - `payment_provider_methods(id PK, provider_customer_id FK, provider, provider_method_reference, status, metadata_json, created_at, updated_at, UNIQUE(provider, provider_method_reference))`
 - `payment_provider_event_inbox(id PK, provider, provider_event_id, provider_reference NULL, event_type NULL, payload_hash, normalized_observation_json NULL bounded to 16 KiB, processing_status, last_error_code NULL, attempts, received_at, processed_at NULL, available_at NULL, first_failed_at NULL, lease_owner NULL, lease_expires_at NULL, updated_at, UNIQUE(provider, provider_event_id))`
+- `payment_settlement_observation(id PK, provider, provider_event_id, payment_intent_id FK, gross_minor, processing_cost_minor, withholding_minor, adjustment_minor, net_minor, currency, observed_at, created_at, UNIQUE(provider, provider_event_id, payment_intent_id))` — immutable verified provider evidence with exact `net = gross - processing cost - withholding + adjustment`; it is not the FreshMarkets Service Fee and does not own Payment state.
 - `refunds(id PK, payment_attempt_id FK, order_id FK NULL, amount_minor, currency, reason_code, reason, status, provider_reference NULL, idempotency_key UNIQUE, requested_by_staff_id FK NULL, version, created_at, updated_at)`
 
 `purpose` distinguishes at least membership enrollment/renewal, grocery checkout, order amendment, and other approved financial intents without coupling Payments to a provider's object model. Provider mappings and inbox payload metadata are Payments-owned. Membership and Orders store only stable application payment references needed for audit/reaction.
@@ -187,6 +188,12 @@ Indexes: provider/reference, payment intent/subject/status, refund/payment/statu
 Migration `0044_financial_safety.sql` adds explicit quote/order monetary components, accepted-Quote identity on order reactions, and resumable provider actions. Migration `0045_finance_exception_taxonomy.sql` preserves historical finance exceptions while adding stable post-payment capacity, consumed-Quote, Instant-mode, and sourcing exception categories. Scheduled capacity allocation and Quote consumption use guarded updates followed by transactional abort sentinels so a zero-row compare-and-swap rolls back every dependent Order snapshot/effect.
 
 Migration `0046_cart_and_inbox_reliability.sql` reconciles historical duplicate `ACTIVE` carts before adding a partial unique customer index. The newest cart wins deterministically; its quantities remain authoritative and SKUs absent from it are copied from the newest older active cart that carries them. Superseded carts remain as history and a payload-safe domain event records the repair. The same migration adds bounded normalized-observation, retry-availability, and conditional-lease fields to the provider inbox; raw webhook request bodies remain forbidden.
+
+Migration `0049_payment_settlement_observations.sql` adds provider-neutral immutable settlement
+evidence linked to the verified provider event and canonical Payment identity. Insert occurs only
+with the winning Payment/Refund compare-and-swap application; duplicate events replay without a
+second observation, invalid arithmetic is rejected before normalization, and amount/currency
+mismatch creates reconciliation evidence rather than changing financial state.
 
 ## Promotions
 

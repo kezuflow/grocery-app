@@ -123,6 +123,25 @@ export async function simulateMockProviderEvent(
     return failure("CONFLICT", "The simulated provider event was rejected", command.requestId);
   }
 
+  if (command.outcome === "SUCCEEDED" && ingested.value.processingStatus === "APPLIED") {
+    const reaction = await database
+      .prepare(
+        "SELECT id, reaction_type, subject_id FROM payment_reaction WHERE payment_intent_id=? AND status='PENDING' ORDER BY created_at ASC LIMIT 1",
+      )
+      .bind(intent.id)
+      .first<{ id: string; reaction_type: string; subject_id: string }>();
+    if (reaction?.reaction_type === "COMMIT_ORDER") {
+      const { applyCheckoutPaymentReaction } =
+        await import("../../orders/application/apply-checkout-payment-reaction");
+      await applyCheckoutPaymentReaction(database, {
+        reactionId: reaction.id,
+        paymentIntentId: intent.id,
+        checkoutAttemptId: reaction.subject_id,
+        canonicalPaymentState: "SUCCEEDED",
+      });
+    }
+  }
+
   const order = await database
     .prepare("SELECT order_id FROM order_payment_reaction WHERE payment_intent_id=?")
     .bind(intent.id)

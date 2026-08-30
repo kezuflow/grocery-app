@@ -117,13 +117,18 @@ export function createMockPaymentProvider(): PaymentProvider {
     async createPayment(input) {
       const providerReference = `mock_pay_${input.idempotencyKey}`;
       const returnUrl = new URL(input.returnUrl);
-      const simulatorUrl = new URL(
-        `/development/mock-payments/${encodeURIComponent(providerReference)}`,
-        returnUrl.origin,
-      );
+      const browserReturn = returnUrl.protocol === "http:" || returnUrl.protocol === "https:";
+      const simulatorUrl = browserReturn
+        ? new URL(
+            `/development/mock-payments/${encodeURIComponent(providerReference)}`,
+            returnUrl.origin,
+          )
+        : new URL(`/pay/${encodeURIComponent(providerReference)}`, "https://mock.pay.invalid");
       simulatorUrl.searchParams.set(
         "returnTo",
-        `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`,
+        browserReturn
+          ? `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`
+          : input.returnUrl,
       );
       return {
         ok: true,

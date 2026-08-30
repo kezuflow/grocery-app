@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CheckoutQuoteView, CoreServiceBinding } from "@freshmarkets/contracts";
-import { mockSignatureFor } from "./payments/infrastructure/providers/mock-payment-provider";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
-import { redrivePaymentReactions } from "./payments/application/redrive-payment-reactions";
+import { simulateMockProviderEvent } from "./payments/application/simulate-mock-provider-event";
 
 const core = exports.default as unknown as CoreServiceBinding;
 const password = "correct-horse-battery-staple";
@@ -295,9 +294,11 @@ describe("customer checkout flow", () => {
       value: { state: "REQUIRES_ACTION", actionType: "REDIRECT" },
     });
     if (!payment.ok) return;
-    const paymentSubject = await env.DB.prepare("SELECT subject_id FROM payment_intent WHERE id=?")
+    const paymentSubject = await env.DB.prepare(
+      "SELECT subject_id, customer_id FROM payment_intent WHERE id=?",
+    )
       .bind(payment.value.paymentIntentId)
-      .first<{ subject_id: string }>();
+      .first<{ subject_id: string; customer_id: string }>();
     const quotesAfterPayment = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
     )
@@ -306,49 +307,40 @@ describe("customer checkout flow", () => {
     expect(paymentSubject?.subject_id).toBe(acceptedQuote.value.quoteId);
     expect(quotesAfterPayment?.count).toBe(quotesBeforePayment?.count);
 
-    const eventBody = JSON.stringify({
-      eventId: `evt-${crypto.randomUUID()}`,
-      reference: `mock_pay_${paymentKey}`,
-      vendorState: "paid",
-      amountMinor: acceptedQuote.value.totalMinor,
-      currency: acceptedQuote.value.currency,
+    const beforeProviderEvent = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM grocery_order WHERE customer_id=?",
+    )
+      .bind(paymentSubject!.customer_id)
+      .first<{ count: number }>();
+    expect(beforeProviderEvent?.count).toBe(0);
+    const paymentAttempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    const simulationCommand = {
+      environment: "test" as const,
+      customerId: paymentSubject!.customer_id,
+      providerReference: paymentAttempt!.provider_reference,
+      outcome: "SUCCEEDED" as const,
+      idempotencyKey: `flow-simulator-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    };
+    const firstSimulation = await simulateMockProviderEvent(
+      env.DB,
+      buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }),
+      simulationCommand,
+    );
+    expect(firstSimulation).toMatchObject({
+      ok: true,
+      value: { committedOrderId: expect.any(String) },
     });
-    const timestamp = Date.now();
-    const signature = await mockSignatureFor(eventBody);
-    const firstWebhook = await SELF.fetch(
-      new Request("https://core.example.invalid/webhooks/payments/mock", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-mock-signature": signature,
-          "x-mock-timestamp": String(timestamp),
-        },
-        body: eventBody,
-      }),
-    );
-    expect(firstWebhook.status).toBe(200);
-    const firstRedrive = await redrivePaymentReactions(
+    const replaySimulation = await simulateMockProviderEvent(
       env.DB,
       buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }),
-      Date.now(),
+      simulationCommand,
     );
-    const replayWebhook = await SELF.fetch(
-      new Request("https://core.example.invalid/webhooks/payments/mock", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-mock-signature": signature,
-          "x-mock-timestamp": String(timestamp),
-        },
-        body: eventBody,
-      }),
-    );
-    expect(replayWebhook.status).toBe(200);
-    const secondRedrive = await redrivePaymentReactions(
-      env.DB,
-      buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }),
-      Date.now(),
-    );
+    expect(replaySimulation).toEqual(firstSimulation);
 
     const counts = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM payment_intent WHERE id=?) AS payments, (SELECT COUNT(*) FROM grocery_order WHERE customer_id=(SELECT customer_id FROM payment_intent WHERE id=?)) AS orders",
@@ -362,8 +354,6 @@ describe("customer checkout flow", () => {
       .first<{ status: string; attempts: number; last_error_code: string | null }>();
     expect(counts).toEqual({ payments: 1, orders: 1 });
     expect(reaction).toMatchObject({ status: "SUCCEEDED" });
-    expect(firstRedrive.applied).toBe(1);
-    expect(secondRedrive.applied).toBe(0);
     const feeSnapshot = await env.DB.prepare(
       "SELECT s.delivery_fee_snapshot_json FROM order_fulfillment_snapshot s JOIN grocery_order o ON o.id=s.order_id WHERE o.customer_id=(SELECT customer_id FROM payment_intent WHERE id=?)",
     )
