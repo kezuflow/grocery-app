@@ -1,4 +1,4 @@
-import type { ProviderRegistry } from "../payments/infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../payments/ports/provider-registry";
 
 /** Outcome of one scheduled job attempt. */
 export interface ScheduledJobOutcome {
@@ -12,7 +12,7 @@ export interface ScheduledJobOutcome {
 export interface ScheduledJobContext {
   readonly database: D1Database;
   /** Configured provider adapters for jobs that must observe provider truth. */
-  readonly registry: ProviderRegistry;
+  readonly registry: PaymentProviderRegistry;
   /** Explicit ownership gate; false still permits confirmed-outcome/grace reconciliation. */
   readonly renewalInitiationEnabled: boolean;
   readonly now: number;

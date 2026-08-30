@@ -198,6 +198,8 @@ Application services establish transaction boundaries and orchestration. Domain 
 
 Forbidden paths include UI to arbitrary route to raw SQL, UI-owned payment rules, shared contracts importing D1 row types, and repositories deciding business eligibility.
 
+These boundaries are executable. `pnpm architecture:check` scans every tracked TypeScript/TSX source file with the TypeScript compiler scanner and rejects Web-to-Core source imports, infrastructure-bearing contracts, outward domain/application dependencies, provider-adapter leakage, SQL in Core entrypoint adapters, and exported contract row types. The verifier owns its narrowly documented runtime-composition exceptions; a violation is repaired behind a port or DTO rather than allowlisted for historical convenience. Fixture tests pin each stable diagnostic code and line number.
+
 ## Read and Write Architecture
 
 Use pragmatic CQRS-lite:

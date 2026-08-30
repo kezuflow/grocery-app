@@ -1,6 +1,6 @@
 import { applyObservationToIntents, type ObservationApplication } from "./apply-observation";
 import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
-import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 
 export type ReconcilePaymentCommand = {
   paymentIntentId: string;
@@ -21,7 +21,7 @@ export type ReconciliationOutcome = ObservationApplication & {
  */
 export async function reconcilePayment(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   command: ReconcilePaymentCommand,
 ): Promise<
   | { ok: true; value: ReconciliationOutcome; requestId: string }

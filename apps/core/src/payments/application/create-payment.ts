@@ -4,7 +4,7 @@ import {
   createPaymentRepository,
   type PaymentRepository,
 } from "../infrastructure/d1/payment-repository";
-import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { recordFinancialEvent } from "./financial-observability";
 
 export type CreatePaymentCommand = {
@@ -42,7 +42,7 @@ function failure(code: string, message: string, requestId: string) {
  */
 export async function createPayment(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   command: CreatePaymentCommand,
 ): Promise<
   { ok: true; value: CreatedPaymentAction; requestId: string } | ReturnType<typeof failure>

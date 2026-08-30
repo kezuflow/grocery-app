@@ -1,4 +1,4 @@
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 
 export type CompleteRecurringAuthorizationCommand = {
@@ -24,7 +24,7 @@ function failure(code: string, message: string, requestId: string) {
  */
 export async function completeRecurringAuthorization(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   command: CompleteRecurringAuthorizationCommand,
 ): Promise<
   | { ok: true; value: CompletedRecurringAuthorization; requestId: string }

@@ -4,7 +4,7 @@ import {
   extendPaymentRepositoryForRefunds,
 } from "../infrastructure/d1/payment-repository";
 import { applyObservationToIntents } from "./apply-observation";
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { recordFinancialEvent } from "./financial-observability";
 
 export type ProviderEventProcessingStatus =
@@ -185,7 +185,7 @@ export async function applyVerifiedProviderEvent(
 /** Verify, normalize, persist, lease, and apply one provider event. */
 export async function ingestProviderEvent(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   providerCode: string,
   headers: Headers,
   rawBody: string,

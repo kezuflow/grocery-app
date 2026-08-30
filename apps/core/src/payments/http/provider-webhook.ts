@@ -1,5 +1,5 @@
 import { ingestProviderEvent } from "../application/ingest-provider-event";
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 
 const WEBHOOK_PATH = /^\/webhooks\/payments\/([a-z0-9_-]+)$/;
 
@@ -11,7 +11,7 @@ const WEBHOOK_PATH = /^\/webhooks\/payments\/([a-z0-9_-]+)$/;
  */
 export async function handleProviderWebhook(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   request: Request,
 ): Promise<Response> {
   const path = new URL(request.url).pathname;

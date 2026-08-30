@@ -23,6 +23,17 @@ export async function activeFulfillmentLocationId(
   return row?.id ?? null;
 }
 
+export async function fulfillmentLocationMarketId(
+  database: D1Database,
+  locationId: string,
+): Promise<string | null> {
+  const row = await database
+    .prepare("SELECT market_id FROM fulfillment_location WHERE id=?")
+    .bind(locationId)
+    .first<{ market_id: string }>();
+  return row?.market_id ?? null;
+}
+
 export async function defaultCurrency(database: D1Database): Promise<string | null> {
   const row = await database
     .prepare(

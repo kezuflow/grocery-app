@@ -1,4 +1,5 @@
 import type { PaymentProvider } from "../../ports/payment-provider";
+import type { PaymentProviderRegistry } from "../../ports/provider-registry";
 
 export class MockProviderEnvironmentError extends Error {
   constructor() {
@@ -12,7 +13,7 @@ export class MockProviderEnvironmentError extends Error {
  * adapter is allowed only in development and test, so preview, staging, and
  * production fail closed even when they are accidentally configured for it.
  */
-export class ProviderRegistry {
+export class ProviderRegistry implements PaymentProviderRegistry {
   private readonly providers = new Map<string, PaymentProvider>();
 
   constructor(environment: string | undefined, providers: readonly PaymentProvider[] = []) {

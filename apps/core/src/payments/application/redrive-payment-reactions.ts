@@ -2,7 +2,7 @@ import { applyMembershipPaymentReaction } from "../../membership/application/app
 import { applyCheckoutPaymentReaction } from "../../orders/application/apply-checkout-payment-reaction";
 import { applyAmendmentPaymentReaction } from "../../orders/application/apply-amendment-payment-reaction";
 import type { PaymentDomainState } from "../domain/payment";
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { reconcilePayment } from "./reconcile-payment";
 
 const REACTION_MAX_ATTEMPTS = 5;
@@ -36,7 +36,7 @@ function canonicalStateOf(intentStatus: string): PaymentDomainState {
  */
 export async function redrivePaymentReactions(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   now: number,
 ): Promise<RedriveSummary> {
   const exhausted = await database

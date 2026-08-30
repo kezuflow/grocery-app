@@ -1,5 +1,5 @@
 import { requestHash } from "../../idempotency";
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { recordFinancialEvent } from "./financial-observability";
 
@@ -34,7 +34,7 @@ function failure(code: string, message: string, requestId: string) {
  */
 export async function beginRecurringAuthorization(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   command: BeginRecurringAuthorizationCommand,
 ): Promise<
   | { ok: true; value: BeginRecurringAuthorizationResult; requestId: string }

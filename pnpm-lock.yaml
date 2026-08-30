@@ -17,6 +17,9 @@ importers:
       oxlint:
         specifier: 1.80.0
         version: 1.80.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
   apps/core:
     dependencies:

@@ -1,5 +1,5 @@
 import { createPayment } from "../../payments/application/create-payment";
-import type { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../../payments/ports/provider-registry";
 import { addCalendarDays } from "../domain/billing-calendar";
 import { createMembershipRepository } from "../infrastructure/d1/membership-repository";
 
@@ -38,7 +38,7 @@ export type RenewalStepOutcome = {
 
 export async function processMembershipRenewals(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   now: number,
   options: { initiationEnabled: boolean },
   limit = 25,
@@ -58,7 +58,7 @@ export async function processMembershipRenewals(
 
 async function initiateDueMembershipRenewals(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   now: number,
   limit: number,
 ): Promise<{ initiated: number; initiationFailures: number }> {

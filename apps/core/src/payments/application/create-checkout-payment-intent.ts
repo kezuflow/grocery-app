@@ -1,5 +1,5 @@
 import type { PaymentIntentCommandRequest } from "@freshmarkets/contracts";
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { createPayment } from "./create-payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
@@ -17,7 +17,7 @@ function failure(code: string, message: string, requestId: string) {
  */
 export async function createCheckoutPaymentIntent(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   providerCode: string,
   routeDistance: RouteDistancePort,
   command: PaymentIntentCommandRequest & { customerId: string },

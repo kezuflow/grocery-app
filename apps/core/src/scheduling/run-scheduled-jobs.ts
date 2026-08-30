@@ -4,7 +4,7 @@ import {
   coreRuntimeConfiguration,
   type CoreRuntimeEnvironment,
 } from "../runtime/runtime-configuration";
-import type { ProviderRegistry } from "../payments/infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../payments/ports/provider-registry";
 import { getJobsForCron } from "./job-registry";
 import type { ScheduledJob, ScheduledJobOutcome } from "./types";
 
@@ -58,7 +58,7 @@ export async function runRegisteredJobs(
   cronExpression: string,
   now: number,
   jobs: readonly ScheduledJob[] = getJobsForCron(cronExpression),
-  registry: ProviderRegistry = buildProviderRegistry({
+  registry: PaymentProviderRegistry = buildProviderRegistry({
     ENVIRONMENT: "development",
     PAYMENT_PROVIDER: "disabled",
   }),

@@ -1,4 +1,4 @@
-import type { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { reconcilePayment } from "./reconcile-payment";
 
 const STUCK_THRESHOLD_MS = 15 * 60_000;
@@ -14,7 +14,7 @@ export type StuckReconciliationSummary = { considered: number; attempted: number
  */
 export async function reconcileStuckPayments(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   now: number,
 ): Promise<StuckReconciliationSummary> {
   const stuck = await database

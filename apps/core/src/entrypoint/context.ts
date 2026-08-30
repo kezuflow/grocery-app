@@ -5,7 +5,11 @@ import { systemClock } from "@freshmarkets/domain-shared";
 import { applicationContext, hasOperationalScope } from "../auth/authorization";
 import { createAuth, type AuthEnvironment } from "../auth/service";
 import { iamSchema } from "../iam/schema";
-import { activeFulfillmentLocationId, activeMarketCode } from "../geography/market-defaults";
+import {
+  activeFulfillmentLocationId,
+  activeMarketCode,
+  fulfillmentLocationMarketId,
+} from "../geography/market-defaults";
 import {
   resolveAuthenticatedCustomer,
   type AuthenticatedCustomer,
@@ -88,12 +92,8 @@ export class CoreContext {
   ): Promise<boolean> {
     const context = await this.requireCapability(input, capability);
     if (!context) return false;
-    const location = await this.env.DB.prepare(
-      "SELECT market_id FROM fulfillment_location WHERE id=?",
-    )
-      .bind(locationId)
-      .first<{ market_id: string }>();
-    return hasOperationalScope(context.scopes, locationId, location?.market_id);
+    const marketId = await fulfillmentLocationMarketId(this.env.DB, locationId);
+    return hasOperationalScope(context.scopes, locationId, marketId ?? undefined);
   }
 
   /**

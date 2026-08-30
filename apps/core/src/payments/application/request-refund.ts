@@ -2,7 +2,7 @@ import type { RefundRow } from "../infrastructure/d1/payment-repository";
 import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
 
 type RefundRowLike = Omit<RefundRow, "providerRefundReference">;
-import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { recordFinancialEvent } from "./financial-observability";
 
 export type RequestRefundCommand = {
@@ -41,7 +41,7 @@ function failure(code: string, message: string, requestId: string) {
  */
 export async function requestRefund(
   database: D1Database,
-  registry: ProviderRegistry,
+  registry: PaymentProviderRegistry,
   command: RequestRefundCommand,
 ): Promise<{ ok: true; value: RefundView; requestId: string } | ReturnType<typeof failure>> {
   const repository = extendPaymentRepositoryForRefunds(database);
