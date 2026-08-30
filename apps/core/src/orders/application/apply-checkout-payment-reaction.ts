@@ -163,6 +163,10 @@ export async function applyCheckoutPaymentReaction(
   }
 
   const orderId = crypto.randomUUID();
+  const orderNumber = `FM-${new Date(now).getUTCFullYear()}-${orderId
+    .replaceAll("-", "")
+    .slice(0, 12)
+    .toUpperCase()}`;
   const deliveryJobId = crypto.randomUUID();
   const deliveryStopId = crypto.randomUUID();
   const addressSnapshot = (quote.addressSnapshot ?? {}) as Record<string, unknown>;
@@ -193,9 +197,10 @@ export async function applyCheckoutPaymentReaction(
           id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json,
           status, total_minor, currency, merchandise_subtotal_minor,
           item_discount_minor, order_discount_minor, delivery_subtotal_minor,
-          delivery_discount_minor, service_fee_minor, tax_minor, payment_id, created_at
+          delivery_discount_minor, service_fee_minor, tax_minor, order_number,
+          committed_at, payment_id, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, pa.id, ?
+        SELECT ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, pa.id, ?
         FROM payment_attempt pa
         WHERE pa.payment_intent_id=? AND pa.status='SUCCEEDED'
         ORDER BY pa.created_at ASC LIMIT 1`,
@@ -215,6 +220,8 @@ export async function applyCheckoutPaymentReaction(
         quote.financial.deliveryDiscountMinor,
         quote.financial.serviceFeeMinor,
         quote.financial.taxMinor,
+        orderNumber,
+        now,
         now,
         input.paymentIntentId,
       ),

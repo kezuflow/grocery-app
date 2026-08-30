@@ -1,15 +1,149 @@
 import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./auth";
-import type { ImplementedOrderState } from "./states";
+import type {
+  DeliveryJobState,
+  FulfillmentState,
+  ImplementedOrderState,
+  PaymentState,
+  RefundState,
+} from "./states";
+import type { OrderIssueCategory, OrderIssueStatus } from "./admin-finance";
 
 export type CustomerOrderView = {
   id: string;
+  orderNumber: string;
   status: ImplementedOrderState;
-  deliveryDate: string;
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
+  deliveryDate: string | null;
+  promisedAt: string | null;
+  committedAt: string;
   totalMinor: number;
   currency: string;
   itemCount: number;
 };
+
+export type CustomerOrderLineSnapshot = {
+  orderItemId: string;
+  skuId: string;
+  productName: string;
+  variantName: string;
+  unit: string;
+  quantity: number;
+  baseQuantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+};
+
+export type CustomerOrderFinancialView = {
+  source: "CHECKOUT_QUOTE" | "AMENDMENT_QUOTE" | "ORDER_TOTAL_ONLY";
+  currency: string;
+  merchandiseSubtotalMinor: number | null;
+  itemDiscountMinor: number | null;
+  orderDiscountMinor: number | null;
+  deliverySubtotalMinor: number | null;
+  deliveryFeeMinor: number | null;
+  deliveryDiscountMinor: number | null;
+  serviceFeeMinor: number | null;
+  taxMinor: number | null;
+  totalMinor: number;
+};
+
+export type CustomerTimelineEntry = {
+  eventId: string;
+  type:
+    | "ORDER_COMMITTED"
+    | "PAYMENT_STATUS"
+    | "FULFILLMENT_STATUS"
+    | "DELIVERY_STATUS"
+    | "AMENDMENT_STATUS"
+    | "REFUND_STATUS"
+    | "ISSUE_STATUS";
+  title: string;
+  description: string;
+  status: string;
+  occurredAt: string;
+};
+
+export type CustomerOrderActionView = {
+  action: "REORDER" | "REPORT_ISSUE" | "REQUEST_AMENDMENT" | "VIEW_INVOICE" | "CANCEL";
+  available: boolean;
+  disabledReason: string | null;
+};
+
+export type CustomerOrderDetailView = {
+  orderId: string;
+  orderNumber: string;
+  status: ImplementedOrderState;
+  version: number;
+  committedAt: string;
+  financial: CustomerOrderFinancialView;
+  items: readonly CustomerOrderLineSnapshot[];
+  fulfillment: {
+    mode: "INSTANT" | "SCHEDULED";
+    status: FulfillmentState | null;
+    deliveryStatus: DeliveryJobState | null;
+    cycleId: string | null;
+    deliveryDate: string | null;
+    promisedAt: string | null;
+    address: {
+      label: string | null;
+      recipient: string | null;
+      phone: string | null;
+      addressLine1: string | null;
+      addressLine2: string | null;
+      barangay: string | null;
+      city: string | null;
+      region: string | null;
+      postalCode: string | null;
+      countryCode: string | null;
+      deliveryNote: string | null;
+    };
+  };
+  payments: readonly {
+    paymentId: string;
+    purpose: "GROCERY_CHECKOUT" | "ORDER_AMENDMENT";
+    status: PaymentState;
+    amountMinor: number;
+    currency: string;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  refunds: readonly {
+    refundId: string;
+    status: RefundState;
+    amountMinor: number;
+    currency: string;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  amendments: readonly {
+    amendmentId: string;
+    status: "DRAFT" | "PENDING_PAYMENT" | "COMMITTED" | "FAILED" | "CANCELED";
+    version: number;
+    financial: CustomerOrderFinancialView;
+    lines: readonly CustomerOrderLineSnapshot[];
+    committedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  issues: readonly {
+    issueId: string;
+    category: OrderIssueCategory;
+    status: OrderIssueStatus;
+    details: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  invoice: {
+    status: "NOT_AVAILABLE" | "NOT_READY" | "READY" | "ISSUED";
+    invoiceIdentifier: string | null;
+    issuedAt: string | null;
+  };
+  timeline: readonly CustomerTimelineEntry[];
+  actions: readonly CustomerOrderActionView[];
+};
+
+export type CustomerOrderDetailRequest = AuthenticatedRequest & { orderId: string };
 
 export type AdminOrderCommandRequest = AuthenticatedRequest & {
   orderId: string;
@@ -23,4 +157,7 @@ export type OrdersService = {
   listCustomerOrders(
     request: AuthenticatedRequest,
   ): Promise<RpcResult<ReadonlyArray<CustomerOrderView>>>;
+  getCustomerOrderDetail(
+    request: CustomerOrderDetailRequest,
+  ): Promise<RpcResult<CustomerOrderDetailView>>;
 };

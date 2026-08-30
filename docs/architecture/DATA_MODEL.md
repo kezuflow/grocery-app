@@ -159,11 +159,12 @@ Core provisions first-touch carts through the partial unique active-cart index, 
 - `order_amendment_items(...)` with the same historical line snapshot semantics.
 - `order_promotion_applications(id PK, order_id FK, amendment_id FK NULL, promotion_id FK, redemption_id FK, price_component MERCHANDISE|DELIVERY, benefit_type, amount_minor, benefit_snapshot_json, UNIQUE(order_id, amendment_id, price_component))`
 
-The canonical target requires the persisted, unique human-readable
-`orders.order_number`. During the current implementation sequence, the physical
-Orders table predates that column; Delivery map detail therefore exposes a null
-order number until Orders persistence lands it and never fabricates one from the
-Order UUID.
+The physical Orders table persists nullable compatibility columns for the unique
+human-readable `order_number` and `committed_at`. New paid commitments populate
+both atomically with the Order; historical rows retain null and customer reads
+use the immutable Order ID as their explicit legacy display identity rather than
+inventing a number. Delivery map detail may continue to expose null for those
+historical rows.
 
 Indexes: customer/committed time, unique payment intent/attempt commitment, optional cycle/status, fulfillment mode/location/status. Order fulfillment, route/delivery-fee calculation, SKU conversion, Promotion, and financial-component snapshots are immutable after commitment; corrections use amendments, adjustment records, and events. Changing fulfillment or delivery-price configuration, cadence, units, SKU size, price, or Promotion later does not rewrite history.
 

@@ -259,6 +259,8 @@ For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiri
 - `orders.createAmendmentDraft({ orderId, items, idempotencyKey }) -> AmendmentDraftView`
 - `orders.payAmendment({ amendmentId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 
+`CustomerOrderDetail` is ownership-scoped and purpose-built from immutable Order snapshots. It contains the public order number and committed instant, exact line/SKU/unit/base-consumption snapshots, an explicit financial source (`CHECKOUT_QUOTE` or `ORDER_TOTAL_ONLY` with unavailable components represented as null), provider-neutral payment/refund summaries, fulfillment mode and promise without location or rider data, additive amendment summaries, customer-safe issue summaries, invoice availability, a deterministic chronological controlled timeline, and Core-derived action availability. It excludes provider identifiers/events/payloads, reconciliation or Audit JSON, staff identity/internal notes, inventory/procurement data, and rider coordinates. A non-owned order returns `NOT_FOUND`; committed customer cancellation is returned unavailable with a controlled reason rather than exposing the internal Admin cancellation command.
+
 Customer order DTOs compose original and amendment timelines while preserving separate financial records.
 
 Customer grocery-order cancellation is not exposed in the mock-payment MVP. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.

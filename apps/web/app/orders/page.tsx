@@ -58,9 +58,14 @@ export default function OrdersPage() {
         </div>
         <div className="mt-4 grid gap-3">
           {visibleOrders.map((order) => (
-            <article key={order.id} className="rounded-lg border bg-white p-5">
+            <Link
+              key={order.id}
+              href={`/orders/${encodeURIComponent(order.id)}`}
+              className="block rounded-lg border bg-white p-5 transition-colors hover:border-[var(--fm-primary-dark)] hover:bg-[var(--fm-surface-soft)]"
+              aria-label={`View order ${order.orderNumber}`}
+            >
               <div className="flex justify-between gap-4">
-                <strong>{order.id}</strong>
+                <strong>{order.orderNumber}</strong>
                 <span>{order.status}</span>
               </div>
               <p className="mt-2 text-sm text-slate-600">
@@ -69,9 +74,12 @@ export default function OrdersPage() {
                   style: "currency",
                   currency: order.currency,
                 })}{" "}
-                · delivery {new Date(order.deliveryDate).toLocaleDateString()}
+                ·{" "}
+                {order.fulfillmentMode === "INSTANT"
+                  ? "Instant delivery"
+                  : `delivery ${order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "date unavailable"}`}
               </p>
-            </article>
+            </Link>
           ))}
           {visibleOrders.length === 0 && !authRequired ? (
             <p className="rounded border bg-white p-6 text-slate-600">

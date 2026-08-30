@@ -77,8 +77,12 @@ describe("closed lifecycle vocabularies", () => {
     const eligibility: { status: SubscriptionState | null } = { status: "TRIALING" };
     const order: CustomerOrderView = {
       id: "order-1",
+      orderNumber: "FM-2026-ORDER1",
       status: "COMMITTED" as ImplementedOrder & CustomerOrderView["status"],
+      fulfillmentMode: "SCHEDULED",
       deliveryDate: "2026-09-01T00:00:00.000Z",
+      promisedAt: null,
+      committedAt: "2026-08-30T00:00:00.000Z",
       totalMinor: 19900,
       currency: "PHP",
       itemCount: 2,

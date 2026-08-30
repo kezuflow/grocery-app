@@ -11,5 +11,14 @@ describe("Orders RPC adapter", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED", requestId: "orders-adapter" },
     });
+    const detail = await rpc.getCustomerOrderDetail({
+      requestId: "orders-detail-adapter",
+      headers: {},
+      orderId: "order-1",
+    });
+    expect(detail).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "orders-detail-adapter" },
+    });
   });
 });

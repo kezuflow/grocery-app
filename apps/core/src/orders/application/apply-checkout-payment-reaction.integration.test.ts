@@ -191,6 +191,13 @@ describe("order commitment from canonical payment reactions", () => {
     };
     const first = await applyCheckoutPaymentReaction(env.DB, command);
     expect(first).toMatchObject({ applied: true, reason: "APPLIED" });
+    const identity = await env.DB.prepare(
+      "SELECT order_number, committed_at FROM grocery_order WHERE id=?",
+    )
+      .bind(first.orderId)
+      .first<{ order_number: string | null; committed_at: number | null }>();
+    expect(identity?.order_number).toMatch(/^FM-\d{4}-[A-F0-9]{12}$/);
+    expect(identity?.committed_at).toEqual(expect.any(Number));
     const replay = await applyCheckoutPaymentReaction(env.DB, command);
     expect(replay).toEqual({ ...first, reason: "ALREADY_APPLIED" });
     const after = await env.DB.prepare(
