@@ -178,19 +178,53 @@ job_evidence AS (
 )
 SELECT * FROM job_evidence;
 
--- Pick one deterministic namespace longer than every legacy stop id. Generated
--- ids within it cannot collide with any preserved legacy id, and unique job ids
--- make the generated ids mutually distinct.
+-- Choose one compact deterministic namespace from N+1 candidates for N legacy
+-- stop ids. Each legacy id can exclude at most one delimited namespace, so at
+-- least one candidate is available. Stable stopless-job ordinals then make all
+-- generated ids distinct without appending source ids.
 CREATE TABLE delivery_stop_id_stage_0043 AS
-WITH generated_namespace AS (
-  SELECT lower(hex(zeroblob(CAST(COALESCE(MAX(length(id)), 0) / 2 AS INTEGER) + 1))) || '-' AS prefix
-  FROM delivery_stop_legacy_0043
+WITH stopless_jobs AS (
+  SELECT
+    stage.id AS delivery_job_id,
+    ROW_NUMBER() OVER (ORDER BY stage.id) AS job_ordinal
+  FROM delivery_job_stage_0043 stage
+  WHERE stage.selected_stop_id IS NULL
+),
+namespace_candidates AS (
+  SELECT ROW_NUMBER() OVER (ORDER BY legacy.id) AS namespace_ordinal
+  FROM delivery_stop_legacy_0043 legacy
+  UNION ALL
+  SELECT COUNT(*) + 1 FROM delivery_stop_legacy_0043
+),
+safe_namespace AS (
+  SELECT candidate.namespace_ordinal
+  FROM namespace_candidates candidate
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM delivery_stop_legacy_0043 legacy
+    WHERE substr(
+      legacy.id,
+      1,
+      length('generated-stop-' || candidate.namespace_ordinal || '-')
+    ) = 'generated-stop-' || candidate.namespace_ordinal || '-'
+  )
+  ORDER BY candidate.namespace_ordinal
+  LIMIT 1
 )
 SELECT
   stage.id AS delivery_job_id,
-  COALESCE(stage.selected_stop_id, namespace.prefix || stage.id) AS canonical_stop_id
+  stage.selected_stop_id AS canonical_stop_id
 FROM delivery_job_stage_0043 stage
-CROSS JOIN generated_namespace namespace;
+WHERE stage.selected_stop_id IS NOT NULL
+UNION ALL
+SELECT
+  stopless.delivery_job_id,
+  'generated-stop-' || namespace.namespace_ordinal || '-' || stopless.job_ordinal
+FROM stopless_jobs stopless
+CROSS JOIN safe_namespace namespace;
+
+CREATE UNIQUE INDEX delivery_stop_id_stage_unique_0043
+  ON delivery_stop_id_stage_0043(canonical_stop_id);
 
 CREATE TABLE delivery_batch (
   id TEXT PRIMARY KEY NOT NULL,
@@ -214,6 +248,7 @@ CREATE TABLE delivery_batch (
   CHECK (
     (
       context_resolution_status = 'RESOLVED'
+      AND fulfillment_mode IS NOT NULL
       AND location_id IS NOT NULL
       AND zone_id IS NOT NULL
       AND (

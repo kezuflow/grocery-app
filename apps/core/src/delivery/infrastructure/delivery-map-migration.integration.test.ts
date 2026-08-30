@@ -835,18 +835,13 @@ describe("canonical delivery batch migration 0043", () => {
       "SELECT id, delivery_job_id, proof_json FROM delivery_stop WHERE delivery_job_id IN ('job-a','job-b') ORDER BY delivery_job_id",
     ).all<Record<string, unknown>>();
     expect(collisionStops.results[0]).toMatchObject({ delivery_job_id: "job-a", proof_json: null });
-    expect(collisionStops.results[0]?.id).toMatch(/^0+-job-a$/);
+    expect(collisionStops.results[0]?.id).toBe("generated-stop-1-1");
     expect(collisionStops.results[1]).toEqual({
       id: "stop-job-a",
       delivery_job_id: "job-b",
       proof_json: '{"original":true}',
     });
-    const longestLegacyStopId = await env.DB.prepare(
-      "SELECT MAX(length(delivery_stop_id)) AS length FROM delivery_stop_compatibility_history",
-    ).first<{ length: number }>();
-    expect(String(collisionStops.results[0]?.id).length).toBeGreaterThan(
-      longestLegacyStopId!.length,
-    );
+    expect(String(collisionStops.results[0]?.id).length).toBeLessThanOrEqual(64);
     expect(
       await env.DB.prepare(
         "SELECT delivery_stop_id, delivery_job_id, proof_json, original_version FROM delivery_stop_compatibility_history WHERE delivery_stop_id='stop-job-a'",
@@ -958,6 +953,21 @@ describe("canonical delivery batch migration 0043", () => {
     await rejects(
       "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status, version, created_at, updated_at) VALUES ('invalid-new-unresolved', 'SCHEDULED', 'cycle-next-cebu', NULL, NULL, 'DRAFT', 'RESOLVED', 1, 1, 1)",
     );
+    await rejects(
+      "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status, version, created_at, updated_at) VALUES ('invalid-resolved-null-mode', NULL, NULL, 'location-cebu-central', 'zone-cebu-city-core', 'DRAFT', 'RESOLVED', 1, 1, 1)",
+    );
+    await env.DB.prepare(
+      "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, status, context_resolution_status, version, created_at, updated_at) VALUES ('valid-legacy-unresolved-null-mode', NULL, NULL, NULL, NULL, 'EXCEPTION', 'LEGACY_UNRESOLVED', 1, 1, 1)",
+    ).run();
+    expect(
+      await env.DB.prepare(
+        "SELECT fulfillment_mode, status, context_resolution_status FROM delivery_batch WHERE id='valid-legacy-unresolved-null-mode'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      fulfillment_mode: null,
+      status: "EXCEPTION",
+      context_resolution_status: "LEGACY_UNRESOLVED",
+    });
     await rejects(
       "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status, context_resolution_status, address_snapshot_json, version, created_at, updated_at) VALUES ('invalid-new-job-context', 'invalid-new-job-order', NULL, 'SCHEDULED', NULL, NULL, 'UNASSIGNED', 'RESOLVED', '{}', 1, 1, 1)",
     );

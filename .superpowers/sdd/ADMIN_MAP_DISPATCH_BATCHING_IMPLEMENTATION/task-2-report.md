@@ -299,3 +299,62 @@ the required stop with every new delivery job; it does not add a separate databa
 the at-least-one-stop invariant. Synchronizing job/stop batch and sequence changes belongs to Task
 5's single assignment/reordering transaction. Neither boundary authorizes Task 3+ runtime work in
 this migration fix.
+
+## Fresh re-review round 3
+
+Both Important findings were reproduced against `4a0f184` before changing 0043. The targeted RED
+run had three failing files:
+
+- The resolved/null-mode rejection helper observed no rejection, demonstrating SQLite CHECK
+  three-valued logic accepted the row.
+- With an empty legacy stop table, two stopless jobs received `00-job-empty-a` and
+  `00-job-empty-b`, proving the allocator still embedded raw job IDs.
+- Independently schema-valid 900,000-character job and legacy stop IDs caused the old allocator to
+  abort 0043 with `SQLITE_TOOBIG`.
+
+The resolved batch CHECK now explicitly requires `fulfillment_mode IS NOT NULL` before evaluating
+the legal Instant/Scheduled cycle relationship. A regression proves an explicit null mode is
+rejected for `RESOLVED`, while null mode/cycle/location/zone is accepted only with the constrained
+`LEGACY_UNRESOLVED` + `EXCEPTION` representation. The owner ruling remains unchanged: an
+operational batch is exactly Instant or Scheduled, there is no Mixed mode, and null is historical
+compatibility only.
+
+The length-derived allocator from the previous re-review has been replaced. For `N` legacy stop
+IDs, 0043 derives candidate namespace ordinals `1..N+1` without recursion. A candidate is excluded
+when any legacy ID begins with its delimited `generated-stop-<namespace>-` prefix. One legacy ID
+can exclude at most one such namespace, so at least one of the `N+1` candidates is always free.
+Stopless jobs receive stable ordinals from binary SQL ordering by canonical job ID; their IDs are
+`generated-stop-<safe namespace>-<job ordinal>`. Selected legacy stops keep their IDs unchanged.
+
+This proves collision freedom and boundedness:
+
+- the chosen namespace excludes every legacy stop ID, including exact adversarial candidate IDs;
+- distinct stable job ordinals make every generated ID distinct, with a staging unique index as
+  an executable guard;
+- neither legacy stop IDs nor job IDs are appended to generated IDs;
+- both ordinals are SQLite integers, so even their maximum decimal forms keep the generated ID
+  below 55 characters;
+- the construction is total for every finite schema-valid input because `N+1` candidates cannot
+  all be excluded by `N` legacy IDs.
+
+Repository-native integration fixtures cover the empty legacy stop table, multiple stable
+stopless-job IDs, exact adversarial `generated-stop-1-1` / `generated-stop-2-1` legacy IDs, and
+independent 900,000-character stop/job IDs. The adversarial fixture deterministically selects
+namespace 3 and produces an 18-character ID for the large job while preserving all three original
+legacy stop IDs in compatibility history.
+
+Round-three verification:
+
+- Targeted migration fixtures: three files, three tests passed.
+- All migration allocator/hostile cases plus atomic Instant/Scheduled writer tests: five files,
+  ten tests passed.
+- Affected migration/commitment/compatibility set: ten files, 44 tests passed.
+- Full Core suite: 97 files, 516 tests passed.
+- Final format, naming, migration verification, lint, workspace typecheck, Core dry-run build, and
+  diff checks were rerun after this report append and before the separate round-three commit.
+
+Delivery event identifiers use the explicitly tested ASCII identifier-whitespace policy: space,
+tab, line feed, vertical tab, form feed, and carriage return normalize as blank. NBSP and other
+Unicode space characters are not broadened into that policy in Task 2. The atomic-writer and Task
+5 batch/sequence synchronization boundaries recorded above remain unchanged; no Task 3 work was
+added.

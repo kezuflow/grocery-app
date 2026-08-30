@@ -5,9 +5,10 @@ beforeEach(async (context) => {
   const migrations = JSON.parse(
     (env as unknown as { TEST_MIGRATIONS: string }).TEST_MIGRATIONS,
   ) as Parameters<typeof applyD1Migrations>[1];
-  const selectedMigrations = context.task.file?.name.endsWith(
-    "delivery-map-migration.integration.test.ts",
-  )
+  const isDeliveryMigrationTest =
+    context.task.file?.name.endsWith("delivery-map-migration.integration.test.ts") ||
+    context.task.file?.name.includes("delivery-stop-id-");
+  const selectedMigrations = isDeliveryMigrationTest
     ? migrations.filter((migration) => migration.name < "0043_delivery_batches_and_map_stops.sql")
     : migrations;
   await applyD1Migrations(env.DB, selectedMigrations);
