@@ -138,59 +138,87 @@ export type CommitDeliveryBatchInput = {
 const abortWhenNoChange = (database: D1Database) =>
   database.prepare("INSERT INTO admin_command_abort(id) SELECT 1 WHERE changes()=0");
 
+const abortUnlessCount = (database: D1Database, expectedCount: number) =>
+  database
+    .prepare("INSERT INTO admin_command_abort(id) SELECT 1 WHERE changes()<>?")
+    .bind(expectedCount);
+
+const candidateRowsSql = `
+  SELECT CAST(entry.key AS INTEGER)+1 AS assignment_sequence,
+         json_extract(entry.value,'$.eventId') AS event_id,
+         json_extract(entry.value,'$.jobId') AS job_id,
+         json_extract(entry.value,'$.jobVersion') AS job_version,
+         json_extract(entry.value,'$.jobStatus') AS job_status,
+         json_extract(entry.value,'$.jobBatchId') AS job_batch_id,
+         json_extract(entry.value,'$.jobSequence') AS job_sequence,
+         json_extract(entry.value,'$.stopId') AS stop_id,
+         json_extract(entry.value,'$.stopVersion') AS stop_version,
+         json_extract(entry.value,'$.stopStatus') AS stop_status,
+         json_extract(entry.value,'$.stopBatchId') AS stop_batch_id,
+         json_extract(entry.value,'$.stopSequence') AS stop_sequence,
+         json_extract(entry.value,'$.latitude') AS latitude,
+         json_extract(entry.value,'$.longitude') AS longitude,
+         json_extract(entry.value,'$.batchStatus') AS batch_status,
+         json_extract(entry.value,'$.batchVersion') AS batch_version
+  FROM json_each(?) entry`;
+
 export async function commitDeliveryBatch(
   database: D1Database,
   input: CommitDeliveryBatchInput,
 ): Promise<void> {
+  const candidatePayload = JSON.stringify(
+    input.candidates.map((candidate) => ({
+      eventId: crypto.randomUUID(),
+      jobId: candidate.jobId,
+      jobVersion: candidate.jobVersion,
+      jobStatus: candidate.jobStatus,
+      jobBatchId: candidate.jobBatchId,
+      jobSequence: candidate.jobSequence,
+      stopId: candidate.stopId,
+      stopVersion: candidate.stopVersion,
+      stopStatus: candidate.stopStatus,
+      stopBatchId: candidate.stopBatchId,
+      stopSequence: candidate.stopSequence,
+      latitude: candidate.latitude,
+      longitude: candidate.longitude,
+      batchStatus: candidate.batchStatus,
+      batchVersion: candidate.batchVersion,
+    })),
+  );
+  const candidateCount = input.candidates.length;
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
         `INSERT INTO admin_command_abort(id)
-         SELECT 1 WHERE NOT EXISTS (
-           SELECT 1 FROM fulfillment_location
-           WHERE id=? AND market_id=? AND status='active' AND version=?
-         )`,
-      )
-      .bind(input.locationId, input.marketId, input.locationVersion),
-    database
-      .prepare(
-        `INSERT INTO admin_command_abort(id)
-         SELECT 1 WHERE NOT EXISTS (
-           SELECT 1 FROM staff_identity staff
-           WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active'
-             AND EXISTS (
-               SELECT 1 FROM staff_role staff_role
-               JOIN role_permission role_permission ON role_permission.role_id=staff_role.role_id
-               JOIN permission permission ON permission.id=role_permission.permission_id
-               WHERE staff_role.staff_id=staff.id AND permission.code='delivery.manage'
-             )
-             AND EXISTS (
-               SELECT 1 FROM staff_scope scope
-               WHERE scope.staff_id=staff.id AND (
-                 scope.scope_kind='global'
-                 OR (scope.scope_kind='location' AND scope.location_id=?)
-                 OR (scope.scope_kind='market' AND scope.market_id=?)
+         SELECT 1
+         WHERE NOT EXISTS (
+                 SELECT 1 FROM fulfillment_location
+                 WHERE id=? AND market_id=? AND status='active' AND version=?
                )
-             )
-         )`,
-      )
-      .bind(input.actorStaffId, input.actorAuthUserId, input.locationId, input.marketId),
-    database
-      .prepare(
-        `INSERT INTO admin_command_abort(id)
-         SELECT 1 WHERE NOT EXISTS (
-           SELECT 1 FROM rider_identity
-           WHERE id=? AND status='ACTIVE' AND version=?
-             AND (preferred_location_id IS NULL OR preferred_location_id=?)
-         )`,
-      )
-      .bind(input.riderId, input.riderVersion, input.locationId),
-    ...(input.fulfillmentMode === "SCHEDULED"
-      ? [
-          database
-            .prepare(
-              `INSERT INTO admin_command_abort(id)
-               SELECT 1 WHERE NOT EXISTS (
+            OR NOT EXISTS (
+                 SELECT 1 FROM staff_identity staff
+                 WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active'
+                   AND EXISTS (
+                     SELECT 1 FROM staff_role staff_role
+                     JOIN role_permission role_permission ON role_permission.role_id=staff_role.role_id
+                     JOIN permission permission ON permission.id=role_permission.permission_id
+                     WHERE staff_role.staff_id=staff.id AND permission.code='delivery.manage'
+                   )
+                   AND EXISTS (
+                     SELECT 1 FROM staff_scope scope
+                     WHERE scope.staff_id=staff.id AND (
+                       scope.scope_kind='global'
+                       OR (scope.scope_kind='location' AND scope.location_id=?)
+                       OR (scope.scope_kind='market' AND scope.market_id=?)
+                     )
+                   )
+               )
+            OR NOT EXISTS (
+                 SELECT 1 FROM rider_identity
+                 WHERE id=? AND status='ACTIVE' AND version=?
+                   AND (preferred_location_id IS NULL OR preferred_location_id=?)
+               )
+            OR (?='SCHEDULED' AND NOT EXISTS (
                  SELECT 1 FROM delivery_cycle cycle
                  WHERE cycle.id=? AND cycle.market_id=? AND cycle.status=? AND cycle.version=?
                    AND cycle.status IN (${ASSIGNABLE_DELIVERY_CYCLE_STATES.map(() => "?").join(",")})
@@ -198,18 +226,27 @@ export async function commitDeliveryBatch(
                      SELECT 1 FROM cycle_zone_capacity capacity
                      WHERE capacity.cycle_id=cycle.id AND capacity.location_id=?
                    )
-               )`,
-            )
-            .bind(
-              input.cycleId,
-              input.marketId,
-              input.cycleStatus,
-              input.cycleVersion,
-              ...ASSIGNABLE_DELIVERY_CYCLE_STATES,
-              input.locationId,
-            ),
-        ]
-      : []),
+               ))`,
+      )
+      .bind(
+        input.locationId,
+        input.marketId,
+        input.locationVersion,
+        input.actorStaffId,
+        input.actorAuthUserId,
+        input.locationId,
+        input.marketId,
+        input.riderId,
+        input.riderVersion,
+        input.locationId,
+        input.fulfillmentMode,
+        input.cycleId,
+        input.marketId,
+        input.cycleStatus,
+        input.cycleVersion,
+        ...ASSIGNABLE_DELIVERY_CYCLE_STATES,
+        input.locationId,
+      ),
     database
       .prepare(
         "INSERT INTO idempotency_records (scope, idempotency_key, request_hash, result_type, result_reference, status, created_at, updated_at) VALUES ('delivery.createAndAssignBatch', ?, ?, 'delivery_batch', NULL, 'PROCESSING', ?, ?)",
@@ -240,106 +277,107 @@ export async function commitDeliveryBatch(
       )
       .bind(input.riderId, input.now, input.batchId),
     abortWhenNoChange(database),
+    database
+      .prepare(
+        `WITH candidates AS (${candidateRowsSql})
+         INSERT INTO admin_command_abort(id)
+         SELECT 1 FROM candidates candidate
+         WHERE candidate.job_batch_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM delivery_batch prior_batch
+             WHERE prior_batch.id=candidate.job_batch_id
+               AND prior_batch.version=candidate.batch_version
+               AND prior_batch.status=candidate.batch_status
+               AND prior_batch.context_resolution_status='RESOLVED'
+               AND prior_batch.location_id=?
+               AND prior_batch.fulfillment_mode=?
+               AND prior_batch.cycle_id IS ?
+               AND prior_batch.zone_id=?
+           )
+         LIMIT 1`,
+      )
+      .bind(candidatePayload, input.locationId, input.fulfillmentMode, input.cycleId, input.zoneId),
+    database
+      .prepare(
+        `WITH candidates AS (${candidateRowsSql})
+         UPDATE delivery_job
+         SET batch_id=?,
+             sequence=(SELECT assignment_sequence FROM candidates WHERE job_id=delivery_job.id),
+             rider_id=?, rider_user_id=NULL, status='ASSIGNED',
+             version=version+1, updated_at=?
+         WHERE EXISTS (
+           SELECT 1 FROM candidates candidate
+           WHERE candidate.job_id=delivery_job.id
+             AND delivery_job.version=candidate.job_version
+             AND delivery_job.status=candidate.job_status
+             AND delivery_job.batch_id IS candidate.job_batch_id
+             AND delivery_job.sequence IS candidate.job_sequence
+             AND delivery_job.context_resolution_status='RESOLVED'
+             AND delivery_job.location_id=?
+             AND delivery_job.fulfillment_mode=?
+             AND delivery_job.cycle_id IS ?
+             AND delivery_job.zone_id=?
+         )`,
+      )
+      .bind(
+        candidatePayload,
+        input.batchId,
+        input.riderId,
+        input.now,
+        input.locationId,
+        input.fulfillmentMode,
+        input.cycleId,
+        input.zoneId,
+      ),
+    abortUnlessCount(database, candidateCount),
+    database
+      .prepare(
+        `WITH candidates AS (${candidateRowsSql})
+         UPDATE delivery_stop
+         SET batch_id=?,
+             sequence=(SELECT assignment_sequence FROM candidates WHERE stop_id=delivery_stop.id),
+             status='ASSIGNED', version=version+1, updated_at=?
+         WHERE EXISTS (
+           SELECT 1 FROM candidates candidate
+           WHERE candidate.stop_id=delivery_stop.id
+             AND candidate.job_id=delivery_stop.delivery_job_id
+             AND delivery_stop.version=candidate.stop_version
+             AND delivery_stop.status=candidate.stop_status
+             AND delivery_stop.batch_id IS candidate.stop_batch_id
+             AND delivery_stop.sequence IS candidate.stop_sequence
+             AND delivery_stop.latitude IS candidate.latitude
+             AND delivery_stop.longitude IS candidate.longitude
+         )`,
+      )
+      .bind(candidatePayload, input.batchId, input.now),
+    abortUnlessCount(database, candidateCount),
+    database
+      .prepare(
+        `WITH candidates AS (${candidateRowsSql})
+         INSERT INTO delivery_event
+           (id,delivery_job_id,delivery_stop_id,rider_id,event_type,occurred_at,recorded_at,metadata_json,idempotency_key)
+         SELECT event_id,job_id,stop_id,?,'ASSIGNED',?,?,
+                json_object(
+                  'batchId',?, 'locationId',?, 'fulfillmentMode',?, 'cycleId',?,
+                  'sequence',assignment_sequence, 'fromStatus',job_status, 'toStatus','ASSIGNED'
+                ),
+                ?||':job:'||job_id
+         FROM candidates
+         ORDER BY assignment_sequence`,
+      )
+      .bind(
+        candidatePayload,
+        input.riderId,
+        input.now,
+        input.now,
+        input.batchId,
+        input.locationId,
+        input.fulfillmentMode,
+        input.cycleId,
+        input.idempotencyKey,
+      ),
+    abortUnlessCount(database, candidateCount),
   ];
-
-  input.candidates.forEach((candidate, index) => {
-    const sequence = index + 1;
-    if (candidate.jobBatchId !== null) {
-      statements.push(
-        database
-          .prepare(
-            `INSERT INTO admin_command_abort(id)
-             SELECT 1 WHERE NOT EXISTS (
-               SELECT 1 FROM delivery_batch
-               WHERE id=? AND version=? AND status=?
-                 AND context_resolution_status='RESOLVED'
-                 AND location_id=? AND fulfillment_mode=? AND cycle_id IS ? AND zone_id=?
-             )`,
-          )
-          .bind(
-            candidate.jobBatchId,
-            candidate.batchVersion,
-            candidate.batchStatus,
-            input.locationId,
-            input.fulfillmentMode,
-            input.cycleId,
-            input.zoneId,
-          ),
-      );
-    }
-    statements.push(
-      database
-        .prepare(
-          `UPDATE delivery_job
-           SET batch_id=?, sequence=?, rider_id=?, rider_user_id=NULL,
-               status='ASSIGNED', version=version+1, updated_at=?
-           WHERE id=? AND version=? AND status=?
-             AND batch_id IS ? AND sequence IS ?
-             AND context_resolution_status='RESOLVED'
-             AND location_id=? AND fulfillment_mode=? AND cycle_id IS ? AND zone_id=?`,
-        )
-        .bind(
-          input.batchId,
-          sequence,
-          input.riderId,
-          input.now,
-          candidate.jobId,
-          candidate.jobVersion,
-          candidate.jobStatus,
-          candidate.jobBatchId,
-          candidate.jobSequence,
-          input.locationId,
-          input.fulfillmentMode,
-          input.cycleId,
-          input.zoneId,
-        ),
-      abortWhenNoChange(database),
-      database
-        .prepare(
-          `UPDATE delivery_stop
-           SET batch_id=?, sequence=?, status='ASSIGNED', version=version+1, updated_at=?
-           WHERE id=? AND delivery_job_id=? AND version=? AND status=?
-             AND batch_id IS ? AND sequence IS ?
-             AND latitude IS ? AND longitude IS ?`,
-        )
-        .bind(
-          input.batchId,
-          sequence,
-          input.now,
-          candidate.stopId,
-          candidate.jobId,
-          candidate.stopVersion,
-          candidate.stopStatus,
-          candidate.stopBatchId,
-          candidate.stopSequence,
-          candidate.latitude,
-          candidate.longitude,
-        ),
-      abortWhenNoChange(database),
-      database
-        .prepare(
-          "INSERT INTO delivery_event (id, delivery_job_id, delivery_stop_id, rider_id, event_type, occurred_at, recorded_at, metadata_json, idempotency_key) VALUES (?, ?, ?, ?, 'ASSIGNED', ?, ?, ?, ?)",
-        )
-        .bind(
-          crypto.randomUUID(),
-          candidate.jobId,
-          candidate.stopId,
-          input.riderId,
-          input.now,
-          input.now,
-          JSON.stringify({
-            batchId: input.batchId,
-            locationId: input.locationId,
-            fulfillmentMode: input.fulfillmentMode,
-            cycleId: input.cycleId,
-            sequence,
-            fromStatus: candidate.jobStatus,
-            toStatus: "ASSIGNED",
-          }),
-          `${input.idempotencyKey}:job:${candidate.jobId}`,
-        ),
-    );
-  });
 
   statements.push(
     auditEventStatement(database, {

@@ -201,23 +201,88 @@ function req(
 async function direct(
   input: CreateAndAssignDeliveryBatchRequest,
   beforeCommit?: () => Promise<void>,
+  database: D1Database = env.DB,
 ) {
   return createAndAssignDeliveryBatch(
-    { auth: createAuth(env as Env & AuthEnvironment), db: env.DB, now: () => NOW, beforeCommit },
+    { auth: createAuth(env as Env & AuthEnvironment), db: database, now: () => NOW, beforeCommit },
     input,
   );
 }
 
+function countingDatabase(onBatch: (statementCount: number) => void): D1Database {
+  return new Proxy(env.DB, {
+    get(target, property) {
+      if (property === "batch")
+        return (statements: D1PreparedStatement[]) => {
+          onBatch(statements.length);
+          return target.batch(statements);
+        };
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 async function snapshot(jobIds: readonly string[], key: string) {
-  const p = jobIds.map(() => "?").join(",");
+  const p = jobIds.length === 0 ? "NULL" : jobIds.map(() => "?").join(",");
   return env.DB.prepare(
-    `SELECT (SELECT COUNT(*) FROM delivery_batch) batches,(SELECT COUNT(*) FROM delivery_event) events,(SELECT COUNT(*) FROM audit_event) audits,(SELECT COUNT(*) FROM idempotency_records WHERE scope='delivery.createAndAssignBatch' AND idempotency_key=?) idempotency,(SELECT GROUP_CONCAT(id||':'||status||':'||version||':'||COALESCE(batch_id,'-')||':'||COALESCE(sequence,'-'),'|') FROM delivery_job WHERE id IN (${p})) jobs,(SELECT GROUP_CONCAT(delivery_job_id||':'||status||':'||version||':'||COALESCE(batch_id,'-')||':'||COALESCE(sequence,'-'),'|') FROM delivery_stop WHERE delivery_job_id IN (${p})) stops`,
+    `SELECT
+       (SELECT COUNT(*) FROM delivery_batch) batches,
+       (SELECT COUNT(*) FROM delivery_event) events,
+       (SELECT COUNT(*) FROM audit_event) audits,
+       (SELECT COUNT(*) FROM idempotency_records WHERE scope='delivery.createAndAssignBatch' AND idempotency_key=?) idempotency,
+       (SELECT GROUP_CONCAT(id||':'||status||':'||version||':'||COALESCE(batch_id,'-')||':'||COALESCE(sequence,'-')||':'||COALESCE(rider_id,'-')||':'||COALESCE(rider_user_id,'-'),'|') FROM delivery_job WHERE id IN (${p})) jobs,
+       (SELECT GROUP_CONCAT(delivery_job_id||':'||status||':'||version||':'||COALESCE(batch_id,'-')||':'||COALESCE(sequence,'-')||':'||COALESCE(CAST(latitude AS TEXT),'NULL')||':'||COALESCE(CAST(longitude AS TEXT),'NULL')||':'||address_snapshot_json||':'||contact_snapshot_json||':'||instructions_snapshot,'|') FROM delivery_stop WHERE delivery_job_id IN (${p})) stops`,
   )
     .bind(key, ...jobIds, ...jobIds)
     .first();
 }
 
+async function expectFailureWithoutMutation(
+  input: CreateAndAssignDeliveryBatchRequest,
+  code: string,
+  invoke: () => Promise<unknown> = () => core.createAndAssignDeliveryBatch(input),
+) {
+  const jobIds = input.orderedDeliveries.map((entry) => entry.jobId);
+  const before = await snapshot(jobIds, input.idempotencyKey);
+  await expect(invoke()).resolves.toMatchObject({ ok: false, error: { code } });
+  expect(await snapshot(jobIds, input.idempotencyKey)).toEqual(before);
+}
+
 describe("create and assign delivery batch", () => {
+  it("keeps 1-job and 24-job material batches within a constant Free-plan query budget", async () => {
+    const counts = new Map<string, number>();
+    for (const mode of ["INSTANT", "SCHEDULED"] as const) {
+      for (const count of [1, 24]) {
+        const jobs = await Promise.all(
+          Array.from({ length: count }, () =>
+            seedJob({ mode, cycleId: mode === "INSTANT" ? null : CYCLE }),
+          ),
+        );
+        const input = req(
+          jobs.map((job) => ({ jobId: job.id, expectedVersion: job.version })),
+          { fulfillmentMode: mode, cycleId: mode === "INSTANT" ? null : CYCLE },
+        );
+        const result = await direct(
+          input,
+          undefined,
+          countingDatabase((statementCount) => counts.set(`${mode}-${count}`, statementCount)),
+        );
+        expect(result.ok).toBe(true);
+      }
+    }
+    expect(counts.get("INSTANT-24")).toBeLessThanOrEqual(20);
+    expect(counts.get("SCHEDULED-24")).toBeLessThanOrEqual(20);
+    expect(counts.get("INSTANT-24")).toBe(counts.get("INSTANT-1"));
+    expect(counts.get("SCHEDULED-24")).toBe(counts.get("SCHEDULED-1"));
+    expect(Object.fromEntries(counts)).toEqual({
+      "INSTANT-1": 17,
+      "INSTANT-24": 17,
+      "SCHEDULED-1": 17,
+      "SCHEDULED-24": 17,
+    });
+  });
+
   it("assigns a retry job atomically to an application-only Rider with scoped private audit", async () => {
     const job = await seedJob({ status: "RETRY_SCHEDULED", version: 7, stopVersion: 11 });
     const input = req([{ jobId: job.id, expectedVersion: 7 }]);
@@ -304,10 +369,12 @@ describe("create and assign delivery batch", () => {
       }),
     );
     expect(
-      await env.DB.prepare("SELECT COUNT(*) count FROM delivery_event WHERE metadata_json LIKE ?")
+      await env.DB.prepare(
+        "SELECT COUNT(*) count,COUNT(DISTINCT id) unique_ids,COUNT(DISTINCT idempotency_key) unique_keys FROM delivery_event WHERE metadata_json LIKE ?",
+      )
         .bind(`%${result.value.batchId}%`)
         .first(),
-    ).toMatchObject({ count: 24 });
+    ).toMatchObject({ count: 24, unique_ids: 24, unique_keys: 24 });
     expect(
       await env.DB.prepare(
         "SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=? AND action='DELIVERY.BATCH_CREATED_AND_ASSIGNED'",
@@ -335,10 +402,7 @@ describe("create and assign delivery batch", () => {
       ],
     ],
   ])("rejects %s selections", async (_name, ordered) => {
-    await expect(core.createAndAssignDeliveryBatch(req(ordered))).resolves.toMatchObject({
-      ok: false,
-      error: { code: "VALIDATION_FAILED" },
-    });
+    await expectFailureWithoutMutation(req(ordered), "VALIDATION_FAILED");
   });
 
   it.each([
@@ -353,51 +417,49 @@ describe("create and assign delivery batch", () => {
   ])("strictly rejects malformed/extra runtime shapes", async (override) => {
     const input =
       override === null ? null : { ...req([{ jobId: "x", expectedVersion: 1 }]), ...override };
+    const key = input?.idempotencyKey ?? "invalid-null-request";
+    const before = await snapshot([], key);
     await expect(core.createAndAssignDeliveryBatch(input as never)).resolves.toMatchObject({
       ok: false,
       error: { code: "VALIDATION_FAILED" },
     });
+    expect(await snapshot([], key)).toEqual(before);
   });
 
   it("requires delivery.manage only and conceals missing/out-of-scope locations", async () => {
     const job = await seedJob();
-    await expect(
-      core.createAndAssignDeliveryBatch(
-        req([{ jobId: job.id, expectedVersion: 1 }], { headers: {} }),
-      ),
-    ).resolves.toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
-    await expect(
-      core.createAndAssignDeliveryBatch(
-        req([{ jobId: job.id, expectedVersion: 1 }], { headers: { cookie: deniedCookie } }),
-      ),
-    ).resolves.toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    await expectFailureWithoutMutation(
+      req([{ jobId: job.id, expectedVersion: 1 }], { headers: {} }),
+      "UNAUTHENTICATED",
+    );
+    await expectFailureWithoutMutation(
+      req([{ jobId: job.id, expectedVersion: 1 }], { headers: { cookie: deniedCookie } }),
+      "FORBIDDEN",
+    );
     for (const locationId of [WEST, "location-missing"])
-      await expect(
-        core.createAndAssignDeliveryBatch(
-          req([{ jobId: job.id, expectedVersion: 1 }], { locationId }),
-        ),
-      ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+      await expectFailureWithoutMutation(
+        req([{ jobId: job.id, expectedVersion: 1 }], { locationId }),
+        "NOT_FOUND",
+      );
   });
 
   it.each(["rider-inactive", "rider-west", "rider-missing"])(
     "rejects unavailable Rider %s",
     async (riderId) => {
       const job = await seedJob();
-      await expect(
-        core.createAndAssignDeliveryBatch(
-          req([{ jobId: job.id, expectedVersion: 1 }], { riderId }),
-        ),
-      ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+      await expectFailureWithoutMutation(
+        req([{ jobId: job.id, expectedVersion: 1 }], { riderId }),
+        "NOT_FOUND",
+      );
     },
   );
 
   it("accepts only canonical Rider IDs, never Staff/Auth compatibility IDs", async () => {
     const job = await seedJob();
-    await expect(
-      core.createAndAssignDeliveryBatch(
-        req([{ jobId: job.id, expectedVersion: 1 }], { riderId: managerStaffId }),
-      ),
-    ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    await expectFailureWithoutMutation(
+      req([{ jobId: job.id, expectedVersion: 1 }], { riderId: managerStaffId }),
+      "NOT_FOUND",
+    );
   });
 
   it.each([
@@ -426,9 +488,7 @@ describe("create and assign delivery batch", () => {
       batchId: await seedBatch("COMPLETED", OTHER_CYCLE),
     });
     for (const job of [active, mismatch])
-      await expect(
-        core.createAndAssignDeliveryBatch(req([{ jobId: job.id, expectedVersion: 1 }])),
-      ).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      await expectFailureWithoutMutation(req([{ jobId: job.id, expectedVersion: 1 }]), "CONFLICT");
     const inconsistent = await seedJob({
       status: "RETRY_SCHEDULED",
       batchId: await seedBatch("CANCELED"),
@@ -438,9 +498,10 @@ describe("create and assign delivery batch", () => {
     )
       .bind(inconsistent.id)
       .run();
-    await expect(
-      core.createAndAssignDeliveryBatch(req([{ jobId: inconsistent.id, expectedVersion: 1 }])),
-    ).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    await expectFailureWithoutMutation(
+      req([{ jobId: inconsistent.id, expectedVersion: 1 }]),
+      "CONFLICT",
+    );
   });
 
   it("rejects missing stop/coordinate, stale version, and mixed location/mode/cycle", async () => {
@@ -461,18 +522,15 @@ describe("create and assign delivery batch", () => {
       [instant, 1, "NOT_FOUND"],
       [otherCycle, 1, "NOT_FOUND"],
     ] as const)
-      await expect(
-        core.createAndAssignDeliveryBatch(req([{ jobId: job.id, expectedVersion: version }])),
-      ).resolves.toMatchObject({ ok: false, error: { code } });
+      await expectFailureWithoutMutation(req([{ jobId: job.id, expectedVersion: version }]), code);
     const good = await seedJob();
-    await expect(
-      core.createAndAssignDeliveryBatch(
-        req([
-          { jobId: good.id, expectedVersion: 1 },
-          { jobId: west.id, expectedVersion: 1 },
-        ]),
-      ),
-    ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    await expectFailureWithoutMutation(
+      req([
+        { jobId: good.id, expectedVersion: 1 },
+        { jobId: west.id, expectedVersion: 1 },
+      ]),
+      "NOT_FOUND",
+    );
   });
 
   it("replays the authoritative result and detects changed hash and processing", async () => {
@@ -492,14 +550,13 @@ describe("create and assign delivery batch", () => {
         rider: { displayName: "Authoritative Rider" },
       },
     });
-    await expect(
-      core.createAndAssignDeliveryBatch({
-        ...input,
-        requestId: crypto.randomUUID(),
-        orderedDeliveries: [...input.orderedDeliveries].reverse(),
-        riderId: "rider-west",
-      }),
-    ).resolves.toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    const changed = {
+      ...input,
+      requestId: crypto.randomUUID(),
+      orderedDeliveries: [...input.orderedDeliveries].reverse(),
+      riderId: "rider-west",
+    };
+    await expectFailureWithoutMutation(changed, "IDEMPOTENCY_CONFLICT");
     const pendingJob = await seedJob();
     const pending = req([{ jobId: pendingJob.id, expectedVersion: 1 }]);
     const hash = await requestHash({
@@ -515,10 +572,7 @@ describe("create and assign delivery batch", () => {
     )
       .bind(pending.idempotencyKey, hash, NOW, NOW)
       .run();
-    await expect(core.createAndAssignDeliveryBatch(pending)).resolves.toMatchObject({
-      ok: false,
-      error: { code: "CONFLICT" },
-    });
+    await expectFailureWithoutMutation(pending, "CONFLICT");
   });
 
   it("has exactly one concurrent different-key winner", async () => {
@@ -564,44 +618,75 @@ describe("create and assign delivery batch", () => {
   it("uses stop CAS and rolls back the material transaction", async () => {
     const job = await seedJob({ version: 3, stopVersion: 8 });
     const input = req([{ jobId: job.id, expectedVersion: 3 }]);
-    await expect(
-      direct(input, async () => {
-        await env.DB.prepare("UPDATE delivery_stop SET version=version+1 WHERE id=?")
-          .bind(job.stopId)
-          .run();
-      }),
-    ).resolves.toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
-    expect(
-      await env.DB.prepare("SELECT status,version,batch_id FROM delivery_job WHERE id=?")
-        .bind(job.id)
-        .first(),
-    ).toMatchObject({ status: "UNASSIGNED", version: 3, batch_id: null });
-    expect(
-      await env.DB.prepare(
-        "SELECT COUNT(*) count FROM idempotency_records WHERE scope='delivery.createAndAssignBatch' AND idempotency_key=?",
-      )
-        .bind(input.idempotencyKey)
-        .first(),
-    ).toMatchObject({ count: 0 });
+    let racedSnapshot: Awaited<ReturnType<typeof snapshot>> | null = null;
+    const result = await direct(input, async () => {
+      await env.DB.prepare("UPDATE delivery_stop SET version=version+1 WHERE id=?")
+        .bind(job.stopId)
+        .run();
+      racedSnapshot = await snapshot([job.id], input.idempotencyKey);
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(await snapshot([job.id], input.idempotencyKey)).toEqual(racedSnapshot);
   });
 
   it("uses the containing batch version as a late CAS guard", async () => {
     const oldBatchId = await seedBatch("COMPLETED");
     const job = await seedJob({ status: "RETRY_SCHEDULED", batchId: oldBatchId });
     const input = req([{ jobId: job.id, expectedVersion: 1 }]);
-    await expect(
-      direct(input, async () => {
-        await env.DB.prepare("UPDATE delivery_batch SET version=version+1 WHERE id=?")
-          .bind(oldBatchId)
-          .run();
-      }),
-    ).resolves.toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
-    expect(
-      await env.DB.prepare("SELECT status,version,batch_id FROM delivery_job WHERE id=?")
-        .bind(job.id)
-        .first(),
-    ).toMatchObject({ status: "RETRY_SCHEDULED", version: 1, batch_id: oldBatchId });
+    let racedSnapshot: Awaited<ReturnType<typeof snapshot>> | null = null;
+    const result = await direct(input, async () => {
+      await env.DB.prepare("UPDATE delivery_batch SET version=version+1 WHERE id=?")
+        .bind(oldBatchId)
+        .run();
+      racedSnapshot = await snapshot([job.id], input.idempotencyKey);
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(await snapshot([job.id], input.idempotencyKey)).toEqual(racedSnapshot);
   });
+
+  it.each(["job", "stop", "old-batch"] as const)(
+    "aborts all 24 bulk assignments when the last candidate has a late %s mismatch",
+    async (raceKind) => {
+      const oldBatchId = raceKind === "old-batch" ? await seedBatch("COMPLETED") : null;
+      const jobs: Awaited<ReturnType<typeof seedJob>>[] = [];
+      for (let index = 0; index < 24; index += 1)
+        jobs.push(
+          await seedJob(
+            raceKind === "old-batch" && index === 23
+              ? { status: "RETRY_SCHEDULED", batchId: oldBatchId }
+              : {},
+          ),
+        );
+      const input = req(jobs.map((job) => ({ jobId: job.id, expectedVersion: 1 })));
+      let racedSnapshot: Awaited<ReturnType<typeof snapshot>> | null = null;
+      const result = await direct(input, async () => {
+        const last = jobs[23];
+        if (raceKind === "job")
+          await env.DB.prepare("UPDATE delivery_job SET version=version+1 WHERE id=?")
+            .bind(last.id)
+            .run();
+        else if (raceKind === "stop")
+          await env.DB.prepare("UPDATE delivery_stop SET version=version+1 WHERE id=?")
+            .bind(last.stopId)
+            .run();
+        else
+          await env.DB.prepare("UPDATE delivery_batch SET version=version+1 WHERE id=?")
+            .bind(oldBatchId)
+            .run();
+        racedSnapshot = await snapshot(
+          jobs.map((job) => job.id),
+          input.idempotencyKey,
+        );
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+      expect(
+        await snapshot(
+          jobs.map((job) => job.id),
+          input.idempotencyKey,
+        ),
+      ).toEqual(racedSnapshot);
+    },
+  );
 
   it("rolls back batch/job/stop/event/audit/idempotency on late audit failure", async () => {
     const job = await seedJob();
