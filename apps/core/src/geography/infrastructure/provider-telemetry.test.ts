@@ -226,4 +226,64 @@ describe("PII-safe Mapbox provider telemetry", () => {
     ]);
     expect(JSON.stringify(events)).not.toContain(sensitive.query);
   });
+
+  it.each([
+    ["non-finite", [Number.NaN, Number.POSITIVE_INFINITY], 0],
+    ["backward", [200, 100], 0],
+    ["over cap", [100, 100_100], 60_000],
+  ] as const)(
+    "bounds a %s clock without changing provider success",
+    async (_case, times, duration) => {
+      const events: ProviderTelemetryEvent[] = [];
+      let index = 0;
+
+      await expect(
+        observeProviderOperation(
+          "MAPBOX_ROUTE_DISTANCE",
+          {
+            clock: () => times[index++] ?? times.at(-1)!,
+            sink: (event) => events.push(event),
+          },
+          async () => "provider-result",
+        ),
+      ).resolves.toBe("provider-result");
+
+      expect(events).toEqual([
+        {
+          operation: "MAPBOX_ROUTE_DISTANCE",
+          durationMilliseconds: duration,
+          result: "SUCCESS",
+        },
+      ]);
+    },
+  );
+
+  it("keeps the domain failure when both clock reads throw", async () => {
+    const events: ProviderTelemetryEvent[] = [];
+    const domainError = { code: "ROUTE_NOT_FOUND" } as const;
+
+    await expect(
+      observeProviderOperation(
+        "MAPBOX_ROUTE_DISTANCE",
+        {
+          clock: () => {
+            throw new Error("clock unavailable");
+          },
+          sink: (event) => events.push(event),
+        },
+        async () => {
+          throw domainError;
+        },
+      ),
+    ).rejects.toBe(domainError);
+
+    expect(events).toEqual([
+      {
+        operation: "MAPBOX_ROUTE_DISTANCE",
+        durationMilliseconds: 0,
+        result: "FAILURE",
+        errorCode: "ROUTE_NOT_FOUND",
+      },
+    ]);
+  });
 });

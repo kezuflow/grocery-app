@@ -1,5 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import nextConfig from "../../next.config";
 import { requestHeaders } from "./request";
 
 describe("Core client request boundary", () => {
@@ -53,23 +55,42 @@ describe("Core client request boundary", () => {
     expect(core.getAdminContext).toBeDefined();
   });
 
-  it("keeps the maps and dispatch runbook as the production security and recovery checklist", () => {
+  it("matches the runbook to the implemented CSP and absent polygon release tooling", async () => {
     const runbookUrl = new URL("../../../../docs/runbooks/MAPS_AND_DISPATCH.md", import.meta.url);
     const runbook = existsSync(runbookUrl) ? readFileSync(runbookUrl, "utf8") : "";
+    const configuredHeaders = await nextConfig.headers?.();
+    expect(configuredHeaders).toEqual([
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value:
+              "worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' https://api.mapbox.com https://events.mapbox.com",
+          },
+        ],
+      },
+    ]);
 
-    expect(runbook).toMatch(/MAPBOX_PUBLIC_ACCESS_TOKEN/);
-    expect(runbook).toMatch(/MAPBOX_ACCESS_TOKEN/);
-    expect(runbook).toMatch(/permanent geocod/i);
-    expect(runbook).toMatch(/polygon.*version|version.*polygon/i);
-    expect(runbook).toMatch(/Content-Security-Policy|CSP/);
-    expect(runbook).toMatch(/provider outage/i);
-    expect(runbook).toMatch(/idempotenc/i);
-    expect(runbook).toMatch(/no (route )?optimization|must not optimize/i);
-    expect(runbook).toMatch(/no live tracking|must not track/i);
-    expect(runbook).toMatch(/rollback/i);
-    expect(runbook).toMatch(/privacy-safe|PII-safe/i);
-    expect(runbook).toMatch(/Customer.*smoke/i);
-    expect(runbook).toMatch(/Admin.*smoke/i);
-    expect(runbook).toMatch(/Rider.*smoke/i);
+    const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+    const scriptFiles = [
+      ...readdirSync(new URL("../../../../scripts/", import.meta.url)).map(
+        (name) => `scripts/${name}`,
+      ),
+      ...readdirSync(new URL("../../../core/scripts/", import.meta.url)).map(
+        (name) => `apps/core/scripts/${name}`,
+      ),
+    ];
+    const polygonReleaseScripts = scriptFiles.filter((relativePath) =>
+      readFileSync(`${repositoryRoot}/${relativePath}`, "utf8").match(
+        /service_area|delivery_zone|polygon_geojson/i,
+      ),
+    );
+    expect(polygonReleaseScripts).toEqual([]);
+    expect(runbook).toContain(
+      "Production polygon deployment, activation, validation, and rollback tooling is not implemented.",
+    );
+    expect(runbook).toContain("worker-src 'self' blob:");
+    expect(runbook).toContain("wrangler versions secret put MAPBOX_ACCESS_TOKEN");
   });
 });

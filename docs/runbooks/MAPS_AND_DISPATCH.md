@@ -24,42 +24,67 @@ Mapbox recommends separate least-privilege public tokens with URL restrictions a
 
 `MAPBOX_ACCESS_TOKEN` is a Core-only Cloudflare secret used for Geocoding v6 and Directions. It must never appear in Web configuration, browser output, source, a command argument, a ticket, or logs.
 
-From `apps/core`, authenticate Wrangler to the intended Cloudflare account, select the deployment environment explicitly when environments are configured, and run the interactive secret command:
+The current `apps/core/wrangler.jsonc` defines the root Worker `freshmarkets-core` and has no named `env` blocks. From `apps/core`, authenticate Wrangler to the intended Cloudflare account, verify that the root Worker is the intended target, and run:
 
 ```text
 pnpm exec wrangler secret put MAPBOX_ACCESS_TOKEN --config wrangler.jsonc
 ```
 
-Enter the value only at Wrangler's hidden prompt. Repeat separately for every intended deployment because Cloudflare environment bindings are not inherited. Then regenerate/check binding types with the repository's existing `pnpm --filter @freshmarkets/core types` command; do not hand-write an `Env` interface. Cloudflare's current guidance requires secrets outside source and generated binding types: [Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/).
+Enter the value only at Wrangler's hidden prompt; never put the value in an argument, source file, Wrangler config, or shell history. `wrangler secret put` creates a new Worker version and immediately deploys it. A rotation therefore changes the secret for live traffic as soon as the command completes; schedule and monitor it as a production deployment, and keep the old provider credential available until the new version is healthy.
+
+If a named Wrangler environment is added later, select it explicitly with both config and environment after verifying that the block exists:
+
+```text
+pnpm exec wrangler secret put MAPBOX_ACCESS_TOKEN --config wrangler.jsonc --env <configured-environment>
+```
+
+For a versioned or gradual rollout, create a version without deploying it immediately:
+
+```text
+pnpm exec wrangler versions secret put MAPBOX_ACCESS_TOKEN --config wrangler.jsonc --env <configured-environment> --message "Rotate Mapbox server token"
+pnpm exec wrangler versions deploy --config wrangler.jsonc --env <configured-environment>
+```
+
+Omit `--env` only after explicitly choosing the current root Worker. The second command interactively selects the created version and traffic allocation; do not use `--yes` for a reviewed gradual rollout. Cloudflare documents that `secret put` immediately deploys, while `versions secret put` only creates a version for later `versions deploy`: [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/) and [Wrangler Worker commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/).
+
+Repeat secret setup separately for every intended deployment because environment bindings are not inherited. Regenerate/check binding types with the repository's existing `pnpm --filter @freshmarkets/core types` command; do not hand-write an `Env` interface. Cloudflare's current guidance requires secrets outside source and generated binding types: [Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/).
 
 Before enabling address persistence in an environment, verify the Mapbox account has permanent geocoding entitlement. Mapbox requires a valid credit card on file or an active enterprise contract for permanent results. Temporary search results cannot be cached or stored; only the final Core reverse lookup with `permanent=true` may supply stored Mapbox-derived metadata. See [Mapbox Geocoding result storage](https://docs.mapbox.com/api/search/geocoding/#storing-geocoding-results).
 
 ## Content Security Policy
 
-Deliver the `Content-Security-Policy` as an HTTP response header. Preserve the application's existing directives and add the Mapbox GL JS requirements:
+`apps/web/next.config.ts` currently delivers this exact `Content-Security-Policy` header for every Web path:
 
 ```text
-worker-src blob:;
-img-src data: blob:;
-connect-src https://api.mapbox.com https://events.mapbox.com;
+worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' https://api.mapbox.com https://events.mapbox.com
 ```
 
-Use a referrer policy that still sends an origin, such as `strict-origin`; `no-referrer` and `same-origin` break URL-restricted cross-origin Mapbox requests. If security policy forbids `blob:` workers, do not weaken CSP ad hoc: review Mapbox's strict-CSP bundle approach and test it with the pinned `mapbox-gl` version. Recheck required endpoints whenever that dependency changes. Source: [Mapbox GL JS security and CSP guidance](https://docs.mapbox.com/mapbox-gl-js/guides/security-and-testing/).
+The map component dynamically imports the `mapbox-gl` ESM package. Mapbox documents that its ESM bundle requires `worker-src blob:` and has no strict-CSP alternative. A policy that forbids blob workers is therefore incompatible with the current FreshMarkets implementation. Do not remove `blob:` or switch bundles through an operational configuration change. Using Mapbox's UMD strict-CSP bundle and its separately served same-origin worker would require a separately designed, implemented, and reviewed application change.
 
-## Approved polygon deployment, versioning, and rollback
+Use a referrer policy that still sends an origin, such as `strict-origin`; `no-referrer` and `same-origin` break URL-restricted cross-origin Mapbox requests. Recheck required endpoints whenever `mapbox-gl` changes. Source: [Mapbox GL JS security and CSP guidance](https://docs.mapbox.com/mapbox-gl-js/guides/security-and-testing/).
+
+## Current polygon implementation and production blocker
 
 Service-area and delivery-zone polygons are versioned Core-owned configuration. Address text, Mapbox results, and Web geometry never replace Core polygon evaluation.
 
-Before deployment:
+What the repository currently implements:
 
-1. Obtain business/operations approval for the named market, service area, zone, effective instant, and fulfillment-location coverage.
-2. Validate GeoJSON shape, coordinate order, closed rings, valid longitude/latitude ranges, intended holes, Cebu bounds, service-area containment, zone overlap policy, and a monotonically new resolution version using repository tooling/tests.
-3. Test known inside, boundary, outside, and hole coordinates. Confirm location/mode/cycle resolution and checkout behavior against the candidate version.
-4. Review the versioned artifact and deployment/rollback pair. Never edit production D1 manually and never expose polygon GeoJSON through Web DTOs.
+- `apps/core/migrations/0003_phase2_geography.sql` creates `service_area` and `delivery_zone`, requires positive `polygon_version`, enforces version uniqueness within their current keys, and seeds the current version-1 Cebu rectangles. It is historical migration data, not a reusable polygon release command.
+- `apps/core/src/geography/geometry.ts` parses a GeoJSON `Polygon` or `Feature`, retains finite numeric positions, requires at least one ring and at least four retained positions per ring, and evaluates boundaries and holes. It does not validate closed rings, longitude/latitude ranges, self-intersection, Cebu bounds, service-area containment, zone overlap, or business approval.
+- `apps/core/src/geography/serviceability.ts` reads active/effective service areas and active zones ordered by polygon version, evaluates a coordinate, and returns the resolved versions. It has no polygon write, activation, deployment, or rollback command.
+- `geometry.test.ts` and `serviceability.test.ts` cover parser and runtime evaluation fixtures. `pnpm migration:check` proves migrations apply and checks its enumerated schema/data invariants; it is not a polygon geometry or release validator.
 
-Deploy through the repository's approved Core configuration/migration release process. Activate the new version atomically for its effective context, retain the prior version for rollback, and record approval, artifact hash, version, deployer, and time in the release record. Existing committed Orders and immutable Delivery stops keep their snapshots; a polygon deployment must not rewrite them.
+Current reproducible checks are limited to these real commands:
 
-For rollback, stop the rollout, activate the reviewed prior polygon version through the same controlled Core process, redeploy compatible Core/Web code if required, and repeat the boundary smoke cases. Do not delete the bad version or renumber history. Re-resolve mutable saved-address and checkout state through normal Core commands; never patch customer or Order rows.
+```text
+# From apps/core
+pnpm exec vitest run --config vitest.config.ts src/geography/geometry.test.ts src/geography/serviceability.test.ts
+
+# From the repository root
+pnpm migration:check
+```
+
+**Production polygon deployment, activation, validation, and rollback tooling is not implemented.** This is a blocking prerequisite for any production polygon change. Do not change polygon rows manually and do not present the tests above as a release mechanism. Before a new polygon version can ship, an owner-approved implementation phase must define and test the missing validation, authorized version lifecycle, deployment, and recovery mechanism. Task 5 intentionally does not invent that platform.
 
 ## Provider outage and degraded behavior
 
@@ -106,8 +131,8 @@ During an incident, aggregate only by fixed operation, result, stable error code
 
 1. Declare the affected surface: browser maps, geocoding, route distance, route preview, dispatch command, or polygon version.
 2. Disable the affected release through the normal deployment rollback; do not disable Core authorization, idempotency, serviceability, or payment/checkout guards.
-3. Rotate a suspected public token and update its exact allowed origins. Rotate a suspected Core token with `wrangler secret put`; never copy the Core value into Web.
-4. Roll back polygon configuration using the prior reviewed version as described above.
+3. Rotate a suspected public token and update its exact allowed origins. Rotate a suspected Core token using the immediate or versioned Wrangler path above; never copy the Core value into Web.
+4. If the incident involves polygon data, freeze polygon changes and escalate. There is no implemented production polygon rollback command; recovery requires an owner-approved, separately reviewed migration/restore procedure before execution. Never repair polygon, Customer, or Order rows manually.
 5. Replay only safe idempotent commands with their original keys. Do not replay lifecycle actions speculatively.
 6. Run the smoke tests below and inspect only privacy-safe telemetry before closing the incident.
 
