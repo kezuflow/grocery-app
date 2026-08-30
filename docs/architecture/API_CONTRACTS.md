@@ -276,6 +276,8 @@ Customer order DTOs compose original and amendment timelines while preserving se
 
 An additive amendment is available only for an owned paid Scheduled order before cutoff under the current location, cycle, availability, capacity, and price context. Creation is expected-order-version guarded, additive-only, permits one active draft/payment attempt, snapshots its own lines and complete financial components, and never rewrites original lines, totals, or payment history. Its payment purpose and subject are `ORDER_AMENDMENT` and the amendment ID; the customer must explicitly accept its exact currency, total, and version. Initiation/browser return never commits. Provider-confirmed canonical success applies the separately auditable inventory or planned-demand delta once; terminal payment failure marks only the amendment failed, while a post-payment mutation race creates a bounded finance exception for reconciliation.
 
+Paid Order commitment also creates one internal invoice-readiness record from the same provider-confirmed transaction. The record copies exact accepted financial components and bounded buyer facts; it does not calculate tax. Missing approved seller/tax configuration yields `PENDING_TAX_CONFIGURATION`, which the customer projection presents as not ready without an identifier. Only separately supplied complete policy facts may reach `READY_FOR_ISSUANCE`; `ISSUED` additionally requires the controlled official identifier and issuance instant.
+
 Customer grocery-order cancellation is not exposed in the mock-payment MVP. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.
 
 ## Admin Foundation, Audit, and Application IAM

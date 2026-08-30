@@ -286,7 +286,7 @@ export async function getCustomerOrderDetail(
       )
       .bind(query.orderId)
       .first<{
-        status: "NOT_READY" | "READY" | "ISSUED";
+        status: "PENDING_TAX_CONFIGURATION" | "READY_FOR_ISSUANCE" | "ISSUED";
         invoiceIdentifier: string | null;
         issuedAt: number | null;
       }>(),
@@ -370,7 +370,12 @@ export async function getCustomerOrderDetail(
   const issues = issuesResult.results.map(toCustomerOrderIssueView);
   const invoice: CustomerOrderDetailView["invoice"] = invoiceRow
     ? {
-        status: invoiceRow.status,
+        status:
+          invoiceRow.status === "PENDING_TAX_CONFIGURATION"
+            ? "NOT_READY"
+            : invoiceRow.status === "READY_FOR_ISSUANCE"
+              ? "READY"
+              : "ISSUED",
         invoiceIdentifier: invoiceRow.status === "ISSUED" ? invoiceRow.invoiceIdentifier : null,
         issuedAt: invoiceRow.status === "ISSUED" ? iso(invoiceRow.issuedAt) : null,
       }

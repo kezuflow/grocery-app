@@ -198,6 +198,25 @@ describe("order commitment from canonical payment reactions", () => {
       .first<{ order_number: string | null; committed_at: number | null }>();
     expect(identity?.order_number).toMatch(/^FM-\d{4}-[A-F0-9]{12}$/);
     expect(identity?.committed_at).toEqual(expect.any(Number));
+    const invoice = await env.DB.prepare(
+      "SELECT status,payment_intent_id,financial_snapshot_json,buyer_snapshot_json,blocked_reason FROM order_invoice_readiness WHERE order_id=?",
+    )
+      .bind(first.orderId)
+      .first<{
+        status: string;
+        payment_intent_id: string;
+        financial_snapshot_json: string;
+        buyer_snapshot_json: string;
+        blocked_reason: string | null;
+      }>();
+    expect(invoice).toMatchObject({
+      status: "PENDING_TAX_CONFIGURATION",
+      payment_intent_id: intentId,
+      blocked_reason: "APPROVED_TAX_CONFIGURATION_REQUIRED",
+    });
+    expect(JSON.parse(invoice?.financial_snapshot_json ?? "{}").totalMinor).toBe(
+      quote.value.totalMinor,
+    );
     const replay = await applyCheckoutPaymentReaction(env.DB, command);
     expect(replay).toEqual({ ...first, reason: "ALREADY_APPLIED" });
     const after = await env.DB.prepare(

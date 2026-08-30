@@ -152,15 +152,21 @@ CREATE TABLE order_invoice_readiness (
   id TEXT PRIMARY KEY,
   order_id TEXT NOT NULL UNIQUE REFERENCES grocery_order(id) ON DELETE RESTRICT,
   payment_id TEXT NOT NULL REFERENCES payment_attempt(id) ON DELETE RESTRICT,
-  status TEXT NOT NULL CHECK (status IN ('NOT_READY', 'READY', 'ISSUED')),
+  payment_intent_id TEXT NOT NULL UNIQUE REFERENCES payment_intent(id) ON DELETE RESTRICT,
+  status TEXT NOT NULL CHECK (status IN ('PENDING_TAX_CONFIGURATION', 'READY_FOR_ISSUANCE', 'ISSUED')),
   invoice_identifier TEXT,
   issued_at INTEGER,
   seller_snapshot_json TEXT,
+  buyer_snapshot_json TEXT NOT NULL,
+  financial_snapshot_json TEXT NOT NULL,
   tax_breakdown_json TEXT,
+  tax_policy_version TEXT,
+  tax_classifications_json TEXT,
   external_reference TEXT,
   blocked_reason TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   CHECK (
     status != 'ISSUED' OR (
       invoice_identifier IS NOT NULL AND issued_at IS NOT NULL AND

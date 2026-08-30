@@ -1,4 +1,5 @@
 import { isSufficientForCommitment } from "../../payments/domain/payment";
+import { createInvoiceReadinessStatement } from "./create-invoice-readiness";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
@@ -531,6 +532,17 @@ export async function applyCheckoutPaymentReaction(
     return reserved > 0;
   }).length;
   statements.push(
+    createInvoiceReadinessStatement(database, {
+      id: crypto.randomUUID(),
+      orderId,
+      paymentIntentId: input.paymentIntentId,
+      financial: quote.financial,
+      buyerSnapshot: {
+        recipient: typeof addressSnapshot.recipient === "string" ? addressSnapshot.recipient : null,
+        address: addressSnapshot,
+      },
+      now,
+    }),
     database
       .prepare(
         "INSERT INTO commitment_abort (id) SELECT -1 WHERE ? > 0 AND (SELECT COUNT(*) FROM inventory_reservation WHERE order_id=?) != ?",
