@@ -10,6 +10,11 @@ import {
   type CoreRuntimeConfiguration,
 } from "../runtime/runtime-configuration";
 import {
+  buildProviderRegistry,
+  selectedPaymentProviderCode,
+} from "../payments/infrastructure/providers/runtime-providers";
+import { buildRouteDistancePort } from "../geography/infrastructure/runtime-route-distance";
+import {
   activeFulfillmentLocationId,
   activeMarketCode,
   fulfillmentLocationMarketId,
@@ -146,18 +151,28 @@ export type CoreRpcContext = Readonly<{
   auth: ReturnType<typeof createAuth>;
   iamDatabase: ReturnType<typeof drizzle<typeof iamSchema>>;
   runtimeConfiguration: () => CoreRuntimeConfiguration;
+  paymentProviders: () => ReturnType<typeof buildProviderRegistry>;
+  paymentProviderCode: () => string | null;
+  routeDistance: () => ReturnType<typeof buildRouteDistancePort>;
 }>;
 
 export function createCoreRpcContext(
   env: Env & AuthEnvironment,
   clock: Clock = systemClock,
 ): CoreRpcContext {
+  let cachedRuntime: CoreRuntimeConfiguration | undefined;
+  let cachedProviders: ReturnType<typeof buildProviderRegistry> | undefined;
+  let cachedRouteDistance: ReturnType<typeof buildRouteDistancePort> | undefined;
+  const runtimeConfiguration = () => (cachedRuntime ??= coreRuntimeConfiguration(env));
   return {
     env,
     access: createCoreContext(env, clock),
     auth: createAuth(env),
     iamDatabase: drizzle(env.DB, { schema: iamSchema }),
-    runtimeConfiguration: () => coreRuntimeConfiguration(env),
+    runtimeConfiguration,
+    paymentProviders: () => (cachedProviders ??= buildProviderRegistry(runtimeConfiguration())),
+    paymentProviderCode: () => selectedPaymentProviderCode(runtimeConfiguration()),
+    routeDistance: () => (cachedRouteDistance ??= buildRouteDistancePort(env)),
   };
 }
 

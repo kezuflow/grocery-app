@@ -68,6 +68,16 @@ test("allows the explicit runtime provider-readiness composition root", () => {
   );
 });
 
+test("allows the Core RPC dependency-composition context", () => {
+  assert.deepEqual(
+    analyzeSourceFile(
+      "apps/core/src/entrypoint/context.ts",
+      'import { buildProviderRegistry } from "../payments/infrastructure/providers/runtime-providers";',
+    ),
+    [],
+  );
+});
+
 test("rejects SQL execution from entrypoint composition", () => {
   assert.equal(
     violation(

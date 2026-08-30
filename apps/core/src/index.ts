@@ -14,39 +14,19 @@ import {
   metricDefinitionStatuses,
 } from "@freshmarkets/contracts";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
-import {
-  createCheckoutQuote as createCheckoutQuoteCommand,
-  refreshCustomerCheckoutQuote,
-} from "./checkout/application/create-checkout-quote";
-import {
-  buildProviderRegistry,
-  selectedPaymentProviderCode,
-} from "./payments/infrastructure/providers/runtime-providers";
+import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
 import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
-import { beginRecurringAuthorization as beginRecurringAuthorizationCommand } from "./payments/application/begin-recurring-authorization";
-import { completeRecurringAuthorization as completeRecurringAuthorizationCommand } from "./payments/application/complete-recurring-authorization";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
   addressSearchRequestSchema,
   addressUpdateRequestSchema,
   authenticatedRequestSchema,
-  createCheckoutQuoteSchema,
-  createPaymentIntentSchema,
-  refreshCheckoutQuoteSchema,
-  checkoutRequestSchema,
   deliveryCommandSchema,
-  fulfillmentCommandSchema,
-  inventoryAdjustmentSchema,
-  procurementCommandSchema,
-  receivingCommandSchema,
   serviceabilityRequestSchema,
-  setCartItemRequestSchema,
   validationMessage,
 } from "./validation";
-import { createCheckoutPaymentIntent } from "./payments/application/create-checkout-payment-intent";
-import { adjustInventory as adjustInventoryCommand } from "./inventory/application/adjust-inventory";
 import { handleProviderWebhook } from "./payments/http/provider-webhook";
 import { drizzle } from "drizzle-orm/d1";
 import { log, requestId } from "./observability";
@@ -54,22 +34,11 @@ import { createAuth, type AuthEnvironment } from "./auth/service";
 import { resolveServiceability } from "./geography/serviceability";
 import { buildGeocoderPort } from "./geography/infrastructure/runtime-geocoder";
 import { GeocoderError } from "./geography/infrastructure/mapbox-geocoder";
-import { activeMarketCode } from "./geography/market-defaults";
-import { listDeliveryCycles as listDeliveryCyclesQuery } from "./commerce/cycle-queries";
-import {
-  getCart as getCartQuery,
-  setCartItem as setCartItemCommand,
-} from "./checkout/application/cart";
-import { evaluateCheckout as evaluateCheckoutPolicy } from "./checkout/application/evaluate-checkout";
-import { listCustomerOrders as listCustomerOrdersQuery } from "./orders/application/list-customer-orders";
 import {
   createCustomerAddress,
   listCustomerAddresses,
   updateCustomerAddress,
 } from "./customer/addresses";
-import { createProcurementRequirement as createProcurementRequirementCommand } from "./procurement/application/create-procurement-requirement";
-import { receiveProcurement as receiveProcurementCommand } from "./procurement/application/receive-procurement";
-import { advanceFulfillment as advanceFulfillmentCommand } from "./operations/application/advance-fulfillment";
 import { advanceDelivery as advanceDeliveryCommand } from "./operations/application/advance-delivery";
 import {
   listFulfillmentQueue,
@@ -212,11 +181,14 @@ import {
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
 } from "./admin/application/finance-commands";
 import { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
-import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
 import { createCoreRpcContext } from "./entrypoint/context";
 import { createAuthRpc } from "./entrypoint/auth-rpc";
 import { createCatalogRpc } from "./entrypoint/catalog-rpc";
 import { createMembershipRpc } from "./entrypoint/membership-rpc";
+import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
+import { createPaymentsRpc } from "./entrypoint/payments-rpc";
+import { createOrdersRpc } from "./entrypoint/orders-rpc";
+import { createOperationsRpc } from "./entrypoint/operations-rpc";
 import { buildRoutePreviewPort } from "./geography/infrastructure/runtime-route-preview";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
 import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
@@ -954,6 +926,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly authRpc = createAuthRpc(this.rpcContext);
   private readonly catalogRpc = createCatalogRpc(this.rpcContext);
   private readonly membershipRpc = createMembershipRpc(this.rpcContext);
+  private readonly checkoutRpc = createCheckoutRpc(this.rpcContext);
+  private readonly paymentsRpc = createPaymentsRpc(this.rpcContext);
+  private readonly ordersRpc = createOrdersRpc(this.rpcContext);
+  private readonly operationsRpc = createOperationsRpc(this.rpcContext);
 
   async fetch(request: Request): Promise<Response> {
     const id = requestId(request);
@@ -2141,57 +2117,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async beginRecurringAuthorization(
     input: import("@freshmarkets/contracts").BeginRecurringAuthorizationRequest,
   ) {
-    const validation = authenticatedRequestSchema
-      .extend({
-        providerCode: validationSchema.string().optional(),
-        currency: validationSchema.string().optional(),
-        returnUrl: validationSchema.string().min(1),
-        idempotencyKey: idempotencyKeySchema,
-      })
-      .safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    const registry = buildProviderRegistry(this.runtimeConfiguration());
-    const providerCode = selectedPaymentProviderCode(this.runtimeConfiguration());
-    if (
-      !providerCode ||
-      (validation.data.providerCode && validation.data.providerCode !== providerCode)
-    )
-      return fail(
-        "PAYMENT_PROVIDER_UNAVAILABLE",
-        "Recurring authorization is unavailable in this environment.",
-        input.requestId,
-      );
-    return beginRecurringAuthorizationCommand(this.env.DB, registry, {
-      customerId: customer.value.customerId,
-      providerCode,
-      currency: validation.data.currency ?? "PHP",
-      returnUrl: validation.data.returnUrl,
-      idempotencyKey: validation.data.idempotencyKey!,
-      requestId: input.requestId,
-    });
+    return this.paymentsRpc.beginRecurringAuthorization(input);
   }
   async completeRecurringAuthorization(
     input: import("@freshmarkets/contracts").CompleteRecurringAuthorizationRequest,
   ) {
-    const validation = authenticatedRequestSchema
-      .extend({ authorizationId: validationSchema.string().min(1) })
-      .safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return completeRecurringAuthorizationCommand(
-      this.env.DB,
-      buildProviderRegistry(this.runtimeConfiguration()),
-      {
-        customerId: customer.value.customerId,
-        authorizationId: validation.data.authorizationId!,
-        requestId: input.requestId,
-      },
-    );
+    return this.paymentsRpc.completeRecurringAuthorization(input);
   }
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,
@@ -2199,172 +2130,48 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.membershipRpc.getSubscriptionEligibility(input);
   }
   async listDeliveryCycles(input: import("@freshmarkets/contracts").DeliveryCycleRequest) {
-    return listDeliveryCyclesQuery(
-      this.env.DB,
-      { marketCode: input.marketCode, requestId: input.requestId },
-      () => activeMarketCode(this.env.DB),
-    );
+    return this.checkoutRpc.listDeliveryCycles(input);
   }
 
   async getCart(input: AuthenticatedRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return getCartQuery(this.env.DB, { ...input, customerId: customer.value.customerId });
+    return this.checkoutRpc.getCart(input);
   }
   async setCartItem(input: import("@freshmarkets/contracts").SetCartItemRequest) {
-    const validation = setCartItemRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return setCartItemCommand(this.env.DB, { ...input, customerId: customer.value.customerId });
+    return this.checkoutRpc.setCartItem(input);
   }
 
   async evaluateCheckout(input: import("@freshmarkets/contracts").CheckoutEligibilityRequest) {
-    const validation = checkoutRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return evaluateCheckoutPolicy(this.env.DB, {
-      ...input,
-      customerId: customer.value.customerId,
-    });
+    return this.checkoutRpc.evaluateCheckout(input);
   }
 
   async createCheckoutQuote(input: import("@freshmarkets/contracts").CheckoutQuoteCommandRequest) {
-    const validation = createCheckoutQuoteSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return createCheckoutQuoteCommand(
-      this.env.DB,
-      {
-        customerId: customer.value.customerId,
-        cartId: input.cartId,
-        cartVersion: input.cartVersion,
-        addressId: input.addressId,
-        deliveryCycleId: input.deliveryCycleId,
-        idempotencyKey: input.idempotencyKey,
-        requestId: input.requestId,
-      },
-      { routeDistance: buildRouteDistancePort(this.env) },
-    );
+    return this.checkoutRpc.createCheckoutQuote(input);
   }
 
   async refreshCheckoutQuote(input: import("@freshmarkets/contracts").CheckoutQuoteRefreshRequest) {
-    const validation = refreshCheckoutQuoteSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return refreshCustomerCheckoutQuote(this.env.DB, {
-      quoteId: input.quoteId,
-      expectedVersion: input.expectedVersion,
-      requestId: input.requestId,
-      customerId: customer.value.customerId,
-    });
+    return this.checkoutRpc.refreshCheckoutQuote(input);
   }
 
   async createPaymentIntent(input: import("@freshmarkets/contracts").PaymentIntentCommandRequest) {
-    const validation = createPaymentIntentSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const providerCode = selectedPaymentProviderCode(this.runtimeConfiguration());
-    if (!providerCode || (input.providerCode && input.providerCode !== providerCode))
-      return fail(
-        "PAYMENT_PROVIDER_UNAVAILABLE",
-        "A payment provider is not configured for this environment.",
-        input.requestId,
-      );
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return createCheckoutPaymentIntent(
-      this.env.DB,
-      buildProviderRegistry(this.runtimeConfiguration()),
-      providerCode,
-      buildRouteDistancePort(this.env),
-      {
-        ...input,
-        customerId: customer.value.customerId,
-      },
-    );
+    return this.paymentsRpc.createPaymentIntent(input);
   }
 
   async listCustomerOrders(input: AuthenticatedRequest) {
-    const customer = await this.context.resolveAuthenticatedCustomer(input);
-    if (!customer.ok) return customer;
-    return listCustomerOrdersQuery(this.env.DB, {
-      customerId: customer.value.customerId,
-      requestId: input.requestId,
-    });
+    return this.ordersRpc.listCustomerOrders(input);
   }
   async adjustInventory(input: import("@freshmarkets/contracts").InventoryAdjustmentRequest) {
-    const validation = inventoryAdjustmentSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    if (!(await this.context.requireOperationalAccess(input, "inventory.adjust", input.locationId)))
-      return fail(
-        "FORBIDDEN",
-        "Inventory capability and location scope are required",
-        input.requestId,
-      );
-    const actor = await this.context.session(input);
-    if (!actor) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    return adjustInventoryCommand(this.env.DB, {
-      requestId: input.requestId,
-      actorId: actor.id,
-      locationId: input.locationId,
-      inventoryPoolId: input.inventoryPoolId,
-      deltaBase: input.delta,
-      reason: input.reason,
-      expectedVersion: input.expectedVersion,
-      idempotencyKey: input.idempotencyKey,
-    });
+    return this.operationsRpc.adjustInventory(input);
   }
   async createProcurementRequirement(
     input: import("@freshmarkets/contracts").ProcurementCommandRequest,
   ) {
-    const validation = procurementCommandSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    if (
-      !(await this.context.requireOperationalAccess(input, "procurement.manage", input.locationId))
-    )
-      return fail(
-        "FORBIDDEN",
-        "Procurement capability and location scope are required",
-        input.requestId,
-      );
-    return createProcurementRequirementCommand(this.env.DB, input);
+    return this.operationsRpc.createProcurementRequirement(input);
   }
   async receiveProcurement(input: import("@freshmarkets/contracts").ReceivingCommandRequest) {
-    const validation = receivingCommandSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    const actor = await this.context.session(input);
-    if (!actor) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    return receiveProcurementCommand(
-      this.env.DB,
-      { ...input, actorId: actor.id },
-      {
-        authorize: (locationId) =>
-          this.context.requireOperationalAccess(input, "procurement.manage", locationId),
-      },
-    );
+    return this.operationsRpc.receiveProcurement(input);
   }
   async advanceFulfillment(input: import("@freshmarkets/contracts").FulfillmentCommandRequest) {
-    const validation = fulfillmentCommandSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return advanceFulfillmentCommand(this.env.DB, input, {
-      authorize: (locationId) =>
-        this.context.requireOperationalAccess(input, "fulfillment.manage", locationId),
-    });
+    return this.operationsRpc.advanceFulfillment(input);
   }
   async advanceDelivery(input: import("@freshmarkets/contracts").DeliveryCommandRequest) {
     const validation = deliveryCommandSchema.safeParse(input);

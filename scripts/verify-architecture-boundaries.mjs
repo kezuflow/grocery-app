@@ -26,6 +26,7 @@ const productionSourcePattern = /^(apps|packages)\/.*\.(?:[cm]?ts|tsx)$/;
 // Application and domain code consume the Payments-owned registry port.
 const providerAdapterCompositionRoots = new Set([
   "apps/core/src/index.ts",
+  "apps/core/src/entrypoint/context.ts",
   "apps/core/src/runtime/readiness.ts",
   "apps/core/src/scheduling/run-scheduled-jobs.ts",
 ]);
