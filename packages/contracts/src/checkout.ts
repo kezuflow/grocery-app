@@ -89,10 +89,41 @@ export type CheckoutQuoteCommandRequest = AuthenticatedRequest & {
   cartId: string;
   cartVersion: number;
   addressId: string;
-  /** Null selects Instant fulfillment; a cycle id selects Scheduled. */
-  deliveryCycleId: string | null;
+  fulfillmentOptionId: string;
   promotionCodes?: readonly string[];
   idempotencyKey: string;
+};
+
+export type FulfillmentOptionsRequest = AuthenticatedRequest & {
+  addressId: string;
+  addressVersion: number;
+  cartId: string;
+  cartVersion: number;
+};
+
+export type FulfillmentOptionView = {
+  optionId: string;
+  mode: "INSTANT" | "SCHEDULED";
+  eligible: boolean;
+  unavailableReason:
+    | "MODE_UNAVAILABLE"
+    | "ADDRESS_UNSERVICEABLE"
+    | "INVENTORY_UNAVAILABLE"
+    | "CYCLE_UNAVAILABLE"
+    | "CAPACITY_UNAVAILABLE"
+    | "FEE_UNAVAILABLE"
+    | null;
+  promisedAt: string | null;
+  deliveryWindow: { startsAt: string; endsAt: string } | null;
+  feePreview: {
+    subtotalMinor: number;
+    discountMinor: number;
+    totalMinor: number;
+    currency: string;
+  } | null;
+  cycleId: string | null;
+  cutoffAt: string | null;
+  provisional: true;
 };
 
 export type PromotionCodeFeedback = {

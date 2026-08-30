@@ -98,7 +98,24 @@ describe("customer checkout flow", () => {
       label: "Home",
       recipient: "Flow Test",
       phone: "09000000000",
-      addressJson: JSON.stringify({ line1: "Cebu City" }),
+      components: {
+        addressLine1: "Cebu City",
+        addressLine2: null,
+        barangay: null,
+        city: "Cebu City",
+        region: null,
+        postalCode: null,
+        countryCode: "PH",
+      },
+      componentsSource: "FIRST_PARTY",
+      confirmationSource: "USER_PIN",
+      instructions: {
+        buildingUnit: null,
+        landmark: null,
+        gateGuard: null,
+        deliveryNote: null,
+        recipientInstruction: null,
+      },
       latitude: 10.32,
       longitude: 123.9,
     });
@@ -132,13 +149,25 @@ describe("customer checkout flow", () => {
     // Canonical authoritative quote (idempotent replay, no payment artifacts).
     const cartNow = await core.getCart(request());
     if (!cartNow.ok) throw new Error("cart unavailable");
+    const options = await core.listFulfillmentOptions({
+      ...request(),
+      addressId: address.value.id,
+      addressVersion: address.value.version,
+      cartId: cart.value.id,
+      cartVersion: cartNow.value.version,
+    });
+    if (!options.ok) throw new Error("fulfillment options unavailable");
+    const scheduledOption = options.value.find(
+      (option) => option.mode === "SCHEDULED" && option.eligible,
+    );
+    if (!scheduledOption) throw new Error("scheduled option unavailable");
     const quoteKey = `flow-quote-${crypto.randomUUID()}`;
     const quote = await core.createCheckoutQuote({
       headers,
       requestId: requestId(),
       addressId: address.value.id,
       cartId: cart.value.id,
-      deliveryCycleId: cycles.value[0].id,
+      fulfillmentOptionId: scheduledOption.optionId,
       cartVersion: cartNow.value.version,
       idempotencyKey: quoteKey,
     });
@@ -152,13 +181,45 @@ describe("customer checkout flow", () => {
       requestId: requestId(),
       addressId: address.value.id,
       cartId: cart.value.id,
-      deliveryCycleId: cycles.value[0].id,
+      fulfillmentOptionId: scheduledOption.optionId,
       cartVersion: cartNow.value.version,
       idempotencyKey: quoteKey,
     });
     expect(quoteReplay.ok).toBe(true);
     if (!quoteReplay.ok) return;
     expect(quoteReplay.value.quoteId).toBe(quote.value.quoteId);
+    await env.DB.prepare(
+      "UPDATE fulfillment_location_mode SET active_mode='INSTANT', cadence=NULL, promise_minutes=30, max_concurrent_instant_orders=5 WHERE location_id='location-cebu-central'",
+    ).run();
+    const replayAfterRoutingChanged = await core.createCheckoutQuote({
+      headers,
+      requestId: requestId(),
+      addressId: address.value.id,
+      cartId: cart.value.id,
+      fulfillmentOptionId: scheduledOption.optionId,
+      cartVersion: cartNow.value.version,
+      idempotencyKey: quoteKey,
+    });
+    expect(replayAfterRoutingChanged).toMatchObject({
+      ok: true,
+      value: { quoteId: quote.value.quoteId },
+    });
+    const conflictingQuoteReplay = await core.createCheckoutQuote({
+      headers,
+      requestId: requestId(),
+      addressId: address.value.id,
+      cartId: cart.value.id,
+      fulfillmentOptionId: `${scheduledOption.optionId}-different`,
+      cartVersion: cartNow.value.version,
+      idempotencyKey: quoteKey,
+    });
+    expect(conflictingQuoteReplay).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    await env.DB.prepare(
+      "UPDATE fulfillment_location_mode SET active_mode='SCHEDULED', cadence='WEEKLY', promise_minutes=NULL, max_concurrent_instant_orders=NULL WHERE location_id='location-cebu-central'",
+    ).run();
     await env.DB.prepare(
       "UPDATE price_version SET amount_minor=amount_minor+100 WHERE sku_id='sku-red-onion-500g' AND valid_to IS NULL",
     ).run();
@@ -181,7 +242,7 @@ describe("customer checkout flow", () => {
       requestId: requestId(),
       addressId: address.value.id,
       cartId: cart.value.id,
-      deliveryCycleId: cycles.value[0].id,
+      fulfillmentOptionId: scheduledOption.optionId,
       cartVersion: cartNow.value.version,
       idempotencyKey: `flow-accepted-${crypto.randomUUID()}`,
     });

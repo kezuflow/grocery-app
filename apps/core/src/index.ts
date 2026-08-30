@@ -2170,6 +2170,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.checkoutRpc.createCheckoutQuote(input);
   }
 
+  async listFulfillmentOptions(input: import("@freshmarkets/contracts").FulfillmentOptionsRequest) {
+    return this.checkoutRpc.listFulfillmentOptions(input);
+  }
+
   async refreshCheckoutQuote(input: import("@freshmarkets/contracts").CheckoutQuoteRefreshRequest) {
     return this.checkoutRpc.refreshCheckoutQuote(input);
   }

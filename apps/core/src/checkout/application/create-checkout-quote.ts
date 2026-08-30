@@ -27,6 +27,8 @@ export type CreateCheckoutQuoteCommand = {
   addressId: string;
   /** Null selects the INSTANT path; a cycle id selects SCHEDULED. */
   deliveryCycleId: string | null;
+  /** Opaque customer selection resolved by the RPC adapter. */
+  fulfillmentOptionId?: string;
   promotionCodes?: readonly string[];
   idempotencyKey: string;
   requestId: string;
@@ -77,11 +79,17 @@ export async function createCheckoutQuote(
   // Idempotent replay first: same key returns the same immutable quote.
   const existing = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
   if (existing) {
+    const existingOptionId =
+      existing.fulfillmentSnapshot && typeof existing.fulfillmentSnapshot === "object"
+        ? (existing.fulfillmentSnapshot as { fulfillmentOptionId?: unknown }).fulfillmentOptionId
+        : undefined;
     if (
       existing.customerId !== command.customerId ||
       existing.cartId !== command.cartId ||
       existing.addressId !== command.addressId ||
       (existing.deliveryCycleId ?? null) !== (command.deliveryCycleId ?? null) ||
+      (command.fulfillmentOptionId !== undefined &&
+        existingOptionId !== command.fulfillmentOptionId) ||
       JSON.stringify(existing.requestedPromotionCodes) !==
         JSON.stringify((command.promotionCodes ?? []).map((code) => code.trim().toUpperCase()))
     )
@@ -376,6 +384,7 @@ async function createScheduledQuote(
         locationName: routing.location_name,
       },
       fulfillmentSnapshot: {
+        fulfillmentOptionId: command.fulfillmentOptionId ?? null,
         fulfillmentMode: "SCHEDULED" as const,
         sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
         poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],

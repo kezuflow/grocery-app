@@ -22,6 +22,8 @@ import type {
   CheckoutQuoteRefreshRequest,
   CheckoutQuoteView,
   CheckoutService,
+  FulfillmentOptionsRequest,
+  FulfillmentOptionView,
 } from "./checkout";
 import type { HealthService, ReadinessService } from "./common";
 import type { MembershipService } from "./membership";
@@ -90,6 +92,9 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   ): Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>;
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
+  listFulfillmentOptions(
+    request: FulfillmentOptionsRequest,
+  ): Promise<RpcResult<readonly FulfillmentOptionView[]>>;
   refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;
   abandonCheckoutAttempt(
     request: AbandonCheckoutAttemptRequest,
@@ -249,6 +254,7 @@ export const coreServiceMethodNames = [
   "setCartItem",
   "evaluateCheckout",
   "createCheckoutQuote",
+  "listFulfillmentOptions",
   "refreshCheckoutQuote",
   "abandonCheckoutAttempt",
   "createPaymentIntent",

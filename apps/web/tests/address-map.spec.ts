@@ -158,7 +158,7 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
 }) => {
   const home = address("address-home", "Home", true);
   const unavailable = address("address-unavailable", "Outside Cebu", false);
-  let eligibilityAddressId: string | undefined;
+  let optionAddressId: string | undefined;
   await page.route("**/api/commerce/cart", (route) =>
     json(route, {
       ok: true,
@@ -180,33 +180,38 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
       requestId: "cart-1",
     }),
   );
-  await page.route("**/api/commerce/cycles", (route) =>
-    json(route, {
+  await page.route("**/api/checkout/fulfillment-options", async (route) => {
+    optionAddressId = (route.request().postDataJSON() as { addressId?: string }).addressId;
+    await json(route, {
       ok: true,
       value: [
         {
-          id: "cycle-1",
-          name: "Saturday delivery",
+          optionId: "fulfillment-scheduled-1",
+          mode: "SCHEDULED",
+          eligible: true,
+          unavailableReason: null,
+          promisedAt: null,
+          deliveryWindow: {
+            startsAt: "2026-09-05T00:00:00.000Z",
+            endsAt: "2026-09-06T00:00:00.000Z",
+          },
+          feePreview: {
+            subtotalMinor: 2_000,
+            discountMinor: 0,
+            totalMinor: 2_000,
+            currency: "PHP",
+          },
+          cycleId: "cycle-1",
           cutoffAt: "2026-09-04T00:00:00.000Z",
-          deliveryDate: "2026-09-05T00:00:00.000Z",
-          status: "OPEN",
-          capacityRemaining: 10,
+          provisional: true,
         },
       ],
-      requestId: "cycles-1",
-    }),
-  );
+      requestId: "options-1",
+    });
+  });
   await page.route("**/api/commerce/address", (route) =>
     json(route, { ok: true, value: [home, unavailable], requestId: "addresses-checkout" }),
   );
-  await page.route("**/api/commerce/checkout", async (route) => {
-    eligibilityAddressId = (route.request().postDataJSON() as { addressId?: string }).addressId;
-    await json(route, {
-      ok: true,
-      value: { eligible: true, failures: [], totalMinor: 30000, currency: "PHP" },
-      requestId: "eligibility-1",
-    });
-  });
   await page.route("**/api/checkout/quote", (route) =>
     json(route, {
       ok: true,
@@ -220,9 +225,9 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
   await expect(page.getByRole("radio", { name: /Outside Cebu/ })).toBeDisabled();
   await assertNoCoordinateInputs(page);
   await page.getByRole("radio", { name: /Home/ }).check();
-  await page.getByRole("button", { name: /Saturday delivery/ }).click();
+  await page.getByRole("button", { name: /Scheduled delivery/ }).click();
   await expect(page.getByText("Review your current total: PHP 320.00.")).toBeVisible();
-  expect(eligibilityAddressId).toBe("address-home");
+  expect(optionAddressId).toBe("address-home");
 });
 
 test("public serviceability checks a confirmed search result without saving or showing hubs", async ({

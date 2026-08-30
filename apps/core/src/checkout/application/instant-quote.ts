@@ -241,6 +241,7 @@ export async function createInstantQuote(
         locationName: routing.location_name,
       },
       fulfillmentSnapshot: {
+        fulfillmentOptionId: command.fulfillmentOptionId ?? null,
         fulfillmentMode: "INSTANT" as const,
         promisedAt: new Date(now + routing.promise_minutes * 60_000).toISOString(),
         sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],

@@ -174,3 +174,29 @@ CREATE TABLE order_invoice_readiness (
     )
   )
 );
+
+-- Existing Scheduled commerce data predates fulfillment_location_mode. Give
+-- every active fulfillment location without explicit configuration the
+-- canonical MVP Scheduled/Weekly mode so customer option discovery never
+-- bypasses the one-active-mode-per-location policy.
+INSERT OR IGNORE INTO fulfillment_location_mode (
+  location_id,
+  active_mode,
+  cadence,
+  promise_minutes,
+  max_concurrent_instant_orders,
+  version,
+  created_at,
+  updated_at
+)
+SELECT
+  id,
+  'SCHEDULED',
+  'WEEKLY',
+  NULL,
+  NULL,
+  1,
+  0,
+  0
+FROM fulfillment_location
+WHERE status = 'active';

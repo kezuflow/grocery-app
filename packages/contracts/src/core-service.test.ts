@@ -139,18 +139,19 @@ describe("domain-grouped core services", () => {
     expect("commitMockOrder" in ({} as Record<string, never>)).toBe(false);
   });
 
-  it("represents Instant checkout without a Scheduled cycle", () => {
+  it("selects fulfillment through an opaque Core option without a location", () => {
     const request = {
       requestId: "request-1",
       headers: {},
       cartId: "cart-1",
       cartVersion: 1,
       addressId: "address-1",
-      deliveryCycleId: null,
+      fulfillmentOptionId: "fulfillment-opaque-1",
       idempotencyKey: "instant-quote-1",
     } satisfies CheckoutQuoteCommandRequest;
 
-    expect(request.deliveryCycleId).toBeNull();
+    expect(request.fulfillmentOptionId).toBe("fulfillment-opaque-1");
+    expect(request).not.toHaveProperty("locationId");
   });
 
   it("keeps provider payment references out of membership commands", () => {

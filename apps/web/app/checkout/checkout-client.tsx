@@ -5,7 +5,7 @@ import type {
   CartView,
   CheckoutQuoteView,
   CustomerAddressView,
-  DeliveryCycleView,
+  FulfillmentOptionView,
   PaymentActionView,
   RpcResult,
 } from "@freshmarkets/contracts";
@@ -15,10 +15,13 @@ import { AddressEditor } from "../../components/storefront/address/address-edito
 import { AddressList } from "../../components/storefront/address/address-list";
 import { PromotionEntry } from "../../components/storefront/checkout/promotion-entry";
 import { CheckoutTotalReview } from "../../components/storefront/checkout/checkout-total-review";
+import { FulfillmentOptionPicker } from "../../components/storefront/checkout/fulfillment-option-picker";
 import { fetchCart } from "../../lib/storefront/cart-client";
 export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: string }) {
   const [cart, setCart] = useState<CartView | null>(null);
-  const [cycles, setCycles] = useState<ReadonlyArray<DeliveryCycleView>>([]);
+  const [fulfillmentOptions, setFulfillmentOptions] = useState<readonly FulfillmentOptionView[]>(
+    [],
+  );
   const [addresses, setAddresses] = useState<ReadonlyArray<CustomerAddressView>>([]);
   const [addressLoadState, setAddressLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -27,7 +30,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
   const [showAddressEditor, setShowAddressEditor] = useState(false);
   const [addressId, setAddressId] = useState("");
   const selectedAddressId = useRef("");
-  const selectedCycleId = useRef("");
+  const selectedFulfillmentOptionId = useRef("");
   const [status, setStatus] = useState("");
   const [promotionCodes, setPromotionCodes] = useState<readonly string[]>([]);
   const promotionCodesRef = useRef<readonly string[]>([]);
@@ -36,7 +39,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     | (CheckoutQuoteView & {
         input: {
           addressId: string;
-          cycleId: string;
+          fulfillmentOptionId: string;
           cartVersion: number;
           promotionCodes: readonly string[];
         };
@@ -47,15 +50,9 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const addressLoadGeneration = useRef(0);
   useEffect(() => {
-    void Promise.all([
-      fetchCart().then((value) => ({ value })),
-      fetch("/api/commerce/cycles").then(
-        (r) => r.json() as Promise<{ value?: ReadonlyArray<DeliveryCycleView> }>,
-      ),
-    ]).then(([cartResult, cycleResult]) => {
-      setCart(cartResult.value ?? null);
-      setCycles(cycleResult.value ?? []);
-      if (cartResult.value?.id === "guest-cart") {
+    void fetchCart().then((value) => {
+      setCart(value ?? null);
+      if (value?.id === "guest-cart") {
         setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
       }
     });
@@ -85,6 +82,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       const confirmed = result.value.find((address) => address.id === requestedAddressId);
       setCurrentAddress(confirmed?.serviceable === true ? confirmed.id : "");
       invalidatePendingQuote();
+      if (confirmed?.serviceable === true) void loadFulfillmentOptions(confirmed);
       if (preferredAddressId) {
         if (confirmed?.serviceable === true) {
           setStatus("Address confirmed for delivery.");
@@ -131,6 +129,30 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     attemptKey.current = `checkout-${crypto.randomUUID()}`;
   }
 
+  async function loadFulfillmentOptions(address: CustomerAddressView) {
+    if (!cart || cart.id === "guest-cart" || !cart.items.length) {
+      setFulfillmentOptions([]);
+      return;
+    }
+    const response = await fetch("/api/checkout/fulfillment-options", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        addressId: address.id,
+        addressVersion: address.version,
+        cartId: cart.id,
+        cartVersion: cart.version,
+      }),
+    });
+    const result = (await response.json()) as RpcResult<readonly FulfillmentOptionView[]>;
+    if (result.ok) {
+      setFulfillmentOptions(result.value);
+      return;
+    }
+    setFulfillmentOptions([]);
+    setStatus(result.error.message);
+  }
+
   async function discardPendingQuote() {
     if (!pendingQuote) return;
     setStatus("Releasing the current checkout reservation…");
@@ -145,13 +167,13 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
 
   function quoteInputIsCurrent(input: {
     addressId: string;
-    cycleId: string;
+    fulfillmentOptionId: string;
     cartVersion: number;
     promotionCodes: readonly string[];
   }) {
     return (
       input.addressId === selectedAddressId.current &&
-      input.cycleId === selectedCycleId.current &&
+      input.fulfillmentOptionId === selectedFulfillmentOptionId.current &&
       input.cartVersion === cart?.version &&
       input.promotionCodes.join("\u0000") === promotionCodesRef.current.join("\u0000")
     );
@@ -165,13 +187,17 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       setStatus("Only a serviceable saved address can be selected for checkout.");
       return;
     }
-    if (selected.id !== selectedAddressId.current) {
+    const changed = selected.id !== selectedAddressId.current;
+    if (changed) {
       setCurrentAddress(selected.id);
       invalidatePendingQuote();
+      selectedFulfillmentOptionId.current = "";
+      void loadFulfillmentOptions(selected);
     }
+    if (!changed) void loadFulfillmentOptions(selected);
     setStatus("Serviceable delivery address selected. Core will recheck it before payment.");
   }
-  async function reviewTotal(cycleId: string) {
+  async function reviewTotal(option: FulfillmentOptionView) {
     if (!cart || !addressId) {
       setStatus("Confirm a serviceable address first.");
       return;
@@ -180,37 +206,18 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
       return;
     }
-    if (cycleId !== selectedCycleId.current) {
-      selectedCycleId.current = cycleId;
+    if (option.optionId !== selectedFulfillmentOptionId.current) {
+      selectedFulfillmentOptionId.current = option.optionId;
       invalidatePendingQuote();
       setStatus("Checking the selected delivery window and current total.");
     }
     const quoteInput = {
       addressId: selectedAddressId.current,
-      cycleId,
+      fulfillmentOptionId: option.optionId,
       cartVersion: cart.version,
       promotionCodes: promotionCodesRef.current,
     };
     const quoteAttemptKey = attemptKey.current;
-    const eligibilityResponse = await fetch("/api/commerce/checkout", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cartId: cart.id, addressId, cycleId }),
-    });
-    const eligibilityResult = (await eligibilityResponse.json()) as {
-      ok: boolean;
-      value?: { eligible: boolean; failures: ReadonlyArray<string> };
-      error?: { message?: string };
-    };
-    if (!eligibilityResult.ok || !eligibilityResult.value?.eligible) {
-      const failures = eligibilityResult.value?.failures ?? [];
-      setStatus(
-        failures.includes("MINIMUM_ORDER_NOT_MET")
-          ? "Your basket is below the current minimum configured for this delivery cycle. Add more items to continue."
-          : (eligibilityResult.error?.message ?? "Checkout requirements are not met yet."),
-      );
-      return;
-    }
     if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
     // 1) Core-authoritative quote. Core recalculates before payment and any
     // changed total must be accepted through a new attempt.
@@ -224,7 +231,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
         cartId: cart.id,
         cartVersion: cart.version,
         addressId,
-        cycleId,
+        fulfillmentOptionId: option.optionId,
         promotionCodes: promotionCodesRef.current,
       }),
     });
@@ -425,37 +432,23 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                   2
                 </span>
                 <div>
-                  <h2 className="text-lg font-bold">Delivery cycle</h2>
+                  <h2 className="text-lg font-bold">Delivery option</h2>
                   <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                    Choose an open delivery window. Core rechecks cutoff and capacity before
-                    payment.
+                    Choose Instant or Scheduled when available. Core rechecks the promise, fee,
+                    inventory, cutoff, and capacity before payment.
                   </p>
                 </div>
               </div>
-              <div className="mt-5 grid gap-3">
-                {cycles.length ? (
-                  cycles.map((cycle) => (
-                    <button
-                      key={cycle.id}
-                      type="button"
-                      onClick={() => reviewTotal(cycle.id)}
-                      disabled={!canReview}
-                      className="flex min-h-16 items-center justify-between gap-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] p-4 text-left transition-colors hover:border-[var(--fm-primary-dark)] hover:bg-[var(--fm-surface-soft)] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <span>
-                        <span className="block font-semibold">{cycle.name}</span>
-                        <small className="mt-1 block text-xs text-[var(--fm-text-muted)]">
-                          {new Date(cycle.deliveryDate).toLocaleString()}
-                        </small>
-                      </span>
-                      <span className="text-sm font-bold text-[var(--fm-primary-dark)]">
-                        Review total
-                      </span>
-                    </button>
-                  ))
+              <div>
+                {fulfillmentOptions.length ? (
+                  <FulfillmentOptionPicker
+                    options={fulfillmentOptions}
+                    disabled={!canReview}
+                    onSelect={(option) => void reviewTotal(option)}
+                  />
                 ) : (
                   <p className="rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-4 text-sm text-[var(--fm-text-muted)]">
-                    Delivery windows are not available right now.
+                    Select a confirmed address to load delivery options.
                   </p>
                 )}
               </div>

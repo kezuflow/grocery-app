@@ -135,13 +135,45 @@ function successfulFetch(options?: {
 }) {
   return vi.fn((url: string | URL | Request, init?: RequestInit) => {
     const path = String(url);
-    if (path === "/api/commerce/cycles")
+    if (path === "/api/checkout/fulfillment-options")
       return Promise.resolve(
         json({
           ok: true,
           value: [
-            { id: "cycle-1", name: "Cycle One", deliveryDate: "2026-09-05", status: "OPEN" },
-            { id: "cycle-2", name: "Cycle Two", deliveryDate: "2026-09-12", status: "OPEN" },
+            {
+              optionId: "option-instant",
+              mode: "INSTANT",
+              eligible: true,
+              unavailableReason: null,
+              promisedAt: "2026-09-01T01:00:00Z",
+              deliveryWindow: null,
+              feePreview: {
+                subtotalMinor: 2000,
+                discountMinor: 0,
+                totalMinor: 2000,
+                currency: "PHP",
+              },
+              cycleId: null,
+              cutoffAt: null,
+              provisional: true,
+            },
+            {
+              optionId: "option-scheduled",
+              mode: "SCHEDULED",
+              eligible: true,
+              unavailableReason: null,
+              promisedAt: null,
+              deliveryWindow: { startsAt: "2026-09-05T00:00:00Z", endsAt: "2026-09-06T00:00:00Z" },
+              feePreview: {
+                subtotalMinor: 3000,
+                discountMinor: 0,
+                totalMinor: 3000,
+                currency: "PHP",
+              },
+              cycleId: "cycle-2",
+              cutoffAt: "2026-09-04T00:00:00Z",
+              provisional: true,
+            },
           ],
         }),
       );
@@ -154,16 +186,16 @@ function successfulFetch(options?: {
     if (path === "/api/checkout/quote") {
       options?.onQuote?.(init);
       const input = JSON.parse(String(init?.body)) as {
-        cycleId: string;
+        fulfillmentOptionId: string;
         promotionCodes?: string[];
       };
-      const cycleId = input.cycleId;
-      const totalMinor = cycleId === "cycle-1" ? 32000 : 33000;
+      const optionId = input.fulfillmentOptionId;
+      const totalMinor = optionId === "option-instant" ? 32000 : 33000;
       return Promise.resolve(
         json({
           ok: true,
           value: {
-            quoteId: `quote-${cycleId}`,
+            quoteId: `quote-${optionId}`,
             attemptVersion: 1,
             priceAcceptanceVersion: 1,
             expiresAt: "2026-09-01T00:00:00.000Z",
@@ -245,13 +277,15 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
 
     choose(container, "Home");
-    click(container, "Cycle One");
+    await flush();
+    click(container, "Instant delivery");
     await flush();
     expect(container.textContent).toContain("PHP 320.00");
 
     choose(container, "Office");
+    await flush();
     expect(container.textContent).not.toContain("PHP 320.00");
-    click(container, "Cycle One");
+    click(container, "Instant delivery");
     await flush();
 
     expect(quoteKeys).toHaveLength(2);
@@ -271,30 +305,28 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
 
     choose(container, "Home");
-    click(container, "Cycle One");
+    await flush();
+    click(container, "Instant delivery");
     await flush();
     click(container, "Edit Home address");
     click(container, "Complete checkout address save");
     await flush();
 
     expect(container.textContent).not.toContain("PHP 320.00");
-    click(container, "Cycle One");
+    await flush();
+    click(container, "Instant delivery");
     await flush();
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
   });
 
   it("invalidates the old quote immediately and rotates idempotency for a different cycle", async () => {
     const quoteKeys: string[] = [];
-    const secondEligibility = deferred<Response>();
-    let eligibilityCalls = 0;
     const base = successfulFetch({
       onQuote: (init) => quoteKeys.push(String(new Headers(init?.headers).get("idempotency-key"))),
     });
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string | URL | Request, init?: RequestInit) => {
-        if (String(url) === "/api/commerce/checkout" && ++eligibilityCalls === 2)
-          return secondEligibility.promise;
         return base(url, init);
       }),
     );
@@ -302,19 +334,14 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
 
     choose(container, "Home");
-    click(container, "Cycle One");
+    await flush();
+    click(container, "Instant delivery");
     await flush();
     expect(container.textContent).toContain("PHP 320.00");
 
-    click(container, "Cycle Two");
+    click(container, "Scheduled delivery");
     await flush();
     expect(container.textContent).not.toContain("PHP 320.00");
-    expect(container.textContent).not.toContain("Accept total and continue to payment");
-
-    secondEligibility.resolve(
-      json({ ok: true, value: { eligible: true, failures: [] }, requestId: "eligible-2" }),
-    );
-    await flush();
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
     expect(container.textContent).toContain("PHP 330.00");
   });
@@ -331,7 +358,8 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
 
     choose(container, "Home");
-    click(container, "Cycle One");
+    await flush();
+    click(container, "Instant delivery");
     await flush();
     expect(container.textContent).toContain("Payment review");
 
@@ -350,7 +378,7 @@ describe("CheckoutClient delivery inputs", () => {
 
     expect(container.textContent).not.toContain("Payment review");
     expect(container.textContent).toContain("SAVE10 added");
-    click(container, "Cycle One");
+    click(container, "Instant delivery");
     await flush();
     expect(quoteBodies.at(-1)?.promotionCodes).toEqual(["SAVE10"]);
 

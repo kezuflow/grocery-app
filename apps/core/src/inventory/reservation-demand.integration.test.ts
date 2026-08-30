@@ -78,7 +78,24 @@ async function checkoutFixture(quantity: number) {
     label: "Home",
     recipient: "Reservation Demand",
     phone: "09000000000",
-    addressJson: JSON.stringify({ line1: "Cebu City" }),
+    components: {
+      addressLine1: "Cebu City",
+      addressLine2: null,
+      barangay: null,
+      city: "Cebu City",
+      region: null,
+      postalCode: null,
+      countryCode: "PH",
+    },
+    componentsSource: "FIRST_PARTY",
+    confirmationSource: "USER_PIN",
+    instructions: {
+      buildingUnit: null,
+      landmark: null,
+      gateGuard: null,
+      deliveryNote: null,
+      recipientInstruction: null,
+    },
     latitude: 10.32,
     longitude: 123.9,
   });
@@ -142,13 +159,31 @@ async function commit(fixture: Awaited<ReturnType<typeof checkoutFixture>>) {
   // directly (the deterministic mock provider is test-registry-only).
   const cartNow = await core.getCart({ headers: fixture.headers, requestId: requestId() });
   if (!cartNow.ok) throw new Error("cart unavailable");
+  const address = await core.listCustomerAddresses({
+    headers: fixture.headers,
+    requestId: requestId(),
+  });
+  if (!address.ok) throw new Error("address unavailable");
+  const options = await core.listFulfillmentOptions({
+    headers: fixture.headers,
+    requestId: requestId(),
+    addressId: fixture.addressId,
+    addressVersion: address.value.find((item) => item.id === fixture.addressId)!.version,
+    cartId: fixture.cartId,
+    cartVersion: cartNow.value.version,
+  });
+  if (!options.ok) throw new Error("fulfillment options unavailable");
+  const scheduledOption = options.value.find(
+    (option) => option.mode === "SCHEDULED" && option.eligible,
+  );
+  if (!scheduledOption) throw new Error("scheduled option unavailable");
   const quote = await core.createCheckoutQuote({
     headers: fixture.headers,
     requestId: requestId(),
     cartId: fixture.cartId,
     cartVersion: cartNow.value.version,
     addressId: fixture.addressId,
-    deliveryCycleId: fixture.cycleId,
+    fulfillmentOptionId: scheduledOption.optionId,
     idempotencyKey: `resdem-${crypto.randomUUID()}`,
   });
   if (!quote.ok) throw new Error(JSON.stringify(quote.error));

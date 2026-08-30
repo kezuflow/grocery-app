@@ -44,7 +44,7 @@ describe("checkout quote route", () => {
       cartId: "c1",
       cartVersion: 2,
       addressId: "a1",
-      cycleId: "cy1",
+      fulfillmentOptionId: "fulfillment-1",
     });
     expect(response.status).toBe(200);
     const forwarded = createCheckoutQuote.mock.calls[0][0];
@@ -52,16 +52,20 @@ describe("checkout quote route", () => {
     expect(forwarded.cartVersion).toBe(2);
   });
 
-  it("selects Instant checkout by forwarding a null cycle when cycleId is omitted", async () => {
+  it("requires and forwards only an opaque Core fulfillment option", async () => {
     requireIdempotencyKey.mockReturnValue("instant-stable-key");
     createCheckoutQuote.mockResolvedValue({ ok: true, value: { quoteId: "q-instant" } });
-
-    const response = await post({ cartId: "c1", cartVersion: 2, addressId: "a1" });
-
+    const response = await post({
+      cartId: "c1",
+      cartVersion: 2,
+      addressId: "a1",
+      fulfillmentOptionId: "opaque-option",
+    });
     expect(response.status).toBe(200);
     expect(createCheckoutQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ deliveryCycleId: null }),
+      expect.objectContaining({ fulfillmentOptionId: "opaque-option" }),
     );
+    expect(createCheckoutQuote.mock.calls[0][0]).not.toHaveProperty("deliveryCycleId");
   });
 
   it("normalizes and forwards a bounded set of promotion codes", async () => {
@@ -72,7 +76,7 @@ describe("checkout quote route", () => {
       cartId: "c1",
       cartVersion: 2,
       addressId: "a1",
-      cycleId: "cy1",
+      fulfillmentOptionId: "fulfillment-1",
       promotionCodes: [" save10 ", "Delivery-Free"],
     });
 
@@ -89,12 +93,14 @@ describe("checkout quote route", () => {
       cartId: "c1",
       cartVersion: 2,
       addressId: "a1",
+      fulfillmentOptionId: "fulfillment-1",
       promotionCodes: ["A", "B", "C", "D", "E", "F"],
     });
     const tooLong = await post({
       cartId: "c1",
       cartVersion: 2,
       addressId: "a1",
+      fulfillmentOptionId: "fulfillment-1",
       promotionCodes: ["X".repeat(65)],
     });
 
@@ -107,7 +113,12 @@ describe("checkout quote route", () => {
     requireIdempotencyKey.mockImplementation(() => {
       throw new Error("IDEMPOTENCY_KEY_REQUIRED");
     });
-    const response = await post({ cartId: "c1", cartVersion: 1, addressId: "a", cycleId: "y" });
+    const response = await post({
+      cartId: "c1",
+      cartVersion: 1,
+      addressId: "a",
+      fulfillmentOptionId: "y",
+    });
     expect(response.status).toBe(400);
     expect(createCheckoutQuote).not.toHaveBeenCalled();
   });

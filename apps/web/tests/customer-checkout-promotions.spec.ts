@@ -78,15 +78,29 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
       },
     }),
   );
-  await page.route("**/api/commerce/cycles", (route) =>
+  await page.route("**/api/checkout/fulfillment-options", (route) =>
     json(route, {
       ok: true,
       value: [
         {
-          id: "cycle-1",
-          name: "Saturday delivery",
-          deliveryDate: "2026-09-05T08:00:00.000Z",
-          status: "OPEN",
+          optionId: "fulfillment-scheduled-1",
+          mode: "SCHEDULED",
+          eligible: true,
+          unavailableReason: null,
+          promisedAt: null,
+          deliveryWindow: {
+            startsAt: "2026-09-05T08:00:00.000Z",
+            endsAt: "2026-09-06T08:00:00.000Z",
+          },
+          feePreview: {
+            subtotalMinor: 2_000,
+            discountMinor: 0,
+            totalMinor: 2_000,
+            currency: "PHP",
+          },
+          cycleId: "cycle-1",
+          cutoffAt: "2026-09-04T00:00:00.000Z",
+          provisional: true,
         },
       ],
     }),
@@ -131,9 +145,6 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
       ],
     }),
   );
-  await page.route("**/api/commerce/checkout", (route) =>
-    json(route, { ok: true, value: { eligible: true, failures: [] } }),
-  );
   await page.route("**/api/checkout/quote", async (route) => {
     quoteRequest = route.request().postDataJSON() as Record<string, unknown>;
     await json(route, { ok: true, value: quote });
@@ -157,9 +168,10 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
   await page.getByRole("radio", { name: /^Home/ }).check();
   await page.getByRole("textbox", { name: "Promotion code" }).fill(" save10 ");
   await page.getByRole("button", { name: "Add code" }).click();
-  await page.getByRole("button", { name: "Saturday delivery" }).click();
+  await page.getByRole("button", { name: /Scheduled delivery/ }).click();
 
   await expect.poll(() => quoteRequest?.promotionCodes).toEqual(["SAVE10"]);
+  expect(quoteRequest).toMatchObject({ fulfillmentOptionId: "fulfillment-scheduled-1" });
   await expect(page.getByText("Promotion applied")).toBeVisible();
   await expect(page.getByText("Free delivery (automatically applied)")).toBeVisible();
   await expect(page.getByText("Merchandise promotion")).toBeVisible();
