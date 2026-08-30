@@ -1,6 +1,7 @@
 import type {
   AuthenticatedRequest,
   CustomerOrderDetailRequest,
+  CreateOrderAmendmentRequest,
   ListCustomerOrderIssuesRequest,
   ReorderOrderRequest,
   SubmitCustomerOrderIssueRequest,
@@ -17,6 +18,7 @@ import { getCustomerOrderDetail } from "../orders/application/get-customer-order
 import { reorderOrder } from "../orders/application/reorder-order";
 import { listCustomerOrderIssues } from "../orders/application/list-customer-order-issues";
 import { submitCustomerOrderIssue } from "../orders/application/submit-customer-order-issue";
+import { createOrderAmendment } from "../orders/application/create-order-amendment";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
 
@@ -102,6 +104,27 @@ export function createOrdersRpc(context: CoreRpcContext) {
         ...input,
         ...validation.data,
         customerId: customer.value.customerId,
+      });
+    },
+    async createOrderAmendment(input: CreateOrderAmendmentRequest) {
+      const validation = authenticatedRequestSchema
+        .extend({
+          orderId: identifierSchema,
+          expectedOrderVersion: positiveIntegerSchema,
+          additions: z
+            .array(z.object({ skuId: identifierSchema, quantity: positiveIntegerSchema }))
+            .min(1)
+            .max(50),
+          idempotencyKey: idempotencyKeySchema,
+        })
+        .safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return createOrderAmendment(context.env.DB, {
+        ...validation.data,
+        customerId: customer.value.customerId,
+        requestId: input.requestId,
       });
     },
   };

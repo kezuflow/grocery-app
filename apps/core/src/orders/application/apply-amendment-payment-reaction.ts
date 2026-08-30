@@ -30,27 +30,50 @@ export async function applyAmendmentPaymentReaction(
   input: ApplyAmendmentPaymentReactionInput,
 ): Promise<AmendmentReactionOutcome> {
   const now = Date.now();
-  if (!isSufficientForCommitment(input.canonicalPaymentState))
-    return { applied: false, reason: "INSUFFICIENT_STATE" };
-
   const amendment = await database
     .prepare(
-      `SELECT a.id, a.order_id, a.status, f.location_id, f.cycle_id, f.zone_id
+      `SELECT a.id, a.order_id, a.status, a.version, a.currency, a.total_minor,
+              a.payment_intent_id, pi.amount_minor AS payment_amount_minor,
+              pi.currency AS payment_currency, f.location_id, f.cycle_id, f.zone_id
        FROM paid_order_amendment a
+       JOIN payment_intent pi ON pi.id=a.payment_intent_id
+         AND pi.purpose='ORDER_AMENDMENT' AND pi.subject_type='paid_order_amendment'
+         AND pi.subject_id=a.id
        LEFT JOIN order_fulfillment_snapshot f ON f.order_id=a.order_id
-       WHERE a.id=?`,
+       WHERE a.id=? AND pi.id=?`,
     )
-    .bind(input.amendmentId)
+    .bind(input.amendmentId, input.paymentIntentId)
     .first<{
       id: string;
       order_id: string;
       status: string;
+      version: number;
+      currency: string;
+      total_minor: number;
+      payment_intent_id: string;
+      payment_amount_minor: number;
+      payment_currency: string;
       location_id: string | null;
       cycle_id: string | null;
       zone_id: string | null;
     }>();
   if (!amendment) return { applied: false, reason: "CAS_CONFLICT" };
   if (amendment.status === "COMMITTED") return { applied: true, reason: "ALREADY_APPLIED" };
+  if (!isSufficientForCommitment(input.canonicalPaymentState)) {
+    if (["FAILED", "EXPIRED"].includes(input.canonicalPaymentState))
+      await database
+        .prepare(
+          "UPDATE paid_order_amendment SET status='FAILED',version=version+1,updated_at=? WHERE id=? AND status='PENDING_PAYMENT' AND version=?",
+        )
+        .bind(now, input.amendmentId, amendment.version)
+        .run();
+    return { applied: false, reason: "INSUFFICIENT_STATE" };
+  }
+  if (
+    amendment.payment_amount_minor !== amendment.total_minor ||
+    amendment.payment_currency !== amendment.currency
+  )
+    return { applied: false, reason: "CAS_CONFLICT" };
 
   const lines = await database
     .prepare(
@@ -73,9 +96,9 @@ export async function applyAmendmentPaymentReaction(
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
-        "UPDATE paid_order_amendment SET status='COMMITTED', updated_at=? WHERE id=? AND status='PENDING_PAYMENT'",
+        "UPDATE paid_order_amendment SET status='COMMITTED',version=version+1,committed_at=?,updated_at=? WHERE id=? AND status='PENDING_PAYMENT' AND version=?",
       )
-      .bind(now, input.amendmentId),
+      .bind(now, now, input.amendmentId, amendment.version),
   ];
 
   const perPool = new Map<string, { requested: number; mode: PoolSourcing }>();

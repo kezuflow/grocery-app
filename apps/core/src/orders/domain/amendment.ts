@@ -1,9 +1,4 @@
-export const PAID_ORDER_STATUSES = [
-  "COMMITTED",
-  "FULFILLMENT_PENDING",
-  "FULFILLMENT_READY",
-  "OUT_FOR_DELIVERY",
-] as const;
+export const PAID_ORDER_STATUSES = ["COMMITTED", "IN_FULFILLMENT"] as const;
 
 export type PaidOrderStatus = (typeof PAID_ORDER_STATUSES)[number];
 

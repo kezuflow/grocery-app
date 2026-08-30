@@ -127,3 +127,13 @@ export type PaymentIntentCommandRequest = AuthenticatedRequest & {
   returnUrl: string;
   idempotencyKey: string;
 };
+
+export type AmendmentPaymentIntentRequest = AuthenticatedRequest & {
+  amendmentId: string;
+  expectedAmendmentVersion: number;
+  expectedCurrency: string;
+  expectedTotalMinor: number;
+  providerCode?: string;
+  returnUrl: string;
+  idempotencyKey: string;
+};

@@ -209,6 +209,22 @@ export type SubmitCustomerOrderIssueRequest = AuthenticatedRequest & {
 
 export type ListCustomerOrderIssuesRequest = AuthenticatedRequest & { orderId: string };
 
+export type OrderAmendmentDraftView = {
+  amendmentId: string;
+  orderId: string;
+  status: "DRAFT" | "PENDING_PAYMENT" | "COMMITTED" | "FAILED" | "CANCELED";
+  version: number;
+  financial: CustomerOrderFinancialView;
+  lines: readonly CustomerOrderLineSnapshot[];
+};
+
+export type CreateOrderAmendmentRequest = AuthenticatedRequest & {
+  orderId: string;
+  expectedOrderVersion: number;
+  additions: readonly { skuId: string; quantity: number }[];
+  idempotencyKey: string;
+};
+
 export type AdminOrderCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "CANCEL" | "REFUND";
@@ -231,4 +247,7 @@ export type OrdersService = {
   listCustomerOrderIssues(
     request: ListCustomerOrderIssuesRequest,
   ): Promise<RpcResult<readonly CustomerOrderIssueView[]>>;
+  createOrderAmendment(
+    request: CreateOrderAmendmentRequest,
+  ): Promise<RpcResult<OrderAmendmentDraftView>>;
 };

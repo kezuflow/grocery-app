@@ -7,6 +7,7 @@ import { StorefrontShell } from "../../../components/storefront/storefront-shell
 import { OrderTimeline } from "../../../components/storefront/orders/order-timeline";
 import { ReorderAction } from "../../../components/storefront/orders/reorder-action";
 import { OrderIssueForm } from "../../../components/storefront/orders/order-issue-form";
+import { AmendmentFlow } from "../../../components/storefront/orders/amendment-flow";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -24,6 +25,7 @@ function label(value: string): string {
 export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }) {
   const reorderAction = order.actions.find((action) => action.action === "REORDER");
   const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
+  const amendmentAction = order.actions.find((action) => action.action === "REQUEST_AMENDMENT");
   const address = order.fulfillment.address;
   const addressLine = [
     address.addressLine1,
@@ -150,7 +152,10 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             ) : null}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {order.actions
-                .filter((action) => !["REORDER", "SUBMIT_ISSUE"].includes(action.action))
+                .filter(
+                  (action) =>
+                    !["REORDER", "SUBMIT_ISSUE", "REQUEST_AMENDMENT"].includes(action.action),
+                )
                 .map((action) => (
                   <div
                     key={action.action}
@@ -170,6 +175,13 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                 orderId={order.orderId}
                 items={order.items}
                 available={issueAction.available}
+              />
+            ) : null}
+            {amendmentAction ? (
+              <AmendmentFlow
+                orderId={order.orderId}
+                orderVersion={order.version}
+                available={amendmentAction.available}
               />
             ) : null}
           </section>

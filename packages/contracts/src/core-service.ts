@@ -27,7 +27,12 @@ import type { HealthService, ReadinessService } from "./common";
 import type { MembershipService } from "./membership";
 import type { OrdersService } from "./orders";
 import type { OperationsReadService, OperationsService } from "./operations";
-import type { PaymentActionView, PaymentIntentCommandRequest, PaymentsService } from "./payments";
+import type {
+  AmendmentPaymentIntentRequest,
+  PaymentActionView,
+  PaymentIntentCommandRequest,
+  PaymentsService,
+} from "./payments";
 import type {
   BatchRoutePreview,
   CreateAndAssignDeliveryBatchRequest,
@@ -91,6 +96,9 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   ): Promise<RpcResult<AbandonCheckoutResult>>;
   /** Canonical payment intent creation for a quote (fail-closed without a provider). */
   createPaymentIntent(request: PaymentIntentCommandRequest): Promise<RpcResult<PaymentActionView>>;
+  createAmendmentPaymentIntent(
+    request: AmendmentPaymentIntentRequest,
+  ): Promise<RpcResult<PaymentActionView>>;
   /** Scoped open-delivery projection with Core-derived selectability. */
   getDeliveryMap(request: DeliveryMapRequest): Promise<RpcResult<DeliveryMapView>>;
   /** Protected delivery detail; raw snapshots never cross the binding. */
@@ -249,6 +257,8 @@ export const coreServiceMethodNames = [
   "reorderOrder",
   "submitCustomerOrderIssue",
   "listCustomerOrderIssues",
+  "createOrderAmendment",
+  "createAmendmentPaymentIntent",
   "adjustInventory",
   "createProcurementRequirement",
   "receiveProcurement",

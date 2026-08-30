@@ -272,6 +272,8 @@ Customer issue submission accepts one controlled category, a trimmed nonblank de
 
 Customer order DTOs compose original and amendment timelines while preserving separate financial records.
 
+An additive amendment is available only for an owned paid Scheduled order before cutoff under the current location, cycle, availability, capacity, and price context. Creation is expected-order-version guarded, additive-only, permits one active draft/payment attempt, snapshots its own lines and complete financial components, and never rewrites original lines, totals, or payment history. Its payment purpose and subject are `ORDER_AMENDMENT` and the amendment ID; the customer must explicitly accept its exact currency, total, and version. Initiation/browser return never commits. Provider-confirmed canonical success applies the separately auditable inventory or planned-demand delta once; terminal payment failure marks only the amendment failed, while a post-payment mutation race creates a bounded finance exception for reconciliation.
+
 Customer grocery-order cancellation is not exposed in the mock-payment MVP. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.
 
 ## Admin Foundation, Audit, and Application IAM

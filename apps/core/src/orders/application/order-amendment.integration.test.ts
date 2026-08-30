@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createOrderAmendment } from "./create-order-amendment";
 import { applyAmendmentPaymentReaction } from "./apply-amendment-payment-reaction";
+import { createAmendmentPaymentIntent } from "../../payments/application/create-amendment-payment-intent";
+import { createMockPaymentProvider } from "../../payments/infrastructure/providers/mock-payment-provider";
+import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 
 let counter = 0;
 async function committedOrder() {
@@ -102,6 +105,7 @@ describe("paid-order amendments", () => {
       .first<{ total_minor: number }>();
 
     const result = await createOrderAmendment(env.DB, {
+      customerId: fixture.customerId,
       orderId: fixture.orderId,
       expectedOrderVersion: 5,
       additions: [{ skuId: fixture.skuId, quantity: 2 }],
@@ -111,13 +115,41 @@ describe("paid-order amendments", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.status).toBe("PENDING_PAYMENT");
-    expect(result.value.totalMinor).toBe(16000); // 2 x 500g x 80.00
+    expect(result.value.financial.totalMinor).toBe(16000); // 2 x 500g x 80.00
 
     // Original commercial history unchanged.
     const after = await env.DB.prepare("SELECT total_minor FROM grocery_order WHERE id=?")
       .bind(fixture.orderId)
       .first<{ total_minor: number }>();
     expect(after?.total_minor).toBe(before?.total_minor);
+
+    const payment = await createAmendmentPaymentIntent(
+      env.DB,
+      new ProviderRegistry("test", [createMockPaymentProvider()]),
+      "mock",
+      {
+        customerId: fixture.customerId,
+        amendmentId: result.value.amendmentId,
+        expectedAmendmentVersion: result.value.version,
+        expectedCurrency: result.value.financial.currency,
+        expectedTotalMinor: result.value.financial.totalMinor,
+        returnUrl: "https://freshmarkets.ph/orders",
+        idempotencyKey: `amendment-payment-${crypto.randomUUID()}`,
+        requestId: "amendment-payment",
+        headers: {},
+      },
+    );
+    expect(payment.ok).toBe(true);
+    const started = await env.DB.prepare(
+      "SELECT a.status,pi.amount_minor amount,pi.purpose FROM paid_order_amendment a JOIN payment_intent pi ON pi.id=a.payment_intent_id WHERE a.id=?",
+    )
+      .bind(result.value.amendmentId)
+      .first();
+    expect(started).toEqual({
+      status: "PENDING_PAYMENT",
+      amount: 16000,
+      purpose: "ORDER_AMENDMENT",
+    });
 
     // Its own SUCCEEDED reaction commits only the delta.
     const intentId = crypto.randomUUID();
@@ -155,6 +187,7 @@ describe("paid-order amendments", () => {
   it("rejects unpaid or final orders and stale versions", async () => {
     const fixture = await committedOrder();
     const stale = await createOrderAmendment(env.DB, {
+      customerId: fixture.customerId,
       orderId: fixture.orderId,
       expectedOrderVersion: 1,
       additions: [{ skuId: fixture.skuId, quantity: 1 }],
@@ -167,6 +200,7 @@ describe("paid-order amendments", () => {
       .bind(fixture.orderId)
       .run();
     const final = await createOrderAmendment(env.DB, {
+      customerId: fixture.customerId,
       orderId: fixture.orderId,
       expectedOrderVersion: 6,
       additions: [{ skuId: fixture.skuId, quantity: 1 }],
@@ -174,5 +208,43 @@ describe("paid-order amendments", () => {
       requestId: crypto.randomUUID(),
     });
     expect(final).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+  });
+
+  it("conceals ownership and binds idempotency to the complete request", async () => {
+    const fixture = await committedOrder();
+    const other = `other-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',1,1)",
+    )
+      .bind(other, `auth-${other}`)
+      .run();
+    const key = `amend-${crypto.randomUUID()}`;
+    const hidden = await createOrderAmendment(env.DB, {
+      customerId: other,
+      orderId: fixture.orderId,
+      expectedOrderVersion: 5,
+      additions: [{ skuId: fixture.skuId, quantity: 1 }],
+      idempotencyKey: key,
+      requestId: "hidden",
+    });
+    const created = await createOrderAmendment(env.DB, {
+      customerId: fixture.customerId,
+      orderId: fixture.orderId,
+      expectedOrderVersion: 5,
+      additions: [{ skuId: fixture.skuId, quantity: 1 }],
+      idempotencyKey: key,
+      requestId: "created",
+    });
+    const conflict = await createOrderAmendment(env.DB, {
+      customerId: fixture.customerId,
+      orderId: fixture.orderId,
+      expectedOrderVersion: 5,
+      additions: [{ skuId: fixture.skuId, quantity: 2 }],
+      idempotencyKey: key,
+      requestId: "conflict",
+    });
+    expect(hidden).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(created.ok).toBe(true);
+    expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
   });
 });
