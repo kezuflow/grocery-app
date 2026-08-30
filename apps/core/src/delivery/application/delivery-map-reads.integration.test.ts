@@ -35,6 +35,15 @@ const instructionsSnapshot = JSON.stringify({
   deliveryNote: "Call on arrival",
   recipientInstruction: null,
 });
+const legacyAddressSnapshot = JSON.stringify({
+  address_json: JSON.stringify({
+    line1: "43 Legacy Road",
+    line2: "Door 4",
+    barangay: "Lahug",
+    region: "Cebu",
+    postalCode: "6000",
+  }),
+});
 
 let counter = 0;
 let readerCookie = "";
@@ -234,6 +243,11 @@ async function seedFixtures(): Promise<void> {
   await seedJob({ id: "job-k-other-location", locationId: WEST });
   await seedJob({ id: "job-l-instant", mode: "INSTANT", cycleId: null });
   await seedJob({ id: "job-m-malformed", address: "not-json", contact: "not-json" });
+  await seedJob({ id: "job-n-legacy-address", address: legacyAddressSnapshot });
+  await seedJob({
+    id: "job-o-empty-address",
+    address: JSON.stringify({ address_json: "{}" }),
+  });
 }
 
 beforeEach(async () => {
@@ -265,11 +279,32 @@ describe("scoped delivery map reads", () => {
       core.getDeliveryMap(scheduledRequest({ headers: { cookie: deniedCookie } })),
     ).resolves.toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     await expect(
-      core.getDeliveryMap(scheduledRequest({ locationId: WEST })),
-    ).resolves.toMatchObject({
-      ok: false,
-      error: { code: "FORBIDDEN" },
-    });
+      core.getDeliveryMap(
+        scheduledRequest({
+          headers: { cookie: deniedCookie },
+          locationId: "location-delivery-map-missing",
+        }),
+      ),
+    ).resolves.toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    for (const locationId of [WEST, "location-delivery-map-missing"]) {
+      await expect(core.getDeliveryMap(scheduledRequest({ locationId }))).resolves.toMatchObject({
+        ok: false,
+        error: { code: "NOT_FOUND" },
+      });
+      await expect(
+        core.getDeliveryMapDetail({
+          ...scheduledRequest({ locationId }),
+          jobId: "job-a-unassigned",
+          expectedVersion: 3,
+        } as ScheduledDetailRequest),
+      ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+      await expect(core.getEligibleRiders(scheduledRequest({ locationId }))).resolves.toMatchObject(
+        {
+          ok: false,
+          error: { code: "NOT_FOUND" },
+        },
+      );
+    }
     await expect(
       core.getDeliveryMap({
         ...scheduledRequest(),
@@ -311,6 +346,8 @@ describe("scoped delivery map reads", () => {
       "job-f-failed",
       "job-g-missing-coordinate",
       "job-m-malformed",
+      "job-n-legacy-address",
+      "job-o-empty-address",
     ]);
     expect(result.value.pins[0]).toEqual({
       jobId: "job-a-unassigned",
@@ -372,7 +409,7 @@ describe("scoped delivery map reads", () => {
       value: {
         jobId: "job-a-unassigned",
         orderId: "order-job-a-unassigned",
-        orderNumber: "order-job-a-unassigned",
+        orderNumber: null,
         destination: {
           coordinate: { latitude: 10.3157, longitude: 123.8854 },
           displayAddress: "1 Mango Avenue, Unit 2, Lahug, Cebu City, Cebu, 6000, PH",
@@ -406,6 +443,30 @@ describe("scoped delivery map reads", () => {
     ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
     await expect(
       core.getDeliveryMapDetail({ ...request, jobId: "job-m-malformed", expectedVersion: 1 }),
+    ).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL_ERROR" } });
+    const legacy = await core.getDeliveryMapDetail({
+      ...request,
+      jobId: "job-n-legacy-address",
+      expectedVersion: 1,
+    });
+    expect(legacy).toMatchObject({
+      ok: true,
+      value: {
+        orderId: "order-job-n-legacy-address",
+        orderNumber: null,
+        destination: {
+          displayAddress: "43 Legacy Road, Door 4, Lahug, 43 Legacy Road, Cebu, 6000, PH",
+        },
+      },
+    });
+    expect(JSON.stringify(legacy)).not.toContain("address_json");
+    expect(JSON.stringify(legacy)).not.toContain("addressLine1");
+    await expect(
+      core.getDeliveryMapDetail({
+        ...request,
+        jobId: "job-o-empty-address",
+        expectedVersion: 1,
+      }),
     ).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL_ERROR" } });
     await expect(
       core.getDeliveryMapDetail({
@@ -451,5 +512,28 @@ describe("scoped delivery map reads", () => {
     });
     expect(JSON.stringify(result)).not.toContain("auth_user_id");
     expect(JSON.stringify(result)).not.toContain("staff_id");
+  });
+
+  it("rejects malformed runtime request and filter shapes without throwing", async () => {
+    await expect(
+      core.getDeliveryMap({ ...scheduledRequest(), statuses: "UNASSIGNED" } as never),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await expect(
+      core.getDeliveryMap({ ...scheduledRequest(), riderId: { id: "rider-active" } } as never),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await expect(core.getDeliveryMap(null as never)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    await expect(
+      core.getDeliveryMapDetail({
+        ...scheduledRequest(),
+        jobId: { id: "job-a-unassigned" },
+        expectedVersion: 3,
+      } as never),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await expect(
+      core.getEligibleRiders({ ...scheduledRequest(), locationId: { id: CENTRAL } } as never),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 });

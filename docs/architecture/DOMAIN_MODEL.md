@@ -305,6 +305,11 @@ Order/address/contact/instruction snapshots, serviceability polygons,
 fulfillment-ranking rules, provider responses, and Better Auth rows are never
 map DTOs.
 
+Order still owns a persisted human-readable global order number as part of the
+canonical commitment. Until the current physical Orders implementation lands
+that field, Delivery map detail returns a nullable order-number projection and
+never presents the Order UUID as an order number.
+
 An authorized open job remains in the projection when its immutable stop has
 no authoritative coordinate. Its coordinate is null, it has no map marker, and
 Core marks it non-selectable with `MISSING_COORDINATE`; protected detail remains

@@ -10,6 +10,7 @@ import type {
 import { resolveOperationsAdministrationAccess } from "../../admin/application/operations-administration-access";
 import {
   deriveDeliverySelection,
+  deliveryReadRequestId,
   resolveDeliveryReadContext,
   type DeliveryMapReadDeps,
 } from "./get-delivery-map";
@@ -51,6 +52,18 @@ function parseObject(value: string): Record<string, unknown> | null {
   }
 }
 
+function nestedObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") return parseObject(value);
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringField(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === "string" ? value : null;
+}
+
 function nullableString(value: unknown): string | null | undefined {
   return value === null || value === undefined
     ? null
@@ -82,43 +95,48 @@ function parseInstructions(value: string | null): DeliveryInstructions | null {
 }
 
 function displayAddress(snapshot: Record<string, unknown>): string | null {
-  const raw = snapshot.address_components_json;
-  const components =
-    typeof raw === "string"
-      ? parseObject(raw)
-      : raw !== null && typeof raw === "object" && !Array.isArray(raw)
-        ? (raw as Record<string, unknown>)
-        : null;
-  if (!components) return null;
-  const keys = [
-    "addressLine1",
-    "addressLine2",
-    "barangay",
-    "city",
-    "region",
-    "postalCode",
-    "countryCode",
-  ] as const;
-  const values: string[] = [];
-  for (const key of keys) {
-    const value = components[key];
-    if (value === null || value === undefined || value === "") continue;
-    if (typeof value !== "string") return null;
-    values.push(value);
-  }
-  return values.length > 0 ? values.join(", ") : null;
+  const structuredCandidate = nestedObject(snapshot.address_components_json);
+  const structured =
+    typeof structuredCandidate?.addressLine1 === "string" &&
+    typeof structuredCandidate.city === "string" &&
+    typeof structuredCandidate.countryCode === "string"
+      ? structuredCandidate
+      : null;
+  const legacy = nestedObject(snapshot.address_json);
+  const source = structured ?? legacy;
+  if (!source) return null;
+  const addressLine1 = stringField(source, "addressLine1") ?? stringField(source, "line1") ?? "";
+  const city = stringField(source, "city") ?? addressLine1;
+  const components = {
+    addressLine1,
+    addressLine2: stringField(source, "addressLine2") ?? stringField(source, "line2"),
+    barangay: stringField(source, "barangay"),
+    city,
+    region: stringField(source, "region"),
+    postalCode: stringField(source, "postalCode"),
+    countryCode: stringField(source, "countryCode") ?? (structured ? null : "PH"),
+  };
+  if (!components.addressLine1 && !components.city) return null;
+  return Object.values(components)
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(", ");
 }
 
 export async function getDeliveryMapDetail(
   deps: DeliveryMapReadDeps,
   request: DeliveryMapDetailRequest,
 ): Promise<RpcResult<DeliveryMapDetail>> {
-  if (!Number.isInteger(request.expectedVersion) || request.expectedVersion <= 0) {
-    return failure(
-      "VALIDATION_FAILED",
-      "A positive expected version is required",
-      request.requestId,
-    );
+  const requestId = deliveryReadRequestId(request);
+  if (
+    request === null ||
+    typeof request !== "object" ||
+    Array.isArray(request) ||
+    typeof request.jobId !== "string" ||
+    request.jobId.trim().length === 0 ||
+    !Number.isInteger(request.expectedVersion) ||
+    request.expectedVersion <= 0
+  ) {
+    return failure("VALIDATION_FAILED", "A positive expected version is required", requestId);
   }
   const context = await resolveDeliveryReadContext(deps, request);
   if (!context.ok) return context;
@@ -178,7 +196,7 @@ export async function getDeliveryMapDetail(
     value: {
       jobId: row.job_id,
       orderId: row.order_id,
-      orderNumber: row.order_id,
+      orderNumber: null,
       destination: {
         coordinate:
           row.latitude === null || row.longitude === null

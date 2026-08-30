@@ -157,6 +157,12 @@ Cart rows create no authoritative hold, capacity, reservation, or demand. `INSTA
 - `order_amendment_items(...)` with the same historical line snapshot semantics.
 - `order_promotion_applications(id PK, order_id FK, amendment_id FK NULL, promotion_id FK, redemption_id FK, price_component MERCHANDISE|DELIVERY, benefit_type, amount_minor, benefit_snapshot_json, UNIQUE(order_id, amendment_id, price_component))`
 
+The canonical target requires the persisted, unique human-readable
+`orders.order_number`. During the current implementation sequence, the physical
+Orders table predates that column; Delivery map detail therefore exposes a null
+order number until Orders persistence lands it and never fabricates one from the
+Order UUID.
+
 Indexes: customer/committed time, unique payment intent/attempt commitment, optional cycle/status, fulfillment mode/location/status. Order fulfillment, route/delivery-fee calculation, SKU conversion, Promotion, and financial-component snapshots are immutable after commitment; corrections use amendments, adjustment records, and events. Changing fulfillment or delivery-price configuration, cadence, units, SKU size, price, or Promotion later does not rewrite history.
 
 ## Payments and Refunds

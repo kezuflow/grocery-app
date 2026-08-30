@@ -35,6 +35,28 @@ type ExpectedDeliveryMapPin = {
   selection: { selectable: boolean; reason: string | null };
 };
 
+type ExpectedDeliveryMapDetail = {
+  jobId: string;
+  orderId: string;
+  orderNumber: string | null;
+  destination: {
+    coordinate: Coordinate | null;
+    displayAddress: string;
+    recipient: string;
+    phone: string;
+    instructions: {
+      buildingUnit: string | null;
+      landmark: string | null;
+      gateGuard: string | null;
+      deliveryNote: string | null;
+      recipientInstruction: string | null;
+    };
+  };
+  status: import("./states").DeliveryJobState;
+  version: number;
+  allowedActions: ReadonlyArray<"CREATE_AND_ASSIGN_BATCH">;
+};
+
 type ExpectedOrderedDeliveryVersion = { jobId: string; expectedVersion: number };
 
 type ExpectedCreateAndAssignRequest = AuthenticatedRequest & {
@@ -49,6 +71,7 @@ type ExpectedCreateAndAssignRequest = AuthenticatedRequest & {
 describe("delivery map and atomic dispatch contracts", () => {
   it("keeps the approved pin and ordered command shapes exact", () => {
     type ExactPin = Expect<Equal<DeliveryMapPin, ExpectedDeliveryMapPin>>;
+    type ExactDetail = Expect<Equal<DeliveryMapDetail, ExpectedDeliveryMapDetail>>;
     type ExactOrderedDelivery = Expect<
       Equal<OrderedDeliveryVersion, ExpectedOrderedDeliveryVersion>
     >;
@@ -57,6 +80,7 @@ describe("delivery map and atomic dispatch contracts", () => {
     >;
 
     void (true as ExactPin);
+    void (true as ExactDetail);
     void (true as ExactOrderedDelivery);
     void (true as ExactCommand);
     expect(true).toBe(true);
@@ -91,7 +115,7 @@ describe("delivery map and atomic dispatch contracts", () => {
     const detail: DeliveryMapDetail = {
       jobId: "job-1",
       orderId: "order-1",
-      orderNumber: "FM-1001",
+      orderNumber: null,
       destination: {
         coordinate: pin.coordinate,
         displayAddress: "Cebu City, Cebu",

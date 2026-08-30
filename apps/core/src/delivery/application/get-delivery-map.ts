@@ -49,16 +49,28 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function deliveryReadRequestId(request: unknown): string {
+  return isRecord(request) && nonEmpty(request.requestId) ? request.requestId : "unknown";
+}
+
+function hasStringHeaders(value: unknown): value is Readonly<Record<string, string>> {
+  return isRecord(value) && Object.values(value).every((header) => typeof header === "string");
+}
+
 export async function resolveDeliveryReadContext(
   deps: DeliveryMapReadDeps,
   request: DeliveryMapRequest,
 ): Promise<RpcResult<ResolvedDeliveryReadContext>> {
-  if (!nonEmpty(request.requestId) || !nonEmpty(request.locationId)) {
-    return failure(
-      "VALIDATION_FAILED",
-      "Request and location identifiers are required",
-      request.requestId,
-    );
+  const requestId = deliveryReadRequestId(request);
+  if (!isRecord(request) || !nonEmpty(request.requestId) || !nonEmpty(request.locationId)) {
+    return failure("VALIDATION_FAILED", "Request and location identifiers are required", requestId);
+  }
+  if (!hasStringHeaders(request.headers)) {
+    return failure("VALIDATION_FAILED", "Request headers are invalid", requestId);
   }
   if (
     (request.fulfillmentMode !== "INSTANT" && request.fulfillmentMode !== "SCHEDULED") ||
@@ -76,6 +88,7 @@ export async function resolveDeliveryReadContext(
     request,
     "delivery.read",
     request.locationId,
+    { concealOutOfScopeLocation: true },
   );
   if (!access.ok) return access;
 
@@ -151,24 +164,27 @@ export function deriveDeliverySelection(
   return { selectable: true, reason: null };
 }
 
-function hasOnlyDeliveryStatuses(statuses: readonly DeliveryJobState[]): boolean {
+function hasOnlyDeliveryStatuses(statuses: unknown): statuses is readonly DeliveryJobState[] {
   const allowed = new Set<string>(deliveryJobStates);
-  return statuses.every((status) => allowed.has(status));
+  return (
+    Array.isArray(statuses) &&
+    statuses.every((status) => typeof status === "string" && allowed.has(status))
+  );
 }
 
 export async function getDeliveryMap(
   deps: DeliveryMapReadDeps,
   request: DeliveryMapRequest,
 ): Promise<RpcResult<DeliveryMapView>> {
+  const requestId = deliveryReadRequestId(request);
+  if (!isRecord(request)) {
+    return failure("VALIDATION_FAILED", "Request must be an object", requestId);
+  }
   if (request.statuses !== undefined && !hasOnlyDeliveryStatuses(request.statuses)) {
-    return failure("VALIDATION_FAILED", "Unknown delivery status filter", request.requestId);
+    return failure("VALIDATION_FAILED", "Unknown delivery status filter", requestId);
   }
   if (request.riderId !== undefined && request.riderId !== null && !nonEmpty(request.riderId)) {
-    return failure(
-      "VALIDATION_FAILED",
-      "Rider filter must be a non-empty identifier",
-      request.requestId,
-    );
+    return failure("VALIDATION_FAILED", "Rider filter must be a non-empty identifier", requestId);
   }
   const context = await resolveDeliveryReadContext(deps, request);
   if (!context.ok) return context;

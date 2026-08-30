@@ -16,12 +16,18 @@ export type OperationsAdministrationCapability =
   | "delivery.manage"
   | "fulfillment.manage";
 
+export type OperationsAdministrationAccessOptions = {
+  /** Return the same result for missing and out-of-scope locations on protected reads. */
+  concealOutOfScopeLocation?: boolean;
+};
+
 /** Resolve the caller and verify the capability against the requested location's market scope. */
 export async function resolveOperationsAdministrationAccess(
   deps: OperationsAdministrationDeps,
   request: AuthenticatedRequest,
   capability: OperationsAdministrationCapability,
   locationId: string,
+  options: OperationsAdministrationAccessOptions = {},
 ): Promise<RpcResult<OperationsAdministrationAccess>> {
   const database = drizzle(deps.db, { schema: iamSchema });
   const context = await applicationContext(deps.auth, database, request);
@@ -32,6 +38,16 @@ export async function resolveOperationsAdministrationAccess(
       error: {
         code: "UNAUTHENTICATED",
         message: "Authentication is required",
+        requestId: request.requestId,
+      },
+    };
+  }
+  if (options.concealOutOfScopeLocation && !context.value.capabilities.includes(capability)) {
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: `${capability} is required`,
         requestId: request.requestId,
       },
     };
@@ -50,10 +66,27 @@ export async function resolveOperationsAdministrationAccess(
       },
     };
   }
-  if (
-    !context.value.capabilities.includes(capability) ||
-    !hasOperationalScope(context.value.scopes, locationId, location.market_id)
-  ) {
+  if (!hasOperationalScope(context.value.scopes, locationId, location.market_id)) {
+    if (options.concealOutOfScopeLocation) {
+      return {
+        ok: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Active fulfillment location not found",
+          requestId: request.requestId,
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: `${capability} and location scope are required`,
+        requestId: request.requestId,
+      },
+    };
+  }
+  if (!context.value.capabilities.includes(capability)) {
     return {
       ok: false,
       error: {

@@ -31,7 +31,8 @@ export type DeliveryMapView = {
 export type DeliveryMapDetail = {
   jobId: string;
   orderId: string;
-  orderNumber: string;
+  /** Null until the canonical persisted Order number is available to this projection. */
+  orderNumber: string | null;
   destination: {
     /** Null when the immutable stop has no authoritative coordinates. */
     coordinate: Coordinate | null;

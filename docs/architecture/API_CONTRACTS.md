@@ -430,7 +430,10 @@ fulfillment mode/cycle, status, purpose-built Rider display identity, aggregate
 version, and Core-derived `{ selectable, reason }`. `DeliveryMapView` is a
 bounded scoped pin collection. `DeliveryMapDetail` separately returns protected
 display address, recipient/contact, structured instructions, version, and
-Core-derived legal actions. `EligibleRiderView` contains canonical Rider
+Core-derived legal actions. Its `orderNumber` is nullable during the current
+implementation sequence because the physical Orders table has not yet landed
+the canonical persisted human-readable number; Core returns null and never
+substitutes the Order UUID. `EligibleRiderView` contains canonical Rider
 identity plus open batch/delivery counts. None exposes raw snapshot JSON,
 polygon GeoJSON, provider data/tokens, Better Auth records, or ranking rules.
 
