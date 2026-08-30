@@ -60,6 +60,31 @@ describe("membership and promotions persistence", () => {
     expect(offerColumns).not.toContain("provider");
   });
 
+  it("persists effective-dated global prices and agreed subscription prices", async () => {
+    expect(await columns("membership_price_version")).toEqual(
+      expect.arrayContaining([
+        "offer_id",
+        "amount_minor",
+        "currency",
+        "effective_from",
+        "effective_to",
+        "version",
+      ]),
+    );
+    expect(await columns("subscription")).toEqual(
+      expect.arrayContaining([
+        "agreed_price_version_id",
+        "agreed_amount_minor",
+        "agreed_currency",
+      ]),
+    );
+
+    const seededPrice = await env.DB.prepare(
+      "SELECT amount_minor, currency, version FROM membership_price_version WHERE effective_to IS NULL",
+    ).first<{ amount_minor: number; currency: string; version: number }>();
+    expect(seededPrice).toMatchObject({ amount_minor: 29900, currency: "PHP", version: 1 });
+  });
+
   it("creates promotion grant/redemption tables with one-per-customer introductory uniqueness", async () => {
     expect(await columns("promotion_grant")).toEqual(
       expect.arrayContaining(["id", "benefit_type", "status", "created_at"]),

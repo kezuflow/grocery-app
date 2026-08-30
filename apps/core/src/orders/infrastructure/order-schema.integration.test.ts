@@ -7,7 +7,14 @@ describe("orders snapshot integrity schema", () => {
       await env.DB.prepare("PRAGMA table_info(grocery_order)").all<{ name: string }>()
     ).results.map((column) => column.name);
     expect(orderCols).toEqual(
-      expect.arrayContaining(["address_snapshot_json", "total_minor", "currency"]),
+      expect.arrayContaining([
+        "address_snapshot_json",
+        "total_minor",
+        "currency",
+        "pre_service_fee_total_minor",
+        "service_fee_configuration_id",
+        "service_fee_snapshot_json",
+      ]),
     );
     const itemCols = (
       await env.DB.prepare("PRAGMA table_info(order_item)").all<{ name: string }>()

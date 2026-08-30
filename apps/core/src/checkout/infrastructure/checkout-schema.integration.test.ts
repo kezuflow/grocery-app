@@ -22,6 +22,9 @@ describe("checkout/orders schema", () => {
         "version",
         "expires_at",
         "idempotency_key",
+        "pre_service_fee_total_minor",
+        "service_fee_configuration_id",
+        "service_fee_snapshot_json",
       ]),
     );
     // Seed real referenced rows so FK enforcement is exercised.
@@ -54,6 +57,25 @@ describe("checkout/orders schema", () => {
         .run();
     await insertQuote("q1", "a1", "ik1");
     await expect(insertQuote("q2", "a2", "ik1")).rejects.toThrow();
+  });
+
+  it("persists effective-dated global service fee configuration", async () => {
+    expect(await cols("service_fee_configuration")).toEqual(
+      expect.arrayContaining([
+        "fee_type",
+        "flat_minor",
+        "percentage_basis_points",
+        "currency",
+        "effective_from",
+        "effective_to",
+        "version",
+        "reason",
+      ]),
+    );
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM service_fee_configuration",
+    ).first<{ count: number }>();
+    expect(count?.count).toBe(0);
   });
 
   it("creates one-order-per-payment-intent reaction identity", async () => {
