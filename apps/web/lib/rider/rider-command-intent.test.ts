@@ -3,11 +3,15 @@ import { createRiderCommandIntentStore } from "./rider-command-intent";
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-function memoryStorage(initial?: string): StorageLike & { value: string | null } {
+function memoryStorage(initial?: string): StorageLike & { value: string | null; removed: number } {
   let value = initial ?? null;
+  let removed = 0;
   return {
     get value() {
       return value;
+    },
+    get removed() {
+      return removed;
     },
     getItem: () => value,
     setItem: (_key, next) => {
@@ -15,6 +19,7 @@ function memoryStorage(initial?: string): StorageLike & { value: string | null }
     },
     removeItem: () => {
       value = null;
+      removed += 1;
     },
   };
 }
@@ -24,23 +29,68 @@ const command = {
   action: "MARK_DELIVERED",
   orderId: "order-1",
   expectedVersion: 7,
+  status: "ARRIVED",
+  allowedActions: ["MARK_DELIVERED", "MARK_FAILED"],
 } as const;
 
+type AuthoritativeJob = {
+  jobId: string;
+  orderId: string;
+  expectedVersion: number;
+  status: string;
+  allowedActions: ReadonlyArray<
+    "MARK_EN_ROUTE" | "MARK_ARRIVED" | "MARK_DELIVERED" | "MARK_FAILED"
+  >;
+};
+
+function reconcile(
+  store: ReturnType<typeof createRiderCommandIntentStore>,
+  jobs: ReadonlyArray<AuthoritativeJob>,
+) {
+  return (
+    store as unknown as {
+      reconcile: (jobs: ReadonlyArray<AuthoritativeJob>) => { cleared: number; retained: number };
+    }
+  ).reconcile(jobs);
+}
+
+function persistedIntent(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    identity: "job-1:MARK_DELIVERED",
+    jobId: "job-1",
+    action: "MARK_DELIVERED",
+    orderId: "order-1",
+    expectedVersion: 7,
+    status: "ARRIVED",
+    allowedActions: ["MARK_DELIVERED", "MARK_FAILED"],
+    fingerprint:
+      '[1,"job-1","MARK_DELIVERED","order-1",7,"ARRIVED",["MARK_DELIVERED","MARK_FAILED"]]',
+    idempotencyKey: "delivery-uuid-1",
+    ...overrides,
+  };
+}
+
+function persistedRaw(intent = persistedIntent(), mapKey = "job-1:MARK_DELIVERED"): string {
+  return JSON.stringify({ version: 1, intents: { [mapKey]: intent } });
+}
+
 describe("rider command intent store", () => {
-  it("creates one delivery idempotency key for a new job action", () => {
-    const store = createRiderCommandIntentStore({
-      storage: memoryStorage(),
-      createKey: () => "uuid-1",
-    });
+  it("creates and persists one versioned delivery intent for a new job action", () => {
+    const storage = memoryStorage();
+    const store = createRiderCommandIntentStore({ storage, createKey: () => "uuid-1" });
 
     expect(store.begin(command)).toEqual({
       status: "started",
       idempotencyKey: "delivery-uuid-1",
       recovered: false,
     });
+    expect(JSON.parse(storage.value!)).toEqual({
+      version: 1,
+      intents: { "job-1:MARK_DELIVERED": persistedIntent() },
+    });
   });
 
-  it("reuses the exact key after an ambiguous result and across a new store instance", () => {
+  it("reuses the exact key after ambiguity and across a new store instance", () => {
     const storage = memoryStorage();
     const first = createRiderCommandIntentStore({ storage, createKey: () => "uuid-1" });
     const started = first.begin(command);
@@ -55,44 +105,57 @@ describe("rider command intent store", () => {
     });
   });
 
-  it("isolates different job and action identities", () => {
+  it("isolates unresolved intents for different jobs", () => {
     let sequence = 0;
     const store = createRiderCommandIntentStore({
       storage: memoryStorage(),
       createKey: () => `uuid-${++sequence}`,
     });
+    const first = store.begin(command);
+    const second = store.begin({ ...command, jobId: "job-2", orderId: "order-2" });
 
-    const delivered = store.begin(command);
-    const failed = store.begin({ ...command, action: "MARK_FAILED" });
-    const otherJob = store.begin({ ...command, jobId: "job-2", orderId: "order-2" });
-
-    expect([delivered.idempotencyKey, failed.idempotencyKey, otherJob.idempotencyKey]).toEqual([
+    expect([first.idempotencyKey, second.idempotencyKey]).toEqual([
       "delivery-uuid-1",
       "delivery-uuid-2",
-      "delivery-uuid-3",
     ]);
   });
 
-  it("never reuses a key when the business payload or expected version changes", () => {
-    let sequence = 0;
+  it("locks a job against a different action while its original intent is unresolved", () => {
     const store = createRiderCommandIntentStore({
       storage: memoryStorage(),
-      createKey: () => `uuid-${++sequence}`,
+      createKey: () => "uuid-1",
     });
-    const original = store.begin(command);
-    store.settle(command, "ambiguous");
+    store.begin(command);
 
-    const changed = { ...command, expectedVersion: 8 };
-    const next = store.begin(changed);
-
-    expect(next.idempotencyKey).not.toBe(original.idempotencyKey);
-    expect(next.recovered).toBe(false);
-    expect(store.hasRecoverable(command)).toBe(false);
-    expect(store.hasRecoverable(changed)).toBe(true);
+    expect(store.begin({ ...command, action: "MARK_FAILED" })).toEqual({
+      status: "blocked",
+      reason: "UNRESOLVED_JOB_INTENT",
+    });
+    expect(store.hasRecoverable(command)).toBe(true);
   });
 
-  it.each(["success", "stale", "conflict"] as const)(
-    "clears the exact intent and requests an authoritative refresh after %s",
+  it.each([
+    { expectedVersion: 8 },
+    { orderId: "order-changed" },
+    { status: "EN_ROUTE" },
+    { allowedActions: ["MARK_FAILED"] as const },
+  ])("does not overwrite unresolved evidence when command context changes", (change) => {
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => "uuid-1",
+    });
+    store.begin(command);
+    store.settle(command, "ambiguous");
+
+    expect(store.begin({ ...command, ...change })).toEqual({
+      status: "blocked",
+      reason: "UNRESOLVED_JOB_INTENT",
+    });
+    expect(store.hasRecoverable(command)).toBe(true);
+  });
+
+  it.each(["success", "stale", "idempotency-conflict"])(
+    "clears the exact intent and refreshes after terminal %s",
     (outcome) => {
       const store = createRiderCommandIntentStore({
         storage: memoryStorage(),
@@ -100,13 +163,31 @@ describe("rider command intent store", () => {
       });
       store.begin(command);
 
-      expect(store.settle(command, outcome)).toEqual({ refresh: true });
+      expect(store.settle(command, outcome as Parameters<typeof store.settle>[1])).toEqual({
+        refresh: true,
+      });
       expect(store.hasRecoverable(command)).toBe(false);
     },
   );
 
+  it("retains the exact intent but refreshes after a generic processing conflict", () => {
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => "uuid-1",
+    });
+    const started = store.begin(command);
+
+    expect(store.settle(command, "processing" as Parameters<typeof store.settle>[1])).toEqual({
+      refresh: true,
+    });
+    expect(store.begin(command)).toMatchObject({
+      idempotencyKey: started.idempotencyKey,
+      recovered: true,
+    });
+  });
+
   it.each(["ambiguous", "failure"] as const)(
-    "retains the exact intent without requesting a refresh after %s failure",
+    "retains the exact intent without refresh after %s",
     (outcome) => {
       const store = createRiderCommandIntentStore({
         storage: memoryStorage(),
@@ -122,7 +203,7 @@ describe("rider command intent store", () => {
     },
   );
 
-  it("coalesces a duplicate submit while the exact intent is pending", () => {
+  it("coalesces a duplicate exact submit while pending", () => {
     const store = createRiderCommandIntentStore({
       storage: memoryStorage(),
       createKey: () => "uuid-1",
@@ -136,7 +217,55 @@ describe("rider command intent store", () => {
     });
   });
 
-  it("falls back to memory when session storage is unavailable", () => {
+  it("keeps exact recovery when authoritative job state is unchanged", () => {
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => "uuid-1",
+    });
+    store.begin(command);
+    store.settle(command, "ambiguous");
+
+    expect(reconcile(store, [command])).toEqual({ cleared: 0, retained: 1 });
+    expect(store.hasRecoverable(command)).toBe(true);
+    expect(store.begin({ ...command, action: "MARK_FAILED" })).toMatchObject({
+      status: "blocked",
+    });
+  });
+
+  it("treats reordered authoritative actions as the same unchanged set", () => {
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => "uuid-1",
+    });
+    store.begin(command);
+    store.settle(command, "ambiguous");
+
+    expect(
+      reconcile(store, [{ ...command, allowedActions: ["MARK_FAILED", "MARK_DELIVERED"] }]),
+    ).toEqual({ cleared: 0, retained: 1 });
+    expect(
+      store.hasRecoverable({ ...command, allowedActions: ["MARK_FAILED", "MARK_DELIVERED"] }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["vanished", []],
+    ["version advanced", [{ ...command, expectedVersion: 8 }]],
+    ["status advanced", [{ ...command, status: "EN_ROUTE" }]],
+    ["action set changed", [{ ...command, allowedActions: ["MARK_FAILED"] }]],
+  ] as const)("clears unresolved intent when authoritative job has %s", (_case, jobs) => {
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => "uuid-1",
+    });
+    store.begin(command);
+    store.settle(command, "ambiguous");
+
+    expect(reconcile(store, jobs)).toEqual({ cleared: 1, retained: 0 });
+    expect(store.hasRecoverable(command)).toBe(false);
+  });
+
+  it("falls back to memory when storage is unavailable before initialization", () => {
     const unavailable: StorageLike = {
       getItem: () => {
         throw new DOMException("blocked");
@@ -158,15 +287,102 @@ describe("rider command intent store", () => {
     expect(store.begin(command).idempotencyKey).toBe(started.idempotencyKey);
   });
 
-  it("ignores corrupt session storage without leaking or crashing", () => {
-    const storage = memoryStorage("not-json");
+  it("blocks a new command if working storage cannot persist it across reload", () => {
+    const storage: StorageLike = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException("quota");
+      },
+      removeItem: () => undefined,
+    };
     const store = createRiderCommandIntentStore({ storage, createKey: () => "uuid-1" });
 
+    expect(store.begin(command)).toEqual({
+      status: "blocked",
+      reason: "PERSISTENCE_UNAVAILABLE",
+    });
+    expect(
+      createRiderCommandIntentStore({ storage, createKey: () => "uuid-2" }).hasRecoverable(command),
+    ).toBe(false);
+  });
+
+  it("blocks admission when corrupt persistent storage cannot be cleared", () => {
+    const storage: StorageLike = {
+      getItem: () => "not-json",
+      setItem: () => undefined,
+      removeItem: () => {
+        throw new DOMException("quota");
+      },
+    };
+    const store = createRiderCommandIntentStore({ storage, createKey: () => "uuid-1" });
+
+    expect(store.begin(command)).toEqual({
+      status: "blocked",
+      reason: "PERSISTENCE_UNAVAILABLE",
+    });
+  });
+
+  it("never evicts unresolved evidence when the bounded store is full", () => {
+    let sequence = 0;
+    const store = createRiderCommandIntentStore({
+      storage: memoryStorage(),
+      createKey: () => `uuid-${++sequence}`,
+    });
+    for (let index = 0; index < 32; index += 1) {
+      const evidence = { ...command, jobId: `job-${index}`, orderId: `order-${index}` };
+      expect(store.begin(evidence).status).toBe("started");
+      store.settle(evidence, "ambiguous");
+    }
+
+    expect(
+      store.begin({ ...command, jobId: "job-over-capacity", orderId: "order-over-capacity" }),
+    ).toEqual({ status: "blocked", reason: "CAPACITY_REACHED" });
+    expect(store.hasRecoverable({ ...command, jobId: "job-0", orderId: "order-0" })).toBe(true);
+  });
+
+  it.each([
+    ["legacy unversioned shape", JSON.stringify({ "job-1:MARK_DELIVERED": persistedIntent() })],
+    ["map key mismatch", persistedRaw(persistedIntent(), "wrong-key")],
+    ["identity mismatch", persistedRaw(persistedIntent({ identity: "wrong" }))],
+    ["fingerprint mismatch", persistedRaw(persistedIntent({ fingerprint: "wrong" }))],
+    ["unknown action", persistedRaw(persistedIntent({ action: "MARK_PAID" }))],
+    ["negative version", persistedRaw(persistedIntent({ expectedVersion: -1 }))],
+    ["unsafe version", persistedRaw(persistedIntent({ expectedVersion: Number.MAX_VALUE }))],
+    ["oversized id", persistedRaw(persistedIntent({ jobId: "j".repeat(201) }))],
+    ["oversized key", persistedRaw(persistedIntent({ idempotencyKey: "k".repeat(201) }))],
+    ["oversized raw", " ".repeat(16_385)],
+  ])("atomically clears %s persisted storage", (_case, raw) => {
+    const storage = memoryStorage(raw);
+    const store = createRiderCommandIntentStore({ storage, createKey: () => "fresh" });
+
+    expect(storage.removed).toBe(1);
     expect(store.begin(command)).toMatchObject({
       status: "started",
-      idempotencyKey: "delivery-uuid-1",
+      idempotencyKey: "delivery-fresh",
       recovered: false,
     });
-    expect(storage.value).not.toContain("not-json");
+  });
+
+  it("atomically clears a persisted envelope with too many entries", () => {
+    const intents = Object.fromEntries(
+      Array.from({ length: 33 }, (_, index) => {
+        const jobId = `job-${index}`;
+        return [
+          `${jobId}:MARK_DELIVERED`,
+          persistedIntent({
+            identity: `${jobId}:MARK_DELIVERED`,
+            jobId,
+            orderId: `order-${index}`,
+            fingerprint: `[1,"${jobId}","MARK_DELIVERED","order-${index}",7,"ARRIVED",["MARK_DELIVERED","MARK_FAILED"]]`,
+            idempotencyKey: `delivery-uuid-${index}`,
+          }),
+        ];
+      }),
+    );
+    const storage = memoryStorage(JSON.stringify({ version: 1, intents }));
+    const store = createRiderCommandIntentStore({ storage, createKey: () => "fresh" });
+
+    expect(storage.removed).toBe(1);
+    expect(store.begin(command)).toMatchObject({ status: "started", recovered: false });
   });
 });

@@ -159,7 +159,13 @@ test("a successful lifecycle action refreshes and advances to the authoritative 
     expect(request.method()).toBe("POST");
     expect(request.headers()["idempotency-key"]).toMatch(/^delivery-/);
     expect(request.postDataJSON()).toEqual({ orderId: "order-first", action: "MARK_DELIVERED" });
-    await route.fulfill({ json: { ok: true, value: { status: "DELIVERED" } } });
+    await route.fulfill({
+      json: {
+        ok: true,
+        value: { id: "order-first", status: "DELIVERED" },
+        requestId: "rider-command",
+      },
+    });
   });
 
   await page.goto("/rider");

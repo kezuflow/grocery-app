@@ -230,7 +230,10 @@ describe("RiderPage batch workflow", () => {
   });
 
   it.each([
-    ["success", { ok: true, value: { status: "DELIVERED" }, requestId: "command" }],
+    [
+      "success",
+      { ok: true, value: { id: "order-first", status: "DELIVERED" }, requestId: "command" },
+    ],
     [
       "stale",
       {
@@ -313,7 +316,11 @@ describe("RiderPage batch workflow", () => {
       .mockResolvedValueOnce(
         Response.json({
           ok: false,
-          error: { code: "FORBIDDEN", message: "Action is no longer allowed" },
+          error: {
+            code: "FORBIDDEN",
+            message: "Action is no longer allowed",
+            requestId: "command",
+          },
         }),
       );
     vi.stubGlobal("fetch", fetchMock);
@@ -341,7 +348,13 @@ describe("RiderPage batch workflow", () => {
       .fn()
       .mockResolvedValueOnce(rpc(batches(current)))
       .mockRejectedValueOnce(new TypeError("connection lost"))
-      .mockResolvedValueOnce(Response.json({ ok: true, value: { status: "EN_ROUTE" } }))
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          value: { id: "order-retry", status: "EN_ROUTE" },
+          requestId: "command",
+        }),
+      )
       .mockResolvedValueOnce(rpc(batches(null)));
     vi.stubGlobal("fetch", fetchMock);
     const { container, root } = await mount();
@@ -394,7 +407,13 @@ describe("RiderPage batch workflow", () => {
     const secondFetch = vi
       .fn()
       .mockResolvedValueOnce(rpc(batches(current)))
-      .mockResolvedValueOnce(Response.json({ ok: true, value: { status: "EN_ROUTE" } }))
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          value: { id: "order-reload", status: "EN_ROUTE" },
+          requestId: "command",
+        }),
+      )
       .mockResolvedValueOnce(rpc(batches(null)));
     vi.stubGlobal("fetch", secondFetch);
     const secondMount = await mount();
@@ -436,6 +455,223 @@ describe("RiderPage batch workflow", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.querySelector('[role="status"]')?.textContent).toContain("already pending");
+    act(() => root.unmount());
+  });
+
+  it("blocks a rapid different-action click while the job has an unresolved command", async () => {
+    const current = delivery({
+      jobId: "locked-job",
+      sequence: 1,
+      status: "ARRIVED",
+      allowedActions: ["MARK_DELIVERED", "MARK_FAILED"],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() => {
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_DELIVERED"]')!.click();
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_FAILED"]')!.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Another update for this delivery is unresolved",
+    );
+    act(() => root.unmount());
+  });
+
+  it("retains and refreshes a processing conflict before retrying the exact key", async () => {
+    const current = delivery({ jobId: "processing", sequence: 1 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: false,
+          error: {
+            code: "CONFLICT",
+            message: "The original delivery command is still processing",
+            requestId: "processing-command",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          value: { id: "order-processing", status: "EN_ROUTE" },
+          requestId: "replay-command",
+        }),
+      )
+      .mockResolvedValueOnce(rpc(batches(null)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+    await flush();
+    const firstKey = new Headers((fetchMock.mock.calls[1]![1] as RequestInit).headers).get(
+      "idempotency-key",
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("still processing");
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+    await flush();
+    const retryKey = new Headers((fetchMock.mock.calls[3]![1] as RequestInit).headers).get(
+      "idempotency-key",
+    );
+    expect(retryKey).toBe(firstKey);
+    act(() => root.unmount());
+  });
+
+  it("reconciles an ambiguous intent when a reload shows changed version and actions", async () => {
+    const original = delivery({ jobId: "advanced", sequence: 1 });
+    const firstFetch = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(original)))
+      .mockRejectedValueOnce(new TypeError("connection lost"));
+    vi.stubGlobal("fetch", firstFetch);
+    const firstMount = await mount();
+    await flush();
+    act(() =>
+      firstMount.container
+        .querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!
+        .click(),
+    );
+    await flush();
+    const firstKey = new Headers((firstFetch.mock.calls[1]![1] as RequestInit).headers).get(
+      "idempotency-key",
+    )!;
+    act(() => firstMount.root.unmount());
+
+    const changed = delivery({
+      jobId: "advanced",
+      sequence: 1,
+      status: "EN_ROUTE",
+      jobVersion: 8,
+      allowedActions: ["MARK_ARRIVED"],
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(rpc(batches(changed))));
+    const secondMount = await mount();
+    await flush();
+
+    const storedValues = Array.from({ length: window.sessionStorage.length }, (_, index) =>
+      window.sessionStorage.getItem(window.sessionStorage.key(index)!),
+    );
+    expect(storedValues.join(" ")).not.toContain(firstKey);
+    expect(secondMount.container.textContent).not.toContain("Recovered an unfinished");
+    expect(
+      secondMount.container.querySelector('[data-rider-action="MARK_ARRIVED"]'),
+    ).not.toBeNull();
+    act(() => secondMount.root.unmount());
+  });
+
+  it("reconciles an ambiguous intent when a fresh batch read shows the job vanished", async () => {
+    const current = delivery({ jobId: "vanished", sequence: 1 });
+    const firstFetch = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockRejectedValueOnce(new TypeError("connection lost"));
+    vi.stubGlobal("fetch", firstFetch);
+    const firstMount = await mount();
+    await flush();
+    act(() =>
+      firstMount.container
+        .querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!
+        .click(),
+    );
+    await flush();
+    const firstKey = new Headers((firstFetch.mock.calls[1]![1] as RequestInit).headers).get(
+      "idempotency-key",
+    )!;
+    act(() => firstMount.root.unmount());
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(rpc(batches(null))));
+    const secondMount = await mount();
+    await flush();
+
+    const storedValues = Array.from({ length: window.sessionStorage.length }, (_, index) =>
+      window.sessionStorage.getItem(window.sessionStorage.key(index)!),
+    );
+    expect(storedValues.join(" ")).not.toContain(firstKey);
+    act(() => secondMount.root.unmount());
+  });
+
+  it.each([
+    [
+      "truthy string ok",
+      { ok: "true", value: { id: "order-invalid", status: "EN_ROUTE" }, requestId: "command" },
+    ],
+    ["missing success value", { ok: true, requestId: "command" }],
+    ["malformed error", { ok: false, error: { code: "NOT_FOUND" } }],
+    [
+      "malformed error details",
+      {
+        ok: false,
+        error: {
+          code: "CONFLICT",
+          message: "processing",
+          requestId: "command",
+          details: { attempt: 2 },
+        },
+      },
+    ],
+    [
+      "mixed unexpected envelope",
+      {
+        ok: true,
+        value: { id: "order-invalid", status: "EN_ROUTE" },
+        error: { code: "CONFLICT", message: "unexpected", requestId: "error" },
+        requestId: "command",
+      },
+    ],
+  ])("treats a %s command response as ambiguous", async (_case, commandResult) => {
+    const current = delivery({ jobId: "invalid-envelope", sequence: 1 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockResolvedValueOnce(Response.json(commandResult));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
+    act(() => root.unmount());
+  });
+
+  it("blocks and announces when a new intent cannot be safely persisted", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota");
+    });
+    const current = delivery({ jobId: "persistence", sequence: 1 });
+    const fetchMock = vi.fn().mockResolvedValue(rpc(batches(current)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "could not be saved safely",
+    );
     act(() => root.unmount());
   });
 });

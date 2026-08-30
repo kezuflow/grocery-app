@@ -1,6 +1,12 @@
 "use client";
 
-import type { Coordinate, RiderBatchList, RiderDeliveryView } from "@freshmarkets/contracts";
+import {
+  appErrorCodes,
+  type AppErrorCode,
+  type Coordinate,
+  type RiderBatchList,
+  type RiderDeliveryView,
+} from "@freshmarkets/contracts";
 import {
   CheckCircle2,
   CircleAlert,
@@ -19,6 +25,7 @@ import {
 } from "../../lib/maps/google-maps-url";
 import {
   createRiderCommandIntentStore,
+  type RiderAuthoritativeJob,
   type RiderCommandEvidence,
 } from "../../lib/rider/rider-command-intent";
 
@@ -29,6 +36,12 @@ type RiderState =
 
 type RiderAction = RiderDeliveryView["allowedActions"][number];
 type ActionNotice = { kind: "pending" | "success" | "error"; message: string } | null;
+type RiderCommandResult =
+  | { ok: true; value: { id: string; status: string }; requestId: string }
+  | {
+      ok: false;
+      error: { code: AppErrorCode; message: string; requestId: string };
+    };
 
 const ACTION_LABELS: Record<RiderAction, string> = {
   MARK_EN_ROUTE: "En Route",
@@ -61,6 +74,64 @@ function navigationUrl(coordinate: Coordinate | null): string | null {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlyArray<string>): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function hasStringDetails(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (isRecord(value) && Object.values(value).every((detail) => typeof detail === "string"))
+  );
+}
+
+function parseRiderCommandResult(value: unknown): RiderCommandResult {
+  if (!isRecord(value) || typeof value.ok !== "boolean") throw new Error("invalid envelope");
+  if (value.ok === true) {
+    if (
+      !hasOnlyKeys(value, ["ok", "value", "requestId"]) ||
+      !isNonEmptyString(value.requestId) ||
+      !isRecord(value.value) ||
+      !hasOnlyKeys(value.value, ["id", "status"]) ||
+      !isNonEmptyString(value.value.id) ||
+      !isNonEmptyString(value.value.status)
+    )
+      throw new Error("invalid success envelope");
+    return {
+      ok: true,
+      value: { id: value.value.id, status: value.value.status },
+      requestId: value.requestId,
+    };
+  }
+  if (
+    !hasOnlyKeys(value, ["ok", "error"]) ||
+    !isRecord(value.error) ||
+    !hasOnlyKeys(value.error, ["code", "message", "requestId", "details"]) ||
+    !isNonEmptyString(value.error.code) ||
+    !appErrorCodes.includes(value.error.code as AppErrorCode) ||
+    !isNonEmptyString(value.error.message) ||
+    !isNonEmptyString(value.error.requestId) ||
+    !hasStringDetails(value.error.details)
+  )
+    throw new Error("invalid failure envelope");
+  return {
+    ok: false,
+    error: {
+      code: value.error.code as AppErrorCode,
+      message: value.error.message,
+      requestId: value.error.requestId,
+    },
+  };
+}
+
 /**
  * Current-delivery-first Rider workflow. Reads are canonical assigned-batch
  * DTOs; lifecycle writes keep the existing explicit Core command adapter.
@@ -81,6 +152,14 @@ export default function RiderPage() {
         error?: { code?: string; message?: string };
       };
       if (payload.ok && payload.value) {
+        const authoritativeJobs = payload.value.batches.flatMap((batch) =>
+          batch.currentDelivery
+            ? [batch.currentDelivery, ...batch.upcomingDeliveries]
+            : [...batch.upcomingDeliveries],
+        );
+        const reconciliation = intentStore.current!.reconcile(
+          authoritativeJobs.map(authoritativeJob),
+        );
         setState({ phase: "ready", value: payload.value });
         const recovered = payload.value.batches.some((batch) => {
           const delivery = batch.currentDelivery;
@@ -94,10 +173,12 @@ export default function RiderPage() {
             message: "Recovered an unfinished delivery update. Retry the same action when ready.",
           });
         }
+        return reconciliation;
       } else setState({ phase: "error", message: loadError(payload) });
     } catch {
       setState({ phase: "error", message: "Network error loading your deliveries." });
     }
+    return null;
   }, []);
 
   useEffect(() => {
@@ -108,6 +189,18 @@ export default function RiderPage() {
     const actionId = `${delivery.jobId}:${action}`;
     const evidence = commandEvidence(delivery, action);
     const intent = intentStore.current!.begin(evidence);
+    if (intent.status === "blocked") {
+      setNotice({
+        kind: "error",
+        message:
+          intent.reason === "UNRESOLVED_JOB_INTENT"
+            ? "Another update for this delivery is unresolved. Refresh before choosing a different action."
+            : intent.reason === "PERSISTENCE_UNAVAILABLE" || intent.reason === "CAPACITY_REACHED"
+              ? "This update could not be saved safely. Resolve pending delivery updates and try again."
+              : "This delivery update could not be prepared safely.",
+      });
+      return;
+    }
     if (intent.status === "duplicate") {
       setNotice({ kind: "pending", message: "This delivery update is already pending." });
       return;
@@ -130,31 +223,38 @@ export default function RiderPage() {
           body: JSON.stringify({ orderId: delivery.orderId, action }),
         },
       );
-      const result = (await response.json()) as {
-        ok: boolean;
-        value?: { status: string };
-        error?: { code?: string; message?: string };
-      };
+      const result = parseRiderCommandResult(await response.json());
       const outcome = result.ok
         ? "success"
         : result.error?.code === "STALE_VERSION"
           ? "stale"
-          : result.error?.code === "IDEMPOTENCY_CONFLICT" || result.error?.code === "CONFLICT"
-            ? "conflict"
-            : "failure";
+          : result.error?.code === "IDEMPOTENCY_CONFLICT"
+            ? "idempotency-conflict"
+            : result.error?.code === "CONFLICT"
+              ? "processing"
+              : "failure";
       const settled = intentStore.current!.settle(evidence, outcome);
       if (settled.refresh) {
-        setNotice({
-          kind: "success",
-          message: result.ok
-            ? `Delivery is now ${displayStatus(result.value?.status ?? "updated")}.`
-            : outcome === "stale"
-              ? "Delivery changed elsewhere. Current delivery refreshed."
-              : "Saved update conflicted with current delivery state. Current delivery refreshed.",
-        });
-        await load();
+        const reconciliation = await load();
+        setNotice(
+          outcome === "processing"
+            ? {
+                kind: "pending",
+                message: reconciliation?.cleared
+                  ? "Current delivery changed and the saved update was reconciled."
+                  : "Delivery update is still processing. Current delivery refreshed; retry will reuse the saved request.",
+              }
+            : {
+                kind: "success",
+                message: result.ok
+                  ? `Delivery is now ${displayStatus(result.value.status)}.`
+                  : outcome === "stale"
+                    ? "Delivery changed elsewhere. Current delivery refreshed."
+                    : "Saved update conflicted with current delivery state. Current delivery refreshed.",
+              },
+        );
       } else {
-        setNotice({ kind: "error", message: result.error?.message ?? "Update failed." });
+        setNotice({ kind: "error", message: result.ok ? "Update failed." : result.error.message });
       }
     } catch {
       intentStore.current!.settle(evidence, "ambiguous");
@@ -279,6 +379,18 @@ function commandEvidence(delivery: RiderDeliveryView, action: RiderAction): Ride
     action,
     orderId: delivery.orderId,
     expectedVersion: delivery.jobVersion,
+    status: delivery.status,
+    allowedActions: delivery.allowedActions,
+  };
+}
+
+function authoritativeJob(delivery: RiderDeliveryView): RiderAuthoritativeJob {
+  return {
+    jobId: delivery.jobId,
+    orderId: delivery.orderId,
+    expectedVersion: delivery.jobVersion,
+    status: delivery.status,
+    allowedActions: delivery.allowedActions,
   };
 }
 

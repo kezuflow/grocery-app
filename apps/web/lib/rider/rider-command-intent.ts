@@ -1,14 +1,35 @@
-export type RiderCommandEvidence = {
+const RIDER_ACTIONS = ["MARK_EN_ROUTE", "MARK_ARRIVED", "MARK_DELIVERED", "MARK_FAILED"] as const;
+
+export type RiderCommandAction = (typeof RIDER_ACTIONS)[number];
+
+export type RiderAuthoritativeJob = {
   jobId: string;
-  action: string;
   orderId: string;
   expectedVersion: number;
+  status: string;
+  allowedActions: ReadonlyArray<RiderCommandAction>;
 };
 
-export type RiderCommandOutcome = "success" | "stale" | "conflict" | "ambiguous" | "failure";
+export type RiderCommandEvidence = RiderAuthoritativeJob & {
+  action: RiderCommandAction;
+};
+
+export type RiderCommandOutcome =
+  | "success"
+  | "stale"
+  | "idempotency-conflict"
+  | "processing"
+  | "ambiguous"
+  | "failure";
 
 type StoredIntent = {
   identity: string;
+  jobId: string;
+  action: RiderCommandAction;
+  orderId: string;
+  expectedVersion: number;
+  status: string;
+  allowedActions: ReadonlyArray<RiderCommandAction>;
   fingerprint: string;
   idempotencyKey: string;
 };
@@ -17,45 +38,135 @@ type StoredIntents = Record<string, StoredIntent>;
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 const STORAGE_KEY = "freshmarkets:rider-command-intents:v1";
+const SCHEMA_VERSION = 1;
+const MAX_RAW_CHARS = 16_384;
+const MAX_INTENTS = 32;
+const MAX_IDENTIFIER_CHARS = 200;
+const MAX_STATUS_CHARS = 64;
+const MAX_IDEMPOTENCY_KEY_CHARS = 200;
 
-function identityFor(command: RiderCommandEvidence): string {
-  return `${command.jobId}:${command.action}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function fingerprintFor(command: RiderCommandEvidence): string {
-  return JSON.stringify([command.jobId, command.action, command.orderId, command.expectedVersion]);
-}
-
-function isStoredIntent(value: unknown): value is StoredIntent {
-  if (!value || typeof value !== "object") return false;
-  const intent = value as Partial<StoredIntent>;
+function isBoundedString(value: unknown, maximum: number): value is string {
   return (
-    typeof intent.identity === "string" &&
-    typeof intent.fingerprint === "string" &&
-    typeof intent.idempotencyKey === "string"
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maximum &&
+    value.trim() === value
   );
 }
 
-function readStoredIntents(storage: StorageLike | undefined): StoredIntents {
-  if (!storage) return {};
+function isRiderAction(value: unknown): value is RiderCommandAction {
+  return typeof value === "string" && RIDER_ACTIONS.includes(value as RiderCommandAction);
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: ReadonlyArray<string>): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function identityFor(command: Pick<RiderCommandEvidence, "jobId" | "action">): string {
+  return `${command.jobId}:${command.action}`;
+}
+
+function normalizedActions(
+  actions: ReadonlyArray<RiderCommandAction>,
+): ReadonlyArray<RiderCommandAction> {
+  return [...actions].sort();
+}
+
+function fingerprintFor(command: RiderCommandEvidence): string {
+  return JSON.stringify([
+    SCHEMA_VERSION,
+    command.jobId,
+    command.action,
+    command.orderId,
+    command.expectedVersion,
+    command.status,
+    normalizedActions(command.allowedActions),
+  ]);
+}
+
+function validActions(value: unknown): value is ReadonlyArray<RiderCommandAction> {
+  return (
+    Array.isArray(value) &&
+    value.length <= RIDER_ACTIONS.length &&
+    value.every(isRiderAction) &&
+    new Set(value).size === value.length
+  );
+}
+
+function validEvidence(command: RiderCommandEvidence): boolean {
+  return (
+    isBoundedString(command.jobId, MAX_IDENTIFIER_CHARS) &&
+    isRiderAction(command.action) &&
+    isBoundedString(command.orderId, MAX_IDENTIFIER_CHARS) &&
+    Number.isSafeInteger(command.expectedVersion) &&
+    command.expectedVersion >= 0 &&
+    isBoundedString(command.status, MAX_STATUS_CHARS) &&
+    validActions(command.allowedActions) &&
+    command.allowedActions.includes(command.action)
+  );
+}
+
+function parseStoredIntent(mapKey: string, value: unknown): StoredIntent | null {
+  if (!isRecord(value)) return null;
+  if (
+    !hasExactKeys(value, [
+      "identity",
+      "jobId",
+      "action",
+      "orderId",
+      "expectedVersion",
+      "status",
+      "allowedActions",
+      "fingerprint",
+      "idempotencyKey",
+    ])
+  )
+    return null;
+  const candidate = value as StoredIntent;
+  if (
+    !validEvidence(candidate) ||
+    !isBoundedString(candidate.identity, MAX_IDENTIFIER_CHARS + MAX_STATUS_CHARS) ||
+    candidate.identity !== identityFor(candidate) ||
+    mapKey !== candidate.identity ||
+    !isBoundedString(candidate.idempotencyKey, MAX_IDEMPOTENCY_KEY_CHARS) ||
+    candidate.fingerprint !== fingerprintFor(candidate)
+  )
+    return null;
+  return candidate;
+}
+
+function parseStoredIntents(raw: string): StoredIntents | null {
+  if (raw.length > MAX_RAW_CHARS) return null;
+  let parsed: unknown;
   try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid");
-    const entries = Object.entries(parsed).filter((entry): entry is [string, StoredIntent] =>
-      isStoredIntent(entry[1]),
-    );
-    if (entries.length !== Object.keys(parsed).length) throw new Error("invalid");
-    return Object.fromEntries(entries);
+    parsed = JSON.parse(raw);
   } catch {
-    try {
-      storage.removeItem(STORAGE_KEY);
-    } catch {
-      // Storage can be denied at any time. The in-memory registry remains usable.
-    }
-    return {};
+    return null;
   }
+  if (!isRecord(parsed) || !hasExactKeys(parsed, ["version", "intents"])) return null;
+  if (parsed.version !== SCHEMA_VERSION || !isRecord(parsed.intents)) return null;
+  const entries = Object.entries(parsed.intents);
+  if (entries.length > MAX_INTENTS) return null;
+  const intents: StoredIntents = {};
+  const jobIds = new Set<string>();
+  for (const [mapKey, value] of entries) {
+    const intent = parseStoredIntent(mapKey, value);
+    if (!intent || jobIds.has(intent.jobId)) return null;
+    jobIds.add(intent.jobId);
+    intents[mapKey] = intent;
+  }
+  return intents;
+}
+
+function serialize(intents: StoredIntents): string | null {
+  const raw = JSON.stringify({ version: SCHEMA_VERSION, intents });
+  return raw.length <= MAX_RAW_CHARS ? raw : null;
 }
 
 function browserSessionStorage(): StorageLike | undefined {
@@ -70,65 +181,159 @@ export function createRiderCommandIntentStore(options?: {
   storage?: StorageLike;
   createKey?: () => string;
 }) {
-  const storage = options?.storage ?? browserSessionStorage();
+  let storage = options?.storage ?? browserSessionStorage();
   const createKey = options?.createKey ?? (() => crypto.randomUUID());
-  const intents = readStoredIntents(storage);
+  let intents: StoredIntents = {};
+  let persistent = false;
+  let persistenceBroken = false;
+  if (storage) {
+    let raw: string | null = null;
+    try {
+      raw = storage.getItem(STORAGE_KEY);
+      persistent = true;
+    } catch {
+      storage = undefined;
+      persistent = false;
+    }
+    if (persistent && raw) {
+      const parsed = parseStoredIntents(raw);
+      if (parsed) intents = parsed;
+      else {
+        try {
+          storage!.removeItem(STORAGE_KEY);
+        } catch {
+          persistenceBroken = true;
+        }
+      }
+    }
+  }
   const inFlight = new Map<string, string>();
 
-  function persist(): void {
-    try {
-      storage?.setItem(STORAGE_KEY, JSON.stringify(intents));
-    } catch {
-      // Session storage is an enhancement; memory remains the safe fallback.
+  function commit(candidate: StoredIntents): "committed" | "too-large" | "unavailable" {
+    const raw = serialize(candidate);
+    if (!raw) return "too-large";
+    if (persistenceBroken) return "unavailable";
+    if (persistent) {
+      try {
+        storage!.setItem(STORAGE_KEY, raw);
+      } catch {
+        return "unavailable";
+      }
     }
+    intents = candidate;
+    return "committed";
+  }
+
+  function exactIntent(command: RiderCommandEvidence): StoredIntent | undefined {
+    const intent = intents[identityFor(command)];
+    return intent?.fingerprint === fingerprintFor(command) ? intent : undefined;
   }
 
   return {
     begin(command: RiderCommandEvidence) {
-      const identity = identityFor(command);
       const fingerprint = fingerprintFor(command);
-      const existing = intents[identity];
-      const exact = existing?.fingerprint === fingerprint ? existing : undefined;
-
-      if (inFlight.get(identity) === fingerprint && exact) {
+      const existingForJob = Object.values(intents).find(
+        (intent) => intent.jobId === command.jobId,
+      );
+      if (existingForJob && existingForJob.fingerprint !== fingerprint) {
+        return { status: "blocked" as const, reason: "UNRESOLVED_JOB_INTENT" as const };
+      }
+      if (!validEvidence(command)) {
+        return { status: "blocked" as const, reason: "INVALID_EVIDENCE" as const };
+      }
+      const exact = existingForJob?.fingerprint === fingerprint ? existingForJob : undefined;
+      if (inFlight.get(command.jobId) === fingerprint && exact) {
         return {
           status: "duplicate" as const,
           idempotencyKey: exact.idempotencyKey,
           recovered: false,
         };
       }
-
-      const intent: StoredIntent = exact ?? {
+      if (exact) {
+        inFlight.set(command.jobId, fingerprint);
+        return {
+          status: "started" as const,
+          idempotencyKey: exact.idempotencyKey,
+          recovered: true,
+        };
+      }
+      if (Object.keys(intents).length >= MAX_INTENTS) {
+        return { status: "blocked" as const, reason: "CAPACITY_REACHED" as const };
+      }
+      const identity = identityFor(command);
+      const intent: StoredIntent = {
+        ...command,
+        allowedActions: normalizedActions(command.allowedActions),
         identity,
         fingerprint,
         idempotencyKey: `delivery-${createKey()}`,
       };
-      intents[identity] = intent;
-      inFlight.set(identity, fingerprint);
-      persist();
+      if (parseStoredIntent(identity, intent) === null) {
+        return { status: "blocked" as const, reason: "INVALID_EVIDENCE" as const };
+      }
+      const result = commit({ ...intents, [identity]: intent });
+      if (result === "too-large") {
+        return { status: "blocked" as const, reason: "CAPACITY_REACHED" as const };
+      }
+      if (result === "unavailable") {
+        return { status: "blocked" as const, reason: "PERSISTENCE_UNAVAILABLE" as const };
+      }
+      inFlight.set(command.jobId, fingerprint);
       return {
         status: "started" as const,
         idempotencyKey: intent.idempotencyKey,
-        recovered: Boolean(exact),
+        recovered: false,
       };
     },
 
     hasRecoverable(command: RiderCommandEvidence): boolean {
-      const intent = intents[identityFor(command)];
-      return intent?.fingerprint === fingerprintFor(command);
+      return Boolean(validEvidence(command) && exactIntent(command));
     },
 
     settle(command: RiderCommandEvidence, outcome: RiderCommandOutcome): { refresh: boolean } {
-      const identity = identityFor(command);
       const fingerprint = fingerprintFor(command);
-      if (inFlight.get(identity) === fingerprint) inFlight.delete(identity);
-
-      const terminal = outcome === "success" || outcome === "stale" || outcome === "conflict";
-      if (terminal && intents[identity]?.fingerprint === fingerprint) {
-        delete intents[identity];
-        persist();
+      if (inFlight.get(command.jobId) === fingerprint) inFlight.delete(command.jobId);
+      const clearable =
+        outcome === "success" || outcome === "stale" || outcome === "idempotency-conflict";
+      if (clearable) {
+        const identity = identityFor(command);
+        if (intents[identity]?.fingerprint === fingerprint) {
+          const candidate = { ...intents };
+          delete candidate[identity];
+          commit(candidate);
+        }
       }
-      return { refresh: terminal };
+      return { refresh: clearable || outcome === "processing" };
+    },
+
+    reconcile(authoritativeJobs: ReadonlyArray<RiderAuthoritativeJob>) {
+      const byJobId = new Map(authoritativeJobs.map((job) => [job.jobId, job]));
+      const candidate = { ...intents };
+      const originalCount = Object.keys(intents).length;
+      let changed = false;
+      for (const [identity, intent] of Object.entries(intents)) {
+        const job = byJobId.get(intent.jobId);
+        const unchanged =
+          job &&
+          job.orderId === intent.orderId &&
+          job.expectedVersion === intent.expectedVersion &&
+          job.status === intent.status &&
+          JSON.stringify(normalizedActions(job.allowedActions)) ===
+            JSON.stringify(intent.allowedActions) &&
+          job.allowedActions.includes(intent.action);
+        if (!unchanged) {
+          delete candidate[identity];
+          inFlight.delete(intent.jobId);
+          changed = true;
+        }
+      }
+      if (changed && commit(candidate) !== "committed") {
+        return { cleared: 0, retained: Object.keys(intents).length };
+      }
+      return {
+        cleared: originalCount - Object.keys(candidate).length,
+        retained: Object.keys(candidate).length,
+      };
     },
   };
 }
