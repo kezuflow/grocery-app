@@ -40,6 +40,18 @@ export class FakeMapAdapter implements MapAdapter {
     this.activeInitialization?.onPinMove(position);
   }
 
+  emitPointActivate(pointId: string): void {
+    this.activeInitialization?.onPointActivate(pointId);
+  }
+
+  emitAreaSelect(firstCorner: MapCoordinate, secondCorner: MapCoordinate): void {
+    this.activeInitialization?.onAreaSelect(firstCorner, secondCorner);
+  }
+
+  emitAreaSelectionCancel(): void {
+    this.activeInitialization?.onAreaSelectionCancel();
+  }
+
   emitLoadError(): void {
     this.activeInitialization?.onLoadError();
   }

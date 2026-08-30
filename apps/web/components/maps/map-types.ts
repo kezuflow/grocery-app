@@ -12,6 +12,7 @@ export type MapPoint = Readonly<{
   id: string;
   position: MapCoordinate;
   label?: string;
+  tone?: "available" | "retry" | "assigned" | "blocked";
 }>;
 
 export type MapDraggablePin = Readonly<{
@@ -36,6 +37,7 @@ export type MapScene = Readonly<{
   draggablePin?: MapDraggablePin;
   polygons?: ReadonlyArray<MapPolygon>;
   lineStrings?: ReadonlyArray<MapLineString>;
+  areaSelectionActive?: boolean;
 }>;
 
 export type MapAdapterInitialization = Readonly<{
@@ -45,6 +47,9 @@ export type MapAdapterInitialization = Readonly<{
   scene: MapScene;
   reducedMotion: boolean;
   onPinMove: (position: MapCoordinate) => void;
+  onPointActivate: (pointId: string) => void;
+  onAreaSelect: (firstCorner: MapCoordinate, secondCorner: MapCoordinate) => void;
+  onAreaSelectionCancel: () => void;
   onLoadError: () => void;
 }>;
 

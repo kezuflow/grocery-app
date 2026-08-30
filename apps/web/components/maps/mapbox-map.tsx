@@ -39,6 +39,7 @@ function pointData(scene: MapScene) {
         id: point.id,
         label: point.label ?? "",
         selected: selectedIds.has(point.id),
+        tone: point.tone ?? "available",
       },
     })),
   };
@@ -123,7 +124,22 @@ function addPointLayers(map: MapboxInstance, scene: MapScene): void {
     source: POINT_SOURCE,
     filter: ["!", ["has", "point_count"]],
     paint: {
-      "circle-color": ["case", ["boolean", ["get", "selected"], false], "#f97316", "#166534"],
+      "circle-color": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        "#f97316",
+        [
+          "match",
+          ["get", "tone"],
+          "retry",
+          "#a15c00",
+          "assigned",
+          "#23658a",
+          "blocked",
+          "#6b6b67",
+          "#166534",
+        ],
+      ],
       "circle-radius": ["case", ["boolean", ["get", "selected"], false], 9, 7],
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 2,
@@ -183,6 +199,79 @@ function createMapboxAdapter(): MapAdapter {
       let scene = options.scene;
       let marker: MapboxMarker | undefined;
       let loaded = false;
+      let areaCleanup: (() => void) | undefined;
+
+      const stopAreaSelection = (): void => {
+        areaCleanup?.();
+        areaCleanup = undefined;
+      };
+
+      const syncAreaSelection = (): void => {
+        stopAreaSelection();
+        if (!scene.areaSelectionActive) return;
+        const canvas = map.getCanvasContainer();
+        const overlay = document.createElement("div");
+        overlay.setAttribute("aria-hidden", "true");
+        overlay.style.cssText =
+          "position:absolute;display:none;border:2px solid #c2410c;background:rgb(249 115 22 / 0.14);pointer-events:none;z-index:2";
+        options.container.appendChild(overlay);
+        map.dragPan.disable();
+        let start: { x: number; y: number } | undefined;
+
+        const relativePoint = (event: PointerEvent) => {
+          const bounds = canvas.getBoundingClientRect();
+          return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+        };
+        const down = (event: PointerEvent) => {
+          if (event.button !== 0) return;
+          start = relativePoint(event);
+          overlay.style.display = "block";
+          canvas.setPointerCapture?.(event.pointerId);
+        };
+        const move = (event: PointerEvent) => {
+          if (!start) return;
+          const end = relativePoint(event);
+          overlay.style.left = `${Math.min(start.x, end.x)}px`;
+          overlay.style.top = `${Math.min(start.y, end.y)}px`;
+          overlay.style.width = `${Math.abs(end.x - start.x)}px`;
+          overlay.style.height = `${Math.abs(end.y - start.y)}px`;
+        };
+        const up = (event: PointerEvent) => {
+          if (!start) return;
+          const end = relativePoint(event);
+          const first = map.unproject([start.x, start.y]);
+          const second = map.unproject([end.x, end.y]);
+          start = undefined;
+          stopAreaSelection();
+          options.onAreaSelect(
+            { longitude: first.lng, latitude: first.lat },
+            { longitude: second.lng, latitude: second.lat },
+          );
+        };
+        const keydown = (event: KeyboardEvent) => {
+          if (event.key !== "Escape") return;
+          stopAreaSelection();
+          options.onAreaSelectionCancel();
+        };
+        const pointerCancel = () => {
+          stopAreaSelection();
+          options.onAreaSelectionCancel();
+        };
+        canvas.addEventListener("pointerdown", down);
+        canvas.addEventListener("pointermove", move);
+        canvas.addEventListener("pointerup", up);
+        canvas.addEventListener("pointercancel", pointerCancel);
+        window.addEventListener("keydown", keydown);
+        areaCleanup = () => {
+          canvas.removeEventListener("pointerdown", down);
+          canvas.removeEventListener("pointermove", move);
+          canvas.removeEventListener("pointerup", up);
+          canvas.removeEventListener("pointercancel", pointerCancel);
+          window.removeEventListener("keydown", keydown);
+          overlay.remove();
+          map.dragPan.enable();
+        };
+      };
 
       const syncPin = (): void => {
         if (!scene.draggablePin) {
@@ -208,8 +297,16 @@ function createMapboxAdapter(): MapAdapter {
         loaded = true;
         addSceneLayers(map, scene);
         syncPin();
+        syncAreaSelection();
       });
       map.on("error", options.onLoadError);
+      map.on("click", "freshmarkets-points", (event) => {
+        if (scene.areaSelectionActive) return;
+        const feature = event.features?.[0];
+        const pointId = (feature as { properties?: Record<string, unknown> } | undefined)
+          ?.properties?.id;
+        if (typeof pointId === "string") options.onPointActivate(pointId);
+      });
 
       return {
         updateScene(nextScene): void {
@@ -222,8 +319,10 @@ function createMapboxAdapter(): MapAdapter {
           setGeoJson(map, POLYGON_SOURCE, polygonData(scene));
           setGeoJson(map, LINE_SOURCE, lineData(scene));
           syncPin();
+          syncAreaSelection();
         },
         destroy(): void {
+          stopAreaSelection();
           marker?.remove();
           map.remove();
         },
@@ -243,6 +342,9 @@ export type MapboxMapProps = Readonly<{
   className?: string;
   fallback?: ReactNode;
   onPinMove?: (position: MapCoordinate) => void;
+  onPointActivate?: (pointId: string) => void;
+  onAreaSelect?: (firstCorner: MapCoordinate, secondCorner: MapCoordinate) => void;
+  onAreaSelectionCancel?: () => void;
 }>;
 
 export function MapboxMap({
@@ -254,15 +356,24 @@ export function MapboxMap({
   className,
   fallback,
   onPinMove,
+  onPointActivate,
+  onAreaSelect,
+  onAreaSelectionCancel,
 }: MapboxMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<MapController | undefined>(undefined);
   const generationRef = useRef(0);
   const sceneRef = useRef(scene);
   const pinMoveRef = useRef(onPinMove);
+  const pointActivateRef = useRef(onPointActivate);
+  const areaSelectRef = useRef(onAreaSelect);
+  const areaCancelRef = useRef(onAreaSelectionCancel);
   const [error, setError] = useState<"configuration" | "load" | null>(null);
   sceneRef.current = scene;
   pinMoveRef.current = onPinMove;
+  pointActivateRef.current = onPointActivate;
+  areaSelectRef.current = onAreaSelect;
+  areaCancelRef.current = onAreaSelectionCancel;
 
   useEffect(() => {
     const generation = ++generationRef.current;
@@ -287,6 +398,10 @@ export function MapboxMap({
         scene: initialScene,
         reducedMotion,
         onPinMove: (position) => pinMoveRef.current?.(position),
+        onPointActivate: (pointId) => pointActivateRef.current?.(pointId),
+        onAreaSelect: (firstCorner, secondCorner) =>
+          areaSelectRef.current?.(firstCorner, secondCorner),
+        onAreaSelectionCancel: () => areaCancelRef.current?.(),
         onLoadError: () => {
           if (disposed || generationRef.current !== generation) return;
           failed = true;

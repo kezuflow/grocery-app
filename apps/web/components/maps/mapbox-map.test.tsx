@@ -21,13 +21,38 @@ const provider = vi.hoisted(() => {
     readonly removedSources: string[] = [];
     readonly removedLayers: string[] = [];
     readonly sources = new Map<string, ProviderSource>();
+    readonly handlers = new Map<string, Array<(event?: unknown) => void>>();
+    readonly canvas: HTMLElement;
+    readonly dragPan = { disable: vi.fn(), enable: vi.fn() };
 
-    constructor(_options: unknown) {
+    constructor(options: { container: HTMLElement }) {
+      this.canvas = options.container;
       provider.maps.push(this);
     }
 
-    on(event: string, handler: () => void): void {
+    on(
+      event: string,
+      layerOrHandler: string | ((event?: unknown) => void),
+      maybeHandler?: (event?: unknown) => void,
+    ): void {
+      const layer = typeof layerOrHandler === "string" ? layerOrHandler : "";
+      const handler = typeof layerOrHandler === "function" ? layerOrHandler : maybeHandler;
+      if (!handler) return;
+      const key = `${event}:${layer}`;
+      this.handlers.set(key, [...(this.handlers.get(key) ?? []), handler]);
       if (event === "load") queueMicrotask(handler);
+    }
+
+    emit(event: string, value?: unknown, layer = ""): void {
+      for (const handler of this.handlers.get(`${event}:${layer}`) ?? []) handler(value);
+    }
+
+    getCanvasContainer(): HTMLElement {
+      return this.canvas;
+    }
+
+    unproject(point: [number, number]): { lng: number; lat: number } {
+      return { lng: point[0], lat: point[1] };
     }
 
     addSource(id: string, options: Record<string, unknown>): void {
@@ -326,6 +351,104 @@ describe("MapboxMap", () => {
     expect(map?.removedSources).toContain("freshmarkets-points");
     act(() => root.unmount());
   });
+
+  it("activates provider-neutral points and completes/cancels area drag while restoring pan", async () => {
+    const onPointActivate = vi.fn();
+    const onAreaSelect = vi.fn();
+    const onAreaSelectionCancel = vi.fn();
+    const { root } = mountMap({
+      adapter: undefined,
+      scene: {
+        points: [{ id: "delivery-1", position: center, tone: "assigned" }],
+      },
+      onPointActivate,
+      onAreaSelect,
+      onAreaSelectionCancel,
+    });
+    await flushEffects();
+    await flushEffects();
+    const map = provider.maps.at(-1)!;
+
+    act(() =>
+      map.emit(
+        "click",
+        { features: [{ properties: { id: "delivery-1" } }] },
+        "freshmarkets-points",
+      ),
+    );
+    expect(onPointActivate).toHaveBeenCalledWith("delivery-1");
+    act(() => {
+      root.render(
+        <MapboxMap
+          publicAccessToken="public-map-token"
+          initialView={{ center, zoom: 13 }}
+          scene={{ areaSelectionActive: true }}
+          onPointActivate={onPointActivate}
+          onAreaSelect={onAreaSelect}
+          onAreaSelectionCancel={onAreaSelectionCancel}
+        />,
+      );
+    });
+    expect(map.dragPan.disable).toHaveBeenCalledOnce();
+
+    act(() => {
+      map.canvas.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 2, clientY: 3 }),
+      );
+      map.canvas.dispatchEvent(
+        new MouseEvent("pointermove", { bubbles: true, clientX: 9, clientY: 12 }),
+      );
+      map.canvas.dispatchEvent(
+        new MouseEvent("pointerup", { bubbles: true, clientX: 9, clientY: 12 }),
+      );
+    });
+    expect(onAreaSelect).toHaveBeenCalledWith(
+      { longitude: 2, latitude: 3 },
+      { longitude: 9, latitude: 12 },
+    );
+    expect(map.dragPan.enable).toHaveBeenCalledOnce();
+    expect(map.canvas.querySelector('[aria-hidden="true"]')).toBeNull();
+
+    act(() => {
+      root.render(
+        <MapboxMap
+          publicAccessToken="public-map-token"
+          initialView={{ center, zoom: 13 }}
+          scene={{ areaSelectionActive: true }}
+          onAreaSelectionCancel={onAreaSelectionCancel}
+        />,
+      );
+    });
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(onAreaSelectionCancel).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+    expect(map.dragPan.enable).toHaveBeenCalled();
+  });
+
+  it("writes only generic identity, label, selected state, and tone to point properties", async () => {
+    const { root } = mountMap({
+      adapter: undefined,
+      scene: {
+        points: [{ id: "delivery-1", position: center, label: "Delivery", tone: "blocked" }],
+      },
+    });
+    await flushEffects();
+    await flushEffects();
+    const pointSource = provider.maps
+      .at(-1)
+      ?.sourceOptions.find(({ id }) => id === "freshmarkets-points");
+    const data = pointSource?.options.data;
+    expect(data).toBeDefined();
+    const properties = (data as { features: Array<{ properties: unknown }> }).features[0]
+      ?.properties;
+    expect(properties).toEqual({
+      id: "delivery-1",
+      label: "Delivery",
+      selected: false,
+      tone: "blocked",
+    });
+    act(() => root.unmount());
+  });
 });
 
 describe("FakeMapAdapter", () => {
@@ -359,6 +482,9 @@ describe("FakeMapAdapter", () => {
       scene,
       reducedMotion: false,
       onPinMove,
+      onPointActivate: vi.fn(),
+      onAreaSelect: vi.fn(),
+      onAreaSelectionCancel: vi.fn(),
       onLoadError: vi.fn(),
     });
     const nextScene: MapScene = { ...scene, selectedPointIds: [] };
@@ -370,5 +496,35 @@ describe("FakeMapAdapter", () => {
     expect(adapter.controllers[0]?.sceneUpdates).toEqual([nextScene]);
     expect(onPinMove).toHaveBeenCalledWith({ longitude: 123.91, latitude: 10.33 });
     expect(adapter.controllers[0]?.destroyed).toBe(true);
+  });
+
+  it("emits provider-neutral point and area-selection interactions", async () => {
+    const adapter = new FakeMapAdapter();
+    const onPointActivate = vi.fn();
+    const onAreaSelect = vi.fn();
+    const onAreaSelectionCancel = vi.fn();
+    await adapter.initialize({
+      container: document.createElement("div"),
+      publicAccessToken: "public-map-token",
+      initialView: { center, zoom: 13 },
+      scene: { areaSelectionActive: true },
+      reducedMotion: false,
+      onPinMove: vi.fn(),
+      onPointActivate,
+      onAreaSelect,
+      onAreaSelectionCancel,
+      onLoadError: vi.fn(),
+    });
+
+    adapter.emitPointActivate("delivery-1");
+    adapter.emitAreaSelect(center, { longitude: 123.91, latitude: 10.34 });
+    adapter.emitAreaSelectionCancel();
+
+    expect(onPointActivate).toHaveBeenCalledWith("delivery-1");
+    expect(onAreaSelect).toHaveBeenCalledWith(center, {
+      longitude: 123.91,
+      latitude: 10.34,
+    });
+    expect(onAreaSelectionCancel).toHaveBeenCalledOnce();
   });
 });
