@@ -99,6 +99,7 @@ import { assignRider as assignRiderCommand } from "./delivery/application/assign
 import { getDeliveryMap as getDeliveryMapQuery } from "./delivery/application/get-delivery-map";
 import { getDeliveryMapDetail as getDeliveryMapDetailQuery } from "./delivery/application/get-delivery-map-detail";
 import { getEligibleRiders as getEligibleRidersQuery } from "./delivery/application/get-eligible-riders";
+import { previewDeliveryBatchRoute as previewDeliveryBatchRouteQuery } from "./delivery/application/preview-delivery-batch-route";
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import {
@@ -224,6 +225,7 @@ import {
 } from "./admin/application/finance-commands";
 import { CoreContext } from "./entrypoint/context";
 import { buildRouteDistancePort } from "./geography/infrastructure/runtime-route-distance";
+import { buildRoutePreviewPort } from "./geography/infrastructure/runtime-route-preview";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
 import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
 import { getMetricSeries } from "./analytics/application/get-metric-series";
@@ -1809,6 +1811,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
         now: () => this.context.now(),
+      },
+      input,
+    );
+  }
+  async previewDeliveryBatchRoute(
+    input: import("@freshmarkets/contracts").PreviewDeliveryBatchRouteRequest,
+  ) {
+    return previewDeliveryBatchRouteQuery(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        now: () => this.context.now(),
+        routePreview: buildRoutePreviewPort(this.env),
       },
       input,
     );
