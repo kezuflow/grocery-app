@@ -76,9 +76,7 @@ describe("FreshMarkets Service Fee", () => {
     { feeType: "MIXED" as const, flatMinor: 0, basisPoints: 100 },
     { feeType: "MIXED" as const, flatMinor: 100, basisPoints: 0 },
   ])("rejects invalid $feeType configuration shapes", (input) => {
-    expect(() => calculateServiceFee({ ...input, baseMinor: 10_000 })).toThrow(
-      /configuration/,
-    );
+    expect(() => calculateServiceFee({ ...input, baseMinor: 10_000 })).toThrow(/configuration/);
   });
 
   it("rejects a fee total that exceeds safe integer storage", () => {

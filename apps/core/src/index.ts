@@ -180,6 +180,12 @@ import {
   changeAdminMembership as changeAdminMembershipCommand,
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
 } from "./admin/application/finance-commands";
+import {
+  getMembershipPriceConfiguration as getMembershipPriceConfigurationQuery,
+  updateMembershipPriceConfiguration as updateMembershipPriceConfigurationCommand,
+  getServiceFeeConfiguration as getServiceFeeConfigurationQuery,
+  updateServiceFeeConfiguration as updateServiceFeeConfigurationCommand,
+} from "./admin/application/commerce-configuration";
 import { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 import { createCoreRpcContext } from "./entrypoint/context";
 import { createAuthRpc } from "./entrypoint/auth-rpc";
@@ -885,6 +891,32 @@ const membershipLifecycleSchema = authenticatedRequestSchema.extend({
   timing: validationSchema.enum(["IMMEDIATE", "PERIOD_END"]).optional(),
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const membershipPriceConfigurationSchema = authenticatedRequestSchema.extend({
+  expectedVersion: validationSchema.number().int().min(1),
+  amountMinor: validationSchema.number().int().min(1),
+  currency: validationSchema
+    .string()
+    .trim()
+    .regex(/^[A-Z]{3}$/),
+  effectiveFrom: validationSchema.string().datetime(),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const serviceFeeConfigurationSchema = authenticatedRequestSchema.extend({
+  expectedVersion: validationSchema.number().int().min(0),
+  feeType: validationSchema.enum(["FLAT", "PERCENTAGE", "MIXED"]),
+  flatMinor: validationSchema.number().int().min(0),
+  percentageBasisPoints: validationSchema.number().int().min(0).max(10_000),
+  currency: validationSchema
+    .string()
+    .trim()
+    .regex(/^[A-Z]{3}$/),
+  effectiveFrom: validationSchema.string().datetime(),
+  reason: validationSchema.string().trim().min(1).max(500),
   idempotencyKey: idempotencyKeySchema,
 });
 
@@ -1928,6 +1960,46 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return resolveAdminReconciliationCaseCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getMembershipPriceConfiguration(input: AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getMembershipPriceConfigurationQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async updateMembershipPriceConfiguration(
+    input: import("@freshmarkets/contracts").UpdateMembershipPriceConfigurationRequest,
+  ) {
+    const validation = membershipPriceConfigurationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateMembershipPriceConfigurationCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getServiceFeeConfiguration(input: AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getServiceFeeConfigurationQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async updateServiceFeeConfiguration(
+    input: import("@freshmarkets/contracts").UpdateServiceFeeConfigurationRequest,
+  ) {
+    const validation = serviceFeeConfigurationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return updateServiceFeeConfigurationCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

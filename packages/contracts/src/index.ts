@@ -8,6 +8,7 @@ export * from "./admin-finance";
 export * from "./admin-operations";
 export * from "./admin-analytics";
 export * from "./core-service";
+export * from "./commerce-configuration";
 export * from "./states";
 export type * from "./geography";
 export type * from "./auth";

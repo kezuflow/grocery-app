@@ -15,6 +15,7 @@ import type { AdminOperationsService } from "./admin-operations";
 import type { AdminAnalyticsService } from "./admin-analytics";
 import type { AuthenticatedRequest, AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
+import type { CommerceConfigurationService } from "./commerce-configuration";
 import type {
   AbandonCheckoutAttemptRequest,
   AbandonCheckoutResult,
@@ -78,7 +79,8 @@ export interface ImplementedCoreService
     AdminMembershipsService,
     AdminOrderIssuesService,
     AdminOperationsService,
-    AdminAnalyticsService {}
+    AdminAnalyticsService,
+    CommerceConfigurationService {}
 
 /**
  * The full Worker binding surface. Every member is a canonical typed domain
@@ -129,6 +131,10 @@ export const coreServiceMethodNames = [
   "auth",
   "getApplicationContext",
   "getAdminContext",
+  "getMembershipPriceConfiguration",
+  "updateMembershipPriceConfiguration",
+  "getServiceFeeConfiguration",
+  "updateServiceFeeConfiguration",
   "listAdminScopes",
   "listMetricDefinitions",
   "getOverview",
@@ -308,6 +314,7 @@ export type { AdminOperationsService } from "./admin-operations";
 export type { AdminAnalyticsService } from "./admin-analytics";
 export type { AuthService } from "./auth";
 export type { CatalogService } from "./catalog";
+export type { CommerceConfigurationService } from "./commerce-configuration";
 export type { CheckoutService } from "./checkout";
 export type { MembershipService, SubscriptionSummary } from "./membership";
 export type { PaymentsService, PaymentActionView, PaymentSummary } from "./payments";

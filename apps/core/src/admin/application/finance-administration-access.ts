@@ -34,6 +34,7 @@ export async function resolveFinanceAdministrationAccess(
     | "orders.read"
     | "orders.manage"
     | "payments.read"
+    | "payments.manage"
     | "refunds.manage"
     | "memberships.read"
     | "memberships.manage",

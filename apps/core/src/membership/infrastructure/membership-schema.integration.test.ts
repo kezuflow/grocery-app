@@ -72,11 +72,7 @@ describe("membership and promotions persistence", () => {
       ]),
     );
     expect(await columns("subscription")).toEqual(
-      expect.arrayContaining([
-        "agreed_price_version_id",
-        "agreed_amount_minor",
-        "agreed_currency",
-      ]),
+      expect.arrayContaining(["agreed_price_version_id", "agreed_amount_minor", "agreed_currency"]),
     );
 
     const seededPrice = await env.DB.prepare(

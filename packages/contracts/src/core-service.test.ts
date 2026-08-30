@@ -18,6 +18,7 @@ import type {
   MembershipService,
   OrdersService,
   PaymentsService,
+  CommerceConfigurationService,
 } from "./core-service";
 import type { CheckoutQuoteCommandRequest } from "./checkout";
 import type { SubscriptionSummary } from "./membership";
@@ -59,6 +60,40 @@ type HasGenericStringAction = {
 }[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
+  it("publishes typed commerce pricing configuration commands", () => {
+    type MembershipPriceUpdate = Parameters<
+      CommerceConfigurationService["updateMembershipPriceConfiguration"]
+    >[0];
+    type ServiceFeeUpdate = Parameters<
+      CommerceConfigurationService["updateServiceFeeConfiguration"]
+    >[0];
+
+    const membership: MembershipPriceUpdate = {
+      requestId: "membership-price-request",
+      headers: {},
+      expectedVersion: 1,
+      amountMinor: 24_900,
+      currency: "PHP",
+      effectiveFrom: "2026-10-01T00:00:00.000Z",
+      reason: "Scheduled annual price review",
+      idempotencyKey: "membership-price-v2",
+    };
+    const serviceFee: ServiceFeeUpdate = {
+      requestId: "service-fee-request",
+      headers: {},
+      expectedVersion: 0,
+      feeType: "MIXED",
+      flatMinor: 1_500,
+      percentageBasisPoints: 300,
+      currency: "PHP",
+      effectiveFrom: "2026-10-01T00:00:00.000Z",
+      reason: "Initial Instant service fee",
+      idempotencyKey: "service-fee-v1",
+    };
+
+    expect(membership.amountMinor).toBe(24_900);
+    expect(serviceFee.feeType).toBe("MIXED");
+  });
   it("publishes stable financial-safety error codes", () => {
     expect(appErrorCodes).toEqual(
       expect.arrayContaining([
