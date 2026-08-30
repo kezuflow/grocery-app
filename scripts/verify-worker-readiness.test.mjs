@@ -48,3 +48,23 @@ test("admin local smoke accepts the BFF unauthenticated envelope", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("readiness smoke requires critical dependency checks", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (request, init) => {
+    const requestId = new Request(request, init).headers.get("x-request-id") ?? "missing";
+    return Response.json(
+      {
+        status: "ready",
+        checks: { database: "ready", paymentProvider: { status: "ready" } },
+      },
+      { headers: { "x-request-id": requestId } },
+    );
+  };
+  try {
+    const result = await probe("http://127.0.0.1:8787", "/ready", "readiness");
+    assert.equal(result.ok, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

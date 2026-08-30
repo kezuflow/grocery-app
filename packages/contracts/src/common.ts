@@ -92,9 +92,37 @@ export type CoreHealthResponse = {
   timestamp: string;
 };
 
+export type CoreReadinessResponse = {
+  service: "core";
+  status: "ready" | "not_ready";
+  contractVersion: typeof CONTRACT_VERSION;
+  environment: string;
+  checks: {
+    runtimeConfiguration: "ready" | "not_ready";
+    database: "ready" | "not_ready";
+    paymentProvider: {
+      status: "ready" | "not_ready";
+      code: string | null;
+      capabilities: readonly (
+        | "PAYMENT_CREATE"
+        | "RECURRING_AUTHORIZATION"
+        | "WEBHOOK_VERIFICATION"
+        | "PAYMENT_LOOKUP"
+        | "REFUND_REQUEST"
+      )[];
+      renewalInitiationEnabled: boolean;
+    };
+  };
+  timestamp: string;
+};
+
 /** Historical health-only entrypoint alias retained for compatibility. */
 export type CoreEntrypoint = {
   health(meta?: RequestMeta): Promise<CoreHealthResponse>;
 };
 
 export type HealthService = CoreEntrypoint;
+
+export type ReadinessService = {
+  readiness(meta?: RequestMeta): Promise<CoreReadinessResponse>;
+};

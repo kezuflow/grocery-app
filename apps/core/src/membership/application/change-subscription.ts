@@ -90,7 +90,6 @@ async function replayOrConflict(
   scope: string,
   key: string,
   hash: string,
-  requestId: string,
 ): Promise<
   { kind: "none" } | { kind: "replay"; row: Row } | { kind: "conflict" } | { kind: "processing" }
 > {
@@ -162,13 +161,7 @@ export async function pauseSubscription(
     subscriptionId: command.subscriptionId,
     reason: command.reason ?? null,
   });
-  const replay = await replayOrConflict(
-    database,
-    scope,
-    command.idempotencyKey,
-    requestHashValue,
-    command.requestId,
-  );
+  const replay = await replayOrConflict(database, scope, command.idempotencyKey, requestHashValue);
   if (replay.kind === "replay")
     return { ok: true, value: summary(replay.row), requestId: command.requestId };
   if (replay.kind === "conflict")
@@ -249,13 +242,7 @@ export async function resumeSubscription(
 > {
   const scope = "membership.resume";
   const requestHashValue = await digest({ op: "resume", subscriptionId: command.subscriptionId });
-  const replay = await replayOrConflict(
-    database,
-    scope,
-    command.idempotencyKey,
-    requestHashValue,
-    command.requestId,
-  );
+  const replay = await replayOrConflict(database, scope, command.idempotencyKey, requestHashValue);
   if (replay.kind === "replay")
     return { ok: true, value: summary(replay.row), requestId: command.requestId };
   if (replay.kind === "conflict")
@@ -350,13 +337,7 @@ export async function cancelSubscription(
     timing: command.timing,
     reason: command.reason ?? null,
   });
-  const replay = await replayOrConflict(
-    database,
-    scope,
-    command.idempotencyKey,
-    requestHashValue,
-    command.requestId,
-  );
+  const replay = await replayOrConflict(database, scope, command.idempotencyKey, requestHashValue);
   if (replay.kind === "replay")
     return { ok: true, value: summary(replay.row), requestId: command.requestId };
   if (replay.kind === "conflict")

@@ -83,7 +83,17 @@ export async function probe(url, expectedPath, mode = "health") {
       body?.error?.code === "UNAUTHENTICATED" &&
       typeof body?.error?.requestId === "string" &&
       body.error.requestId.length > 0;
-    const healthyResponse = response.ok && contentType.includes("application/json") && structured;
+    const dependencyReady =
+      mode === "readiness" &&
+      response.ok &&
+      body?.status === "ready" &&
+      body?.checks?.database === "ready" &&
+      body?.checks?.paymentProvider?.status === "ready";
+    const healthyResponse =
+      response.ok &&
+      contentType.includes("application/json") &&
+      structured &&
+      (mode !== "readiness" || dependencyReady);
     const requestReference = mode === "admin" ? adminError : returnedRequestId === requestId;
     return check(
       `${expectedPath} local smoke`,
@@ -136,6 +146,7 @@ export async function runReadinessChecks({
     const coreUrl = process.env.FRESHMARKETS_CORE_URL ?? "http://127.0.0.1:8787";
     const webUrl = process.env.FRESHMARKETS_WEB_URL ?? "http://127.0.0.1:3000";
     checks.push(await probe(coreUrl, "/health"));
+    checks.push(await probe(coreUrl, "/ready", "readiness"));
     checks.push(await probe(webUrl, "/api/core-health"));
     checks.push(await probe(webUrl, "/api/admin/context", "admin"));
   }

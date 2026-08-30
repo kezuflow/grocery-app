@@ -5,10 +5,6 @@ import { CoreEntrypoint } from "./index";
 
 const password = "correct-horse-battery-staple";
 
-function requestId() {
-  return crypto.randomUUID();
-}
-
 function cookieHeader(response: Response): string {
   return (response.headers.getSetCookie?.() ?? [])
     .map((cookie) => cookie.split(";", 1)[0])

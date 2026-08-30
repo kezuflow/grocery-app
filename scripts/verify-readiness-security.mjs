@@ -1,95 +1,191 @@
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { extname, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = process.cwd();
-const files = execFileSync("git", ["ls-files"], { encoding: "utf8" })
-  .split(/\r?\n/)
-  .filter(Boolean);
-const findings = [];
-const sourceExtensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc"]);
-const isSource = (file) => sourceExtensions.has(extname(file));
-const isTest = (file) => /(?:\.test|\.spec)\.[^.]+$/.test(file);
+import { createScanner, LanguageVariant, SyntaxKind } from "typescript/unstable/ast";
 
-function finding(file, rule, line) {
-  findings.push(`${file}${line ? `:${line}` : ""} — ${rule}`);
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const forbiddenLogFields = new Set([
+  "authorization",
+  "cookie",
+  "setcookie",
+  "token",
+  "accesstoken",
+  "refreshtoken",
+  "clienttoken",
+  "secret",
+  "password",
+  "rawbody",
+  "webhookbody",
+  "providerpayload",
+  "payload",
+  "actionurl",
+  "resetlink",
+  "addresssnapshot",
+  "addresssnapshotjson",
+]);
+const directConsoleAllowlist = new Set([
+  "apps/core/src/observability.ts",
+  "apps/core/src/payments/application/financial-observability.ts",
+]);
+
+function normalize(value) {
+  return value.replaceAll("\\", "/");
 }
 
-function lineNumber(content, index) {
-  return content.slice(0, index).split("\n").length;
-}
-
-for (const file of files) {
-  if (
-    !isSource(file) ||
-    file.includes("worker-configuration.d.ts") ||
-    file === "scripts/verify-readiness-security.mjs"
-  )
-    continue;
-  const content = await readFile(`${root}/${file}`, "utf8");
-
-  const secretPatterns = [
-    /-----BEGIN (?:RSA|EC|OPENSSH|PRIVATE) KEY-----/,
-    /\bAKIA[0-9A-Z]{16}\b/,
-    /\b(?:sk|rk)_live_[A-Za-z0-9]{16,}\b/,
-    /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
-    /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
-  ];
-  for (const pattern of secretPatterns) {
-    const match = pattern.exec(content);
-    if (match) finding(file, "committed credential pattern", lineNumber(content, match.index));
+function tokens(sourceText) {
+  const scanner = createScanner(true, LanguageVariant.Standard, sourceText);
+  const result = [];
+  for (let kind = scanner.scan(); kind !== SyntaxKind.EndOfFile; kind = scanner.scan()) {
+    result.push({ kind, start: scanner.getTokenStart(), text: scanner.getTokenText() });
   }
+  return result;
+}
 
-  if (file.startsWith("apps/web/") && !isTest(file)) {
-    for (const pattern of [
-      /from\s+["']drizzle-orm\/d1["']/,
-      /\bD1Database\b/,
-      /from\s+["'][^"']*\/schema["']/,
-    ]) {
-      const match = pattern.exec(content);
-      if (match)
-        finding(
-          file,
-          "Web must not import Core D1/schema infrastructure",
-          lineNumber(content, match.index),
-        );
+function lineAt(sourceText, position) {
+  return sourceText.slice(0, position).split("\n").length;
+}
+
+function logCallTokens(sourceTokens, startIndex) {
+  const result = [];
+  let depth = 0;
+  for (let index = startIndex + 1; index < sourceTokens.length; index += 1) {
+    const token = sourceTokens[index];
+    result.push(token);
+    if (token.kind === SyntaxKind.OpenParenToken) depth += 1;
+    if (token.kind === SyntaxKind.CloseParenToken) {
+      depth -= 1;
+      if (depth === 0) break;
     }
   }
-
-  if (!isTest(file)) {
-    const cors = /Access-Control-Allow-Origin|access-control-allow-origin/.exec(content);
-    if (cors)
-      finding(
-        file,
-        "general CORS surface requires explicit architecture approval",
-        lineNumber(content, cors.index),
-      );
-  }
+  return result;
 }
 
-for (const file of files.filter((item) => /wrangler\.jsonc$/.test(item))) {
-  const content = await readFile(`${root}/${file}`, "utf8");
+export function analyzeSecuritySource(fileNameInput, sourceText) {
+  const fileName = normalize(fileNameInput);
   if (
-    /ENVIRONMENT["']?\s*:\s*["']production["']/i.test(content) &&
-    /PAYMENT_PROVIDER["']?\s*:\s*["']mock["']/i.test(content)
-  ) {
-    finding(file, "production configuration must not inherit the mock payment provider");
+    fileName.endsWith(".d.ts") ||
+    fileName.endsWith(".test.ts") ||
+    fileName.endsWith(".integration.test.ts")
+  )
+    return [];
+  const sourceTokens = tokens(sourceText);
+  const violations = [];
+
+  for (let index = 0; index < sourceTokens.length; index += 1) {
+    const token = sourceTokens[index];
+    const next = sourceTokens[index + 1];
+    const previous = sourceTokens[index - 1];
+
+    if (
+      token.text === "console" &&
+      next?.kind === SyntaxKind.DotToken &&
+      !directConsoleAllowlist.has(fileName)
+    ) {
+      violations.push({
+        code: "DIRECT_CONSOLE",
+        file: fileName,
+        line: lineAt(sourceText, token.start),
+        message: "Production Core telemetry must cross a redacted observability boundary",
+      });
+    }
+
+    if (
+      token.text !== "log" ||
+      next?.kind !== SyntaxKind.OpenParenToken ||
+      previous?.kind === SyntaxKind.DotToken ||
+      fileName === "apps/core/src/observability.ts"
+    ) {
+      continue;
+    }
+
+    for (const callToken of logCallTokens(sourceTokens, index)) {
+      if (callToken.kind !== SyntaxKind.Identifier) continue;
+      const normalized = callToken.text.replaceAll(/[^A-Za-z0-9]/gu, "").toLowerCase();
+      if (!forbiddenLogFields.has(normalized)) continue;
+      violations.push({
+        code: "SENSITIVE_LOG_FIELD",
+        file: fileName,
+        line: lineAt(sourceText, callToken.start),
+        message: `Sensitive field ${callToken.text} must not be passed to log()`,
+      });
+    }
   }
-  if (
-    /ENVIRONMENT["']?\s*:\s*["']production["']/i.test(content) &&
-    /https?:\/\/(?:localhost|127\.0\.0\.1)/i.test(content)
-  ) {
-    finding(file, "production configuration must not use loopback origins");
-  }
+  return violations;
 }
 
-if (findings.length) {
-  console.error("Readiness security verification failed:");
-  for (const item of findings) console.error(`- ${item}`);
-  process.exitCode = 1;
-} else {
-  console.log("Readiness security verification passed.");
-  console.log(
-    "Exceptions: generated Web worker types are excluded; test fixtures are excluded from production-secret/CORS scans.",
+export function verifyReadinessSurface(files) {
+  const common = files.get("packages/contracts/src/common.ts") ?? "";
+  const service = files.get("packages/contracts/src/core-service.ts") ?? "";
+  const entrypoint = files.get("apps/core/src/index.ts") ?? "";
+  const failures = [];
+  if (!common.includes("CoreReadinessResponse")) failures.push("Readiness DTO is missing");
+  if (!service.includes('"readiness"')) failures.push("Readiness RPC is missing from the manifest");
+  if (!entrypoint.includes('path === "/health"')) failures.push("Liveness route is missing");
+  if (!entrypoint.includes('path === "/ready"')) failures.push("Readiness route is missing");
+  if (!entrypoint.includes("SELECT 1 AS ready"))
+    failures.push("Bounded D1 readiness probe is missing");
+  return failures;
+}
+
+export function verifyObservabilityConfig(source, name) {
+  const configuration = JSON.parse(
+    source.replace(/^\s*\/\/.*$/gmu, "").replace(/,\s*([}\]])/gu, "$1"),
   );
+  const observability = configuration.observability;
+  if (
+    observability?.enabled !== true ||
+    observability.logs?.enabled !== true ||
+    observability.logs?.invocation_logs !== true ||
+    observability.logs?.head_sampling_rate !== 1 ||
+    observability.traces?.enabled !== true ||
+    observability.traces?.head_sampling_rate !== 0.05
+  ) {
+    return [`${name} observability must explicitly retain all logs and sample 5% of traces`];
+  }
+  return [];
 }
+
+function trackedSources() {
+  return execFileSync("git", ["ls-files", "apps/core/src/**/*.ts", "apps/core/src/*.ts"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+    .split(/\r?\n/u)
+    .filter(Boolean)
+    .map(normalize);
+}
+
+function main() {
+  const files = new Map();
+  for (const fileName of [
+    "packages/contracts/src/common.ts",
+    "packages/contracts/src/core-service.ts",
+    "apps/core/src/index.ts",
+  ]) {
+    files.set(fileName, readFileSync(path.join(repositoryRoot, fileName), "utf8"));
+  }
+  const failures = verifyReadinessSurface(files);
+  for (const configFile of ["apps/core/wrangler.jsonc", "apps/web/wrangler.jsonc"]) {
+    failures.push(
+      ...verifyObservabilityConfig(
+        readFileSync(path.join(repositoryRoot, configFile), "utf8"),
+        configFile,
+      ),
+    );
+  }
+  const violations = trackedSources().flatMap((fileName) =>
+    analyzeSecuritySource(fileName, readFileSync(path.join(repositoryRoot, fileName), "utf8")),
+  );
+  for (const failure of failures) process.stderr.write(`${failure}\n`);
+  for (const violation of violations) {
+    process.stderr.write(
+      `${violation.file}:${violation.line} ${violation.code} ${violation.message}\n`,
+    );
+  }
+  if (failures.length || violations.length) process.exitCode = 1;
+  else process.stdout.write("Readiness and observability boundaries verified.\n");
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

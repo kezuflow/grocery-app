@@ -3,9 +3,7 @@ import type {
   AdminStaffPage,
   AdminStaffSummary,
   RpcResult,
-  Scope,
 } from "@freshmarkets/contracts";
-import { isAdminCapability, type Capability } from "@freshmarkets/contracts";
 import {
   boundListLimit,
   decodeStaffCursor,

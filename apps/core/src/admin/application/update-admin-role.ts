@@ -8,7 +8,6 @@ import type {
 import { isAdminCapability } from "@freshmarkets/contracts";
 import { claimCommandIdempotency } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { log } from "../../observability";
 import { loadRoleCapabilities, readRoleDetail } from "./list-admin-roles";
 import {
   resolveStaffAdministrationAccess,

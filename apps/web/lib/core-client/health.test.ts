@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  CONTRACT_VERSION,
-  type CoreServiceBinding,
-  type HealthService,
-} from "@freshmarkets/contracts";
+import { CONTRACT_VERSION, type HealthService } from "@freshmarkets/contracts";
 import { getCoreHealth } from "./health";
 
 describe("Web Core client", () => {

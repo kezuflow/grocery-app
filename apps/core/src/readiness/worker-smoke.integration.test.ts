@@ -24,4 +24,22 @@ describe("Worker-local readiness smoke", () => {
     });
     expect(typeof body.contractVersion).toBe("string");
   });
+
+  it("returns dependency readiness separately from liveness", async () => {
+    const requestId = "worker-smoke-readiness";
+    const response = await SELF.fetch("https://core.example.invalid/ready", {
+      headers: { "x-request-id": requestId },
+    });
+    const body = (await response.json()) as {
+      status?: string;
+      checks?: { database?: string; paymentProvider?: { status?: string } };
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toBe(requestId);
+    expect(body).toMatchObject({
+      status: "ready",
+      checks: { database: "ready", paymentProvider: { status: "ready" } },
+    });
+  });
 });

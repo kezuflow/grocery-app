@@ -61,8 +61,6 @@ export async function adjustInventory(
     expectedVersion: command.expectedVersion,
   });
 
-  const balance = await repository.readBalance(command.locationId, command.inventoryPoolId);
-
   const execution = await repository.executeAdjustment(
     {
       locationId: command.locationId,

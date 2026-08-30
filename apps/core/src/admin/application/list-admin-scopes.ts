@@ -6,7 +6,6 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { applicationContext } from "../../auth/authorization";
-import type { AuthInstance } from "../../auth/service";
 import { iamSchema } from "../../iam/schema";
 import type { AdminContextDeps } from "./get-admin-context";
 

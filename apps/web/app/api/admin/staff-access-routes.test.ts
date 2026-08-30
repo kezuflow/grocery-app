@@ -26,7 +26,7 @@ vi.mock("cloudflare:workers", () => ({
 
 import { GET as listStaff } from "./staff/route";
 import { GET as getStaff, PATCH as updateStaff } from "./staff/[staff-id]/route";
-import { GET as listInvitations, POST as invite } from "./staff/invitations/route";
+import { POST as invite } from "./staff/invitations/route";
 import { POST as revokeInvitation } from "./staff/invitations/[invitation-id]/revoke/route";
 import { POST as changeAccess } from "./staff/[staff-id]/access/route";
 import { PUT as setRoles } from "./staff/[staff-id]/roles/route";

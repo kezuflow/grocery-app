@@ -21,7 +21,7 @@ import type {
   CheckoutQuoteView,
   CheckoutService,
 } from "./checkout";
-import type { HealthService } from "./common";
+import type { HealthService, ReadinessService } from "./common";
 import type { MembershipService } from "./membership";
 import type { OrdersService } from "./orders";
 import type { OperationsReadService, OperationsService } from "./operations";
@@ -48,6 +48,7 @@ import type {
 export interface ImplementedCoreService
   extends
     HealthService,
+    ReadinessService,
     Pick<AuthService, "auth" | "getApplicationContext">,
     CatalogService,
     Pick<MembershipService, "getSubscriptionEligibility" | "startTrial">,
@@ -106,6 +107,7 @@ export interface CoreServiceBinding extends ImplementedCoreService {
 /** Runtime manifest paired with the structural interface for deployment conformance tests. */
 export const coreServiceMethodNames = [
   "health",
+  "readiness",
   "auth",
   "getApplicationContext",
   "getAdminContext",
