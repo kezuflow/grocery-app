@@ -23,6 +23,8 @@ describe("customer Membership experience", () => {
       value: {
         offer: {
           code: "MEMBERSHIP_MONTHLY",
+          priceVersionId: "membership-price-version-1",
+          priceVersion: 1,
           amountMinor: 29900,
           currency: "PHP",
           billingInterval: "CALENDAR_MONTH",
@@ -98,11 +100,68 @@ describe("customer Membership experience", () => {
     const replay = await beginPaidEnrollment(env.DB, command);
     expect(replay).toEqual(first);
     const row = await env.DB.prepare(
-      "SELECT status, trial_ends_at FROM subscription WHERE customer_id=?",
+      "SELECT status, trial_ends_at, agreed_price_version_id, agreed_amount_minor, agreed_currency FROM subscription WHERE customer_id=?",
     )
       .bind(customerId)
-      .first<{ status: string; trial_ends_at: number | null }>();
-    expect(row).toEqual({ status: "PENDING", trial_ends_at: null });
+      .first<{
+        status: string;
+        trial_ends_at: number | null;
+        agreed_price_version_id: string;
+        agreed_amount_minor: number;
+        agreed_currency: string;
+      }>();
+    expect(row).toEqual({
+      status: "PENDING",
+      trial_ends_at: null,
+      agreed_price_version_id: "membership-price-version-1",
+      agreed_amount_minor: 29_900,
+      agreed_currency: "PHP",
+    });
+  });
+
+  it("grandfathers existing subscriptions when the global price changes", async () => {
+    const firstCustomer = await customer();
+    const first = await beginPaidEnrollment(env.DB, {
+      customerId: firstCustomer,
+      offerId: "offer-membership-monthly",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    });
+    expect(first.ok).toBe(true);
+
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE membership_price_version SET effective_to=? WHERE id='membership-price-version-1'",
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO membership_price_version
+          (id, offer_id, amount_minor, currency, effective_from, effective_to, version, created_at)
+         VALUES ('membership-price-version-test-2', 'offer-membership-monthly', 24900, 'PHP', ?, NULL, 2, ?)`,
+      ).bind(now, now),
+    ]);
+
+    const secondCustomer = await customer();
+    const second = await beginPaidEnrollment(env.DB, {
+      customerId: secondCustomer,
+      offerId: "offer-membership-monthly",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    });
+    expect(second.ok).toBe(true);
+    const prices = await env.DB.prepare(
+      "SELECT customer_id, agreed_amount_minor FROM subscription WHERE customer_id IN (?, ?) ORDER BY customer_id",
+    )
+      .bind(firstCustomer, secondCustomer)
+      .all<{ customer_id: string; agreed_amount_minor: number }>();
+    expect(
+      new Map(prices.results.map((row) => [row.customer_id, row.agreed_amount_minor])),
+    ).toEqual(
+      new Map([
+        [firstCustomer, 29_900],
+        [secondCustomer, 24_900],
+      ]),
+    );
   });
 
   it("conflicts when a paid-enrollment key is reused for another offer", async () => {

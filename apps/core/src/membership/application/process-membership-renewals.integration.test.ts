@@ -120,6 +120,21 @@ describe("membership renewal processing", () => {
     expect(await renewalIntents(subscriptionId)).toHaveLength(1);
   });
 
+  it("renews at the subscription's agreed price after the global price changes", async () => {
+    const subscriptionId = await seededTrial({ trialEnded: true });
+    await env.DB.prepare(
+      "UPDATE subscription_offer SET fee_minor=24900 WHERE id='offer-membership-monthly'",
+    ).run();
+
+    await processMembershipRenewals(env.DB, testRegistry(), Date.now());
+    const intent = await env.DB.prepare(
+      "SELECT amount_minor, currency FROM payment_intent WHERE subject_id=? AND purpose='MEMBERSHIP_RENEWAL'",
+    )
+      .bind(subscriptionId)
+      .first<{ amount_minor: number; currency: string }>();
+    expect(intent).toEqual({ amount_minor: 29_900, currency: "PHP" });
+  });
+
   it("does not initiate while the trial or paid period is still running", async () => {
     await seededTrial();
     const outcome = await processMembershipRenewals(env.DB, testRegistry(), Date.now());

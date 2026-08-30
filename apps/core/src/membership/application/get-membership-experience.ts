@@ -34,24 +34,39 @@ function subscriptionSummary(row: SubscriptionRow): SubscriptionSummary {
 }
 
 async function activeOffer(database: D1Database): Promise<MembershipOfferView | null> {
-  const row = await database
+  const now = Date.now();
+  const rows = await database
     .prepare(
-      "SELECT id, code, name, fee_minor, currency, billing_interval FROM subscription_offer WHERE code='MEMBERSHIP_MONTHLY' AND status='active' AND is_default=1 LIMIT 1",
+      `SELECT o.id, o.code, o.name, o.billing_interval,
+              p.id AS price_version_id, p.version AS price_version,
+              p.amount_minor, p.currency
+       FROM subscription_offer o
+       JOIN membership_price_version p ON p.offer_id = o.id
+       WHERE o.code='MEMBERSHIP_MONTHLY' AND o.status='active' AND o.is_default=1
+         AND p.effective_from <= ? AND (p.effective_to IS NULL OR p.effective_to > ?)
+       ORDER BY p.effective_from DESC, p.version DESC LIMIT 2`,
     )
-    .first<{
+    .bind(now, now)
+    .all<{
       id: string;
       code: string;
       name: string;
-      fee_minor: number;
+      price_version_id: string;
+      price_version: number;
+      amount_minor: number;
       currency: string;
       billing_interval: string;
     }>();
-  if (!row || row.billing_interval !== "CALENDAR_MONTH") return null;
+  if (rows.results.length !== 1) return null;
+  const row = rows.results[0]!;
+  if (row.billing_interval !== "CALENDAR_MONTH") return null;
   return {
     offerId: row.id,
+    priceVersionId: row.price_version_id,
+    priceVersion: row.price_version,
     code: row.code,
     name: row.name,
-    amountMinor: row.fee_minor,
+    amountMinor: row.amount_minor,
     currency: row.currency,
     billingInterval: "CALENDAR_MONTH",
   };
@@ -231,9 +246,23 @@ export async function beginPaidEnrollment(
         .bind(scope, command.idempotencyKey, hash, subscriptionId, now, now),
       database
         .prepare(
-          "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, cancel_at_period_end, version, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', ?, 0, 1, ?, ?)",
+          `INSERT INTO subscription
+             (id, customer_id, offer_id, status, starts_at, cancel_at_period_end,
+              agreed_price_version_id, agreed_amount_minor, agreed_currency,
+              version, created_at, updated_at)
+           VALUES (?, ?, ?, 'PENDING', ?, 0, ?, ?, ?, 1, ?, ?)`,
         )
-        .bind(subscriptionId, command.customerId, offer.offerId, now, now, now),
+        .bind(
+          subscriptionId,
+          command.customerId,
+          offer.offerId,
+          now,
+          offer.priceVersionId,
+          offer.amountMinor,
+          offer.currency,
+          now,
+          now,
+        ),
       database
         .prepare(
           "INSERT INTO subscription_event (id, subscription_id, event_type, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'ENROLLMENT_BEGUN', 'CUSTOMER', '{}', ?, ?)",

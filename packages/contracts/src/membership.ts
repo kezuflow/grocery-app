@@ -16,6 +16,8 @@ export type StartTrialRequest = AuthenticatedRequest & { offerCode?: string };
 // trial-entitlement field: introductory trials are Promotions grants.
 export type MembershipOfferView = {
   offerId: string;
+  priceVersionId: string;
+  priceVersion: number;
   code: string;
   name: string;
   amountMinor: number;

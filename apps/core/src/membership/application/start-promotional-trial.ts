@@ -145,12 +145,24 @@ export async function startPromotionalTrial(
 
   const nominalBillingDay = calendarDayOfMonth(trialStartsAtIso, timeZone);
 
-  // The canonical PHP 299/calendar-month paid offer this trial precedes.
+  // The active global paid price is copied into the trial subscription so a
+  // later configuration change cannot silently reprice its first renewal.
   const offer = await database
     .prepare(
-      "SELECT id FROM subscription_offer WHERE code='MEMBERSHIP_MONTHLY' AND status='active'",
+      `SELECT o.id, p.id AS price_version_id, p.amount_minor, p.currency
+       FROM subscription_offer o
+       JOIN membership_price_version p ON p.offer_id=o.id
+       WHERE o.code='MEMBERSHIP_MONTHLY' AND o.status='active'
+         AND p.effective_from <= ? AND (p.effective_to IS NULL OR p.effective_to > ?)
+       ORDER BY p.effective_from DESC, p.version DESC LIMIT 1`,
     )
-    .first<{ id: string }>();
+    .bind(now, now)
+    .first<{
+      id: string;
+      price_version_id: string;
+      amount_minor: number;
+      currency: string;
+    }>();
   if (!offer)
     return failure(
       "CONFIGURATION_ERROR",
@@ -177,7 +189,12 @@ export async function startPromotionalTrial(
       }),
       database
         .prepare(
-          "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, cancel_at_period_end, payment_authorization_id, nominal_billing_day, version, created_at, updated_at) VALUES (?, ?, ?, 'TRIALING', ?, ?, 0, ?, ?, 1, ?, ?)",
+          `INSERT INTO subscription
+             (id, customer_id, offer_id, status, starts_at, trial_ends_at,
+              cancel_at_period_end, payment_authorization_id, nominal_billing_day,
+              agreed_price_version_id, agreed_amount_minor, agreed_currency,
+              version, created_at, updated_at)
+           VALUES (?, ?, ?, 'TRIALING', ?, ?, 0, ?, ?, ?, ?, ?, 1, ?, ?)`,
         )
         .bind(
           subscriptionId,
@@ -187,6 +204,9 @@ export async function startPromotionalTrial(
           trialEndsAtMs,
           authorization.id,
           nominalBillingDay,
+          offer.price_version_id,
+          offer.amount_minor,
+          offer.currency,
           now2,
           now2,
         ),

@@ -20,8 +20,8 @@ type DueRenewalRow = {
   current_period_ends_at: number | null;
   payment_authorization_id: string | null;
   provider: string | null;
-  fee_minor: number;
-  currency: string;
+  agreed_amount_minor: number;
+  agreed_currency: string;
 };
 
 function dueBoundary(row: DueRenewalRow): number | null {
@@ -64,14 +64,16 @@ async function initiateDueMembershipRenewals(
 ): Promise<{ initiated: number; initiationFailures: number }> {
   const rows = await database
     .prepare(
-      `SELECT s.id, s.customer_id, s.status, s.trial_ends_at, s.current_period_ends_at, s.payment_authorization_id, a.provider, o.fee_minor, o.currency
+      `SELECT s.id, s.customer_id, s.status, s.trial_ends_at, s.current_period_ends_at,
+              s.payment_authorization_id, a.provider,
+              s.agreed_amount_minor, s.agreed_currency
        FROM subscription s
-       JOIN subscription_offer o ON o.id = s.offer_id
        LEFT JOIN payment_authorization a ON a.id = s.payment_authorization_id
        WHERE ((s.status='TRIALING' AND s.trial_ends_at IS NOT NULL AND s.trial_ends_at <= ?)
            OR (s.status='ACTIVE' AND s.current_period_ends_at IS NOT NULL AND s.current_period_ends_at <= ?))
          AND (s.renewal_initiated_through IS NULL OR s.renewal_initiated_through <
               CASE WHEN s.status='TRIALING' THEN s.trial_ends_at ELSE s.current_period_ends_at END)
+         AND s.agreed_amount_minor IS NOT NULL AND s.agreed_currency IS NOT NULL
        LIMIT ?`,
     )
     .bind(now, now, limit)
@@ -100,8 +102,8 @@ async function initiateDueMembershipRenewals(
       subjectType: "subscription",
       subjectId: row.id,
       customerId: row.customer_id,
-      amountMinor: row.fee_minor,
-      currency: row.currency,
+      amountMinor: row.agreed_amount_minor,
+      currency: row.agreed_currency,
       providerCode: row.provider,
       returnUrl: RENEWAL_RETURN_URL,
       idempotencyKey: `renewal:${row.id}:${boundary}`,
