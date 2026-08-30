@@ -31,7 +31,7 @@ import type {
   DeliveryMapDetailRequest,
   DeliveryMapRequest,
   DeliveryMapView,
-  EligibleRiderView,
+  EligibleRiderPage,
   EligibleRidersRequest,
   PreviewDeliveryBatchRouteRequest,
   RiderBatchList,
@@ -87,9 +87,7 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   /** Protected delivery detail; raw snapshots never cross the binding. */
   getDeliveryMapDetail(request: DeliveryMapDetailRequest): Promise<RpcResult<DeliveryMapDetail>>;
   /** Canonical active rider candidates and current open workload. */
-  getEligibleRiders(
-    request: EligibleRidersRequest,
-  ): Promise<RpcResult<ReadonlyArray<EligibleRiderView>>>;
+  getEligibleRiders(request: EligibleRidersRequest): Promise<RpcResult<EligibleRiderPage>>;
   /** Non-authoritative preview of the submitted manual delivery order. */
   previewDeliveryBatchRoute(
     request: PreviewDeliveryBatchRouteRequest,

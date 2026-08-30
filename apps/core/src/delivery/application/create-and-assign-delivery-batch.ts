@@ -227,10 +227,8 @@ async function classifyCommitFailure(
   }
 
   const rider = await deps.db
-    .prepare(
-      "SELECT id,version FROM rider_identity WHERE id=? AND status='ACTIVE' AND (preferred_location_id IS NULL OR preferred_location_id=?)",
-    )
-    .bind(request.riderId, request.locationId)
+    .prepare("SELECT id,version FROM rider_identity WHERE id=? AND status='ACTIVE'")
+    .bind(request.riderId)
     .first<RiderAuthority>();
   if (!rider) return failure("NOT_FOUND", "Active Rider is unavailable", request.requestId);
   if (rider.version !== expected.rider.version)
@@ -325,10 +323,8 @@ export async function createAndAssignDeliveryBatch(
   }
 
   const rider = await deps.db
-    .prepare(
-      "SELECT id,version FROM rider_identity WHERE id=? AND status='ACTIVE' AND (preferred_location_id IS NULL OR preferred_location_id=?)",
-    )
-    .bind(request.riderId, request.locationId)
+    .prepare("SELECT id,version FROM rider_identity WHERE id=? AND status='ACTIVE'")
+    .bind(request.riderId)
     .first<RiderAuthority>();
   if (!rider) return failure("NOT_FOUND", "Active Rider is unavailable", request.requestId);
 

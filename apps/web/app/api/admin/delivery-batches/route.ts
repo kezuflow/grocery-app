@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import type { EligibleRiderPage, EligibleRiderView, RpcResult } from "@freshmarkets/contracts";
 import { identifierSchema, idempotencyKeySchema, z } from "@freshmarkets/validation";
 import { requireIdempotencyKey } from "@/lib/core-client/commands";
 import { coreClient } from "@/lib/core-client/core";
@@ -38,13 +39,56 @@ export async function GET(request: Request) {
     return validationFailure(requestId, "Invalid eligible Riders request");
   }
 
-  return Response.json(
-    await coreClient(env.CORE).getEligibleRiders({
-      requestId,
-      headers: requestHeaders(request),
-      ...context,
-    }),
+  const core = coreClient(env.CORE);
+  const baseRequest = { requestId, headers: requestHeaders(request), ...context };
+  const riders: EligibleRiderView[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  for (;;) {
+    const result = await core.getEligibleRiders({ ...baseRequest, ...(cursor ? { cursor } : {}) });
+    if (!result.ok) return Response.json(result);
+    const page = result.value;
+    if (
+      !isEligibleRiderPage(page) ||
+      page.complete !== (page.nextCursor === null) ||
+      (page.nextCursor !== null && seenCursors.has(page.nextCursor)) ||
+      (page.nextCursor !== null && page.riders.length === 0)
+    ) {
+      return Response.json(paginationFailure(requestId));
+    }
+    riders.push(...page.riders);
+    if (page.nextCursor === null) {
+      return Response.json({ ok: true, value: riders, requestId } satisfies RpcResult<
+        ReadonlyArray<EligibleRiderView>
+      >);
+    }
+    seenCursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+  }
+}
+
+function isEligibleRiderPage(value: unknown): value is EligibleRiderPage {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const page = value as Partial<EligibleRiderPage>;
+  return (
+    Array.isArray(page.riders) &&
+    typeof page.complete === "boolean" &&
+    (page.nextCursor === null ||
+      (typeof page.nextCursor === "string" &&
+        page.nextCursor.length > 0 &&
+        page.nextCursor.length <= 1_024))
   );
+}
+
+function paginationFailure(requestId: string): RpcResult<never> {
+  return {
+    ok: false,
+    error: {
+      code: "INTERNAL_ERROR",
+      message: "Eligible Rider pagination could not be completed safely",
+      requestId,
+    },
+  };
 }
 
 export async function POST(request: Request) {

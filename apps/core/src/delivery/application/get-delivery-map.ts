@@ -12,6 +12,9 @@ import {
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "../../admin/application/operations-administration-access";
+import { decodeDeliveryMapCursor, encodeDeliveryMapCursor } from "./delivery-read-cursor";
+
+const DELIVERY_MAP_PAGE_SIZE = 250;
 
 export type DeliveryMapReadDeps = OperationsAdministrationDeps & { now: () => number };
 export type ResolvedDeliveryReadContext = {
@@ -24,6 +27,7 @@ type DeliveryMapRow = {
   job_id: string;
   order_id: string;
   batch_id: string | null;
+  job_sequence: number | null;
   fulfillment_mode: FulfillmentMode;
   cycle_id: string | null;
   location_id: string;
@@ -31,6 +35,11 @@ type DeliveryMapRow = {
   status: DeliveryJobState;
   context_resolution_status: "RESOLVED" | "LEGACY_UNRESOLVED";
   version: number;
+  stop_id: string | null;
+  stop_status: DeliveryJobState | null;
+  stop_batch_id: string | null;
+  stop_sequence: number | null;
+  stop_version: number | null;
   latitude: number | null;
   longitude: number | null;
   rider_display_name: string | null;
@@ -132,6 +141,12 @@ export function deriveDeliverySelection(
     | "status"
     | "context_resolution_status"
     | "batch_id"
+    | "job_sequence"
+    | "stop_id"
+    | "stop_status"
+    | "stop_batch_id"
+    | "stop_sequence"
+    | "stop_version"
     | "batch_fulfillment_mode"
     | "batch_cycle_id"
     | "batch_location_id"
@@ -144,6 +159,17 @@ export function deriveDeliverySelection(
 ): DeliveryMapPin["selection"] {
   if (row.context_resolution_status !== "RESOLVED")
     return { selectable: false, reason: "JOB_CONTEXT_UNRESOLVED" };
+  if (
+    row.stop_id === null ||
+    row.stop_version === null ||
+    row.stop_status !== row.status ||
+    row.stop_batch_id !== row.batch_id ||
+    row.stop_sequence !== row.job_sequence ||
+    (row.batch_id === null) !== (row.job_sequence === null) ||
+    (row.stop_batch_id === null) !== (row.stop_sequence === null)
+  ) {
+    return { selectable: false, reason: "STOP_ASSIGNMENT_INCOHERENT" };
+  }
   if (row.batch_id !== null) {
     if (row.batch_context_resolution_status !== "RESOLVED")
       return { selectable: false, reason: "BATCH_CONTEXT_UNRESOLVED" };
@@ -186,8 +212,26 @@ export async function getDeliveryMap(
   if (request.riderId !== undefined && request.riderId !== null && !nonEmpty(request.riderId)) {
     return failure("VALIDATION_FAILED", "Rider filter must be a non-empty identifier", requestId);
   }
+  if (
+    request.cursor !== undefined &&
+    (!nonEmpty(request.cursor) || request.cursor.length > 1_024)
+  ) {
+    return failure("VALIDATION_FAILED", "Pagination cursor is invalid", requestId);
+  }
   const context = await resolveDeliveryReadContext(deps, request);
   if (!context.ok) return context;
+
+  const cursorScope = JSON.stringify({
+    locationId: context.value.locationId,
+    fulfillmentMode: context.value.fulfillmentMode,
+    cycleId: context.value.cycleId,
+    statuses: request.statuses ? [...request.statuses].sort() : null,
+    riderId: request.riderId ?? null,
+  });
+  const cursor = request.cursor ? decodeDeliveryMapCursor(request.cursor, cursorScope) : null;
+  if (request.cursor && !cursor) {
+    return failure("VALIDATION_FAILED", "Pagination cursor is invalid", requestId);
+  }
 
   const clauses = [
     "job.location_id=?",
@@ -205,29 +249,38 @@ export async function getDeliveryMap(
     clauses.push("job.rider_id=?");
     bindings.push(request.riderId);
   }
+  if (cursor) {
+    clauses.push("job.id>?");
+    bindings.push(cursor.id);
+  }
 
   const rows = await deps.db
     .prepare(
-      `SELECT job.id AS job_id, job.order_id, job.batch_id, job.fulfillment_mode,
+      `SELECT job.id AS job_id, job.order_id, job.batch_id, job.sequence AS job_sequence, job.fulfillment_mode,
               job.cycle_id, job.location_id, job.rider_id, job.status,
-              job.context_resolution_status, job.version, stop.latitude, stop.longitude,
+              job.context_resolution_status, job.version,
+              stop.id AS stop_id, stop.status AS stop_status, stop.batch_id AS stop_batch_id,
+              stop.sequence AS stop_sequence, stop.version AS stop_version,
+              stop.latitude, stop.longitude,
               rider.display_name AS rider_display_name,
               batch.fulfillment_mode AS batch_fulfillment_mode,
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,
               batch.status AS batch_status,
               batch.context_resolution_status AS batch_context_resolution_status
        FROM delivery_job job
-       JOIN delivery_stop stop ON stop.delivery_job_id=job.id
+       LEFT JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        LEFT JOIN rider_identity rider ON rider.id=job.rider_id
        LEFT JOIN delivery_batch batch ON batch.id=job.batch_id
        WHERE ${clauses.join(" AND ")}
        ORDER BY job.id ASC
-       LIMIT 1000`,
+       LIMIT ?`,
     )
-    .bind(...bindings)
+    .bind(...bindings, DELIVERY_MAP_PAGE_SIZE + 1)
     .all<DeliveryMapRow>();
 
-  const pins: DeliveryMapPin[] = rows.results.map((row) => ({
+  const pageRows = rows.results.slice(0, DELIVERY_MAP_PAGE_SIZE);
+  const hasMore = rows.results.length > DELIVERY_MAP_PAGE_SIZE;
+  const pins: DeliveryMapPin[] = pageRows.map((row) => ({
     jobId: row.job_id,
     orderId: row.order_id,
     batchId: row.batch_id,
@@ -245,6 +298,8 @@ export async function getDeliveryMap(
     version: row.version,
     selection: deriveDeliverySelection(row, context.value),
   }));
+  const last = pageRows.at(-1);
+  const nextCursor = hasMore && last ? encodeDeliveryMapCursor(cursorScope, last.job_id) : null;
   return {
     ok: true,
     value: {
@@ -252,6 +307,8 @@ export async function getDeliveryMap(
       fulfillmentMode: context.value.fulfillmentMode,
       cycleId: context.value.cycleId,
       pins,
+      nextCursor,
+      complete: nextCursor === null,
       generatedAt: new Date(deps.now()).toISOString(),
     },
     requestId: request.requestId,

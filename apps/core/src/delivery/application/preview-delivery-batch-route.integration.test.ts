@@ -154,6 +154,9 @@ async function seedFixtures(): Promise<void> {
     env.DB.prepare(
       "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, rider_id, status, context_resolution_status, version, created_at, updated_at) VALUES ('batch-preview-unresolved', NULL, NULL, NULL, NULL, NULL, 'EXCEPTION', 'LEGACY_UNRESOLVED', 1, ?, ?)",
     ).bind(NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, fulfillment_mode, cycle_id, location_id, zone_id, rider_id, status, context_resolution_status, version, created_at, updated_at) VALUES ('batch-preview-active', 'SCHEDULED', ?, ?, ?, NULL, 'READY', 'RESOLVED', 1, ?, ?)",
+    ).bind(CYCLE, LOCATION, ZONE, NOW, NOW),
   ]);
   await seedJob({ id: "job-preview-first", version: 3, latitude: 10.31, longitude: 123.81 });
   await seedJob({ id: "job-preview-second", version: 5, latitude: 10.32, longitude: 123.82 });
@@ -162,6 +165,25 @@ async function seedFixtures(): Promise<void> {
   await seedJob({ id: "job-preview-other-cycle", cycleId: OTHER_CYCLE });
   await seedJob({ id: "job-preview-valid-batch", batchId: "batch-preview-valid" });
   await seedJob({ id: "job-preview-unresolved-batch", batchId: "batch-preview-unresolved" });
+  await seedJob({ id: "job-preview-active-conflict", batchId: "batch-preview-active" });
+  await seedJob({ id: "job-preview-stop-mismatch" });
+  await seedJob({ id: "job-preview-terminal", latitude: 10.4444, longitude: 123.9444 });
+  await seedJob({
+    id: "job-preview-historical-coordinate",
+    latitude: 10.5555,
+    longitude: 123.9555,
+  });
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE delivery_stop SET batch_id='batch-preview-active', sequence=7, status='ASSIGNED', version=2 WHERE delivery_job_id='job-preview-stop-mismatch'",
+    ),
+    env.DB.prepare(
+      "UPDATE delivery_job SET status='DELIVERED', version=2 WHERE id IN ('job-preview-terminal','job-preview-historical-coordinate')",
+    ),
+    env.DB.prepare(
+      "UPDATE delivery_stop SET status='DELIVERED', version=2 WHERE delivery_job_id IN ('job-preview-terminal','job-preview-historical-coordinate')",
+    ),
+  ]);
   for (let index = 1; index <= 24; index += 1) {
     await seedJob({
       id: `job-preview-max-${String(index).padStart(2, "0")}`,
@@ -373,6 +395,46 @@ describe("preview delivery batch route", () => {
         }),
       ),
     ).resolves.toMatchObject({ ok: true, value: { outcome: "AVAILABLE" } });
+  });
+
+  it.each([
+    ["terminal job", "job-preview-terminal", 2],
+    ["active batch conflict", "job-preview-active-conflict", 1],
+    ["reciprocal stop mismatch", "job-preview-stop-mismatch", 1],
+  ] as const)(
+    "rejects non-selectable %s before invoking the route provider",
+    async (_case, jobId, version) => {
+      const routePreview = successfulPort(async () => ({
+        ...routeResult,
+        legs: [{ meters: 1, seconds: 1 }],
+      }));
+
+      await expect(
+        preview(
+          routePreview,
+          request({ orderedDeliveries: [{ jobId, expectedVersion: version }] }),
+        ),
+      ).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(routePreview.preview).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not disclose historical terminal coordinates to the provider", async () => {
+    const routePreview = successfulPort(async () => ({
+      ...routeResult,
+      legs: [{ meters: 1, seconds: 1 }],
+    }));
+
+    const result = await preview(
+      routePreview,
+      request({
+        orderedDeliveries: [{ jobId: "job-preview-historical-coordinate", expectedVersion: 2 }],
+      }),
+    );
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    expect(routePreview.preview).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("10.5555");
+    expect(JSON.stringify(result)).not.toContain("123.9555");
   });
 
   it.each([

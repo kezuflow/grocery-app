@@ -25,6 +25,10 @@ export type DeliveryMapView = {
   /** Required for Scheduled and null for Instant. */
   cycleId: string | null;
   pins: ReadonlyArray<DeliveryMapPin>;
+  /** Opaque continuation for another bounded Core page; null only when complete. */
+  nextCursor: string | null;
+  /** Explicit completeness evidence; exactly equivalent to nextCursor being null. */
+  complete: boolean;
   generatedAt: string;
 };
 
@@ -52,6 +56,14 @@ export type EligibleRiderView = {
   displayName: string;
   openBatchCount: number;
   openDeliveryCount: number;
+};
+
+export type EligibleRiderPage = {
+  riders: ReadonlyArray<EligibleRiderView>;
+  /** Opaque continuation for another bounded Core page; null only when complete. */
+  nextCursor: string | null;
+  /** Explicit completeness evidence; exactly equivalent to nextCursor being null. */
+  complete: boolean;
 };
 
 export type OrderedDeliveryVersion = {
@@ -164,6 +176,7 @@ export type DeliveryMapRequest = AuthenticatedRequest &
   DeliveryDispatchContext & {
     statuses?: ReadonlyArray<DeliveryJobState>;
     riderId?: string | null;
+    cursor?: string;
   };
 
 export type DeliveryMapDetailRequest = AuthenticatedRequest &
@@ -172,7 +185,8 @@ export type DeliveryMapDetailRequest = AuthenticatedRequest &
     expectedVersion: number;
   };
 
-export type EligibleRidersRequest = AuthenticatedRequest & DeliveryDispatchContext;
+export type EligibleRidersRequest = AuthenticatedRequest &
+  DeliveryDispatchContext & { cursor?: string };
 
 export type PreviewDeliveryBatchRouteRequest = AuthenticatedRequest &
   DeliveryDispatchContext & {

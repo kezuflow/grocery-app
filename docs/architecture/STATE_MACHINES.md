@@ -197,7 +197,10 @@ nothing. The intermediate batch states are recorded for audit but are not
 separate Web authorization points.
 
 Route preview causes no transition, never reorders stops, and neither authorizes
-nor blocks `CreateAndAssignDeliveryBatch`.
+nor blocks `CreateAndAssignDeliveryBatch`. Before a provider is called, preview
+must nevertheless pass the same scoped open/selectable, expected-version,
+active-batch, and reciprocal job/stop coherence policy as dispatch assignment;
+these policy failures are authoritative rather than provider warnings.
 
 ## Delivery Job / Stop
 

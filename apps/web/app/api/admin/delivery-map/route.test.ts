@@ -71,6 +71,93 @@ beforeEach(() => {
 });
 
 describe("GET /api/admin/delivery-map", () => {
+  it("aggregates every bounded Core page before returning a complete operational map", async () => {
+    const firstPin = {
+      jobId: "job-0001",
+      orderId: "order-0001",
+      batchId: null,
+      coordinate: { latitude: 10.31, longitude: 123.88 },
+      fulfillmentMode: "INSTANT",
+      cycleId: null,
+      status: "UNASSIGNED",
+      rider: null,
+      version: 1,
+      selection: { selectable: true, reason: null },
+    };
+    core.getDeliveryMap
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          ...instantContext(),
+          pins: [firstPin],
+          nextCursor: "map-page-2",
+          complete: false,
+          generatedAt: "2026-08-30T00:00:00.000Z",
+        },
+        requestId: "core-map-1",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          ...instantContext(),
+          pins: [{ ...firstPin, jobId: "job-1001", orderId: "order-1001" }],
+          nextCursor: null,
+          complete: true,
+          generatedAt: "2026-08-30T00:00:01.000Z",
+        },
+        requestId: "core-map-2",
+      });
+
+    const response = await getMap(
+      new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      value: {
+        pins: [{ jobId: "job-0001" }, { jobId: "job-1001" }],
+        nextCursor: null,
+        complete: true,
+      },
+    });
+    expect(core.getDeliveryMap).toHaveBeenCalledTimes(2);
+    expect(core.getDeliveryMap.mock.calls[1][0]).toMatchObject({ cursor: "map-page-2" });
+  });
+
+  it("fails closed when Core pagination repeats or contradicts continuation evidence", async () => {
+    core.getDeliveryMap.mockResolvedValue({
+      ok: true,
+      value: {
+        ...instantContext(),
+        pins: [
+          {
+            jobId: "job-loop",
+            orderId: "order-loop",
+            batchId: null,
+            coordinate: null,
+            fulfillmentMode: "INSTANT",
+            cycleId: null,
+            status: "UNASSIGNED",
+            rider: null,
+            version: 1,
+            selection: { selectable: false, reason: "MISSING_COORDINATE" },
+          },
+        ],
+        nextCursor: "same-cursor",
+        complete: false,
+        generatedAt: "2026-08-30T00:00:00.000Z",
+      },
+      requestId: "core-map-loop",
+    });
+    const response = await getMap(
+      new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+    expect(core.getDeliveryMap).toHaveBeenCalledTimes(2);
+  });
+
   it("forwards one generated request identity, only safe headers, Instant context, and optional filters", async () => {
     const response = await getMap(
       new Request(
@@ -448,6 +535,52 @@ describe("POST /api/admin/delivery-map/route-preview", () => {
 });
 
 describe("/api/admin/delivery-batches", () => {
+  it("aggregates every bounded Rider page before returning a complete candidate set", async () => {
+    core.getEligibleRiders
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          riders: [
+            {
+              riderId: "rider-0001",
+              displayName: "Rider 0001",
+              openBatchCount: 0,
+              openDeliveryCount: 0,
+            },
+          ],
+          nextCursor: "riders-page-2",
+          complete: false,
+        },
+        requestId: "core-riders-1",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          riders: [
+            {
+              riderId: "rider-0501",
+              displayName: "Rider 0501",
+              openBatchCount: 0,
+              openDeliveryCount: 0,
+            },
+          ],
+          nextCursor: null,
+          complete: true,
+        },
+        requestId: "core-riders-2",
+      });
+
+    const response = await getRiders(
+      new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      value: [{ riderId: "rider-0001" }, { riderId: "rider-0501" }],
+    });
+    expect(core.getEligibleRiders).toHaveBeenCalledTimes(2);
+    expect(core.getEligibleRiders.mock.calls[1][0]).toMatchObject({ cursor: "riders-page-2" });
+  });
+
   it("GET calls only getEligibleRiders with exact Instant context", async () => {
     await getRiders(
       new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),

@@ -305,6 +305,12 @@ Order/address/contact/instruction snapshots, serviceability polygons,
 fulfillment-ranking rules, provider responses, and Better Auth rows are never
 map DTOs.
 
+Selection fails closed unless the canonical stop exists and reciprocally agrees
+with its job on status, batch, and manual sequence evidence. Map and Rider
+candidate reads are bounded keyset pages with explicit continuation/completeness
+evidence; the thin Web adapter retrieves the full selected operational context
+before presenting queue and Rider counts as complete.
+
 Order still owns a persisted human-readable global order number as part of the
 canonical commitment. Until the current physical Orders implementation lands
 that field, Delivery map detail returns a nullable order-number projection and
@@ -320,7 +326,9 @@ Dispatch manually orders one to 24 selectable jobs. Route preview starts at the
 authoritative fulfillment location, loads immutable stop coordinates inside
 Core, follows the submitted order without optimization, and is informational:
 preview failure does not block assignment and preview success does not authorize
-it. The reviewed `CreateAndAssignDeliveryBatch` command takes canonical Rider and
+it. Preview first enforces the same scoped open/selectable and reciprocal
+job/stop policy as assignment and calls no provider for rejected work. The
+reviewed `CreateAndAssignDeliveryBatch` command takes canonical Rider and
 job identities plus expected job versions and one stable idempotency key. Core
 atomically validates location/mode/cycle compatibility, active Rider and scope,
 coordinates, legal states, versions, and conflicting assignments; it then

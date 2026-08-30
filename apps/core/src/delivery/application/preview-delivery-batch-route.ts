@@ -12,6 +12,7 @@ import {
   type RoutePreviewResult,
 } from "../../geography/ports/route-preview";
 import {
+  deriveDeliverySelection,
   deliveryReadRequestId,
   resolveDeliveryReadContext,
   type DeliveryMapReadDeps,
@@ -24,13 +25,21 @@ export type PreviewDeliveryBatchRouteDeps = DeliveryMapReadDeps & {
 type PreviewRow = {
   job_id: string;
   batch_id: string | null;
+  job_sequence: number | null;
   fulfillment_mode: FulfillmentMode;
   cycle_id: string | null;
   location_id: string;
   context_resolution_status: "RESOLVED" | "LEGACY_UNRESOLVED";
   version: number;
+  status: import("@freshmarkets/contracts").DeliveryJobState;
+  stop_id: string | null;
+  stop_status: import("@freshmarkets/contracts").DeliveryJobState | null;
+  stop_batch_id: string | null;
+  stop_sequence: number | null;
+  stop_version: number | null;
   latitude: number | null;
   longitude: number | null;
+  batch_status: string | null;
   batch_fulfillment_mode: FulfillmentMode | null;
   batch_cycle_id: string | null;
   batch_location_id: string | null;
@@ -170,14 +179,18 @@ export async function previewDeliveryBatchRoute(
   const ids = request.orderedDeliveries.map(({ jobId }) => jobId);
   const rows = await deps.db
     .prepare(
-      `SELECT job.id AS job_id, job.batch_id, job.fulfillment_mode, job.cycle_id,
-              job.location_id, job.context_resolution_status, job.version,
+      `SELECT job.id AS job_id, job.batch_id, job.sequence AS job_sequence,
+              job.fulfillment_mode, job.cycle_id, job.location_id,
+              job.context_resolution_status, job.version, job.status,
+              stop.id AS stop_id, stop.status AS stop_status, stop.batch_id AS stop_batch_id,
+              stop.sequence AS stop_sequence, stop.version AS stop_version,
               stop.latitude, stop.longitude,
+              batch.status AS batch_status,
               batch.fulfillment_mode AS batch_fulfillment_mode,
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,
               batch.context_resolution_status AS batch_context_resolution_status
        FROM delivery_job job
-       JOIN delivery_stop stop ON stop.delivery_job_id=job.id
+       LEFT JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        LEFT JOIN delivery_batch batch ON batch.id=job.batch_id
        WHERE job.id IN (${ids.map(() => "?").join(",")})`,
     )
@@ -201,18 +214,13 @@ export async function previewDeliveryBatchRoute(
         "Delivery job changed; refresh before previewing",
         request.requestId,
       );
-    if (row.context_resolution_status !== "RESOLVED")
-      return failure("CONFLICT", "Delivery job context is unresolved", request.requestId);
-    if (row.batch_id !== null) {
-      if (row.batch_context_resolution_status !== "RESOLVED")
-        return failure("CONFLICT", "Delivery batch context is unresolved", request.requestId);
-      if (
-        row.batch_location_id !== context.value.locationId ||
-        row.batch_fulfillment_mode !== context.value.fulfillmentMode ||
-        row.batch_cycle_id !== context.value.cycleId
-      ) {
-        return failure("CONFLICT", "Delivery batch context does not match", request.requestId);
-      }
+    const selection = deriveDeliverySelection(row, context.value);
+    if (!selection.selectable) {
+      return failure(
+        selection.reason === "MISSING_COORDINATE" ? "VALIDATION_FAILED" : "CONFLICT",
+        "Delivery job is not selectable for route preview",
+        request.requestId,
+      );
     }
     const destinationCoordinate = coordinateFromValues(row.latitude, row.longitude);
     if (!destinationCoordinate)

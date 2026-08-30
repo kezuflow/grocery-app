@@ -62,6 +62,22 @@ type ExpectedDeliveryMapDetail = {
 
 type ExpectedOrderedDeliveryVersion = { jobId: string; expectedVersion: number };
 
+type ExpectedDeliveryMapPage = {
+  locationId: string;
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
+  cycleId: string | null;
+  pins: ReadonlyArray<DeliveryMapPin>;
+  nextCursor: string | null;
+  complete: boolean;
+  generatedAt: string;
+};
+
+type ExpectedEligibleRiderPage = {
+  riders: ReadonlyArray<EligibleRiderView>;
+  nextCursor: string | null;
+  complete: boolean;
+};
+
 type ExpectedCreateAndAssignRequest = AuthenticatedRequest & {
   locationId: string;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
@@ -188,6 +204,33 @@ describe("delivery map and atomic dispatch contracts", () => {
     expect(true).toBe(true);
   });
 
+  it("makes bounded delivery and Rider pagination completeness explicit", () => {
+    type ExactMapPage = Expect<Equal<DeliveryMapView, ExpectedDeliveryMapPage>>;
+    type ExactRiderPage = Expect<
+      Equal<import("./index").EligibleRiderPage, ExpectedEligibleRiderPage>
+    >;
+
+    void (true as ExactMapPage);
+    void (true as ExactRiderPage);
+    void ({
+      headers: {},
+      requestId: "req-map-page-2",
+      locationId: "location-1",
+      fulfillmentMode: "INSTANT",
+      cycleId: null,
+      cursor: "opaque-map-cursor",
+    } satisfies DeliveryMapRequest);
+    void ({
+      headers: {},
+      requestId: "req-rider-page-2",
+      locationId: "location-1",
+      fulfillmentMode: "INSTANT",
+      cycleId: null,
+      cursor: "opaque-rider-cursor",
+    } satisfies EligibleRidersRequest);
+    expect(true).toBe(true);
+  });
+
   it("provides bounded map, detail, rider, preview, and batch views", () => {
     const pin: DeliveryMapPin = {
       jobId: "job-1",
@@ -206,6 +249,8 @@ describe("delivery map and atomic dispatch contracts", () => {
       fulfillmentMode: "SCHEDULED",
       cycleId: "cycle-1",
       pins: [pin],
+      nextCursor: null,
+      complete: true,
       generatedAt: "2026-08-30T00:00:00.000Z",
     };
     const coordinateMissingPin: DeliveryMapPin = {

@@ -231,6 +231,13 @@ projected as a null coordinate rather than omitted or synthesized; it produces
 no map marker and fails assignment selection closed with
 `MISSING_COORDINATE`.
 
+The map and eligible-Rider reads use bounded, opaque, context-bound keyset
+pagination. Delivery pages order by `delivery_job.id`; Rider pages order by
+`(display_name, id)`. Completeness is explicit, and Web follows all pages before
+presenting the selected operational context as complete. Rider
+`preferred_location_id` remains descriptive data and is not an assignment
+authorization predicate.
+
 Migration `0043_delivery_batches_and_map_stops.sql` is owned by the Delivery
 implementation phase and is not created by the contract phase. It must converge
 historical batches/stops onto the canonical rows above, permit null cycle only

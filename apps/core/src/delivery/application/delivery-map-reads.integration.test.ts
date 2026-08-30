@@ -248,6 +248,10 @@ async function seedFixtures(): Promise<void> {
     id: "job-o-empty-address",
     address: JSON.stringify({ address_json: "{}" }),
   });
+  await seedJob({ id: "job-p-stop-mismatch" });
+  await env.DB.prepare(
+    "UPDATE delivery_stop SET batch_id='batch-assigned', sequence=9, status='ASSIGNED', version=2 WHERE delivery_job_id='job-p-stop-mismatch'",
+  ).run();
 }
 
 beforeEach(async () => {
@@ -350,6 +354,7 @@ describe("scoped delivery map reads", () => {
       "job-m-malformed",
       "job-n-legacy-address",
       "job-o-empty-address",
+      "job-p-stop-mismatch",
     ]);
     expect(result.value.pins[0]).toEqual({
       jobId: "job-a-unassigned",
@@ -386,6 +391,9 @@ describe("scoped delivery map reads", () => {
         coordinate: null,
         selection: { selectable: false, reason: "MISSING_COORDINATE" },
       },
+    );
+    expect(result.value.pins.find((pin) => pin.jobId === "job-p-stop-mismatch")?.selection).toEqual(
+      { selectable: false, reason: "STOP_ASSIGNMENT_INCOHERENT" },
     );
     for (const pin of result.value.pins) {
       expect(pin).not.toHaveProperty("addressSnapshotJson");
@@ -496,24 +504,51 @@ describe("scoped delivery map reads", () => {
     const result = await core.getEligibleRiders(scheduledRequest());
     expect(result).toEqual({
       ok: true,
-      value: [
-        {
-          riderId: "rider-active",
-          displayName: "Alpha Rider",
-          openBatchCount: 1,
-          openDeliveryCount: 1,
-        },
-        {
-          riderId: "rider-application-only",
-          displayName: "Beta Rider",
-          openBatchCount: 0,
-          openDeliveryCount: 0,
-        },
-      ],
+      value: {
+        riders: [
+          {
+            riderId: "rider-active",
+            displayName: "Alpha Rider",
+            openBatchCount: 1,
+            openDeliveryCount: 1,
+          },
+          {
+            riderId: "rider-application-only",
+            displayName: "Beta Rider",
+            openBatchCount: 0,
+            openDeliveryCount: 0,
+          },
+          {
+            riderId: "rider-west",
+            displayName: "West Rider",
+            openBatchCount: 0,
+            openDeliveryCount: 0,
+          },
+        ],
+        nextCursor: null,
+        complete: true,
+      },
       requestId: expect.any(String),
     });
     expect(JSON.stringify(result)).not.toContain("auth_user_id");
     expect(JSON.stringify(result)).not.toContain("staff_id");
+  });
+
+  it("treats a Rider's preferred location as descriptive candidate metadata only", async () => {
+    const result = await core.getEligibleRiders(scheduledRequest());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.riders.find((rider) => rider.riderId === "rider-west")).toMatchObject({
+      riderId: "rider-west",
+      displayName: "West Rider",
+    });
+
+    await expect(
+      core.getEligibleRiders(scheduledRequest({ locationId: WEST })),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "NOT_FOUND" },
+    });
   });
 
   it("rejects malformed runtime request and filter shapes without throwing", async () => {
@@ -536,6 +571,76 @@ describe("scoped delivery map reads", () => {
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
     await expect(
       core.getEligibleRiders({ ...scheduledRequest(), locationId: { id: CENTRAL } } as never),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("pages beyond the historical 1000 delivery and 500 Rider caps with validated cursors", async () => {
+    const statements: D1PreparedStatement[] = [];
+    for (let index = 0; index < 1_001; index += 1) {
+      const suffix = index.toString().padStart(4, "0");
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO delivery_job (id, order_id, batch_id, sequence, cycle_id, fulfillment_mode, location_id, zone_id, rider_id, status, context_resolution_status, address_snapshot_json, version, created_at, updated_at) VALUES (?, ?, NULL, NULL, ?, 'SCHEDULED', ?, ?, NULL, 'UNASSIGNED', 'RESOLVED', ?, 1, ?, ?)",
+        ).bind(
+          `page-job-${suffix}`,
+          `page-order-${suffix}`,
+          CYCLE,
+          CENTRAL,
+          ZONE,
+          addressSnapshot,
+          NOW,
+          NOW,
+        ),
+        env.DB.prepare(
+          "INSERT INTO delivery_stop (id, delivery_job_id, batch_id, sequence, latitude, longitude, address_snapshot_json, contact_snapshot_json, instructions_snapshot, status, version, created_at, updated_at) VALUES (?, ?, NULL, NULL, 10.3157, 123.8854, ?, ?, ?, 'UNASSIGNED', 1, ?, ?)",
+        ).bind(
+          `page-stop-${suffix}`,
+          `page-job-${suffix}`,
+          addressSnapshot,
+          contactSnapshot,
+          instructionsSnapshot,
+          NOW,
+          NOW,
+        ),
+      );
+    }
+    for (let index = 0; index < 501; index += 1) {
+      const suffix = index.toString().padStart(4, "0");
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO rider_identity (id, staff_id, auth_user_id, display_name, preferred_location_id, status, version, created_at, updated_at) VALUES (?, NULL, NULL, ?, NULL, 'ACTIVE', 1, ?, ?)",
+        ).bind(`page-rider-${suffix}`, `Page Rider ${suffix}`, NOW, NOW),
+      );
+    }
+    for (let start = 0; start < statements.length; start += 75) {
+      await env.DB.batch(statements.slice(start, start + 75));
+    }
+
+    const firstMap = await core.getDeliveryMap(scheduledRequest({ statuses: ["UNASSIGNED"] }));
+    expect(firstMap).toMatchObject({ ok: true, value: { complete: false } });
+    if (!firstMap.ok) return;
+    expect(firstMap.value.pins).toHaveLength(250);
+    expect(firstMap.value.nextCursor).toEqual(expect.any(String));
+    const secondMap = await core.getDeliveryMap(
+      scheduledRequest({ statuses: ["UNASSIGNED"], cursor: firstMap.value.nextCursor! }),
+    );
+    expect(secondMap).toMatchObject({ ok: true, value: { complete: false } });
+    if (!secondMap.ok) return;
+    expect(secondMap.value.pins[0]?.jobId).not.toBe(firstMap.value.pins.at(-1)?.jobId);
+    await expect(
+      core.getDeliveryMap(scheduledRequest({ cursor: "not-an-opaque-cursor" })),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const firstRiders = await core.getEligibleRiders(scheduledRequest());
+    expect(firstRiders).toMatchObject({ ok: true, value: { complete: false } });
+    if (!firstRiders.ok) return;
+    expect(firstRiders.value.riders).toHaveLength(200);
+    const secondRiders = await core.getEligibleRiders(
+      scheduledRequest({ cursor: firstRiders.value.nextCursor! }),
+    );
+    expect(secondRiders).toMatchObject({ ok: true, value: { complete: false } });
+    await expect(
+      core.getEligibleRiders(scheduledRequest({ cursor: "not-an-opaque-cursor" })),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 });

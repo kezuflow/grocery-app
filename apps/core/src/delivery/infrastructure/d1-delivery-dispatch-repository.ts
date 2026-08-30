@@ -216,7 +216,6 @@ export async function commitDeliveryBatch(
             OR NOT EXISTS (
                  SELECT 1 FROM rider_identity
                  WHERE id=? AND status='ACTIVE' AND version=?
-                   AND (preferred_location_id IS NULL OR preferred_location_id=?)
                )
             OR (?='SCHEDULED' AND NOT EXISTS (
                  SELECT 1 FROM delivery_cycle cycle
@@ -238,7 +237,6 @@ export async function commitDeliveryBatch(
         input.marketId,
         input.riderId,
         input.riderVersion,
-        input.locationId,
         input.fulfillmentMode,
         input.cycleId,
         input.marketId,

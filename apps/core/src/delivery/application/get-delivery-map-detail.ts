@@ -19,12 +19,18 @@ type DetailRow = {
   job_id: string;
   order_id: string;
   batch_id: string | null;
+  job_sequence: number | null;
   fulfillment_mode: FulfillmentMode;
   cycle_id: string | null;
   location_id: string;
   status: DeliveryJobState;
   context_resolution_status: "RESOLVED" | "LEGACY_UNRESOLVED";
   version: number;
+  stop_id: string | null;
+  stop_status: DeliveryJobState | null;
+  stop_batch_id: string | null;
+  stop_sequence: number | null;
+  stop_version: number | null;
   latitude: number | null;
   longitude: number | null;
   address_snapshot_json: string;
@@ -142,9 +148,11 @@ export async function getDeliveryMapDetail(
   if (!context.ok) return context;
   const row = await deps.db
     .prepare(
-      `SELECT job.id AS job_id, job.order_id, job.batch_id, job.fulfillment_mode,
+      `SELECT job.id AS job_id, job.order_id, job.batch_id, job.sequence AS job_sequence, job.fulfillment_mode,
               job.cycle_id, job.location_id, job.status, job.context_resolution_status,
-              job.version, stop.latitude, stop.longitude, stop.address_snapshot_json,
+              job.version, stop.id AS stop_id, stop.status AS stop_status,
+              stop.batch_id AS stop_batch_id, stop.sequence AS stop_sequence,
+              stop.version AS stop_version, stop.latitude, stop.longitude, stop.address_snapshot_json,
               stop.contact_snapshot_json, stop.instructions_snapshot,
               batch.fulfillment_mode AS batch_fulfillment_mode,
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,

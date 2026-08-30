@@ -443,16 +443,13 @@ describe("create and assign delivery batch", () => {
       );
   });
 
-  it.each(["rider-inactive", "rider-west", "rider-missing"])(
-    "rejects unavailable Rider %s",
-    async (riderId) => {
-      const job = await seedJob();
-      await expectFailureWithoutMutation(
-        req([{ jobId: job.id, expectedVersion: 1 }], { riderId }),
-        "NOT_FOUND",
-      );
-    },
-  );
+  it.each(["rider-inactive", "rider-missing"])("rejects unavailable Rider %s", async (riderId) => {
+    const job = await seedJob();
+    await expectFailureWithoutMutation(
+      req([{ jobId: job.id, expectedVersion: 1 }], { riderId }),
+      "NOT_FOUND",
+    );
+  });
 
   it("accepts only canonical Rider IDs, never Staff/Auth compatibility IDs", async () => {
     const job = await seedJob();
@@ -857,16 +854,51 @@ describe("create and assign delivery batch", () => {
     }
   });
 
+  it("assigns an active Rider whose descriptive preferred location differs", async () => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }], { riderId: "rider-west" });
+
+    await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+      ok: true,
+      value: { rider: { riderId: "rider-west" }, orderedDeliveries: [{ jobId: job.id }] },
+    });
+  });
+
+  it("transaction guard ignores a concurrent preference-only change while retaining Rider version authority", async () => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+    try {
+      await expect(
+        direct(input, async () => {
+          await env.DB.prepare(
+            "UPDATE rider_identity SET preferred_location_id=? WHERE id='rider-app'",
+          )
+            .bind(WEST)
+            .run();
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { rider: { riderId: "rider-app" }, orderedDeliveries: [{ jobId: job.id }] },
+      });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE rider_identity SET preferred_location_id=NULL WHERE id='rider-app'",
+      ).run();
+    }
+  });
+
   it.each([
     [
       "status",
       "UPDATE rider_identity SET status='SUSPENDED',version=version+1 WHERE id='rider-app'",
+      "NOT_FOUND",
     ],
     [
       "preferred location",
       `UPDATE rider_identity SET preferred_location_id='${WEST}',version=version+1 WHERE id='rider-app'`,
+      "CONFLICT",
     ],
-  ])("fails closed when Rider %s changes after preflight", async (_name, sql) => {
+  ] as const)("fails closed when Rider %s changes after preflight", async (_name, sql, code) => {
     const job = await seedJob();
     const input = req([{ jobId: job.id, expectedVersion: 1 }]);
     const before = await snapshot([job.id], input.idempotencyKey);
@@ -874,7 +906,7 @@ describe("create and assign delivery batch", () => {
       await expect(direct(input, async () => void (await env.DB.exec(sql)))).resolves.toMatchObject(
         {
           ok: false,
-          error: { code: "NOT_FOUND" },
+          error: { code },
         },
       );
       expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);

@@ -416,9 +416,9 @@ Every command validates location scope and legal transition.
 
 - `admin.delivery.getOperationsSummary({ fulfillmentMode?, cycleId?, locationId? }) -> DeliveryOperationsSummary`
 - `admin.delivery.listExceptions(filters, page) -> DeliveryExceptionQueue`
-- `getDeliveryMap({ headers, requestId, locationId, fulfillmentMode, cycleId, statuses?, riderId? }) -> DeliveryMapView`
+- `getDeliveryMap({ headers, requestId, locationId, fulfillmentMode, cycleId, statuses?, riderId?, cursor? }) -> DeliveryMapView`
 - `getDeliveryMapDetail({ headers, requestId, locationId, fulfillmentMode, cycleId, jobId, expectedVersion }) -> DeliveryMapDetail`
-- `getEligibleRiders({ headers, requestId, locationId, fulfillmentMode, cycleId }) -> EligibleRiderView[]`
+- `getEligibleRiders({ headers, requestId, locationId, fulfillmentMode, cycleId, cursor? }) -> EligibleRiderPage`
 - `previewDeliveryBatchRoute({ headers, requestId, locationId, fulfillmentMode, cycleId, orderedDeliveries }) -> BatchRoutePreview`
 - `createAndAssignDeliveryBatch({ headers, requestId, locationId, fulfillmentMode, cycleId, riderId, orderedDeliveries, idempotencyKey }) -> DeliveryBatchView`
 - `admin.delivery.reorderStops(...) -> DeliveryBatchView`
@@ -437,6 +437,15 @@ substitutes the Order UUID. `EligibleRiderView` contains canonical Rider
 identity plus open batch/delivery counts. None exposes raw snapshot JSON,
 polygon GeoJSON, provider data/tokens, Better Auth records, or ranking rules.
 
+`DeliveryMapView` and `EligibleRiderPage` are bounded keyset pages with stable
+`job.id` and `(Rider display name, Rider id)` order respectively. Each exposes
+an opaque context-bound `nextCursor` plus explicit `complete` evidence;
+malformed or wrong-context cursors return `VALIDATION_FAILED`. Thin Admin Web
+adapters follow every continuation for the selected context and return a
+complete map/Rider set only after Core returns `nextCursor: null` and
+`complete: true`. Repeated, empty non-terminal, contradictory, or malformed
+continuation evidence fails closed instead of presenting a partial queue.
+
 Every authorized open row remains in `DeliveryMapView`. When the immutable stop
 has no authoritative coordinate, the pin and detail coordinate are null, Web
 renders no map marker, selection is `{ selectable: false, reason:
@@ -444,11 +453,22 @@ renders no map marker, selection is `{ selectable: false, reason:
 never fabricates a coordinate, and assignment still requires a non-null
 authoritative coordinate.
 
+Map selectability also requires reciprocal canonical job/stop evidence: the
+stop must exist and its status, batch, and sequence must match the job's
+assignment evidence. A mismatch is projected as the non-selectable
+`STOP_ASSIGNMENT_INCOHERENT` exception rather than advertised as assignable.
+
 Every `orderedDeliveries` entry is `{ jobId, expectedVersion }`; its array is the
 manual route order. Preview and assignment accept no origin or destination
 coordinates. `BatchRoutePreview` is a provider-neutral, non-authoritative
 GeoJSON LineString/meters/seconds/legs result with an explicit warning outcome;
 it never optimizes and warning results do not block assignment.
+
+Before any route-provider call, preview applies the same scoped open/selectable
+and reciprocal job/stop policy as the dispatch map. Terminal jobs, active-batch
+conflicts, missing or incoherent stops, unresolved context, missing coordinates,
+and stale versions are authoritative rejections; provider warning semantics
+apply only after this policy succeeds.
 
 `createAndAssignDeliveryBatch` accepts one to 24 unique jobs, one canonical
 Rider ID, and a caller-stable idempotency key. Core requires `delivery.manage`
@@ -460,6 +480,11 @@ returns `IDEMPOTENCY_CONFLICT`; a stale job returns `STALE_VERSION`; every
 failure leaves all selected jobs and batch records unchanged. Map/detail/rider
 reads require `delivery.read` plus location scope. Cycle identity is required
 for `SCHEDULED` and must be null for `INSTANT`.
+
+Rider `preferred_location_id` is descriptive and never an assignment scope or
+eligibility guard. Candidate reads and assignment require an active canonical
+Rider and retain Rider version guards, while Admin capability plus market or
+location scope authorizes the target operation.
 
 The superseded two-step `createBatch`/`assignRider` target is not a second
 dispatch authority. The currently implemented compatibility assignment by

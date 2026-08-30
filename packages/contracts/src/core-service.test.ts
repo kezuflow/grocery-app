@@ -32,7 +32,7 @@ import type {
   DeliveryMapDetailRequest,
   DeliveryMapRequest,
   DeliveryMapView,
-  EligibleRiderView,
+  EligibleRiderPage,
   EligibleRidersRequest,
   PreviewDeliveryBatchRouteRequest,
   RiderBatchList,
@@ -86,7 +86,7 @@ describe("domain-grouped core services", () => {
     type RidersSignature = Expect<
       Equal<
         CoreServiceBinding["getEligibleRiders"],
-        (request: EligibleRidersRequest) => Promise<RpcResult<ReadonlyArray<EligibleRiderView>>>
+        (request: EligibleRidersRequest) => Promise<RpcResult<EligibleRiderPage>>
       >
     >;
     type PreviewSignature = Expect<
