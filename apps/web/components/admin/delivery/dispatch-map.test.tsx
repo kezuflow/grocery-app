@@ -614,29 +614,45 @@ describe("DispatchMap", () => {
     act(() => root.unmount());
   });
 
-  it("retains the command key after transport ambiguity and refreshes on stale conflict", async () => {
+  it("freezes every business input after transport ambiguity and replays the byte-identical payload and key", async () => {
     (
       globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     const batchKeys: Array<string | null> = [];
+    const batchBodies: string[] = [];
     let batchAttempt = 0;
     let mapLoads = 0;
-    const pin = {
-      jobId: "job-1",
-      orderId: "order-1",
-      batchId: null,
-      coordinate: null,
-      fulfillmentMode: "INSTANT" as const,
-      cycleId: null,
-      status: "UNASSIGNED",
-      rider: null,
-      version: 4,
-      selection: { selectable: true, reason: null },
-    };
+    const pins = [
+      {
+        jobId: "job-1",
+        orderId: "order-1",
+        batchId: null,
+        coordinate: null,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "UNASSIGNED",
+        rider: null,
+        version: 4,
+        selection: { selectable: true, reason: null },
+      },
+      {
+        jobId: "job-2",
+        orderId: "order-2",
+        batchId: null,
+        coordinate: null,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "RETRY_SCHEDULED",
+        rider: null,
+        version: 8,
+        selection: { selectable: true, reason: null },
+      },
+    ];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/admin/delivery-batches" && init?.method === "POST") {
         batchKeys.push(new Headers(init.headers).get("idempotency-key"));
+        batchBodies.push(String(init.body));
         if (batchAttempt++ === 0) throw new TypeError("connection lost");
         return new Response(
           JSON.stringify({
@@ -656,6 +672,12 @@ describe("DispatchMap", () => {
                 openBatchCount: 0,
                 openDeliveryCount: 1,
               },
+              {
+                riderId: "rider-2",
+                displayName: "Rider Two",
+                openBatchCount: 1,
+                openDeliveryCount: 4,
+              },
             ],
             requestId: "riders",
           }),
@@ -668,7 +690,7 @@ describe("DispatchMap", () => {
             locationId: "location-1",
             fulfillmentMode: "INSTANT",
             cycleId: null,
-            pins: [pin],
+            pins,
             generatedAt: "now",
           },
           requestId: "map",
@@ -686,6 +708,9 @@ describe("DispatchMap", () => {
     act(() =>
       container.querySelector<HTMLButtonElement>('button[aria-label="Select job-1"]')!.click(),
     );
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Select job-2"]')!.click(),
+    );
     const rider = Array.from(container.querySelectorAll("select")).find((select) =>
       select.parentElement?.textContent?.includes("Eligible Rider"),
     )!;
@@ -697,21 +722,48 @@ describe("DispatchMap", () => {
       Array.from(document.querySelectorAll("button")).find((item) =>
         item.textContent?.includes(text),
       )!;
-    act(() => findButton("Review batch").click());
+    await act(async () => {
+      findButton("Review batch").click();
+      await Promise.resolve();
+    });
     await act(async () => {
       findButton("Confirm create and assign").click();
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(container.textContent).toContain("result is unknown");
+    expect(container.textContent).toContain("exact assignment");
+    expect(container.querySelector<HTMLInputElement>('input[type="radio"]')?.disabled).toBe(true);
+    expect(
+      Array.from(container.querySelectorAll("select")).find((select) =>
+        select.parentElement?.textContent?.includes("Status"),
+      )?.disabled,
+    ).toBe(true);
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Select job-1"]')?.disabled,
+    ).toBe(true);
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Move job-2 up"]')?.disabled,
+    ).toBe(true);
+    expect(rider.disabled).toBe(true);
+    act(() => {
+      locationMock.current = { locationId: "location-2", label: "Other location" };
+      root.render(<DispatchMap publicAccessToken={undefined} fetchImpl={fetchImpl} />);
+    });
     await act(async () => {
-      findButton("Confirm create and assign").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mapLoads).toBe(1);
+    await act(async () => {
+      findButton("Retry exact assignment").click();
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(batchKeys).toHaveLength(2);
     expect(batchKeys[1]).toBe(batchKeys[0]);
+    expect(batchBodies[1]).toBe(batchBodies[0]);
     expect(container.textContent).toContain("Authoritative deliveries were refreshed");
     expect(mapLoads).toBe(2);
     expect(container.textContent).toContain("0/24 stops");
@@ -767,4 +819,416 @@ describe("DispatchMap", () => {
     expect(forbiddenContainer.textContent).toContain("forbidden-7");
     act(() => forbiddenRoot.unmount());
   });
+
+  it("loads detail for assigned and missing-coordinate rows without making them selectable", async () => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const adapter = new FakeMapAdapter();
+    const detailJobs: string[] = [];
+    const pins = [
+      {
+        jobId: "job-null",
+        orderId: "order-null",
+        batchId: "batch-1",
+        coordinate: null,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "ASSIGNED",
+        rider: { riderId: "rider-old", displayName: "Assigned Rider" },
+        version: 3,
+        selection: { selectable: false, reason: "Already assigned" },
+      },
+      {
+        jobId: "job-map",
+        orderId: "order-map",
+        batchId: "batch-1",
+        coordinate: { longitude: 123.88, latitude: 10.31 },
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "ASSIGNED",
+        rider: { riderId: "rider-old", displayName: "Assigned Rider" },
+        version: 4,
+        selection: { selectable: false, reason: "Already assigned" },
+      },
+    ];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/detail?")) {
+        const jobId = new URL(url, "https://example.test").searchParams.get("jobId")!;
+        detailJobs.push(jobId);
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            value: {
+              jobId,
+              orderId: `order-${jobId}`,
+              orderNumber: null,
+              destination: {
+                coordinate: jobId === "job-null" ? null : pins[1]!.coordinate,
+                displayAddress: `${jobId} protected address`,
+                recipient: "Recipient",
+                phone: "09170000000",
+                instructions: {
+                  buildingUnit: null,
+                  landmark: null,
+                  gateGuard: null,
+                  deliveryNote: null,
+                  recipientInstruction: null,
+                },
+              },
+              status: "ASSIGNED",
+              version: jobId === "job-null" ? 3 : 4,
+              allowedActions: [],
+            },
+            requestId: `detail-${jobId}`,
+          }),
+        );
+      }
+      if (url.includes("delivery-batches"))
+        return new Response(JSON.stringify({ ok: true, value: [], requestId: "riders" }));
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          value: {
+            locationId: "location-1",
+            fulfillmentMode: "INSTANT",
+            cycleId: null,
+            pins,
+            generatedAt: "now",
+          },
+          requestId: "map",
+        }),
+      );
+    });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <DispatchMap publicAccessToken="token" mapAdapter={adapter} fetchImpl={fetchImpl} />,
+      ),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const nullRow = Array.from(container.querySelectorAll("tr")).find((row) =>
+      row.textContent?.includes("job-null"),
+    )!;
+    const detailButton = Array.from(nullRow.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("View detail"),
+    )!;
+    expect(detailButton.disabled).toBe(false);
+    await act(async () => {
+      detailButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("job-null protected address");
+    await act(async () => {
+      adapter.emitPointActivate("job-map");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(detailJobs).toEqual(["job-null", "job-map"]);
+    expect(container.textContent).toContain("job-map protected address");
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Select job-map"]')?.disabled,
+    ).toBe(true);
+    act(() => root.unmount());
+  });
+
+  it("keeps assigned Rider filter facets separate from eligible assignment Riders and applies exact point tones", async () => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const adapter = new FakeMapAdapter();
+    const coordinate = { longitude: 123.88, latitude: 10.31 };
+    const pins = [
+      {
+        jobId: "assigned",
+        orderId: "o1",
+        batchId: "b1",
+        coordinate,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "ASSIGNED",
+        rider: { riderId: "rider-old", displayName: "Assigned Only" },
+        version: 1,
+        selection: { selectable: false, reason: "Assigned" },
+      },
+      {
+        jobId: "retry",
+        orderId: "o2",
+        batchId: null,
+        coordinate,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "RETRY_SCHEDULED",
+        rider: null,
+        version: 1,
+        selection: { selectable: true, reason: null },
+      },
+      {
+        jobId: "blocked",
+        orderId: "o3",
+        batchId: null,
+        coordinate,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "UNASSIGNED",
+        rider: null,
+        version: 1,
+        selection: { selectable: false, reason: "Blocked by Core" },
+      },
+      {
+        jobId: "available",
+        orderId: "o4",
+        batchId: null,
+        coordinate,
+        fulfillmentMode: "INSTANT" as const,
+        cycleId: null,
+        status: "UNASSIGNED",
+        rider: null,
+        version: 1,
+        selection: { selectable: true, reason: null },
+      },
+    ];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(
+            String(input).includes("delivery-batches")
+              ? {
+                  ok: true,
+                  value: [
+                    {
+                      riderId: "rider-new",
+                      displayName: "Eligible Rider",
+                      openBatchCount: 0,
+                      openDeliveryCount: 0,
+                    },
+                  ],
+                  requestId: "riders",
+                }
+              : {
+                  ok: true,
+                  value: {
+                    locationId: "location-1",
+                    fulfillmentMode: "INSTANT",
+                    cycleId: null,
+                    pins,
+                    generatedAt: "now",
+                  },
+                  requestId: "map",
+                },
+          ),
+        ),
+    );
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <DispatchMap publicAccessToken="token" mapAdapter={adapter} fetchImpl={fetchImpl} />,
+      ),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const riderFilter = Array.from(container.querySelectorAll("select")).find((select) =>
+      select.parentElement?.textContent?.includes("Rider filter"),
+    )!;
+    const assignmentRider = Array.from(container.querySelectorAll("select")).at(-1)!;
+    expect(Array.from(riderFilter.options).map((option) => option.value)).toContain("rider-old");
+    expect(Array.from(assignmentRider.options).map((option) => option.value)).not.toContain(
+      "rider-old",
+    );
+    const latestScene =
+      adapter.controllers[0]!.sceneUpdates.at(-1) ?? adapter.initializations[0]!.scene;
+    expect(latestScene.points?.map(({ id, tone }) => [id, tone])).toEqual([
+      ["assigned", "assigned"],
+      ["retry", "retry"],
+      ["blocked", "blocked"],
+      ["available", "available"],
+    ]);
+    const status = Array.from(container.querySelectorAll("select")).find((select) =>
+      select.parentElement?.textContent?.includes("Status"),
+    )!;
+    act(() => {
+      status.value = "ASSIGNED";
+      status.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(Array.from(riderFilter.options).map((option) => option.value)).toContain("rider-old");
+    act(() => root.unmount());
+  });
+
+  it.each(["reorder", "deselect", "status", "mode", "cycle", "location"] as const)(
+    "suppresses a deferred preview after %s changes its exact fingerprint",
+    async (mutation) => {
+      (
+        globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      ).IS_REACT_ACT_ENVIRONMENT = true;
+      const adapter = new FakeMapAdapter();
+      let resolvePreview!: (response: Response) => void;
+      const deferredPreview = new Promise<Response>((resolve) => (resolvePreview = resolve));
+      const makePins = (fulfillmentMode: "INSTANT" | "SCHEDULED", cycleId: string | null) => [
+        {
+          jobId: "job-1",
+          orderId: "o1",
+          batchId: null,
+          coordinate: { longitude: 123.88, latitude: 10.31 },
+          fulfillmentMode,
+          cycleId,
+          status: "UNASSIGNED",
+          rider: null,
+          version: 1,
+          selection: { selectable: true, reason: null },
+        },
+        {
+          jobId: "job-2",
+          orderId: "o2",
+          batchId: null,
+          coordinate: { longitude: 123.89, latitude: 10.32 },
+          fulfillmentMode,
+          cycleId,
+          status: "UNASSIGNED",
+          rider: null,
+          version: 2,
+          selection: { selectable: true, reason: null },
+        },
+      ];
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("route-preview")) return deferredPreview;
+        if (url.includes("delivery-batches"))
+          return new Response(JSON.stringify({ ok: true, value: [], requestId: "riders" }));
+        const parsed = new URL(url, "https://example.test");
+        const fulfillmentMode = parsed.searchParams.get("fulfillmentMode") as
+          | "INSTANT"
+          | "SCHEDULED";
+        const requestCycle = parsed.searchParams.get("cycleId");
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            value: {
+              locationId: parsed.searchParams.get("locationId"),
+              fulfillmentMode,
+              cycleId: requestCycle,
+              pins: makePins(fulfillmentMode, requestCycle),
+              generatedAt: "now",
+            },
+            requestId: "map",
+          }),
+        );
+      });
+      const container = document.createElement("div");
+      const root = createRoot(container);
+      act(() =>
+        root.render(
+          <DispatchMap publicAccessToken="token" mapAdapter={adapter} fetchImpl={fetchImpl} />,
+        ),
+      );
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const setInput = (input: HTMLInputElement, value: string) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+          input,
+          value,
+        );
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      if (mutation === "cycle") {
+        const scheduled = Array.from(
+          container.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+        ).find((input) => input.parentElement?.textContent?.includes("Scheduled"))!;
+        act(() => scheduled.click());
+        act(() =>
+          setInput(container.querySelector<HTMLInputElement>("input[required]")!, "cycle-1"),
+        );
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+      }
+      act(() => {
+        container.querySelector<HTMLButtonElement>('button[aria-label="Select job-1"]')!.click();
+        container.querySelector<HTMLButtonElement>('button[aria-label="Select job-2"]')!.click();
+      });
+      act(() =>
+        Array.from(container.querySelectorAll("button"))
+          .find((button) => button.textContent?.includes("Preview route"))!
+          .click(),
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      act(() => {
+        if (mutation === "reorder")
+          container.querySelector<HTMLButtonElement>('button[aria-label="Move job-2 up"]')!.click();
+        if (mutation === "deselect")
+          container.querySelector<HTMLButtonElement>('button[aria-label="Select job-1"]')!.click();
+        if (mutation === "status") {
+          const status = Array.from(container.querySelectorAll("select")).find((select) =>
+            select.parentElement?.textContent?.includes("Status"),
+          )!;
+          status.value = "UNASSIGNED";
+          status.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (mutation === "mode") {
+          const scheduled = Array.from(
+            container.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+          ).find((input) => input.parentElement?.textContent?.includes("Scheduled"))!;
+          scheduled.click();
+        }
+        if (mutation === "cycle")
+          setInput(container.querySelector<HTMLInputElement>("input[required]")!, "cycle-2");
+        if (mutation === "location") {
+          locationMock.current = { locationId: "location-2", label: "Other" };
+          root.render(
+            <DispatchMap publicAccessToken="token" mapAdapter={adapter} fetchImpl={fetchImpl} />,
+          );
+        }
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        resolvePreview(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              value: {
+                outcome: "AVAILABLE",
+                geometry: {
+                  type: "LineString",
+                  coordinates: [
+                    [123.88, 10.31],
+                    [123.89, 10.32],
+                  ],
+                },
+                totalMeters: 10,
+                totalSeconds: 20,
+                legs: [],
+                warning: null,
+              },
+              requestId: "preview",
+            }),
+          ),
+        );
+        await deferredPreview;
+        await Promise.resolve();
+      });
+      expect(container.textContent).not.toContain("Route preview available");
+      expect(adapter.controllers[0]!.sceneUpdates.at(-1)?.lineStrings ?? []).toEqual([]);
+      act(() => root.unmount());
+    },
+  );
 });

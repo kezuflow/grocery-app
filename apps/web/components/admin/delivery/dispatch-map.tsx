@@ -32,6 +32,23 @@ type LoadState =
   | { phase: "error"; message: string; requestId?: string }
   | { phase: "ready" };
 
+type AssignmentPayload = Readonly<{
+  locationId: string;
+  fulfillmentMode: FulfillmentMode;
+  cycleId: string | null;
+  riderId: string;
+  orderedDeliveries: ReadonlyArray<Readonly<{ jobId: string; expectedVersion: number }>>;
+}>;
+
+type AmbiguousIntent = Readonly<{
+  payload: AssignmentPayload;
+  serializedBody: string;
+  idempotencyKey: string;
+  fingerprint: string;
+}>;
+
+type RiderFilterFacet = Readonly<{ riderId: string; displayName: string }>;
+
 const CEBU_CENTER = { longitude: 123.8854, latitude: 10.3157 } as const;
 
 function statusTone(status: string): "neutral" | "success" | "warning" | "danger" | "info" {
@@ -43,9 +60,9 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
 }
 
 function pointTone(pin: DeliveryMapPin): "available" | "retry" | "assigned" | "blocked" {
-  if (!pin.selection.selectable) return "blocked";
-  if (["FAILED", "RETRY_SCHEDULED", "ESCALATED"].includes(pin.status)) return "retry";
   if (pin.rider || ["ASSIGNED", "EN_ROUTE", "ARRIVED"].includes(pin.status)) return "assigned";
+  if (["FAILED", "RETRY_SCHEDULED", "ESCALATED"].includes(pin.status)) return "retry";
+  if (!pin.selection.selectable) return "blocked";
   return "available";
 }
 
@@ -57,6 +74,14 @@ function contextQuery(locationId: string, mode: FulfillmentMode, cycleId: string
 
 async function readResult<T>(response: Response): Promise<RpcResult<T>> {
   return (await response.json()) as RpcResult<T>;
+}
+
+function orderedFingerprint(deliveries: ReadonlyArray<OrderedDeliveryItem>): string {
+  return JSON.stringify(deliveries.map(({ jobId, version }) => [jobId, version]));
+}
+
+function clientRequestReference(): string {
+  return `client-${crypto.randomUUID()}`;
 }
 
 export function DispatchMap({
@@ -76,6 +101,7 @@ export function DispatchMap({
   const [riderFilter, setRiderFilter] = useState("");
   const [view, setView] = useState<DeliveryMapView | null>(null);
   const [riders, setRiders] = useState<ReadonlyArray<EligibleRiderView>>([]);
+  const [riderFilterFacets, setRiderFilterFacets] = useState<ReadonlyArray<RiderFilterFacet>>([]);
   const [state, setState] = useState<LoadState>({ phase: "idle" });
   const [selected, setSelected] = useState<ReadonlyArray<OrderedDeliveryItem>>([]);
   const [riderId, setRiderId] = useState("");
@@ -85,30 +111,57 @@ export function DispatchMap({
   const [reviewing, setReviewing] = useState(false);
   const [areaSelectionActive, setAreaSelectionActive] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewMessage, setPreviewMessage] = useState<string | null>(null);
+  const [ambiguousIntent, setAmbiguousIntent] = useState<AmbiguousIntent | null>(null);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const loadGeneration = useRef(0);
   const detailGeneration = useRef(0);
+  const previewGeneration = useRef(0);
   const activeLoadAbort = useRef<AbortController | null>(null);
+  const activePreviewAbort = useRef<AbortController | null>(null);
+  const baseContextIdentityRef = useRef("");
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const contextIdentity = `${location.locationId ?? ""}|${mode}|${
     mode === "SCHEDULED" ? cycleId.trim() : ""
   }`;
   const contextIdentityRef = useRef(contextIdentity);
   contextIdentityRef.current = contextIdentity;
 
+  const invalidatePreview = useCallback(() => {
+    previewGeneration.current += 1;
+    activePreviewAbort.current?.abort();
+    activePreviewAbort.current = null;
+    setPreview(null);
+    setPreviewMessage(null);
+    setReviewing(false);
+  }, []);
+
   const clearIntent = useCallback(() => {
     setSelected([]);
     setRiderId("");
     setDetail(null);
     setDetailJobId(null);
-    setPreview(null);
-    setReviewing(false);
+    invalidatePreview();
     setAreaSelectionActive(false);
-  }, []);
+  }, [invalidatePreview]);
 
   const loadWorkspace = useCallback(async () => {
+    if (ambiguousIntent || commandIntent.pending) return;
     const locationId = location.locationId;
     const scheduledCycle = cycleId.trim();
+    const baseContextIdentity = `${locationId ?? ""}|${mode}|${
+      mode === "SCHEDULED" ? scheduledCycle : ""
+    }`;
+    const baseContextChanged = baseContextIdentityRef.current !== baseContextIdentity;
+    const appliedRiderFilter = baseContextChanged ? "" : riderFilter;
+    if (baseContextChanged) {
+      baseContextIdentityRef.current = baseContextIdentity;
+      setRiderFilterFacets([]);
+      if (riderFilter) setRiderFilter("");
+    }
     const generation = ++loadGeneration.current;
     activeLoadAbort.current?.abort();
     commandIntent.reset();
@@ -125,7 +178,7 @@ export function DispatchMap({
     setState({ phase: "loading" });
     const query = contextQuery(locationId, mode, scheduledCycle);
     if (statusFilter) query.append("statuses", statusFilter);
-    if (riderFilter) query.set("riderId", riderFilter);
+    if (appliedRiderFilter) query.set("riderId", appliedRiderFilter);
     const riderQuery = contextQuery(locationId, mode, scheduledCycle);
     try {
       const [mapResponse, riderResponse] = await Promise.all([
@@ -155,6 +208,22 @@ export function DispatchMap({
       }
       setView(mapResult.value);
       setRiders(riderResult.value);
+      setRiderFilterFacets((current) => {
+        const facets = new Map<string, RiderFilterFacet>();
+        if (!baseContextChanged) {
+          for (const facet of current) facets.set(facet.riderId, facet);
+        }
+        for (const pin of mapResult.value.pins) {
+          if (pin.rider) facets.set(pin.rider.riderId, pin.rider);
+        }
+        for (const rider of riderResult.value) {
+          facets.set(rider.riderId, {
+            riderId: rider.riderId,
+            displayName: rider.displayName,
+          });
+        }
+        return [...facets.values()];
+      });
       setState({ phase: "ready" });
     } catch (error) {
       if (
@@ -162,9 +231,14 @@ export function DispatchMap({
         (error instanceof DOMException && error.name === "AbortError")
       )
         return;
-      setState({ phase: "error", message: "Network access to the dispatch workspace failed." });
+      setState({
+        phase: "error",
+        message: "Network access to the dispatch workspace failed.",
+        requestId: clientRequestReference(),
+      });
     }
   }, [
+    ambiguousIntent,
     clearIntent,
     commandIntent,
     cycleId,
@@ -181,14 +255,18 @@ export function DispatchMap({
       loadGeneration.current += 1;
       activeLoadAbort.current?.abort();
     };
-  }, [loadWorkspace]);
+  }, [loadWorkspace, refreshRevision]);
 
-  function invalidatePreview() {
-    setPreview(null);
-    setReviewing(false);
-  }
+  useEffect(
+    () => () => {
+      previewGeneration.current += 1;
+      activePreviewAbort.current?.abort();
+    },
+    [],
+  );
 
   function togglePin(pin: DeliveryMapPin) {
+    if (ambiguousIntent || commandIntent.pending) return;
     if (!pin.selection.selectable) {
       setMessage(pin.selection.reason ?? "This delivery is not selectable.");
       return;
@@ -211,10 +289,13 @@ export function DispatchMap({
     invalidatePreview();
   }
 
-  async function loadDetail(pin: DeliveryMapPin) {
+  async function loadDetail(pin: DeliveryMapPin, tiedToSelection = false) {
+    if (ambiguousIntent || commandIntent.pending) return;
     const locationId = location.locationId;
     if (!locationId) return;
     const generation = ++detailGeneration.current;
+    const requestedContext = contextIdentityRef.current;
+    const requestedFingerprint = `${requestedContext}|${pin.jobId}|${pin.version}`;
     setDetailJobId(pin.jobId);
     setDetail(null);
     const query = contextQuery(locationId, mode, cycleId.trim());
@@ -226,26 +307,41 @@ export function DispatchMap({
       );
       if (
         generation !== detailGeneration.current ||
-        !selectedRef.current.some((item) => item.jobId === pin.jobId)
+        requestedContext !== contextIdentityRef.current ||
+        `${contextIdentityRef.current}|${pin.jobId}|${pin.version}` !== requestedFingerprint ||
+        viewRef.current?.pins.find((candidate) => candidate.jobId === pin.jobId)?.version !==
+          pin.version ||
+        (tiedToSelection && !selectedRef.current.some((item) => item.jobId === pin.jobId))
       )
         return;
       if (result.ok) setDetail(result.value);
       else setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
     } catch {
-      if (generation === detailGeneration.current)
-        setMessage("Protected delivery detail could not be loaded.");
+      if (
+        generation === detailGeneration.current &&
+        requestedContext === contextIdentityRef.current
+      )
+        setMessage(
+          `Protected delivery detail could not be loaded. Request reference: ${clientRequestReference()}`,
+        );
     }
   }
 
   function pointActivate(jobId: string) {
+    if (ambiguousIntent || commandIntent.pending) return;
     const pin = view?.pins.find((candidate) => candidate.jobId === jobId);
     if (!pin) return;
     const wasSelected = selected.some((item) => item.jobId === jobId);
-    togglePin(pin);
-    if (!wasSelected && pin.selection.selectable) void loadDetail(pin);
+    if (pin.selection.selectable) {
+      togglePin(pin);
+      if (!wasSelected) void loadDetail(pin, true);
+    } else {
+      void loadDetail(pin);
+    }
   }
 
   function selectArea(firstCorner: MapCoordinate, secondCorner: MapCoordinate) {
+    if (ambiguousIntent || commandIntent.pending) return;
     setAreaSelectionActive(false);
     const candidates = pinsInsideBounds(view?.pins ?? [], { firstCorner, secondCorner });
     setSelected((current) => {
@@ -269,13 +365,19 @@ export function DispatchMap({
 
   const previewRoute = async () => {
     const locationId = location.locationId;
-    if (!locationId || !selected.length) return;
+    if (!locationId || !selected.length || ambiguousIntent || commandIntent.pending) return;
     invalidatePreview();
+    const generation = previewGeneration.current;
+    const requestedContext = contextIdentityRef.current;
+    const requestedOrder = orderedFingerprint(selected);
+    const controller = new AbortController();
+    activePreviewAbort.current = controller;
     try {
       const result = await readResult<BatchRoutePreview>(
         await fetchImpl("/api/admin/delivery-map/route-preview", {
           method: "POST",
           credentials: "same-origin",
+          signal: controller.signal,
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             locationId,
@@ -288,71 +390,101 @@ export function DispatchMap({
           }),
         }),
       );
+      if (
+        generation !== previewGeneration.current ||
+        requestedContext !== contextIdentityRef.current ||
+        requestedOrder !== orderedFingerprint(selectedRef.current)
+      )
+        return;
+      activePreviewAbort.current = null;
       if (result.ok) {
         setPreview(result.value);
-        setMessage(
+        setPreviewMessage(
           result.value.outcome === "WARNING"
             ? result.value.warning.message
             : "Route preview updated.",
         );
-      } else setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
-    } catch {
-      setMessage("Route preview could not be loaded; assignment remains available.");
+      } else
+        setPreviewMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
+    } catch (error) {
+      if (
+        generation !== previewGeneration.current ||
+        (error instanceof DOMException && error.name === "AbortError")
+      )
+        return;
+      setPreviewMessage(
+        `Route preview could not be loaded; assignment remains available. Request reference: ${clientRequestReference()}`,
+      );
     }
   };
 
   const confirmAssignment = async () => {
-    const locationId = location.locationId;
-    if (
-      commandIntent.pending ||
-      !locationId ||
-      !riderId ||
-      selected.length < 1 ||
-      selected.length > 24
-    )
-      return;
-    const submittedContextIdentity = contextIdentityRef.current;
+    if (commandIntent.pending) return;
+    let attemptedIntent = ambiguousIntent;
+    if (!attemptedIntent) {
+      const locationId = location.locationId;
+      if (!locationId || !riderId || selected.length < 1 || selected.length > 24) return;
+      const payload: AssignmentPayload = {
+        locationId,
+        fulfillmentMode: mode,
+        cycleId: mode === "INSTANT" ? null : cycleId.trim(),
+        riderId,
+        orderedDeliveries: selected.map(({ jobId, version }) => ({
+          jobId,
+          expectedVersion: version,
+        })),
+      };
+      const serializedBody = JSON.stringify(payload);
+      attemptedIntent = {
+        payload,
+        serializedBody,
+        idempotencyKey: commandIntent.idempotencyKey,
+        fingerprint: serializedBody,
+      };
+    }
+    setAreaSelectionActive(false);
     try {
-      const result = await commandIntent.submit((idempotencyKey) =>
-        fetchImpl("/api/admin/delivery-batches", {
+      const result = await commandIntent.submit((idempotencyKey) => {
+        if (
+          idempotencyKey !== attemptedIntent.idempotencyKey ||
+          JSON.stringify(attemptedIntent.payload) !== attemptedIntent.fingerprint ||
+          attemptedIntent.serializedBody !== attemptedIntent.fingerprint
+        ) {
+          throw new Error("The retained assignment key changed before replay.");
+        }
+        return fetchImpl("/api/admin/delivery-batches", {
           method: "POST",
           credentials: "same-origin",
-          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-          body: JSON.stringify({
-            locationId,
-            fulfillmentMode: mode,
-            cycleId: mode === "INSTANT" ? null : cycleId.trim(),
-            riderId,
-            orderedDeliveries: selected.map(({ jobId, version }) => ({
-              jobId,
-              expectedVersion: version,
-            })),
-          }),
-        }).then(readResult<DeliveryBatchView>),
-      );
-      if (submittedContextIdentity !== contextIdentityRef.current) {
-        setMessage(
-          "An assignment response arrived for the previous context; current deliveries were not replaced.",
-        );
-        return;
-      }
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": attemptedIntent.idempotencyKey,
+          },
+          body: attemptedIntent.serializedBody,
+        }).then(readResult<DeliveryBatchView>);
+      });
+      setAmbiguousIntent(null);
+      clearIntent();
+      setRefreshRevision((revision) => revision + 1);
       if (result.ok) {
         setMessage(`Batch ${result.value.batchId} was created and assigned.`);
-        await loadWorkspace();
       } else if (result.error.code === "STALE_VERSION" || result.error.code === "CONFLICT") {
         setMessage(
           `Assignments changed. Authoritative deliveries were refreshed. Request reference: ${result.error.requestId}`,
         );
-        await loadWorkspace();
       } else {
         setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
       }
     } catch {
-      setMessage("The assignment result is unknown. Retry will use the same idempotency key.");
+      setAmbiguousIntent(attemptedIntent);
+      setReviewing(false);
+      setMessage(
+        "The assignment result is unknown. Business inputs are frozen; retry the exact assignment with the retained idempotency key.",
+      );
     }
   };
 
   const selectedIds = selected.map((item) => item.jobId);
+  const businessInputsFrozen = commandIntent.pending || ambiguousIntent !== null;
   const scene = useMemo<MapScene>(
     () => ({
       points: (view?.pins ?? []).flatMap((pin) =>
@@ -404,7 +536,12 @@ export function DispatchMap({
                 type="radio"
                 name="dispatch-mode"
                 checked={mode === value}
-                onChange={() => setMode(value)}
+                disabled={businessInputsFrozen}
+                onChange={() => {
+                  if (businessInputsFrozen) return;
+                  setMode(value);
+                  setRiderFilter("");
+                }}
               />
               {value === "INSTANT" ? "Instant" : "Scheduled"}
             </label>
@@ -416,7 +553,12 @@ export function DispatchMap({
             <input
               className="ml-2 min-h-11 rounded border px-3"
               value={cycleId}
-              onChange={(event) => setCycleId(event.target.value)}
+              disabled={businessInputsFrozen}
+              onChange={(event) => {
+                if (businessInputsFrozen) return;
+                setCycleId(event.target.value);
+                setRiderFilter("");
+              }}
               required
             />
           </label>
@@ -426,7 +568,10 @@ export function DispatchMap({
           <select
             className="ml-2 min-h-11 rounded border bg-white px-3"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            disabled={businessInputsFrozen}
+            onChange={(event) => {
+              if (!businessInputsFrozen) setStatusFilter(event.target.value);
+            }}
           >
             <option value="">All statuses</option>
             {deliveryJobStates.map((status) => (
@@ -439,10 +584,13 @@ export function DispatchMap({
           <select
             className="ml-2 min-h-11 rounded border bg-white px-3"
             value={riderFilter}
-            onChange={(event) => setRiderFilter(event.target.value)}
+            disabled={businessInputsFrozen}
+            onChange={(event) => {
+              if (!businessInputsFrozen) setRiderFilter(event.target.value);
+            }}
           >
             <option value="">All Riders</option>
-            {riders.map((rider) => (
+            {riderFilterFacets.map((rider) => (
               <option key={rider.riderId} value={rider.riderId}>
                 {rider.displayName}
               </option>
@@ -451,8 +599,8 @@ export function DispatchMap({
         </label>
       </FilterBar>
 
-      <AdminLiveRegion message={message} />
-      {!location.locationId ? (
+      <AdminLiveRegion message={previewMessage ?? message} />
+      {!location.locationId && !ambiguousIntent ? (
         <AdminPageState
           state="permission-empty"
           title="Select a permitted location"
@@ -508,8 +656,11 @@ export function DispatchMap({
                 </div>
                 <Button
                   type="button"
+                  disabled={businessInputsFrozen}
                   variant={areaSelectionActive ? "destructive" : "outline"}
-                  onClick={() => setAreaSelectionActive((active) => !active)}
+                  onClick={() => {
+                    if (!businessInputsFrozen) setAreaSelectionActive((active) => !active);
+                  }}
                 >
                   {areaSelectionActive ? "Cancel area selection" : "Select Area"}
                 </Button>
@@ -556,7 +707,7 @@ export function DispatchMap({
                           <Checkbox
                             aria-label={`Select ${pin.jobId}`}
                             checked={checked}
-                            disabled={!pin.selection.selectable}
+                            disabled={businessInputsFrozen || !pin.selection.selectable}
                             aria-describedby={
                               !pin.selection.selectable ? `reason-${pin.jobId}` : undefined
                             }
@@ -586,7 +737,7 @@ export function DispatchMap({
                             type="button"
                             size="sm"
                             variant="link"
-                            disabled={!checked}
+                            disabled={businessInputsFrozen}
                             onClick={() => void loadDetail(pin)}
                           >
                             View detail
@@ -607,20 +758,39 @@ export function DispatchMap({
             detail={detail}
             reviewing={reviewing}
             pending={commandIntent.pending}
+            businessInputsFrozen={businessInputsFrozen}
+            ambiguousRecovery={
+              ambiguousIntent
+                ? {
+                    locationId: ambiguousIntent.payload.locationId,
+                    fulfillmentMode: ambiguousIntent.payload.fulfillmentMode,
+                    cycleId: ambiguousIntent.payload.cycleId,
+                    riderId: ambiguousIntent.payload.riderId,
+                    orderedDeliveries: ambiguousIntent.payload.orderedDeliveries,
+                  }
+                : null
+            }
             contextLabel={contextLabel}
             onRiderChange={(value) => {
+              if (businessInputsFrozen) return;
               setRiderId(value);
-              setReviewing(false);
+              invalidatePreview();
             }}
             onReorder={(value) => {
+              if (businessInputsFrozen) return;
               setSelected(value);
               invalidatePreview();
             }}
             onPreview={() => void previewRoute()}
-            onReview={() => setReviewing(true)}
+            onReview={() => {
+              if (!businessInputsFrozen) setReviewing(true);
+            }}
             onConfirm={() => void confirmAssignment()}
+            onRetryAmbiguous={() => void confirmAssignment()}
             onReviewingChange={setReviewing}
-            onClear={clearIntent}
+            onClear={() => {
+              if (!businessInputsFrozen) clearIntent();
+            }}
           />
         </div>
       ) : null}

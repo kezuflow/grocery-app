@@ -32,12 +32,21 @@ type Props = {
   detail: DeliveryMapDetail | null;
   reviewing: boolean;
   pending: boolean;
+  businessInputsFrozen: boolean;
+  ambiguousRecovery: Readonly<{
+    locationId: string;
+    fulfillmentMode: "INSTANT" | "SCHEDULED";
+    cycleId: string | null;
+    riderId: string;
+    orderedDeliveries: ReadonlyArray<Readonly<{ jobId: string; expectedVersion: number }>>;
+  }> | null;
   contextLabel: string;
   onRiderChange: (riderId: string) => void;
   onReorder: (deliveries: ReadonlyArray<OrderedDeliveryItem>) => void;
   onPreview: () => void;
   onReview: () => void;
   onConfirm: () => void;
+  onRetryAmbiguous: () => void;
   onReviewingChange: (reviewing: boolean) => void;
   onClear: () => void;
 };
@@ -58,14 +67,18 @@ export function SelectedDeliveriesDrawer(props: Props) {
           type="button"
           size="sm"
           variant="ghost"
-          disabled={!props.deliveries.length}
+          disabled={props.businessInputsFrozen || !props.deliveries.length}
           onClick={props.onClear}
         >
           Clear
         </Button>
       </div>
       {props.deliveries.length ? (
-        <DeliveryOrderList deliveries={props.deliveries} onReorder={props.onReorder} />
+        <DeliveryOrderList
+          deliveries={props.deliveries}
+          disabled={props.businessInputsFrozen}
+          onReorder={props.onReorder}
+        />
       ) : (
         <p className="text-sm text-[var(--fm-text-muted)]">
           Select eligible deliveries from the map or table.
@@ -94,6 +107,7 @@ export function SelectedDeliveriesDrawer(props: Props) {
         <select
           className="mt-1 min-h-11 w-full rounded border border-[var(--fm-border)] bg-white px-3"
           value={props.riderId}
+          disabled={props.businessInputsFrozen}
           onChange={(event) => props.onRiderChange(event.target.value)}
         >
           <option value="">Select Rider…</option>
@@ -123,18 +137,40 @@ export function SelectedDeliveriesDrawer(props: Props) {
           </Alert>
         )
       ) : null}
+      {props.ambiguousRecovery ? (
+        <Alert variant="warning">
+          <div>
+            <AlertTitle>Assignment result unknown</AlertTitle>
+            <AlertDescription>
+              Inputs are frozen for the exact assignment at {props.ambiguousRecovery.locationId} (
+              {props.ambiguousRecovery.fulfillmentMode}
+              {props.ambiguousRecovery.cycleId ? `, cycle ${props.ambiguousRecovery.cycleId}` : ""})
+              to Rider {props.ambiguousRecovery.riderId}, in this order:{" "}
+              {props.ambiguousRecovery.orderedDeliveries.map(({ jobId }) => jobId).join(", ")}.
+            </AlertDescription>
+            <Button
+              type="button"
+              className="mt-3 min-h-11 w-full"
+              disabled={props.pending}
+              onClick={props.onRetryAmbiguous}
+            >
+              {props.pending ? "Retrying exact assignment…" : "Retry exact assignment"}
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
         <Button
           type="button"
           variant="outline"
-          disabled={!props.deliveries.length}
+          disabled={props.businessInputsFrozen || !props.deliveries.length}
           onClick={props.onPreview}
         >
           Preview route
         </Button>
         <Button
           type="button"
-          disabled={!props.deliveries.length || !props.riderId}
+          disabled={props.businessInputsFrozen || !props.deliveries.length || !props.riderId}
           onClick={props.onReview}
         >
           Review batch

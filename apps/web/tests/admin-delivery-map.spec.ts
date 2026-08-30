@@ -103,11 +103,19 @@ test("authenticated dispatch remains table-operable without Mapbox and recovers 
       key: request.headers()["idempotency-key"] ?? null,
     });
     batchAttempts += 1;
+    if (batchAttempts === 3) {
+      await route.abort("failed");
+      return;
+    }
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(
-        batchAttempts === 1
-          ? { ok: true, value: { batchId: "batch-created" }, requestId: "batch-success" }
+        batchAttempts === 1 || batchAttempts === 4
+          ? {
+              ok: true,
+              value: { batchId: batchAttempts === 1 ? "batch-created" : "batch-recovered" },
+              requestId: "batch-success",
+            }
           : {
               ok: false,
               error: {
@@ -177,4 +185,20 @@ test("authenticated dispatch remains table-operable without Mapbox and recovers 
   await expect(page.getByText(/Authoritative deliveries were refreshed/)).toBeVisible();
   await expect(page.getByText("0/24 stops").first()).toBeVisible();
   expect(mapLoads).toBeGreaterThanOrEqual(3);
+
+  await page.getByRole("checkbox", { name: "Select job-1" }).click();
+  await page.getByRole("checkbox", { name: "Select job-2" }).click();
+  await page.getByRole("button", { name: "Move job-2 up" }).click();
+  await page.getByLabel("Eligible Rider").selectOption("rider-1");
+  await page.getByRole("button", { name: "Review batch" }).click();
+  await page.getByRole("button", { name: "Confirm create and assign" }).click();
+  await expect(page.getByText("Assignment result unknown", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Status")).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Select job-1" })).toBeDisabled();
+  await page.getByRole("button", { name: "Retry exact assignment" }).click();
+  await expect(
+    page.getByText("Batch batch-recovered was created and assigned.", { exact: true }),
+  ).toBeVisible();
+  expect(submitted[3]?.body).toEqual(submitted[2]?.body);
+  expect(submitted[3]?.key).toBe(submitted[2]?.key);
 });

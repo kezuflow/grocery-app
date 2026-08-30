@@ -12,14 +12,18 @@ export type OrderedDeliveryItem = Readonly<{
 
 export function DeliveryOrderList({
   deliveries,
+  disabled = false,
   onReorder,
 }: {
   deliveries: ReadonlyArray<OrderedDeliveryItem>;
+  disabled?: boolean;
   onReorder: (deliveries: ReadonlyArray<OrderedDeliveryItem>) => void;
 }) {
   const draggedId = useRef<string | null>(null);
+  const listRef = useRef<HTMLOListElement>(null);
 
   function move(index: number, offset: number) {
+    if (disabled) return;
     const destination = index + offset;
     if (destination < 0 || destination >= deliveries.length) return;
     const next = [...deliveries];
@@ -28,11 +32,14 @@ export function DeliveryOrderList({
     next.splice(destination, 0, item);
     onReorder(next);
     queueMicrotask(() =>
-      document.querySelector<HTMLButtonElement>(`[data-order-focus="${item.jobId}"]`)?.focus(),
+      listRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-order-focus="${item.jobId}"]`)
+        ?.focus(),
     );
   }
 
   function drop(targetId: string) {
+    if (disabled) return;
     const sourceId = draggedId.current;
     draggedId.current = null;
     if (!sourceId || sourceId === targetId) return;
@@ -45,11 +52,11 @@ export function DeliveryOrderList({
   }
 
   return (
-    <ol aria-label="Manual delivery order" className="space-y-2">
+    <ol ref={listRef} aria-label="Manual delivery order" className="space-y-2">
       {deliveries.map((delivery, index) => (
         <li
           key={delivery.jobId}
-          draggable
+          draggable={!disabled}
           onDragStart={() => (draggedId.current = delivery.jobId)}
           onDragOver={(event) => event.preventDefault()}
           onDrop={() => drop(delivery.jobId)}
@@ -68,7 +75,7 @@ export function DeliveryOrderList({
             size="icon-sm"
             variant="outline"
             aria-label={`Move ${delivery.jobId} up`}
-            disabled={index === 0}
+            disabled={disabled || index === 0}
             onClick={() => move(index, -1)}
           >
             ↑
@@ -79,7 +86,7 @@ export function DeliveryOrderList({
             variant="outline"
             aria-label={`Move ${delivery.jobId} down`}
             data-order-focus={delivery.jobId}
-            disabled={index === deliveries.length - 1}
+            disabled={disabled || index === deliveries.length - 1}
             onClick={() => move(index, 1)}
           >
             ↓
