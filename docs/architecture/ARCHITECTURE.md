@@ -233,7 +233,7 @@ R2 stores durable blobs such as product media, future proof-of-delivery files, a
 
 ### Queues
 
-Queues handle non-critical asynchronous work: notification delivery, analytics/event ingestion, retryable webhook follow-up, and reconciliation jobs. Critical order commitment, capacity, inventory, and payment state changes remain synchronous and transactionally guarded. Consumers must tolerate duplicate delivery. Queues are introduced only after a documented need; the launch-scale transactional email set is dispatched inline as an idempotent command side effect until then.
+Critical order commitment, capacity, inventory, and payment state changes remain synchronous and transactionally guarded. Launch-scale transactional email uses a D1 outbox and the explicit Core scheduler: stable domain facts project deduplicated intents, bounded leases record every attempt, and adapter failure never rolls back business state or reports delivery. Queues remain deferred until a documented scale or isolation need; future consumers must tolerate duplicate delivery.
 
 ### KV
 

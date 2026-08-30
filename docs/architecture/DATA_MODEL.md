@@ -271,6 +271,8 @@ added, but neither a batch nor a Rider becomes the owner of Order state.
 
 ## Audit and Operational Reliability
 
+`notification_outbox` is the durable launch email intent store. It snapshots the recipient and bounded versioned template facts, uses one stable idempotency key per domain fact/type/recipient, and tracks schedule, availability/lease instant, bounded attempts, last controlled error, and terminal delivery state. `notification_attempt` is append-only attempt evidence. Neither table owns or mutates Order, Payment, Membership, Fulfillment, or Delivery truth; scheduler delivery can lag or fail independently.
+
 - `audit_events(id PK, actor_type, actor_id NULL, action, resource_type, resource_id, market_id FK NULL, location_id FK NULL, reason NULL, metadata_json, before_json NULL, after_json NULL, correlation_id, created_at)`
 - `idempotency_records(scope, idempotency_key, request_hash, result_type, result_reference, status, expires_at NULL, created_at, PRIMARY KEY(scope, idempotency_key))`
 - `outbox_events(id PK, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, available_at, created_at, processed_at NULL)` where transactional event-to-queue publication needs durable recovery.

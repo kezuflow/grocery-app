@@ -89,6 +89,7 @@ describe("scheduled job registry", () => {
     expect([...SCHEDULED_CRON_EXPRESSIONS].sort()).toEqual(["* * * * *", "*/15 * * * *"].sort());
     const everyMinute = getJobsForCron("* * * * *").map((job) => job.name);
     expect(everyMinute).toContain("checkout.hold-expiry");
+    expect(everyMinute).toContain("notifications.delivery");
     expect(everyMinute).toContain("membership.scheduled-cancellations");
     expect(everyMinute).toContain("payments.provider-action-expiry");
     expect(everyMinute).toContain("commerce.cycle-cutoff");
