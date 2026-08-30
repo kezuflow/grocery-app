@@ -239,3 +239,63 @@ factual contexts while belonging to a batch whose aggregate context is
 `LEGACY_UNRESOLVED`. Task 3 must require both job and batch resolution before selection or
 assignment. Original conflicting evidence remains available in the three append-only compatibility
 history tables for explicit operational reconciliation.
+
+## Review fix round 2 re-review
+
+Three Important findings and the whitespace-event minor were reproduced with hostile pre-0043
+history before production SQL changed. The RED evidence was run independently so each failure was
+observable against `fd0d26a`:
+
+- Mixed-mode preservation applied 0043 but returned invented `SCHEDULED` instead of the asserted
+  null canonical mode.
+- A stopless `job-a` plus `job-b` with original stop ID `stop-job-a` aborted 0043 on
+  `UNIQUE constraint failed: delivery_stop.id`.
+- A valid legacy `COMPLETED` batch created at 1000 with a delivered job at 500 aborted on
+  `completed_at IS NULL OR completed_at >= created_at`.
+- The primary fixture now uses a tab/newline-only legacy event type, which SQLite's one-argument
+  `trim` does not treat as empty.
+
+The owner confirmed there is no `MIXED` operational fulfillment mode. Canonical
+`delivery_batch.fulfillment_mode` is nullable only for the constrained
+`LEGACY_UNRESOLVED`/`EXCEPTION` representation. Resolved batches still require exactly `INSTANT`
+or `SCHEDULED` with their legal cycle relationship. All conflicting or missing historical mode
+evidence now receives null mode/cycle/location/zone; every original job mode remains exact in
+append-only job history. This work does not add a `MIXED` enum or selectable state.
+
+Stopless jobs now receive IDs from a staged deterministic namespace whose prefix alone is longer
+than the longest legacy stop ID. Therefore generated IDs cannot equal any legacy stop ID, and the
+unique job suffix prevents generated/generated collisions. Chosen historical stops keep their
+original IDs, proof bytes, status, version, batch, and sequence in canonical selection and
+compatibility history. The exact `job-a`/`stop-job-a` collision fixture migrates without loss.
+
+Invalid completion chronology no longer copies an impossible timestamp into the canonical batch.
+A resolved-context legacy `COMPLETED` batch whose last delivery is missing or predates batch
+creation becomes canonical `EXCEPTION`, with null dispatched/completed instants and a safe
+nondecreasing canonical update instant. Its original `COMPLETED`, created/version values and the
+job's original delivered/created/updated values remain exact in append-only histories.
+
+Legacy event normalization now trims ASCII space, tab, newline, vertical-tab, form-feed, and
+carriage-return before deciding whether an event type is empty. Whitespace-only values map to
+`LEGACY_COMPATIBILITY`; the original `domain_event.event_type` and payload remain unchanged.
+
+The consolidated hostile fixture now proves 26 canonical jobs and 26 canonical stops while
+retaining 26 original jobs, ten original batches, and 25 original stops. It continues to cover
+all-Instant and order-independent mixed aggregation, invalid references/coordinates/events,
+append-only exact job history, JSON-null instructions fallback, Rider identities with nullable
+auth/staff links, and original batch/stop/proof bytes. The atomic Instant/Scheduled commitment
+tests continue to prove their post-0043 job+stop transaction and rollback behavior.
+
+Re-review verification:
+
+- Focused hostile full-chain migration: one file, one test passed.
+- Migration plus both atomic commitment suites: three files, eight tests passed.
+- Affected migration/commitment/compatibility set: eight files, 42 tests passed.
+- Full Core suite: 95 files, 514 tests passed.
+- Final format, naming, migration verification, lint, workspace typecheck, Core dry-run build, and
+  diff checks were rerun after this report append and before the separate re-review commit.
+
+Two boundaries are explicit and unchanged. Task 2 relies on the paid-order atomic writer to create
+the required stop with every new delivery job; it does not add a separate database mechanism for
+the at-least-one-stop invariant. Synchronizing job/stop batch and sequence changes belongs to Task
+5's single assignment/reordering transaction. Neither boundary authorizes Task 3+ runtime work in
+this migration fix.

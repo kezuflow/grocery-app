@@ -443,7 +443,28 @@ async function seedPre0043CompatibilityRows(): Promise<void> {
       ).bind(stopId, batchId, jobId, sequence),
     ),
     env.DB.prepare(
-      "INSERT INTO domain_event (id, aggregate_type, aggregate_id, event_type, payload_json, occurred_at) VALUES ('event-delivery-empty-type', 'DELIVERY_JOB', 'job-bad-coordinate-range', '', '{\"legacy\":\"empty-event-type\"}', 409)",
+      "INSERT INTO domain_event (id, aggregate_type, aggregate_id, event_type, payload_json, occurred_at) VALUES ('event-delivery-empty-type', 'DELIVERY_JOB', 'job-bad-coordinate-range', ?, '{\"legacy\":\"empty-event-type\"}', 409)",
+    ).bind("\t\n"),
+    env.DB.prepare(
+      "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES ('job-a', 'order-stopless-a', NULL, 'INSTANT', NULL, 'UNASSIGNED', '{}', NULL, 1, 1, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES ('job-b', 'order-stopped-b', NULL, 'INSTANT', NULL, 'UNASSIGNED', '{}', NULL, 1, 1, 1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_stop (id, batch_id, delivery_job_id, sequence, status, proof_json, version) VALUES ('stop-job-a', NULL, 'job-b', NULL, 'UNASSIGNED', '{\"original\":true}', 4)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES ('job-precreated-completion', 'order-precreated-completion', 'cycle-next-cebu', 'SCHEDULED', NULL, 'DELIVERED', '{}', 500, 3, 400, 500)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, created_at) VALUES ('order-precreated-completion', 'location-cebu-central', 'cycle-next-cebu', 'zone-cebu-city-core', 300, 400, 450, 'SCHEDULED', '[]', 400)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_batch (id, cycle_id, status, rider_user_id, created_at, version) VALUES ('batch-precreated-completion', 'cycle-next-cebu', 'COMPLETED', NULL, 1000, 7)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_stop (id, batch_id, delivery_job_id, sequence, status, proof_json, version) VALUES ('stop-precreated-completion', 'batch-precreated-completion', 'job-precreated-completion', 1, 'DELIVERED', '{\"timestamp\":500}', 5)",
     ),
   ]);
 }
@@ -474,12 +495,12 @@ describe("canonical delivery batch migration 0043", () => {
     const counts = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM delivery_job) AS jobs, (SELECT COUNT(*) FROM delivery_batch) AS batches, (SELECT COUNT(*) FROM delivery_stop) AS stops, (SELECT COUNT(DISTINCT delivery_job_id) FROM delivery_stop) AS stopped_jobs",
     ).first<{ jobs: number; batches: number; stops: number; stopped_jobs: number }>();
-    expect(counts).toEqual({ jobs: 23, batches: 9, stops: 23, stopped_jobs: 23 });
+    expect(counts).toEqual({ jobs: 26, batches: 10, stops: 26, stopped_jobs: 26 });
 
     const historyCounts = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM delivery_batch_compatibility_history) AS batches, (SELECT COUNT(*) FROM delivery_job_compatibility_history) AS jobs, (SELECT COUNT(*) FROM delivery_stop_compatibility_history) AS stops",
     ).first<{ batches: number; jobs: number; stops: number }>();
-    expect(historyCounts).toEqual({ batches: 9, jobs: 23, stops: 23 });
+    expect(historyCounts).toEqual({ batches: 10, jobs: 26, stops: 25 });
     expect(
       await env.DB.prepare(
         "SELECT original_status, original_rider_user_id FROM delivery_batch_compatibility_history WHERE delivery_batch_id='batch-delivery-empty-unresolved'",
@@ -549,7 +570,7 @@ describe("canonical delivery batch migration 0043", () => {
     expect(mixedBatches.results).toEqual([
       {
         id: "batch-mixed-instant-first",
-        fulfillment_mode: "SCHEDULED",
+        fulfillment_mode: null,
         cycle_id: null,
         location_id: null,
         zone_id: null,
@@ -558,7 +579,7 @@ describe("canonical delivery batch migration 0043", () => {
       },
       {
         id: "batch-mixed-scheduled-first",
-        fulfillment_mode: "SCHEDULED",
+        fulfillment_mode: null,
         cycle_id: null,
         location_id: null,
         zone_id: null,
@@ -572,7 +593,7 @@ describe("canonical delivery batch migration 0043", () => {
     expect(contextDisagreementBatches.results).toEqual([
       {
         id: "batch-context-disagreement",
-        fulfillment_mode: "SCHEDULED",
+        fulfillment_mode: null,
         cycle_id: null,
         location_id: null,
         zone_id: null,
@@ -581,7 +602,7 @@ describe("canonical delivery batch migration 0043", () => {
       },
       {
         id: "batch-context-disagreement-reverse",
-        fulfillment_mode: "SCHEDULED",
+        fulfillment_mode: null,
         cycle_id: null,
         location_id: null,
         zone_id: null,
@@ -590,7 +611,7 @@ describe("canonical delivery batch migration 0043", () => {
       },
       {
         id: "batch-cycle-disagreement",
-        fulfillment_mode: "SCHEDULED",
+        fulfillment_mode: null,
         cycle_id: null,
         location_id: null,
         zone_id: null,
@@ -603,7 +624,7 @@ describe("canonical delivery batch migration 0043", () => {
       "SELECT fulfillment_mode, cycle_id, location_id, zone_id, rider_id, rider_user_id, status, context_resolution_status FROM delivery_batch WHERE id='batch-delivery-empty-unresolved'",
     ).first<Record<string, unknown>>();
     expect(unresolvedBatch).toEqual({
-      fulfillment_mode: "SCHEDULED",
+      fulfillment_mode: null,
       cycle_id: null,
       location_id: null,
       zone_id: null,
@@ -799,7 +820,7 @@ describe("canonical delivery batch migration 0043", () => {
       await env.DB.prepare(
         "SELECT event_type, payload_json FROM domain_event WHERE id='event-delivery-empty-type'",
       ).first<Record<string, unknown>>(),
-    ).toEqual({ event_type: "", payload_json: '{"legacy":"empty-event-type"}' });
+    ).toEqual({ event_type: "\t\n", payload_json: '{"legacy":"empty-event-type"}' });
     expect(
       await env.DB.prepare(
         "SELECT metadata_json, delivered_at, rider_id FROM delivery_proof WHERE delivery_stop_id='stop-delivery-legacy'",
@@ -809,6 +830,56 @@ describe("canonical delivery batch migration 0043", () => {
       delivered_at: 1700000000400,
       rider_id: "rider-staff-rider-legacy",
     });
+
+    const collisionStops = await env.DB.prepare(
+      "SELECT id, delivery_job_id, proof_json FROM delivery_stop WHERE delivery_job_id IN ('job-a','job-b') ORDER BY delivery_job_id",
+    ).all<Record<string, unknown>>();
+    expect(collisionStops.results[0]).toMatchObject({ delivery_job_id: "job-a", proof_json: null });
+    expect(collisionStops.results[0]?.id).toMatch(/^0+-job-a$/);
+    expect(collisionStops.results[1]).toEqual({
+      id: "stop-job-a",
+      delivery_job_id: "job-b",
+      proof_json: '{"original":true}',
+    });
+    const longestLegacyStopId = await env.DB.prepare(
+      "SELECT MAX(length(delivery_stop_id)) AS length FROM delivery_stop_compatibility_history",
+    ).first<{ length: number }>();
+    expect(String(collisionStops.results[0]?.id).length).toBeGreaterThan(
+      longestLegacyStopId!.length,
+    );
+    expect(
+      await env.DB.prepare(
+        "SELECT delivery_stop_id, delivery_job_id, proof_json, original_version FROM delivery_stop_compatibility_history WHERE delivery_stop_id='stop-job-a'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      delivery_stop_id: "stop-job-a",
+      delivery_job_id: "job-b",
+      proof_json: '{"original":true}',
+      original_version: 4,
+    });
+
+    expect(
+      await env.DB.prepare(
+        "SELECT status, context_resolution_status, created_at, updated_at, dispatched_at, completed_at FROM delivery_batch WHERE id='batch-precreated-completion'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({
+      status: "EXCEPTION",
+      context_resolution_status: "RESOLVED",
+      created_at: 1000,
+      updated_at: 1000,
+      dispatched_at: null,
+      completed_at: null,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT original_status, original_created_at, original_version FROM delivery_batch_compatibility_history WHERE delivery_batch_id='batch-precreated-completion'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({ original_status: "COMPLETED", original_created_at: 1000, original_version: 7 });
+    expect(
+      await env.DB.prepare(
+        "SELECT original_delivered_at, original_created_at, original_updated_at FROM delivery_job_compatibility_history WHERE delivery_job_id='job-precreated-completion'",
+      ).first<Record<string, unknown>>(),
+    ).toEqual({ original_delivered_at: 500, original_created_at: 400, original_updated_at: 500 });
 
     await rejects("UPDATE delivery_stop SET latitude=11 WHERE id='stop-delivery-legacy'");
     await rejects(

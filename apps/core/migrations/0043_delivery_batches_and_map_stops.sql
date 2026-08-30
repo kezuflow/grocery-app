@@ -178,10 +178,24 @@ job_evidence AS (
 )
 SELECT * FROM job_evidence;
 
+-- Pick one deterministic namespace longer than every legacy stop id. Generated
+-- ids within it cannot collide with any preserved legacy id, and unique job ids
+-- make the generated ids mutually distinct.
+CREATE TABLE delivery_stop_id_stage_0043 AS
+WITH generated_namespace AS (
+  SELECT lower(hex(zeroblob(CAST(COALESCE(MAX(length(id)), 0) / 2 AS INTEGER) + 1))) || '-' AS prefix
+  FROM delivery_stop_legacy_0043
+)
+SELECT
+  stage.id AS delivery_job_id,
+  COALESCE(stage.selected_stop_id, namespace.prefix || stage.id) AS canonical_stop_id
+FROM delivery_job_stage_0043 stage
+CROSS JOIN generated_namespace namespace;
+
 CREATE TABLE delivery_batch (
   id TEXT PRIMARY KEY NOT NULL,
-  fulfillment_mode TEXT NOT NULL DEFAULT 'SCHEDULED'
-    CHECK (fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
+  fulfillment_mode TEXT DEFAULT 'SCHEDULED'
+    CHECK (fulfillment_mode IS NULL OR fulfillment_mode IN ('INSTANT', 'SCHEDULED')),
   cycle_id TEXT REFERENCES delivery_cycle(id) ON DELETE RESTRICT,
   location_id TEXT REFERENCES fulfillment_location(id) ON DELETE RESTRICT,
   zone_id TEXT REFERENCES delivery_zone(id) ON DELETE RESTRICT,
@@ -209,7 +223,7 @@ CREATE TABLE delivery_batch (
     )
     OR (
       context_resolution_status = 'LEGACY_UNRESOLVED'
-      AND fulfillment_mode = 'SCHEDULED'
+      AND fulfillment_mode IS NULL
       AND cycle_id IS NULL
       AND location_id IS NULL
       AND zone_id IS NULL
@@ -267,7 +281,7 @@ INSERT INTO delivery_batch
    updated_at, dispatched_at, completed_at)
 SELECT
   batch.id,
-  CASE WHEN batch.context_is_resolved = 1 THEN batch.minimum_mode ELSE 'SCHEDULED' END,
+  CASE WHEN batch.context_is_resolved = 1 THEN batch.minimum_mode ELSE NULL END,
   CASE
     WHEN batch.context_is_resolved = 1 AND batch.minimum_mode = 'SCHEDULED'
       THEN batch.minimum_cycle_id
@@ -279,21 +293,34 @@ SELECT
   batch.rider_user_id,
   CASE
     WHEN batch.context_is_resolved = 0 THEN 'EXCEPTION'
+    WHEN batch.status = 'COMPLETED'
+      AND (batch.last_delivery IS NULL OR batch.last_delivery < batch.created_at)
+      THEN 'EXCEPTION'
     WHEN batch.status IN ('DRAFT', 'READY', 'ASSIGNED', 'DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED', 'EXCEPTION') THEN batch.status
     ELSE 'EXCEPTION'
   END,
   CASE WHEN batch.context_is_resolved = 1 THEN 'RESOLVED' ELSE 'LEGACY_UNRESOLVED' END,
   CASE WHEN batch.version > 0 THEN batch.version ELSE 1 END,
   batch.created_at,
-  COALESCE(batch.last_job_update, batch.created_at),
+  CASE
+    WHEN batch.last_job_update IS NULL OR batch.last_job_update < batch.created_at
+      THEN batch.created_at
+    ELSE batch.last_job_update
+  END,
   CASE
     WHEN batch.context_is_resolved = 1
       AND batch.status IN ('DISPATCHED', 'IN_PROGRESS', 'COMPLETED', 'EXCEPTION')
+      AND NOT (
+        batch.status = 'COMPLETED'
+        AND (batch.last_delivery IS NULL OR batch.last_delivery < batch.created_at)
+      )
       THEN batch.created_at
     ELSE NULL
   END,
   CASE
-    WHEN batch.context_is_resolved = 1 AND batch.status = 'COMPLETED'
+    WHEN batch.context_is_resolved = 1
+      AND batch.status = 'COMPLETED'
+      AND batch.last_delivery >= batch.created_at
       THEN batch.last_delivery
     ELSE NULL
   END
@@ -407,20 +434,7 @@ INSERT INTO delivery_stop
    status, proof_json, arrived_at, delivered_at, failure_reason_code,
    failure_notes, version, created_at, updated_at)
 SELECT
-  COALESCE(
-    (
-      SELECT stop.id
-      FROM delivery_stop_legacy_0043 stop
-      WHERE stop.delivery_job_id = job.id
-      ORDER BY
-        CASE WHEN stop.batch_id IS NULL THEN 1 ELSE 0 END,
-        CASE WHEN stop.sequence > 0 THEN 0 ELSE 1 END,
-        CASE WHEN stop.sequence > 0 THEN stop.sequence ELSE 2147483647 END,
-        stop.id
-      LIMIT 1
-    ),
-    'stop-' || job.id
-  ),
+  allocated.canonical_stop_id,
   job.id,
   job.batch_id,
   job.sequence,
@@ -514,7 +528,8 @@ SELECT
   ), job.version),
   job.created_at,
   job.updated_at
-FROM delivery_job job;
+FROM delivery_job job
+JOIN delivery_stop_id_stage_0043 allocated ON allocated.delivery_job_id = job.id;
 
 CREATE TABLE delivery_event (
   id TEXT PRIMARY KEY NOT NULL,
@@ -536,7 +551,7 @@ SELECT
   event.aggregate_id,
   stop.id,
   job.rider_id,
-  CASE WHEN length(trim(event.event_type)) > 0
+  CASE WHEN length(trim(event.event_type, ' ' || char(9) || char(10) || char(11) || char(12) || char(13))) > 0
     THEN event.event_type ELSE 'LEGACY_COMPATIBILITY' END,
   event.occurred_at,
   event.occurred_at,
@@ -577,6 +592,7 @@ JOIN delivery_job job ON job.id = stop.delivery_job_id
 WHERE stop.proof_json IS NOT NULL;
 
 DROP TABLE delivery_job_stage_0043;
+DROP TABLE delivery_stop_id_stage_0043;
 DROP TABLE delivery_stop_legacy_0043;
 DROP TABLE delivery_job_legacy_0043;
 DROP TABLE delivery_batch_legacy_0043;
