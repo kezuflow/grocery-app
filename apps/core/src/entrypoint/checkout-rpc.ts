@@ -74,6 +74,7 @@ export function createCheckoutRpc(context: CoreRpcContext) {
           cartVersion: input.cartVersion,
           addressId: input.addressId,
           deliveryCycleId: input.deliveryCycleId,
+          promotionCodes: input.promotionCodes,
           idempotencyKey: input.idempotencyKey,
           requestId: input.requestId,
         },

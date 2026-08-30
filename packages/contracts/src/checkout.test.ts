@@ -40,4 +40,30 @@ describe("checkout contracts", () => {
     void (true as ExplicitFinancialComponents);
     expect(true).toBe(true);
   });
+
+  it("carries promotion feedback and an explicit price-acceptance version", () => {
+    const view = {
+      priceAcceptanceVersion: 2,
+      requestedPromotionCodes: ["SAVE10"],
+      promotionFeedback: [{ code: "SAVE10", status: "APPLIED", message: "Promotion applied" }],
+      promotionApplications: [
+        {
+          promotionId: "promotion-1",
+          code: "SAVE10",
+          name: "Save ten",
+          component: "MERCHANDISE",
+          benefitType: "ORDER_PERCENT_DISCOUNT",
+          amountMinor: 1000,
+          automatic: false,
+        },
+      ],
+    } satisfies Pick<
+      CheckoutQuoteView,
+      | "priceAcceptanceVersion"
+      | "requestedPromotionCodes"
+      | "promotionFeedback"
+      | "promotionApplications"
+    >;
+    expect(view.promotionApplications[0]?.component).toBe("MERCHANDISE");
+  });
 });

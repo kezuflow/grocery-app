@@ -514,6 +514,54 @@ assert.throws(() =>
 assert.deepEqual(cartUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
 cartUpgrade.close();
 
+// Customer MVP migration is additive over live Membership/Promotions data and
+// establishes the quote-claim, follow-up, notification, and invoice seams in
+// one reserved migration.
+const customerMvpUpgrade = database();
+apply(
+  customerMvpUpgrade,
+  migrations.filter((migration) => migration.name <= "0046_cart_and_inbox_reliability.sql"),
+);
+customerMvpUpgrade.exec(`
+  INSERT INTO customer (id, auth_user_id, status, created_at, updated_at)
+    VALUES ('customer-mvp-upgrade', 'auth-customer-mvp-upgrade', 'active', 1, 1);
+  INSERT INTO promotion_redemption
+    (id, grant_id, benefit_code, benefit_type, customer_id, subject_type, subject_id, redeemed_at)
+    VALUES ('customer-mvp-intro-redemption', 'grant-introductory-trial', 'INTRO_TRIAL',
+            'MEMBERSHIP_FEE_WAIVER', 'customer-mvp-upgrade', 'subscription', 'historical-sub', 1);
+`);
+apply(
+  customerMvpUpgrade,
+  migrations.filter((migration) => migration.name === "0047_customer_mvp_completion.sql"),
+);
+assert.equal(
+  customerMvpUpgrade
+    .prepare(
+      "SELECT COUNT(*) AS count FROM promotion_redemption WHERE id='customer-mvp-intro-redemption'",
+    )
+    .get().count,
+  1,
+  "0047 must preserve introductory-trial redemption history",
+);
+for (const table of [
+  "promotion_rule",
+  "checkout_promotion_claim",
+  "order_promotion_application",
+  "notification_outbox",
+  "notification_attempt",
+  "order_invoice_readiness",
+]) {
+  assert.equal(
+    customerMvpUpgrade
+      .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name=?")
+      .get(table).count,
+    1,
+    `0047 must create ${table}`,
+  );
+}
+assert.deepEqual(customerMvpUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
+customerMvpUpgrade.close();
+
 console.log(
-  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, and 0045 -> 0046 cart reliability upgrades are valid.",
+  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, and 0046 -> 0047 customer MVP upgrades are valid.",
 );

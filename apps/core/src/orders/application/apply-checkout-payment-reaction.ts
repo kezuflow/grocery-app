@@ -65,6 +65,40 @@ export async function applyCheckoutPaymentReaction(
   if (!membership.eligible)
     return recordException(database, input, "MEMBERSHIP_LOST", "MEMBERSHIP_LOST");
 
+  const promotionClaims = await database
+    .prepare(
+      `SELECT id, promotion_id, price_component, benefit_type, amount_minor,
+              definition_version, grant_id, snapshot_json
+       FROM checkout_promotion_claim
+       WHERE checkout_quote_id=? AND status='UNCOMMITTED'
+       ORDER BY price_component`,
+    )
+    .bind(quote.id)
+    .all<{
+      id: string;
+      promotion_id: string;
+      price_component: "MERCHANDISE" | "DELIVERY";
+      benefit_type: string;
+      amount_minor: number;
+      definition_version: number;
+      grant_id: string | null;
+      snapshot_json: string;
+    }>();
+  if (promotionClaims.results.length !== quote.promotionApplications.length)
+    return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
+  for (const claim of promotionClaims.results) {
+    const application = quote.promotionApplications.find(
+      (item) => item.component === claim.price_component,
+    );
+    if (
+      !application ||
+      application.promotionId !== claim.promotion_id ||
+      application.amountMinor !== claim.amount_minor ||
+      application.benefitType !== claim.benefit_type
+    )
+      return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
+  }
+
   interface CycleSnapshot {
     cycleId: string;
     cutoffAt: string;
@@ -279,6 +313,113 @@ export async function applyCheckoutPaymentReaction(
         ),
     ),
   ];
+
+  for (const claim of promotionClaims.results) {
+    const systemGrantId = `order-promotion-${claim.promotion_id}`;
+    const grantId = claim.grant_id ?? systemGrantId;
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO commitment_abort (id)
+           SELECT -8 WHERE NOT EXISTS (
+             SELECT 1 FROM promotion p
+             WHERE p.id=? AND p.status='ACTIVE' AND p.version=? AND p.starts_at<=?
+               AND (p.ends_at IS NULL OR p.ends_at>?)
+               AND (p.global_usage_limit IS NULL OR (
+                 SELECT COUNT(*) FROM promotion_redemption pr WHERE pr.promotion_id=p.id
+               ) < p.global_usage_limit)
+               AND (p.per_customer_usage_limit IS NULL OR (
+                 SELECT COUNT(*) FROM promotion_redemption pr
+                 WHERE pr.promotion_id=p.id AND pr.customer_id=?
+               ) < p.per_customer_usage_limit)
+           )`,
+        )
+        .bind(claim.promotion_id, claim.definition_version, now, now, quote.customerId),
+    );
+    if (claim.grant_id === null) {
+      statements.push(
+        database
+          .prepare(
+            `INSERT OR IGNORE INTO promotion_grant (
+              id, benefit_code, benefit_type, max_redemptions, status,
+              customer_id, parameters_json, created_at, updated_at
+            ) SELECT ?, code, benefit_type, 1000000000, 'ACTIVE', NULL,
+                     json_object('promotionId', id, 'scope', 'ORDER'), ?, ?
+              FROM promotion WHERE id=?`,
+          )
+          .bind(systemGrantId, now, now, claim.promotion_id),
+      );
+    } else {
+      statements.push(
+        database
+          .prepare(
+            `INSERT INTO commitment_abort (id)
+             SELECT -9 WHERE NOT EXISTS (
+               SELECT 1 FROM promotion_grant g
+               WHERE g.id=? AND g.customer_id=? AND g.status='ACTIVE'
+                 AND (SELECT COUNT(*) FROM promotion_redemption pr WHERE pr.grant_id=g.id)
+                     < g.max_redemptions
+             )`,
+          )
+          .bind(claim.grant_id, quote.customerId),
+      );
+    }
+    const redemptionId = crypto.randomUUID();
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO promotion_redemption (
+            id, grant_id, benefit_code, benefit_type, customer_id, subject_type,
+            subject_id, redeemed_at, promotion_id, order_id, price_component,
+            amount_minor, benefit_snapshot_json, eligibility_snapshot_json,
+            idempotency_key
+          ) SELECT ?, ?, p.code, ?, ?, 'grocery_order', ?, ?, p.id, ?, ?, ?, ?, ?, ?
+            FROM promotion p WHERE p.id=?`,
+        )
+        .bind(
+          redemptionId,
+          grantId,
+          claim.benefit_type,
+          quote.customerId,
+          orderId,
+          now,
+          orderId,
+          claim.price_component,
+          claim.amount_minor,
+          claim.snapshot_json,
+          JSON.stringify({
+            checkoutQuoteId: quote.id,
+            definitionVersion: claim.definition_version,
+          }),
+          `checkout-promotion:${quote.id}:${claim.price_component}`,
+          claim.promotion_id,
+        ),
+      database
+        .prepare(
+          `INSERT INTO order_promotion_application (
+            id, order_id, amendment_id, promotion_id, redemption_id,
+            price_component, benefit_type, amount_minor, benefit_snapshot_json, created_at
+          ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          orderId,
+          claim.promotion_id,
+          redemptionId,
+          claim.price_component,
+          claim.benefit_type,
+          claim.amount_minor,
+          claim.snapshot_json,
+          now,
+        ),
+      database
+        .prepare(
+          "UPDATE checkout_promotion_claim SET status='COMMITTED', committed_at=? WHERE id=? AND status='UNCOMMITTED'",
+        )
+        .bind(now, claim.id),
+      database.prepare("INSERT INTO commitment_abort (id) SELECT -10 WHERE changes()=0"),
+    );
+  }
 
   if (!instant) {
     statements.push(
@@ -520,7 +661,8 @@ async function recordException(
     | "MEMBERSHIP_LOST"
     | "CYCLE_CLOSED"
     | "INSTANT_MODE_UNAVAILABLE"
-    | "SOURCING_MODE_UNAVAILABLE",
+    | "SOURCING_MODE_UNAVAILABLE"
+    | "PROMOTION_CHANGED",
   reason: OrderCommittedOutcome["reason"],
 ): Promise<OrderCommittedOutcome> {
   await recordFinanceExceptionRow(database, input, kind, reason, Date.now());

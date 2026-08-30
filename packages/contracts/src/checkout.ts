@@ -91,12 +91,34 @@ export type CheckoutQuoteCommandRequest = AuthenticatedRequest & {
   addressId: string;
   /** Null selects Instant fulfillment; a cycle id selects Scheduled. */
   deliveryCycleId: string | null;
+  promotionCodes?: readonly string[];
   idempotencyKey: string;
+};
+
+export type PromotionCodeFeedback = {
+  code: string;
+  status: "APPLIED" | "INVALID" | "EXPIRED" | "INELIGIBLE" | "DUPLICATE" | "NOT_SELECTED";
+  message: string;
+};
+
+export type CheckoutPromotionApplicationView = {
+  promotionId: string;
+  code: string;
+  name: string;
+  component: "MERCHANDISE" | "DELIVERY";
+  benefitType:
+    | "ORDER_FIXED_DISCOUNT"
+    | "ORDER_PERCENT_DISCOUNT"
+    | "DELIVERY_FEE_WAIVER"
+    | "DELIVERY_FEE_DISCOUNT";
+  amountMinor: number;
+  automatic: boolean;
 };
 
 export type CheckoutQuoteView = {
   quoteId: string;
   attemptVersion: number;
+  priceAcceptanceVersion: number;
   expiresAt: string;
   currency: string;
   merchandiseSubtotalMinor: number;
@@ -111,6 +133,9 @@ export type CheckoutQuoteView = {
   deliveryFeeMinor: number;
   totalMinor: number;
   lines: ReadonlyArray<Record<string, unknown>>;
+  requestedPromotionCodes: readonly string[];
+  promotionFeedback: readonly PromotionCodeFeedback[];
+  promotionApplications: readonly CheckoutPromotionApplicationView[];
 };
 
 export type CheckoutQuoteRefreshRequest = AuthenticatedRequest & {

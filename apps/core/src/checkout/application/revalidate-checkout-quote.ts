@@ -4,6 +4,7 @@ import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
+import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
 
 type RevalidationFailure = {
   ok: false;
@@ -21,6 +22,7 @@ type LiveCartItem = {
   sku_id: string;
   quantity: number;
   product_id: string;
+  category_id: string;
   inventory_pool_id: string;
   consumption_base_quantity: number;
   sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
@@ -63,7 +65,7 @@ export async function revalidateCheckoutQuote(
       .first<{ latitude: number; longitude: number; delivery_zone_code: string | null }>(),
     database
       .prepare(
-        `SELECT ci.sku_id, ci.quantity, p.id AS product_id, p.inventory_pool_id,
+        `SELECT ci.sku_id, ci.quantity, p.id AS product_id, p.category_id, p.inventory_pool_id,
                 s.consumption_base_quantity, ip.canonical_sourcing_mode AS sourcing_mode
          FROM cart_item ci
          JOIN sku s ON s.id=ci.sku_id
@@ -196,16 +198,52 @@ export async function revalidateCheckoutQuote(
   } catch {
     return rejected("CONFIGURATION_ERROR", "Delivery fee configuration is unavailable");
   }
+  const promotions = await evaluateCheckoutPromotions(database, {
+    customerId: quote.customerId,
+    marketId,
+    locationId: snapshot.locationId,
+    fulfillmentMode: quote.fulfillmentMode ?? "SCHEDULED",
+    merchandiseSubtotalMinor: subtotalMinor,
+    deliverySubtotalMinor: deliveryFee.feeMinor,
+    lineFacts: liveItems.results.map((item) => ({
+      skuId: item.sku_id,
+      productId: item.product_id,
+      categoryId: item.category_id,
+      quantity: item.quantity,
+      lineSubtotalMinor: quotedLines.get(item.sku_id)?.lineTotalMinor ?? 0,
+    })),
+    requestedCodes: quote.requestedPromotionCodes,
+    at: now,
+  });
+  const projectedApplications = promotions.applications.map((application) => ({
+    promotionId: application.promotionId,
+    code: application.code,
+    name: application.name,
+    component: application.component,
+    benefitType: application.benefitType,
+    amountMinor: application.amountMinor,
+    automatic: application.automatic,
+  }));
+  if (JSON.stringify(projectedApplications) !== JSON.stringify(quote.promotionApplications))
+    return rejected("PRICE_CHANGED", "Promotion eligibility changed; accept a new quote");
+  const merchandiseDiscount =
+    promotions.applications.find((application) => application.component === "MERCHANDISE")
+      ?.amountMinor ?? 0;
+  const deliveryDiscount =
+    promotions.applications.find((application) => application.component === "DELIVERY")
+      ?.amountMinor ?? 0;
   const currentFinancial = {
     ...quote.financial,
     merchandiseSubtotalMinor: subtotalMinor,
+    orderDiscountMinor: merchandiseDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
+    deliveryDiscountMinor: deliveryDiscount,
     totalMinor:
       subtotalMinor -
       quote.financial.itemDiscountMinor -
-      quote.financial.orderDiscountMinor +
+      merchandiseDiscount +
       deliveryFee.feeMinor -
-      quote.financial.deliveryDiscountMinor +
+      deliveryDiscount +
       quote.financial.serviceFeeMinor +
       quote.financial.taxMinor,
     currency: deliveryFee.snapshot.currency,

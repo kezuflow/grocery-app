@@ -93,7 +93,10 @@ async function seededCheckout(
   return { customerId, cartId, addressId, skuId, poolId, subscriptionId };
 }
 
-async function createQuote(fixture: Awaited<ReturnType<typeof seededCheckout>>) {
+async function createQuote(
+  fixture: Awaited<ReturnType<typeof seededCheckout>>,
+  promotionCodes?: readonly string[],
+) {
   const cycles = await env.DB.prepare(
     "SELECT id FROM delivery_cycle WHERE status='OPEN' ORDER BY delivery_date ASC LIMIT 1",
   ).all<{ id: string }>();
@@ -106,6 +109,7 @@ async function createQuote(fixture: Awaited<ReturnType<typeof seededCheckout>>) 
       cartVersion: 3,
       addressId: fixture.addressId,
       deliveryCycleId: cycles.results[0].id,
+      promotionCodes,
       idempotencyKey: `quote-${crypto.randomUUID()}`,
       requestId: crypto.randomUUID(),
     },
@@ -113,20 +117,21 @@ async function createQuote(fixture: Awaited<ReturnType<typeof seededCheckout>>) 
   );
 }
 
-async function intentWithReaction(quoteId: string, customerId: string) {
+async function intentWithReaction(quoteId: string, customerId: string, amountMinor = 65000) {
   const intentId = crypto.randomUUID();
   await env.DB.prepare(
-    "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, 65000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
+    "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, ?, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
   )
-    .bind(intentId, quoteId, customerId, `pi-${intentId}`, Date.now(), Date.now())
+    .bind(intentId, quoteId, customerId, amountMinor, `pi-${intentId}`, Date.now(), Date.now())
     .run();
   await env.DB.prepare(
-    "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 65000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
+    "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
   )
     .bind(
       `attempt-${intentId}`,
       customerId,
       intentId,
+      amountMinor,
       `mock_pay_${intentId}`,
       `intent:${intentId}`,
       Date.now(),
@@ -143,6 +148,109 @@ async function intentWithReaction(quoteId: string, customerId: string) {
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("snapshots a promotion claim without redemption, then redeems it once at commitment", async () => {
+    const fixture = await seededCheckout();
+    const promotionId = `promotion-${crypto.randomUUID()}`;
+    const code = `SAVE${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO promotion (
+        id, code, name, description, status, benefit_type, discount_minor, percent,
+        minimum_minor, starts_at, ends_at, global_usage_limit, per_customer_usage_limit,
+        automatic, priority, version, created_at, updated_at
+      ) VALUES (?, ?, 'Checkout saving', '', 'ACTIVE', 'ORDER_FIXED_DISCOUNT', 5000, NULL,
+                0, ?, NULL, 10, 1, 0, 0, 1, ?, ?)`,
+    )
+      .bind(promotionId, code, now - 1, now, now)
+      .run();
+
+    const quote = await createQuote(fixture, [code.toLowerCase()]);
+    if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    expect(quote.value).toMatchObject({
+      orderDiscountMinor: 5000,
+      requestedPromotionCodes: [code],
+      promotionApplications: [{ promotionId, component: "MERCHANDISE", amountMinor: 5000 }],
+    });
+    const before = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM checkout_promotion_claim WHERE checkout_quote_id=?) AS claims, (SELECT COUNT(*) FROM promotion_redemption WHERE promotion_id=?) AS redemptions",
+    )
+      .bind(quote.value.quoteId, promotionId)
+      .first<{ claims: number; redemptions: number }>();
+    expect(before).toEqual({ claims: 1, redemptions: 0 });
+
+    const { intentId, reactionId } = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+      quote.value.totalMinor,
+    );
+    const command = {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    const first = await applyCheckoutPaymentReaction(env.DB, command);
+    expect(first).toMatchObject({ applied: true, reason: "APPLIED" });
+    const replay = await applyCheckoutPaymentReaction(env.DB, command);
+    expect(replay).toEqual({ ...first, reason: "ALREADY_APPLIED" });
+    const after = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM promotion_redemption WHERE promotion_id=?) AS redemptions, (SELECT COUNT(*) FROM order_promotion_application WHERE promotion_id=?) AS applications, (SELECT status FROM checkout_promotion_claim WHERE checkout_quote_id=?) AS claim_status",
+    )
+      .bind(promotionId, promotionId, quote.value.quoteId)
+      .first<{ redemptions: number; applications: number; claim_status: string }>();
+    expect(after).toEqual({ redemptions: 1, applications: 1, claim_status: "COMMITTED" });
+  });
+
+  it("cannot exceed a promotion usage limit across separately paid commitments", async () => {
+    const firstFixture = await seededCheckout();
+    const secondFixture = await seededCheckout();
+    const promotionId = `limited-${crypto.randomUUID()}`;
+    const code = `LIMITED${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO promotion (
+        id, code, name, description, status, benefit_type, discount_minor, percent,
+        minimum_minor, starts_at, ends_at, global_usage_limit, per_customer_usage_limit,
+        automatic, priority, version, created_at, updated_at
+      ) VALUES (?, ?, 'Limited', '', 'ACTIVE', 'ORDER_FIXED_DISCOUNT', 1000, NULL,
+                0, ?, NULL, 1, NULL, 1, 0, 1, ?, ?)`,
+    )
+      .bind(promotionId, code, now - 1, now, now)
+      .run();
+    const firstQuote = await createQuote(firstFixture);
+    const secondQuote = await createQuote(secondFixture);
+    if (!firstQuote.ok || !secondQuote.ok) throw new Error("quote fixture failed");
+    const firstPayment = await intentWithReaction(
+      firstQuote.value.quoteId,
+      firstFixture.customerId,
+      firstQuote.value.totalMinor,
+    );
+    const secondPayment = await intentWithReaction(
+      secondQuote.value.quoteId,
+      secondFixture.customerId,
+      secondQuote.value.totalMinor,
+    );
+    const first = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId: firstPayment.reactionId,
+      paymentIntentId: firstPayment.intentId,
+      checkoutAttemptId: firstQuote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    const second = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId: secondPayment.reactionId,
+      paymentIntentId: secondPayment.intentId,
+      checkoutAttemptId: secondQuote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(first).toMatchObject({ applied: true });
+    expect(second).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+    const counts = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM promotion_redemption WHERE promotion_id=?) AS redemptions, (SELECT COUNT(*) FROM grocery_order WHERE customer_id=?) AS second_orders",
+    )
+      .bind(promotionId, secondFixture.customerId)
+      .first<{ redemptions: number; second_orders: number }>();
+    expect(counts).toEqual({ redemptions: 1, second_orders: 0 });
+  });
   it("rejects a scheduled basket below the market minimum", async () => {
     const fixture = await seededCheckout({ quantity: 1 });
 

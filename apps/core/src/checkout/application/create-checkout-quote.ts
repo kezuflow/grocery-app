@@ -11,6 +11,14 @@ import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee
 import { deliveryFeeFailure } from "./delivery-fee-failure";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
+import type {
+  CheckoutPromotionApplicationView,
+  PromotionCodeFeedback,
+} from "@freshmarkets/contracts";
+import {
+  evaluateCheckoutPromotions,
+  promotionClaimStatements,
+} from "../../promotions/application/evaluate-checkout-promotions";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -19,6 +27,7 @@ export type CreateCheckoutQuoteCommand = {
   addressId: string;
   /** Null selects the INSTANT path; a cycle id selects SCHEDULED. */
   deliveryCycleId: string | null;
+  promotionCodes?: readonly string[];
   idempotencyKey: string;
   requestId: string;
 };
@@ -28,6 +37,7 @@ export type CheckoutQuoteDependencies = { routeDistance: RouteDistancePort };
 export type CheckoutQuoteView = {
   quoteId: string;
   attemptVersion: number;
+  priceAcceptanceVersion: number;
   expiresAt: string;
   currency: string;
   merchandiseSubtotalMinor: number;
@@ -42,6 +52,9 @@ export type CheckoutQuoteView = {
   deliveryFeeMinor: number;
   totalMinor: number;
   lines: ReadonlyArray<QuoteLine>;
+  requestedPromotionCodes: readonly string[];
+  promotionFeedback: readonly PromotionCodeFeedback[];
+  promotionApplications: readonly CheckoutPromotionApplicationView[];
 };
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
@@ -68,7 +81,9 @@ export async function createCheckoutQuote(
       existing.customerId !== command.customerId ||
       existing.cartId !== command.cartId ||
       existing.addressId !== command.addressId ||
-      (existing.deliveryCycleId ?? null) !== (command.deliveryCycleId ?? null)
+      (existing.deliveryCycleId ?? null) !== (command.deliveryCycleId ?? null) ||
+      JSON.stringify(existing.requestedPromotionCodes) !==
+        JSON.stringify((command.promotionCodes ?? []).map((code) => code.trim().toUpperCase()))
     )
       return failure(
         "IDEMPOTENCY_CONFLICT",
@@ -107,7 +122,7 @@ export async function createCheckoutQuote(
   const cartItems = await database
     .prepare(
       `SELECT ci.sku_id, ci.quantity, s.name AS variant_name, s.sellable_unit_id AS unit, s.consumption_base_quantity,
-              p.id AS product_id, p.name AS product_name, p.inventory_pool_id,
+              p.id AS product_id, p.name AS product_name, p.category_id, p.inventory_pool_id,
               ip.canonical_sourcing_mode AS sourcing_mode
        FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
        JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE ci.cart_id=?`,
@@ -121,6 +136,7 @@ export async function createCheckoutQuote(
       consumption_base_quantity: number;
       product_id: string;
       product_name: string;
+      category_id: string;
       inventory_pool_id: string;
       sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
     }>();
@@ -299,15 +315,50 @@ async function createScheduledQuote(
 
   const quoteId = crypto.randomUUID();
   const expiresAt = Date.now() + QUOTE_TTL_MS;
+  const requestedPromotionCodes = (command.promotionCodes ?? []).map((code) =>
+    code.trim().toUpperCase(),
+  );
+  const promotion = await evaluateCheckoutPromotions(database, {
+    customerId: command.customerId,
+    marketId: cycle.market_id,
+    locationId: routing.location_id,
+    fulfillmentMode: "SCHEDULED",
+    merchandiseSubtotalMinor: subtotalMinor,
+    deliverySubtotalMinor: deliveryFee.feeMinor,
+    lineFacts: items.map((item) => ({
+      skuId: item.sku_id,
+      productId: item.product_id,
+      categoryId: item.category_id,
+      quantity: item.quantity,
+      lineSubtotalMinor: lines.find((line) => line.skuId === item.sku_id)?.lineTotalMinor ?? 0,
+    })),
+    requestedCodes: requestedPromotionCodes,
+    at: now2,
+  });
+  const merchandiseDiscount =
+    promotion.applications.find((application) => application.component === "MERCHANDISE")
+      ?.amountMinor ?? 0;
+  const deliveryDiscount =
+    promotion.applications.find((application) => application.component === "DELIVERY")
+      ?.amountMinor ?? 0;
+  const promotionApplications = promotion.applications.map((application) => ({
+    promotionId: application.promotionId,
+    code: application.code,
+    name: application.name,
+    component: application.component,
+    benefitType: application.benefitType,
+    amountMinor: application.amountMinor,
+    automatic: application.automatic,
+  }));
   const financial = {
     merchandiseSubtotalMinor: subtotalMinor,
     itemDiscountMinor: 0,
-    orderDiscountMinor: 0,
+    orderDiscountMinor: merchandiseDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
-    deliveryDiscountMinor: 0,
+    deliveryDiscountMinor: deliveryDiscount,
     serviceFeeMinor: 0,
     taxMinor: 0,
-    totalMinor: subtotalMinor + deliveryFee.feeMinor,
+    totalMinor: subtotalMinor - merchandiseDiscount + deliveryFee.feeMinor - deliveryDiscount,
     currency: deliveryFee.snapshot.currency,
   };
   const decision = await resolveCheckoutDecision(database, {
@@ -356,9 +407,9 @@ async function createScheduledQuote(
           currency: decision.currency,
           financial,
           subtotalMinor,
-          discountMinor: 0,
+          discountMinor: merchandiseDiscount,
           deliveryFeeMinor: deliveryFee.feeMinor,
-          totalMinor: subtotalMinor + deliveryFee.feeMinor,
+          totalMinor: financial.totalMinor,
           lines: evidence.lines,
           addressSnapshot: evidence.addressSnapshot,
           cycleSnapshot: evidence.cycleSnapshot,
@@ -367,9 +418,20 @@ async function createScheduledQuote(
           status: "ACTIVE",
           version: 1,
           expiresAt,
+          priceAcceptanceVersion: 1,
+          requestedPromotionCodes,
+          promotionFeedback: promotion.feedback,
+          promotionApplications,
           idempotencyKey: command.idempotencyKey,
         },
         Date.now(),
+      ),
+      ...promotionClaimStatements(
+        database,
+        quoteId,
+        command.customerId,
+        promotion.applications,
+        now2,
       ),
       repository.supersedeQuotesForCart(command.cartId, quoteId, Date.now()),
     ]);
@@ -437,6 +499,7 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
   return {
     quoteId: row.id,
     attemptVersion: row.version,
+    priceAcceptanceVersion: row.priceAcceptanceVersion,
     expiresAt: new Date(row.expiresAt).toISOString(),
     currency: row.currency,
     merchandiseSubtotalMinor: row.financial.merchandiseSubtotalMinor,
@@ -451,5 +514,8 @@ function viewFrom(row: CheckoutQuoteRow): CheckoutQuoteView {
     deliveryFeeMinor: row.deliveryFeeMinor,
     totalMinor: row.totalMinor,
     lines: row.lines,
+    requestedPromotionCodes: row.requestedPromotionCodes,
+    promotionFeedback: row.promotionFeedback,
+    promotionApplications: row.promotionApplications,
   };
 }

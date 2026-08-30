@@ -4,6 +4,10 @@ import {
   type QuoteLine,
 } from "../domain/quote";
 import type { DeliveryFeeSnapshot } from "../../geography/application/quote-delivery-fee";
+import type {
+  CheckoutPromotionApplicationView,
+  PromotionCodeFeedback,
+} from "@freshmarkets/contracts";
 
 export type CheckoutQuoteRow = {
   id: string;
@@ -27,10 +31,14 @@ export type CheckoutQuoteRow = {
   status: "ACTIVE" | "CONSUMED" | "EXPIRED" | "SUPERSEDED";
   version: number;
   expiresAt: number;
+  priceAcceptanceVersion: number;
+  requestedPromotionCodes: string[];
+  promotionFeedback: PromotionCodeFeedback[];
+  promotionApplications: CheckoutPromotionApplicationView[];
 };
 
 const COLUMNS =
-  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, status, version, expires_at";
+  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, requested_promotion_codes_json, promotion_feedback_json, promotion_applications_json, price_acceptance_version, status, version, expires_at";
 
 type RawRow = {
   id: string;
@@ -60,6 +68,10 @@ type RawRow = {
   status: CheckoutQuoteRow["status"];
   version: number;
   expires_at: number;
+  requested_promotion_codes_json: string;
+  promotion_feedback_json: string;
+  promotion_applications_json: string;
+  price_acceptance_version: number;
 };
 
 function map(row: RawRow): CheckoutQuoteRow {
@@ -99,6 +111,12 @@ function map(row: RawRow): CheckoutQuoteRow {
     status: row.status,
     version: row.version,
     expiresAt: row.expires_at,
+    priceAcceptanceVersion: row.price_acceptance_version,
+    requestedPromotionCodes: JSON.parse(row.requested_promotion_codes_json) as string[],
+    promotionFeedback: JSON.parse(row.promotion_feedback_json) as PromotionCodeFeedback[],
+    promotionApplications: JSON.parse(
+      row.promotion_applications_json,
+    ) as CheckoutPromotionApplicationView[],
   };
 }
 
@@ -141,10 +159,12 @@ export function createCheckoutRepository(database: D1Database) {
             item_discount_minor, order_discount_minor, delivery_subtotal_minor,
             delivery_discount_minor, service_fee_minor, tax_minor, lines_json,
             address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json,
-            delivery_fee_snapshot_json, status, version, expires_at,
+            delivery_fee_snapshot_json, requested_promotion_codes_json,
+            promotion_feedback_json, promotion_applications_json,
+            price_acceptance_version, status, version, expires_at,
             idempotency_key, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           input.id,
@@ -171,6 +191,10 @@ export function createCheckoutRepository(database: D1Database) {
           JSON.stringify(input.cycleSnapshot ?? null),
           JSON.stringify(input.fulfillmentSnapshot ?? null),
           JSON.stringify(input.deliveryFeeSnapshot ?? null),
+          JSON.stringify(input.requestedPromotionCodes),
+          JSON.stringify(input.promotionFeedback),
+          JSON.stringify(input.promotionApplications),
+          input.priceAcceptanceVersion,
           input.status,
           input.version,
           input.expiresAt,
