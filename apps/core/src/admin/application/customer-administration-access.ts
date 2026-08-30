@@ -21,7 +21,7 @@ export type CustomerAdministrationAccess = {
 };
 
 /**
- * Customer administration is a central, global-scope concern for MVP:
+ * Customer administration is a central, global-scope concern for the current release:
  * customer identity is global, so callers need the named capability plus a
  * global scope. Market/location-scoped principals receive FORBIDDEN.
  */

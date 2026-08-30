@@ -26,7 +26,7 @@ describe("canonical payment transitions", () => {
   });
 });
 
-describe("mvp payment commitment policy", () => {
+describe("current-release payment commitment policy", () => {
   it("treats only canonical SUCCEEDED as sufficient", () => {
     for (const state of [
       "INITIATED",

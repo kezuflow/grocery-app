@@ -625,7 +625,7 @@ git commit -m "feat(checkout): offer Core-routed fulfillment modes"
 - Modify: `docs/architecture/STATE_MACHINES.md`
 - Modify: `docs/architecture/DATA_MODEL.md`
 - Modify: `docs/architecture/API_CONTRACTS.md`
-- Modify: `docs/product/MVP_SCOPE.md`
+- Modify: `docs/product/PRODUCT_SCOPE.md`
 - Modify: `docs/product/IMPLEMENTATION_PLAN.md`
 - Modify: `IMPLEMENTATION_STATUS.md`
 - Modify: relevant `apps/core/README.md` and `apps/web/README.md`

@@ -54,7 +54,7 @@ export function transitionPayment(
 }
 
 /**
- * MVP commitment policy: a canonical outcome is sufficient for downstream paid
+ * Current-release commitment policy: a canonical outcome is sufficient for downstream paid
  * commitment only when it is provider-confirmed `SUCCEEDED` (captured funds).
  */
 export const mvpPaymentCommitmentPolicy = {

@@ -153,7 +153,7 @@ export async function createCheckoutQuote(
   if (cartItems.results.some((item) => item.sourcing_mode === "ON_DEMAND"))
     return failure(
       "UNAVAILABLE_ITEM",
-      "On-demand sourcing is not configured for MVP checkout",
+      "On-demand sourcing is not configured for current checkout",
       command.requestId,
     );
 

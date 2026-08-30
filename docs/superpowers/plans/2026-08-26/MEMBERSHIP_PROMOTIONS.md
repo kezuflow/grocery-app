@@ -8,7 +8,7 @@
 
 **Tech Stack:** Cloudflare D1, TypeScript calendar/timezone APIs, Zod, Vitest Workers pool, shared domain contracts.
 
-**Spec:** `docs/architecture/DOMAIN_MODEL.md` Membership and Promotion; `docs/architecture/STATE_MACHINES.md` Subscription; `docs/architecture/DATA_MODEL.md` Subscriptions and Promotions; `docs/architecture/API_CONTRACTS.md` Subscription and Membership Payments; `docs/product/MVP_SCOPE.md` criterion 3.
+**Spec:** `docs/architecture/DOMAIN_MODEL.md` Membership and Promotion; `docs/architecture/STATE_MACHINES.md` Subscription; `docs/architecture/DATA_MODEL.md` Subscriptions and Promotions; `docs/architecture/API_CONTRACTS.md` Subscription and Membership Payments; `docs/product/PRODUCT_SCOPE.md` criterion 3.
 
 ## Global Constraints
 

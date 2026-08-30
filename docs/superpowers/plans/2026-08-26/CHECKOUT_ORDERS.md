@@ -8,7 +8,7 @@
 
 **Tech Stack:** Cloudflare D1 transactions, TypeScript, Zod, shared typed Service Binding contracts, Vitest Workers pool, Playwright.
 
-**Spec:** `docs/architecture/DOMAIN_MODEL.md` Checkout and Orders; `docs/architecture/STATE_MACHINES.md` Order and Payment; `docs/architecture/DATA_MODEL.md` Carts, Checkout, Orders, Amendments, Capacity, and Inventory; `docs/architecture/API_CONTRACTS.md` Checkout and Order commands; `docs/product/MVP_SCOPE.md` checkout acceptance criteria.
+**Spec:** `docs/architecture/DOMAIN_MODEL.md` Checkout and Orders; `docs/architecture/STATE_MACHINES.md` Order and Payment; `docs/architecture/DATA_MODEL.md` Carts, Checkout, Orders, Amendments, Capacity, and Inventory; `docs/architecture/API_CONTRACTS.md` Checkout and Order commands; `docs/product/PRODUCT_SCOPE.md` checkout acceptance criteria.
 
 ## Global Constraints
 

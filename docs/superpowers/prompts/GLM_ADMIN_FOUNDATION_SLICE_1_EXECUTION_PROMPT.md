@@ -14,7 +14,7 @@ READ FIRST, COMPLETELY, IN THIS ORDER
 4. docs/architecture/STATE_MACHINES.md
 5. docs/architecture/DATA_MODEL.md
 6. docs/architecture/API_CONTRACTS.md
-7. docs/product/MVP_SCOPE.md
+7. docs/product/PRODUCT_SCOPE.md
 8. docs/product/IMPLEMENTATION_PLAN.md
 9. docs/design/admin/DESIGN.md
 10. docs/design/admin/COMPONENTS.md

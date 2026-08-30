@@ -1,5 +1,5 @@
 /**
- * Persisted market/location default resolution for the single active MVP
+ * Persisted market/location default resolution for the single active launch
  * market and fulfillment location. Geography and Assignment owns these
  * defaults; callers compose them, never hard-code them.
  */

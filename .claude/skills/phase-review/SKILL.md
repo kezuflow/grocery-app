@@ -114,7 +114,7 @@ Look for:
 - missing contracts
 - missing authorization foundations
 - premature infrastructure
-- MVP functionality that has no implementation phase
+- Product-scope functionality that has no implementation phase
 - future functionality leaking into earlier phases
 
 Trace important rules through:

@@ -1,10 +1,10 @@
-# FreshMarkets MVP Scope
+# FreshMarkets Product Scope
 
-This document is authoritative for MVP inclusion, exclusion, and acceptance only. Runtime/context ownership, business meaning, lifecycle transitions, persistence, and contracts remain authoritative in their corresponding architecture documents.
+This document is authoritative for the current release inclusion, exclusion, and acceptance only. Runtime/context ownership, business meaning, lifecycle transitions, persistence, and contracts remain authoritative in their corresponding architecture documents.
 
-## MVP Business Outcome
+## Current Release Business Outcome
 
-MVP is complete only when one customer can complete this real business loop in the initial Cebu operation:
+The current release is complete only when one customer can complete this real business loop in the initial Cebu operation:
 
 ```text
 Browse marketplace
@@ -23,9 +23,9 @@ Browse marketplace
  -> completed order
 ```
 
-The MVP may operate one live fulfillment location, but its domain/data model must retain markets, zones, location capabilities, location availability, and location inventory from the beginning.
+The The current release may operate one live fulfillment location, but its domain/data model must retain markets, zones, location capabilities, location availability, and location inventory from the beginning.
 
-## MVP Included
+## Current Release Included
 
 ### Platform and identity
 
@@ -55,7 +55,7 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Membership renewal, trial conversion, and dunning lifecycle: paid renewal requires provider-confirmed canonical Payments success; an explicit failed-renewal outcome enters `PAST_DUE` with a 7-calendar-day grace window preserving entitlement; verified recovery returns `ACTIVE`; grace exhaustion transitions to `EXPIRED`; customer cancellation during `PAST_DUE` terminates immediately to `CANCELED`. Production automatic charge initiation, retry ownership, and retry timing are unresolved and unapproved; current automated behavior is a mock-tested seam only.
 - Introductory-trial abuse policy: one trial per application customer, the authorization precondition above, and provider authorization-identity reuse prevention where the provider exposes a stable identity; no mandatory SMS/phone verification; residual promotional abuse is accepted at launch.
 - Central checkout eligibility service.
-- One Promotions context with controlled MVP membership-fee-waiver, order percentage/fixed discount, and delivery fee waiver/discount benefits; closed configurable eligibility rules, grants/redemptions, limits, and deterministic one-order-plus-one-delivery stacking.
+- One Promotions context with controlled launch membership-fee-waiver, order percentage/fixed discount, and delivery fee waiver/discount benefits; closed configurable eligibility rules, grants/redemptions, limits, and deterministic one-order-plus-one-delivery stacking.
 - Separate provider-neutral Payments boundary for membership and grocery payments. The deterministic mock adapter is development/test-only; production requires a separately owner-approved provider, signed event ingestion, canonical state translation, and reconciliation before launch.
 - Explicit Quote/Order monetary components and committed immutable SKU conversion, Promotion, fulfillment mode/location/zone/promise/window/ETA, delivery-instruction, and optional Scheduled-cycle snapshots.
 - Committed order creation and additive paid-order amendments under mode-specific eligibility. Scheduled uses cutoff; the normal Instant amendment deadline remains fail-closed until approved.
@@ -77,14 +77,14 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Transactional notification emails as the launch channel (order confirmed; payment action required; payment failed; Scheduled cutoff reminder; out for delivery; delivered; failed delivery; renewal payment failed/action required; introductory trial ending; upcoming first paid renewal). Notifications are side effects that communicate authoritative state and never mutate domain truth.
 - BIR-compliant invoicing readiness: persistence seams for invoice identifier/serial, issuance timestamp, seller/taxpayer snapshot, taxable/VAT breakdown, immutable relationship to the committed Order/payment, and future external/electronic invoice references. Exact computation and retention rules remain gated on authoritative accounting/tax confirmation before go-live.
 
-## MVP Exclusions
+## Current Release Exclusions
 
 - Customer-directed substitution engine.
 - Variable-weight settlement, post-pick repricing, capture adjustment, or weight-based supplemental charge/refund.
 - Customer-selectable hubs.
 - Customer reviews/ratings.
 - Live GPS/rider tracking.
-- Customer-initiated post-commitment delivery-window rescheduling; the supported MVP route is the legally allowed cancellation path followed by reorder where applicable.
+- Customer-initiated post-commitment delivery-window rescheduling; the supported current release route is the legally allowed cancellation path followed by reorder where applicable.
 - Full multi-market rollout or multiple live locations, though schemas support them.
 - Internal stock transfers UI/workflow.
 - Complex route optimization or map-based fleet routing.
@@ -95,7 +95,7 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Durable Object capacity coordinator or Workflow orchestration.
 - Separate microservices, event sourcing, separate read database, or public general-purpose REST API.
 
-## MVP Acceptance Criteria
+## Current Release Acceptance Criteria
 
 1. An unauthenticated browser can browse but cannot place an order.
 2. A customer can create/verify/login with Better Auth and maintain a secure session through Web/Core boundaries.
@@ -124,7 +124,7 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 25. Invoicing seams are additive and immutable: issuance data references exactly one committed Order/payment outcome and can never be rewritten after creation.
 26. Cart prices do not lock price or inventory. Before payment, Core recalculates price, discount, stock, serviceability, and route-based delivery fee; a changed total creates no payment until the customer explicitly accepts the new total.
 27. Delivery fee configuration is versioned per market/location using integer minimum and per-kilometer minor-unit values. External route/configuration failure fails closed, and the committed Order snapshots provider-neutral route meters, fee inputs/result, and configuration version.
-28. Customer grocery-order cancellation is absent from the mock-payment MVP. A successful payment followed by commitment failure is retried idempotently against the same payment and escalates visibly after bounded failure without a duplicate payment/order or inferred automatic refund.
+28. Customer grocery-order cancellation is absent from the mock-payment launch. A successful payment followed by commitment failure is retried idempotently against the same payment and escalates visibly after bounded failure without a duplicate payment/order or inferred automatic refund.
 29. The basket minimum is enforced authoritatively against pre-discount merchandise only in both Instant and Scheduled checkout. Payment readiness recalculates without creating a replacement Quote, and identical replay returns the original unexpired provider continuation before Quote-state checks.
 30. Paid commitment atomically guards accepted-Quote consumption and Scheduled capacity. Refund requests atomically reserve outstanding and successful refund value so concurrent requests cannot exceed captured funds.
 31. Customer checkout lists opaque Core-routed Instant/Scheduled options only after a confirmed serviceable address and nonempty current cart; stale address/cart/routing/cycle evidence fails closed and no customer selects a hub.
@@ -135,7 +135,7 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 
 ## Phase 1.5
 
-- Extend the production payment provider and local methods after the MVP commitment paths are operational.
+- Extend the production payment provider and local methods after the current release commitment paths are operational.
 - SMS/push notification channels, notification preferences, and richer operational messaging beyond the launch email set.
 - Favorites.
 - Supplier master data and richer procurement approval/reconciliation.
@@ -160,9 +160,9 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 - Variable-weight settlement.
 - Route optimization and richer fleet capabilities.
 - Workflows for long-running exception/procurement orchestration.
-- Advanced Promotions/experimentation beyond the controlled MVP benefits and stacking policy.
+- Advanced Promotions/experimentation beyond the controlled Current-release benefits and stacking policy.
 - Dedicated analytics/data-lake infrastructure.
 
 ## Scope Governance
 
-Any proposed MVP addition must identify the business loop step it completes, its domain/data dependencies, its operational owner, and its failure/reconciliation behavior. “The architecture supports it” is not sufficient justification for adding speculative functionality.
+Any proposed product-scope addition must identify the business loop step it completes, its domain/data dependencies, its operational owner, and its failure/reconciliation behavior. “The architecture supports it” is not sufficient justification for adding speculative functionality.

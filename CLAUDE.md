@@ -13,7 +13,7 @@ in the same change when an approved decision changes (never silently):
 
 - `docs/architecture/` — runtime, repository, ownership, layering, contracts, data
   model, and state machines.
-- `docs/product/` — MVP scope, phased implementation plan, and implementation
+- `docs/product/` — product scope, phased implementation plan, and implementation
   status.
 - `docs/design/` — admin and marketplace design and component guidance.
 

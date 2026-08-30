@@ -24,7 +24,7 @@ export type FinanceAdministrationAccess = {
 };
 
 /**
- * Finance state is global for MVP: callers need the named capability plus a
+ * Finance state is global for the current release: callers need the named capability plus a
  * global scope. Scoped principals receive FORBIDDEN.
  */
 export async function resolveFinanceAdministrationAccess(

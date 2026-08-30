@@ -72,7 +72,7 @@ Do not imply a weight variant has its own independent physical stock. Do not sho
 
 Show product story, image/media, fixed variant selector, current price, unit/quantity explanation, availability, delivery context, and add-to-cart action. If a product/variant is unavailable for the resolved location, explain the next useful action: choose another variant, change address, or browse alternatives.
 
-Variant selection is fixed and deliberate in MVP. Arbitrary grams or final-weight settlement are not presented.
+Variant selection is fixed and deliberate in the current release. Arbitrary grams or final-weight settlement are not presented.
 
 ## Subscription Gate
 
@@ -162,7 +162,7 @@ Do not rewrite historical details after catalog/address changes. Show amendments
 - Prefer server-rendered read-heavy marketplace surfaces through Core queries.
 - Keep interactive cart/checkout/address controls client-side but keep writes in typed Core calls.
 - Use request-time image optimization only after vinext/R2 compatibility is verified.
-- Avoid relying on Cache Components/PPR or undocumented caching semantics in MVP.
+- Avoid relying on Cache Components/PPR or undocumented caching semantics in the current release.
 - Use explicit cache/revalidation policy for public catalog content; never cache personalized eligibility, prices, subscription, or order responses incorrectly.
 
 ## Phase-0 Research And Proposal

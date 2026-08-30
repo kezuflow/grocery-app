@@ -8,11 +8,11 @@ This document is authoritative for business terminology, relationships, and inva
 
 ### Organization
 
-The top-level business entity. MVP has one organization, FreshMarkets, but organization identity remains explicit.
+The top-level business entity. The current release has one organization, FreshMarkets, but organization identity remains explicit.
 
 ### Market
 
-An operational geography with a currency, timezone, service configuration, and one or more fulfillment locations. MVP market is Metro Cebu, currency PHP, timezone `Asia/Manila`.
+An operational geography with a currency, timezone, service configuration, and one or more fulfillment locations. The current release market is Metro Cebu, currency PHP, timezone `Asia/Manila`.
 
 ### FulfillmentLocation
 
@@ -23,7 +23,7 @@ Invariant: customers never select a location. The application assigns one from e
 Each active fulfillment location has exactly one effective `FulfillmentMode` configuration:
 
 - `INSTANT` — current location inventory and an expiring checkout hold back the customer promise; normal replenishment procurement is outside the checkout path.
-- `SCHEDULED` — a configured offering/window and optional cadence drive capacity, cutoff, planned demand, procurement, receiving, and scheduled delivery. MVP Scheduled cadence is `WEEKLY`.
+- `SCHEDULED` — a configured offering/window and optional cadence drive capacity, cutoff, planned demand, procurement, receiving, and scheduled delivery. Current-release Scheduled cadence is `WEEKLY`.
 
 `WEEKLY` is a cadence/configuration value, never a fundamental fulfillment mode. Mode configuration is versioned/effective-dated so a location may switch modes without mutating the fulfillment decision snapshotted on committed Orders. Market-level configuration may supply defaults or offering policy, but the resolved fulfillment location has one unambiguous active mode at checkout.
 
@@ -46,7 +46,7 @@ Coordinates used for a saved address must come from a provider candidate, a user
 
 A configurable `SCHEDULED` operational schedule containing cadence, order-open, cutoff, procurement, receiving, packing, dispatch, delivery date/window, zone/location participation, capacity, and lifecycle state. Weekend and `WEEKLY` behavior are configuration, not code. `INSTANT` fulfillment does not require or fabricate a DeliveryCycle.
 
-Capacity is conceptually `DeliveryCycle x DeliveryZone`, with location context. MVP may initially configure the same capacity across zones but cannot collapse the model permanently to cycle-only capacity.
+Capacity is conceptually `DeliveryCycle x DeliveryZone`, with location context. The current release may initially configure the same capacity across zones but cannot collapse the model permanently to cycle-only capacity.
 
 ## Identity and Access
 
@@ -113,11 +113,11 @@ Renewal, trial conversion, and dunning are Membership lifecycle behavior driven 
 
 Introductory-trial abuse policy: one introductory trial per application customer; the recurring-capable authorization precondition above; and, where the provider exposes a stable authorization/payment-instrument identity, prevention of repeated introductory grants against the same identity. Address/device/risk signals may support review or risk scoring but are not undocumented identity rules, and SMS/phone verification is not mandatory for trial abuse prevention. Some residual promotional abuse is accepted rather than building a fraud platform before launch.
 
-Calendar-month calculation uses the Market's configured business timezone. Core converts the activation instant to that timezone, adds one calendar month while preserving local wall-clock time, clamps a day that does not exist in the target month to that month's final valid day, then persists `trialStartsAt` and `trialEndsAt` as UTC instants. For the MVP market this timezone is `Asia/Manila`. A fixed 14-day or 30-day duration is not equivalent.
+Calendar-month calculation uses the Market's configured business timezone. Core converts the activation instant to that timezone, adds one calendar month while preserving local wall-clock time, clamps a day that does not exist in the target month to that month's final valid day, then persists `trialStartsAt` and `trialEndsAt` as UTC instants. For the The current release market this timezone is `Asia/Manila`. A fixed 14-day or 30-day duration is not equivalent.
 
 Invariant: authentication alone never permits purchase. Core must resolve the Customer and validate subscription eligibility during checkout commitment.
 
-Paid activation requires a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. Payment initiation, a browser return, or a vendor status copied directly into Membership cannot activate a paid subscription. For MVP, a provider's captured/success outcome maps through its adapter to canonical Payments `SUCCEEDED`, after which an explicit idempotent Membership command may transition the subscription.
+Paid activation requires a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. Payment initiation, a browser return, or a vendor status copied directly into Membership cannot activate a paid subscription. For the current release, a provider's captured/success outcome maps through its adapter to canonical Payments `SUCCEEDED`, after which an explicit idempotent Membership command may transition the subscription.
 
 A subscription is not bound permanently to a fulfillment location. Any future subscription-generated order resolves the current address, serviceability, zone, location, and cycle at generation time.
 
@@ -145,13 +145,13 @@ Invariant: variants do not create independent physical inventories. Red Onion 25
 
 ### BaseInventoryUnit
 
-The canonical integer unit used for physical stock and demand accounting for a Product/inventory pool. MVP base units are `GRAM` (`MASS`), `MILLILITER` (`VOLUME`), and `PIECE` (`COUNT`). Authoritative balances never use floating-point quantities.
+The canonical integer unit used for physical stock and demand accounting for a Product/inventory pool. Current-release base units are `GRAM` (`MASS`), `MILLILITER` (`VOLUME`), and `PIECE` (`COUNT`). Authoritative balances never use floating-point quantities.
 
 Catalog owns a controlled, data-driven unit registry. A unit has identifier, code, display name, dimension, exact conversion to its dimension's canonical base unit, and active status. Initial controlled sell-unit codes include `G`, `KG`, `ML`, `L`, and `PC`. Conversions use exact integer/rational factors and may occur only within the same dimension; kilograms convert to grams, liters to milliliters, and pieces remain count-based.
 
 Packaging words such as pack, bunch, tray, head, or bottle are SKU-specific merchandising labels, not global units with universal conversion. A 12-piece egg tray records `12 PIECE` consumption on that SKU; another Product's pack may consume a different base quantity. The persisted SKU conversion is the authority used by Cart, Inventory, Quote, and Order snapshots.
 
-MVP supports fixed variants only. Variable-weight settlement, post-pick repricing, capture adjustment, and weight-driven supplemental charge/refund flows are explicitly out of scope.
+The current release supports fixed variants only. Variable-weight settlement, post-pick repricing, capture adjustment, and weight-driven supplemental charge/refund flows are explicitly out of scope.
 
 ### LocationAvailability
 
@@ -205,7 +205,7 @@ An additive transaction linked to a committed order, available only before cycle
 
 Payments is a bounded context separate from Membership and Orders. `PaymentIntent`/`PaymentAttempt` represent provider-neutral purpose, amount, attempts, and canonical financial state. A membership enrollment, checkout, amendment, or refund may have its own payment purpose and stable application reference; an order may have multiple payments through amendments. Provider customers, methods, references, payloads, and status mappings live behind Payments-owned integration ports.
 
-A provider adapter translates provider states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; MVP treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state. If an Order reaction fails after success is observed, Payments preserves that observation and Core retries the same idempotent commitment. Bounded failure creates a reconciliation exception; no second payment/order or automatic refund is inferred.
+A provider adapter translates provider states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; The current release treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state. If an Order reaction fails after success is observed, Payments preserves that observation and Core retries the same idempotent commitment. Bounded failure creates a reconciliation exception; no second payment/order or automatic refund is inferred.
 
 Checkout entitlement is one executable Membership policy evaluated at an exact instant. `TRIALING` requires an unexpired `trialEndsAt`; `ACTIVE` uses the current paid period and is not invalidated by a historical trial timestamp; `PAST_DUE` requires an unexpired grace timestamp. Quote and commitment share this policy. The market minimum applies to pre-discount merchandise subtotal only: delivery, service fees, and tax never satisfy it.
 
@@ -219,7 +219,7 @@ A `Refund` is an explicit financial adjustment with amount, reason, state, provi
 
 An eligibility and benefit policy supporting a closed application vocabulary with database-configurable parameters. Promotions is one bounded context for membership fee waivers, order discounts, and delivery discounts; it owns definitions, status/effective time, eligibility, grants, redemptions, limits, deterministic selection, and stacking. It never executes user-authored JavaScript, SQL, expressions, or a general scripting/rules engine.
 
-MVP benefit types are:
+Current-release benefit types are:
 
 - `MEMBERSHIP_FEE_WAIVER`;
 - `ORDER_PERCENT_DISCOUNT`;
@@ -244,7 +244,7 @@ Order percentage/fixed benefits apply only to the approved merchandise subtotal 
 - `ON_DEMAND`: supply is acquired for a specific committed demand through a configured operational path rather than assumed available.
 - `MIXED`: usable stock covers an exact portion and another configured sourcing path covers the remainder.
 
-Sourcing answers how inventory is obtained; FulfillmentMode answers when/how the customer receives it. The two vocabularies are independent and the resolved combination is snapshotted. `INSTANT + STOCKED` and `SCHEDULED + PLANNED` are valid examples, not the only structurally representable combinations. A configured combination is eligible only when its owning policies can actually fulfill it; MVP does not infer an unimplemented `ON_DEMAND` path.
+Sourcing answers how inventory is obtained; FulfillmentMode answers when/how the customer receives it. The two vocabularies are independent and the resolved combination is snapshotted. `INSTANT + STOCKED` and `SCHEDULED + PLANNED` are valid examples, not the only structurally representable combinations. A configured combination is eligible only when its owning policies can actually fulfill it; The current release does not infer an unimplemented `ON_DEMAND` path.
 
 ### LocationInventory
 
@@ -276,7 +276,7 @@ committed demand
 = procurement requirement
 ```
 
-The model supports central or local procurement and destination locations without requiring both in MVP.
+The model supports central or local procurement and destination locations without requiring both in the current release.
 
 ### Receiving
 
@@ -286,7 +286,7 @@ The controlled recording of purchased goods received, rejected, or short. Receiv
 
 A shortage, partial supplier fill, quality rejection, receiving discrepancy, unexpected unavailability, fulfillment shortage, or delivery failure requiring resolution. Allowed resolutions are domain-specific and may include alternate sourcing, operator-approved replacement, affected-line cancellation, retry/reschedule, partial refund, refund, or escalation.
 
-MVP does not include a customer-directed substitution engine.
+The current release does not include a customer-directed substitution engine.
 
 ## Fulfillment and Delivery
 
@@ -352,7 +352,7 @@ job mutation.
 
 Route execution is not encoded by mutating raw order rows. Delivery events advance the delivery state machine and may cause order projections to change.
 
-MVP proof is delivered timestamp, rider, and delivery event. Photo, recipient identity, and signature are future metadata.
+Current-release proof is delivered timestamp, rider, and delivery event. Photo, recipient identity, and signature are future metadata.
 
 ## Admin and Analytics Read Side
 
@@ -376,7 +376,7 @@ Auth user identities supplied by Web.
 
 ### Analytics and MetricDefinition
 
-Analytics is a derived read-side concern inside the Core modular monolith for MVP. It may aggregate, calculate, project, summarize, and serve dashboards from Customers, Orders, Payments, Membership, Promotions, Inventory, Fulfillment, and Delivery. It owns no source lifecycle, eligibility, balance, or identity state. Rebuildable projections may improve read performance but cannot become mutation authority.
+Analytics is a derived read-side concern inside the Core modular monolith for the current release. It may aggregate, calculate, project, summarize, and serve dashboards from Customers, Orders, Payments, Membership, Promotions, Inventory, Fulfillment, and Delivery. It owns no source lifecycle, eligibility, balance, or identity state. Rebuildable projections may improve read performance but cannot become mutation authority.
 
 Every published metric name has exactly one versioned `MetricDefinition` containing formula, source records/events, event-time field, reporting timezone, dimensions, inclusion/exclusion rules, and rounding/empty-denominator behavior. A metric without an approved definition is unavailable rather than calculated differently by separate dashboards.
 

@@ -514,7 +514,7 @@ assert.throws(() =>
 assert.deepEqual(cartUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
 cartUpgrade.close();
 
-// Customer MVP migration is additive over live Membership/Promotions data and
+// Customer launch migration is additive over live Membership/Promotions data and
 // establishes the quote-claim, follow-up, notification, and invoice seams in
 // one reserved migration.
 const customerMvpUpgrade = database();
@@ -524,11 +524,11 @@ apply(
 );
 customerMvpUpgrade.exec(`
   INSERT INTO customer (id, auth_user_id, status, created_at, updated_at)
-    VALUES ('customer-mvp-upgrade', 'auth-customer-mvp-upgrade', 'active', 1, 1);
+    VALUES ('customer-launch-upgrade', 'auth-customer-launch-upgrade', 'active', 1, 1);
   INSERT INTO promotion_redemption
     (id, grant_id, benefit_code, benefit_type, customer_id, subject_type, subject_id, redeemed_at)
-    VALUES ('customer-mvp-intro-redemption', 'grant-introductory-trial', 'INTRO_TRIAL',
-            'MEMBERSHIP_FEE_WAIVER', 'customer-mvp-upgrade', 'subscription', 'historical-sub', 1);
+    VALUES ('customer-launch-intro-redemption', 'grant-introductory-trial', 'INTRO_TRIAL',
+            'MEMBERSHIP_FEE_WAIVER', 'customer-launch-upgrade', 'subscription', 'historical-sub', 1);
 `);
 apply(
   customerMvpUpgrade,
@@ -537,7 +537,7 @@ apply(
 assert.equal(
   customerMvpUpgrade
     .prepare(
-      "SELECT COUNT(*) AS count FROM promotion_redemption WHERE id='customer-mvp-intro-redemption'",
+      "SELECT COUNT(*) AS count FROM promotion_redemption WHERE id='customer-launch-intro-redemption'",
     )
     .get().count,
   1,
@@ -563,5 +563,5 @@ assert.deepEqual(customerMvpUpgrade.prepare("PRAGMA foreign_key_check").all(), [
 customerMvpUpgrade.close();
 
 console.log(
-  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, and 0046 -> 0047 customer MVP upgrades are valid.",
+  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, and 0046 -> 0047 customer launch upgrades are valid.",
 );

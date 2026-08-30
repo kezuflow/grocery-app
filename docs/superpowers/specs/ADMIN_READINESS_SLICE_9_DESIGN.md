@@ -7,7 +7,7 @@ business workflow or change a canonical domain rule.
 
 ## Goal
 
-Make the existing FreshMarkets Web/Core MVP demonstrably ready for the next deployment step by
+Make the existing FreshMarkets Web/Core release demonstrably ready for the next deployment step by
 closing shared accessibility and boundary gaps, measuring obvious request/render costs, and proving
 Worker-local and production-like operational checks without introducing new infrastructure.
 

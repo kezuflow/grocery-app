@@ -333,7 +333,7 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 
 ### Customer cancellation
 
-- Customer grocery-order cancellation is not in the mock-payment MVP. It is absent from the Core
+- Customer grocery-order cancellation is not in the mock-payment launch. It is absent from the Core
   entrypoint, shared Service Binding contract, and Web customer surface.
 - Internal operational cancellation machinery remains an operations seam and is not customer
   authority. Membership-cancellation UX remains unresolved and is not inferred here.
@@ -378,6 +378,6 @@ have been executed.
 - Decide membership-cancellation customer UX and effective timing before exposing a command.
 - Configure an onboarded transactional email sender/adapter and the Core Mapbox secret outside source.
 - Approve BIR seller/tax/serial/retention policy before invoice issuance.
-- Treat the Customer MVP implementation as locally verified product behavior only after the current-tree completion report gates pass; production deployment acceptance remains external.
+- Treat the Customer launch implementation as locally verified product behavior only after the current-tree completion report gates pass; production deployment acceptance remains external.
 - Provision authenticated staff/rider/customer browser test identities and run the written
   Playwright acceptance journeys without skips.

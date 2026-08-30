@@ -42,7 +42,7 @@ This record resolves implementation ambiguity without replacing the domain speci
 ## Commercial Policy and Cebu Defaults
 
 - **Decision:** Trial duration, minimum basket, default market, fulfillment location, and applicable fees are configuration or persisted policy data, not scattered command constants.
-- **Legacy behavior preserved:** MVP defaults remain Metro Cebu, `location-cebu-central`, a 14-day seeded trial, and a PHP 500 minimum basket.
+- **Legacy behavior preserved:** current release defaults remain Metro Cebu, `location-cebu-central`, a 14-day seeded trial, and a PHP 500 minimum basket.
 - **Migration strategy:** Pass 1 centralizes these defaults. Trial duration is read from `subscription_offer`; persisted policy tables and zone fees remain later P1/P2 work.
 
 ## Payment Boundary

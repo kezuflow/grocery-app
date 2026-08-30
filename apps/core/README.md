@@ -22,7 +22,7 @@ For local development, `BETTER_AUTH_URL` is the browser-facing Web origin
 `http://localhost:3000`; it is not the standalone Core listener. `pnpm dev:core`
 uses Wrangler's default `http://127.0.0.1:8787` listener.
 
-## Customer MVP runtime
+## Customer launch runtime
 
 Core exposes typed Membership, Promotion-aware checkout, opaque fulfillment-option, Payment/Order, customer Order detail/reorder/issue/amendment, notification-outbox, and invoice-readiness application surfaces. Customer Web clients submit confirmed address/cart versions and an opaque fulfillment option; Core resolves the internal location/mode/cycle and repeats every authoritative check at Quote/payment/commitment boundaries.
 

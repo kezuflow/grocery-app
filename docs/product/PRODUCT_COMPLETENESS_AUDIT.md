@@ -1,6 +1,6 @@
 # FreshMarkets Product Completeness Audit
 
-Reconciled 2026-08-27. This is descriptive audit evidence; `MVP_SCOPE.md` and the canonical
+Reconciled 2026-08-27. This is descriptive audit evidence; `PRODUCT_SCOPE.md` and the canonical
 architecture set remain authoritative.
 
 ## Classification rule
@@ -21,8 +21,8 @@ acceptance does not.
 | Scheduled fulfillment | PARTIAL | Cycle/cutoff/capacity foundations; operations breadth remains incomplete |
 | Delivery pricing | LOCAL SLICE | Versioned integer config, route-distance port/adapter, immutable snapshots and failure tests |
 | Cart/checkout | LOCAL SLICE | Authoritative reprice/revalidation and explicit total acceptance; full authenticated E2E open |
-| Payments/orders | MOCK MVP ONLY | Deterministic signed mock flow, dedupe, reaction recovery, one-payment/one-order tests; no production provider |
-| Customer grocery cancellation | EXCLUDED FROM MOCK MVP | No customer RPC/contract; internal operations seam only |
+| Payments/orders | MOCK current release ONLY | Deterministic signed mock flow, dedupe, reaction recovery, one-payment/one-order tests; no production provider |
+| Customer grocery cancellation | EXCLUDED FROM MOCK current release | No customer RPC/contract; internal operations seam only |
 | Membership trial/renewal | MOCK-TESTED SEAMS | Provider-neutral states/scheduling; production mandate and automatic charging unapproved |
 | Auth email | LOCAL SLICE | Core Cloudflare Email Service adapter and fake binding/flow tests; sender onboarding open |
 | Product notifications | NOT STARTED | Auth email does not complete Program 6 notification scope |

@@ -37,7 +37,7 @@ Implementation must continue to obey:
 - `docs/architecture/STATE_MACHINES.md`
 - `docs/architecture/DATA_MODEL.md`
 - `docs/architecture/API_CONTRACTS.md`
-- `docs/product/MVP_SCOPE.md`
+- `docs/product/PRODUCT_SCOPE.md`
 - `docs/product/IMPLEMENTATION_PLAN.md`
 - `docs/architecture/NAMING_CONVENTIONS.md`
 - `docs/design/marketplace/DESIGN.md`

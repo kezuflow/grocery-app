@@ -30,7 +30,7 @@ ready. Ground every implementation finding in real, cited repository evidence.
 2. The canonical documents relevant to the review scope:
    - `docs/architecture/ARCHITECTURE.md`, `API_CONTRACTS.md`, `DOMAIN_MODEL.md`,
      `DATA_MODEL.md`, `STATE_MACHINES.md`
-   - `docs/product/MVP_SCOPE.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_STATUS.md`
+   - `docs/product/PRODUCT_SCOPE.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_STATUS.md`
    - `docs/design/admin/*`, `docs/design/marketplace/*`
 3. The actual implementation under `apps/core`, `apps/web`, `packages/*`, and
    `apps/core/migrations`.
@@ -95,8 +95,8 @@ it is genuinely irrelevant to the scope, and say so.
    scope.
 9. **Phase dependencies** — nothing implements or depends on a later phase's work;
    dependency-order per `IMPLEMENTATION_PLAN.md` holds.
-10. **MVP completeness** — for phases in scope, the MVP business loop steps and
-    acceptance criteria in `MVP_SCOPE.md` are actually satisfied, not merely
+10. **Product-scope completeness** — for phases in scope, the launch business loop steps and
+    acceptance criteria in `PRODUCT_SCOPE.md` are actually satisfied, not merely
     scaffolded. Do not credit speculative or out-of-scope work.
 11. **Locked business invariants** — subscription-gated checkout, payment-success vs
     cutoff commitment boundaries, additive-only amendments, immutable order
@@ -119,7 +119,7 @@ Label every finding with exactly one class:
   architecture or invariants; note them without alarm.
 - **Premature abstraction** — generality, indirection, or infrastructure built ahead
   of a demonstrated need (e.g., Durable Objects, Workflows, extra packages,
-  event-sourcing) that `MVP_SCOPE.md`/`ARCHITECTURE.md` defer.
+  event-sourcing) that `PRODUCT_SCOPE.md`/`ARCHITECTURE.md` defer.
 
 Do not inflate technical debt or premature abstraction into defects, and do not
 downgrade a real boundary/invariant violation into "debt".

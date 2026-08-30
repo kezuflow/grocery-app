@@ -1,6 +1,6 @@
 # FreshMarkets Agent Instructions
 
-This file is the enforcement and documentation router for this repository. The canonical set is `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/STATE_MACHINES.md`, `docs/architecture/DATA_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, `docs/product/MVP_SCOPE.md`, and `docs/product/IMPLEMENTATION_PLAN.md`. `IMPLEMENTATION_STATUS.md`, phase reviews, remediation notes, READMEs, code, and migration history describe implementation or historical compatibility; they do not override the canonical set. Read the relevant canonical documents before changing a domain or product surface.
+This file is the enforcement and documentation router for this repository. The canonical set is `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/STATE_MACHINES.md`, `docs/architecture/DATA_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, `docs/product/PRODUCT_SCOPE.md`, and `docs/product/IMPLEMENTATION_PLAN.md`. `IMPLEMENTATION_STATUS.md`, phase reviews, remediation notes, READMEs, code, and migration history describe implementation or historical compatibility; they do not override the canonical set. Read the relevant canonical documents before changing a domain or product surface.
 
 ## Mandatory Architecture
 
@@ -29,7 +29,7 @@ This file is the enforcement and documentation router for this repository. The c
 - The current membership is one paid offer at PHP 299.00 per calendar billing month. The introductory free trial is a Promotion grant over that paid membership for exactly one calendar billing month; it is not a zero-price offer or plan.
 - Membership owns subscription state; Promotions owns trial eligibility/grant/redemption; Payments owns all provider interactions and canonical financial state. Better Auth owns none of these concepts.
 - `CANCELED` and `EXPIRED` are distinct terminal subscription states. Scheduled cancellation is intent metadata while the subscription remains in its entitled state until an explicit transition at the effective instant.
-- Paid membership activation and paid order commitment require a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. For MVP, provider captured/success states map to canonical `SUCCEEDED`; browser return state or payment initiation is never sufficient.
+- Paid membership activation and paid order commitment require a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. For the current release, provider captured/success states map to canonical `SUCCEEDED`; browser return state or payment initiation is never sufficient.
 - Paid orders are locked and cannot be freely mutated after commitment.
 - Customer fulfillment mode is exactly `INSTANT` or `SCHEDULED`. Each active fulfillment location has one active mode configuration; `WEEKLY` is the initial Scheduled cadence, never a fulfillment mode. A later configuration change never rewrites a committed Order's fulfillment snapshot.
 - Fulfillment mode and sourcing mode are separate. Canonical sourcing values are `STOCKED`, `PLANNED`, `ON_DEMAND`, and `MIXED`; valid combinations include `INSTANT + STOCKED` and `SCHEDULED + PLANNED`.
@@ -41,14 +41,14 @@ This file is the enforcement and documentation router for this repository. The c
 - Authoritative price belongs to a sellable SKU in its applicable market/location price context. Missing or invalid price is unavailable, never silently zero.
 - Stocked inventory reservation and planned-procurement committed demand are separate concepts.
 - Historical orders snapshot product, SKU/unit and base consumption, prices and explicit monetary components, discounts/promotions, address, fulfillment mode/location/zone/promise, and Scheduled cycle/window identifiers where applicable.
-- Promotions owns one controlled benefit/rule system for membership fee waivers, order discounts, and delivery discounts. MVP stacking permits at most one merchandise/order benefit plus one delivery benefit; Membership benefits remain separate. Arbitrary executable promotion scripting is forbidden.
+- Promotions owns one controlled benefit/rule system for membership fee waivers, order discounts, and delivery discounts. Current-release stacking permits at most one merchandise/order benefit plus one delivery benefit; Membership benefits remain separate. Arbitrary executable promotion scripting is forbidden.
 - Core authoritatively validates coordinates, serviceability polygons, delivery zone, fulfillment mode/location/promise, mode-specific inventory or cycle/cutoff/capacity, cart, SKU prices, promotions/stacking, minimum order, subscription, and payment readiness.
 - Customers buy from FreshMarkets and never select a fulfillment hub.
-- Preserve multi-market and multi-location support even while MVP operates one Cebu location.
+- Preserve multi-market and multi-location support even while the the current release operates one Cebu location.
 - Maintain independent state machines for subscription, cycle, order, payment, refund, procurement, receiving, fulfillment, and delivery.
 - Client/application/admin lifecycle commands require stable idempotency keys and expected aggregate versions where concurrent mutation is possible. Provider events never invent or accept client `expectedVersion` values; they use unique `(provider, providerEventId)` inbox identity, handler-side compare-and-swap protection, and safe retry/reconciliation.
 - Admin uses purpose-built Core commands/read models and capability-based IAM, never raw tables, Better Auth user rows as Customer records, or a global `isAdmin` authority.
-- Analytics is a derived read-side concern inside the Core modular monolith for MVP. Every published named metric requires one versioned canonical definition; Analytics never owns Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state.
+- Analytics is a derived read-side concern inside the Core modular monolith for the current release. Every published named metric requires one versioned canonical definition; Analytics never owns Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state.
 
 ## Design Rules
 
@@ -64,7 +64,7 @@ This file is the enforcement and documentation router for this repository. The c
 - Checkout, orders, payments, subscriptions, or delivery cycles: read `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`.
 - Catalog, units, SKUs, pricing, fulfillment modes, or promotions: read `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`; read `STATE_MACHINES.md` when lifecycle or commitment behavior changes.
 - Inventory, procurement, receiving, fulfillment, or delivery: read `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, and `DATA_MODEL.md`.
-- MVP or sequencing change: read `docs/product/MVP_SCOPE.md` and `docs/product/IMPLEMENTATION_PLAN.md`.
+- Product scope or sequencing change: read `docs/product/PRODUCT_SCOPE.md` and `docs/product/IMPLEMENTATION_PLAN.md`.
 - Admin or Analytics change: read the Admin/Analytics sections of `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`, plus `docs/design/admin/DESIGN.md` and `docs/design/admin/COMPONENTS.md` for Admin UI.
 - Marketplace UI change: read `docs/design/marketplace/DESIGN.md` and `docs/design/marketplace/REFERENCES.md`.
 

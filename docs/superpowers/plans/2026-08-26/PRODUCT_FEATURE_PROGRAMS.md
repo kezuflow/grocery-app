@@ -8,7 +8,7 @@ remediation program (Plans 01-07 plus Plan 08 P1 core, merged to `main` via PR #
 repository reality (migrations `0001`-`0018`; Core bounded-context modules in `apps/core/src`).
 
 This document is program authority for sequencing and decomposition only. Scope authority remains
-`MVP_SCOPE.md`; runtime, contract, state, and data authority remain the canonical architecture
+`PRODUCT_SCOPE.md`; runtime, contract, state, and data authority remain the canonical architecture
 set named in `AGENTS.md`. Implementation has NOT started. Do not treat Plans 01-07 or the Plan 08
 P1 core as unfinished; Program 1 below is the only remaining remediation scope.
 
@@ -117,7 +117,7 @@ scheduling mechanics and Program 4 supplies the future adapter boundary only aft
 
 **CAN RUN IN PARALLEL WITH:** Programs 5 (design + non-payment slices), 7, 8, 9, 10, 11, 12, 13, 14.
 
-**AUTHORITATIVE DOCS AFFECTED:** `STATE_MACHINES.md`, `DOMAIN_MODEL.md`, `MVP_SCOPE.md` (already
+**AUTHORITATIVE DOCS AFFECTED:** `STATE_MACHINES.md`, `DOMAIN_MODEL.md`, `PRODUCT_SCOPE.md` (already
 amended in the reconciliation change); `DATA_MODEL.md` and `API_CONTRACTS.md` when the dunning
 fields, renewal-attempt records, authorization-identity abuse prevention, and customer-facing
 grace/retry status surface are specified.
@@ -277,7 +277,7 @@ kept out of structured Address fields, and snapshotted immutably onto committed 
 
 **CAN RUN IN PARALLEL WITH:** everything (small, isolated diff surface).
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `DATA_MODEL.md` (instruction
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `DATA_MODEL.md` (instruction
 fields + order snapshot), `API_CONTRACTS.md` (address/quote/order DTO fields),
 `docs/design/marketplace/DESIGN.md` (already amended).
 
@@ -308,7 +308,7 @@ no arbitrary external URLs as canonical source.
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `DATA_MODEL.md` (media tables),
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `DATA_MODEL.md` (media tables),
 `API_CONTRACTS.md` (media fields on catalog DTOs), `docs/design/admin/*` (upload flow).
 
 **EXPECTED CODE DOMAINS:** `apps/core/src/catalog` media records, R2 infrastructure adapter,
@@ -339,7 +339,7 @@ financial additions, next valid actions), explicitly without live rider GPS.
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `API_CONTRACTS.md` (order
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `API_CONTRACTS.md` (order
 detail read model), `docs/design/marketplace/DESIGN.md` (already amended).
 
 **EXPECTED CODE DOMAINS:** `apps/core/src/orders` read model, Web order detail route/timeline
@@ -370,7 +370,7 @@ refund.
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `DOMAIN_MODEL.md` (Orders/
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `DOMAIN_MODEL.md` (Orders/
 operations ownership of issue records), `API_CONTRACTS.md`, `DATA_MODEL.md`,
 `docs/design/admin/*` (queue screen).
 
@@ -403,7 +403,7 @@ suffices).
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `API_CONTRACTS.md` (reorder
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `API_CONTRACTS.md` (reorder
 preview/apply contract), `DOMAIN_MODEL.md` (Cart ownership note).
 
 **EXPECTED CODE DOMAINS:** `apps/core/src/cart` reorder command/validation, Web order history/
@@ -434,7 +434,7 @@ order/payment/audit history.
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `DOMAIN_MODEL.md` (IAM/
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `DOMAIN_MODEL.md` (IAM/
 Customers privacy semantics), `API_CONTRACTS.md`, `DATA_MODEL.md` (request tables, closure
 metadata), `ARCHITECTURE.md` only if a retention hook changes context ownership (not expected).
 
@@ -467,7 +467,7 @@ external/electronic invoice references. No invented Philippine tax computation o
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended), `DATA_MODEL.md` (invoice seam
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended), `DATA_MODEL.md` (invoice seam
 tables), `DOMAIN_MODEL.md` (Orders/finance boundary note), `API_CONTRACTS.md` (admin invoice read
 surface minimal).
 
@@ -497,7 +497,7 @@ accounting/tax confirmation as an open gate.
 
 **CAN RUN IN PARALLEL WITH:** everything.
 
-**AUTHORITATIVE DOCS AFFECTED:** `MVP_SCOPE.md` (already amended); a small design note in
+**AUTHORITATIVE DOCS AFFECTED:** `PRODUCT_SCOPE.md` (already amended); a small design note in
 `docs/design/marketplace/DESIGN.md` if a support surface is added beyond links/copy.
 
 **EXPECTED CODE DOMAINS:** Web links/copy/surface(s), optionally a configuration-driven contact

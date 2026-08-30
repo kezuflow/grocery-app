@@ -239,7 +239,7 @@ Core receives payment provider webhooks through a signed public webhook handler 
 - commit/recover the Membership activation or Order exactly once;
 - enqueue non-critical follow-up.
 
-Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for MVP; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Membership or Order DTOs.
+Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for the current release; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Membership or Order DTOs.
 
 Retry availability uses bounded backoff. Expired leases are reclaimable; competing Workers cannot both own an observation. Retry age/attempt exhaustion transitions the inbox row to `RECONCILIATION_REQUIRED` and creates one operationally visible case, so recovery does not depend on the provider sending the event again.
 
@@ -280,7 +280,7 @@ An additive amendment is available only for an owned paid Scheduled order before
 
 Paid Order commitment also creates one internal invoice-readiness record from the same provider-confirmed transaction. The record copies exact accepted financial components and bounded buyer facts; it does not calculate tax. Missing approved seller/tax configuration yields `PENDING_TAX_CONFIGURATION`, which the customer projection presents as not ready without an identifier. Only separately supplied complete policy facts may reach `READY_FOR_ISSUANCE`; `ISSUED` additionally requires the controlled official identifier and issuance instant.
 
-Customer grocery-order cancellation is not exposed in the mock-payment MVP. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.
+Customer grocery-order cancellation is not exposed in the mock-payment launch. Any future customer command requires a separately approved payment/refund policy. Internal scoped operations commands are not customer authority.
 
 ## Admin Foundation, Audit, and Application IAM
 
@@ -328,13 +328,13 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - Commands take caller-stable `idempotencyKey`s and `expectedVersion` where concurrent mutation is possible, require a reason for access changes/revocation/archive, and append `audit_event` rows (closed action vocabulary `STAFF.*`/`ROLE.*`) with before/after snapshots and `correlation_id = requestId`. Identical replay returns the authoritative result; hash conflicts return `IDEMPOTENCY_CONFLICT`.
 - `setAdminStaffRoles`/`setAdminStaffScopes` replace atomically; every statement in their D1 batch carries the caller's version predicate so a concurrent change makes the whole batch read back as `STALE_VERSION`. Archived roles fail closed on assignment.
 - `revokeAdminStaffSessions` deletes the authentication authority's own session rows for the linked user (the minimal Better Auth build exposes no administrative revoke API), leaving no application-side session state.
-- Invitation lifecycle for MVP: `inviteAdminStaff` creates one durable `PENDING` record per normalized email with 14-day expiry; acceptance/provisioning of a new identity is an explicitly deferred later flow.
+- Invitation lifecycle for the current release: `inviteAdminStaff` creates one durable `PENDING` record per normalized email with 14-day expiry; acceptance/provisioning of a new identity is an explicitly deferred later flow.
 
 ### Implemented Customer CRM service (Slice 3, 2026-08-27)
 
 `packages/contracts/src/admin-customers.ts` publishes `AdminCustomerService` (`listAdminCustomers`, `getAdminCustomer`, `listCustomerInvitations`, `inviteCustomer`, `changeCustomerAccess`, `revokeCustomerSessions`, `requestCustomerClosure`) and `AdminPrivacyService` (`listPrivacyRequests`, `applyPrivacyAction`).
 
-- Authorization: `customers.read` (reads) or `customers.manage` (commands) **plus a global scope** in Core; customer identity is global for MVP and scoped principals receive `FORBIDDEN`.
+- Authorization: `customers.read` (reads) or `customers.manage` (commands) **plus a global scope** in Core; customer identity is global for the current release and scoped principals receive `FORBIDDEN`.
 - `AdminCustomerSummary` composes the display `email`, `phone`, commerce-access status from the `customer_principal` gate, current `subscriptionState`, committed `orderCount`/`lastOrderAt`, aggregate `version`, and `createdAt`. Lifetime spend/AOV are excluded until their canonical metric definitions are approved. `AdminCustomerDetail` adds the ten most recent sanitized Audit summaries for the account.
 - `changeCustomerAccess` disables/restores commerce access through the `customer_principal` gate with the customer aggregate's version guard; `revokeCustomerSessions` deletes the authentication authority's session rows (same mechanism as the Staff service).
 - `requestCustomerClosure` opens an auditable privacy request; `applyPrivacyAction` enforces the closed lifecycle `SUBMITTED -> VERIFYING|APPROVED|REJECTED`, `VERIFYING -> APPROVED|REJECTED|ESCALATED`, `APPROVED -> PROCESSING`, `PROCESSING -> COMPLETED|ESCALATED`, `ESCALATED -> PROCESSING` and returns `ILLEGAL_TRANSITION` otherwise. Completion records resolution only — no order, payment, refund, redemption, ledger, or audit history is ever deleted, and retention-backed anonymization remains gated on approved policy.

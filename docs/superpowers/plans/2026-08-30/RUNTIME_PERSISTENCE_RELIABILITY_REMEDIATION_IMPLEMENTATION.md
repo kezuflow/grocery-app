@@ -174,7 +174,7 @@ Run: `pnpm audit --json`
 - Modify: `docs/architecture/STATE_MACHINES.md`
 - Modify: `docs/architecture/DATA_MODEL.md`
 - Modify: `docs/architecture/API_CONTRACTS.md`
-- Modify: `docs/product/MVP_SCOPE.md`
+- Modify: `docs/product/PRODUCT_SCOPE.md`
 - Modify: `docs/product/IMPLEMENTATION_PLAN.md`
 - Modify: `docs/product/IMPLEMENTATION_STATUS.md`
 

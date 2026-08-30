@@ -23,7 +23,7 @@
 ### Task 1: Canonical scope document and routers
 
 **Files:**
-- Rename: `docs/product/MVP_SCOPE.md` -> `docs/product/PRODUCT_SCOPE.md`
+- Rename: `docs/product/PRODUCT_SCOPE.md` -> `docs/product/PRODUCT_SCOPE.md`
 - Modify: `AGENTS.md`
 - Modify: `docs/architecture/ARCHITECTURE.md`
 - Modify: `docs/architecture/DOMAIN_MODEL.md`
@@ -47,7 +47,7 @@ Expected: matches include the old filename and active fixed-stage language.
 - [ ] **Step 2: Rename the canonical scope file**
 
 ```powershell
-git mv docs/product/MVP_SCOPE.md docs/product/PRODUCT_SCOPE.md
+git mv docs/product/PRODUCT_SCOPE.md docs/product/PRODUCT_SCOPE.md
 ```
 
 - [ ] **Step 3: Update active canonical language**
@@ -59,7 +59,7 @@ MVP scope                  -> product scope
 MVP launch                 -> initial launch
 for MVP                    -> for the current release
 MVP may initially          -> the current release may initially
-MVP_SCOPE.md               -> PRODUCT_SCOPE.md
+PRODUCT_SCOPE.md               -> PRODUCT_SCOPE.md
 ```
 
 Do not mechanically replace substrings inside applied migration names.

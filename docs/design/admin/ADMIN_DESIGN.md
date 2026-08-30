@@ -20,7 +20,7 @@ Capability-aware primary navigation:
 8. Customers
 9. Subscriptions
 10. Payments
-11. Promotions (MVP subset/later)
+11. Promotions (current release subset/later)
 12. Staff / Roles
 13. Audit Log
 14. Settings
@@ -87,7 +87,7 @@ Domain: `OrderStatus`, `OrderTimeline`, `OrderItemsTable`, `OrderFinancialSummar
 4. Build `FilterBar`, `AdminDataTable`, status components, loading/empty/error/conflict states, and URL filter persistence.
 5. Implement Overview and Orders workspaces against typed read models and legal command results.
 6. Add Payments, Inventory, Procurement, Fulfillment, and Delivery queues/detail workspaces as their Core contracts/read models become complete.
-7. Add Customers, Subscriptions, Staff/Roles, Audit, and later Promotions/Analytics surfaces according to MVP sequencing.
+7. Add Customers, Subscriptions, Staff/Roles, Audit, and later Promotions/Analytics surfaces according to current release sequencing.
 8. Validate keyboard/accessibility, location/capability enforcement, idempotency/conflict behavior, responsive tables, and representative Playwright operational flows.
 
 ## Approved Decisions

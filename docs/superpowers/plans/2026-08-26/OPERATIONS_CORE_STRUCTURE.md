@@ -8,7 +8,7 @@
 
 **Tech Stack:** Cloudflare Workers, D1, TypeScript, Zod, shared Service Binding contracts, Vitest Workers pool, Playwright, vinext.
 
-**Spec:** `docs/architecture/ARCHITECTURE.md` deployment/module boundaries; `docs/architecture/DOMAIN_MODEL.md` Inventory, Procurement, Receiving, Fulfillment, Delivery, and IAM ownership; `docs/architecture/STATE_MACHINES.md` operational transitions; `docs/architecture/API_CONTRACTS.md` admin/rider command and query rules; `docs/architecture/DATA_MODEL.md` operational data; `docs/product/MVP_SCOPE.md` admin and rider outcomes.
+**Spec:** `docs/architecture/ARCHITECTURE.md` deployment/module boundaries; `docs/architecture/DOMAIN_MODEL.md` Inventory, Procurement, Receiving, Fulfillment, Delivery, and IAM ownership; `docs/architecture/STATE_MACHINES.md` operational transitions; `docs/architecture/API_CONTRACTS.md` admin/rider command and query rules; `docs/architecture/DATA_MODEL.md` operational data; `docs/product/PRODUCT_SCOPE.md` admin and rider outcomes.
 
 ## Global Constraints
 

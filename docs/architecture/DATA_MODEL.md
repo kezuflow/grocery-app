@@ -15,7 +15,7 @@ Conventions:
 - Provider inbox records are deduplicated by unique `(provider, provider_event_id)`; provider payloads do not supply aggregate versions.
 - JSON snapshots are versioned application data, not an excuse to omit queryable foreign keys.
 
-The canonical Scheduled operational capacity key is cycle × delivery zone × fulfillment location. Instant coordination uses location inventory-pool holds/reservations rather than a synthetic cycle. The canonical price scope is SKU × market × optional location × price type. Historical MVP migrations may be narrower, but corrective migrations must move toward these keys without rewriting applied migrations.
+The canonical Scheduled operational capacity key is cycle × delivery zone × fulfillment location. Instant coordination uses location inventory-pool holds/reservations rather than a synthetic cycle. The canonical price scope is SKU × market × optional location × price type. Historical launch migrations may be narrower, but corrective migrations must move toward these keys without rewriting applied migrations.
 
 ## Better Auth-Owned Tables
 
@@ -36,7 +36,7 @@ Better Auth does not own customer profiles, addresses, application IAM, membersh
 - `markets(id PK, organization_id FK, code UNIQUE, name, currency, timezone, status)`
 - `fulfillment_locations(id PK, market_id FK, code, name, type, address_json, latitude, longitude, status, version, UNIQUE(market_id, code))`
 - `location_capabilities(location_id FK, capability, enabled, PRIMARY KEY(location_id, capability))`
-- `fulfillment_mode_configurations(id PK, market_id FK, location_id FK, fulfillment_mode INSTANT|SCHEDULED, cadence NULL, configuration_json, effective_from, effective_to NULL, status, version)` with one effective active configuration per active location and `cadence` allowed only for `SCHEDULED`; MVP Scheduled cadence is `WEEKLY`.
+- `fulfillment_mode_configurations(id PK, market_id FK, location_id FK, fulfillment_mode INSTANT|SCHEDULED, cadence NULL, configuration_json, effective_from, effective_to NULL, status, version)` with one effective active configuration per active location and `cadence` allowed only for `SCHEDULED`; Current-release Scheduled cadence is `WEEKLY`.
 - `service_areas(id PK, market_id FK, code, name, polygon_geojson, polygon_version, active_from, active_to, status, UNIQUE(market_id, code, polygon_version))`
 - `delivery_zones(id PK, service_area_id FK, code, name, polygon_geojson, polygon_version, fee_rule_id FK NULL, status, UNIQUE(service_area_id, code, polygon_version))`
 - `location_serviceability(zone_id FK, location_id FK, priority, eligible, valid_from, valid_to, PRIMARY KEY(zone_id, location_id, valid_from))`
@@ -137,7 +137,7 @@ The launch implementation adds normalized detail and SKU-level availability stor
 - `delivery_cycle_zones(cycle_id FK, zone_id FK, location_id FK, capacity_limit, allocated_count, status, version, PRIMARY KEY(cycle_id, zone_id, location_id))`
 - `capacity_allocations(id PK, cycle_id FK, zone_id FK, location_id FK, checkout_attempt_id FK, order_id FK NULL, units, status, expires_at NULL, created_at, UNIQUE(checkout_attempt_id), UNIQUE(order_id))`
 
-Delivery-fee configuration applies to both modes and is selected by effective market/location version. Money and rates use integers; Core derives the fee from provider-neutral road-route meters and snapshots the selected configuration and calculation. Cycle/capacity tables apply only to `SCHEDULED`. Capacity commitment uses a conditional update (`allocated_count + requested <= capacity_limit`) and allocation insert in one D1 transactional batch. Temporary capacity holds, if used, have short expiry and an idempotent cleanup command; MVP should prefer allocating at the latest safe payment boundary to minimize hold complexity. `INSTANT` never receives a fabricated cycle row.
+Delivery-fee configuration applies to both modes and is selected by effective market/location version. Money and rates use integers; Core derives the fee from provider-neutral road-route meters and snapshots the selected configuration and calculation. Cycle/capacity tables apply only to `SCHEDULED`. Capacity commitment uses a conditional update (`allocated_count + requested <= capacity_limit`) and allocation insert in one D1 transactional batch. Temporary capacity holds, if used, have short expiry and an idempotent cleanup command; current release should prefer allocating at the latest safe payment boundary to minimize hold complexity. `INSTANT` never receives a fabricated cycle row.
 
 ## Cart and Checkout Attempts
 
@@ -210,7 +210,7 @@ Every `*_base` value is an integer interpreted through its InventoryPool base un
 
 ## Procurement and Receiving
 
-- `suppliers(id PK, code UNIQUE, name, status, metadata_json)` (minimal MVP identity)
+- `suppliers(id PK, code UNIQUE, name, status, metadata_json)` (minimal launch identity)
 - `procurement_runs(id PK, cycle_id FK, destination_location_id FK, status, demand_version, version, created_at, updated_at, UNIQUE(cycle_id, destination_location_id))`
 - `procurement_requirements(id PK, run_id FK, inventory_pool_id FK, committed_demand_base, safety_buffer_base, usable_inventory_base, confirmed_incoming_base, required_base, approved_base NULL, status, version, UNIQUE(run_id, inventory_pool_id))`
 - `purchase_orders(id PK, run_id FK, supplier_id FK, destination_location_id FK, status, external_reference NULL, version, created_at, updated_at)`
@@ -325,9 +325,9 @@ Critical batches include:
 
 Use conditional updates against expected state/version and verify affected-row counts for client/application/admin lifecycle commands. Duplicate idempotency keys with different request hashes are conflicts; identical replay returns the original result. Provider events use durable `(provider, provider_event_id)` deduplication and handler-side conditional updates; concurrent aggregate changes cause safe retry/reconciliation, never an invented webhook version.
 
-## Customer MVP Completion Migration
+## Customer launch Completion Migration
 
-Migration `0047_customer_mvp_completion.sql` is the additive Customer MVP boundary. It adds controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness` with exact buyer/financial/tax-policy evidence. Fulfillment locations remain unavailable to customer option discovery until their single active mode is explicitly configured; the migration does not invent operational mode authority.
+Migration `0047_customer_mvp_completion.sql` is the additive Customer launch boundary. It adds controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness` with exact buyer/financial/tax-policy evidence. Fulfillment locations remain unavailable to customer option discovery until their single active mode is explicitly configured; the migration does not invent operational mode authority.
 
 Promotion claims are uncommitted Quote evidence until atomic Order commitment creates redemption/application history. `notification_outbox.idempotency_key` uniquely identifies one business notification intent, and due work is indexed by status/availability/schedule. `order_invoice_readiness` is one-to-one with Order and provider-confirmed Payment intent; its financial components must be nonnegative and reconcile exactly to the committed total before persistence.
 

@@ -4,7 +4,7 @@
 
 This specification defines the correction pass for the standalone `html/` storefront prototype. It implements the approved customer-facing behavior without changing Core, D1, shared contracts, authentication providers, payment providers, or production deployment behavior.
 
-The repository's canonical architecture, domain, state-machine, data-model, API-contract, MVP, and marketplace-design documents remain authoritative. DoorDash and Mobbin are usability references only. When a reference conflicts with FreshMarkets business rules, the FreshMarkets rule wins.
+The repository's canonical architecture, domain, state-machine, data-model, API-contract, product-scope, and marketplace-design documents remain authoritative. DoorDash and Mobbin are usability references only. When a reference conflicts with FreshMarkets business rules, the FreshMarkets rule wins.
 
 ## Objective
 

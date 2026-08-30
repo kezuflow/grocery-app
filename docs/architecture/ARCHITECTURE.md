@@ -2,7 +2,7 @@
 
 ## Status and Authority
 
-This document is authoritative for the approved runtime, repository, bounded-context ownership, integration boundaries, and layering architecture. `DOMAIN_MODEL.md` owns business meaning and invariants, `STATE_MACHINES.md` owns lifecycle vocabulary and transitions, `DATA_MODEL.md` owns conceptual persistence, and `API_CONTRACTS.md` owns application boundary semantics. Product scope and sequencing are authoritative only in `MVP_SCOPE.md` and `IMPLEMENTATION_PLAN.md`. Status reports, remediation notes, READMEs, code, and migrations do not override these decisions.
+This document is authoritative for the approved runtime, repository, bounded-context ownership, integration boundaries, and layering architecture. `DOMAIN_MODEL.md` owns business meaning and invariants, `STATE_MACHINES.md` owns lifecycle vocabulary and transitions, `DATA_MODEL.md` owns conceptual persistence, and `API_CONTRACTS.md` owns application boundary semantics. Product scope and sequencing are authoritative only in `PRODUCT_SCOPE.md` and `IMPLEMENTATION_PLAN.md`. Status reports, remediation notes, READMEs, code, and migrations do not override these decisions.
 
 ## System Shape
 
@@ -216,7 +216,7 @@ Use pragmatic CQRS-lite:
 
 - Queries are named for a customer or operational decision, such as `MarketplaceProductView`, `AdminOrderList`, `DeliveryCycleSummary`, and `ProcurementRequirement`.
 - Writes are explicit commands such as `ConfirmOrder`, `CreateOrderAmendment`, `ReceiveProcurement`, `AdjustInventory`, `MarkPacked`, and `MarkDelivered`.
-- Read and write paths share one D1 database and one deployment. There is no event-sourced command bus or separate read database in MVP.
+- Read and write paths share one D1 database and one deployment. There is no event-sourced command bus or separate read database in the current release.
 - Read models may use optimized SQL joins/projections but must retain authorization and scope checks.
 - Admin customer summaries, operational queues, and Analytics dashboards compose purpose-built projections over owning contexts. They never use Better Auth tables as the Customer database or mutate source state through projection storage.
 - A named metric is publishable only through one versioned canonical definition specifying formula, source context/events, time basis/timezone, inclusion/exclusion rules, and unresolved accounting dependencies.
@@ -225,7 +225,7 @@ Use pragmatic CQRS-lite:
 
 ### D1
 
-D1 is the MVP relational transactional source of truth and is bound only to Core. Use constraints, unique indexes, optimistic versions, conditional updates, and transactional `batch()` operations. Use D1 Sessions only where sequential consistency/read replication requirements justify them.
+D1 is the current-release relational transactional source of truth and is bound only to Core. Use constraints, unique indexes, optimistic versions, conditional updates, and transactional `batch()` operations. Use D1 Sessions only where sequential consistency/read replication requirements justify them.
 
 ### R2
 
@@ -241,7 +241,7 @@ KV is optional for cache/config-like workloads with acceptable staleness. It is 
 
 ### Durable Objects
 
-Durable Objects are not part of the MVP architecture. D1 atomic conditional allocation coordinates cycle/zone capacity. A Durable Object per cycle/zone may be introduced only after measured hot-key contention or live coordination requirements show that D1 is insufficient.
+Durable Objects are not part of the current release architecture. D1 atomic conditional allocation coordinates cycle/zone capacity. A Durable Object per cycle/zone may be introduced only after measured hot-key contention or live coordination requirements show that D1 is insufficient.
 
 ### Workflows
 
@@ -253,7 +253,7 @@ Cloudflare Cron Triggers are the approved time-driven execution mechanism. They 
 
 ## vinext Compatibility Policy
 
-The MVP may rely on App Router, React Server Components, client components, route handlers, server actions used as thin adapters, middleware for coarse presentation behavior, navigation/headers APIs, metadata, request-time images, and selected static/ISR output.
+The The current release may rely on App Router, React Server Components, client components, route handlers, server actions used as thin adapters, middleware for coarse presentation behavior, navigation/headers APIs, metadata, request-time images, and selected static/ISR output.
 
 Before implementation, run a compatibility spike and `vinext check`. Explicitly test nested layouts, loading/error boundaries, cookies, headers, redirects, streaming, Service Binding access, auth route proxying, OAuth redirects, and production Worker builds.
 
@@ -293,16 +293,16 @@ nonce; it permits neither `unsafe-inline` nor `unsafe-eval` in any environment. 
 do not carry request-varying CSP. Live storefront-auth, Admin, and Maps/serviceability hydration
 flows verify the nonce policy while deployed HTTPS environments alone receive HSTS.
 
-## MVP Versus Future Scaling
+## Current Release Versus Future Scaling
 
-MVP uses two Workers, one D1 database, one active Cebu fulfillment location with exactly one configured active fulfillment mode, D1 coordination for the applicable Instant inventory hold or Scheduled cycle capacity, and a provider-neutral payment integration boundary. `SCHEDULED` initially supports `WEEKLY` cadence, but cadence is configuration rather than a platform-wide fulfillment mode. The schema and domain remain multi-location and mode-aware.
+The current release uses two Workers, one D1 database, one active Cebu fulfillment location with exactly one configured active fulfillment mode, D1 coordination for the applicable Instant inventory hold or Scheduled cycle capacity, and a provider-neutral payment integration boundary. `SCHEDULED` initially supports `WEEKLY` cadence, but cadence is configuration rather than a platform-wide fulfillment mode. The schema and domain remain multi-location and mode-aware.
 
 Future scaling options include additional locations and markets, D1 read replication sessions for read-heavy operations, Durable Objects for proven hot coordination, stock transfers, central/local procurement routing, Workflows for long-running orchestration, richer analytics stores, and selective module extraction. Extraction requires a demonstrated independent scaling, security, deployment, or ownership need and must preserve typed contracts and business invariants.
 
-## Customer MVP Runtime Completion
+## Customer launch Runtime Completion
 
 The launch customer flow remains one Core-owned transaction spine: Membership/Promotions eligibility -> confirmed address and opaque fulfillment option -> immutable Quote and explicit price acceptance -> provider-confirmed Payment outcome -> atomic Order commitment -> customer-safe Order follow-up. Web route handlers are thin same-origin adapters and never select a location, compute a discount, infer payment success, issue a refund, or mutate an Order directly.
 
-Transactional customer messages use a D1 `notification_outbox` claimed by Core's scheduled handler with bounded leases, retry metadata, and immutable attempts. This is deliberately not a Queue/Workflow dependency for MVP. The infrastructure port uses Cloudflare's native Send Email binding with both text and HTML content and preserves stable provider failure codes for retry. Delivery failure cannot roll back or alter the source business transition; a configured, onboarded sender remains a deployment gate and missing configuration fails closed.
+Transactional customer messages use a D1 `notification_outbox` claimed by Core's scheduled handler with bounded leases, retry metadata, and immutable attempts. This is deliberately not a Queue/Workflow dependency for the current release. The infrastructure port uses Cloudflare's native Send Email binding with both text and HTML content and preserves stable provider failure codes for retry. Delivery failure cannot roll back or alter the source business transition; a configured, onboarded sender remains a deployment gate and missing configuration fails closed.
 
 Order commitment atomically persists notification intent and invoice-readiness evidence with the Order. Invoice readiness is an internal tax/accounting seam, not issuance: Core records buyer and exact financial snapshots but neither computes unapproved tax nor invents an invoice identifier. Official issuance requires approved seller, tax, serial, and retention policy.

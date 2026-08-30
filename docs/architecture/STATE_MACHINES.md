@@ -6,7 +6,7 @@ States are changed only through named application commands. Client, application,
 
 External provider events are not client commands and never supply or invent an `expectedVersion`. Ingestion requires unique `(provider, providerEventId)` identity and a durable inbox. The handler loads current aggregate state, applies legal-transition and compare-and-swap protection, and safely retries or reconciles if another command changed the aggregate concurrently.
 
-A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid membership and paid orders. For MVP, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, delivery-cycle cutoff is the later operational/procurement commitment boundary. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate.
+A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid membership and paid orders. For the current release, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, delivery-cycle cutoff is the later operational/procurement commitment boundary. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate.
 
 ## Subscription
 
@@ -106,7 +106,7 @@ SUCCEEDED -> PARTIALLY_REFUNDED -> REFUNDED
 SUCCEEDED -> REFUNDED
 ```
 
-Provider states map into stable application states behind the payment adapter. `SUCCEEDED` means funds reached the configured payment-commitment boundary (captured for MVP), not merely that a browser returned successfully or that payment was initiated. Membership and Order react through separate explicit idempotent application commands.
+Provider states map into stable application states behind the payment adapter. `SUCCEEDED` means funds reached the configured payment-commitment boundary (captured for the current release), not merely that a browser returned successfully or that payment was initiated. Membership and Order react through separate explicit idempotent application commands.
 
 Commands/events include `InitiatePayment`, `RecordActionRequired`, `ProcessPaymentWebhook`, `ReconcilePayment`, and `MarkPaymentExpired`.
 
@@ -220,7 +220,7 @@ Commands include `AssignDeliveryJob`, `MarkEnRoute`, `MarkArrived`, `MarkDeliver
 
 Failure reasons include customer unavailable, invalid address, no response, refused, access issue, rider/vehicle issue, weather, and other. Failure alone does not choose refund, retry, or reschedule; an explicit resolution command does.
 
-MVP delivery proof records delivered timestamp, rider, and event/status. Later photo, recipient identity, and signature metadata attach without changing the transition model.
+current release delivery proof records delivered timestamp, rider, and event/status. Later photo, recipient identity, and signature metadata attach without changing the transition model.
 
 ## Cancellation Effects by Stage
 

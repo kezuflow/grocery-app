@@ -23,7 +23,7 @@ export function selectedPaymentProviderCode(
 /**
  * The single runtime construction point. Provider selection is explicit
  * configuration, never registration order. Only the deterministic mock is
- * approved for this MVP and only in development/test; every other combination
+ * approved for the current release and only in development/test; every other combination
  * yields an empty registry and therefore fails closed.
  */
 export function buildProviderRegistry(

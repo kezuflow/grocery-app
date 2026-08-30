@@ -10,7 +10,7 @@ This document is authoritative for implementation sequence and phase acceptance,
 
 ## Remediation Pass 1 — P0/P1 Foundations (2026-08-25)
 
-This bounded remediation pass is applied across the existing MVP slice before
+This bounded remediation pass is applied across the existing product slice before
 further phase expansion. It preserves compatibility behavior and the locked
 business invariants. Its recorded decisions are historical implementation
 context, not an additional authority:
@@ -20,7 +20,7 @@ context, not an additional authority:
   canonical document set supersedes any conflict.
 - `STATE_MACHINES.md` remains authoritative for lifecycle vocabulary and legal
   transitions; `API_CONTRACTS.md` remains authoritative for target RPC shapes.
-- Existing MVP RPCs remain compatibility adapters until their replacement
+- Existing launch RPCs remain compatibility adapters until their replacement
   contracts are implemented in the relevant phase.
 
 Completed foundations include boundary validation, operational scope checks,
@@ -310,7 +310,7 @@ Phases 2–4.
 
 ### Cloudflare resources
 
-- D1 atomic conditional allocation; no DO in MVP.
+- D1 atomic conditional allocation; no DO in the current release.
 
 ### Tests and acceptance
 
@@ -372,7 +372,7 @@ Phase 6; provider integration port from Phase 0.
 
 - Provider-neutral Payments context, payment intents/attempts by purpose, provider mappings/adapters, signed durable event inbox, canonical payment state, and reconciliation.
 - Explicit idempotent reactions from canonical sufficient Payments outcomes to Membership activation/recovery and Order commitment.
-- Order commitment transaction, immutable snapshots, amendments, and internal cancellation/refund policy seams. Customer grocery cancellation remains unexposed for the mock-payment MVP.
+- Order commitment transaction, immutable snapshots, amendments, and internal cancellation/refund policy seams. Customer grocery cancellation remains unexposed for the mock-payment launch.
 
 ### D1/data changes
 
@@ -568,7 +568,7 @@ Phases 1 and 7–11.
 
 ### D1/data changes
 
-- Add category hierarchy and optimistic-version storage required by the canonical model, plus canonical product-media storage/association required by MVP. Add indexes or rebuildable projections only where measured admin queries require them.
+- Add category hierarchy and optimistic-version storage required by the canonical model, plus canonical product-media storage/association required by current release. Add indexes or rebuildable projections only where measured admin queries require them.
 
 ### RPC/contracts
 
@@ -641,13 +641,13 @@ Restaurant-specific interactions, customer hub selection, arbitrary weight, or s
 
 ### Purpose
 
-Add explicitly prioritized post-MVP capabilities without destabilizing the committed business loop.
+Add explicitly prioritized post-launch capabilities without destabilizing the committed business loop.
 
 ### Dependencies
 
-Stable MVP operations and observability.
+Stable current release operations and observability.
 
-### Implemented Customer MVP work
+### Implemented Customer launch work
 
 - Controlled grocery Order/Delivery Promotion rules, deterministic two-component stacking, Quote claims, and commit-time redemptions.
 - Customer Membership experience, immutable Order detail/timeline, current-state reorder, typed issue intake, pre-commit abandonment, and Scheduled-before-cutoff paid additive amendments.
