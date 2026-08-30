@@ -6,6 +6,7 @@ import type { CustomerOrderDetailView, RpcResult } from "@freshmarkets/contracts
 import { StorefrontShell } from "../../../components/storefront/storefront-shell";
 import { OrderTimeline } from "../../../components/storefront/orders/order-timeline";
 import { ReorderAction } from "../../../components/storefront/orders/reorder-action";
+import { OrderIssueForm } from "../../../components/storefront/orders/order-issue-form";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -22,6 +23,7 @@ function label(value: string): string {
 
 export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }) {
   const reorderAction = order.actions.find((action) => action.action === "REORDER");
+  const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
   const address = order.fulfillment.address;
   const addressLine = [
     address.addressLine1,
@@ -148,7 +150,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             ) : null}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {order.actions
-                .filter((action) => action.action !== "REORDER")
+                .filter((action) => !["REORDER", "SUBMIT_ISSUE"].includes(action.action))
                 .map((action) => (
                   <div
                     key={action.action}
@@ -163,6 +165,13 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                   </div>
                 ))}
             </div>
+            {issueAction ? (
+              <OrderIssueForm
+                orderId={order.orderId}
+                items={order.items}
+                available={issueAction.available}
+              />
+            ) : null}
           </section>
 
           {order.amendments.length ? (
@@ -197,8 +206,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                 {order.issues.map((issue) => (
                   <li key={issue.issueId} className="text-sm">
                     <strong>{label(issue.category)}</strong> · {label(issue.status)}
-                    {issue.details ? (
-                      <p className="mt-1 text-[var(--fm-text-muted)]">{issue.details}</p>
+                    <p className="mt-1 text-[var(--fm-text-muted)]">{issue.description}</p>
+                    {issue.resolutionMessage ? (
+                      <p className="mt-1">{issue.resolutionMessage}</p>
                     ) : null}
                   </li>
                 ))}

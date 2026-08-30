@@ -7,7 +7,6 @@ import type {
   PaymentState,
   RefundState,
 } from "./states";
-import type { OrderIssueCategory, OrderIssueStatus } from "./admin-finance";
 
 export type CustomerOrderView = {
   id: string;
@@ -65,7 +64,7 @@ export type CustomerTimelineEntry = {
 };
 
 export type CustomerOrderActionView = {
-  action: "REORDER" | "REPORT_ISSUE" | "REQUEST_AMENDMENT" | "VIEW_INVOICE" | "CANCEL";
+  action: "REORDER" | "SUBMIT_ISSUE" | "REQUEST_AMENDMENT" | "VIEW_INVOICE" | "CANCEL";
   available: boolean;
   disabledReason: string | null;
 };
@@ -126,14 +125,7 @@ export type CustomerOrderDetailView = {
     createdAt: string;
     updatedAt: string;
   }[];
-  issues: readonly {
-    issueId: string;
-    category: OrderIssueCategory;
-    status: OrderIssueStatus;
-    details: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }[];
+  issues: readonly CustomerOrderIssueView[];
   invoice: {
     status: "NOT_AVAILABLE" | "NOT_READY" | "READY" | "ISSUED";
     invoiceIdentifier: string | null;
@@ -180,6 +172,43 @@ export type ReorderOrderRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export const customerOrderIssueCategories = [
+  "MISSING_ITEM",
+  "WRONG_ITEM",
+  "DAMAGED_ITEM",
+  "POOR_QUALITY",
+  "QUANTITY_DISCREPANCY",
+  "DELIVERY_ISSUE",
+  "OTHER",
+] as const;
+export type CustomerOrderIssueCategory = (typeof customerOrderIssueCategories)[number];
+
+export type CustomerOrderIssueStatus = "SUBMITTED" | "IN_REVIEW" | "RESOLVED" | "ESCALATED";
+
+export type CustomerOrderIssueView = {
+  issueId: string;
+  orderId: string;
+  category: CustomerOrderIssueCategory;
+  status: CustomerOrderIssueStatus;
+  description: string;
+  affectedOrderItemIds: readonly string[];
+  resolutionMessage: string | null;
+  terminal: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SubmitCustomerOrderIssueRequest = AuthenticatedRequest & {
+  orderId: string;
+  category: CustomerOrderIssueCategory;
+  description: string;
+  affectedOrderItemIds: readonly string[];
+  idempotencyKey: string;
+};
+
+export type ListCustomerOrderIssuesRequest = AuthenticatedRequest & { orderId: string };
+
 export type AdminOrderCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "CANCEL" | "REFUND";
@@ -196,4 +225,10 @@ export type OrdersService = {
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;
   reorderOrder(request: ReorderOrderRequest): Promise<RpcResult<ReorderResultView>>;
+  submitCustomerOrderIssue(
+    request: SubmitCustomerOrderIssueRequest,
+  ): Promise<RpcResult<CustomerOrderIssueView>>;
+  listCustomerOrderIssues(
+    request: ListCustomerOrderIssuesRequest,
+  ): Promise<RpcResult<readonly CustomerOrderIssueView[]>>;
 };

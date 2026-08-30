@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CustomerOrderDetailView, ReorderResultView } from "./orders";
+import {
+  customerOrderIssueCategories,
+  type CustomerOrderDetailView,
+  type CustomerOrderIssueView,
+  type ReorderResultView,
+} from "./orders";
 
 describe("customer order contracts", () => {
   it("contains purpose-built customer fields without provider, staff, audit, or routing leakage", () => {
@@ -83,5 +88,34 @@ describe("customer order contracts", () => {
     expect(result).not.toHaveProperty("promotionCodes");
     expect(result).not.toHaveProperty("cycleId");
     expect(result).not.toHaveProperty("addressId");
+  });
+
+  it("closes customer issue categories and omits assignment, refund, and Admin action authority", () => {
+    expect(customerOrderIssueCategories).toEqual([
+      "MISSING_ITEM",
+      "WRONG_ITEM",
+      "DAMAGED_ITEM",
+      "POOR_QUALITY",
+      "QUANTITY_DISCREPANCY",
+      "DELIVERY_ISSUE",
+      "OTHER",
+    ]);
+    const issue = {
+      issueId: "issue-1",
+      orderId: "order-1",
+      category: "POOR_QUALITY",
+      status: "IN_REVIEW",
+      description: "Produce arrived bruised",
+      affectedOrderItemIds: ["item-1"],
+      resolutionMessage: null,
+      terminal: false,
+      version: 2,
+      createdAt: "2026-08-30T00:00:00.000Z",
+      updatedAt: "2026-08-30T00:01:00.000Z",
+    } satisfies CustomerOrderIssueView;
+    expect(issue).not.toHaveProperty("assignedStaffId");
+    expect(issue).not.toHaveProperty("internalNotes");
+    expect(issue).not.toHaveProperty("refundAction");
+    expect(issue).not.toHaveProperty("adminActions");
   });
 });

@@ -91,9 +91,14 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
     issues: [
       {
         issueId: "issue-1",
-        category: "QUALITY",
-        status: "INVESTIGATING",
-        details: "Bruised",
+        orderId: "order-1",
+        category: "POOR_QUALITY",
+        status: "IN_REVIEW",
+        description: "Bruised",
+        affectedOrderItemIds: ["item-1"],
+        resolutionMessage: null,
+        terminal: false,
+        version: 1,
         createdAt: "2026-08-30T00:01:00.000Z",
         updatedAt: "2026-08-30T00:02:00.000Z",
       },
@@ -110,6 +115,7 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
       },
     ],
     actions: [
+      { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
       {
         action: "CANCEL",
         available: false,

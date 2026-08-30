@@ -11,6 +11,8 @@ describe("Core entrypoint composition boundary", () => {
     expect(indexSource).toContain("return this.ordersRpc.listCustomerOrders(input)");
     expect(indexSource).toContain("return this.ordersRpc.getCustomerOrderDetail(input)");
     expect(indexSource).toContain("return this.ordersRpc.reorderOrder(input)");
+    expect(indexSource).toContain("return this.ordersRpc.listCustomerOrderIssues(input)");
+    expect(indexSource).toContain("return this.ordersRpc.submitCustomerOrderIssue(input)");
     expect(indexSource).toContain("return this.operationsRpc.adjustInventory(input)");
   });
 

@@ -31,5 +31,27 @@ describe("Orders RPC adapter", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED", requestId: "orders-reorder-adapter" },
     });
+    const issues = await rpc.listCustomerOrderIssues({
+      requestId: "orders-issues-adapter",
+      headers: {},
+      orderId: "order-1",
+    });
+    expect(issues).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "orders-issues-adapter" },
+    });
+    const submitted = await rpc.submitCustomerOrderIssue({
+      requestId: "orders-submit-issue-adapter",
+      headers: {},
+      orderId: "order-1",
+      category: "OTHER",
+      description: "This is a sufficiently detailed issue report.",
+      affectedOrderItemIds: [],
+      idempotencyKey: "orders-submit-issue-key",
+    });
+    expect(submitted).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "orders-submit-issue-adapter" },
+    });
   });
 });

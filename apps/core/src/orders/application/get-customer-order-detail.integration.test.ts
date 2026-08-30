@@ -194,7 +194,7 @@ describe("getCustomerOrderDetail", () => {
       },
       payments: [{ status: "SUCCEEDED", amountMinor: 28500 }],
       refunds: [{ status: "PROCESSING", amountMinor: 500 }],
-      issues: [{ category: "QUALITY", status: "INVESTIGATING", details: "Bruised produce" }],
+      issues: [{ category: "POOR_QUALITY", status: "IN_REVIEW", description: "Bruised produce" }],
       actions: expect.arrayContaining([
         {
           action: "CANCEL",

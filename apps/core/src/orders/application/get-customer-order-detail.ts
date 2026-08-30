@@ -6,8 +6,6 @@ import type {
   DeliveryJobState,
   FulfillmentState,
   ImplementedOrderState,
-  OrderIssueCategory,
-  OrderIssueStatus,
   PaymentState,
   RefundState,
   RpcResult,
@@ -16,6 +14,10 @@ import {
   buildCustomerOrderTimeline,
   type CustomerTimelineFact,
 } from "./build-customer-order-timeline";
+import {
+  toCustomerOrderIssueView,
+  type CustomerIssueStorageRow,
+} from "./list-customer-order-issues";
 
 type DetailQuery = { customerId: string; orderId: string; requestId: string };
 
@@ -114,7 +116,7 @@ function actions(input: {
     input.cutoffAt > Date.now();
   return [
     { action: "REORDER", available: true, disabledReason: null },
-    { action: "REPORT_ISSUE", available: true, disabledReason: null },
+    { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
     {
       action: "REQUEST_AMENDMENT",
       available: amendable,
@@ -268,19 +270,15 @@ export async function getCustomerOrderDetail(
       }>(),
     database
       .prepare(
-        `SELECT id AS issueId, category, status, details,
-                created_at AS createdAt, updated_at AS updatedAt
-         FROM order_issue WHERE order_id=? AND customer_id=? ORDER BY created_at,id`,
+        `SELECT i.id AS issueId, i.order_id AS orderId, i.category, i.status, i.details,
+                i.version, i.created_at AS createdAt, i.updated_at AS updatedAt,
+                COALESCE((SELECT json_group_array(oil.order_item_id)
+                          FROM order_issue_line oil WHERE oil.issue_id=i.id), '[]')
+                  AS affectedOrderItemIdsJson
+         FROM order_issue i WHERE i.order_id=? AND i.customer_id=? ORDER BY i.created_at,i.id`,
       )
       .bind(query.orderId, query.customerId)
-      .all<{
-        issueId: string;
-        category: OrderIssueCategory;
-        status: OrderIssueStatus;
-        details: string | null;
-        createdAt: number;
-        updatedAt: number;
-      }>(),
+      .all<CustomerIssueStorageRow>(),
     database
       .prepare(
         `SELECT status, invoice_identifier AS invoiceIdentifier, issued_at AS issuedAt
@@ -369,11 +367,7 @@ export async function getCustomerOrderDetail(
     createdAt: new Date(refund.createdAt).toISOString(),
     updatedAt: new Date(refund.updatedAt).toISOString(),
   }));
-  const issues = issuesResult.results.map((issue) => ({
-    ...issue,
-    createdAt: new Date(issue.createdAt).toISOString(),
-    updatedAt: new Date(issue.updatedAt).toISOString(),
-  }));
+  const issues = issuesResult.results.map(toCustomerOrderIssueView);
   const invoice: CustomerOrderDetailView["invoice"] = invoiceRow
     ? {
         status: invoiceRow.status,
