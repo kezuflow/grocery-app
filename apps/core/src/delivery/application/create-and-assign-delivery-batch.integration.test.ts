@@ -19,6 +19,8 @@ const NOW = 1_800_100_000_000;
 let managerCookie = "";
 let deniedCookie = "";
 let managerStaffId = "";
+let managerRoleId = "";
+let managerScopeId = "";
 let seeded = false;
 
 async function signUp() {
@@ -48,6 +50,7 @@ async function seedStaff(capability: string) {
   const principal = await signUp();
   const staffId = `staff-${crypto.randomUUID()}`;
   const roleId = `role-${crypto.randomUUID()}`;
+  const scopeId = `scope-${crypto.randomUUID()}`;
   await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO staff_identity (id,auth_user_id,display_name,status,created_at,updated_at) VALUES (?,?,'Manager','active',?,?)",
@@ -60,7 +63,7 @@ async function seedStaff(capability: string) {
     env.DB.prepare("INSERT INTO staff_role (staff_id,role_id) VALUES (?,?)").bind(staffId, roleId),
     env.DB.prepare(
       "INSERT INTO staff_scope (id,staff_id,scope_kind,market_id,location_id) VALUES (?,?,'location',NULL,?)",
-    ).bind(`scope-${crypto.randomUUID()}`, staffId, LOCATION),
+    ).bind(scopeId, staffId, LOCATION),
     env.DB.prepare(
       "INSERT OR IGNORE INTO permission (id,code,description,created_at) VALUES (?,?,?,?)",
     ).bind(`perm-${crypto.randomUUID()}`, capability, capability, NOW),
@@ -68,7 +71,7 @@ async function seedStaff(capability: string) {
       "INSERT INTO role_permission (role_id,permission_id) SELECT ?,id FROM permission WHERE code=?",
     ).bind(roleId, capability),
   ]);
-  return { ...principal, staffId };
+  return { ...principal, staffId, roleId, scopeId };
 }
 
 type JobOptions = {
@@ -166,6 +169,8 @@ async function seedFixtures() {
   const manager = await seedStaff("delivery.manage");
   managerCookie = manager.cookie;
   managerStaffId = manager.staffId;
+  managerRoleId = manager.roleId;
+  managerScopeId = manager.scopeId;
   deniedCookie = (await seedStaff("delivery.read")).cookie;
 }
 
@@ -255,20 +260,68 @@ describe("create and assign delivery batch", () => {
   });
 
   it("preserves exact order for 24 Instant deliveries with a null cycle", async () => {
-    const jobs = [];
+    const jobs: Awaited<ReturnType<typeof seedJob>>[] = [];
     for (let i = 1; i <= 24; i += 1)
       jobs.push(await seedJob({ mode: "INSTANT", cycleId: null, version: i, stopVersion: 30 + i }));
     const ordered = [...jobs]
       .reverse()
       .map((job) => ({ jobId: job.id, expectedVersion: job.version }));
-    const result = await core.createAndAssignDeliveryBatch(
-      req(ordered, { fulfillmentMode: "INSTANT", cycleId: null }),
-    );
+    const input = req(ordered, { fulfillmentMode: "INSTANT", cycleId: null });
+    const beforeStops = await env.DB.prepare(
+      `SELECT delivery_job_id,address_snapshot_json,contact_snapshot_json,instructions_snapshot,latitude,longitude
+       FROM delivery_stop WHERE delivery_job_id IN (${jobs.map(() => "?").join(",")}) ORDER BY delivery_job_id`,
+    )
+      .bind(...jobs.map((job) => job.id))
+      .all();
+    const result = await core.createAndAssignDeliveryBatch(input);
     expect(result.ok).toBe(true);
     if (result.ok)
       expect(result.value.orderedDeliveries.map((x) => [x.jobId, x.sequence])).toEqual(
         ordered.map((x, i) => [x.jobId, i + 1]),
       );
+    if (!result.ok) return;
+    const persisted = await env.DB.prepare(
+      `SELECT j.id,j.sequence,j.version job_version,j.rider_id,s.sequence stop_sequence,
+              s.version stop_version,s.status stop_status
+       FROM delivery_job j JOIN delivery_stop s ON s.delivery_job_id=j.id
+       WHERE j.batch_id=? ORDER BY j.sequence`,
+    )
+      .bind(result.value.batchId)
+      .all<Record<string, unknown>>();
+    expect(persisted.results).toHaveLength(24);
+    expect(persisted.results).toEqual(
+      ordered.map((entry, index) => {
+        const original = jobs.find((job) => job.id === entry.jobId)!;
+        return {
+          id: entry.jobId,
+          sequence: index + 1,
+          job_version: original.version + 1,
+          rider_id: "rider-app",
+          stop_sequence: index + 1,
+          stop_version: 31 + Number(original.version),
+          stop_status: "ASSIGNED",
+        };
+      }),
+    );
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM delivery_event WHERE metadata_json LIKE ?")
+        .bind(`%${result.value.batchId}%`)
+        .first(),
+    ).toMatchObject({ count: 24 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=? AND action='DELIVERY.BATCH_CREATED_AND_ASSIGNED'",
+      )
+        .bind(result.value.batchId)
+        .first(),
+    ).toMatchObject({ count: 1 });
+    const afterStops = await env.DB.prepare(
+      `SELECT delivery_job_id,address_snapshot_json,contact_snapshot_json,instructions_snapshot,latitude,longitude
+       FROM delivery_stop WHERE delivery_job_id IN (${jobs.map(() => "?").join(",")}) ORDER BY delivery_job_id`,
+    )
+      .bind(...jobs.map((job) => job.id))
+      .all();
+    expect(afterStops.results).toEqual(beforeStops.results);
   });
 
   it.each([
@@ -470,11 +523,37 @@ describe("create and assign delivery batch", () => {
 
   it("has exactly one concurrent different-key winner", async () => {
     const job = await seedJob();
-    const results = await Promise.all([
-      direct(req([{ jobId: job.id, expectedVersion: 1 }])),
-      direct(req([{ jobId: job.id, expectedVersion: 1 }])),
-    ]);
+    const inputs = [
+      req([{ jobId: job.id, expectedVersion: 1 }]),
+      req([{ jobId: job.id, expectedVersion: 1 }]),
+    ];
+    let arrivals = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const barrier = async () => {
+      arrivals += 1;
+      if (arrivals === 2) release();
+      await gate;
+    };
+    const results = await Promise.all(inputs.map((input) => direct(input, barrier)));
+    expect(arrivals).toBe(2);
     expect(results.filter((x) => x.ok)).toHaveLength(1);
+    expect(results.filter((x) => !x.ok)).toEqual([
+      expect.objectContaining({
+        ok: false,
+        error: expect.objectContaining({ code: "STALE_VERSION" }),
+      }),
+    ]);
+    const loser = inputs[results.findIndex((result) => !result.ok)];
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM idempotency_records WHERE scope='delivery.createAndAssignBatch' AND idempotency_key=?",
+      )
+        .bind(loser.idempotencyKey)
+        .first(),
+    ).toMatchObject({ count: 0 });
     expect(
       await env.DB.prepare("SELECT status,version,sequence FROM delivery_job WHERE id=?")
         .bind(job.id)
@@ -532,9 +611,278 @@ describe("create and assign delivery batch", () => {
       "CREATE TRIGGER fail_batch_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.BATCH_CREATED_AND_ASSIGNED' BEGIN SELECT RAISE(ABORT,'INJECTED'); END;",
     );
     try {
-      await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({ ok: false });
+      await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "INTERNAL_ERROR" },
+      });
     } finally {
       await env.DB.exec("DROP TRIGGER fail_batch_audit;");
+    }
+    expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+  });
+
+  it.each(["DRAFT", "SCHEDULED", "CANCELED", "CLOSED"])(
+    "rejects non-operational Scheduled cycle state %s without mutation",
+    async (status) => {
+      const job = await seedJob();
+      const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+      const prior = await env.DB.prepare("SELECT status,version FROM delivery_cycle WHERE id=?")
+        .bind(CYCLE)
+        .first<{ status: string; version: number }>();
+      const before = await snapshot([job.id], input.idempotencyKey);
+      await env.DB.prepare("UPDATE delivery_cycle SET status=?,version=version+1 WHERE id=?")
+        .bind(status, CYCLE)
+        .run();
+      try {
+        await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+          ok: false,
+          error: { code: "CONFLICT" },
+        });
+        expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+      } finally {
+        await env.DB.prepare("UPDATE delivery_cycle SET status=?,version=? WHERE id=?")
+          .bind(prior?.status, prior?.version, CYCLE)
+          .run();
+      }
+    },
+  );
+
+  it.each([
+    "OPEN",
+    "CUTOFF_REACHED",
+    "PROCUREMENT",
+    "RECEIVING",
+    "PACKING",
+    "DISPATCHING",
+    "DELIVERING",
+  ])("permits canonical operational Scheduled cycle state %s", async (status) => {
+    const job = await seedJob();
+    const prior = await env.DB.prepare("SELECT status,version FROM delivery_cycle WHERE id=?")
+      .bind(CYCLE)
+      .first<{ status: string; version: number }>();
+    await env.DB.prepare("UPDATE delivery_cycle SET status=?,version=version+1 WHERE id=?")
+      .bind(status, CYCLE)
+      .run();
+    try {
+      await expect(
+        core.createAndAssignDeliveryBatch(req([{ jobId: job.id, expectedVersion: 1 }])),
+      ).resolves.toMatchObject({ ok: true, value: { status: "ASSIGNED" } });
+    } finally {
+      await env.DB.prepare("UPDATE delivery_cycle SET status=?,version=? WHERE id=?")
+        .bind(prior?.status, prior?.version, CYCLE)
+        .run();
+    }
+  });
+
+  it("rejects an inactive requested location before mutation", async () => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+    const before = await snapshot([job.id], input.idempotencyKey);
+    await env.DB.prepare("UPDATE fulfillment_location SET status='inactive' WHERE id=?")
+      .bind(LOCATION)
+      .run();
+    try {
+      await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "NOT_FOUND" },
+      });
+      expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+    } finally {
+      await env.DB.prepare("UPDATE fulfillment_location SET status='active' WHERE id=?")
+        .bind(LOCATION)
+        .run();
+    }
+  });
+
+  it("rejects unresolved job and containing batch contexts without mutation", async () => {
+    const unresolvedJobId = `job-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO delivery_job (id,order_id,batch_id,sequence,cycle_id,fulfillment_mode,location_id,zone_id,rider_id,status,context_resolution_status,address_snapshot_json,version,created_at,updated_at) VALUES (?,?,NULL,NULL,NULL,'SCHEDULED',NULL,NULL,NULL,'ESCALATED','LEGACY_UNRESOLVED','{}',1,?,?)",
+      ).bind(unresolvedJobId, `order-${unresolvedJobId}`, NOW, NOW),
+      env.DB.prepare(
+        "INSERT INTO delivery_stop (id,delivery_job_id,batch_id,sequence,latitude,longitude,address_snapshot_json,contact_snapshot_json,instructions_snapshot,status,version,created_at,updated_at) VALUES (?,?,NULL,NULL,10,123,'{}','{}','{}','ESCALATED',1,?,?)",
+      ).bind(`stop-${unresolvedJobId}`, unresolvedJobId, NOW, NOW),
+    ]);
+    const unresolvedBatchId = `batch-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO delivery_batch (id,fulfillment_mode,cycle_id,location_id,zone_id,status,context_resolution_status,version,created_at,updated_at) VALUES (?,NULL,NULL,NULL,NULL,'EXCEPTION','LEGACY_UNRESOLVED',1,?,?)",
+    )
+      .bind(unresolvedBatchId, NOW, NOW)
+      .run();
+    const batched = await seedJob({
+      status: "RETRY_SCHEDULED",
+      batchId: unresolvedBatchId,
+    });
+    for (const [jobId, code] of [
+      [unresolvedJobId, "NOT_FOUND"],
+      [batched.id, "CONFLICT"],
+    ] as const) {
+      const input = req([{ jobId, expectedVersion: 1 }]);
+      const before = await snapshot([jobId], input.idempotencyKey);
+      await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+        ok: false,
+        error: { code },
+      });
+      expect(await snapshot([jobId], input.idempotencyKey)).toEqual(before);
+    }
+  });
+
+  it.each([
+    ["out-of-range", 91, 123.8854],
+    ["one-sided", 10.3157, null],
+    ["nonfinite", Number.POSITIVE_INFINITY, 123.8854],
+  ])(
+    "rejects storage-corrupt %s coordinates without mutation",
+    async (_name, latitude, longitude) => {
+      await env.DB.exec("PRAGMA ignore_check_constraints=ON;");
+      let job: Awaited<ReturnType<typeof seedJob>>;
+      try {
+        job = await seedJob({ latitude, longitude });
+      } finally {
+        await env.DB.exec("PRAGMA ignore_check_constraints=OFF;");
+      }
+      const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+      const before = await snapshot([job.id], input.idempotencyKey);
+      await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "VALIDATION_FAILED" },
+      });
+      expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+    },
+  );
+
+  it("fails closed when location authority changes after preflight", async () => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+    const before = await snapshot([job.id], input.idempotencyKey);
+    try {
+      await expect(
+        direct(input, async () => {
+          await env.DB.prepare("UPDATE fulfillment_location SET status='inactive' WHERE id=?")
+            .bind(LOCATION)
+            .run();
+        }),
+      ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+      expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+    } finally {
+      await env.DB.prepare("UPDATE fulfillment_location SET status='active' WHERE id=?")
+        .bind(LOCATION)
+        .run();
+    }
+  });
+
+  it.each([
+    [
+      "status",
+      "UPDATE rider_identity SET status='SUSPENDED',version=version+1 WHERE id='rider-app'",
+    ],
+    [
+      "preferred location",
+      `UPDATE rider_identity SET preferred_location_id='${WEST}',version=version+1 WHERE id='rider-app'`,
+    ],
+  ])("fails closed when Rider %s changes after preflight", async (_name, sql) => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+    const before = await snapshot([job.id], input.idempotencyKey);
+    try {
+      await expect(direct(input, async () => void (await env.DB.exec(sql)))).resolves.toMatchObject(
+        {
+          ok: false,
+          error: { code: "NOT_FOUND" },
+        },
+      );
+      expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+    } finally {
+      await env.DB.prepare(
+        "UPDATE rider_identity SET status='ACTIVE',preferred_location_id=NULL,version=version+1 WHERE id='rider-app'",
+      ).run();
+    }
+  });
+
+  it("fails closed and conceals live IAM capability and scope changes", async () => {
+    for (const change of ["capability", "scope"] as const) {
+      const job = await seedJob();
+      const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+      const before = await snapshot([job.id], input.idempotencyKey);
+      try {
+        await expect(
+          direct(input, async () => {
+            if (change === "capability")
+              await env.DB.prepare("DELETE FROM role_permission WHERE role_id=?")
+                .bind(managerRoleId)
+                .run();
+            else
+              await env.DB.prepare("DELETE FROM staff_scope WHERE id=?").bind(managerScopeId).run();
+          }),
+        ).resolves.toMatchObject({
+          ok: false,
+          error: { code: change === "capability" ? "FORBIDDEN" : "NOT_FOUND" },
+        });
+        expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+      } finally {
+        if (change === "capability")
+          await env.DB.prepare(
+            "INSERT INTO role_permission (role_id,permission_id) SELECT ?,id FROM permission WHERE code='delivery.manage'",
+          )
+            .bind(managerRoleId)
+            .run();
+        else
+          await env.DB.prepare(
+            "INSERT INTO staff_scope (id,staff_id,scope_kind,market_id,location_id) VALUES (?,?,'location',NULL,?)",
+          )
+            .bind(managerScopeId, managerStaffId, LOCATION)
+            .run();
+      }
+    }
+  });
+
+  it.each([
+    ["terminal state", "UPDATE delivery_cycle SET status='CLOSED',version=version+1 WHERE id=?"],
+    ["version", "UPDATE delivery_cycle SET version=version+1 WHERE id=?"],
+  ])("guards a Scheduled cycle %s race", async (_name, sql) => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+    const before = await snapshot([job.id], input.idempotencyKey);
+    const prior = await env.DB.prepare("SELECT status,version FROM delivery_cycle WHERE id=?")
+      .bind(CYCLE)
+      .first<{ status: string; version: number }>();
+    try {
+      await expect(
+        direct(input, async () => void (await env.DB.prepare(sql).bind(CYCLE).run())),
+      ).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
+    } finally {
+      await env.DB.prepare("UPDATE delivery_cycle SET status=?,version=? WHERE id=?")
+        .bind(prior?.status, prior?.version, CYCLE)
+        .run();
+    }
+  });
+
+  it.each(["COMPLETED", "CANCELED"])("reuses a %s prior batch", async (status) => {
+    const oldBatchId = await seedBatch(status);
+    const job = await seedJob({ status: "RETRY_SCHEDULED", batchId: oldBatchId });
+    const result = await core.createAndAssignDeliveryBatch(
+      req([{ jobId: job.id, expectedVersion: 1 }]),
+    );
+    expect(result).toMatchObject({ ok: true, value: { status: "ASSIGNED" } });
+    if (result.ok) expect(result.value.batchId).not.toBe(oldBatchId);
+  });
+
+  it("rolls back and classifies a late event failure as internal", async () => {
+    const job = await seedJob();
+    const input = req([{ jobId: job.id, expectedVersion: 1 }]);
+    const before = await snapshot([job.id], input.idempotencyKey);
+    await env.DB.exec(
+      "CREATE TRIGGER fail_batch_event BEFORE INSERT ON delivery_event WHEN NEW.event_type='ASSIGNED' BEGIN SELECT RAISE(ABORT,'INJECTED'); END;",
+    );
+    try {
+      await expect(core.createAndAssignDeliveryBatch(input)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "INTERNAL_ERROR" },
+      });
+    } finally {
+      await env.DB.exec("DROP TRIGGER fail_batch_event;");
     }
     expect(await snapshot([job.id], input.idempotencyKey)).toEqual(before);
   });

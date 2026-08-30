@@ -7,6 +7,7 @@ import type {
 import { resolveOperationsAdministrationAccess } from "../../admin/application/operations-administration-access";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import {
+  isAssignableDeliveryCycleState,
   isAssignableDeliveryState,
   isBoundedCoordinate,
   isReusableDeliveryBatchState,
@@ -159,6 +160,109 @@ async function authoritativeReplay(
     : failure("INTERNAL_ERROR", "The original batch result is unavailable", requestId);
 }
 
+type LocationAuthority = { market_id: string; version: number };
+type CycleAuthority = { id: string; status: string; version: number };
+type RiderAuthority = { id: string; version: number };
+
+async function classifyCommitFailure(
+  deps: CreateAndAssignDeliveryBatchDeps,
+  request: CreateAndAssignDeliveryBatchRequest,
+  hash: string,
+  expected: {
+    location: LocationAuthority;
+    cycle: CycleAuthority | null;
+    rider: RiderAuthority;
+    candidates: readonly DeliveryAssignmentCandidate[];
+  },
+): Promise<RpcResult<DeliveryBatchView>> {
+  const raced = await findIdempotencyRecord(deps.db, SCOPE, request.idempotencyKey);
+  if (raced?.requestHash !== undefined && raced.requestHash !== hash)
+    return failure(
+      "IDEMPOTENCY_CONFLICT",
+      "Idempotency key was used for another request",
+      request.requestId,
+    );
+  if (raced?.status === "SUCCEEDED")
+    return authoritativeReplay(deps, raced.resultReference, request.requestId);
+  if (raced?.status === "PROCESSING")
+    return failure("CONFLICT", "The original command is still processing", request.requestId);
+
+  const access = await resolveOperationsAdministrationAccess(
+    deps,
+    request,
+    "delivery.manage",
+    request.locationId,
+    { concealOutOfScopeLocation: true },
+  );
+  if (!access.ok) return access;
+  const location = await deps.db
+    .prepare("SELECT market_id,version FROM fulfillment_location WHERE id=? AND status='active'")
+    .bind(request.locationId)
+    .first<LocationAuthority>();
+  if (!location)
+    return failure("NOT_FOUND", "Active fulfillment location not found", request.requestId);
+  if (
+    location.market_id !== expected.location.market_id ||
+    location.version !== expected.location.version
+  )
+    return failure("CONFLICT", "Fulfillment location changed concurrently", request.requestId);
+
+  if (request.fulfillmentMode === "SCHEDULED") {
+    const cycle = await deps.db
+      .prepare(
+        `SELECT cycle.id,cycle.status,cycle.version FROM delivery_cycle cycle
+         WHERE cycle.id=? AND cycle.market_id=?
+           AND EXISTS (SELECT 1 FROM cycle_zone_capacity capacity
+                       WHERE capacity.cycle_id=cycle.id AND capacity.location_id=?)`,
+      )
+      .bind(request.cycleId, location.market_id, request.locationId)
+      .first<CycleAuthority>();
+    if (!cycle) return failure("NOT_FOUND", "Delivery cycle is unavailable", request.requestId);
+    if (
+      !isAssignableDeliveryCycleState(cycle.status) ||
+      cycle.version !== expected.cycle?.version ||
+      cycle.status !== expected.cycle?.status
+    )
+      return failure("CONFLICT", "Delivery cycle changed concurrently", request.requestId);
+  }
+
+  const rider = await deps.db
+    .prepare(
+      "SELECT id,version FROM rider_identity WHERE id=? AND status='ACTIVE' AND (preferred_location_id IS NULL OR preferred_location_id=?)",
+    )
+    .bind(request.riderId, request.locationId)
+    .first<RiderAuthority>();
+  if (!rider) return failure("NOT_FOUND", "Active Rider is unavailable", request.requestId);
+  if (rider.version !== expected.rider.version)
+    return failure(
+      "CONFLICT",
+      "Rider assignment authority changed concurrently",
+      request.requestId,
+    );
+
+  const current = await loadDeliveryAssignmentCandidates(
+    deps.db,
+    request.orderedDeliveries.map((entry) => entry.jobId),
+  );
+  for (const prior of expected.candidates) {
+    const candidate = current.get(prior.jobId);
+    if (!candidate)
+      return failure("NOT_FOUND", "Delivery job is unavailable in this context", request.requestId);
+    const invalid = candidateFailure(candidate, request);
+    if (invalid) return failure(invalid.code, invalid.message, request.requestId);
+    if (
+      candidate.stopVersion !== prior.stopVersion ||
+      candidate.batchVersion !== prior.batchVersion
+    )
+      return failure(
+        "STALE_VERSION",
+        "Delivery assignment changed concurrently",
+        request.requestId,
+      );
+  }
+  return failure("INTERNAL_ERROR", "Delivery assignment could not be committed", request.requestId);
+}
+
 export async function createAndAssignDeliveryBatch(
   deps: CreateAndAssignDeliveryBatchDeps,
   request: CreateAndAssignDeliveryBatchRequest,
@@ -178,22 +282,25 @@ export async function createAndAssignDeliveryBatch(
   if (!access.ok) return access;
 
   const location = await deps.db
-    .prepare("SELECT market_id FROM fulfillment_location WHERE id=? AND status='active'")
+    .prepare("SELECT market_id,version FROM fulfillment_location WHERE id=? AND status='active'")
     .bind(request.locationId)
-    .first<{ market_id: string }>();
+    .first<LocationAuthority>();
   if (!location)
     return failure("NOT_FOUND", "Active fulfillment location not found", request.requestId);
+  let cycle: CycleAuthority | null = null;
   if (request.fulfillmentMode === "SCHEDULED") {
-    const cycle = await deps.db
+    cycle = await deps.db
       .prepare(
-        `SELECT cycle.id FROM delivery_cycle cycle
+        `SELECT cycle.id,cycle.status,cycle.version FROM delivery_cycle cycle
          WHERE cycle.id=? AND cycle.market_id=?
            AND EXISTS (SELECT 1 FROM cycle_zone_capacity capacity
                        WHERE capacity.cycle_id=cycle.id AND capacity.location_id=?)`,
       )
       .bind(request.cycleId, location.market_id, request.locationId)
-      .first<{ id: string }>();
+      .first<CycleAuthority>();
     if (!cycle) return failure("NOT_FOUND", "Delivery cycle is unavailable", request.requestId);
+    if (!isAssignableDeliveryCycleState(cycle.status))
+      return failure("CONFLICT", "Delivery cycle is not operational", request.requestId);
   }
 
   const hash = await requestHash({
@@ -219,10 +326,10 @@ export async function createAndAssignDeliveryBatch(
 
   const rider = await deps.db
     .prepare(
-      "SELECT id FROM rider_identity WHERE id=? AND status='ACTIVE' AND (preferred_location_id IS NULL OR preferred_location_id=?)",
+      "SELECT id,version FROM rider_identity WHERE id=? AND status='ACTIVE' AND (preferred_location_id IS NULL OR preferred_location_id=?)",
     )
     .bind(request.riderId, request.locationId)
-    .first<{ id: string }>();
+    .first<RiderAuthority>();
   if (!rider) return failure("NOT_FOUND", "Active Rider is unavailable", request.requestId);
 
   const ids = request.orderedDeliveries.map((entry) => entry.jobId);
@@ -254,10 +361,14 @@ export async function createAndAssignDeliveryBatch(
       batchId,
       locationId: request.locationId,
       marketId: location.market_id,
+      locationVersion: location.version,
       fulfillmentMode: request.fulfillmentMode,
       cycleId: request.cycleId,
+      cycleStatus: cycle?.status ?? null,
+      cycleVersion: cycle?.version ?? null,
       zoneId,
       riderId: request.riderId,
+      riderVersion: rider.version,
       actorStaffId: access.value.staffId,
       actorAuthUserId: access.value.authUserId,
       requestId: request.requestId,
@@ -267,18 +378,7 @@ export async function createAndAssignDeliveryBatch(
       candidates,
     });
   } catch {
-    const raced = await findIdempotencyRecord(deps.db, SCOPE, request.idempotencyKey);
-    if (raced?.requestHash !== undefined && raced.requestHash !== hash)
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used for another request",
-        request.requestId,
-      );
-    if (raced?.status === "SUCCEEDED")
-      return authoritativeReplay(deps, raced.resultReference, request.requestId);
-    if (raced?.status === "PROCESSING")
-      return failure("CONFLICT", "The original command is still processing", request.requestId);
-    return failure("STALE_VERSION", "Delivery assignment changed concurrently", request.requestId);
+    return classifyCommitFailure(deps, request, hash, { location, cycle, rider, candidates });
   }
   const view = await loadDeliveryBatchView(deps.db, batchId);
   return view

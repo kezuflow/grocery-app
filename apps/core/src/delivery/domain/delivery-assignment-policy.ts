@@ -1,5 +1,14 @@
 export const ASSIGNABLE_DELIVERY_STATES = ["UNASSIGNED", "RETRY_SCHEDULED"] as const;
 export const REUSABLE_DELIVERY_BATCH_STATES = ["COMPLETED", "CANCELED"] as const;
+export const ASSIGNABLE_DELIVERY_CYCLE_STATES = [
+  "OPEN",
+  "CUTOFF_REACHED",
+  "PROCUREMENT",
+  "RECEIVING",
+  "PACKING",
+  "DISPATCHING",
+  "DELIVERING",
+] as const;
 
 export function isAssignableDeliveryState(
   value: string,
@@ -9,6 +18,10 @@ export function isAssignableDeliveryState(
 
 export function isReusableDeliveryBatchState(value: string): boolean {
   return (REUSABLE_DELIVERY_BATCH_STATES as readonly string[]).includes(value);
+}
+
+export function isAssignableDeliveryCycleState(value: string): boolean {
+  return (ASSIGNABLE_DELIVERY_CYCLE_STATES as readonly string[]).includes(value);
 }
 
 export function isBoundedCoordinate(latitude: unknown, longitude: unknown): boolean {

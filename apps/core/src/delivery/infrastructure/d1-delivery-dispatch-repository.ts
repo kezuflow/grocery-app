@@ -1,5 +1,6 @@
 import type { DeliveryBatchView, FulfillmentMode } from "@freshmarkets/contracts";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { ASSIGNABLE_DELIVERY_CYCLE_STATES } from "../domain/delivery-assignment-policy";
 
 export type DeliveryAssignmentCandidate = {
   jobId: string;
@@ -117,10 +118,14 @@ export type CommitDeliveryBatchInput = {
   batchId: string;
   locationId: string;
   marketId: string;
+  locationVersion: number;
   fulfillmentMode: FulfillmentMode;
   cycleId: string | null;
+  cycleStatus: string | null;
+  cycleVersion: number | null;
   zoneId: string;
   riderId: string;
+  riderVersion: number;
   actorStaffId: string;
   actorAuthUserId: string;
   requestId: string;
@@ -138,6 +143,73 @@ export async function commitDeliveryBatch(
   input: CommitDeliveryBatchInput,
 ): Promise<void> {
   const statements: D1PreparedStatement[] = [
+    database
+      .prepare(
+        `INSERT INTO admin_command_abort(id)
+         SELECT 1 WHERE NOT EXISTS (
+           SELECT 1 FROM fulfillment_location
+           WHERE id=? AND market_id=? AND status='active' AND version=?
+         )`,
+      )
+      .bind(input.locationId, input.marketId, input.locationVersion),
+    database
+      .prepare(
+        `INSERT INTO admin_command_abort(id)
+         SELECT 1 WHERE NOT EXISTS (
+           SELECT 1 FROM staff_identity staff
+           WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active'
+             AND EXISTS (
+               SELECT 1 FROM staff_role staff_role
+               JOIN role_permission role_permission ON role_permission.role_id=staff_role.role_id
+               JOIN permission permission ON permission.id=role_permission.permission_id
+               WHERE staff_role.staff_id=staff.id AND permission.code='delivery.manage'
+             )
+             AND EXISTS (
+               SELECT 1 FROM staff_scope scope
+               WHERE scope.staff_id=staff.id AND (
+                 scope.scope_kind='global'
+                 OR (scope.scope_kind='location' AND scope.location_id=?)
+                 OR (scope.scope_kind='market' AND scope.market_id=?)
+               )
+             )
+         )`,
+      )
+      .bind(input.actorStaffId, input.actorAuthUserId, input.locationId, input.marketId),
+    database
+      .prepare(
+        `INSERT INTO admin_command_abort(id)
+         SELECT 1 WHERE NOT EXISTS (
+           SELECT 1 FROM rider_identity
+           WHERE id=? AND status='ACTIVE' AND version=?
+             AND (preferred_location_id IS NULL OR preferred_location_id=?)
+         )`,
+      )
+      .bind(input.riderId, input.riderVersion, input.locationId),
+    ...(input.fulfillmentMode === "SCHEDULED"
+      ? [
+          database
+            .prepare(
+              `INSERT INTO admin_command_abort(id)
+               SELECT 1 WHERE NOT EXISTS (
+                 SELECT 1 FROM delivery_cycle cycle
+                 WHERE cycle.id=? AND cycle.market_id=? AND cycle.status=? AND cycle.version=?
+                   AND cycle.status IN (${ASSIGNABLE_DELIVERY_CYCLE_STATES.map(() => "?").join(",")})
+                   AND EXISTS (
+                     SELECT 1 FROM cycle_zone_capacity capacity
+                     WHERE capacity.cycle_id=cycle.id AND capacity.location_id=?
+                   )
+               )`,
+            )
+            .bind(
+              input.cycleId,
+              input.marketId,
+              input.cycleStatus,
+              input.cycleVersion,
+              ...ASSIGNABLE_DELIVERY_CYCLE_STATES,
+              input.locationId,
+            ),
+        ]
+      : []),
     database
       .prepare(
         "INSERT INTO idempotency_records (scope, idempotency_key, request_hash, result_type, result_reference, status, created_at, updated_at) VALUES ('delivery.createAndAssignBatch', ?, ?, 'delivery_batch', NULL, 'PROCESSING', ?, ?)",
