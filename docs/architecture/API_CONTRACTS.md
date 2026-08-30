@@ -255,11 +255,14 @@ For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiri
 
 - `orders.listMine(page) -> CustomerOrderPage`
 - `orders.getMine({ orderId }) -> CustomerOrderDetail`
+- `orders.reorder({ orderId, expectedCartVersion, idempotencyKey }) -> ReorderResultView`
 - `orders.getAmendmentEligibility({ orderId }) -> AmendmentEligibilityView`
 - `orders.createAmendmentDraft({ orderId, items, idempotencyKey }) -> AmendmentDraftView`
 - `orders.payAmendment({ amendmentId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 
 `CustomerOrderDetail` is ownership-scoped and purpose-built from immutable Order snapshots. It contains the public order number and committed instant, exact line/SKU/unit/base-consumption snapshots, an explicit financial source (`CHECKOUT_QUOTE` or `ORDER_TOTAL_ONLY` with unavailable components represented as null), provider-neutral payment/refund summaries, fulfillment mode and promise without location or rider data, additive amendment summaries, customer-safe issue summaries, invoice availability, a deterministic chronological controlled timeline, and Core-derived action availability. It excludes provider identifiers/events/payloads, reconciliation or Audit JSON, staff identity/internal notes, inventory/procurement data, and rider coordinates. A non-owned order returns `NOT_FOUND`; committed customer cancellation is returned unavailable with a controlled reason rather than exposing the internal Admin cancellation command.
+
+`ReorderResultView` reports complete, partial, or no-items-added outcome, current-price additions, controlled skip reasons, and the new ordinary Cart version. Orders reads only historical SKU/quantity/display snapshots and delegates one idempotent, expected-version batch to Checkout's Cart application service. Cart resolves current SKU/product activity, location availability, price, and existing quantity, then applies every eligible merge under one aggregate compare-and-swap. Historical prices, Promotions, address, fulfillment mode, cycle, capacity, and delivery promise never return as current authority; address and fulfillment review are always required.
 
 Customer order DTOs compose original and amendment timelines while preserving separate financial records.
 

@@ -145,6 +145,41 @@ export type CustomerOrderDetailView = {
 
 export type CustomerOrderDetailRequest = AuthenticatedRequest & { orderId: string };
 
+export type ReorderSkippedReason =
+  | "SKU_INACTIVE"
+  | "PRODUCT_INACTIVE"
+  | "LOCATION_UNAVAILABLE"
+  | "PRICE_UNAVAILABLE"
+  | "INVALID_HISTORICAL_QUANTITY";
+
+export type ReorderResultView = {
+  outcome: "COMPLETE" | "PARTIAL" | "NO_ITEMS_ADDED";
+  cartId: string;
+  newCartVersion: number;
+  addedLines: readonly {
+    skuId: string;
+    name: string;
+    quantityAdded: number;
+    newQuantity: number;
+    currentUnitPriceMinor: number;
+    currency: string;
+  }[];
+  skippedLines: readonly {
+    skuId: string;
+    productName: string;
+    quantity: number;
+    reason: ReorderSkippedReason;
+  }[];
+  requiresFulfillmentReview: true;
+  requiresAddressReview: true;
+};
+
+export type ReorderOrderRequest = AuthenticatedRequest & {
+  orderId: string;
+  expectedCartVersion: number;
+  idempotencyKey: string;
+};
+
 export type AdminOrderCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "CANCEL" | "REFUND";
@@ -160,4 +195,5 @@ export type OrdersService = {
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;
+  reorderOrder(request: ReorderOrderRequest): Promise<RpcResult<ReorderResultView>>;
 };

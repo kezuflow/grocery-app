@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { getCart, setCartItem } from "./cart";
+import { addCartItemsBatch, getCart, setCartItem } from "./cart";
 
 async function customer() {
   const suffix = crypto.randomUUID();
@@ -72,6 +72,7 @@ describe("cart aggregate", () => {
     if (!initial.ok) return;
     const command = {
       ...principal,
+      sourceOrderId: `order-${crypto.randomUUID()}`,
       cartId: initial.value.id,
       skuId: "sku-red-onion-500g",
       quantity: 2,
@@ -151,6 +152,76 @@ describe("cart aggregate", () => {
           }),
         ],
         checkoutBlocked: false,
+      },
+    });
+  });
+
+  it("atomically merges eligible batch lines, skips unavailable lines, and replays exactly", async () => {
+    const principal = await customer();
+    const initial = await getCart(env.DB, principal);
+    if (!initial.ok) throw new Error("cart setup failed");
+    const unavailableSku = await cloneSku({ available: false, priced: true });
+    const command = {
+      ...principal,
+      sourceOrderId: `order-${crypto.randomUUID()}`,
+      cartId: initial.value.id,
+      expectedVersion: initial.value.version,
+      idempotencyKey: `cart-batch-${crypto.randomUUID()}`,
+      lines: [
+        { skuId: "sku-red-onion-500g", quantity: 2, productName: "Historical onion" },
+        { skuId: unavailableSku, quantity: 1, productName: "Unavailable item" },
+      ],
+    };
+
+    const applied = await addCartItemsBatch(env.DB, command);
+    const replay = await addCartItemsBatch(env.DB, command);
+
+    expect(applied).toMatchObject({
+      ok: true,
+      value: {
+        cartId: initial.value.id,
+        newCartVersion: initial.value.version + 1,
+        addedLines: [{ skuId: "sku-red-onion-500g", quantityAdded: 2, newQuantity: 2 }],
+        skippedLines: [{ skuId: unavailableSku, reason: "LOCATION_UNAVAILABLE" }],
+      },
+    });
+    expect(replay).toEqual(applied);
+    const line = await env.DB.prepare(
+      "SELECT quantity FROM cart_item WHERE cart_id=? AND sku_id='sku-red-onion-500g'",
+    )
+      .bind(initial.value.id)
+      .first<{ quantity: number }>();
+    expect(line?.quantity).toBe(2);
+
+    const conflict = await addCartItemsBatch(env.DB, {
+      ...command,
+      lines: [{ skuId: "sku-red-onion-500g", quantity: 3, productName: "Changed" }],
+    });
+    expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+
+  it("returns a controlled all-skipped outcome without changing the cart version", async () => {
+    const principal = await customer();
+    const initial = await getCart(env.DB, principal);
+    if (!initial.ok) throw new Error("cart setup failed");
+    const unpricedSku = await cloneSku({ available: true, priced: false });
+
+    const result = await addCartItemsBatch(env.DB, {
+      ...principal,
+      sourceOrderId: `order-${crypto.randomUUID()}`,
+      cartId: initial.value.id,
+      expectedVersion: initial.value.version,
+      idempotencyKey: `cart-batch-none-${crypto.randomUUID()}`,
+      lines: [{ skuId: unpricedSku, quantity: 1, productName: "Unpriced" }],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        outcome: "NO_ITEMS_ADDED",
+        newCartVersion: initial.value.version,
+        addedLines: [],
+        skippedLines: [{ reason: "PRICE_UNAVAILABLE" }],
       },
     });
   });

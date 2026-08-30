@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CustomerOrderDetailView } from "./orders";
+import type { CustomerOrderDetailView, ReorderResultView } from "./orders";
 
 describe("customer order contracts", () => {
   it("contains purpose-built customer fields without provider, staff, audit, or routing leakage", () => {
@@ -55,5 +55,33 @@ describe("customer order contracts", () => {
       totalMinor: 10_000,
     };
     expect(financial.merchandiseSubtotalMinor).toBeNull();
+  });
+
+  it("returns current-cart additions and controlled skip reasons without historical authority", () => {
+    const result = {
+      outcome: "PARTIAL",
+      cartId: "cart-1",
+      newCartVersion: 4,
+      addedLines: [
+        {
+          skuId: "sku-1",
+          name: "Onion",
+          quantityAdded: 2,
+          newQuantity: 3,
+          currentUnitPriceMinor: 12_900,
+          currency: "PHP",
+        },
+      ],
+      skippedLines: [
+        { skuId: "sku-2", productName: "Old item", quantity: 1, reason: "SKU_INACTIVE" },
+      ],
+      requiresFulfillmentReview: true,
+      requiresAddressReview: true,
+    } satisfies ReorderResultView;
+
+    expect(result).not.toHaveProperty("historicalPriceMinor");
+    expect(result).not.toHaveProperty("promotionCodes");
+    expect(result).not.toHaveProperty("cycleId");
+    expect(result).not.toHaveProperty("addressId");
   });
 });

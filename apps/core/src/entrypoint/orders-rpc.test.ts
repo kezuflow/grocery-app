@@ -20,5 +20,16 @@ describe("Orders RPC adapter", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED", requestId: "orders-detail-adapter" },
     });
+    const reorder = await rpc.reorderOrder({
+      requestId: "orders-reorder-adapter",
+      headers: {},
+      orderId: "order-1",
+      expectedCartVersion: 1,
+      idempotencyKey: "orders-reorder-key",
+    });
+    expect(reorder).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "orders-reorder-adapter" },
+    });
   });
 });

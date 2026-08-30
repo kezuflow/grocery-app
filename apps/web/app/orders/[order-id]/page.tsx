@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { CustomerOrderDetailView, RpcResult } from "@freshmarkets/contracts";
 import { StorefrontShell } from "../../../components/storefront/storefront-shell";
 import { OrderTimeline } from "../../../components/storefront/orders/order-timeline";
+import { ReorderAction } from "../../../components/storefront/orders/reorder-action";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -20,6 +21,7 @@ function label(value: string): string {
 }
 
 export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }) {
+  const reorderAction = order.actions.find((action) => action.action === "REORDER");
   const address = order.fulfillment.address;
   const addressLine = [
     address.addressLine1,
@@ -139,20 +141,27 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             <h2 id="follow-up-heading" className="text-xl font-bold">
               Order follow-up
             </h2>
+            {reorderAction ? (
+              <div className="mt-4">
+                <ReorderAction orderId={order.orderId} available={reorderAction.available} />
+              </div>
+            ) : null}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {order.actions.map((action) => (
-                <div
-                  key={action.action}
-                  className="rounded-lg border border-[var(--fm-border)] p-3 text-sm"
-                >
-                  <p className="font-semibold">{label(action.action)}</p>
-                  <p className="mt-1 text-[var(--fm-text-muted)]">
-                    {action.available
-                      ? "Available for this order"
-                      : label(action.disabledReason ?? "Unavailable")}
-                  </p>
-                </div>
-              ))}
+              {order.actions
+                .filter((action) => action.action !== "REORDER")
+                .map((action) => (
+                  <div
+                    key={action.action}
+                    className="rounded-lg border border-[var(--fm-border)] p-3 text-sm"
+                  >
+                    <p className="font-semibold">{label(action.action)}</p>
+                    <p className="mt-1 text-[var(--fm-text-muted)]">
+                      {action.available
+                        ? "Available for this order"
+                        : label(action.disabledReason ?? "Unavailable")}
+                    </p>
+                  </div>
+                ))}
             </div>
           </section>
 

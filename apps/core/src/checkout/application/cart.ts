@@ -1,9 +1,16 @@
-import type { AuthenticatedRequest, CartView, SetCartItemRequest } from "@freshmarkets/contracts";
+import type {
+  AuthenticatedRequest,
+  CartView,
+  ReorderResultView,
+  ReorderSkippedReason,
+  SetCartItemRequest,
+} from "@freshmarkets/contracts";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 
 const CART_SET_SCOPE = "cart.setItem";
+const CART_BATCH_SCOPE = "cart.addBatch";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -336,4 +343,290 @@ export async function setCartItem(
     return failure("INTERNAL_ERROR", "The cart update could not be applied", command.requestId);
   }
   return getCart(database, command);
+}
+
+export type AddCartItemsBatchCommand = {
+  sourceOrderId: string;
+  customerId: string;
+  cartId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  requestId: string;
+  lines: readonly { skuId: string; quantity: number; productName: string }[];
+};
+
+export type AddCartItemsBatchValue = Pick<
+  ReorderResultView,
+  "outcome" | "cartId" | "newCartVersion" | "addedLines" | "skippedLines"
+>;
+
+export type AddCartItemsBatchResult =
+  | { ok: true; value: AddCartItemsBatchValue; requestId: string }
+  | ReturnType<typeof failure>;
+
+function replayBatchValue(reference: string | null): AddCartItemsBatchValue | null {
+  if (!reference) return null;
+  try {
+    const parsed = JSON.parse(reference) as AddCartItemsBatchValue;
+    return parsed && typeof parsed === "object" && typeof parsed.cartId === "string"
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Add multiple current, purchasable SKUs to one ordinary active Cart under a
+ * single aggregate-version guard. Callers supply historical display names for
+ * controlled skip feedback only; current SKU state and price remain Cart-owned.
+ */
+export async function addCartItemsBatch(
+  database: D1Database,
+  command: AddCartItemsBatchCommand,
+): Promise<AddCartItemsBatchResult> {
+  const normalized = [...command.lines]
+    .map((line) => ({
+      skuId: line.skuId,
+      quantity: line.quantity,
+      productName: line.productName,
+    }))
+    .sort((left, right) => left.skuId.localeCompare(right.skuId));
+  const hash = await requestHash({
+    sourceOrderId: command.sourceOrderId,
+    cartId: command.cartId,
+    expectedVersion: command.expectedVersion,
+    lines: normalized,
+  });
+  const existing = await findIdempotencyRecord(database, CART_BATCH_SCOPE, command.idempotencyKey);
+  if (existing) {
+    if (existing.requestHash !== hash)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "The idempotency key was already used for another reorder",
+        command.requestId,
+      );
+    if (existing.status === "SUCCEEDED") {
+      const value = replayBatchValue(existing.resultReference);
+      return value
+        ? { ok: true, value, requestId: command.requestId }
+        : failure("INTERNAL_ERROR", "The reorder result could not be recovered", command.requestId);
+    }
+    return failure("CONFLICT", "The reorder is already being processed", command.requestId);
+  }
+
+  const cart = await database
+    .prepare(
+      "SELECT id, location_id, version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'",
+    )
+    .bind(command.cartId, command.customerId)
+    .first<CartRow>();
+  if (!cart) return failure("NOT_FOUND", "Active cart not found", command.requestId);
+  if (cart.version !== command.expectedVersion)
+    return failure(
+      "CART_VERSION_CONFLICT",
+      "The cart changed; reload it before reordering",
+      command.requestId,
+    );
+
+  const currency = await database
+    .prepare(
+      "SELECT COALESCE(mcp.currency,m.currency) AS currency FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id WHERE fl.id=?",
+    )
+    .bind(cart.location_id)
+    .first<{ currency: string }>();
+  if (!currency)
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Cart market currency is not configured",
+      command.requestId,
+    );
+
+  const requested = new Map<string, { quantity: number; productName: string }>();
+  for (const line of normalized) {
+    const prior = requested.get(line.skuId);
+    requested.set(line.skuId, {
+      quantity: (prior?.quantity ?? 0) + line.quantity,
+      productName: prior?.productName ?? line.productName,
+    });
+  }
+  const skuIds = [...requested.keys()];
+  const now = Date.now();
+  const candidates =
+    skuIds.length === 0
+      ? {
+          results: [] as Array<{
+            skuId: string;
+            name: string;
+            skuStatus: string;
+            productStatus: string;
+            availabilityStatus: string | null;
+            unitPriceMinor: number | null;
+            existingQuantity: number;
+          }>,
+        }
+      : await database
+          .prepare(
+            `SELECT s.id AS skuId, s.name, s.status AS skuStatus, p.status AS productStatus,
+                    sla.availability_status AS availabilityStatus,
+                    COALESCE(ci.quantity,0) AS existingQuantity,
+                    (
+                      SELECT pv.amount_minor FROM price_version pv
+                      JOIN fulfillment_location fl ON fl.id=?
+                      WHERE pv.sku_id=s.id AND pv.market_id=fl.market_id
+                        AND (pv.location_id IS NULL OR pv.location_id=fl.id)
+                        AND pv.currency=? AND pv.price_type='STANDARD'
+                        AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
+                      ORDER BY (pv.location_id IS NOT NULL) DESC,pv.version DESC LIMIT 1
+                    ) AS unitPriceMinor
+             FROM sku s JOIN product p ON p.id=s.product_id
+             LEFT JOIN sku_location_availability sla
+               ON sla.sku_id=s.id AND sla.location_id=?
+             LEFT JOIN cart_item ci ON ci.cart_id=? AND ci.sku_id=s.id
+             WHERE s.id IN (${skuIds.map(() => "?").join(",")})`,
+          )
+          .bind(cart.location_id, currency.currency, now, now, cart.location_id, cart.id, ...skuIds)
+          .all<{
+            skuId: string;
+            name: string;
+            skuStatus: string;
+            productStatus: string;
+            availabilityStatus: string | null;
+            unitPriceMinor: number | null;
+            existingQuantity: number;
+          }>();
+  const candidateById = new Map(
+    candidates.results.map((candidate) => [candidate.skuId, candidate]),
+  );
+  const addedLines: AddCartItemsBatchValue["addedLines"][number][] = [];
+  const skippedLines: AddCartItemsBatchValue["skippedLines"][number][] = [];
+  for (const [skuId, line] of requested) {
+    const candidate = candidateById.get(skuId);
+    let reason: ReorderSkippedReason | null = null;
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0)
+      reason = "INVALID_HISTORICAL_QUANTITY";
+    else if (!candidate || candidate.skuStatus !== "active") reason = "SKU_INACTIVE";
+    else if (candidate.productStatus !== "active") reason = "PRODUCT_INACTIVE";
+    else if (candidate.availabilityStatus !== "AVAILABLE") reason = "LOCATION_UNAVAILABLE";
+    else if (candidate.unitPriceMinor === null) reason = "PRICE_UNAVAILABLE";
+    if (reason) {
+      skippedLines.push({
+        skuId,
+        productName: line.productName,
+        quantity: line.quantity,
+        reason,
+      });
+      continue;
+    }
+    addedLines.push({
+      skuId,
+      name: candidate!.name,
+      quantityAdded: line.quantity,
+      newQuantity: candidate!.existingQuantity + line.quantity,
+      currentUnitPriceMinor: candidate!.unitPriceMinor!,
+      currency: currency.currency,
+    });
+  }
+  const value: AddCartItemsBatchValue = {
+    outcome:
+      addedLines.length === 0 ? "NO_ITEMS_ADDED" : skippedLines.length > 0 ? "PARTIAL" : "COMPLETE",
+    cartId: cart.id,
+    newCartVersion: cart.version + (addedLines.length > 0 ? 1 : 0),
+    addedLines,
+    skippedLines,
+  };
+  const resultReference = JSON.stringify(value);
+
+  if (addedLines.length === 0) {
+    const inserted = await database
+      .prepare(
+        "INSERT OR IGNORE INTO idempotency_records (scope,idempotency_key,request_hash,result_type,status,result_reference,created_at,updated_at) VALUES (?,?,?,'cart_batch','SUCCEEDED',?,?,?)",
+      )
+      .bind(CART_BATCH_SCOPE, command.idempotencyKey, hash, resultReference, now, now)
+      .run();
+    if ((inserted.meta?.changes ?? 0) === 1)
+      return { ok: true, value, requestId: command.requestId };
+    const raced = await findIdempotencyRecord(database, CART_BATCH_SCOPE, command.idempotencyKey);
+    if (raced?.requestHash !== hash)
+      return failure("IDEMPOTENCY_CONFLICT", "Idempotency key conflict", command.requestId);
+    const replay = replayBatchValue(raced?.resultReference ?? null);
+    return replay
+      ? { ok: true, value: replay, requestId: command.requestId }
+      : failure("CONFLICT", "The reorder is already being processed", command.requestId);
+  }
+
+  try {
+    await database.batch([
+      database
+        .prepare(
+          "INSERT OR IGNORE INTO idempotency_records (scope,idempotency_key,request_hash,result_type,status,created_at,updated_at) VALUES (?,?,?,'cart_batch','PROCESSING',?,?)",
+        )
+        .bind(CART_BATCH_SCOPE, command.idempotencyKey, hash, now, now),
+      ...addedLines.map((line) =>
+        database
+          .prepare(
+            `INSERT INTO cart_item (cart_id,sku_id,quantity)
+             SELECT ?,?,? WHERE EXISTS (
+               SELECT 1 FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE' AND version=?
+             ) AND EXISTS (
+               SELECT 1 FROM idempotency_records
+               WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'
+             )
+             ON CONFLICT(cart_id,sku_id) DO UPDATE SET quantity=excluded.quantity`,
+          )
+          .bind(
+            cart.id,
+            line.skuId,
+            line.newQuantity,
+            cart.id,
+            command.customerId,
+            command.expectedVersion,
+            CART_BATCH_SCOPE,
+            command.idempotencyKey,
+            hash,
+          ),
+      ),
+      database
+        .prepare(
+          `UPDATE cart SET version=version+1,updated_at=?
+           WHERE id=? AND customer_id=? AND status='ACTIVE' AND version=?
+             AND EXISTS (SELECT 1 FROM idempotency_records
+               WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING')`,
+        )
+        .bind(
+          now,
+          cart.id,
+          command.customerId,
+          command.expectedVersion,
+          CART_BATCH_SCOPE,
+          command.idempotencyKey,
+          hash,
+        ),
+      database.prepare("INSERT INTO commitment_abort (id) SELECT -6 WHERE changes()=0"),
+      database
+        .prepare(
+          "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
+        )
+        .bind(resultReference, now, CART_BATCH_SCOPE, command.idempotencyKey, hash),
+    ]);
+  } catch {
+    const raced = await findIdempotencyRecord(database, CART_BATCH_SCOPE, command.idempotencyKey);
+    if (raced?.requestHash !== undefined && raced.requestHash !== hash)
+      return failure("IDEMPOTENCY_CONFLICT", "Idempotency key conflict", command.requestId);
+    if (raced?.status === "SUCCEEDED") {
+      const replay = replayBatchValue(raced.resultReference);
+      if (replay) return { ok: true, value: replay, requestId: command.requestId };
+    }
+    const latest = await activeCart(database, command.customerId);
+    if (!latest || latest.id !== cart.id)
+      return failure("NOT_FOUND", "Active cart not found", command.requestId);
+    if (latest.version !== command.expectedVersion)
+      return failure(
+        "CART_VERSION_CONFLICT",
+        "The cart changed; reload it before reordering",
+        command.requestId,
+      );
+    return failure("INTERNAL_ERROR", "The reorder could not be applied", command.requestId);
+  }
+  return { ok: true, value, requestId: command.requestId };
 }
