@@ -4,6 +4,11 @@ import type {
   Coordinate,
 } from "@freshmarkets/contracts";
 import type { GeocoderPort, GeocoderSearchInput, PermanentGeocode } from "../ports/geocoder";
+import {
+  defaultProviderTelemetry,
+  observeProviderOperation,
+  type ProviderTelemetryDependencies,
+} from "./provider-telemetry";
 
 const MAPBOX_GEOCODING_BASE_URL = "https://api.mapbox.com/search/geocode/v6";
 const CEBU_PROXIMITY: Coordinate = { latitude: 10.3157, longitude: 123.8854 };
@@ -66,56 +71,65 @@ export class MapboxGeocoder implements GeocoderPort {
     private readonly accessToken: string,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly timeoutMilliseconds = DEFAULT_TIMEOUT_MILLISECONDS,
+    private readonly telemetry: ProviderTelemetryDependencies = defaultProviderTelemetry,
   ) {}
 
   async search(input: GeocoderSearchInput): Promise<ReadonlyArray<AddressSearchCandidate>> {
-    this.requireConfigured();
-    const query = input.query.trim();
-    if (!query) throw new GeocoderError("GEOCODER_INVALID_REQUEST");
-    const proximity = input.proximity ?? CEBU_PROXIMITY;
-    validateCoordinate(proximity);
+    return observeProviderOperation("MAPBOX_GEOCODER_SEARCH", this.telemetry, async () => {
+      this.requireConfigured();
+      const query = input.query.trim();
+      if (!query) throw new GeocoderError("GEOCODER_INVALID_REQUEST");
+      const proximity = input.proximity ?? CEBU_PROXIMITY;
+      validateCoordinate(proximity);
 
-    const url = new URL(`${MAPBOX_GEOCODING_BASE_URL}/forward`);
-    url.searchParams.set("q", query);
-    url.searchParams.set("country", "PH");
-    url.searchParams.set("proximity", `${proximity.longitude},${proximity.latitude}`);
-    url.searchParams.set("limit", String(SEARCH_RESULT_LIMIT));
-    url.searchParams.set("access_token", this.accessToken);
+      const url = new URL(`${MAPBOX_GEOCODING_BASE_URL}/forward`);
+      url.searchParams.set("q", query);
+      url.searchParams.set("country", "PH");
+      url.searchParams.set("proximity", `${proximity.longitude},${proximity.latitude}`);
+      url.searchParams.set("limit", String(SEARCH_RESULT_LIMIT));
+      url.searchParams.set("access_token", this.accessToken);
 
-    const features = await this.requestFeatures(url);
-    return features.flatMap((feature) => {
-      const mapped = mapFeature(feature);
-      if (!mapped) return [];
-      const { providerReference: _providerReference, ...candidate } = mapped;
-      return [candidate];
+      const features = await this.requestFeatures(url);
+      return features.flatMap((feature) => {
+        const mapped = mapFeature(feature);
+        if (!mapped) return [];
+        const { providerReference: _providerReference, ...candidate } = mapped;
+        return [candidate];
+      });
     });
   }
 
   async reversePermanent(input: { coordinate: Coordinate }): Promise<PermanentGeocode> {
-    this.requireConfigured();
-    validateCoordinate(input.coordinate);
+    return observeProviderOperation(
+      "MAPBOX_GEOCODER_REVERSE_PERMANENT",
+      this.telemetry,
+      async () => {
+        this.requireConfigured();
+        validateCoordinate(input.coordinate);
 
-    const url = new URL(`${MAPBOX_GEOCODING_BASE_URL}/reverse`);
-    url.searchParams.set("longitude", String(input.coordinate.longitude));
-    url.searchParams.set("latitude", String(input.coordinate.latitude));
-    url.searchParams.set("country", "PH");
-    url.searchParams.set("permanent", "true");
-    url.searchParams.set("access_token", this.accessToken);
+        const url = new URL(`${MAPBOX_GEOCODING_BASE_URL}/reverse`);
+        url.searchParams.set("longitude", String(input.coordinate.longitude));
+        url.searchParams.set("latitude", String(input.coordinate.latitude));
+        url.searchParams.set("country", "PH");
+        url.searchParams.set("permanent", "true");
+        url.searchParams.set("access_token", this.accessToken);
 
-    const features = await this.requestFeatures(url);
-    for (const feature of features) {
-      const mapped = mapFeature(feature);
-      if (mapped)
-        return {
-          provider: "MAPBOX",
-          providerReference: mapped.providerReference,
-          displayAddress: mapped.displayAddress,
-          coordinate: mapped.coordinate,
-          components: mapped.components,
-          accuracy: mapped.accuracy,
-        };
-    }
-    throw new GeocoderError("GEOCODER_NO_RESULTS");
+        const features = await this.requestFeatures(url);
+        for (const feature of features) {
+          const mapped = mapFeature(feature);
+          if (mapped)
+            return {
+              provider: "MAPBOX",
+              providerReference: mapped.providerReference,
+              displayAddress: mapped.displayAddress,
+              coordinate: mapped.coordinate,
+              components: mapped.components,
+              accuracy: mapped.accuracy,
+            };
+        }
+        throw new GeocoderError("GEOCODER_NO_RESULTS");
+      },
+    );
   }
 
   private requireConfigured(): void {

@@ -287,10 +287,12 @@ describe("scoped delivery map reads", () => {
       ),
     ).resolves.toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     for (const locationId of [WEST, "location-delivery-map-missing"]) {
-      await expect(core.getDeliveryMap(scheduledRequest({ locationId }))).resolves.toMatchObject({
+      const deniedMap = await core.getDeliveryMap(scheduledRequest({ locationId }));
+      expect(deniedMap).toMatchObject({
         ok: false,
         error: { code: "NOT_FOUND" },
       });
+      expect(JSON.stringify(deniedMap)).not.toContain("job-a-unassigned");
       await expect(
         core.getDeliveryMapDetail({
           ...scheduledRequest({ locationId }),

@@ -305,6 +305,7 @@ describe("assigned rider batch read model", () => {
       ]),
     );
     expect(JSON.stringify(result)).not.toContain("rider-job-other");
+    expect(JSON.stringify(result)).not.toContain("rider-batch-other");
     expect(JSON.stringify(result)).not.toContain("auth_user_id");
   });
 

@@ -837,6 +837,8 @@ describe("Phase 4B customer addresses", () => {
       label: "Stolen",
     });
     expect(forged).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(JSON.stringify(forged)).not.toContain(created.value.id);
+    expect(JSON.stringify(forged)).not.toContain(owner.userId);
   });
 
   it("blocks list, create, and update when the principal is disabled", async () => {

@@ -261,10 +261,11 @@ describe("Mapbox route-preview adapter", () => {
   });
 
   it("maps missing configuration and network failure without logging sensitive request data", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const logSpies = [
       vi.spyOn(console, "log").mockImplementation(() => undefined),
       vi.spyOn(console, "info").mockImplementation(() => undefined),
-      vi.spyOn(console, "warn").mockImplementation(() => undefined),
+      warnSpy,
       vi.spyOn(console, "error").mockImplementation(() => undefined),
     ];
     const token = "secret-route-preview-token";
@@ -281,7 +282,28 @@ describe("Mapbox route-preview adapter", () => {
     await expect(
       unavailable.preview({ origin, orderedDestinations: [firstDestination] }),
     ).rejects.toEqual(new RoutePreviewError("ROUTE_UNAVAILABLE"));
-    expect(logSpies.every((spy) => spy.mock.calls.length === 0)).toBe(true);
+    const warnings = warnSpy.mock.calls.map(([message]) => JSON.parse(String(message)) as object);
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        level: "warn",
+        event: "provider_operation",
+        operation: "MAPBOX_ROUTE_PREVIEW",
+        result: "FAILURE",
+        errorCode: "ROUTE_UNCONFIGURED",
+      }),
+      expect.objectContaining({
+        level: "warn",
+        event: "provider_operation",
+        operation: "MAPBOX_ROUTE_PREVIEW",
+        result: "FAILURE",
+        errorCode: "ROUTE_UNAVAILABLE",
+      }),
+    ]);
+    const serializedLogs = JSON.stringify(logSpies.flatMap((spy) => spy.mock.calls));
+    expect(serializedLogs).not.toContain(token);
+    expect(serializedLogs).not.toContain("provider unavailable");
+    expect(serializedLogs).not.toContain(String(origin.latitude));
+    expect(serializedLogs).not.toContain(String(origin.longitude));
     for (const error of [
       new RoutePreviewError("ROUTE_UNCONFIGURED"),
       new RoutePreviewError("ROUTE_UNAVAILABLE"),
