@@ -437,14 +437,31 @@ substitutes the Order UUID. `EligibleRiderView` contains canonical Rider
 identity plus open batch/delivery counts. None exposes raw snapshot JSON,
 polygon GeoJSON, provider data/tokens, Better Auth records, or ranking rules.
 
-`DeliveryMapView` and `EligibleRiderPage` are bounded keyset pages with stable
-`job.id` and `(Rider display name, Rider id)` order respectively. Each exposes
-an opaque context-bound `nextCursor` plus explicit `complete` evidence;
-malformed or wrong-context cursors return `VALIDATION_FAILED`. Thin Admin Web
-adapters follow every continuation for the selected context and return a
-complete map/Rider set only after Core returns `nextCursor: null` and
-`complete: true`. Repeated, empty non-terminal, contradictory, or malformed
-continuation evidence fails closed instead of presenting a partial queue.
+`DeliveryMapView` and `EligibleRiderPage` are bounded keyset pages ordered only
+by immutable canonical `delivery_job.id` and `rider_identity.id` respectively;
+mutable Rider display names never participate in continuation. Each page
+exposes an opaque context-and-revision-bound `nextCursor`, explicit `complete`,
+an opaque `projectionRevision`, and authoritative `totalCount`. Delivery pages
+also expose `generatedAt` as the filtered projection's stable source watermark,
+not the wall-clock time of an individual page call. Core hashes bounded ordered
+evidence for every field that affects the filtered delivery projection or the
+eligible Rider/workload projection before and after each page read. A cursor
+whose revision no longer matches returns typed `STALE_VERSION`; this is
+application revision evidence and does not claim a cross-request D1 snapshot.
+
+Thin Admin Web adapters follow continuations only within explicit ceilings:
+20 Core pages of at most 250 entries and 5,000 total delivery entries, or 10
+Core pages of at most 200 entries and 2,000 total Riders, plus named validation-
+work budgets. They return a complete set only after revision, watermark,
+count, strict DTO shape, uniqueness, monotonic immutable-ID progress, cursor,
+and completion evidence all agree. Repeated or uniquely changing cursors with
+no entity progress, empty non-terminal pages, duplicate/regressing IDs,
+malformed entries, mixed revisions/watermarks, contradictory completion, and
+any call/page/item/work overflow fail closed with no partial response. After a
+complete immutable-ID traversal, Web may sort the Rider result by display name
+and Rider ID for presentation. The operational tradeoff is deliberate: very
+large or concurrently changing contexts require an Admin refresh instead of
+silently presenting a partial or mixed-generation queue.
 
 Every authorized open row remains in `DeliveryMapView`. When the immutable stop
 has no authoritative coordinate, the pin and detail coordinate are null, Web

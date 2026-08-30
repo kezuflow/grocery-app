@@ -17,6 +17,9 @@ import { GET as getRiders, POST as createBatch } from "../delivery-batches/route
 
 const base = "https://freshmarkets.ph/api/admin";
 const success = { ok: true, value: [], requestId: "core-request" } as const;
+const REVISION_A = "a".repeat(64);
+const REVISION_B = "b".repeat(64);
+const GENERATED_AT = "2026-08-30T00:00:00.000Z";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`${base}/${path}`, {
@@ -48,6 +51,57 @@ function scheduledContext() {
 
 function delivery(jobId = "job-1", expectedVersion = 2) {
   return { jobId, expectedVersion };
+}
+
+function mapPin(jobId: string) {
+  return {
+    jobId,
+    orderId: `order-${jobId}`,
+    batchId: null,
+    coordinate: { latitude: 10.31, longitude: 123.88 },
+    fulfillmentMode: "INSTANT" as const,
+    cycleId: null,
+    status: "UNASSIGNED" as const,
+    rider: null,
+    version: 1,
+    selection: { selectable: true, reason: null },
+  };
+}
+
+function mapPage(
+  pins: ReadonlyArray<ReturnType<typeof mapPin> | Record<string, unknown>>,
+  nextCursor: string | null,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    ...instantContext(),
+    pins,
+    nextCursor,
+    complete: nextCursor === null,
+    projectionRevision: REVISION_A,
+    totalCount: pins.length,
+    generatedAt: GENERATED_AT,
+    ...overrides,
+  };
+}
+
+function rider(riderId: string, displayName = riderId) {
+  return { riderId, displayName, openBatchCount: 0, openDeliveryCount: 0 };
+}
+
+function riderPage(
+  riders: ReadonlyArray<ReturnType<typeof rider> | Record<string, unknown>>,
+  nextCursor: string | null,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    riders,
+    nextCursor,
+    complete: nextCursor === null,
+    projectionRevision: REVISION_A,
+    totalCount: riders.length,
+    ...overrides,
+  };
 }
 
 function expectGeneratedRequest(call: unknown) {
@@ -92,7 +146,9 @@ describe("GET /api/admin/delivery-map", () => {
           pins: [firstPin],
           nextCursor: "map-page-2",
           complete: false,
-          generatedAt: "2026-08-30T00:00:00.000Z",
+          projectionRevision: REVISION_A,
+          totalCount: 2,
+          generatedAt: GENERATED_AT,
         },
         requestId: "core-map-1",
       })
@@ -103,7 +159,9 @@ describe("GET /api/admin/delivery-map", () => {
           pins: [{ ...firstPin, jobId: "job-1001", orderId: "order-1001" }],
           nextCursor: null,
           complete: true,
-          generatedAt: "2026-08-30T00:00:01.000Z",
+          projectionRevision: REVISION_A,
+          totalCount: 2,
+          generatedAt: GENERATED_AT,
         },
         requestId: "core-map-2",
       });
@@ -144,7 +202,9 @@ describe("GET /api/admin/delivery-map", () => {
         ],
         nextCursor: "same-cursor",
         complete: false,
-        generatedAt: "2026-08-30T00:00:00.000Z",
+        projectionRevision: REVISION_A,
+        totalCount: 2,
+        generatedAt: GENERATED_AT,
       },
       requestId: "core-map-loop",
     });
@@ -156,6 +216,106 @@ describe("GET /api/admin/delivery-map", () => {
       error: { code: "INTERNAL_ERROR" },
     });
     expect(core.getDeliveryMap).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [
+      "a malformed entry",
+      [mapPage([{ ...mapPin("job-0001"), version: "1" }], null, { totalCount: 1 })],
+    ],
+    [
+      "a duplicate immutable job ID",
+      [
+        mapPage([mapPin("job-0001")], "cursor-2", { totalCount: 2 }),
+        mapPage([mapPin("job-0001")], null, { totalCount: 2 }),
+      ],
+    ],
+    [
+      "a regressing immutable job ID",
+      [
+        mapPage([mapPin("job-0002")], "cursor-2", { totalCount: 2 }),
+        mapPage([mapPin("job-0001")], null, { totalCount: 2 }),
+      ],
+    ],
+    [
+      "unique-cursor entity non-progress",
+      [
+        mapPage([mapPin("job-0001")], "unique-cursor-2", { totalCount: 2 }),
+        mapPage([mapPin("job-0001")], null, { totalCount: 2 }),
+      ],
+    ],
+    [
+      "a mixed authoritative revision",
+      [
+        mapPage([mapPin("job-0001")], "cursor-2", { totalCount: 2 }),
+        mapPage([mapPin("job-0002")], null, {
+          projectionRevision: REVISION_B,
+          totalCount: 2,
+        }),
+      ],
+    ],
+    [
+      "a mixed source watermark",
+      [
+        mapPage([mapPin("job-0001")], "cursor-2", { totalCount: 2 }),
+        mapPage([mapPin("job-0002")], null, {
+          totalCount: 2,
+          generatedAt: "2026-08-30T00:00:01.000Z",
+        }),
+      ],
+    ],
+  ])("fails closed on %s", async (_name, pages) => {
+    for (const page of pages) {
+      core.getDeliveryMap.mockResolvedValueOnce({ ok: true, value: page, requestId: "core-map" });
+    }
+    const response = await getMap(
+      new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+  });
+
+  it("fails closed at the bounded Core-page ceiling without requesting a partial tail", async () => {
+    core.getDeliveryMap.mockImplementation(async () => {
+      const page = core.getDeliveryMap.mock.calls.length;
+      const last = page === 21;
+      return {
+        ok: true,
+        value: mapPage(
+          [mapPin(`job-${page.toString().padStart(4, "0")}`)],
+          last ? null : `cursor-${page + 1}`,
+          {
+            totalCount: 21,
+          },
+        ),
+        requestId: `core-map-${page}`,
+      };
+    });
+    const response = await getMap(
+      new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+    expect(core.getDeliveryMap).toHaveBeenCalledTimes(20);
+  });
+
+  it("fails closed before materializing an authoritative delivery item-count overflow", async () => {
+    core.getDeliveryMap.mockResolvedValue({
+      ok: true,
+      value: mapPage([mapPin("job-0001")], null, { totalCount: 5_001 }),
+      requestId: "core-map-overflow",
+    });
+    const response = await getMap(
+      new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
   });
 
   it("forwards one generated request identity, only safe headers, Instant context, and optional filters", async () => {
@@ -550,6 +710,8 @@ describe("/api/admin/delivery-batches", () => {
           ],
           nextCursor: "riders-page-2",
           complete: false,
+          projectionRevision: REVISION_A,
+          totalCount: 2,
         },
         requestId: "core-riders-1",
       })
@@ -566,6 +728,8 @@ describe("/api/admin/delivery-batches", () => {
           ],
           nextCursor: null,
           complete: true,
+          projectionRevision: REVISION_A,
+          totalCount: 2,
         },
         requestId: "core-riders-2",
       });
@@ -579,6 +743,124 @@ describe("/api/admin/delivery-batches", () => {
     });
     expect(core.getEligibleRiders).toHaveBeenCalledTimes(2);
     expect(core.getEligibleRiders.mock.calls[1][0]).toMatchObject({ cursor: "riders-page-2" });
+  });
+
+  it("sorts Riders by mutable display name and immutable ID only after complete ID traversal", async () => {
+    core.getEligibleRiders
+      .mockResolvedValueOnce({
+        ok: true,
+        value: riderPage([rider("rider-0001", "Zulu Rider")], "riders-page-2", {
+          totalCount: 2,
+        }),
+        requestId: "core-riders-1",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: riderPage([rider("rider-0002", "Alpha Rider")], null, { totalCount: 2 }),
+        requestId: "core-riders-2",
+      });
+    const response = await getRiders(
+      new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      value: [
+        { riderId: "rider-0002", displayName: "Alpha Rider" },
+        { riderId: "rider-0001", displayName: "Zulu Rider" },
+      ],
+    });
+  });
+
+  it.each([
+    [
+      "a malformed entry",
+      [riderPage([{ ...rider("rider-0001"), openBatchCount: -1 }], null, { totalCount: 1 })],
+    ],
+    [
+      "a duplicate immutable Rider ID",
+      [
+        riderPage([rider("rider-0001")], "cursor-2", { totalCount: 2 }),
+        riderPage([rider("rider-0001")], null, { totalCount: 2 }),
+      ],
+    ],
+    [
+      "a regressing immutable Rider ID",
+      [
+        riderPage([rider("rider-0002")], "cursor-2", { totalCount: 2 }),
+        riderPage([rider("rider-0001")], null, { totalCount: 2 }),
+      ],
+    ],
+    [
+      "unique-cursor entity non-progress",
+      [
+        riderPage([rider("rider-0001")], "unique-cursor-2", { totalCount: 2 }),
+        riderPage([rider("rider-0001")], null, { totalCount: 2 }),
+      ],
+    ],
+    [
+      "a mixed authoritative revision",
+      [
+        riderPage([rider("rider-0001")], "cursor-2", { totalCount: 2 }),
+        riderPage([rider("rider-0002")], null, {
+          projectionRevision: REVISION_B,
+          totalCount: 2,
+        }),
+      ],
+    ],
+  ])("fails closed on %s", async (_name, pages) => {
+    for (const page of pages) {
+      core.getEligibleRiders.mockResolvedValueOnce({
+        ok: true,
+        value: page,
+        requestId: "core-riders",
+      });
+    }
+    const response = await getRiders(
+      new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+  });
+
+  it("fails closed at the bounded Rider page ceiling", async () => {
+    core.getEligibleRiders.mockImplementation(async () => {
+      const page = core.getEligibleRiders.mock.calls.length;
+      const last = page === 11;
+      return {
+        ok: true,
+        value: riderPage(
+          [rider(`rider-${page.toString().padStart(4, "0")}`)],
+          last ? null : `cursor-${page + 1}`,
+          { totalCount: 11 },
+        ),
+        requestId: `core-riders-${page}`,
+      };
+    });
+    const response = await getRiders(
+      new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
+    expect(core.getEligibleRiders).toHaveBeenCalledTimes(10);
+  });
+
+  it("fails closed before materializing an authoritative Rider item-count overflow", async () => {
+    core.getEligibleRiders.mockResolvedValue({
+      ok: true,
+      value: riderPage([rider("rider-0001")], null, { totalCount: 2_001 }),
+      requestId: "core-riders-overflow",
+    });
+    const response = await getRiders(
+      new Request(`${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT`),
+    );
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "INTERNAL_ERROR" },
+    });
   });
 
   it("GET calls only getEligibleRiders with exact Instant context", async () => {

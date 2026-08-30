@@ -69,6 +69,8 @@ type ExpectedDeliveryMapPage = {
   pins: ReadonlyArray<DeliveryMapPin>;
   nextCursor: string | null;
   complete: boolean;
+  projectionRevision: string;
+  totalCount: number;
   generatedAt: string;
 };
 
@@ -76,6 +78,8 @@ type ExpectedEligibleRiderPage = {
   riders: ReadonlyArray<EligibleRiderView>;
   nextCursor: string | null;
   complete: boolean;
+  projectionRevision: string;
+  totalCount: number;
 };
 
 type ExpectedCreateAndAssignRequest = AuthenticatedRequest & {
@@ -251,6 +255,8 @@ describe("delivery map and atomic dispatch contracts", () => {
       pins: [pin],
       nextCursor: null,
       complete: true,
+      projectionRevision: "a".repeat(64),
+      totalCount: 1,
       generatedAt: "2026-08-30T00:00:00.000Z",
     };
     const coordinateMissingPin: DeliveryMapPin = {

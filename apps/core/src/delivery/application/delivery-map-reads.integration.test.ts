@@ -527,6 +527,8 @@ describe("scoped delivery map reads", () => {
         ],
         nextCursor: null,
         complete: true,
+        projectionRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        totalCount: 3,
       },
       requestId: expect.any(String),
     });
@@ -574,7 +576,7 @@ describe("scoped delivery map reads", () => {
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
-  it("pages beyond the historical 1000 delivery and 500 Rider caps with validated cursors", async () => {
+  it("traverses every delivery and Rider page exactly once using immutable canonical IDs", async () => {
     const statements: D1PreparedStatement[] = [];
     for (let index = 0; index < 1_001; index += 1) {
       const suffix = index.toString().padStart(4, "0");
@@ -609,38 +611,109 @@ describe("scoped delivery map reads", () => {
       statements.push(
         env.DB.prepare(
           "INSERT INTO rider_identity (id, staff_id, auth_user_id, display_name, preferred_location_id, status, version, created_at, updated_at) VALUES (?, NULL, NULL, ?, NULL, 'ACTIVE', 1, ?, ?)",
-        ).bind(`page-rider-${suffix}`, `Page Rider ${suffix}`, NOW, NOW),
+        ).bind(
+          `page-rider-${suffix}`,
+          `Page Rider ${(500 - index).toString().padStart(4, "0")}`,
+          NOW,
+          NOW,
+        ),
       );
     }
     for (let start = 0; start < statements.length; start += 75) {
       await env.DB.batch(statements.slice(start, start + 75));
     }
 
-    const firstMap = await core.getDeliveryMap(scheduledRequest({ statuses: ["UNASSIGNED"] }));
-    expect(firstMap).toMatchObject({ ok: true, value: { complete: false } });
-    if (!firstMap.ok) return;
-    expect(firstMap.value.pins).toHaveLength(250);
-    expect(firstMap.value.nextCursor).toEqual(expect.any(String));
-    const secondMap = await core.getDeliveryMap(
-      scheduledRequest({ statuses: ["UNASSIGNED"], cursor: firstMap.value.nextCursor! }),
-    );
-    expect(secondMap).toMatchObject({ ok: true, value: { complete: false } });
-    if (!secondMap.ok) return;
-    expect(secondMap.value.pins[0]?.jobId).not.toBe(firstMap.value.pins.at(-1)?.jobId);
+    const mapIds: string[] = [];
+    let mapCursor: string | undefined;
+    let mapRevision: string | undefined;
+    let mapGeneratedAt: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await core.getDeliveryMap(
+        scheduledRequest({ statuses: ["UNASSIGNED"], ...(mapCursor ? { cursor: mapCursor } : {}) }),
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      mapRevision ??= result.value.projectionRevision;
+      mapGeneratedAt ??= result.value.generatedAt;
+      expect(result.value.projectionRevision).toBe(mapRevision);
+      expect(result.value.generatedAt).toBe(mapGeneratedAt);
+      expect(result.value.totalCount).toBeGreaterThan(1_000);
+      mapIds.push(...result.value.pins.map((pin) => pin.jobId));
+      if (result.value.complete) break;
+      expect(result.value.nextCursor).toEqual(expect.any(String));
+      mapCursor = result.value.nextCursor!;
+    }
+    const seededMapIds = mapIds.filter((id) => id.startsWith("page-job-"));
+    expect(seededMapIds).toHaveLength(1_001);
+    expect(new Set(seededMapIds).size).toBe(1_001);
+    expect(seededMapIds).toEqual([...seededMapIds].sort());
+    expect(seededMapIds.at(-1)).toBe("page-job-1000");
     await expect(
       core.getDeliveryMap(scheduledRequest({ cursor: "not-an-opaque-cursor" })),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
-    const firstRiders = await core.getEligibleRiders(scheduledRequest());
-    expect(firstRiders).toMatchObject({ ok: true, value: { complete: false } });
-    if (!firstRiders.ok) return;
-    expect(firstRiders.value.riders).toHaveLength(200);
-    const secondRiders = await core.getEligibleRiders(
-      scheduledRequest({ cursor: firstRiders.value.nextCursor! }),
-    );
-    expect(secondRiders).toMatchObject({ ok: true, value: { complete: false } });
+    const riderIds: string[] = [];
+    let riderCursor: string | undefined;
+    let riderRevision: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await core.getEligibleRiders(
+        scheduledRequest(riderCursor ? { cursor: riderCursor } : {}),
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      riderRevision ??= result.value.projectionRevision;
+      expect(result.value.projectionRevision).toBe(riderRevision);
+      expect(result.value.totalCount).toBeGreaterThan(500);
+      riderIds.push(...result.value.riders.map((rider) => rider.riderId));
+      if (result.value.complete) break;
+      expect(result.value.nextCursor).toEqual(expect.any(String));
+      riderCursor = result.value.nextCursor!;
+    }
+    const seededRiderIds = riderIds.filter((id) => id.startsWith("page-rider-"));
+    expect(seededRiderIds).toHaveLength(501);
+    expect(new Set(seededRiderIds).size).toBe(501);
+    expect(seededRiderIds).toEqual([...seededRiderIds].sort());
+    expect(seededRiderIds.at(-1)).toBe("page-rider-0500");
     await expect(
       core.getEligibleRiders(scheduledRequest({ cursor: "not-an-opaque-cursor" })),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("fails closed when either authoritative projection revision changes between pages", async () => {
+    const firstMap = await core.getDeliveryMap(scheduledRequest({ statuses: ["UNASSIGNED"] }));
+    expect(firstMap).toMatchObject({ ok: true, value: { complete: false } });
+    if (!firstMap.ok) return;
+    await env.DB.prepare(
+      "UPDATE delivery_job SET version=version+1, updated_at=? WHERE id='page-job-0900'",
+    )
+      .bind(NOW + 1)
+      .run();
+    await expect(
+      core.getDeliveryMap(
+        scheduledRequest({ statuses: ["UNASSIGNED"], cursor: firstMap.value.nextCursor! }),
+      ),
+    ).resolves.toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    await env.DB.prepare(
+      "UPDATE delivery_job SET version=version-1, updated_at=? WHERE id='page-job-0900'",
+    )
+      .bind(NOW)
+      .run();
+
+    const firstRiders = await core.getEligibleRiders(scheduledRequest());
+    expect(firstRiders).toMatchObject({ ok: true, value: { complete: false } });
+    if (!firstRiders.ok) return;
+    await env.DB.prepare(
+      "UPDATE rider_identity SET display_name='Moved Before Cursor', version=version+1, updated_at=? WHERE id='page-rider-0400'",
+    )
+      .bind(NOW + 1)
+      .run();
+    await expect(
+      core.getEligibleRiders(scheduledRequest({ cursor: firstRiders.value.nextCursor! })),
+    ).resolves.toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    await env.DB.prepare(
+      "UPDATE rider_identity SET display_name='Page Rider 0100', version=version-1, updated_at=? WHERE id='page-rider-0400'",
+    )
+      .bind(NOW)
+      .run();
   });
 });

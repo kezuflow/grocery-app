@@ -29,6 +29,10 @@ export type DeliveryMapView = {
   nextCursor: string | null;
   /** Explicit completeness evidence; exactly equivalent to nextCursor being null. */
   complete: boolean;
+  /** Opaque digest of the complete filtered projection; stable across one traversal. */
+  projectionRevision: string;
+  /** Authoritative number of entries in the complete filtered projection. */
+  totalCount: number;
   generatedAt: string;
 };
 
@@ -64,6 +68,10 @@ export type EligibleRiderPage = {
   nextCursor: string | null;
   /** Explicit completeness evidence; exactly equivalent to nextCursor being null. */
   complete: boolean;
+  /** Opaque digest of the complete eligible Rider/workload projection. */
+  projectionRevision: string;
+  /** Authoritative number of entries in the complete eligible Rider projection. */
+  totalCount: number;
 };
 
 export type OrderedDeliveryVersion = {

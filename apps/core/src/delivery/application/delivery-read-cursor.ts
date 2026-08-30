@@ -1,5 +1,5 @@
-type DeliveryMapCursor = { v: 1; k: "MAP"; s: string; id: string };
-type EligibleRiderCursor = { v: 1; k: "RIDER"; s: string; name: string; id: string };
+type DeliveryMapCursor = { v: 2; k: "MAP"; s: string; r: string; id: string };
+type EligibleRiderCursor = { v: 2; k: "RIDER"; s: string; r: string; id: string };
 
 function encode(value: DeliveryMapCursor | EligibleRiderCursor): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -30,50 +30,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function encodeDeliveryMapCursor(scope: string, id: string): string {
-  return encode({ v: 1, k: "MAP", s: scope, id });
+export function encodeDeliveryMapCursor(scope: string, revision: string, id: string): string {
+  return encode({ v: 2, k: "MAP", s: scope, r: revision, id });
 }
 
-export function decodeDeliveryMapCursor(cursor: string, scope: string): { id: string } | null {
+export function decodeDeliveryMapCursor(
+  cursor: string,
+  scope: string,
+): { revision: string; id: string } | null {
   const value = decode(cursor);
   if (
     !isRecord(value) ||
-    !exactKeys(value, ["id", "k", "s", "v"]) ||
-    value.v !== 1 ||
+    !exactKeys(value, ["id", "k", "r", "s", "v"]) ||
+    value.v !== 2 ||
     value.k !== "MAP" ||
     value.s !== scope ||
+    typeof value.r !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.r) ||
     typeof value.id !== "string" ||
     value.id.length < 1 ||
     value.id.length > 200
   ) {
     return null;
   }
-  return { id: value.id };
+  return { revision: value.r, id: value.id };
 }
 
-export function encodeEligibleRiderCursor(scope: string, name: string, id: string): string {
-  return encode({ v: 1, k: "RIDER", s: scope, name, id });
+export function encodeEligibleRiderCursor(scope: string, revision: string, id: string): string {
+  return encode({ v: 2, k: "RIDER", s: scope, r: revision, id });
 }
 
 export function decodeEligibleRiderCursor(
   cursor: string,
   scope: string,
-): { name: string; id: string } | null {
+): { revision: string; id: string } | null {
   const value = decode(cursor);
   if (
     !isRecord(value) ||
-    !exactKeys(value, ["id", "k", "name", "s", "v"]) ||
-    value.v !== 1 ||
+    !exactKeys(value, ["id", "k", "r", "s", "v"]) ||
+    value.v !== 2 ||
     value.k !== "RIDER" ||
     value.s !== scope ||
-    typeof value.name !== "string" ||
-    value.name.length < 1 ||
-    value.name.length > 200 ||
+    typeof value.r !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.r) ||
     typeof value.id !== "string" ||
     value.id.length < 1 ||
     value.id.length > 200
   ) {
     return null;
   }
-  return { name: value.name, id: value.id };
+  return { revision: value.r, id: value.id };
 }
