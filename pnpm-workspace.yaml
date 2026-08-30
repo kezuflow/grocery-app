@@ -4,10 +4,16 @@ packages:
 
 overrides:
   "@esbuild-kit/core-utils>esbuild": 0.25.12
+  "miniflare@4.20260721.0>sharp": 0.35.2
+  "miniflare@4.20260721.0>undici": 7.29.0
+  "miniflare@4.20260721.0>workerd": 1.20260820.1
+  "wrangler@4.113.0>workerd": 1.20260820.1
 
 onlyBuiltDependencies:
   - esbuild
+  - sharp
   - workerd
 allowBuilds:
   esbuild: true
+  sharp: true
   workerd: true

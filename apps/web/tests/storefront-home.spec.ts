@@ -37,6 +37,44 @@ test("the marketplace home server-renders categories, rails, and membership cont
 });
 
 test("the membership offer returns after a full page refresh", async ({ page }) => {
+  await page.route("**/api/membership", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          offer: {
+            offerId: "membership-monthly",
+            code: "MEMBERSHIP_MONTHLY",
+            name: "FreshMarkets Membership",
+            amountMinor: 29_900,
+            currency: "PHP",
+            billingInterval: "CALENDAR_MONTH",
+          },
+          subscription: null,
+          introductoryTrial: {
+            status: "AUTHORIZATION_REQUIRED",
+            eligible: false,
+            duration: "CALENDAR_MONTH",
+          },
+          recurringAuthorization: { status: "REQUIRED", ready: false },
+          actions: {
+            startTrial: {
+              available: false,
+              disabledReason: "RECURRING_AUTHORIZATION_REQUIRED",
+            },
+            beginPaidEnrollment: { available: true, disabledReason: null },
+            pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+            resume: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+            cancelImmediately: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+            cancelAtPeriodEnd: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+          },
+        },
+        requestId: "membership-offer",
+      }),
+    }),
+  );
   await page.goto("/");
   await page.waitForLoadState("networkidle");
   const offer = page.getByRole("complementary", { name: "FreshMarkets membership offer" });
@@ -148,10 +186,12 @@ test("empty cart uses the shared storefront summary and recovery state", async (
   await expect(page.getByRole("link", { name: "Continue shopping" }).last()).toBeVisible();
 });
 
-test("checkout uses progressive delivery sections and a shared order summary", async ({ page }) => {
+test("checkout uses Core-routed delivery options and a shared order summary", async ({ page }) => {
   await page.goto("/checkout");
   await expect(page.getByRole("heading", { name: "Delivery details" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Delivery cycle" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Promotion codes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Delivery option" })).toBeVisible();
+  await expect(page.getByText(/Choose Instant or Scheduled when available/)).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Order summary" })).toBeVisible();
 });
 

@@ -324,3 +324,11 @@ Critical batches include:
   and idempotency completion.
 
 Use conditional updates against expected state/version and verify affected-row counts for client/application/admin lifecycle commands. Duplicate idempotency keys with different request hashes are conflicts; identical replay returns the original result. Provider events use durable `(provider, provider_event_id)` deduplication and handler-side conditional updates; concurrent aggregate changes cause safe retry/reconciliation, never an invented webhook version.
+
+## Customer MVP Completion Migration
+
+Migration `0047_customer_mvp_completion.sql` is the additive Customer MVP boundary. It adds controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness` with exact buyer/financial/tax-policy evidence. Fulfillment locations remain unavailable to customer option discovery until their single active mode is explicitly configured; the migration does not invent operational mode authority.
+
+Promotion claims are uncommitted Quote evidence until atomic Order commitment creates redemption/application history. `notification_outbox.idempotency_key` uniquely identifies one business notification intent, and due work is indexed by status/availability/schedule. `order_invoice_readiness` is one-to-one with Order and provider-confirmed Payment intent; its financial components must be nonnegative and reconcile exactly to the committed total before persistence.
+
+Customer-facing Order detail remains a purpose-built projection over immutable Order/item/address/fulfillment/financial snapshots plus bounded timeline, issue, amendment, Promotion, notification, and invoice-readiness state. Raw provider fields, internal location-assignment authority, staff-only issue notes, and tax/accounting internals are not returned.

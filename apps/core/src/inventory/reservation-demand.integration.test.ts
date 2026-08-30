@@ -65,6 +65,11 @@ async function authenticatedCookie() {
 }
 
 async function checkoutFixture(quantity: number) {
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO fulfillment_location_mode (location_id,active_mode,cadence,promise_minutes,max_concurrent_instant_orders,version,created_at,updated_at) VALUES (?, 'SCHEDULED','WEEKLY',NULL,NULL,1,?,?)",
+  )
+    .bind(locationId, Date.now(), Date.now())
+    .run();
   const cookie = await authenticatedCookie();
   const headers = { cookie };
   const request = () => ({ headers, requestId: requestId() });

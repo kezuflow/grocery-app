@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CustomerOrderDetailView, RpcResult } from "@freshmarkets/contracts";
 import { StorefrontShell } from "../../../components/storefront/storefront-shell";
@@ -310,25 +311,23 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
   );
 }
 
-export default function CustomerOrderDetailPage({
-  params,
-}: {
-  params: Promise<{ "order-id": string }>;
-}) {
+export default function CustomerOrderDetailPage() {
+  const orderId = useParams<{ "order-id": string }>()?.["order-id"];
   const [state, setState] = useState<
     "loading" | "ready" | "not-found" | "unauthenticated" | "error"
   >("loading");
   const [order, setOrder] = useState<CustomerOrderDetailView | null>(null);
 
   useEffect(() => {
+    if (!orderId) {
+      setState("not-found");
+      return;
+    }
     let active = true;
-    void params
-      .then(({ "order-id": orderId }) =>
-        fetch(`/api/commerce/orders/${encodeURIComponent(orderId)}`, {
-          cache: "no-store",
-          credentials: "same-origin",
-        }),
-      )
+    void fetch(`/api/commerce/orders/${encodeURIComponent(orderId)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
       .then((response) => response.json() as Promise<RpcResult<CustomerOrderDetailView>>)
       .then((result) => {
         if (!active) return;
@@ -349,7 +348,7 @@ export default function CustomerOrderDetailPage({
     return () => {
       active = false;
     };
-  }, [params]);
+  }, [orderId]);
 
   return (
     <StorefrontShell>

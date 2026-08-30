@@ -7,6 +7,12 @@ import {
 import type { PaymentProviderRegistry } from "../payments/ports/provider-registry";
 import { getJobsForCron } from "./job-registry";
 import type { ScheduledJob, ScheduledJobOutcome } from "./types";
+import {
+  createCloudflareEmailDeliveryPort,
+  disabledEmailDeliveryPort,
+  type EmailDeliveryEnvironment,
+  type EmailDeliveryPort,
+} from "../notifications/infrastructure/email-delivery-port";
 
 const MAX_DETAIL_LENGTH = 200;
 
@@ -63,12 +69,13 @@ export async function runRegisteredJobs(
     PAYMENT_PROVIDER: "disabled",
   }),
   renewalInitiationEnabled = false,
+  emailDelivery: EmailDeliveryPort = disabledEmailDeliveryPort,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
     let outcome: ScheduledJobOutcome;
     try {
-      outcome = await job.run({ database, now, registry, renewalInitiationEnabled });
+      outcome = await job.run({ database, now, registry, renewalInitiationEnabled, emailDelivery });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
     }
@@ -80,7 +87,7 @@ export async function runRegisteredJobs(
 
 /** Entrypoint-facing wrapper resolving the registry for a fired cron expression. */
 export async function runScheduledJobs(
-  env: CoreRuntimeEnvironment & { DB: D1Database },
+  env: CoreRuntimeEnvironment & EmailDeliveryEnvironment & { DB: D1Database },
   cronExpression: string,
   now: number,
 ): Promise<ScheduledJobOutcome[]> {
@@ -92,5 +99,6 @@ export async function runScheduledJobs(
     undefined,
     buildProviderRegistry(runtime),
     runtime.renewals.initiationEnabled,
+    createCloudflareEmailDeliveryPort(env),
   );
 }

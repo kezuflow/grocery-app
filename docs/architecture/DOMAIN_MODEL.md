@@ -384,27 +384,27 @@ Exactly one version per metric code is current and `APPROVED`. Replaced definiti
 
 The initial metric catalog is:
 
-| Metric | Canonical formula or required status |
-|---|---|
-| Order count | Count Orders whose first successful commitment instant is in the reporting window; amendments are not additional Orders. |
-| Refund amount | Sum canonical `SUCCEEDED` Refund amount by refund-success instant and currency in the reporting window. |
-| New customers | Count Customer aggregates created in the reporting window. |
-| Active customers | Count distinct Customers with at least one first Order commitment instant in the reporting window. |
-| Repeat customer rate | Active Customers who had a committed Order before their first in-window commitment divided by Active Customers; empty denominator returns null. |
-| Orders per customer | Order count divided by Active Customers; empty denominator returns null. |
-| Active members / trialing members | Point-in-time count of effective `ACTIVE` / `TRIALING` subscriptions after timestamp eligibility rules. |
-| Promotion redemptions | Count Promotion redemption records by `redeemedAt`, grouped by benefit type/promotion as requested. |
-| Discount spend | Sum snapshotted applied benefit amounts by merchandise, delivery, and membership-fee components; components and currencies are never silently combined. |
-| Promotion-influenced Order revenue | Sum committed Order `finalTotalMinor` for Orders with at least one Order/delivery Promotion redemption; this is influence labeling, not causal attribution. |
-| Fulfillment time | `fulfillmentCompletedAt - committedAt` for completed fulfillments. |
-| Picking time | `pickingCompletedAt - pickingStartedAt` where both events exist. |
-| Packing time | `packedAt - packingStartedAt` where both events exist. |
-| Delivery time | `deliveredAt - dispatchedAt` for delivered jobs. |
-| Late-delivery rate | Delivered jobs after their snapshotted promised time plus unresolved jobs past that promise, divided by jobs whose promise elapsed in the window. |
-| Cancellation rate | Orders first committed in the window that later reach `CANCELED`, divided by Order count for the same commitment cohort. |
-| Out-of-stock rate | Availability evaluations that reject an active SKU for insufficient usable location stock divided by evaluated active-SKU availability checks; instrumentation/version is part of the definition. |
-| Stockouts | Count location inventory-pool transitions from usable quantity above zero to zero, deduplicated by ledger transition. |
-| Inventory adjustments/shrinkage | Sum signed base-unit adjustment ledger movements, grouped by Product base unit, location, and reason; unlike dimensions are never summed. |
+| Metric                             | Canonical formula or required status                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Order count                        | Count Orders whose first successful commitment instant is in the reporting window; amendments are not additional Orders.                                                                          |
+| Refund amount                      | Sum canonical `SUCCEEDED` Refund amount by refund-success instant and currency in the reporting window.                                                                                           |
+| New customers                      | Count Customer aggregates created in the reporting window.                                                                                                                                        |
+| Active customers                   | Count distinct Customers with at least one first Order commitment instant in the reporting window.                                                                                                |
+| Repeat customer rate               | Active Customers who had a committed Order before their first in-window commitment divided by Active Customers; empty denominator returns null.                                                   |
+| Orders per customer                | Order count divided by Active Customers; empty denominator returns null.                                                                                                                          |
+| Active members / trialing members  | Point-in-time count of effective `ACTIVE` / `TRIALING` subscriptions after timestamp eligibility rules.                                                                                           |
+| Promotion redemptions              | Count Promotion redemption records by `redeemedAt`, grouped by benefit type/promotion as requested.                                                                                               |
+| Discount spend                     | Sum snapshotted applied benefit amounts by merchandise, delivery, and membership-fee components; components and currencies are never silently combined.                                           |
+| Promotion-influenced Order revenue | Sum committed Order `finalTotalMinor` for Orders with at least one Order/delivery Promotion redemption; this is influence labeling, not causal attribution.                                       |
+| Fulfillment time                   | `fulfillmentCompletedAt - committedAt` for completed fulfillments.                                                                                                                                |
+| Picking time                       | `pickingCompletedAt - pickingStartedAt` where both events exist.                                                                                                                                  |
+| Packing time                       | `packedAt - packingStartedAt` where both events exist.                                                                                                                                            |
+| Delivery time                      | `deliveredAt - dispatchedAt` for delivered jobs.                                                                                                                                                  |
+| Late-delivery rate                 | Delivered jobs after their snapshotted promised time plus unresolved jobs past that promise, divided by jobs whose promise elapsed in the window.                                                 |
+| Cancellation rate                  | Orders first committed in the window that later reach `CANCELED`, divided by Order count for the same commitment cohort.                                                                          |
+| Out-of-stock rate                  | Availability evaluations that reject an active SKU for insufficient usable location stock divided by evaluated active-SKU availability checks; instrumentation/version is part of the definition. |
+| Stockouts                          | Count location inventory-pool transitions from usable quantity above zero to zero, deduplicated by ledger transition.                                                                             |
+| Inventory adjustments/shrinkage    | Sum signed base-unit adjustment ledger movements, grouped by Product base unit, location, and reason; unlike dimensions are never summed.                                                         |
 
 The following names are required but blocked from publication until the named authority is approved: GMV, revenue/net sales, AOV, and refund rate require an accounting definition of gross/net components, cancellations, refunds, fees, tax, and event-time recognition; trial-to-paid conversion requires a cohort and conversion-window definition; MRR and churn additionally depend on renewal, grace/dunning, fee-waiver, and effective-cancellation policy; Promotion redemption rate needs an approved denominator; substitution rate remains unavailable while substitutions are out of scope. Inventory turnover is deferred until its cost/period basis is approved.
 
@@ -429,3 +429,8 @@ Audit logging is not event sourcing and is distinct from application diagnostics
 11. Operational state changes require explicit commands, legal transitions, authorization, idempotency where replayable, and audit where material.
 12. Client/application/admin lifecycle commands use stable idempotency and expected aggregate versions where concurrent mutation is possible; provider events use unique provider-event identity and handler-side conditional updates instead of supplied versions.
 13. Admin and Analytics are read/application surfaces; neither owns or directly mutates source-context state.
+14. A customer chooses an opaque Core-provided fulfillment option; fulfillment location and Scheduled cycle routing remain internal evidence and are revalidated at Quote creation.
+15. A customer Order Issue is typed intake and status projection only. It never authorizes a refund, cancellation, replacement, credit, or inventory movement.
+16. Reorder copies eligible historical SKU quantities into the current active cart under current catalog, price, and availability rules; it never restores historical commercial or fulfillment state.
+17. A paid Order amendment is additive, Scheduled-before-cutoff only, independently priced and paid, and committed only from a canonical successful amendment Payment reaction. It never edits original Order lines or financial snapshots.
+18. Notification and invoice-readiness records are consequences of authoritative transitions. Neither may decide or retroactively change Membership, Payment, Order, Promotion, Inventory, Fulfillment, or Delivery state.

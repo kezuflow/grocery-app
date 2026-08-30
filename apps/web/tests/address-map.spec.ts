@@ -215,7 +215,28 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
   await page.route("**/api/checkout/quote", (route) =>
     json(route, {
       ok: true,
-      value: { quoteId: "quote-1", totalMinor: 32000, currency: "PHP" },
+      value: {
+        quoteId: "quote-1",
+        attemptVersion: 1,
+        priceAcceptanceVersion: 1,
+        expiresAt: "2026-09-05T00:00:00.000Z",
+        currency: "PHP",
+        merchandiseSubtotalMinor: 30_000,
+        itemDiscountMinor: 0,
+        orderDiscountMinor: 0,
+        deliverySubtotalMinor: 2_000,
+        deliveryDiscountMinor: 0,
+        serviceFeeMinor: 0,
+        taxMinor: 0,
+        subtotalMinor: 30_000,
+        discountMinor: 0,
+        deliveryFeeMinor: 2_000,
+        totalMinor: 32_000,
+        lines: [],
+        requestedPromotionCodes: [],
+        promotionFeedback: [],
+        promotionApplications: [],
+      },
       requestId: "quote-1",
     }),
   );
@@ -246,6 +267,7 @@ test("public serviceability checks a confirmed search result without saving or s
   });
 
   await page.goto("/serviceability");
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Search for an address").fill("Ayala Cebu");
   await page.getByRole("button", { name: candidate.displayAddress }).click();
   await expect(page.getByText("Delivery is available", { exact: true })).toBeVisible();
@@ -257,20 +279,14 @@ test("public serviceability checks a confirmed search result without saving or s
 });
 
 test("anonymous serviceability reaches Core through the real Web Service Binding", async ({
-  playwright,
-  baseURL,
+  request,
 }) => {
-  const anonymous = await playwright.request.newContext({ baseURL });
-  try {
-    const response = await anonymous.post("/api/serviceability", {
-      data: candidate.coordinate,
-    });
-    expect(response.ok()).toBe(true);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: true,
-      value: { coordinate: candidate.coordinate },
-    });
-  } finally {
-    await anonymous.dispose();
-  }
+  const response = await request.post("/api/serviceability", {
+    data: candidate.coordinate,
+  });
+  expect(response.ok()).toBe(true);
+  await expect(response.json()).resolves.toMatchObject({
+    ok: true,
+    value: { coordinate: candidate.coordinate },
+  });
 });

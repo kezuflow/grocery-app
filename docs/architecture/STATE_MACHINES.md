@@ -224,17 +224,35 @@ MVP delivery proof records delivered timestamp, rider, and event/status. Later p
 
 ## Cancellation Effects by Stage
 
-| Stage | Normal authority | Inventory/demand effect | Financial effect |
-|---|---|---|---|
-| Before payment | Customer/system | None | None |
+| Stage                                                                  | Normal authority                   | Inventory/demand effect                                                                | Financial effect                                       |
+| ---------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Before payment                                                         | Customer/system                    | None                                                                                   | None                                                   |
 | Paid before Scheduled cutoff or before Instant fulfillment work begins | Customer request under mode policy | Release Instant/stocked reservation; cancel planned demand if not operationally locked | Normally full refund, subject to configured fee policy |
-| After cutoff before procurement | Operations | Explicit demand adjustment | Full/partial refund by policy |
-| Procurement started | Operations | Preserve supplier commitment; route resulting supply to inventory/resolution | Partial/full refund or credit by approved policy |
-| After receiving | Operations/support | Inventory remains auditable; reverse allocation if usable | Affected-line or policy refund |
-| After packing | Operations/support | Packed goods require explicit disposition | Policy refund/credit |
-| After dispatch | Delivery/support | Failed-delivery resolution | Retry/reschedule/refund/credit |
-| Delivered | Support/finance | No cancellation | Separate return/refund adjustment |
+| After cutoff before procurement                                        | Operations                         | Explicit demand adjustment                                                             | Full/partial refund by policy                          |
+| Procurement started                                                    | Operations                         | Preserve supplier commitment; route resulting supply to inventory/resolution           | Partial/full refund or credit by approved policy       |
+| After receiving                                                        | Operations/support                 | Inventory remains auditable; reverse allocation if usable                              | Affected-line or policy refund                         |
+| After packing                                                          | Operations/support                 | Packed goods require explicit disposition                                              | Policy refund/credit                                   |
+| After dispatch                                                         | Delivery/support                   | Failed-delivery resolution                                                             | Retry/reschedule/refund/credit                         |
+| Delivered                                                              | Support/finance                    | No cancellation                                                                        | Separate return/refund adjustment                      |
 
 ## Transition Test Expectations
 
 For every state machine, test all allowed transitions, representative illegal transitions, authorization/scope failures, duplicate commands, stale versions for versioned lifecycle commands, and cross-domain effects. Provider-event tests instead cover duplicate `(provider, providerEventId)`, out-of-order delivery, handler compare-and-swap conflict, retry, and reconciliation. Time-boundary tests must cover exactly-at-cutoff behavior using an injected clock.
+
+## Customer Follow-up Supporting Lifecycles
+
+```text
+OrderIssue: SUBMITTED -> CLAIMED -> INVESTIGATING -> RESOLVED
+                   \-----------------------------> ESCALATED
+
+Notification: PENDING -> PROCESSING -> SENT
+                   ^          \-> PENDING (retry)
+                   \------------- expired lease recovery
+                              \-> FAILED (bounded terminal exhaustion)
+
+InvoiceReadiness: PENDING_TAX_CONFIGURATION -> READY_FOR_ISSUANCE -> ISSUED
+```
+
+Issue submission is customer-owned, typed, idempotent, and version-safe; staff handling is a separate Admin authority and does not imply a financial action. Customer projection collapses `CLAIMED` and `INVESTIGATING` to `IN_REVIEW` while preserving `SUBMITTED`, `RESOLVED`, and `ESCALATED`. Notification retries never replay the source transition. Invoice readiness advances only when the required approved accounting evidence exists; `ISSUED` additionally requires an immutable identifier, issue instant, seller snapshot, and tax breakdown.
+
+The existing `OrderAmendment` lifecycle applies only to additive paid additions. A customer may draft one active amendment for a committed Scheduled Order before cutoff. Its dedicated `ORDER_AMENDMENT` Payment must reach canonical `SUCCEEDED` before the amendment commits. Failed/expired payment fails the amendment; duplicate provider reactions replay safely.

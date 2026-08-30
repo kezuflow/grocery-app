@@ -14,6 +14,7 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ "order-id": "order-1" }) }));
 vi.mock("../../../components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: ReactNode }) => children,
 }));

@@ -5,7 +5,7 @@
 **Review date:** 2026-08-30
 
 **Scope:** Whole repository except the separately owned Admin Dashboard and Maps programs
-**Status:** Programs 1–3 implemented; Program 4 approved and next in sequence
+**Status:** Programs 1–4 implemented locally; final repository verification and trunk integration recorded in the Customer MVP completion report
 
 ## Executive assessment
 
@@ -18,10 +18,10 @@ The review found four material classes of work:
 3. architecture-boundary, request-security, correlation, readiness, and maintainability hardening; and
 4. incomplete customer MVP behavior already promised by the canonical product documents.
 
-The first three classes are implemented in the protective remediation worktree. Programs 1–2 have
-complete Core/Web verification, and Program 3 has repository-wide unit/integration verification plus
-live request-nonce auth, Admin, and Maps/serviceability acceptance. Program 4 retains its approved,
-task-level, test-driven implementation plan and is the remaining product-completion program.
+All four classes are implemented in the protective remediation worktree. Programs 1–2 have complete
+Core/Web verification, Program 3 has repository-wide unit/integration verification plus live
+request-nonce auth, Admin, and Maps/serviceability acceptance, and Program 4 completes the customer
+Membership-to-post-order journey while preserving the separately owned Admin and Maps surfaces.
 
 ## What is strong today
 
@@ -52,22 +52,22 @@ task-level, test-driven implementation plan and is the remaining product-complet
 
 ## Findings and remediation status
 
-| Priority | Finding | Risk | Remediation status |
-| --- | --- | --- | --- |
-| Critical | Entitlement, price, minimum-basket, payment, capacity, and order-commitment checks were not uniformly enforced at every authoritative boundary. | Paid orders could be committed under stale or incomplete policy. | Fixed and verified in Program 1. |
-| Critical | Scheduled paid commitment did not prove one atomic capacity claim with the order consequence. | Capacity oversell under concurrency. | Fixed with guarded atomic commitment and race tests. |
-| Critical | Provider timeouts/ambiguous outcomes and replay paths could lose usable actions or misclassify financial state. | False failure, duplicate external action, or unrecoverable customer flow. | Fixed with claim-before-provider-call, durable action recovery, canonical observation classification, and reconciliation. |
-| Critical | Outstanding refund value was not reserved atomically. | Concurrent refunds could exceed captured value. | Fixed with atomic reservation and replay-safe observation handling. |
-| High | Historical migration `0021` could not safely upgrade a populated pre-instant schema while preserving the full foreign-key graph. | Production upgrade failure or data loss. | Fixed; fresh, populated `0020 -> current`, and later upgrade paths are verified. |
-| High | Deployed runtime configuration accepted development secrets/origins/cookies/mock-provider combinations. | Insecure preview/production boot. | Fixed with cached typed fail-closed Core/Web validation. |
-| High | A first-touch cart race could create multiple active carts; mutation lacked complete version/idempotency semantics. | Split customer state and lost concurrent updates. | Fixed with reconciliation/index, first-touch conflict handling, expected versions, and stable idempotency. |
-| High | Provider inbox retry records lacked durable lease/redrive/escalation behavior. | Webhooks could remain indefinitely unprocessed or process concurrently. | Fixed with normalized observations, leases, bounded backoff, scheduler redrive, and one-time escalation. |
-| High | Renewal initiation ownership was ambiguous and scheduler recovery incomplete. | Duplicate/misowned billing attempts or missed confirmed outcomes. | Fixed with explicit disabled-by-default ownership gate; outcome/dunning/grace recovery continues independently. |
-| High | The Core entrypoint and legacy contract barrel are collision hotspots with weak executable layer enforcement. | Review difficulty, cross-context coupling, and repeated concurrent conflicts. | Fixed for the authorized non-Admin/non-Maps transport through bounded adapters, contract manifests, and an AST architecture gate; excluded entrypoint methods remain explicit. |
-| High | Public request bodies are inconsistently bounded and Web security/correlation policy is incomplete. | Memory abuse, unsafe media/body handling, inconsistent CSP/headers, weak incident traceability. | Fixed for authorized route families with incremental bounded readers, UUID correlation, request-nonce CSP, and live hydration acceptance; excluded Admin/Maps direct reads remain owner follow-up. |
-| High | Customer Membership, promotion checkout, order detail, reorder, issues, abandonment, amendments, notifications, invoice readiness, and explicit mode selection are incomplete. | Canonical MVP cannot be considered launch-complete. | Program 4 planned as thirteen vertical, test-driven slices after Program 3. |
-| Medium | Catalog generation depended on migrations beyond the schema boundary it owns; storefront assertions and dependency audit were stale. | Generator breakage from unrelated later schema and false verification failures. | Fixed; owned-boundary generation, current assertions, and a narrow esbuild override now pass. |
-| Medium | Production lint/generated-type/readiness warnings and transport duplication remain. | Operational noise and slower safe changes. | Included in Program 3 acceptance. |
+| Priority | Finding                                                                                                                                                                        | Risk                                                                                            | Remediation status                                                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critical | Entitlement, price, minimum-basket, payment, capacity, and order-commitment checks were not uniformly enforced at every authoritative boundary.                                | Paid orders could be committed under stale or incomplete policy.                                | Fixed and verified in Program 1.                                                                                                                                                                   |
+| Critical | Scheduled paid commitment did not prove one atomic capacity claim with the order consequence.                                                                                  | Capacity oversell under concurrency.                                                            | Fixed with guarded atomic commitment and race tests.                                                                                                                                               |
+| Critical | Provider timeouts/ambiguous outcomes and replay paths could lose usable actions or misclassify financial state.                                                                | False failure, duplicate external action, or unrecoverable customer flow.                       | Fixed with claim-before-provider-call, durable action recovery, canonical observation classification, and reconciliation.                                                                          |
+| Critical | Outstanding refund value was not reserved atomically.                                                                                                                          | Concurrent refunds could exceed captured value.                                                 | Fixed with atomic reservation and replay-safe observation handling.                                                                                                                                |
+| High     | Historical migration `0021` could not safely upgrade a populated pre-instant schema while preserving the full foreign-key graph.                                               | Production upgrade failure or data loss.                                                        | Fixed; fresh, populated `0020 -> current`, and later upgrade paths are verified.                                                                                                                   |
+| High     | Deployed runtime configuration accepted development secrets/origins/cookies/mock-provider combinations.                                                                        | Insecure preview/production boot.                                                               | Fixed with cached typed fail-closed Core/Web validation.                                                                                                                                           |
+| High     | A first-touch cart race could create multiple active carts; mutation lacked complete version/idempotency semantics.                                                            | Split customer state and lost concurrent updates.                                               | Fixed with reconciliation/index, first-touch conflict handling, expected versions, and stable idempotency.                                                                                         |
+| High     | Provider inbox retry records lacked durable lease/redrive/escalation behavior.                                                                                                 | Webhooks could remain indefinitely unprocessed or process concurrently.                         | Fixed with normalized observations, leases, bounded backoff, scheduler redrive, and one-time escalation.                                                                                           |
+| High     | Renewal initiation ownership was ambiguous and scheduler recovery incomplete.                                                                                                  | Duplicate/misowned billing attempts or missed confirmed outcomes.                               | Fixed with explicit disabled-by-default ownership gate; outcome/dunning/grace recovery continues independently.                                                                                    |
+| High     | The Core entrypoint and legacy contract barrel are collision hotspots with weak executable layer enforcement.                                                                  | Review difficulty, cross-context coupling, and repeated concurrent conflicts.                   | Fixed for the authorized non-Admin/non-Maps transport through bounded adapters, contract manifests, and an AST architecture gate; excluded entrypoint methods remain explicit.                     |
+| High     | Public request bodies are inconsistently bounded and Web security/correlation policy is incomplete.                                                                            | Memory abuse, unsafe media/body handling, inconsistent CSP/headers, weak incident traceability. | Fixed for authorized route families with incremental bounded readers, UUID correlation, request-nonce CSP, and live hydration acceptance; excluded Admin/Maps direct reads remain owner follow-up. |
+| High     | Customer Membership, promotion checkout, order detail, reorder, issues, abandonment, amendments, notifications, invoice readiness, and explicit mode selection are incomplete. | Canonical MVP cannot be considered launch-complete.                                             | Fixed and locally verified in Program 4; external production-provider/policy gates remain explicit.                                                                                                |
+| Medium   | Catalog generation depended on migrations beyond the schema boundary it owns; storefront assertions and dependency audit were stale.                                           | Generator breakage from unrelated later schema and false verification failures.                 | Fixed; owned-boundary generation, current assertions, and a narrow esbuild override now pass.                                                                                                      |
+| Medium   | Production lint/generated-type/readiness warnings and transport duplication remain.                                                                                            | Operational noise and slower safe changes.                                                      | Included in Program 3 acceptance.                                                                                                                                                                  |
 
 ## Implemented remediation
 
@@ -115,11 +115,11 @@ Worker types, and representative live auth/Admin/Maps acceptance.
 Implementation report:
 `docs/superpowers/reports/ARCHITECTURE_SECURITY_HARDENING_FINAL.md`.
 
-## Remaining approved work
+## Implemented customer completion
 
 ### Program 4 — Customer MVP completion
 
-The approved plan will deliver:
+The implemented plan delivers:
 
 - a Core-owned Membership experience and complete lifecycle target surface;
 - deterministic one-merchandise-plus-one-delivery checkout promotions with commit-time redemption;
@@ -134,6 +134,7 @@ The approved plan will deliver:
 - a managed end-to-end journey covering the complete customer path.
 
 Plan: `docs/superpowers/plans/2026-08-30/CUSTOMER_MVP_COMPLETION_IMPLEMENTATION.md`.
+Final evidence: `docs/superpowers/reports/CUSTOMER_MVP_COMPLETION_REPORT.md`.
 
 ## Verification evidence for completed programs
 

@@ -48,3 +48,9 @@ directly from Core through the Service Binding (`coreClient(env.CORE)`); it does
   banners, add-to-cart stepper, cart indicator, toast announcer, quick-view provider/dialog).
 - `tests/storefront-home.spec.ts` covers anonymous browse, server-side filtering, the quick-view
   dialog, and the sign-in boundary against a provisioned local stack.
+
+## Customer checkout and orders
+
+`/checkout` loads only Maps-confirmed saved addresses and calls the thin `/api/checkout/fulfillment-options` adapter after a nonempty authenticated cart exists. It displays Core-provided Instant/Scheduled availability, promise/window, and fee previews without exposing a fulfillment hub. Address, cart, Promotion, or option changes abandon any prior accepted Quote and require a new explicit total acceptance.
+
+`/orders` and `/orders/[order-id]` render Core-owned summaries, immutable detail/timeline, current-state reorder results, typed issue intake, committed-cancellation unavailability, and eligible additive-amendment payment actions. Web does not infer provider success, refunds, invoice issuance, or legal actions.

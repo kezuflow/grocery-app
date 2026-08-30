@@ -348,16 +348,16 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
 
 ## Maturity by area
 
-| Area                       | Current evidence                                                                     | Not established                                              |
-| -------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests              | Production deployment acceptance                             |
-| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                   | Production sender/domain and OAuth configuration             |
-| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                         | Approved production polygons/geocoder and Mapbox secret      |
-| Checkout/orders            | Authoritative quote revalidation, mock payment reaction, immutable order snapshots   | Full authenticated browser acceptance and production payment |
-| Membership                 | Provider-neutral states, trial/authorization/renewal test seams                      | Approved production mandates and automatic charges           |
-| Operations                 | Scoped commands/read models and local integration tests                              | Complete staff/rider authenticated Playwright acceptance     |
-| Notifications              | Auth verification/reset only                                                         | Product notification Program 6                               |
-| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright | Production deployment acceptance remains external            |
+| Area                       | Current evidence                                                                                                                         | Not established                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests                                                                  | Production deployment acceptance                            |
+| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                                                                       | Production sender/domain and OAuth configuration            |
+| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                                                                             | Approved production polygons/geocoder and Mapbox secret     |
+| Checkout/orders            | Opaque Core fulfillment options, accepted quotes/promotions, mock payment reaction, immutable detail/timeline, reorder/issues/amendments | Production payment and committed-cancellation/refund policy |
+| Membership                 | Customer experience plus provider-neutral trial/authorization/renewal state                                                              | Approved production mandates and automatic charges          |
+| Operations                 | Scoped commands/read models and local integration tests                                                                                  | Complete staff/rider authenticated Playwright acceptance    |
+| Notifications              | Durable launch email outbox/attempts, leases, retry and safe projection                                                                  | Production sender/domain and delivery acceptance            |
+| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright                                                     | Production deployment acceptance remains external           |
 
 ## Verification truthfulness
 
@@ -376,7 +376,8 @@ have been executed.
 - Select and approve a production grocery/recurring payment provider and define its mandate, retry,
   reconciliation, and refund policies.
 - Decide membership-cancellation customer UX and effective timing before exposing a command.
-- Configure an onboarded Cloudflare Email Service sender and the Core Mapbox secret outside source.
-- Complete Programs 6-14 without treating current schemas or plans as implemented product behavior.
+- Configure an onboarded transactional email sender/adapter and the Core Mapbox secret outside source.
+- Approve BIR seller/tax/serial/retention policy before invoice issuance.
+- Treat the Customer MVP implementation as locally verified product behavior only after the current-tree completion report gates pass; production deployment acceptance remains external.
 - Provision authenticated staff/rider/customer browser test identities and run the written
   Playwright acceptance journeys without skips.

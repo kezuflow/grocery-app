@@ -127,6 +127,11 @@ The MVP may operate one live fulfillment location, but its domain/data model mus
 28. Customer grocery-order cancellation is absent from the mock-payment MVP. A successful payment followed by commitment failure is retried idempotently against the same payment and escalates visibly after bounded failure without a duplicate payment/order or inferred automatic refund.
 29. The basket minimum is enforced authoritatively against pre-discount merchandise only in both Instant and Scheduled checkout. Payment readiness recalculates without creating a replacement Quote, and identical replay returns the original unexpired provider continuation before Quote-state checks.
 30. Paid commitment atomically guards accepted-Quote consumption and Scheduled capacity. Refund requests atomically reserve outstanding and successful refund value so concurrent requests cannot exceed captured funds.
+31. Customer checkout lists opaque Core-routed Instant/Scheduled options only after a confirmed serviceable address and nonempty current cart; stale address/cart/routing/cycle evidence fails closed and no customer selects a hub.
+32. Customer Order detail exposes immutable commercial/fulfillment history, a safe timeline, current legal actions, typed issues, additive amendments, notification state, and invoice availability without provider, staff-only, or routing-authority leakage.
+33. Committed grocery-order cancellation remains unavailable to customers until cancellation/refund policy is approved. Pre-commit Quote abandonment is explicit, idempotent, and releases only provisional Instant holds or Scheduled capacity.
+34. Launch transactional notification intent is durable in D1 and retried independently of domain success. Core uses its Cloudflare Send Email adapter only when `EMAIL` and `AUTH_EMAIL_FROM` are configured; production delivery is not launch-ready until that sender domain is onboarded and verified.
+35. Invoice readiness records exact committed evidence but does not claim official issuance, tax computation, or BIR compliance before the owner-approved accounting policy and serial/retention implementation.
 
 ## Phase 1.5
 

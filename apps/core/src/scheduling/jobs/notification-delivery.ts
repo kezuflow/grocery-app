@@ -1,13 +1,12 @@
 import { deliverNotifications } from "../../notifications/application/deliver-notifications";
 import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
-import { disabledEmailDeliveryPort } from "../../notifications/infrastructure/email-delivery-port";
 import type { ScheduledJob } from "../types";
 
 export const notificationDeliveryJob: ScheduledJob = {
   name: "notifications.delivery",
-  async run({ database, now }) {
+  async run({ database, emailDelivery, now }) {
     const projected = await projectDomainNotifications(database, now);
-    const delivery = await deliverNotifications(database, disabledEmailDeliveryPort, now);
+    const delivery = await deliverNotifications(database, emailDelivery, now);
     return {
       status: "SUCCEEDED",
       affected: projected + delivery.delivered,

@@ -1,4 +1,5 @@
 import type { PaymentProviderRegistry } from "../payments/ports/provider-registry";
+import type { EmailDeliveryPort } from "../notifications/infrastructure/email-delivery-port";
 
 /** Outcome of one scheduled job attempt. */
 export interface ScheduledJobOutcome {
@@ -15,6 +16,7 @@ export interface ScheduledJobContext {
   readonly registry: PaymentProviderRegistry;
   /** Explicit ownership gate; false still permits confirmed-outcome/grace reconciliation. */
   readonly renewalInitiationEnabled: boolean;
+  readonly emailDelivery: EmailDeliveryPort;
   readonly now: number;
 }
 

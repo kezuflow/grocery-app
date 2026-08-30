@@ -108,7 +108,7 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 - `catalog.search({ query, categoryId?, cursor?, limit? }) -> ProductSearchPage`
 - `catalog.getProduct({ slug, addressId? }) -> MarketplaceProductView`
 - `catalog.listCategories({ parentId? }) -> CategoryNavigationView`
-- `fulfillment.getOptions({ addressId, cartId }) -> FulfillmentOptionView[]`
+- `checkout.listFulfillmentOptions({ addressId, addressVersion, cartId, cartVersion }) -> FulfillmentOptionView[]`
 
 `MarketplaceProductView` includes customer display data and persisted fixed variants with `skuId`, display/packaging label (`500 g`, `1 pack`), optional `Pack`/`Bunch` merchandising label, integer sell quantity, controlled sell-unit code/display (`G`/`KG`/`PC`), exact integer base-unit consumption, core-resolved media (`src` + `alt`) with ordered customer-facing product details, an approximate assembled-pack contents note, the current SKU/market/location quoteable price, availability messaging, and fulfillment context. Staff packing instructions never appear in any public DTO. It does not expose inventory ledger quantities unless a deliberate customer-facing availability field is defined. Sellable sizes are returned from database configuration, not a hard-coded union.
 
@@ -207,8 +207,8 @@ Cart `quantity` is an integer count of the configured SKU, never kilograms/liter
 
 ## Checkout Eligibility and Quote
 
-- `checkout.evaluate({ cartId, addressId, fulfillmentOptionId, promotionCodes? }) -> CheckoutEligibilityView`
-- `checkout.createQuote({ cartId, cartVersion, addressId, deliveryCycleId, idempotencyKey }) -> CheckoutQuoteView`, where `deliveryCycleId: null` selects `INSTANT` and a non-empty cycle identifier selects `SCHEDULED`.
+- `checkout.evaluate({ cartId, addressId, cycleId }) -> CheckoutEligibilityView` is a deprecated Scheduled-only compatibility read; current Web uses `listFulfillmentOptions` followed by authoritative `createQuote` and does not call it.
+- `checkout.createQuote({ cartId, cartVersion, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutQuoteView`; the opaque option binds address/cart versions, mode, internal routing, and any Scheduled cycle. Web never submits a location or cycle as fulfillment authority.
 - `checkout.refreshQuote({ checkoutAttemptId }) -> CheckoutQuoteView`
 
 The view reports each eligibility dimension, explicit financial components, price/availability changes, resolved serviceability, selected `INSTANT`/`SCHEDULED` option, delivery promise, Instant hold status or Scheduled cycle/capacity status, applied/rejected Promotions by price component, and available alternatives. Sensitive location-selection rules remain internal.
@@ -216,6 +216,8 @@ The view reports each eligibility dimension, explicit financial components, pric
 `CheckoutQuoteView` contains `merchandiseSubtotalMinor`, `itemDiscountMinor`, `orderDiscountMinor`, `deliverySubtotalMinor`, `deliveryDiscountMinor`, `serviceFeeMinor`, `taxMinor`, `totalMinor`, and currency. `subtotalMinor`, `discountMinor`, and `deliveryFeeMinor` remain compatibility projections. Item lines snapshot SKU quantity/unit/base consumption and allocated discount. The internal quote snapshot also records provider-neutral route meters, delivery minimum/rate, calculated fee, configuration version, and road-route/driving calculation metadata. Percentage/fixed Order benefits use only the approved merchandise basis; Delivery benefits use only delivery fee.
 
 The authoritative service validates authenticated Customer, subscription, cart, SKU/market/location prices, minimum basket, address coordinates, service area, zone, resolved location and active mode, mode-specific inventory hold or cycle/cutoff/capacity, Promotions eligibility/limits/stacking, provider-neutral route distance, effective delivery-fee configuration, and payment readiness. External route/configuration failure fails closed. For each Order quote it selects at most one merchandise benefit and one delivery benefit; a valid explicit selection wins its component, otherwise highest computed value then stable Promotion ID determines the winner.
+
+Fulfillment-option reads require a Maps-confirmed, active, Core-serviceable Customer address and an owned nonempty active cart at the submitted versions. Both `INSTANT` and `SCHEDULED` are returned as stable customer-facing choices even when unavailable, with a controlled reason and provisional promise/fee context. The option ID is opaque and re-resolved by Core at Quote creation; address/cart/routing/cycle changes fail closed. An identical Quote idempotency replay returns the original immutable Quote even when current routing later changes, while the same key with another option is `IDEMPOTENCY_CONFLICT`.
 
 ## Checkout, Payment, and Order Commitment
 

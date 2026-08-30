@@ -647,10 +647,16 @@ Add explicitly prioritized post-MVP capabilities without destabilizing the commi
 
 Stable MVP operations and observability.
 
-### Candidate work
+### Implemented Customer MVP work
 
-- Grocery promotion subset and stacking beyond the introductory membership trial already owned by Phase 4.
-- Notifications and analytics projections/events.
+- Controlled grocery Order/Delivery Promotion rules, deterministic two-component stacking, Quote claims, and commit-time redemptions.
+- Customer Membership experience, immutable Order detail/timeline, current-state reorder, typed issue intake, pre-commit abandonment, and Scheduled-before-cutoff paid additive amendments.
+- D1 notification outbox/attempt processing and invoice-readiness evidence. Production sender and official accounting/tax issuance remain owner-gated.
+- Opaque Core-routed Instant/Scheduled fulfillment options bound to confirmed address/cart versions.
+- Versioned Analytics definitions and read-side projections/events.
+
+### Remaining candidate work
+
 - Recurring subscription orders.
 - Multi-location candidates, transfers, richer proof, and capacity escalation.
 

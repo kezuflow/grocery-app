@@ -149,6 +149,11 @@ describe("customer checkout flow", () => {
     // Canonical authoritative quote (idempotent replay, no payment artifacts).
     const cartNow = await core.getCart(request());
     if (!cartNow.ok) throw new Error("cart unavailable");
+    await env.DB.prepare(
+      "INSERT INTO fulfillment_location_mode (location_id,active_mode,cadence,promise_minutes,max_concurrent_instant_orders,version,created_at,updated_at) VALUES ('location-cebu-central','SCHEDULED','WEEKLY',NULL,NULL,1,?,?)",
+    )
+      .bind(Date.now(), Date.now())
+      .run();
     const options = await core.listFulfillmentOptions({
       ...request(),
       addressId: address.value.id,

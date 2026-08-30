@@ -12,6 +12,9 @@ describe("listFulfillmentOptions", () => {
     const now = Date.now();
     await env.DB.batch([
       env.DB.prepare(
+        "INSERT INTO fulfillment_location_mode (location_id,active_mode,cadence,promise_minutes,max_concurrent_instant_orders,version,created_at,updated_at) VALUES ('location-cebu-central','SCHEDULED','WEEKLY',NULL,NULL,1,?,?)",
+      ).bind(now, now),
+      env.DB.prepare(
         "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
       ).bind(customerId, `auth-${customerId}`, now, now),
       env.DB.prepare(
