@@ -71,7 +71,7 @@ Run: `pnpm --filter @freshmarkets/web test -- lib/runtime lib/auth/proxy.test.ts
 ## Task 4: Active-Cart Database Invariant and Reconciliation
 
 **Files:**
-- Create: `apps/core/migrations/0045_cart_and_inbox_reliability.sql` (renumber at integration if another accepted task claims `0045`)
+- Create: `apps/core/migrations/0046_cart_and_inbox_reliability.sql` (final integrated number after Maps claimed `0043` and the two financial migrations shifted to `0044`/`0045`)
 - Create: `apps/core/src/checkout/infrastructure/cart-reliability-migration.integration.test.ts`
 - Modify: `docs/architecture/DATA_MODEL.md`
 

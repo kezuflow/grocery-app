@@ -1,4 +1,4 @@
--- 0043_financial_safety.sql
+-- 0044_financial_safety.sql
 -- Explicit quote/order monetary components, resumable provider actions, and
 -- one committed order per accepted checkout quote.
 

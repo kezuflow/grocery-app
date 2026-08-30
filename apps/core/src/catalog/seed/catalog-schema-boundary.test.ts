@@ -6,7 +6,7 @@ describe("selectCatalogSchemaMigrations", () => {
     expect(
       selectCatalogSchemaMigrations(
         [
-          "0045_cart_and_inbox_reliability.sql",
+          "0046_cart_and_inbox_reliability.sql",
           "0025_complete_produce_catalog.sql",
           "0004_phase3_catalog.sql",
           "0024_catalog_details_and_sku_availability.sql",

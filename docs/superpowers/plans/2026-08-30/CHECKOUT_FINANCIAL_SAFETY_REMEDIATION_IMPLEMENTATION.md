@@ -18,7 +18,7 @@
 - A provider-confirmed canonical `SUCCEEDED` outcome is required for paid membership and order commitment; browser return state and payment initiation are never sufficient.
 - Application commands use stable idempotency keys; provider events use `(provider, providerEventId)` and never accept `expectedVersion`.
 - Every behavioral implementation starts with an observed failing test and ends with focused Worker-local tests before a commit.
-- Use migration `0043_financial_safety.sql` in this detached worktree; if Admin or Maps claims `0043` before integration, renumber this unapplied migration without changing its contents.
+- The detached implementation used `0043_financial_safety.sql`; integration preserved Maps-owned `0043_delivery_batches_and_map_stops.sql` and renumbered the unapplied financial migration to final path `0044_financial_safety.sql` without changing its SQL behavior.
 - Preserve compatibility at the Web/Core boundary while both deployments may be version-skewed.
 
 ---
@@ -98,7 +98,7 @@ git commit -m "fix(membership): centralize checkout entitlement"
 ### Task 2: Explicit Financial Snapshot Schema and Repository Model
 
 **Files:**
-- Create: `apps/core/migrations/0043_financial_safety.sql`
+- Create: `apps/core/migrations/0044_financial_safety.sql`
 - Create: `apps/core/src/checkout/infrastructure/financial-safety-migration.integration.test.ts`
 - Modify: `apps/core/src/checkout/domain/quote.ts`
 - Modify: `apps/core/src/checkout/infrastructure/d1-checkout-repository.ts`
@@ -179,7 +179,7 @@ Expected: PASS and old stored quotes remain readable through the compatibility p
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add apps/core/migrations/0043_financial_safety.sql apps/core/src/checkout packages/contracts/src/checkout.ts packages/contracts/src/checkout.test.ts
+git add apps/core/migrations/0044_financial_safety.sql apps/core/src/checkout packages/contracts/src/checkout.ts packages/contracts/src/checkout.test.ts
 git commit -m "feat(checkout): persist explicit financial components"
 ```
 

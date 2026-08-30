@@ -444,13 +444,13 @@ assert.throws(
 analyticsUpgrade.close();
 
 // A live database can contain duplicate ACTIVE carts because the historical
-// schema had only a non-unique customer/status index. Verify the 0045
+// schema had only a non-unique customer/status index. Verify the 0046
 // reconciliation chooses the newest cart, preserves/merges lines, records safe
 // evidence, and only then establishes the uniqueness invariant.
 const cartUpgrade = database();
 apply(
   cartUpgrade,
-  migrations.filter((migration) => migration.name <= "0044_finance_exception_taxonomy.sql"),
+  migrations.filter((migration) => migration.name <= "0045_finance_exception_taxonomy.sql"),
 );
 cartUpgrade.exec(`
   INSERT INTO customer (id, auth_user_id, status, created_at, updated_at)
@@ -467,7 +467,7 @@ cartUpgrade.exec(`
 `);
 apply(
   cartUpgrade,
-  migrations.filter((migration) => migration.name === "0045_cart_and_inbox_reliability.sql"),
+  migrations.filter((migration) => migration.name === "0046_cart_and_inbox_reliability.sql"),
 );
 assert.deepEqual(
   cartUpgrade
@@ -515,5 +515,5 @@ assert.deepEqual(cartUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
 cartUpgrade.close();
 
 console.log(
-  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, and 0044 -> 0045 cart reliability upgrades are valid.",
+  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, and 0045 -> 0046 cart reliability upgrades are valid.",
 );
