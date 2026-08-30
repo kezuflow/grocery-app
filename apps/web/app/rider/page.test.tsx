@@ -343,15 +343,21 @@ describe("RiderPage batch workflow", () => {
   });
 
   it("retains and reuses the exact key after an ambiguous result with accessible retry messaging", async () => {
-    const current = delivery({ jobId: "retry", sequence: 1 });
+    const current = delivery({
+      jobId: "retry",
+      sequence: 1,
+      status: "ARRIVED",
+      allowedActions: ["MARK_DELIVERED", "MARK_FAILED"],
+    });
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(rpc(batches(current)))
       .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(rpc(batches(current)))
       .mockResolvedValueOnce(
         Response.json({
           ok: true,
-          value: { id: "order-retry", status: "EN_ROUTE" },
+          value: { id: "order-retry", status: "DELIVERED" },
           requestId: "command",
         }),
       )
@@ -361,26 +367,112 @@ describe("RiderPage batch workflow", () => {
     await flush();
 
     act(() =>
-      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_DELIVERED"]')!.click(),
     );
     await flush();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/rider/batches");
     const firstHeaders = new Headers((fetchMock.mock.calls[1]![1] as RequestInit).headers);
 
     act(() =>
-      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_FAILED"]')!.click(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Another update for this delivery is unresolved",
+    );
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_DELIVERED"]')!.click(),
     );
     expect(container.querySelector('[role="status"]')?.textContent).toContain(
       "Retrying saved delivery update",
     );
     await flush();
 
-    const retryHeaders = new Headers((fetchMock.mock.calls[2]![1] as RequestInit).headers);
+    const retryHeaders = new Headers((fetchMock.mock.calls[3]![1] as RequestInit).headers);
     expect(retryHeaders.get("idempotency-key")).toBe(firstHeaders.get("idempotency-key"));
     expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "Delivery is now en route",
+      "Delivery is now delivered",
     );
+    act(() => root.unmount());
+  });
+
+  it("reconciles saved ambiguous evidence when the best-effort refresh finds a present changed job", async () => {
+    const original = delivery({ jobId: "advanced-now", sequence: 1 });
+    const changed = delivery({
+      jobId: "advanced-now",
+      sequence: 1,
+      status: "EN_ROUTE",
+      jobVersion: 8,
+      allowedActions: ["MARK_ARRIVED"],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(original)))
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(rpc(batches(changed)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
+    expect(container.querySelector('[data-testid="current-delivery"]')?.textContent).toContain(
+      "en route",
+    );
+    expect(container.querySelector('[data-rider-action="MARK_ARRIVED"]')).not.toBeNull();
+    expect(window.sessionStorage.getItem("freshmarkets:rider-command-intents:v1")).not.toContain(
+      "advanced-now",
+    );
+    act(() => root.unmount());
+  });
+
+  it.each([
+    ["refresh failure", () => Promise.reject(new TypeError("refresh lost"))],
+    ["absent filtered job", () => Promise.resolve(rpc(batches(null)))],
+  ])("preserves ready UI, notice, key, and job lock after %s", async (_case, refreshResult) => {
+    const current = delivery({
+      jobId: "preserved",
+      sequence: 1,
+      status: "ARRIVED",
+      allowedActions: ["MARK_DELIVERED", "MARK_FAILED"],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockRejectedValueOnce(new TypeError("command lost"))
+      .mockImplementationOnce(refreshResult);
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_DELIVERED"]')!.click(),
+    );
+    await flush();
+    const stored = window.sessionStorage.getItem("freshmarkets:rider-command-intents:v1");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
+    expect(container.querySelector('[data-testid="current-delivery"]')?.textContent).toContain(
+      "preserved Mango Avenue",
+    );
+    expect(stored).toContain("preserved:MARK_DELIVERED");
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_FAILED"]')!.click(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Another update for this delivery is unresolved",
+    );
+    expect(window.sessionStorage.getItem("freshmarkets:rider-command-intents:v1")).toBe(stored);
     act(() => root.unmount());
   });
 
@@ -647,7 +739,8 @@ describe("RiderPage batch workflow", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(rpc(batches(current)))
-      .mockResolvedValueOnce(Response.json(commandResult));
+      .mockResolvedValueOnce(Response.json(commandResult))
+      .mockResolvedValueOnce(rpc(batches(current)));
     vi.stubGlobal("fetch", fetchMock);
     const { container, root } = await mount();
     await flush();
@@ -657,7 +750,7 @@ describe("RiderPage batch workflow", () => {
     );
     await flush();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
     act(() => root.unmount());
   });
@@ -687,7 +780,8 @@ describe("RiderPage batch workflow", () => {
             value: { id: returnedId, status: returnedStatus },
             requestId: "command",
           }),
-        );
+        )
+        .mockResolvedValueOnce(rpc(batches(current)));
       vi.stubGlobal("fetch", fetchMock);
       const { container, root } = await mount();
       await flush();
@@ -697,7 +791,7 @@ describe("RiderPage batch workflow", () => {
       );
       await flush();
 
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(container.querySelector('[role="alert"]')?.textContent).toContain(
         "result is uncertain",
       );

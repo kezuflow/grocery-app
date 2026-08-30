@@ -197,6 +197,24 @@ export default function RiderPage() {
     void load();
   }, [load]);
 
+  const reconcileAfterAmbiguous = useCallback(async (command: RiderCommandEvidence) => {
+    try {
+      const response = await fetch("/api/rider/batches");
+      const payload = (await response.json()) as { ok: boolean; value?: RiderBatchList };
+      if (payload.ok !== true || !payload.value) return;
+      const authoritativeDeliveries = payload.value.batches.flatMap((batch) =>
+        batch.currentDelivery
+          ? [batch.currentDelivery, ...batch.upcomingDeliveries]
+          : [...batch.upcomingDeliveries],
+      );
+      if (!authoritativeDeliveries.some((delivery) => delivery.jobId === command.jobId)) return;
+      intentStore.current!.reconcile(authoritativeDeliveries.map(authoritativeJob));
+      setState({ phase: "ready", value: payload.value });
+    } catch {
+      // This is a best-effort reconciliation read. Keep the prior ready UI and saved intent.
+    }
+  }, []);
+
   async function act(delivery: RiderDeliveryView, action: RiderAction) {
     const actionId = `${delivery.jobId}:${action}`;
     const evidence = commandEvidence(delivery, action);
@@ -274,6 +292,7 @@ export default function RiderPage() {
         kind: "error",
         message: "The update result is uncertain. Retry will safely reuse the saved request.",
       });
+      await reconcileAfterAmbiguous(evidence);
     } finally {
       setPendingAction(null);
     }
