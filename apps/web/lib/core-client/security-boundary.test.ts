@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import nextConfig from "../../next.config";
+import { resolveSecurityHeaderEnvironment, webSecurityHeaders } from "../security/headers";
 import { requestHeaders } from "./request";
 
 describe("Core client request boundary", () => {
@@ -62,13 +63,7 @@ describe("Core client request boundary", () => {
     expect(configuredHeaders).toEqual([
       {
         source: "/:path*",
-        headers: [
-          {
-            key: "Content-Security-Policy",
-            value:
-              "worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' https://api.mapbox.com https://events.mapbox.com",
-          },
-        ],
+        headers: webSecurityHeaders(resolveSecurityHeaderEnvironment(process.env)),
       },
     ]);
 

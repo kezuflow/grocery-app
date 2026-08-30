@@ -53,7 +53,8 @@ Before enabling address persistence in an environment, verify the Mapbox account
 
 ## Content Security Policy
 
-`apps/web/next.config.ts` currently delivers this exact `Content-Security-Policy` header for every Web path:
+`apps/web/next.config.ts` delivers a complete environment-safe `Content-Security-Policy` for every
+Web path. Its Mapbox-required directive subset is kept exact:
 
 ```text
 worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' https://api.mapbox.com https://events.mapbox.com
