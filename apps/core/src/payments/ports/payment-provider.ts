@@ -113,4 +113,14 @@ export interface PaymentProvider {
     amountMinor: number;
     currency: string;
   }): Promise<{ ok: true; providerRefundReference: string } | { ok: false; errorCode: string }>;
+
+  /** Non-production adapter hook that still emits a normally signed raw event. */
+  createTestEvent?(input: {
+    providerEventId: string;
+    providerReference: string;
+    outcome: "SUCCEEDED" | "FAILED" | "EXPIRED";
+    amountMinor: number;
+    currency: string;
+    observedAt: number;
+  }): Promise<{ rawBody: string; headers: Headers }>;
 }

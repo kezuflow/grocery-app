@@ -2218,6 +2218,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   ) {
     return this.paymentsRpc.completeRecurringAuthorization(input);
   }
+  async simulateMockProviderEvent(
+    input: import("@freshmarkets/contracts").SimulateMockPaymentRequest,
+  ) {
+    return this.paymentsRpc.simulateMockProviderEvent(input);
+  }
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,
   ) {

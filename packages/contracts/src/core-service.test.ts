@@ -22,7 +22,12 @@ import type {
 } from "./core-service";
 import type { CheckoutQuoteCommandRequest } from "./checkout";
 import type { SubscriptionSummary } from "./membership";
-import type { PaymentActionView, PaymentSummary } from "./payments";
+import type {
+  PaymentActionView,
+  PaymentSummary,
+  SimulateMockPaymentRequest,
+  MockPaymentSimulationView,
+} from "./payments";
 import type { OperationsService } from "./operations";
 import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
 import { appErrorCodes, type RpcResult } from "./common";
@@ -60,6 +65,26 @@ type HasGenericStringAction = {
 }[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
+  it("publishes a constrained mock simulator without client-controlled money", () => {
+    type SimulationSignature = Expect<
+      Equal<
+        CoreServiceBinding["simulateMockProviderEvent"],
+        (request: SimulateMockPaymentRequest) => Promise<RpcResult<MockPaymentSimulationView>>
+      >
+    >;
+    type RequestKeys = keyof SimulateMockPaymentRequest;
+    type HasAmount = "amountMinor" extends RequestKeys ? true : false;
+    type HasCurrency = "currency" extends RequestKeys ? true : false;
+    type HasCustomer = "customerId" extends RequestKeys ? true : false;
+
+    void (true as SimulationSignature);
+    expect([false, false, false] satisfies [HasAmount, HasCurrency, HasCustomer]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+  });
+
   it("publishes typed commerce pricing configuration commands", () => {
     type MembershipPriceUpdate = Parameters<
       CommerceConfigurationService["updateMembershipPriceConfiguration"]

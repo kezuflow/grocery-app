@@ -21,6 +21,8 @@ describe("account Membership experience", () => {
         experience={{
           offer: {
             offerId: "offer",
+            priceVersionId: "membership-price-version-1",
+            priceVersion: 1,
             code: "MEMBERSHIP_MONTHLY",
             name: "Market Plus",
             amountMinor: 41200,

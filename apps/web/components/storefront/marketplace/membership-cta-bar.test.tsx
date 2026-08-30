@@ -19,6 +19,8 @@ import { MembershipCtaBar } from "./membership-cta-bar";
 const experience = {
   offer: {
     offerId: "offer",
+    priceVersionId: "membership-price-version-1",
+    priceVersion: 1,
     code: "MEMBERSHIP_MONTHLY",
     name: "FreshMarkets Membership",
     amountMinor: 41200,

@@ -62,7 +62,10 @@ export interface ImplementedCoreService
     Pick<AuthService, "auth" | "getApplicationContext">,
     CatalogService,
     MembershipService,
-    Pick<PaymentsService, "beginRecurringAuthorization" | "completeRecurringAuthorization">,
+    Pick<
+      PaymentsService,
+      "beginRecurringAuthorization" | "completeRecurringAuthorization" | "simulateMockProviderEvent"
+    >,
     CheckoutService,
     OrdersService,
     OperationsReadService,
@@ -254,6 +257,7 @@ export const coreServiceMethodNames = [
   "cancelSubscription",
   "beginRecurringAuthorization",
   "completeRecurringAuthorization",
+  "simulateMockProviderEvent",
   "getSubscriptionEligibility",
   "listDeliveryCycles",
   "getCart",

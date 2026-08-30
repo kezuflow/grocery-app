@@ -115,11 +115,21 @@ export function createMockPaymentProvider(): PaymentProvider {
       };
     },
     async createPayment(input) {
+      const providerReference = `mock_pay_${input.idempotencyKey}`;
+      const returnUrl = new URL(input.returnUrl);
+      const simulatorUrl = new URL(
+        `/development/mock-payments/${encodeURIComponent(providerReference)}`,
+        returnUrl.origin,
+      );
+      simulatorUrl.searchParams.set(
+        "returnTo",
+        `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`,
+      );
       return {
         ok: true,
-        providerReference: `mock_pay_${input.idempotencyKey}`,
+        providerReference,
         actionType: "REDIRECT",
-        redirectUrl: `https://mock.pay.invalid/checkout/${encodeURIComponent(input.idempotencyKey)}?return=${encodeURIComponent(input.returnUrl)}`,
+        redirectUrl: simulatorUrl.toString(),
         clientToken: null,
         expiresAt: Date.now() + 15 * 60 * 1000,
       };
@@ -248,6 +258,39 @@ export function createMockPaymentProvider(): PaymentProvider {
       return {
         ok: true,
         providerRefundReference: `mock_refund_${input.refundProviderIdempotencyKey}`,
+      };
+    },
+    async createTestEvent(input) {
+      const rawBody = JSON.stringify({
+        eventId: input.providerEventId,
+        reference: input.providerReference,
+        vendorState:
+          input.outcome === "SUCCEEDED"
+            ? "paid"
+            : input.outcome === "FAILED"
+              ? "failed"
+              : "expired",
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+        ...(input.outcome === "SUCCEEDED"
+          ? {
+              settlement: {
+                grossMinor: input.amountMinor,
+                processingCostMinor: 0,
+                withholdingMinor: 0,
+                adjustmentMinor: 0,
+                netMinor: input.amountMinor,
+              },
+            }
+          : {}),
+      });
+      return {
+        rawBody,
+        headers: new Headers({
+          "content-type": "application/json",
+          "x-mock-signature": await mockSignatureFor(rawBody),
+          "x-mock-timestamp": String(input.observedAt),
+        }),
       };
     },
   };

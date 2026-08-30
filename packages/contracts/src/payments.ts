@@ -90,6 +90,27 @@ export type RefundView = {
   state: RefundState;
 };
 
+export type MockPaymentOutcome = "SUCCEEDED" | "FAILED" | "EXPIRED";
+
+export type SimulateMockPaymentRequest = AuthenticatedRequest & {
+  providerReference: string;
+  outcome: MockPaymentOutcome;
+  idempotencyKey: string;
+};
+
+export type MockPaymentSimulationView = {
+  providerReference: string;
+  outcome: MockPaymentOutcome;
+  processingStatus:
+    | "APPLIED"
+    | "DUPLICATE"
+    | "RETRY_REQUIRED"
+    | "RECONCILIATION_REQUIRED"
+    | "REJECTED";
+  paymentIntentId: string;
+  committedOrderId: string | null;
+};
+
 /**
  * Canonical payments target port. Payment success is always a canonical
  * provider-confirmed outcome; browser or initiation state never maps to
@@ -107,6 +128,9 @@ export type PaymentsService = {
   recoverMembershipActivation(
     request: RecoverActivationRequest,
   ): Promise<RpcResult<SubscriptionActivationResult>>;
+  simulateMockProviderEvent(
+    request: SimulateMockPaymentRequest,
+  ): Promise<RpcResult<MockPaymentSimulationView>>;
 };
 
 export type PaymentIntentCommandRequest = AuthenticatedRequest & {

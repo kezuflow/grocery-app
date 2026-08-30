@@ -66,7 +66,10 @@ describe("payment intent creation", () => {
     if (!result.ok) return;
     expect(result.value.state).toBe("REQUIRES_ACTION");
     expect(result.value.actionType).toBe("REDIRECT");
-    expect(result.value.redirectUrl).toContain("mock.pay.invalid");
+    expect(result.value.redirectUrl).toContain(
+      "https://app.example/development/mock-payments/mock_pay_",
+    );
+    expect(result.value.redirectUrl).toContain("returnTo=%2Fmembership");
     const { row, attempts } = await intentRows(attempt.idempotencyKey);
     expect(row).toMatchObject({ status: "REQUIRES_ACTION", version: 2 });
     expect(attempts).toBe(1);

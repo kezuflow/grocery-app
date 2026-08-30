@@ -3,18 +3,45 @@ import type {
   BeginRecurringAuthorizationRequest,
   CompleteRecurringAuthorizationRequest,
   PaymentIntentCommandRequest,
+  SimulateMockPaymentRequest,
 } from "@freshmarkets/contracts";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
 import { beginRecurringAuthorization } from "../payments/application/begin-recurring-authorization";
 import { completeRecurringAuthorization } from "../payments/application/complete-recurring-authorization";
 import { createCheckoutPaymentIntent } from "../payments/application/create-checkout-payment-intent";
 import { createAmendmentPaymentIntent } from "../payments/application/create-amendment-payment-intent";
+import { simulateMockProviderEvent as simulateMockProviderEventCommand } from "../payments/application/simulate-mock-provider-event";
 import { authenticatedRequestSchema, createPaymentIntentSchema } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { rpcFailure, validationFailure } from "./validation-errors";
 
 export function createPaymentsRpc(context: CoreRpcContext) {
   return {
+    async simulateMockProviderEvent(input: SimulateMockPaymentRequest) {
+      const environment = context.runtimeConfiguration().environment;
+      if (environment !== "development" && environment !== "test")
+        return rpcFailure("NOT_FOUND", "Payment simulator not found", input.requestId);
+      const validation = authenticatedRequestSchema
+        .extend({
+          providerReference: validationSchema.string().trim().min(1).max(256),
+          outcome: validationSchema.enum(["SUCCEEDED", "FAILED", "EXPIRED"]),
+          idempotencyKey: idempotencyKeySchema,
+        })
+        .strict()
+        .safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return simulateMockProviderEventCommand(context.env.DB, context.paymentProviders(), {
+        environment,
+        customerId: customer.value.customerId,
+        providerReference: validation.data.providerReference,
+        outcome: validation.data.outcome,
+        idempotencyKey: validation.data.idempotencyKey,
+        requestId: input.requestId,
+      });
+    },
+
     async beginRecurringAuthorization(input: BeginRecurringAuthorizationRequest) {
       const validation = authenticatedRequestSchema
         .extend({
