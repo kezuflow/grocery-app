@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Coordinate } from "@freshmarkets/contracts";
 import { GoogleMapsCoordinateValidationError, googleMapsNavigationUrl } from "./google-maps-url";
 
 describe("googleMapsNavigationUrl", () => {
@@ -44,4 +45,13 @@ describe("googleMapsNavigationUrl", () => {
   ])("rejects an invalid coordinate with a typed validation error %#", (coordinate) => {
     expect(() => googleMapsNavigationUrl(coordinate)).toThrow(GoogleMapsCoordinateValidationError);
   });
+
+  it.each([null, undefined] as const)(
+    "rejects a nullish runtime coordinate with the typed validation error %#",
+    (coordinate) => {
+      expect(() => googleMapsNavigationUrl(coordinate as unknown as Coordinate)).toThrow(
+        GoogleMapsCoordinateValidationError,
+      );
+    },
+  );
 });

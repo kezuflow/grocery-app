@@ -10,6 +10,8 @@ export class GoogleMapsCoordinateValidationError extends Error {
 }
 
 function validCoordinate(coordinate: Coordinate): boolean {
+  if (coordinate == null) return false;
+
   return (
     Number.isFinite(coordinate.latitude) &&
     Number.isFinite(coordinate.longitude) &&
