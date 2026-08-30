@@ -1,4 +1,5 @@
 import type {
+  AbandonCheckoutAttemptRequest,
   AuthenticatedRequest,
   CheckoutEligibilityRequest,
   CheckoutQuoteCommandRequest,
@@ -6,6 +7,7 @@ import type {
   DeliveryCycleRequest,
   SetCartItemRequest,
 } from "@freshmarkets/contracts";
+import { abandonCheckoutAttempt } from "../checkout/application/abandon-checkout-attempt";
 import { listDeliveryCycles } from "../commerce/cycle-queries";
 import { activeMarketCode } from "../geography/market-defaults";
 import { getCart, setCartItem } from "../checkout/application/cart";
@@ -15,6 +17,7 @@ import {
 } from "../checkout/application/create-checkout-quote";
 import { evaluateCheckout } from "../checkout/application/evaluate-checkout";
 import {
+  abandonCheckoutAttemptSchema,
   authenticatedRequestSchema,
   checkoutRequestSchema,
   createCheckoutQuoteSchema,
@@ -92,6 +95,20 @@ export function createCheckoutRpc(context: CoreRpcContext) {
         expectedVersion: input.expectedVersion,
         requestId: input.requestId,
         customerId: customer.value.customerId,
+      });
+    },
+
+    async abandonCheckoutAttempt(input: AbandonCheckoutAttemptRequest) {
+      const validation = abandonCheckoutAttemptSchema.safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return abandonCheckoutAttempt(context.env.DB, {
+        customerId: customer.value.customerId,
+        quoteId: validation.data.quoteId,
+        expectedVersion: validation.data.expectedVersion,
+        idempotencyKey: validation.data.idempotencyKey,
+        requestId: input.requestId,
       });
     },
   };

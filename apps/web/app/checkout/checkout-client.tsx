@@ -105,9 +105,42 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     setAddressId(nextAddressId);
   }
 
+  async function abandonQuote(quote: CheckoutQuoteView): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `/api/checkout/quote/${encodeURIComponent(quote.quoteId)}/abandon`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": `checkout-abandon-${quote.quoteId}`,
+          },
+          body: JSON.stringify({ expectedVersion: quote.attemptVersion }),
+        },
+      );
+      const result = (await response.json()) as RpcResult<unknown>;
+      return result.ok;
+    } catch {
+      return false;
+    }
+  }
+
   function invalidatePendingQuote() {
+    if (pendingQuote) void abandonQuote(pendingQuote);
     setPendingQuote(null);
     attemptKey.current = `checkout-${crypto.randomUUID()}`;
+  }
+
+  async function discardPendingQuote() {
+    if (!pendingQuote) return;
+    setStatus("Releasing the current checkout reservation…");
+    if (!(await abandonQuote(pendingQuote))) {
+      setStatus("The current checkout could not be released safely. Try again before restarting.");
+      return;
+    }
+    setPendingQuote(null);
+    attemptKey.current = `checkout-${crypto.randomUUID()}`;
+    setStatus("Current checkout released. You can choose new delivery details.");
   }
 
   function quoteInputIsCurrent(input: {
@@ -429,11 +462,21 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
             </section>
 
             {pendingQuote ? (
-              <CheckoutTotalReview
-                quote={pendingQuote}
-                onAccept={confirmPayment}
-                accepting={acceptingPayment}
-              />
+              <div>
+                <CheckoutTotalReview
+                  quote={pendingQuote}
+                  onAccept={confirmPayment}
+                  accepting={acceptingPayment}
+                />
+                <button
+                  type="button"
+                  onClick={() => void discardPendingQuote()}
+                  disabled={acceptingPayment}
+                  className="mt-3 text-sm font-semibold underline underline-offset-4 disabled:opacity-50"
+                >
+                  Discard current total and start again
+                </button>
+              </div>
             ) : null}
             {status ? (
               <p

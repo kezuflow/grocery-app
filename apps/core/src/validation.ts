@@ -283,6 +283,12 @@ export const refreshCheckoutQuoteSchema = headersRequest.extend({
   expectedVersion: expectedVersionSchema,
 });
 
+export const abandonCheckoutAttemptSchema = headersRequest.extend({
+  quoteId: identifierSchema,
+  expectedVersion: positiveIntegerSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+
 export const createPaymentIntentSchema = headersRequest.extend({
   checkoutAttemptId: identifierSchema,
   expectedQuoteVersion: positiveIntegerSchema,

@@ -16,6 +16,8 @@ import type { AdminAnalyticsService } from "./admin-analytics";
 import type { AuthenticatedRequest, AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type {
+  AbandonCheckoutAttemptRequest,
+  AbandonCheckoutResult,
   CheckoutQuoteCommandRequest,
   CheckoutQuoteRefreshRequest,
   CheckoutQuoteView,
@@ -84,6 +86,9 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
   refreshCheckoutQuote(request: CheckoutQuoteRefreshRequest): Promise<RpcResult<CheckoutQuoteView>>;
+  abandonCheckoutAttempt(
+    request: AbandonCheckoutAttemptRequest,
+  ): Promise<RpcResult<AbandonCheckoutResult>>;
   /** Canonical payment intent creation for a quote (fail-closed without a provider). */
   createPaymentIntent(request: PaymentIntentCommandRequest): Promise<RpcResult<PaymentActionView>>;
   /** Scoped open-delivery projection with Core-derived selectability. */
@@ -237,6 +242,7 @@ export const coreServiceMethodNames = [
   "evaluateCheckout",
   "createCheckoutQuote",
   "refreshCheckoutQuote",
+  "abandonCheckoutAttempt",
   "createPaymentIntent",
   "listCustomerOrders",
   "getCustomerOrderDetail",

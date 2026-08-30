@@ -143,6 +143,20 @@ export type CheckoutQuoteRefreshRequest = AuthenticatedRequest & {
   expectedVersion: number;
 };
 
+export type AbandonCheckoutAttemptRequest = AuthenticatedRequest & {
+  quoteId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type AbandonCheckoutResult = {
+  quoteId: string;
+  outcome: "ABANDONED" | "ALREADY_TERMINAL";
+  quoteStatus: "SUPERSEDED" | "EXPIRED";
+  releasedInventoryHolds: number;
+  releasedCapacityAllocations: number;
+};
+
 export type CartView = {
   id: string;
   version: number;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CheckoutQuoteView, PaymentIntentCommandRequest } from "./index";
+import type {
+  AbandonCheckoutAttemptRequest,
+  AbandonCheckoutResult,
+  CheckoutQuoteView,
+  PaymentIntentCommandRequest,
+} from "./index";
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
@@ -89,5 +94,24 @@ describe("checkout contracts", () => {
     } satisfies PaymentIntentCommandRequest;
 
     expect(request.expectedPriceAcceptanceVersion).toBe(3);
+  });
+
+  it("separates pre-commit abandonment from committed-order cancellation", () => {
+    const request = {
+      requestId: "request-abandon",
+      headers: {},
+      quoteId: "quote-1",
+      expectedVersion: 2,
+      idempotencyKey: "abandon-1",
+    } satisfies AbandonCheckoutAttemptRequest;
+    const result = {
+      quoteId: request.quoteId,
+      outcome: "ABANDONED",
+      quoteStatus: "SUPERSEDED",
+      releasedInventoryHolds: 1,
+      releasedCapacityAllocations: 0,
+    } satisfies AbandonCheckoutResult;
+    expect(result.outcome).toBe("ABANDONED");
+    expect(result).not.toHaveProperty("orderStatus");
   });
 });

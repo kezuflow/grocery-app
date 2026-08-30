@@ -19,5 +19,16 @@ describe("Checkout RPC adapter", () => {
       ok: false,
       error: { code: "VALIDATION_FAILED", requestId: "checkout-adapter" },
     });
+    const abandon = await rpc.abandonCheckoutAttempt({
+      requestId: "checkout-abandon-adapter",
+      headers: {},
+      quoteId: "quote-1",
+      expectedVersion: 1,
+      idempotencyKey: "checkout-abandon-key",
+    });
+    expect(abandon).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "checkout-abandon-adapter" },
+    });
   });
 });

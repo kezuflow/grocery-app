@@ -2174,6 +2174,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.checkoutRpc.refreshCheckoutQuote(input);
   }
 
+  async abandonCheckoutAttempt(
+    input: import("@freshmarkets/contracts").AbandonCheckoutAttemptRequest,
+  ) {
+    return this.checkoutRpc.abandonCheckoutAttempt(input);
+  }
+
   async createPaymentIntent(input: import("@freshmarkets/contracts").PaymentIntentCommandRequest) {
     return this.paymentsRpc.createPaymentIntent(input);
   }
