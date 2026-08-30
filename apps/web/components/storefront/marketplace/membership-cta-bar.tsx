@@ -2,12 +2,42 @@
 
 import Link from "next/link";
 import { X } from "lucide-react";
-import { useState } from "react";
+import type { MembershipExperienceView } from "@freshmarkets/contracts";
+import { useEffect, useState } from "react";
 
-export function MembershipCtaBar() {
+export function MembershipCtaBar({
+  experience: suppliedExperience,
+}: {
+  experience?: MembershipExperienceView;
+}) {
   const [visible, setVisible] = useState(true);
+  const [experience, setExperience] = useState(suppliedExperience);
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (suppliedExperience) return;
+    let active = true;
+    void fetch("/api/membership")
+      .then(
+        async (response) =>
+          (await response.json()) as { ok: boolean; value?: MembershipExperienceView },
+      )
+      .then((result) => {
+        if (active && result.ok && result.value) setExperience(result.value);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [suppliedExperience]);
+
+  if (!visible || !experience || experience.subscription) return null;
+
+  const offer = new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: experience.offer.currency,
+    maximumFractionDigits: 0,
+  }).format(experience.offer.amountMinor / 100);
+  const trialAvailable = experience.introductoryTrial.eligible;
 
   return (
     <aside
@@ -30,11 +60,18 @@ export function MembershipCtaBar() {
 
         <p className="min-w-0 flex-1 text-[11px] leading-4 font-semibold sm:text-sm sm:leading-5">
           <span className="sm:hidden">
-            One month <span className="text-[var(--fm-primary-lime)]">free</span>, then ₱299/month.
+            {trialAvailable ? (
+              <>Introductory trial available, then {offer}/month.</>
+            ) : (
+              <>
+                {experience.offer.name} is {offer}/month.
+              </>
+            )}
           </span>
           <span className="hidden sm:inline">
-            Get FreshMarkets membership <span className="text-[var(--fm-primary-lime)]">free</span>{" "}
-            for one month, then ₱299/month.
+            {trialAvailable
+              ? `Start the available introductory trial, then ${offer}/month.`
+              : `${experience.offer.name} is ${offer}/month.`}
           </span>
         </p>
 
@@ -42,7 +79,7 @@ export function MembershipCtaBar() {
           href="/account"
           className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-2 text-[11px] font-bold text-[var(--fm-primary-dark)] transition-colors hover:bg-[#c4fa69] focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black focus-visible:outline-none sm:px-4 sm:text-sm"
         >
-          Start your free trial
+          {trialAvailable ? "Review introductory trial" : "Review membership"}
         </Link>
       </div>
 

@@ -35,7 +35,7 @@ const PROMOS = [
   {
     href: "/account",
     src: "/promos/membership-made-simple.png",
-    alt: "Membership made simple — ₱299 per month",
+    alt: "Membership made simple — review current membership details",
   },
 ] as const;
 
@@ -216,7 +216,7 @@ export function MembershipStrip() {
       <p>
         <strong className="font-semibold">Membership eligibility is checked at checkout.</strong>{" "}
         <span className="text-[var(--fm-text-muted)]">
-          One introductory calendar month is included, then ₱299/month.
+          Review your current offer, trial eligibility, and available actions in your account.
         </span>
       </p>
       <Link

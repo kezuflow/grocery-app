@@ -1,4 +1,5 @@
 import type { SubscriptionSummary } from "./start-promotional-trial";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { canTransitionSubscription, type SubscriptionLifecycleState } from "../domain/subscription";
 
 export type PauseSubscriptionCommand = {
@@ -43,7 +44,7 @@ const SUMMARY_STATE = [
   "EXPIRED",
 ] as const;
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
@@ -79,7 +80,7 @@ function summary(row: Row): SubscriptionSummary {
       : "PENDING",
     cancelAtPeriodEnd: row.cancel_at_period_end === 1,
     scheduledCancellationAt: toIso(row.scheduled_cancellation_at),
-    trialStartsAt: toIso(row.starts_at),
+    trialStartsAt: row.trial_ends_at === null ? null : toIso(row.starts_at),
     trialEndsAt: toIso(row.trial_ends_at),
     version: row.version,
   };
@@ -160,6 +161,7 @@ export async function pauseSubscription(
     op: "pause",
     subscriptionId: command.subscriptionId,
     reason: command.reason ?? null,
+    expectedVersion: command.expectedVersion,
   });
   const replay = await replayOrConflict(database, scope, command.idempotencyKey, requestHashValue);
   if (replay.kind === "replay")
@@ -241,7 +243,11 @@ export async function resumeSubscription(
   { ok: true; value: SubscriptionSummary; requestId: string } | ReturnType<typeof failure>
 > {
   const scope = "membership.resume";
-  const requestHashValue = await digest({ op: "resume", subscriptionId: command.subscriptionId });
+  const requestHashValue = await digest({
+    op: "resume",
+    subscriptionId: command.subscriptionId,
+    expectedVersion: command.expectedVersion,
+  });
   const replay = await replayOrConflict(database, scope, command.idempotencyKey, requestHashValue);
   if (replay.kind === "replay")
     return { ok: true, value: summary(replay.row), requestId: command.requestId };
@@ -336,6 +342,7 @@ export async function cancelSubscription(
     subscriptionId: command.subscriptionId,
     timing: command.timing,
     reason: command.reason ?? null,
+    expectedVersion: command.expectedVersion,
   });
   const replay = await replayOrConflict(database, scope, command.idempotencyKey, requestHashValue);
   if (replay.kind === "replay")
@@ -423,7 +430,7 @@ export async function cancelSubscription(
 
   // PERIOD_END: record the intent only; entitlement stays TRIALING/ACTIVE/
   // PAST_DUE until the explicit effective-time command runs.
-  if (!["TRIALING", "ACTIVE", "PAST_DUE"].includes(row.status)) {
+  if (!["TRIALING", "ACTIVE"].includes(row.status)) {
     await failClaim(database, scope, command.idempotencyKey);
     return failure(
       "ILLEGAL_TRANSITION",

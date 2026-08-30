@@ -2115,6 +2115,27 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async startTrial(input: import("@freshmarkets/contracts").StartTrialRequest) {
     return this.membershipRpc.startTrial(input);
   }
+  async getMembershipExperience(input: AuthenticatedRequest) {
+    return this.membershipRpc.getMembershipExperience(input);
+  }
+  async getSubscriptionSummary(input: AuthenticatedRequest) {
+    return this.membershipRpc.getSubscriptionSummary(input);
+  }
+  async getOffer(input: AuthenticatedRequest) {
+    return this.membershipRpc.getOffer(input);
+  }
+  async beginPaidEnrollment(input: import("@freshmarkets/contracts").BeginPaidEnrollmentRequest) {
+    return this.membershipRpc.beginPaidEnrollment(input);
+  }
+  async pauseSubscription(input: import("@freshmarkets/contracts").PauseSubscriptionRequest) {
+    return this.membershipRpc.pauseSubscription(input);
+  }
+  async resumeSubscription(input: import("@freshmarkets/contracts").ResumeSubscriptionRequest) {
+    return this.membershipRpc.resumeSubscription(input);
+  }
+  async cancelSubscription(input: import("@freshmarkets/contracts").CancelSubscriptionRequest) {
+    return this.membershipRpc.cancelSubscription(input);
+  }
   async beginRecurringAuthorization(
     input: import("@freshmarkets/contracts").BeginRecurringAuthorizationRequest,
   ) {

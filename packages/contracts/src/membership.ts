@@ -33,6 +33,33 @@ export type SubscriptionSummary = {
   version: number;
 };
 
+export type MembershipActionAvailability = {
+  available: boolean;
+  disabledReason: string | null;
+};
+
+export type MembershipExperienceView = {
+  offer: MembershipOfferView;
+  subscription: SubscriptionSummary | null;
+  introductoryTrial: {
+    status: "AVAILABLE" | "AUTHORIZATION_REQUIRED" | "REDEEMED" | "OPEN_SUBSCRIPTION";
+    eligible: boolean;
+    duration: "CALENDAR_MONTH";
+  };
+  recurringAuthorization: {
+    status: "READY" | "PENDING" | "REQUIRED";
+    ready: boolean;
+  };
+  actions: {
+    startTrial: MembershipActionAvailability;
+    beginPaidEnrollment: MembershipActionAvailability;
+    pause: MembershipActionAvailability;
+    resume: MembershipActionAvailability;
+    cancelImmediately: MembershipActionAvailability;
+    cancelAtPeriodEnd: MembershipActionAvailability;
+  };
+};
+
 export type GetSubscriptionRequest = AuthenticatedRequest;
 export type StartPromotionalTrialRequest = AuthenticatedRequest & { idempotencyKey: string };
 export type BeginPaidEnrollmentRequest = AuthenticatedRequest & {
@@ -61,6 +88,9 @@ export type CancelSubscriptionRequest = AuthenticatedRequest & {
  * stable idempotency key and the required aggregate version.
  */
 export type MembershipService = {
+  getMembershipExperience(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<MembershipExperienceView>>;
   getSubscriptionEligibility(
     request: SubscriptionEligibilityRequest | GetSubscriptionRequest,
   ): Promise<RpcResult<SubscriptionEligibility>>;

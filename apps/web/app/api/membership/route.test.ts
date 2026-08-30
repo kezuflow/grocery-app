@@ -1,67 +1,58 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getSubscriptionEligibility } = vi.hoisted(() => ({
-  getSubscriptionEligibility: vi.fn(),
+const { getMembershipExperience } = vi.hoisted(() => ({
+  getMembershipExperience: vi.fn(),
 }));
 
-vi.mock("cloudflare:workers", () => ({
-  env: {
-    CORE: {
-      getSubscriptionEligibility,
-    },
-  },
-}));
+vi.mock("cloudflare:workers", () => ({ env: { CORE: { getMembershipExperience } } }));
 
 import { GET } from "./route";
 
-beforeEach(() => {
-  getSubscriptionEligibility.mockReset();
-});
+beforeEach(() => getMembershipExperience.mockReset());
 
 describe("membership account surface", () => {
-  it("exposes the PHP 299 calendar-month offer without vendor vocabulary", async () => {
-    getSubscriptionEligibility.mockResolvedValue({
-      ok: true,
-      value: { eligible: true, state: "TRIALING", trialEndsAt: "2026-09-25T00:00:00.000Z" },
-    });
+  it("forwards the Core-owned experience without Web-owned membership facts", async () => {
+    const value = {
+      offer: {
+        offerId: "offer-membership-monthly",
+        code: "MEMBERSHIP_MONTHLY",
+        name: "FreshMarkets Membership",
+        amountMinor: 29900,
+        currency: "PHP",
+        billingInterval: "CALENDAR_MONTH",
+      },
+      subscription: null,
+      introductoryTrial: {
+        eligible: false,
+        status: "AUTHORIZATION_REQUIRED",
+        duration: "CALENDAR_MONTH",
+      },
+      recurringAuthorization: { ready: false, status: "REQUIRED" },
+      actions: {},
+    };
+    getMembershipExperience.mockResolvedValue({ ok: true, value });
     const response = await GET(
       new Request("https://freshmarkets.ph/api/membership", { headers: { cookie: "s=1" } }),
     );
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      ok: boolean;
-      value: {
-        offer: { amountMinor: number; currency: string; billingInterval: string };
-        introductoryTrial: { duration: string };
-        cancellationOptions: string[];
-        subscriptionState: string | null;
-      };
-    };
-    expect(body.value.offer).toMatchObject({
-      amountMinor: 29900,
-      currency: "PHP",
-      billingInterval: "CALENDAR_MONTH",
-    });
-    expect(body.value.introductoryTrial).toEqual({
-      benefitCode: "INTRO_TRIAL",
-      duration: "CALENDAR_MONTH",
-    });
-    // Both explicit choices are presented; no default is preselected here.
-    expect(body.value.cancellationOptions).toEqual(["IMMEDIATE", "PERIOD_END"]);
-    expect(body.value.subscriptionState).toBe("TRIALING");
-    const serialized = JSON.stringify(body);
-    for (const banned of ["provider", "vendor", "trial_days", "14day", "14 day"]) {
-      expect(serialized.toLowerCase()).not.toContain(banned);
-    }
+    expect(await response.json()).toMatchObject({ ok: true, value });
+    expect(getMembershipExperience).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: expect.any(String), headers: expect.any(Object) }),
+    );
   });
 
-  it("degrades to a null state when the session is unauthenticated", async () => {
-    getSubscriptionEligibility.mockResolvedValue({
+  it("preserves unauthenticated Core failures", async () => {
+    getMembershipExperience.mockResolvedValue({
       ok: false,
-      error: { code: "UNAUTHENTICATED", message: "Authentication is required" },
+      error: {
+        code: "UNAUTHENTICATED",
+        message: "Authentication is required",
+        requestId: "core",
+      },
     });
     const response = await GET(new Request("https://freshmarkets.ph/api/membership"));
-    const body = (await response.json()) as { value: { subscriptionState: string | null } };
-    expect(body.value.subscriptionState).toBeNull();
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED" },
+    });
   });
 });

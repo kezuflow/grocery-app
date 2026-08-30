@@ -153,6 +153,30 @@ describe("versioned subscription lifecycle", () => {
       .first<{ status: string }>();
     expect(stillThere?.status).toBe("TRIALING");
   });
+
+  it("rejects idempotency-key reuse with a different expected version", async () => {
+    const { subscriptionId } = await trialingSubscription();
+    const command = cancelCommand(subscriptionId, "IMMEDIATE");
+    const first = await cancelSubscription(env.DB, command);
+    expect(first.ok).toBe(true);
+    const reused = await cancelSubscription(env.DB, { ...command, expectedVersion: 99 });
+    expect(reused).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+  });
+
+  it("fails period-end cancellation closed for past-due membership", async () => {
+    const { subscriptionId } = await trialingSubscription();
+    await env.DB.prepare("UPDATE subscription SET status='PAST_DUE' WHERE id=?")
+      .bind(subscriptionId)
+      .run();
+    const result = await cancelSubscription(env.DB, cancelCommand(subscriptionId, "PERIOD_END"));
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
+  });
 });
 
 function nowPlus(_ms: number): number {
