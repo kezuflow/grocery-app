@@ -1,10 +1,11 @@
 import type { AuthenticatedRequest, CartView, SetCartItemRequest } from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 
 const CART_SET_SCOPE = "cart.setItem";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

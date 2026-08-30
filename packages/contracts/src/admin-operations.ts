@@ -1,5 +1,5 @@
 import type { RpcResult } from "./common";
-import type { AuthenticatedRequest } from "./index";
+import type { AuthenticatedRequest } from "./auth";
 import type { OperationalExceptionItem } from "./operations";
 import type { DeliveryAction, FulfillmentAction } from "./states";
 export {

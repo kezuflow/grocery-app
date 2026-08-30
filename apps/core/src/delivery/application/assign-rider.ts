@@ -1,7 +1,8 @@
 import type { AssignRiderRequest, AssignRiderValue } from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { claimCommandIdempotency } from "../../idempotency";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
@@ -24,7 +25,7 @@ export async function assignRider(
   ports: AssignRiderPorts,
 ): Promise<
   | { ok: true; value: AssignRiderValue; requestId: string }
-  | { ok: false; error: { code: string; message: string; requestId: string } }
+  | { ok: false; error: { code: AppErrorCode; message: string; requestId: string } }
 > {
   const row = await database
     .prepare(

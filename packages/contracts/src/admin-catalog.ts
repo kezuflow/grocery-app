@@ -1,4 +1,6 @@
-import type { AdminAuditEventListItem, AuthenticatedRequest, RpcResult } from "./index";
+import type { AuthenticatedRequest } from "./auth";
+import type { AdminAuditEventListItem } from "./admin-foundation";
+import type { RpcResult } from "./common";
 
 export const catalogStatuses = ["active", "inactive"] as const;
 export type CatalogStatus = (typeof catalogStatuses)[number];

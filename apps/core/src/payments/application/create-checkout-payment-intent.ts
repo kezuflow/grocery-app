@@ -1,4 +1,9 @@
-import type { PaymentIntentCommandRequest } from "@freshmarkets/contracts";
+import type {
+  PaymentActionView,
+  PaymentIntentCommandRequest,
+  RpcResult,
+} from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { createPayment } from "./create-payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
@@ -6,7 +11,7 @@ import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { revalidateCheckoutQuote } from "../../checkout/application/revalidate-checkout-quote";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
@@ -21,10 +26,7 @@ export async function createCheckoutPaymentIntent(
   providerCode: string,
   routeDistance: RouteDistancePort,
   command: PaymentIntentCommandRequest & { customerId: string },
-): Promise<
-  | { ok: true; value: Record<string, unknown>; requestId: string }
-  | { ok: false; error: { code: string; message: string; requestId: string } }
-> {
+): Promise<RpcResult<PaymentActionView>> {
   const paymentRepository = createPaymentRepository(database);
   const existing = await paymentRepository.findIntentByIdempotencyKey(command.idempotencyKey);
   if (existing) {

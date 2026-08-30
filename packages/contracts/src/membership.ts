@@ -1,10 +1,16 @@
 import type { RpcResult } from "./common";
 import type { SubscriptionState } from "./states";
-import type {
-  AuthenticatedRequest,
-  SubscriptionEligibility,
-  SubscriptionEligibilityRequest,
-} from "./index";
+import type { AuthenticatedRequest } from "./auth";
+
+export type SubscriptionEligibilityRequest = AuthenticatedRequest;
+export type SubscriptionEligibility = {
+  eligible: boolean;
+  state: SubscriptionState | null;
+  trialEndsAt: string | null;
+};
+
+/** Historical trial route request retained while callers migrate to the canonical command. */
+export type StartTrialRequest = AuthenticatedRequest & { offerCode?: string };
 
 // Canonical single paid membership offer. It intentionally carries no
 // trial-entitlement field: introductory trials are Promotions grants.

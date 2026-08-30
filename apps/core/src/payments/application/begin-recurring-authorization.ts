@@ -1,5 +1,6 @@
 import { requestHash } from "../../idempotency";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { recordFinancialEvent } from "./financial-observability";
 
@@ -23,7 +24,7 @@ export type BeginRecurringAuthorizationResult = {
 
 const SCOPE = "payments.beginRecurringAuthorization";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

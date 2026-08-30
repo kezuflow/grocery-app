@@ -1,4 +1,5 @@
 import { requestHash } from "../../idempotency";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import {
   START_RECEIVING_SCOPE,
   createReceivingRepository,
@@ -13,7 +14,7 @@ export type StartReceivingCommand = {
   requestId: string;
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

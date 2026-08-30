@@ -13,16 +13,19 @@ import type {
 } from "./admin-finance";
 import type { AdminOperationsService } from "./admin-operations";
 import type { AdminAnalyticsService } from "./admin-analytics";
-import type { AuthService } from "./auth";
+import type { AuthenticatedRequest, AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
-import type { CheckoutService } from "./checkout";
-import type { HealthService } from "./index";
+import type {
+  CheckoutQuoteCommandRequest,
+  CheckoutQuoteRefreshRequest,
+  CheckoutQuoteView,
+  CheckoutService,
+} from "./checkout";
+import type { HealthService } from "./common";
 import type { MembershipService } from "./membership";
 import type { OrdersService } from "./orders";
 import type { OperationsReadService, OperationsService } from "./operations";
-import type { PaymentsService } from "./payments";
-import type { CheckoutQuoteCommandRequest, CheckoutQuoteRefreshRequest } from "./index";
-import type { CheckoutQuoteView, PaymentIntentCommandRequest, PaymentActionView } from "./index";
+import type { PaymentActionView, PaymentIntentCommandRequest, PaymentsService } from "./payments";
 import type {
   BatchRoutePreview,
   CreateAndAssignDeliveryBatchRequest,
@@ -97,10 +100,163 @@ export interface CoreServiceBinding extends ImplementedCoreService {
     request: CreateAndAssignDeliveryBatchRequest,
   ): Promise<RpcResult<DeliveryBatchView>>;
   /** Assigned operational batches for the authenticated active canonical Rider. */
-  getRiderBatches(
-    request: import("./index").AuthenticatedRequest,
-  ): Promise<RpcResult<RiderBatchList>>;
+  getRiderBatches(request: AuthenticatedRequest): Promise<RpcResult<RiderBatchList>>;
 }
+
+/** Runtime manifest paired with the structural interface for deployment conformance tests. */
+export const coreServiceMethodNames = [
+  "health",
+  "auth",
+  "getApplicationContext",
+  "getAdminContext",
+  "listAdminScopes",
+  "listMetricDefinitions",
+  "getOverview",
+  "getAnalyticsOverview",
+  "getMetric",
+  "getMetricSeries",
+  "listAdminAuditEvents",
+  "getAdminAuditEvent",
+  "listAdminStaff",
+  "getAdminStaff",
+  "listAdminStaffInvitations",
+  "inviteAdminStaff",
+  "revokeAdminStaffInvitation",
+  "updateAdminStaff",
+  "changeAdminStaffAccess",
+  "setAdminStaffRoles",
+  "setAdminStaffScopes",
+  "revokeAdminStaffSessions",
+  "listAdminRoles",
+  "getAdminRole",
+  "createAdminRole",
+  "updateAdminRole",
+  "setAdminRoleCapabilities",
+  "archiveAdminRole",
+  "listCapabilityDefinitions",
+  "listAdminCustomers",
+  "getAdminCustomer",
+  "listCustomerInvitations",
+  "inviteCustomer",
+  "changeCustomerAccess",
+  "revokeCustomerSessions",
+  "requestCustomerClosure",
+  "listPrivacyRequests",
+  "applyPrivacyAction",
+  "listAdminPromotions",
+  "getAdminPromotion",
+  "createAdminPromotion",
+  "updateAdminPromotion",
+  "changeAdminPromotionStatus",
+  "previewAdminPromotion",
+  "grantAdminPromotion",
+  "listPromotionGrants",
+  "listPromotionRedemptions",
+  "listAdminCategories",
+  "createAdminCategory",
+  "getAdminCategory",
+  "updateAdminCategory",
+  "setAdminCategoryStatus",
+  "listAdminUnits",
+  "createAdminUnit",
+  "listAdminProducts",
+  "createAdminProduct",
+  "getAdminProduct",
+  "updateAdminProduct",
+  "setAdminProductStatus",
+  "uploadAdminProductMedia",
+  "updateAdminProductMedia",
+  "removeAdminProductMedia",
+  "createAdminSku",
+  "updateAdminSku",
+  "setAdminSkuAvailability",
+  "setAdminSkuPrice",
+  "listAdminInventory",
+  "getAdminInventoryLedger",
+  "getFulfillmentMode",
+  "activateFulfillmentMode",
+  "aggregateAdminProcurementDemand",
+  "startAdminReceiving",
+  "recordAdminReceivedLine",
+  "completeAdminReceiving",
+  "advanceAdminFulfillment",
+  "advanceAdminDelivery",
+  "resolveAdminOperationalException",
+  "listProcurementRequirements",
+  "listReceivingSessions",
+  "listFulfillmentQueue",
+  "listDeliveryOperations",
+  "getDeliveryMap",
+  "getDeliveryMapDetail",
+  "getEligibleRiders",
+  "previewDeliveryBatchRoute",
+  "createAndAssignDeliveryBatch",
+  "listOperationalExceptions",
+  "listAdminOrders",
+  "getAdminOrder",
+  "cancelAdminOrder",
+  "listAdminPayments",
+  "getAdminPaymentOverview",
+  "getAdminPayment",
+  "requestAdminRefund",
+  "listAdminReconciliationCases",
+  "resolveAdminReconciliationCase",
+  "listAdminMemberships",
+  "getAdminMembership",
+  "pauseAdminMembership",
+  "resumeAdminMembership",
+  "cancelAdminMembership",
+  "listAdminOrderIssues",
+  "getAdminOrderIssue",
+  "applyAdminOrderIssueAction",
+  "resolveServiceability",
+  "searchAddressCandidates",
+  "searchCatalog",
+  "getMarketplaceHome",
+  "getCatalogProduct",
+  "listCategories",
+  "createCustomerAddress",
+  "listCustomerAddresses",
+  "updateCustomerAddress",
+  "startTrial",
+  "beginRecurringAuthorization",
+  "completeRecurringAuthorization",
+  "getSubscriptionEligibility",
+  "listDeliveryCycles",
+  "getCart",
+  "setCartItem",
+  "evaluateCheckout",
+  "createCheckoutQuote",
+  "refreshCheckoutQuote",
+  "createPaymentIntent",
+  "listCustomerOrders",
+  "adjustInventory",
+  "createProcurementRequirement",
+  "receiveProcurement",
+  "advanceFulfillment",
+  "advanceDelivery",
+  "adminOperationsBoard",
+  "assignRider",
+  "riderJobs",
+  "getRiderBatches",
+  "adminScheduledJobRuns",
+] as const satisfies ReadonlyArray<keyof CoreServiceBinding>;
+
+type MissingRuntimeManifestMethod = Exclude<
+  keyof CoreServiceBinding,
+  (typeof coreServiceMethodNames)[number]
+>;
+type ExtraRuntimeManifestMethod = Exclude<
+  (typeof coreServiceMethodNames)[number],
+  keyof CoreServiceBinding
+>;
+const coreServiceMethodManifestIsExact: [
+  MissingRuntimeManifestMethod,
+  ExtraRuntimeManifestMethod,
+] extends [never, never]
+  ? true
+  : never = true;
+void coreServiceMethodManifestIsExact;
 
 export type { AdminFoundationService } from "./admin-foundation";
 export type { AdminStaffAccessService } from "./admin-staff-access";

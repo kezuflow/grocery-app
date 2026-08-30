@@ -1,4 +1,5 @@
 import { requestHash } from "../../idempotency";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { PaymentPurpose } from "../domain/payment";
 import {
   createPaymentRepository,
@@ -29,7 +30,7 @@ export type CreatedPaymentAction = {
   expiresAt: string | null;
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

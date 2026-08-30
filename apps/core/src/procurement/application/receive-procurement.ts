@@ -1,8 +1,9 @@
-import type { ReceivingCommandRequest } from "@freshmarkets/contracts";
+import type { ReceivingCommandRequest, ReceivingRecordState } from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { startReceiving as startReceivingCommand } from "./start-receiving";
 import { recordReceivedLine as recordReceivedLineCommand } from "./record-received-line";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
@@ -16,7 +17,7 @@ export type ReceiveProcurementResult =
       ok: true;
       value: {
         receivingRecordId: string;
-        status: string;
+        status: ReceivingRecordState;
         acceptedBase: number;
         rejectedBase: number;
         remainingBase: number;
@@ -24,7 +25,7 @@ export type ReceiveProcurementResult =
       };
       requestId: string;
     }
-  | { ok: false; error: { code: string; message: string; requestId: string } };
+  | { ok: false; error: { code: AppErrorCode; message: string; requestId: string } };
 
 /**
  * Record a received line against a requirement's first receiving record,
@@ -83,7 +84,7 @@ export async function receiveProcurement(
       ok: true as const,
       value: {
         receivingRecordId: result.value.receivingRecordId,
-        status: result.value.status,
+        status: result.value.status as ReceivingRecordState,
         acceptedBase: result.value.acceptedBase,
         rejectedBase: result.value.rejectedBase,
         remainingBase: result.value.remainingBase,

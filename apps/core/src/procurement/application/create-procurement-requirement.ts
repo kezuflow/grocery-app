@@ -1,12 +1,13 @@
-import type { ProcurementCommandRequest } from "@freshmarkets/contracts";
+import type { OperationsCommandState, ProcurementCommandRequest } from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { claimCommandIdempotency } from "../../idempotency";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
 export type CreateProcurementRequirementResult =
-  | { ok: true; value: { id: string; status: string }; requestId: string }
+  | { ok: true; value: { id: string; status: OperationsCommandState }; requestId: string }
   | ReturnType<typeof failure>;
 
 const SCOPE = "procurement.createRequirement";
@@ -49,7 +50,10 @@ export async function createProcurementRequirement(
       if (prior)
         return {
           ok: true as const,
-          value: { id: idempotency.existing.resultReference, status: prior.status },
+          value: {
+            id: idempotency.existing.resultReference,
+            status: prior.status as OperationsCommandState,
+          },
           requestId: command.requestId,
         };
     }

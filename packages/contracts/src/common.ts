@@ -22,6 +22,7 @@ export const appErrorCodes = [
   "CYCLE_CLOSED",
   "CYCLE_FULL",
   "INSUFFICIENT_STOCK",
+  "INSTANT_MODE_UNAVAILABLE",
   "CAPACITY_UNAVAILABLE",
   "MINIMUM_ORDER_NOT_MET",
   "PRICE_CHANGED",
@@ -41,13 +42,24 @@ export const appErrorCodes = [
   "GEOCODER_INVALID_RESPONSE",
   "GEOCODER_NO_RESULTS",
   "ITEM_UNAVAILABLE",
+  "UNAVAILABLE_ITEM",
   "PROMOTION_INELIGIBLE",
   "PAYMENT_REQUIRED",
   "PAYMENT_FAILED",
   "PAYMENT_OUTCOME_UNRESOLVED",
   "AUTHORIZATION_OUTCOME_UNRESOLVED",
   "PAYMENT_ACTION_EXPIRED",
+  "QUOTE_EXPIRED",
   "AUTHORIZATION_ACTION_EXPIRED",
+  "AUTHORIZATION_FAILED",
+  "AUTHORIZATION_REVOKED",
+  "AUTHORIZATION_PENDING",
+  "AUTHORIZATION_IDENTITY_IN_USE",
+  "RECURRING_AUTHORIZATION_REQUIRED",
+  "RECURRING_NOT_CAPABLE",
+  "PROVIDER_LOOKUP_FAILED",
+  "OPEN_SUBSCRIPTION_EXISTS",
+  "ADDRESS_UNSERVICEABLE",
   "REFUND_AMOUNT_UNAVAILABLE",
   "PAYMENT_PROVIDER_UNAVAILABLE",
   "FINANCIAL_OPERATION_REQUIRES_REVIEW",
@@ -79,3 +91,10 @@ export type CoreHealthResponse = {
   databaseBindingConfigured: boolean;
   timestamp: string;
 };
+
+/** Historical health-only entrypoint alias retained for compatibility. */
+export type CoreEntrypoint = {
+  health(meta?: RequestMeta): Promise<CoreHealthResponse>;
+};
+
+export type HealthService = CoreEntrypoint;

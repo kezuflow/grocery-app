@@ -2,6 +2,7 @@ import {
   createCheckoutRepository,
   type CheckoutQuoteRow,
 } from "../infrastructure/d1-checkout-repository";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
@@ -43,7 +44,7 @@ export type CheckoutQuoteView = {
   lines: ReadonlyArray<QuoteLine>;
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

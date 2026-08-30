@@ -1,4 +1,5 @@
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 
 export type CompleteRecurringAuthorizationCommand = {
@@ -12,7 +13,7 @@ export type CompletedRecurringAuthorization = {
   provider: string;
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

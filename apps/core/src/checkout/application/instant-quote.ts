@@ -12,6 +12,7 @@ import {
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { deliveryFeeFailure } from "./delivery-fee-failure";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 
 export type QuoteItem = {
   sku_id: string;
@@ -25,7 +26,7 @@ export type QuoteItem = {
   sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

@@ -1,5 +1,5 @@
 import type { Coordinate, DeliveryInstructions } from "./geography";
-import type { AuthenticatedRequest } from "./index";
+import type { AuthenticatedRequest } from "./auth";
 import type { DeliveryJobState } from "./states";
 
 export type FulfillmentMode = "INSTANT" | "SCHEDULED";

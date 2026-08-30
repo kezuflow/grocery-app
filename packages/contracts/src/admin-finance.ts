@@ -1,4 +1,5 @@
-import type { AuthenticatedRequest, RpcResult } from "./index";
+import type { AuthenticatedRequest } from "./auth";
+import type { RpcResult } from "./common";
 
 export const orderIssueCategories = [
   "MISSING_ITEM",

@@ -1,5 +1,23 @@
 import type { RpcResult } from "./common";
-import type { AuthenticatedRequest, CustomerOrderView } from "./index";
+import type { AuthenticatedRequest } from "./auth";
+import type { ImplementedOrderState } from "./states";
+
+export type CustomerOrderView = {
+  id: string;
+  status: ImplementedOrderState;
+  deliveryDate: string;
+  totalMinor: number;
+  currency: string;
+  itemCount: number;
+};
+
+export type AdminOrderCommandRequest = AuthenticatedRequest & {
+  orderId: string;
+  action: "CANCEL" | "REFUND";
+  reason: string;
+  idempotencyKey: string;
+  expectedVersion: number;
+};
 
 export type OrdersService = {
   listCustomerOrders(

@@ -7,6 +7,7 @@ import type {
   ServiceabilityFailureReason,
   UpdateCustomerAddressRequest,
 } from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { drizzle } from "drizzle-orm/d1";
 import type { GeocoderPort, PermanentGeocode } from "../geography/ports/geocoder";
 import { resolveServiceability } from "../geography/serviceability";
@@ -44,7 +45,7 @@ type CustomerAddressRow = {
 const ADDRESS_COLUMNS =
   "id, customer_id, label, recipient, phone, address_json, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, confirmation_source, user_confirmed_at, delivery_instructions_json, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

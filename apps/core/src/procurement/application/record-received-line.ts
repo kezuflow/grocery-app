@@ -1,4 +1,5 @@
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import {
   RECORD_LINE_SCOPE,
   createReceivingRepository,
@@ -25,7 +26,7 @@ export type ReceivingResult = {
   inventoryVersion: number | null;
 };
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 

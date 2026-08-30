@@ -1,5 +1,5 @@
 import type { RpcResult } from "./common";
-import type { AuthenticatedRequest, Scope } from "./index";
+import type { AuthenticatedRequest, Scope } from "./auth";
 
 /**
  * The closed canonical admin capability vocabulary. Dot-form is the only

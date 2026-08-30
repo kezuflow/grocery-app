@@ -40,3 +40,55 @@ export type DeliveryInstructions = {
   deliveryNote: string | null;
   recipientInstruction: string | null;
 };
+
+export type ServiceabilityFailureReason =
+  | "INVALID_COORDINATES"
+  | "OUTSIDE_SERVICE_AREA"
+  | "OUTSIDE_DELIVERY_ZONE"
+  | "NO_ELIGIBLE_LOCATION";
+
+export type ServiceabilityRequest = RequestMeta &
+  Coordinate & {
+    marketCode?: string;
+    addressComponents?: Readonly<Record<string, string>>;
+    previousResolution?: {
+      serviceAreaCode: string;
+      serviceAreaPolygonVersion: number;
+      deliveryZoneCode: string | null;
+      deliveryZonePolygonVersion: number | null;
+    };
+  };
+
+export type ServiceabilityMarket = {
+  code: string;
+  name: string;
+  currency: string;
+  timezone: string;
+};
+
+export type ServiceabilityArea = {
+  code: string;
+  name: string;
+  polygonVersion: number;
+};
+
+export type ServiceabilityZone = {
+  code: string;
+  name: string;
+  polygonVersion: number;
+};
+
+export type ServiceabilityResult = {
+  serviceable: boolean;
+  reason: ServiceabilityFailureReason | null;
+  coordinate: Coordinate;
+  market: ServiceabilityMarket | null;
+  serviceArea: ServiceabilityArea | null;
+  deliveryZone: ServiceabilityZone | null;
+  fulfillmentEligibility: {
+    eligible: boolean;
+    candidateCount: number;
+  };
+  resolutionChanged: boolean;
+  evaluatedAt: string;
+};

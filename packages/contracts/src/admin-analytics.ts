@@ -1,5 +1,6 @@
 import type { RpcResult } from "./common";
-import type { AdminSelectedScope, AuthenticatedRequest, Scope } from "./index";
+import type { AuthenticatedRequest, Scope } from "./auth";
+import type { AdminSelectedScope } from "./admin-foundation";
 
 export const metricDefinitionAvailabilities = ["AVAILABLE", "UNAVAILABLE"] as const;
 export type MetricDefinitionAvailability = (typeof metricDefinitionAvailabilities)[number];

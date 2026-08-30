@@ -6,10 +6,6 @@ import { checkoutEligibility } from "../../commerce/service";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 
-function failure(code: string, message: string, requestId: string) {
-  return { ok: false as const, error: { code, message, requestId } };
-}
-
 export type CheckoutEvaluation = {
   eligible: boolean;
   failures: string[];
@@ -27,9 +23,7 @@ export type CheckoutEvaluation = {
 export async function evaluateCheckout(
   database: D1Database,
   command: CheckoutEligibilityRequest & { customerId: string },
-): Promise<
-  { ok: true; value: CheckoutEvaluation; requestId: string } | ReturnType<typeof failure>
-> {
+): Promise<{ ok: true; value: CheckoutEvaluation; requestId: string }> {
   const db = drizzle(database);
   const now = Date.now();
   const [subscription, address, cycle, policy] = await Promise.all([

@@ -1,8 +1,9 @@
 import type { FulfillmentCommandRequest } from "@freshmarkets/contracts";
+import type { AppErrorCode, OperationsCommandState } from "@freshmarkets/contracts";
 import { fulfillmentTransitions, transitionToResult } from "../../commerce/state-machines";
 import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
@@ -12,8 +13,8 @@ export type AdvanceFulfillmentPorts = {
 };
 
 export type AdvanceFulfillmentResult =
-  | { ok: true; value: { id: string; status: string }; requestId: string }
-  | { ok: false; error: { code: string; message: string; requestId: string } };
+  | { ok: true; value: { id: string; status: OperationsCommandState }; requestId: string }
+  | { ok: false; error: { code: AppErrorCode; message: string; requestId: string } };
 
 const SCOPE = "fulfillment.advance";
 
@@ -70,7 +71,7 @@ export async function advanceFulfillment(
   if (priorCommand?.status === "SUCCEEDED")
     return {
       ok: true,
-      value: { id: command.orderId, status: row.status },
+      value: { id: command.orderId, status: row.status as OperationsCommandState },
       requestId: command.requestId,
     };
   if (priorCommand?.status === "PROCESSING")
@@ -110,7 +111,7 @@ export async function advanceFulfillment(
     if (idempotency.existing.status === "SUCCEEDED")
       return {
         ok: true as const,
-        value: { id: command.orderId, status: next },
+        value: { id: command.orderId, status: next as OperationsCommandState },
         requestId: command.requestId,
       };
     return failure(
@@ -153,7 +154,7 @@ export async function advanceFulfillment(
   }
   return {
     ok: true as const,
-    value: { id: command.orderId, status: next },
+    value: { id: command.orderId, status: next as OperationsCommandState },
     requestId: command.requestId,
   };
 }

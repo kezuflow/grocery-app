@@ -7,18 +7,7 @@ export async function listDeliveryCycles(
   database: D1Database,
   query: { marketCode?: string | null; requestId: string },
   resolveDefaultMarketCode: () => Promise<string | null>,
-): Promise<{
-  ok: true;
-  value: Array<{
-    id: string;
-    name: string;
-    cutoffAt: string;
-    deliveryDate: string;
-    status: string;
-    capacityRemaining: number;
-  }>;
-  requestId: string;
-}> {
+): Promise<RpcResult<ReadonlyArray<DeliveryCycleView>>> {
   const marketCode = query.marketCode ?? (await resolveDefaultMarketCode());
   if (!marketCode) return { ok: true as const, value: [], requestId: query.requestId };
   const rows = await database
@@ -41,9 +30,10 @@ export async function listDeliveryCycles(
       name: r.name,
       cutoffAt: new Date(r.cutoff_at).toISOString(),
       deliveryDate: new Date(r.delivery_date).toISOString(),
-      status: r.status,
+      status: r.status as DeliveryCycleState,
       capacityRemaining: r.capacity_remaining,
     })),
     requestId: query.requestId,
   };
 }
+import type { DeliveryCycleState, DeliveryCycleView, RpcResult } from "@freshmarkets/contracts";

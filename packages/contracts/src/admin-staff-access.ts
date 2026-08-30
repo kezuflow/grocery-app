@@ -1,4 +1,6 @@
-import type { AuthenticatedRequest, Capability, RpcResult, Scope } from "./index";
+import type { AuthenticatedRequest, Scope } from "./auth";
+import type { Capability } from "./admin-foundation";
+import type { RpcResult } from "./common";
 
 export const adminStaffInvitationStatuses = ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"] as const;
 export type AdminStaffInvitationStatus = (typeof adminStaffInvitationStatuses)[number];

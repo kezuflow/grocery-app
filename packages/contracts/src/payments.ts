@@ -1,6 +1,6 @@
 import type { PaymentState, RefundState } from "./states";
 import type { RpcResult } from "./common";
-import type { AuthenticatedRequest } from "./index";
+import type { AuthenticatedRequest } from "./auth";
 
 // Provider-neutral payment vocabulary. Vendor states map into these canonical
 // states behind the payment adapter; no vendor field appears in a DTO.

@@ -1,16 +1,71 @@
 import type { RpcResult } from "./common";
+import type { AuthenticatedRequest } from "./auth";
 import type {
-  AuthenticatedRequest,
-  DeliveryCommandRequest,
-  FulfillmentCommandRequest,
-  InventoryAdjustmentRequest,
-  InventoryAdjustmentResult,
-  ProcurementCommandRequest,
-  ReceivingCommandRequest,
-  ReceivingCommandResult,
-} from "./index";
-import type { OperationsCommandState } from "./states";
-import type { DeliveryAction, FulfillmentAction } from "./states";
+  DeliveryAction,
+  FulfillmentAction,
+  OperationsCommandState,
+  ReceivingRecordState,
+} from "./states";
+
+export type AdminCommandResult = { id: string; status: OperationsCommandState };
+
+export type InventoryAdjustmentRequest = AuthenticatedRequest & {
+  locationId: string;
+  inventoryPoolId: string;
+  delta: number;
+  reason: string;
+  idempotencyKey: string;
+  expectedVersion: number;
+};
+
+export type InventoryAdjustmentResult = {
+  locationId: string;
+  inventoryPoolId: string;
+  onHandBase: number;
+  reservedBase: number;
+  version: number;
+  ledgerEntryId: string;
+};
+
+export type ProcurementCommandRequest = AuthenticatedRequest & {
+  deliveryCycleId: string;
+  locationId: string;
+  inventoryPoolId: string;
+  idempotencyKey: string;
+  expectedVersion: number;
+};
+
+export type ReceivingCommandRequest = AuthenticatedRequest & {
+  requirementId: string;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  reason?: string;
+  idempotencyKey: string;
+  expectedVersion: number;
+};
+
+export type ReceivingCommandResult = {
+  receivingRecordId: string;
+  status: ReceivingRecordState;
+  acceptedBase: number;
+  rejectedBase: number;
+  remainingBase: number;
+  version: number;
+};
+
+export type FulfillmentCommandRequest = AuthenticatedRequest & {
+  orderId: string;
+  action: FulfillmentAction;
+  idempotencyKey: string;
+  expectedVersion: number;
+};
+
+export type DeliveryCommandRequest = AuthenticatedRequest & {
+  orderId: string;
+  action: DeliveryAction;
+  idempotencyKey: string;
+  expectedVersion: number;
+};
 
 export type OperationsCommandResult = { id: string; status: OperationsCommandState };
 

@@ -1,4 +1,5 @@
 import type { CheckoutQuoteRow } from "../infrastructure/d1-checkout-repository";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
@@ -6,7 +7,7 @@ import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 
 type RevalidationFailure = {
   ok: false;
-  code: string;
+  code: AppErrorCode;
   message: string;
 };
 
@@ -25,7 +26,7 @@ type LiveCartItem = {
   sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 };
 
-function rejected(code: string, message: string): RevalidationFailure {
+function rejected(code: AppErrorCode, message: string): RevalidationFailure {
   return { ok: false, code, message };
 }
 

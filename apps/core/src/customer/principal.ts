@@ -1,4 +1,4 @@
-import type { AuthenticatedRequest } from "@freshmarkets/contracts";
+import type { AppErrorCode, AuthenticatedRequest } from "@freshmarkets/contracts";
 
 export type SessionUser = { id: string; email: string; name: string; emailVerified: boolean };
 
@@ -11,7 +11,7 @@ export type AuthenticatedCustomer = {
 
 export type CustomerResolutionFailure = {
   ok: false;
-  error: { code: string; message: string; requestId: string };
+  error: { code: AppErrorCode; message: string; requestId: string };
 };
 
 export type ResolvedCustomer =
@@ -105,6 +105,10 @@ export async function resolveAuthenticatedCustomer(
   };
 }
 
-function failure(code: string, message: string, requestId: string): CustomerResolutionFailure {
+function failure(
+  code: AppErrorCode,
+  message: string,
+  requestId: string,
+): CustomerResolutionFailure {
   return { ok: false, error: { code, message, requestId } };
 }

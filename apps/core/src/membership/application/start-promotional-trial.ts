@@ -5,6 +5,7 @@ import {
   hasIntroductoryRedemption,
 } from "../../promotions/application/grant-introductory-trial";
 import { requestHash } from "../../idempotency";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 
 export type StartPromotionalTrialCommand = {
   customerId: string;
@@ -25,7 +26,7 @@ export type SubscriptionSummary = {
 
 const TRIAL_SCOPE = "membership.startTrial";
 
-function failure(code: string, message: string, requestId: string) {
+function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
