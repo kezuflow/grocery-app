@@ -20,6 +20,9 @@ const bodySchema = z.object({
 /**
  * The requesting rider's own open jobs. Core resolves the session and
  * returns only assignments belonging to that rider.
+ *
+ * @deprecated Historical raw job-list projection retained only while Web
+ * callers migrate to GET /api/rider/batches. Its behavior remains unchanged.
  */
 export async function GET(request: Request) {
   return Response.json(
