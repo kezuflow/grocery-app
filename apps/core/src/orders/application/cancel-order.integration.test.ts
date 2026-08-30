@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { cancelOrder, applyOrderRefundObservation } from "./cancel-order";
+import { advanceOrderCancellation } from "./advance-order-cancellation";
 
 let counter = 0;
 async function paidOrderFixture(options: { cutoffOffsetMs?: number } = {}) {
@@ -55,6 +56,45 @@ async function paidOrderFixture(options: { cutoffOffsetMs?: number } = {}) {
   return { customerId, orderId, intentId };
 }
 
+async function addCommittedAmendment(
+  fixture: Awaited<ReturnType<typeof paidOrderFixture>>,
+  amountMinor: number,
+) {
+  const now = Date.now();
+  const intentId = crypto.randomUUID();
+  const amendmentId = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO payment_intent (id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES (?,'ORDER_AMENDMENT','paid_order_amendment',?,?,?,'PHP','SUCCEEDED',?,1,?,?)",
+    ).bind(intentId, amendmentId, fixture.customerId, amountMinor, `pi-${intentId}`, now, now),
+    env.DB.prepare(
+      "INSERT INTO payment_attempt (id,customer_id,payment_intent_id,amount_minor,currency,status,provider,provider_reference,idempotency_key,created_at,updated_at) VALUES (?,?,?,?,'PHP','SUCCEEDED','mock',?,?,?,?)",
+    ).bind(
+      crypto.randomUUID(),
+      fixture.customerId,
+      intentId,
+      amountMinor,
+      `mock_pay_${intentId}`,
+      `pa-${intentId}`,
+      now,
+      now,
+    ),
+    env.DB.prepare(
+      "INSERT INTO paid_order_amendment (id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at,version,committed_at) VALUES (?,?,'COMMITTED','PHP',?,?,?, ?,?,1,?)",
+    ).bind(
+      amendmentId,
+      fixture.orderId,
+      amountMinor,
+      intentId,
+      `amend-${amendmentId}`,
+      now,
+      now,
+      now,
+    ),
+  ]);
+  return intentId;
+}
+
 function command(orderId: string): Parameters<typeof cancelOrder>[1] {
   return {
     orderId,
@@ -66,47 +106,106 @@ function command(orderId: string): Parameters<typeof cancelOrder>[1] {
 }
 
 describe("explicit cancellation and refund orchestration", () => {
+  it("coordinates the original payment and every committed addition before canceling", async () => {
+    const fixture = await paidOrderFixture();
+    const amendmentOne = await addCommittedAmendment(fixture, 5_000);
+    const amendmentTwo = await addCommittedAmendment(fixture, 7_000);
+    const refundIds = new Map<string, string>();
+    const result = await cancelOrder(env.DB, command(fixture.orderId), {
+      requestRefund: async (input) => {
+        const refundId = crypto.randomUUID();
+        refundIds.set(input.paymentIntentId, refundId);
+        await env.DB.prepare(
+          "INSERT INTO payment_refund (id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at) VALUES (?,?,?,'PHP','PROCESSING',?,?,1,?,?)",
+        )
+          .bind(
+            refundId,
+            input.paymentIntentId,
+            input.amountMinor,
+            input.reason,
+            input.idempotencyKey,
+            Date.now(),
+            Date.now(),
+          )
+          .run();
+        return { ok: true as const, refundId, refundState: "PROCESSING" as const };
+      },
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+    expect(result).toMatchObject({
+      ok: true,
+      value: { requiredRefundMinor: 36_000, refunds: { length: 3 } },
+    });
+    const paymentIds = [fixture.intentId, amendmentOne, amendmentTwo];
+    for (const [index, paymentIntentId] of paymentIds.entries()) {
+      const refundId = refundIds.get(paymentIntentId)!;
+      await env.DB.prepare("UPDATE payment_refund SET status='SUCCEEDED' WHERE id=?")
+        .bind(refundId)
+        .run();
+      const advanced = await advanceOrderCancellation(env.DB, {
+        paymentIntentId,
+        refundId,
+        refundState: "SUCCEEDED",
+      });
+      expect(advanced.completed).toBe(index === paymentIds.length - 1);
+      const order = await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first<{ status: string }>();
+      expect(order?.status).toBe(
+        index === paymentIds.length - 1 ? "CANCELED" : "CANCELLATION_REQUESTED",
+      );
+    }
+  });
+
   it("requests a canonical refund for a paid pre-cutoff order and finalizes from the observation", async () => {
     const fixture = await paidOrderFixture();
     const refundsRequested: string[] = [];
     const result = await cancelOrder(env.DB, command(fixture.orderId), {
       requestRefund: async (input) => {
         refundsRequested.push(input.paymentIntentId);
+        const refundId = crypto.randomUUID();
         // Simulate the provider accepting the refund request.
         await env.DB.prepare(
           "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, provider_refund_reference, version, created_at, updated_at) VALUES (?, ?, ?, 'PHP', 'PROCESSING', ?, ?, ?, 1, ?, ?)",
-        ).bind(
-          crypto.randomUUID(),
-          input.paymentIntentId,
-          input.amountMinor,
-          input.reason,
-          input.idempotencyKey,
-          `mock_refund_${input.idempotencyKey}`,
-          Date.now(),
-          Date.now(),
-        );
-        return { ok: true, refundState: "PROCESSING" as const };
+        )
+          .bind(
+            refundId,
+            input.paymentIntentId,
+            input.amountMinor,
+            input.reason,
+            input.idempotencyKey,
+            `mock_refund_${input.idempotencyKey}`,
+            Date.now(),
+            Date.now(),
+          )
+          .run();
+        return { ok: true, refundId, refundState: "PROCESSING" as const };
       },
     });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
     expect(result).toMatchObject({
       ok: true,
       value: { state: "CANCELLATION_REQUESTED", refundState: "PROCESSING" },
     });
     expect(refundsRequested).toEqual([fixture.intentId]);
-    // Operational state stays untouched until the refund observation lands.
+    // Operational commitments release when cancellation is accepted.
     const reservedBefore = await env.DB.prepare(
       "SELECT COALESCE(SUM(quantity),0) AS total FROM inventory_reservation WHERE order_id=? AND status='RESERVED'",
     )
       .bind(fixture.orderId)
       .first<{ total: number }>();
-    expect(reservedBefore?.total).toBe(1000);
+    expect(reservedBefore?.total).toBe(0);
 
     // Canonical refund success observation finalizes the order.
-    await env.DB.prepare("UPDATE payment_intent SET status='REFUNDED' WHERE id=?")
+    const refund = await env.DB.prepare("SELECT id FROM payment_refund WHERE payment_intent_id=?")
       .bind(fixture.intentId)
+      .first<{ id: string }>();
+    await env.DB.prepare("UPDATE payment_refund SET status='SUCCEEDED' WHERE id=?")
+      .bind(refund!.id)
       .run();
     const observation = await applyOrderRefundObservation(env.DB, {
       paymentIntentId: fixture.intentId,
+      refundId: refund!.id,
     });
     expect(observation.applied).toBe(true);
     const row = await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
@@ -119,6 +218,61 @@ describe("explicit cancellation and refund orchestration", () => {
       .bind(fixture.orderId)
       .first<{ total: number }>();
     expect(reservedAfter?.total).toBe(0);
+  });
+
+  it("retains the snapshotted Instant Service Fee only for a customer cancellation", async () => {
+    const fixture = await paidOrderFixture();
+    await env.DB.prepare(
+      "UPDATE grocery_order SET fulfillment_mode='INSTANT',cycle_id=NULL,service_fee_minor=2500 WHERE id=?",
+    )
+      .bind(fixture.orderId)
+      .run();
+    let requestedAmount = -1;
+
+    const result = await cancelOrder(env.DB, command(fixture.orderId), {
+      requestRefund: async (input) => {
+        requestedAmount = input.amountMinor;
+        return { ok: true, refundState: "PROCESSING" as const };
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { requiredRefundMinor: 21_500, retainedServiceFeeMinor: 2_500 },
+    });
+    expect(requestedAmount).toBe(21_500);
+  });
+
+  it("refunds the full Instant payment when FreshMarkets causes the cancellation", async () => {
+    const fixture = await paidOrderFixture();
+    await env.DB.prepare(
+      "UPDATE grocery_order SET fulfillment_mode='INSTANT',cycle_id=NULL,service_fee_minor=2500,status='FULFILLMENT_PENDING' WHERE id=?",
+    )
+      .bind(fixture.orderId)
+      .run();
+    let requestedAmount = -1;
+
+    const result = await cancelOrder(
+      env.DB,
+      {
+        ...command(fixture.orderId),
+        actor: "BUSINESS",
+        cause: "STOCK_UNAVAILABLE",
+        reason: "Stock became unavailable during picking",
+      },
+      {
+        requestRefund: async (input) => {
+          requestedAmount = input.amountMinor;
+          return { ok: true, refundState: "PROCESSING" as const };
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { requiredRefundMinor: 24_000, retainedServiceFeeMinor: 0 },
+    });
+    expect(requestedAmount).toBe(24_000);
   });
 
   it("rejects post-cutoff paid cancellation to manual review", async () => {
@@ -153,9 +307,14 @@ describe("explicit cancellation and refund orchestration", () => {
     }
   });
 
-  it.each(["OUT_FOR_DELIVERY", "DELIVERED", "CANCELED", "EXPIRED"])(
+  it.each([
+    ["OUT_FOR_DELIVERY", "FINANCIAL_OPERATION_REQUIRES_REVIEW"],
+    ["DELIVERED", "ORDER_NOT_CANCELABLE"],
+    ["CANCELED", "ORDER_NOT_CANCELABLE"],
+    ["EXPIRED", "ORDER_NOT_CANCELABLE"],
+  ])(
     "rejects cancellation from the terminal or late lifecycle state %s",
-    async (status) => {
+    async (status, expectedCode) => {
       const fixture = await paidOrderFixture();
       await env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?")
         .bind(status, fixture.orderId)
@@ -163,7 +322,7 @@ describe("explicit cancellation and refund orchestration", () => {
 
       const outcome = await cancelOrder(env.DB, command(fixture.orderId));
 
-      expect(outcome).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+      expect(outcome).toMatchObject({ ok: false, error: { code: expectedCode } });
       const row = await env.DB.prepare("SELECT status, version FROM grocery_order WHERE id=?")
         .bind(fixture.orderId)
         .first<{ status: string; version: number }>();

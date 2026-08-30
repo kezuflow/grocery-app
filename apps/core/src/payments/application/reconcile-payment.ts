@@ -1,6 +1,7 @@
 import { applyObservationToIntents, type ObservationApplication } from "./apply-observation";
 import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
+import { synchronizeOrderCancellationForPayment } from "../../orders/application/advance-order-cancellation";
 
 export type ReconcilePaymentCommand = {
   paymentIntentId: string;
@@ -73,6 +74,7 @@ export async function reconcilePayment(
   }
 
   const application = await applyObservationToIntents(database, [intent], view.canonicalState);
+  await synchronizeOrderCancellationForPayment(database, intent.id);
   return {
     ok: true,
     value: { ...application, source: "PROVIDER_LOOKUP" },

@@ -6,6 +6,7 @@ import {
 import { applyObservationToIntents } from "./apply-observation";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { recordFinancialEvent } from "./financial-observability";
+import { advanceOrderCancellation } from "../../orders/application/advance-order-cancellation";
 
 export type ProviderEventProcessingStatus =
   | "APPLIED"
@@ -114,6 +115,11 @@ export async function applyVerifiedProviderEvent(
           now,
         });
       await finish("APPLIED");
+      await advanceOrderCancellation(database, {
+        paymentIntentId: refund.paymentIntentId,
+        refundId: refund.id,
+        refundState: refund.status as import("@freshmarkets/contracts").RefundState,
+      });
       return result(event, "DUPLICATE", refund.paymentIntentId, event.canonicalState);
     }
     const changed = await refunds.updateRefundStatusCas({
@@ -142,6 +148,11 @@ export async function applyVerifiedProviderEvent(
       // own refund CAS, so the last writer necessarily sees the final sum.
       await refunds.refreshIntentRefundState(refund.paymentIntentId, now);
     }
+    await advanceOrderCancellation(database, {
+      paymentIntentId: refund.paymentIntentId,
+      refundId: refund.id,
+      refundState: event.canonicalState as import("@freshmarkets/contracts").RefundState,
+    });
     await finish("APPLIED");
     return result(event, "APPLIED", refund.paymentIntentId, event.canonicalState);
   }

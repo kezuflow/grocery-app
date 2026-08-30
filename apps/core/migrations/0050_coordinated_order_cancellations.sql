@@ -32,7 +32,7 @@ CREATE TABLE order_cancellation_refund_member (
   payment_intent_id TEXT NOT NULL REFERENCES payment_intent(id),
   required_amount_minor INTEGER NOT NULL CHECK (required_amount_minor >= 0),
   currency TEXT NOT NULL CHECK (length(currency) = 3),
-  refund_id TEXT REFERENCES refund(id),
+  refund_id TEXT REFERENCES payment_refund(id),
   status TEXT NOT NULL CHECK (status IN (
     'NOT_REQUESTED','REQUESTED','APPROVED','PROCESSING','SUCCEEDED',
     'REJECTED','FAILED','ESCALATED'
