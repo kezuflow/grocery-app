@@ -128,7 +128,7 @@ For an eligible cancellation:
 
 ### Customer-initiated Scheduled cancellation
 
-A Customer may request cancellation only before the snapshotted admin-configured delivery-cycle cutoff. The cancellation coordinates the original grocery payment and every committed paid addition.
+A Customer may request cancellation only before the snapshotted admin-configured delivery-cycle cutoff and before the Order enters `FULFILLMENT_PENDING`, whichever occurs first. The cancellation coordinates the original grocery payment and every committed paid addition.
 
 Additions cannot be canceled independently. A parent cancellation before cutoff:
 
