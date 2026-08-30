@@ -17,6 +17,10 @@ import {
   GoogleMapsCoordinateValidationError,
   googleMapsNavigationUrl,
 } from "../../lib/maps/google-maps-url";
+import {
+  createRiderCommandIntentStore,
+  type RiderCommandEvidence,
+} from "../../lib/rider/rider-command-intent";
 
 type RiderState =
   | { phase: "loading" }
@@ -65,7 +69,8 @@ export default function RiderPage() {
   const [state, setState] = useState<RiderState>({ phase: "loading" });
   const [notice, setNotice] = useState<ActionNotice>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
-  const keys = useRef(new Map<string, string>());
+  const intentStore = useRef<ReturnType<typeof createRiderCommandIntentStore> | null>(null);
+  if (!intentStore.current) intentStore.current = createRiderCommandIntentStore();
 
   const load = useCallback(async () => {
     try {
@@ -75,8 +80,21 @@ export default function RiderPage() {
         value?: RiderBatchList;
         error?: { code?: string; message?: string };
       };
-      if (payload.ok && payload.value) setState({ phase: "ready", value: payload.value });
-      else setState({ phase: "error", message: loadError(payload) });
+      if (payload.ok && payload.value) {
+        setState({ phase: "ready", value: payload.value });
+        const recovered = payload.value.batches.some((batch) => {
+          const delivery = batch.currentDelivery;
+          return delivery?.allowedActions.some((action) =>
+            intentStore.current?.hasRecoverable(commandEvidence(delivery, action)),
+          );
+        });
+        if (recovered) {
+          setNotice({
+            kind: "pending",
+            message: "Recovered an unfinished delivery update. Retry the same action when ready.",
+          });
+        }
+      } else setState({ phase: "error", message: loadError(payload) });
     } catch {
       setState({ phase: "error", message: "Network error loading your deliveries." });
     }
@@ -88,20 +106,27 @@ export default function RiderPage() {
 
   async function act(delivery: RiderDeliveryView, action: RiderAction) {
     const actionId = `${delivery.jobId}:${action}`;
-    let idempotencyKey = keys.current.get(actionId);
-    if (!idempotencyKey) {
-      idempotencyKey = `delivery-${crypto.randomUUID()}`;
-      keys.current.set(actionId, idempotencyKey);
+    const evidence = commandEvidence(delivery, action);
+    const intent = intentStore.current!.begin(evidence);
+    if (intent.status === "duplicate") {
+      setNotice({ kind: "pending", message: "This delivery update is already pending." });
+      return;
     }
 
     setPendingAction(actionId);
-    setNotice({ kind: "pending", message: "Updating delivery…" });
+    setNotice({
+      kind: "pending",
+      message: intent.recovered ? "Retrying saved delivery update…" : "Updating delivery…",
+    });
     try {
       const response = await fetch(
         `/api/rider/jobs?v=${encodeURIComponent(String(delivery.jobVersion))}`,
         {
           method: "POST",
-          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": intent.idempotencyKey,
+          },
           body: JSON.stringify({ orderId: delivery.orderId, action }),
         },
       );
@@ -110,21 +135,33 @@ export default function RiderPage() {
         value?: { status: string };
         error?: { code?: string; message?: string };
       };
-      const definitive = result.ok || result.error?.code === "STALE_VERSION";
-      if (definitive) {
-        keys.current.delete(actionId);
+      const outcome = result.ok
+        ? "success"
+        : result.error?.code === "STALE_VERSION"
+          ? "stale"
+          : result.error?.code === "IDEMPOTENCY_CONFLICT" || result.error?.code === "CONFLICT"
+            ? "conflict"
+            : "failure";
+      const settled = intentStore.current!.settle(evidence, outcome);
+      if (settled.refresh) {
         setNotice({
           kind: "success",
           message: result.ok
             ? `Delivery is now ${displayStatus(result.value?.status ?? "updated")}.`
-            : "Delivery changed elsewhere. Current delivery refreshed.",
+            : outcome === "stale"
+              ? "Delivery changed elsewhere. Current delivery refreshed."
+              : "Saved update conflicted with current delivery state. Current delivery refreshed.",
         });
         await load();
       } else {
         setNotice({ kind: "error", message: result.error?.message ?? "Update failed." });
       }
     } catch {
-      setNotice({ kind: "error", message: "Update could not be completed. Try again." });
+      intentStore.current!.settle(evidence, "ambiguous");
+      setNotice({
+        kind: "error",
+        message: "The update result is uncertain. Retry will safely reuse the saved request.",
+      });
     } finally {
       setPendingAction(null);
     }
@@ -234,6 +271,15 @@ export default function RiderPage() {
       ) : null}
     </main>
   );
+}
+
+function commandEvidence(delivery: RiderDeliveryView, action: RiderAction): RiderCommandEvidence {
+  return {
+    jobId: delivery.jobId,
+    action,
+    orderId: delivery.orderId,
+    expectedVersion: delivery.jobVersion,
+  };
 }
 
 function CurrentDelivery({

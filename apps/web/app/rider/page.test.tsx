@@ -88,6 +88,7 @@ describe("RiderPage batch workflow", () => {
     (
       globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    window.sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -237,6 +238,17 @@ describe("RiderPage batch workflow", () => {
         error: { code: "STALE_VERSION", message: "Delivery changed", requestId: "command" },
       },
     ],
+    [
+      "idempotency conflict",
+      {
+        ok: false,
+        error: {
+          code: "IDEMPOTENCY_CONFLICT",
+          message: "Command payload changed",
+          requestId: "command",
+        },
+      },
+    ],
   ] as const)(
     "refreshes after a definitive %s result and advances to Core's next delivery",
     async (_case, commandResult) => {
@@ -320,6 +332,110 @@ describe("RiderPage batch workflow", () => {
     expect(container.querySelector('[data-testid="current-delivery"]')?.textContent).toContain(
       "failed-action Mango Avenue",
     );
+    act(() => root.unmount());
+  });
+
+  it("retains and reuses the exact key after an ambiguous result with accessible retry messaging", async () => {
+    const current = delivery({ jobId: "retry", sequence: 1 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(Response.json({ ok: true, value: { status: "EN_ROUTE" } }))
+      .mockResolvedValueOnce(rpc(batches(null)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+    await flush();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("result is uncertain");
+    const firstHeaders = new Headers((fetchMock.mock.calls[1]![1] as RequestInit).headers);
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!.click(),
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Retrying saved delivery update",
+    );
+    await flush();
+
+    const retryHeaders = new Headers((fetchMock.mock.calls[2]![1] as RequestInit).headers);
+    expect(retryHeaders.get("idempotency-key")).toBe(firstHeaders.get("idempotency-key"));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Delivery is now en route",
+    );
+    act(() => root.unmount());
+  });
+
+  it("announces a recovered exact intent after remount and safely reuses its key", async () => {
+    const current = delivery({ jobId: "reload", sequence: 1 });
+    const firstFetch = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockResolvedValueOnce(new Response("not-json", { status: 502 }));
+    vi.stubGlobal("fetch", firstFetch);
+    const firstMount = await mount();
+    await flush();
+    act(() =>
+      firstMount.container
+        .querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!
+        .click(),
+    );
+    await flush();
+    const firstKey = new Headers((firstFetch.mock.calls[1]![1] as RequestInit).headers).get(
+      "idempotency-key",
+    );
+    act(() => firstMount.root.unmount());
+
+    const secondFetch = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockResolvedValueOnce(Response.json({ ok: true, value: { status: "EN_ROUTE" } }))
+      .mockResolvedValueOnce(rpc(batches(null)));
+    vi.stubGlobal("fetch", secondFetch);
+    const secondMount = await mount();
+    await flush();
+
+    expect(secondMount.container.querySelector('[role="status"]')?.textContent).toContain(
+      "Recovered an unfinished delivery update",
+    );
+    act(() =>
+      secondMount.container
+        .querySelector<HTMLButtonElement>('[data-rider-action="MARK_EN_ROUTE"]')!
+        .click(),
+    );
+    await flush();
+    const recoveredKey = new Headers((secondFetch.mock.calls[1]![1] as RequestInit).headers).get(
+      "idempotency-key",
+    );
+    expect(recoveredKey).toBe(firstKey);
+    act(() => secondMount.root.unmount());
+  });
+
+  it("coalesces a duplicate click while the same command is pending", async () => {
+    const current = delivery({ jobId: "duplicate", sequence: 1 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpc(batches(current)))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container, root } = await mount();
+    await flush();
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-rider-action="MARK_EN_ROUTE"]',
+    )!;
+
+    act(() => {
+      button.click();
+      button.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("already pending");
     act(() => root.unmount());
   });
 });
