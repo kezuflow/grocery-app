@@ -2,11 +2,20 @@ import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 import {
+  hasOnlyQueryKeys,
   parsePositiveVersion,
   parseQueryContext,
   parseRequiredIdentifier,
   validationFailure,
 } from "../delivery-map-route-utils";
+
+const QUERY_KEYS = new Set([
+  "locationId",
+  "fulfillmentMode",
+  "cycleId",
+  "jobId",
+  "expectedVersion",
+]);
 
 export async function GET(request: Request) {
   const requestId = crypto.randomUUID();
@@ -14,7 +23,7 @@ export async function GET(request: Request) {
   const context = parseQueryContext(params);
   const jobId = parseRequiredIdentifier(params, "jobId");
   const expectedVersion = parsePositiveVersion(params, "expectedVersion");
-  if (!context || !jobId || expectedVersion === null) {
+  if (!hasOnlyQueryKeys(params, QUERY_KEYS) || !context || !jobId || expectedVersion === null) {
     return validationFailure(requestId, "Invalid delivery map detail request");
   }
 

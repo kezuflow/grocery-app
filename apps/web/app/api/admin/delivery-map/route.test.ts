@@ -136,6 +136,28 @@ describe("GET /api/admin/delivery-map", () => {
     );
   });
 
+  it.each([
+    ["arbitrary", "unknown=private-value"],
+    ["origin", "origin=private-origin"],
+    ["latitude", "latitude=10.3"],
+    ["longitude", "longitude=123.9"],
+    ["optimization", "optimize=true"],
+    ["optimization alias", "optimization=shortest"],
+    ["provider", "provider=mapbox"],
+  ])(
+    "rejects unknown %s query input without reflecting it or calling Core",
+    async (_name, input) => {
+      const response = await getMap(
+        new Request(`${base}/delivery-map?locationId=location-1&fulfillmentMode=INSTANT&${input}`),
+      );
+      const serialized = JSON.stringify(await response.clone().json());
+      expect(response.status).toBe(400);
+      expect(serialized).toContain("VALIDATION_FAILED");
+      expect(serialized).not.toContain(input.split("=")[1]);
+      expect(core.getDeliveryMap).not.toHaveBeenCalled();
+    },
+  );
+
   it("returns Core authentication failure unchanged at the adapter transport status", async () => {
     const result = {
       ok: false,
@@ -186,6 +208,25 @@ describe("GET /api/admin/delivery-map/detail", () => {
       ),
     );
     await expectValidation(response, core.getDeliveryMapDetail);
+  });
+
+  it.each([
+    ["statuses", "statuses=UNASSIGNED"],
+    ["Rider", "riderId=rider-private"],
+    ["coordinate", "latitude=10.3"],
+    ["origin", "origin=private-origin"],
+    ["optimization", "optimization=shortest"],
+    ["provider", "provider=mapbox"],
+    ["arbitrary", "unknown=private-value"],
+  ])("rejects unknown %s query input without calling Core", async (_name, input) => {
+    const response = await getDetail(
+      new Request(
+        `${base}/delivery-map/detail?locationId=location-1&fulfillmentMode=INSTANT&jobId=job-1&expectedVersion=1&${input}`,
+      ),
+    );
+    const serialized = JSON.stringify(await response.clone().json());
+    await expectValidation(response, core.getDeliveryMapDetail);
+    expect(serialized).not.toContain(input.split("=")[1]);
   });
 
   it("forwards Core forbidden and not-found results unchanged", async () => {
@@ -437,6 +478,25 @@ describe("/api/admin/delivery-batches", () => {
     expect(await response.json()).toEqual(result);
   });
 
+  it.each([
+    ["statuses", "statuses=UNASSIGNED"],
+    ["Rider", "riderId=rider-private"],
+    ["coordinate", "longitude=123.9"],
+    ["origin", "origin=private-origin"],
+    ["optimization", "optimize=true"],
+    ["provider", "provider=mapbox"],
+    ["arbitrary", "unknown=private-value"],
+  ])("GET rejects unknown %s query input without calling Core", async (_name, input) => {
+    const response = await getRiders(
+      new Request(
+        `${base}/delivery-batches?locationId=location-1&fulfillmentMode=INSTANT&${input}`,
+      ),
+    );
+    const serialized = JSON.stringify(await response.clone().json());
+    await expectValidation(response, core.getEligibleRiders);
+    expect(serialized).not.toContain(input.split("=")[1]);
+  });
+
   it("POST forwards canonical Rider, versions, order, and a matching stable key", async () => {
     const orderedDeliveries = [delivery("job-2", 4), delivery("job-1", 8)];
     await createBatch(
@@ -473,6 +533,39 @@ describe("/api/admin/delivery-batches", () => {
     );
     expect(core.createAndAssignDeliveryBatch.mock.calls[0][0].idempotencyKey).toBe("header-key");
   });
+
+  it("POST accepts an exact 200-character resolved header key", async () => {
+    const idempotencyKey = "k".repeat(200);
+    await createBatch(
+      jsonRequest(
+        "delivery-batches",
+        { ...instantContext(), riderId: "rider-1", orderedDeliveries: [delivery()] },
+        { "idempotency-key": idempotencyKey },
+      ),
+    );
+    expect(core.createAndAssignDeliveryBatch.mock.calls[0][0].idempotencyKey).toBe(idempotencyKey);
+  });
+
+  it.each([
+    ["blank", "   "],
+    ["oversized", "k".repeat(201)],
+  ])(
+    "POST rejects a %s header-only key without calling Core or reflecting it",
+    async (_name, key) => {
+      const response = await createBatch(
+        jsonRequest(
+          "delivery-batches",
+          { ...instantContext(), riderId: "rider-1", orderedDeliveries: [delivery()] },
+          { "idempotency-key": key },
+        ),
+      );
+      const serialized = JSON.stringify(await response.clone().json());
+      expect(response.status).toBe(400);
+      expect(serialized).toContain("VALIDATION_FAILED");
+      expect(serialized).not.toContain(key);
+      expect(core.createAndAssignDeliveryBatch).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["missing key", {}, {}],

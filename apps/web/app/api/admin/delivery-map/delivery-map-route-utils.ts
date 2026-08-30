@@ -49,6 +49,13 @@ export function validationFailure(requestId: string, message: string): Response 
   );
 }
 
+export function hasOnlyQueryKeys(
+  params: URLSearchParams,
+  allowedKeys: ReadonlySet<string>,
+): boolean {
+  return Array.from(params.keys()).every((key) => allowedKeys.has(key));
+}
+
 function singleQueryValue(params: URLSearchParams, name: string): string | null | undefined {
   const values = params.getAll(name);
   if (values.length > 1) return undefined;

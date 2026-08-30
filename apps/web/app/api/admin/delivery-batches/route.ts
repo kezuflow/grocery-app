@@ -5,10 +5,13 @@ import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 import {
   dispatchContextSchema,
+  hasOnlyQueryKeys,
   orderedDeliveriesSchema,
   parseQueryContext,
   validationFailure,
 } from "../delivery-map/delivery-map-route-utils";
+
+const GET_QUERY_KEYS = new Set(["locationId", "fulfillmentMode", "cycleId"]);
 
 const commandSchema = z.union([
   dispatchContextSchema.options[0]
@@ -29,8 +32,11 @@ const commandSchema = z.union([
 
 export async function GET(request: Request) {
   const requestId = crypto.randomUUID();
-  const context = parseQueryContext(new URL(request.url).searchParams);
-  if (!context) return validationFailure(requestId, "Invalid eligible Riders request");
+  const params = new URL(request.url).searchParams;
+  const context = parseQueryContext(params);
+  if (!hasOnlyQueryKeys(params, GET_QUERY_KEYS) || !context) {
+    return validationFailure(requestId, "Invalid eligible Riders request");
+  }
 
   return Response.json(
     await coreClient(env.CORE).getEligibleRiders({
@@ -52,6 +58,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return validationFailure(requestId, (error as Error).message);
   }
+  const parsedIdempotencyKey = idempotencyKeySchema.safeParse(idempotencyKey);
+  if (!parsedIdempotencyKey.success) {
+    return validationFailure(requestId, "Invalid idempotency key");
+  }
   const { idempotencyKey: _bodyKey, ...command } = parsed.data;
 
   return Response.json(
@@ -59,7 +69,7 @@ export async function POST(request: Request) {
       requestId,
       headers: requestHeaders(request),
       ...command,
-      idempotencyKey,
+      idempotencyKey: parsedIdempotencyKey.data,
     }),
   );
 }
