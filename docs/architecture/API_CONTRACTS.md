@@ -469,6 +469,7 @@ with the compatibility surface.
 
 ## Rider Operations
 
+- `getRiderBatches({ headers, requestId }) -> RiderBatchList`
 - `rider.listAssignments() -> RiderAssignmentList`
 - `rider.getBatch({ batchId }) -> RiderBatchView`
 - `rider.markEnRoute({ jobId, expectedVersion, idempotencyKey })`
@@ -476,7 +477,19 @@ with the compatibility surface.
 - `rider.markDelivered({ stopId, occurredAt, proofMetadata?, expectedVersion, idempotencyKey })`
 - `rider.markFailed({ stopId, reasonCode, notes?, occurredAt, expectedVersion, idempotencyKey })`
 
-Core verifies that the rider is assigned to the job. Client-supplied timestamps are recorded as reported metadata where useful; Core records authoritative receipt time.
+`getRiderBatches` derives the active canonical Rider from the authenticated
+session and accepts no client Rider identity. It returns only that Rider's
+assigned operational batches in their exact `INSTANT` or `SCHEDULED` context.
+Each batch identifies the first unfinished immutable stop as
+`currentDelivery`, returns later unfinished stops as an ordered
+`upcomingDeliveries` projection, and includes only Core-derived legal actions.
+Destination coordinates, display address, recipient/contact data, and delivery
+instructions come from the immutable stop snapshot rather than the customer's
+current saved address. The historical `riderJobs` projection remains a
+deprecated compatibility read while callers migrate; it is not a second Rider
+authorization or sequencing authority.
+
+Core verifies that the rider is assigned to the job. Client-supplied timestamps are recorded as reported metadata where useful; Core records authoritative receipt time. Web may build a keyless Google Maps universal URL only for the current delivery's immutable coordinate. It supplies no origin or waypoints, and navigation itself causes no FreshMarkets state transition.
 
 ## Analytics Queries
 

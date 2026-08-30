@@ -29,6 +29,37 @@ Status date: 2026-08-30. This file is descriptive evidence only. The canonical d
   token configuration, the Core Mapbox secret, permanent-geocoding entitlement, and approved
   production serviceability polygons outside source.
 
+## Delivery Map Dispatch and Rider Navigation (2026-08-30)
+
+- Core now exposes purpose-built, location-scoped Delivery map/detail and eligible-Rider reads,
+  provider-neutral preview of the submitted manual stop order, and one atomic guarded
+  create-and-assign command for one to 24 deliveries. Operational batches are exactly `INSTANT`
+  or `SCHEDULED`; unresolved historical evidence remains non-operational. Migration
+  `0043_delivery_batches_and_map_stops.sql` preserves historical jobs/batches/stops while adding
+  canonical context, immutable stop coordinates, Rider references, versions, events, and indexes.
+- The Admin Delivery workspace synchronizes accessible table and map selection, rectangle
+  selection, protected detail, manual pointer/keyboard ordering, warning-only route preview,
+  Rider workload, explicit final review, idempotent replay, and stale/conflict recovery. Mapbox
+  never optimizes or authorizes the order, and the table workflow remains available when the map
+  cannot render.
+- Core resolves the authenticated active canonical Rider and returns only assigned batches. The
+  first unfinished immutable stop is current; later stops are ordered upcoming work. Rider Web
+  opens only the current coordinate through a keyless Google Maps universal driving URL with no
+  origin or waypoints. FreshMarkets lifecycle actions remain explicit, Core-derived, versioned,
+  and idempotent; session recovery stores bounded job/action command evidence without address,
+  contact, instruction, coordinate, or token data.
+- Fresh whole-program local acceptance passed 17 focused contract, 208 focused Core, and 261
+  focused Web tests; the full recursive suite passed 1,096 tests in 169 files. Managed serial
+  Playwright passed all five address/Checkout/serviceability flows, the Admin dispatch flow, and
+  four runnable Rider navigation/advancement flows. One Rider empty-state flow remains skipped
+  because the local run has no configured auth-email transport. Formatting, naming, migrations,
+  lint, type checks, vinext compatibility, Worker builds, and diff checks passed; lint retains 19
+  existing warnings and the Web build retains its non-fatal large-chunk advisory.
+- Production still requires restricted public/server Mapbox token configuration, permanent-
+  geocoding entitlement, and an approved versioned serviceability polygon release mechanism. The
+  current runbook intentionally records production polygon change as blocked rather than
+  inventing deployment or rollback authority.
+
 ## Admin Operations UI Phase 12 (2026-08-30)
 
 - The approved Admin screen inventory is implemented through the typed Web-to-Core Service Binding: Core-authorized hierarchical navigation; Catalog Product and Category list/create/detail/edit/lifecycle; canonical R2-backed Product media administration; complete Order and Payment workspaces; and the existing Customer/Privacy, Membership, Promotion, Inventory, Procurement/Receiving, Fulfillment, Delivery, exception, Analytics, Staff/Role, Audit, and fulfillment-mode surfaces.
