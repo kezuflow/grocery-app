@@ -26,7 +26,7 @@ type ExpectedDeliveryMapPin = {
   jobId: string;
   orderId: string;
   batchId: string | null;
-  coordinate: Coordinate;
+  coordinate: Coordinate | null;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   cycleId: string | null;
   status: string;
@@ -82,6 +82,12 @@ describe("delivery map and atomic dispatch contracts", () => {
       pins: [pin],
       generatedAt: "2026-08-30T00:00:00.000Z",
     };
+    const coordinateMissingPin: DeliveryMapPin = {
+      ...pin,
+      jobId: "job-missing-coordinate",
+      coordinate: null,
+      selection: { selectable: false, reason: "MISSING_COORDINATE" },
+    };
     const detail: DeliveryMapDetail = {
       jobId: "job-1",
       orderId: "order-1",
@@ -102,6 +108,12 @@ describe("delivery map and atomic dispatch contracts", () => {
       status: "UNASSIGNED",
       version: 3,
       allowedActions: ["CREATE_AND_ASSIGN_BATCH"],
+    };
+    const coordinateMissingDetail: DeliveryMapDetail = {
+      ...detail,
+      jobId: coordinateMissingPin.jobId,
+      destination: { ...detail.destination, coordinate: null },
+      allowedActions: [],
     };
     const rider: EligibleRiderView = {
       riderId: "rider-1",
@@ -140,6 +152,8 @@ describe("delivery map and atomic dispatch contracts", () => {
     };
 
     expect(map.pins).toEqual([pin]);
+    expect(coordinateMissingPin.coordinate).toBeNull();
+    expect(coordinateMissingDetail.allowedActions).toEqual([]);
     expect(detail.destination.instructions.buildingUnit).toBe("Unit 2");
     expect(rider.openDeliveryCount).toBe(7);
     expect(preview.outcome).toBe("AVAILABLE");

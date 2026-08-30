@@ -96,6 +96,9 @@ import {
 } from "./delivery/application/list-delivery-dispatch";
 import { listRiderJobs } from "./delivery/application/list-rider-jobs";
 import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
+import { getDeliveryMap as getDeliveryMapQuery } from "./delivery/application/get-delivery-map";
+import { getDeliveryMapDetail as getDeliveryMapDetailQuery } from "./delivery/application/get-delivery-map-detail";
+import { getEligibleRiders as getEligibleRidersQuery } from "./delivery/application/get-eligible-riders";
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import {
@@ -1778,6 +1781,36 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return listAdminDeliveryOperations(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async getDeliveryMap(input: import("@freshmarkets/contracts").DeliveryMapRequest) {
+    return getDeliveryMapQuery(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        now: () => this.context.now(),
+      },
+      input,
+    );
+  }
+  async getDeliveryMapDetail(input: import("@freshmarkets/contracts").DeliveryMapDetailRequest) {
+    return getDeliveryMapDetailQuery(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        now: () => this.context.now(),
+      },
+      input,
+    );
+  }
+  async getEligibleRiders(input: import("@freshmarkets/contracts").EligibleRidersRequest) {
+    return getEligibleRidersQuery(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        now: () => this.context.now(),
+      },
+      input,
     );
   }
   async listOperationalExceptions(

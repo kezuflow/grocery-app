@@ -8,7 +8,8 @@ export type DeliveryMapPin = {
   jobId: string;
   orderId: string;
   batchId: string | null;
-  coordinate: Coordinate;
+  /** Null preserves authorized open rows that have no authoritative map marker. */
+  coordinate: Coordinate | null;
   fulfillmentMode: FulfillmentMode;
   cycleId: string | null;
   status: string;
@@ -32,7 +33,8 @@ export type DeliveryMapDetail = {
   orderId: string;
   orderNumber: string;
   destination: {
-    coordinate: Coordinate;
+    /** Null when the immutable stop has no authoritative coordinates. */
+    coordinate: Coordinate | null;
     displayAddress: string;
     recipient: string;
     phone: string;

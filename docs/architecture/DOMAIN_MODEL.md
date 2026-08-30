@@ -305,6 +305,12 @@ Order/address/contact/instruction snapshots, serviceability polygons,
 fulfillment-ranking rules, provider responses, and Better Auth rows are never
 map DTOs.
 
+An authorized open job remains in the projection when its immutable stop has
+no authoritative coordinate. Its coordinate is null, it has no map marker, and
+Core marks it non-selectable with `MISSING_COORDINATE`; protected detail remains
+available without a batch-assignment action. Assignment still requires a
+non-null authoritative coordinate.
+
 Dispatch manually orders one to 24 selectable jobs. Route preview starts at the
 authoritative fulfillment location, loads immutable stop coordinates inside
 Core, follows the submitted order without optimization, and is informational:

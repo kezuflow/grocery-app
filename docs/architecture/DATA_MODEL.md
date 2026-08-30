@@ -219,6 +219,12 @@ Indexes: run/cycle/location/status, requirements/status, POs/supplier/status, re
 
 Indexes support cycle/location/status work queues, rider/current batches, and open delivery exceptions. Delivery status does not replace order/fulfillment state.
 
+Delivery map reads retain every authorized open `delivery_job` in its exact
+location/mode/cycle context. A null `delivery_stop.latitude`/`longitude` pair is
+projected as a null coordinate rather than omitted or synthesized; it produces
+no map marker and fails assignment selection closed with
+`MISSING_COORDINATE`.
+
 Migration `0043_delivery_batches_and_map_stops.sql` is owned by the Delivery
 implementation phase and is not created by the contract phase. It must converge
 historical batches/stops onto the canonical rows above, permit null cycle only

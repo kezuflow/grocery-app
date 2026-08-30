@@ -425,7 +425,7 @@ Every command validates location scope and legal transition.
 - `admin.delivery.rescheduleJob(...) -> DeliveryJobView`
 - `admin.delivery.resolveFailure(...) -> DeliveryJobView`
 
-`DeliveryMapPin` contains only job/order/batch identities, coordinate,
+`DeliveryMapPin` contains only job/order/batch identities, nullable coordinate,
 fulfillment mode/cycle, status, purpose-built Rider display identity, aggregate
 version, and Core-derived `{ selectable, reason }`. `DeliveryMapView` is a
 bounded scoped pin collection. `DeliveryMapDetail` separately returns protected
@@ -433,6 +433,13 @@ display address, recipient/contact, structured instructions, version, and
 Core-derived legal actions. `EligibleRiderView` contains canonical Rider
 identity plus open batch/delivery counts. None exposes raw snapshot JSON,
 polygon GeoJSON, provider data/tokens, Better Auth records, or ranking rules.
+
+Every authorized open row remains in `DeliveryMapView`. When the immutable stop
+has no authoritative coordinate, the pin and detail coordinate are null, Web
+renders no map marker, selection is `{ selectable: false, reason:
+"MISSING_COORDINATE" }`, and detail exposes no batch-assignment action. Core
+never fabricates a coordinate, and assignment still requires a non-null
+authoritative coordinate.
 
 Every `orderedDeliveries` entry is `{ jobId, expectedVersion }`; its array is the
 manual route order. Preview and assignment accept no origin or destination
