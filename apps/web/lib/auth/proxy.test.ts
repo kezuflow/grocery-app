@@ -74,6 +74,34 @@ describe("proxyAuthRequest", () => {
     await proxyAuthRequest(request, { auth }, "https://freshmarkets.ph");
     expect(auth.mock.calls[0][0].body).toBeUndefined();
   });
+
+  it("rejects unsupported and oversized bodies before invoking Core", async () => {
+    const auth = coreAuthSpy();
+    const unsupported = await proxyAuthRequest(
+      new Request("https://freshmarkets.ph/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: "credentials",
+      }),
+      { auth },
+      "https://freshmarkets.ph",
+    );
+    expect(unsupported.status).toBe(415);
+    const oversized = await proxyAuthRequest(
+      new Request("https://freshmarkets.ph/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(256 * 1024 + 1),
+        },
+        body: "{}",
+      }),
+      { auth },
+      "https://freshmarkets.ph",
+    );
+    expect(oversized.status).toBe(413);
+    expect(auth).not.toHaveBeenCalled();
+  });
 });
 
 describe("resolvePublicAppOrigin", () => {

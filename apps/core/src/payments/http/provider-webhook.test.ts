@@ -33,4 +33,25 @@ describe("provider webhook route", () => {
     const wrongMethod = await SELF.fetch("https://core.example.invalid/webhooks/payments/stripe");
     expect(wrongMethod.status).toBe(404);
   });
+
+  it("rejects oversized and unsupported bodies before provider lookup", async () => {
+    const oversized = await SELF.fetch(
+      "https://core.example.invalid/webhooks/payments/never-registered",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "content-length": "262145" },
+        body: "{}",
+      },
+    );
+    expect(oversized.status).toBe(413);
+    const unsupported = await SELF.fetch(
+      "https://core.example.invalid/webhooks/payments/never-registered",
+      {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: "{}",
+      },
+    );
+    expect(unsupported.status).toBe(415);
+  });
 });

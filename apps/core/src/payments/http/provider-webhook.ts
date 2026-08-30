@@ -1,7 +1,9 @@
 import { ingestProviderEvent } from "../application/ingest-provider-event";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
+import { readBoundedText } from "../../http/bounded-body";
 
 const WEBHOOK_PATH = /^\/webhooks\/payments\/([a-z0-9_-]+)$/;
+export const PAYMENT_WEBHOOK_MAX_BYTES = 256 * 1024;
 
 /**
  * Narrow signed provider-event ingress. The route exists only for adapters
@@ -22,8 +24,20 @@ export async function handleProviderWebhook(
       { status: 404 },
     );
   }
-  const rawBody = await request.text();
-  const outcome = await ingestProviderEvent(database, registry, match[1], request.headers, rawBody);
+  const body = await readBoundedText(request, {
+    maxBytes: PAYMENT_WEBHOOK_MAX_BYTES,
+    contentTypes: ["application/json"],
+  });
+  if (!body.ok) {
+    return Response.json({ ok: false, error: body.error }, { status: body.error.status });
+  }
+  const outcome = await ingestProviderEvent(
+    database,
+    registry,
+    match[1],
+    request.headers,
+    body.value,
+  );
   if (!outcome.ok) {
     const status =
       outcome.error.code === "PAYMENT_PROVIDER_UNCONFIGURED"
