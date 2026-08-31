@@ -31,6 +31,7 @@ export default defineConfig({
   retries: managedStack ? 1 : 0,
   workers: managedStack ? 1 : undefined,
   reporter: [["list"]],
+  snapshotPathTemplate: "{testDir}/visual-baselines/{arg}{ext}",
   webServer: managedStack
     ? {
         command: `pnpm --filter @freshmarkets/web build && node apps/web/tests/prepare-admin-e2e-state.mjs && pnpm --filter @freshmarkets/core exec wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e-state && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js dev -c apps/web/dist/server/wrangler.json -c apps/core/wrangler.e2e.jsonc --persist-to apps/core/.wrangler/e2e-state --port ${managedPort}`,
