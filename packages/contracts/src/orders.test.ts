@@ -5,6 +5,7 @@ import {
   type CustomerOrderIssueView,
   type CancelCustomerOrderRequest,
   type OrderCancellationView,
+  type ProvisionalTransactionSummaryView,
   type ReorderResultView,
 } from "./orders";
 
@@ -37,6 +38,38 @@ describe("customer order contracts", () => {
     expect(request).not.toHaveProperty("actor");
     expect(request).not.toHaveProperty("cause");
     expect(cancellation.refunds[0]).not.toHaveProperty("provider");
+  });
+
+  it("labels the bounded document as provisional and excludes invented tax identity", () => {
+    const summary = {
+      documentKind: "PROVISIONAL_TRANSACTION_SUMMARY",
+      disclaimer: "NOT AN OFFICIAL BIR INVOICE",
+      orderNumber: "FM-1",
+      committedAt: "2026-08-31T00:00:00.000Z",
+      currency: "PHP",
+      buyer: { recipient: "Ana", addressLines: ["Cebu City"] },
+      lines: [],
+      financial: {
+        source: "ORDER_TOTAL_ONLY",
+        currency: "PHP",
+        merchandiseSubtotalMinor: null,
+        itemDiscountMinor: null,
+        orderDiscountMinor: null,
+        deliverySubtotalMinor: null,
+        deliveryFeeMinor: null,
+        deliveryDiscountMinor: null,
+        serviceFeeMinor: null,
+        taxMinor: null,
+        totalMinor: 10_000,
+      },
+      payments: [],
+      refunds: [],
+      amendments: [],
+      officialInvoice: { status: "NOT_READY", identifier: null },
+    } satisfies ProvisionalTransactionSummaryView;
+    expect(summary.disclaimer).toBe("NOT AN OFFICIAL BIR INVOICE");
+    expect(summary).not.toHaveProperty("sellerTin");
+    expect(summary).not.toHaveProperty("officialSerial");
   });
   it("contains purpose-built customer fields without provider, staff, audit, or routing leakage", () => {
     type Keys = keyof CustomerOrderDetailView;

@@ -44,7 +44,12 @@ import type {
   PreviewDeliveryBatchRouteRequest,
   RiderBatchList,
 } from "./delivery-maps";
-import type { CancelCustomerOrderRequest, OrderCancellationView } from "./orders";
+import type {
+  CancelCustomerOrderRequest,
+  OrderCancellationView,
+  ProvisionalTransactionSummaryRequest,
+  ProvisionalTransactionSummaryView,
+} from "./orders";
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
@@ -74,6 +79,18 @@ describe("domain-grouped core services", () => {
       >
     >;
     void (true as CancelSignature);
+    expect(true).toBe(true);
+  });
+  it("exposes provisional transaction summaries on the Core binding", () => {
+    type SummarySignature = Expect<
+      Equal<
+        CoreServiceBinding["getProvisionalTransactionSummary"],
+        (
+          request: ProvisionalTransactionSummaryRequest,
+        ) => Promise<RpcResult<ProvisionalTransactionSummaryView>>
+      >
+    >;
+    void (true as SummarySignature);
     expect(true).toBe(true);
   });
   it("publishes a constrained mock simulator without client-controlled money", () => {

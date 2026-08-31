@@ -4,6 +4,7 @@ import type {
   CustomerOrderDetailRequest,
   CreateOrderAmendmentRequest,
   ListCustomerOrderIssuesRequest,
+  ProvisionalTransactionSummaryRequest,
   ReorderOrderRequest,
   SubmitCustomerOrderIssueRequest,
   AppErrorCode,
@@ -24,6 +25,7 @@ import { submitCustomerOrderIssue } from "../orders/application/submit-customer-
 import { createOrderAmendment } from "../orders/application/create-order-amendment";
 import { requestOrderCancellation } from "../orders/application/cancel-order";
 import { requestRefund } from "../payments/application/request-refund";
+import { getProvisionalTransactionSummary } from "../orders/application/get-provisional-transaction-summary";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
 
@@ -47,6 +49,19 @@ export function createOrdersRpc(context: CoreRpcContext) {
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
       return getCustomerOrderDetail(context.env.DB, {
+        customerId: customer.value.customerId,
+        orderId: validation.data.orderId,
+        requestId: input.requestId,
+      });
+    },
+    async getProvisionalTransactionSummary(input: ProvisionalTransactionSummaryRequest) {
+      const validation = authenticatedRequestSchema
+        .extend({ orderId: identifierSchema })
+        .safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return getProvisionalTransactionSummary(context.env.DB, {
         customerId: customer.value.customerId,
         orderId: validation.data.orderId,
         requestId: input.requestId,

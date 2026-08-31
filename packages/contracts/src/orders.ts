@@ -143,6 +143,23 @@ export type CustomerOrderDetailView = {
 
 export type CustomerOrderDetailRequest = AuthenticatedRequest & { orderId: string };
 
+export type ProvisionalTransactionSummaryRequest = CustomerOrderDetailRequest;
+
+export type ProvisionalTransactionSummaryView = {
+  documentKind: "PROVISIONAL_TRANSACTION_SUMMARY";
+  disclaimer: "NOT AN OFFICIAL BIR INVOICE";
+  orderNumber: string;
+  committedAt: string;
+  currency: string;
+  buyer: { recipient: string | null; addressLines: readonly string[] };
+  lines: readonly CustomerOrderLineSnapshot[];
+  financial: CustomerOrderFinancialView;
+  payments: CustomerOrderDetailView["payments"];
+  refunds: CustomerOrderDetailView["refunds"];
+  amendments: CustomerOrderDetailView["amendments"];
+  officialInvoice: { status: "NOT_READY" | "READY" | "ISSUED"; identifier: string | null };
+};
+
 export type CancelCustomerOrderRequest = AuthenticatedRequest & {
   orderId: string;
   expectedVersion: number;
@@ -270,6 +287,9 @@ export type OrdersService = {
   cancelCustomerOrder(
     request: CancelCustomerOrderRequest,
   ): Promise<RpcResult<OrderCancellationView>>;
+  getProvisionalTransactionSummary(
+    request: ProvisionalTransactionSummaryRequest,
+  ): Promise<RpcResult<ProvisionalTransactionSummaryView>>;
   reorderOrder(request: ReorderOrderRequest): Promise<RpcResult<ReorderResultView>>;
   submitCustomerOrderIssue(
     request: SubmitCustomerOrderIssueRequest,

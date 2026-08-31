@@ -270,6 +270,7 @@ export const coreServiceMethodNames = [
   "createPaymentIntent",
   "listCustomerOrders",
   "getCustomerOrderDetail",
+  "getProvisionalTransactionSummary",
   "cancelCustomerOrder",
   "reorderOrder",
   "submitCustomerOrderIssue",

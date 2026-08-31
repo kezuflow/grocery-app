@@ -20,6 +20,15 @@ describe("Orders RPC adapter", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED", requestId: "orders-detail-adapter" },
     });
+    const summary = await rpc.getProvisionalTransactionSummary({
+      requestId: "orders-summary-adapter",
+      headers: {},
+      orderId: "order-1",
+    });
+    expect(summary).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "orders-summary-adapter" },
+    });
     const cancellation = await rpc.cancelCustomerOrder({
       requestId: "orders-cancel-adapter",
       headers: {},
