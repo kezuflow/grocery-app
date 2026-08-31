@@ -1,6 +1,7 @@
 import type { AdminNavigationItem, AdminNavigationSectionCode } from "@freshmarkets/contracts";
 import {
   BarChart3,
+  BadgeDollarSign,
   Boxes,
   ClipboardList,
   CreditCard,
@@ -41,6 +42,7 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "payments-overview",
   "payments-transactions",
   "payments-reconciliation",
+  "commerce-configuration",
   "analytics",
   "staff",
   "staff-list",
@@ -78,6 +80,7 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   customers: Users,
   memberships: ShieldCheck,
   payments: CreditCard,
+  "commerce-configuration": BadgeDollarSign,
   promotions: BarChart3,
   analytics: BarChart3,
   staff: Users,

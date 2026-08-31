@@ -20,6 +20,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
+import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 export default function ReceivingPage() {
   const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<ReceivingSessionPage | null>(null);
@@ -144,6 +145,7 @@ export default function ReceivingPage() {
         title="Receiving"
         description={`Record accepted and rejected base-unit quantities for ${label}.`}
       />
+      <WorkspaceNavigation parentCode="procurement" label="Procurement administration" />
       {state === "loading" ? (
         <div role="status" aria-label="Loading receiving">
           <Skeleton className="h-10 w-full" />

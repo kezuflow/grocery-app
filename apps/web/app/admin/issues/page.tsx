@@ -20,6 +20,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
+import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 
 const nextActions: Record<string, OrderIssueAction[]> = {
   SUBMITTED: ["CLAIM"],
@@ -96,6 +97,7 @@ export default function IssuesPage() {
           </Link>
         }
       />
+      <WorkspaceNavigation parentCode="orders" label="Order administration" />
       {state === "loading" ? (
         <div role="status">
           <Skeleton className="h-10 w-full" />

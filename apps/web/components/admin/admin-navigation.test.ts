@@ -59,6 +59,25 @@ describe("admin navigation mapping", () => {
     expect(adminNavigationFromContext([])).toEqual([]);
   });
 
+  it("renders the Core-authorized Pricing & fees workspace", () => {
+    const items = adminNavigationFromContext([
+      {
+        code: "commerce-configuration",
+        label: "Pricing & fees",
+        href: "/admin/commerce-configuration",
+        section: "finance",
+        parentCode: null,
+        kind: "workspace",
+      },
+    ]);
+    expect(items[0]).toMatchObject({
+      code: "commerce-configuration",
+      label: "Pricing & fees",
+      href: "/admin/commerce-configuration",
+    });
+    expect(items[0]?.icon).toBeTruthy();
+  });
+
   it("groups only Core-provided entries under their canonical sections and parents", () => {
     const groups = groupAdminNavigation(
       adminNavigationFromContext([

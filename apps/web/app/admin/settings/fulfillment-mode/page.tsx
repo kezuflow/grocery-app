@@ -8,6 +8,7 @@ import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 export default function FulfillmentModePage() {
   const { locationId, label } = useAdminLocation();
   const [configuration, setConfiguration] = useState<FulfillmentModeConfigurationView | null>(null);
@@ -89,6 +90,7 @@ export default function FulfillmentModePage() {
         title="Fulfillment mode"
         description="Explicit location configuration. INSTANT and SCHEDULED are the only fulfillment modes; WEEKLY is Scheduled cadence."
       />
+      <WorkspaceNavigation parentCode="settings" label="Settings administration" />
       {state === "loading" ? (
         <div role="status" aria-label="Loading fulfillment mode">
           <Skeleton className="h-10 w-full" />

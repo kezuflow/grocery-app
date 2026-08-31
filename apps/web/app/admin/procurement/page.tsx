@@ -20,6 +20,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
+import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 export default function ProcurementPage() {
   const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<ProcurementRequirementPage | null>(null);
@@ -101,6 +102,7 @@ export default function ProcurementPage() {
         title="Procurement"
         description={`Turn committed demand into explicit procurement requirements for ${label}.`}
       />
+      <WorkspaceNavigation parentCode="procurement" label="Procurement administration" />
       {state === "loading" ? (
         <div role="status" aria-label="Loading procurement">
           <Skeleton className="h-10 w-full" />

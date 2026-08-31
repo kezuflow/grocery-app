@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
-import { CUSTOMER_SUB_NAVIGATION } from "../../../../components/admin/admin-navigation";
+import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import {
   AdminCursorPagination,
@@ -121,21 +121,7 @@ export default function PrivacyQueuePage() {
         title="Privacy queue"
         description="Data-subject requests worked through a legal transition lifecycle. Nothing is ever hard-deleted."
       />
-      <nav aria-label="Customer sub-navigation" className="flex gap-3 text-sm">
-        {CUSTOMER_SUB_NAVIGATION.map((item) => (
-          <Link
-            key={item.code}
-            href={item.href}
-            className={
-              item.code === "customers-privacy"
-                ? "font-semibold text-[var(--fm-primary-dark)] underline"
-                : "text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
-            }
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <WorkspaceNavigation parentCode="customers" label="Customer administration" />
 
       {state.phase === "loading" ? (
         <div className="space-y-3" role="status" aria-label="Loading privacy requests">

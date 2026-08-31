@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AnalyticsOverviewView,
   AnalyticsWindow,
+  MetricSeriesView,
   MetricDefinitionView,
   RpcResult,
 } from "@freshmarkets/contracts";
@@ -20,6 +21,8 @@ import {
 } from "../../../components/ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminContext } from "../admin-context-provider";
+import { AdminDashboardGrid, MetricCard } from "../../../components/admin/admin-compositions";
+import { AnalyticsChartGrid } from "../../../components/admin/analytics-chart-grid";
 
 type AnalyticsState =
   | { phase: "loading" }
@@ -28,6 +31,7 @@ type AnalyticsState =
       phase: "ready";
       definitions: ReadonlyArray<MetricDefinitionView>;
       overview: AnalyticsOverviewView;
+      series: ReadonlyArray<MetricSeriesView>;
     };
 
 function currentWindow(): AnalyticsWindow {
@@ -120,7 +124,27 @@ export default function AnalyticsPage() {
         });
         return;
       }
-      setState({ phase: "ready", definitions: definitions.value, overview: overview.value });
+      const series = await Promise.all(
+        overview.value.metrics.slice(0, 4).map(async (metric) => {
+          const seriesQuery = new URLSearchParams(query);
+          seriesQuery.set("definitionVersion", String(metric.definitionVersion));
+          try {
+            const response = await fetch(
+              `/api/admin/analytics/metrics/${encodeURIComponent(metric.metricCode)}?${seriesQuery}`,
+            );
+            const result = (await response.json()) as RpcResult<MetricSeriesView>;
+            return result.ok ? result.value : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setState({
+        phase: "ready",
+        definitions: definitions.value,
+        overview: overview.value,
+        series: series.filter((metric): metric is MetricSeriesView => metric !== null),
+      });
     } catch {
       setState({ phase: "error", message: "Network error loading Analytics.", requestId: null });
     }
@@ -197,7 +221,11 @@ export default function AnalyticsPage() {
       ) : null}
 
       {state.phase === "ready" ? (
-        <AnalyticsReady definitions={state.definitions} overview={state.overview} />
+        <AnalyticsReady
+          definitions={state.definitions}
+          overview={state.overview}
+          series={state.series}
+        />
       ) : null}
     </div>
   );
@@ -206,19 +234,23 @@ export default function AnalyticsPage() {
 function AnalyticsReady({
   definitions,
   overview,
+  series,
 }: {
   definitions: ReadonlyArray<MetricDefinitionView>;
   overview: AnalyticsOverviewView;
+  series: ReadonlyArray<MetricSeriesView>;
 }) {
   return (
     <>
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Analytics context">
-        <ContextItem
+      <AdminDashboardGrid ariaLabel="Analytics context">
+        <MetricCard
+          className="xl:col-span-3"
           label="Window"
           value={`${overview.window.startAt.slice(0, 10)} → ${overview.window.endAt.slice(0, 10)}`}
         />
-        <ContextItem label="Timezone" value={overview.window.timezone} />
-        <ContextItem
+        <MetricCard className="xl:col-span-3" label="Timezone" value={overview.window.timezone} />
+        <MetricCard
+          className="xl:col-span-3"
           label="Scope"
           value={
             overview.scope.kind === "global"
@@ -228,12 +260,15 @@ function AnalyticsReady({
                 : `Location ${overview.scope.locationId}`
           }
         />
-        <ContextItem
+        <MetricCard
+          className="xl:col-span-3"
           label="Source freshness"
           value={formatInstant(overview.freshness.sourceWatermark)}
           detail={`Computed ${formatInstant(overview.freshness.computedAt)}`}
         />
-      </section>
+      </AdminDashboardGrid>
+
+      <AnalyticsChartGrid series={series} />
 
       <ListPageSection
         title="Metric summary"
@@ -244,39 +279,31 @@ function AnalyticsReady({
             No metrics are available for this window and scope.
           </p>
         ) : (
-          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <AdminDashboardGrid ariaLabel="Metric summary" className="p-4">
             {overview.metrics.map((metric) => (
-              <article
+              <MetricCard
                 key={`${metric.metricCode}:${metric.definitionVersion}`}
-                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-medium">{metric.metricCode}</h3>
-                  <StatusBadge tone={metric.availability === "AVAILABLE" ? "success" : "warning"}>
-                    {metric.availability}
-                  </StatusBadge>
-                </div>
-                <p className="mt-3 text-2xl font-bold">
-                  {metric.availability === "AVAILABLE" ? formatNumber(metric.value) : "Unavailable"}
-                </p>
-                <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
-                  Definition v{metric.definitionVersion}
-                </p>
-                {metric.dimensions.length > 0 ? (
-                  <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                    {metric.dimensions
-                      .map((dimension) => `${dimension.key}: ${dimension.value}`)
-                      .join(" · ")}
-                  </p>
-                ) : null}
-                {metric.unavailableReason ? (
-                  <p className="mt-2 text-xs text-[var(--fm-warning)]">
-                    {metric.unavailableReason}
-                  </p>
-                ) : null}
-              </article>
+                className="xl:col-span-4"
+                label={metric.metricCode}
+                value={metric.availability === "AVAILABLE" ? formatNumber(metric.value) : null}
+                unavailableReason={
+                  metric.unavailableReason ?? "Metric is unavailable for this context."
+                }
+                detail={
+                  <>
+                    <span>Definition v{metric.definitionVersion}</span>
+                    {metric.dimensions.length > 0 ? (
+                      <span className="mt-1 block">
+                        {metric.dimensions
+                          .map((dimension) => `${dimension.key}: ${dimension.value}`)
+                          .join(" · ")}
+                      </span>
+                    ) : null}
+                  </>
+                }
+              />
             ))}
-          </div>
+          </AdminDashboardGrid>
         )}
       </ListPageSection>
 
@@ -338,18 +365,6 @@ function AnalyticsReady({
         )}
       </ListPageSection>
     </>
-  );
-}
-
-function ContextItem({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  return (
-    <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-        {label}
-      </p>
-      <p className="mt-2 text-sm font-semibold">{value}</p>
-      {detail ? <p className="mt-1 text-xs text-[var(--fm-text-muted)]">{detail}</p> : null}
-    </div>
   );
 }
 

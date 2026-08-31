@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
+import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 
 type LoadState =
   | { phase: "loading" }
@@ -112,6 +113,7 @@ export default function StaffPage() {
         title="Staff & Access"
         description="Identities, invitations, roles, and scopes. Administration is global-scope only."
       />
+      <WorkspaceNavigation parentCode="staff" label="Staff administration" />
 
       {state.phase === "loading" ? (
         <div className="space-y-3" role="status" aria-label="Loading staff">

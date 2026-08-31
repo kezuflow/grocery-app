@@ -15,6 +15,7 @@ import {
   type AdminDataTableColumn,
 } from "../../../components/admin/admin-data-table";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
+import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 
 type State =
   | { phase: "loading" }
@@ -59,14 +60,7 @@ export default function OrdersPage() {
         title="Orders"
         description="Committed orders with payment, fulfillment, and delivery status."
       />
-      <nav aria-label="Order administration" className="flex gap-3 text-sm">
-        <Link className="font-semibold underline" href="/admin/orders">
-          Orders
-        </Link>
-        <Link className="underline" href="/admin/issues">
-          Customer issues
-        </Link>
-      </nav>
+      <WorkspaceNavigation parentCode="orders" label="Order administration" />
       {state.phase === "loading" ? <AdminPageState state="loading" title="Loading orders" /> : null}
       {state.phase === "error" ? (
         <AdminPageState
