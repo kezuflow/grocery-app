@@ -156,6 +156,7 @@ import {
   uploadAdminProductMedia as uploadAdminProductMediaCommand,
   updateAdminProductMedia as updateAdminProductMediaCommand,
   removeAdminProductMedia as removeAdminProductMediaCommand,
+  getAdminProductMediaContent as getAdminProductMediaContentQuery,
 } from "./admin/application/product-media";
 import {
   listAdminInventory as listAdminInventoryQuery,
@@ -190,6 +191,7 @@ import { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness
 import { createCoreRpcContext } from "./entrypoint/context";
 import { createAuthRpc } from "./entrypoint/auth-rpc";
 import { createCatalogRpc } from "./entrypoint/catalog-rpc";
+import { getAdminOverview as getAdminOverviewQuery } from "./admin/application/admin-overview";
 import { createMembershipRpc } from "./entrypoint/membership-rpc";
 import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
 import { createPaymentsRpc } from "./entrypoint/payments-rpc";
@@ -600,10 +602,28 @@ const catalogUnitCreateSchema = authenticatedRequestSchema.extend({
 });
 
 const catalogProductListSchema = authenticatedRequestSchema.extend({
+  marketId: validationSchema.string().trim().min(1).max(200),
+  locationId: validationSchema.string().trim().min(1).max(200).nullable(),
   query: validationSchema.string().trim().min(1).max(100).optional(),
   status: validationSchema.enum(["active", "inactive"]).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+
+const adminOverviewSchema = authenticatedRequestSchema.extend({
+  selectedScope: validationSchema.discriminatedUnion("kind", [
+    validationSchema.object({ kind: validationSchema.literal("GLOBAL") }),
+    validationSchema.object({
+      kind: validationSchema.literal("MARKET"),
+      marketId: validationSchema.string().trim().min(1).max(200),
+    }),
+    validationSchema.object({
+      kind: validationSchema.literal("LOCATION"),
+      marketId: validationSchema.string().trim().min(1).max(200),
+      locationId: validationSchema.string().trim().min(1).max(200),
+    }),
+  ]),
+  timezone: validationSchema.string().trim().min(1).max(100),
 });
 
 const catalogProductCustomerDetailSchema = validationSchema.object({
@@ -672,6 +692,11 @@ const catalogProductMediaRemoveSchema = catalogProductMediaMetadataSchema.pick({
   mediaId: true,
   expectedProductVersion: true,
   idempotencyKey: true,
+});
+
+const catalogProductMediaContentSchema = authenticatedRequestSchema.extend({
+  productId: validationSchema.string().trim().min(1).max(200),
+  mediaId: validationSchema.string().trim().min(1).max(200),
 });
 
 const catalogSkuCreateSchema = authenticatedRequestSchema.extend({
@@ -962,6 +987,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly paymentsRpc = createPaymentsRpc(this.rpcContext);
   private readonly ordersRpc = createOrdersRpc(this.rpcContext);
   private readonly operationsRpc = createOperationsRpc(this.rpcContext);
+
+  async getAdminOverview(input: import("@freshmarkets/contracts").AdminOverviewRequest) {
+    const validation = adminOverviewSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminOverviewQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
 
   async fetch(request: Request): Promise<Response> {
     const id = requestId(request);
@@ -1598,6 +1633,21 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return removeAdminProductMediaCommand(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      validation.data,
+    );
+  }
+  async getAdminProductMediaContent(
+    input: import("@freshmarkets/contracts").AdminProductMediaContentRequest,
+  ) {
+    const validation = catalogProductMediaContentSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminProductMediaContentQuery(
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,

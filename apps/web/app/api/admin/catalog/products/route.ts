@@ -41,9 +41,25 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   }
+  const marketId = params.get("marketId")?.trim() ?? "";
+  if (!marketId) {
+    return Response.json(
+      {
+        ok: false as const,
+        error: {
+          code: "VALIDATION_FAILED" as const,
+          message: "An explicit marketId pricing context is required",
+          requestId: crypto.randomUUID(),
+        },
+      },
+      { status: 400 },
+    );
+  }
   const result = await coreClient(env.CORE).listAdminProducts({
     requestId: crypto.randomUUID(),
     headers: requestHeaders(request),
+    marketId,
+    locationId: params.get("locationId")?.trim() || null,
     query: params.get("query") ?? undefined,
     status: status ?? undefined,
     cursor: params.get("cursor") ?? undefined,

@@ -28,12 +28,36 @@ export default function ProductsPage() {
   const [payload, setPayload] = useState<RpcResult<AdminProductPage> | null>(null);
   const pagination = useAdminPagination();
   const adminContext = useAdminContext();
+  const pricingTarget =
+    adminContext.state.phase === "ready"
+      ? adminContext.state.selectedScope?.kind === "LOCATION"
+        ? {
+            marketId: adminContext.state.selectedScope.marketId,
+            locationId: adminContext.state.selectedScope.locationId,
+          }
+        : adminContext.state.selectedScope?.kind === "MARKET"
+          ? { marketId: adminContext.state.selectedScope.marketId, locationId: null }
+          : (() => {
+              const option =
+                adminContext.state.scopes.find((candidate) => candidate.kind === "location") ??
+                adminContext.state.scopes.find((candidate) => candidate.kind === "market");
+              return option
+                ? {
+                    marketId: option.marketId,
+                    locationId: option.kind === "location" ? option.locationId : null,
+                  }
+                : null;
+            })()
+      : null;
   const canManage =
     adminContext.state.phase === "ready" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
   useEffect(() => {
+    if (!pricingTarget) return;
     setPayload(null);
     const params = new URLSearchParams({ limit: "50" });
+    params.set("marketId", pricingTarget.marketId);
+    if (pricingTarget.locationId) params.set("locationId", pricingTarget.locationId);
     if (query.trim()) params.set("query", query.trim());
     if (status !== "all") params.set("status", status);
     if (pagination.cursor) params.set("cursor", pagination.cursor);
@@ -50,7 +74,7 @@ export default function ProductsPage() {
           },
         }),
       );
-  }, [pagination.cursor, query, status]);
+  }, [pagination.cursor, pricingTarget?.locationId, pricingTarget?.marketId, query, status]);
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") next.set(key, value);

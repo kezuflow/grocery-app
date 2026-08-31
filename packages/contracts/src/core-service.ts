@@ -13,6 +13,7 @@ import type {
 } from "./admin-finance";
 import type { AdminOperationsService } from "./admin-operations";
 import type { AdminAnalyticsService } from "./admin-analytics";
+import type { AdminOverviewService } from "./admin-overview";
 import type { AuthenticatedRequest, AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CommerceConfigurationService } from "./commerce-configuration";
@@ -83,6 +84,7 @@ export interface ImplementedCoreService
     AdminOrderIssuesService,
     AdminOperationsService,
     AdminAnalyticsService,
+    AdminOverviewService,
     CommerceConfigurationService {}
 
 /**
@@ -134,6 +136,7 @@ export const coreServiceMethodNames = [
   "auth",
   "getApplicationContext",
   "getAdminContext",
+  "getAdminOverview",
   "getMembershipPriceConfiguration",
   "updateMembershipPriceConfiguration",
   "getServiceFeeConfiguration",
@@ -196,6 +199,7 @@ export const coreServiceMethodNames = [
   "uploadAdminProductMedia",
   "updateAdminProductMedia",
   "removeAdminProductMedia",
+  "getAdminProductMediaContent",
   "createAdminSku",
   "updateAdminSku",
   "setAdminSkuAvailability",
@@ -310,6 +314,7 @@ export type { AdminStaffAccessService } from "./admin-staff-access";
 export type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
 export type { AdminPromotionsService } from "./admin-promotions";
 export type { AdminCatalogService, AdminInventoryReadService } from "./admin-catalog";
+export type { AdminOverviewService } from "./admin-overview";
 export type {
   AdminOrdersService,
   AdminPaymentsService,

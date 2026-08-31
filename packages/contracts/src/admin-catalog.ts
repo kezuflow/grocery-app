@@ -68,8 +68,36 @@ export type AdminProductSummary = {
   version: number;
 };
 
+export type AdminProductListSummary = AdminProductSummary & {
+  activeSkuCount: number;
+  pricedSkuCount: number;
+  availableSkuCount: number;
+  primaryMedia: {
+    mediaId: string;
+    altText: string;
+    version: number;
+  } | null;
+  priceRange: {
+    minimumMinor: number;
+    maximumMinor: number;
+    currency: string;
+  } | null;
+};
+
 export type AdminProductPage = {
-  items: ReadonlyArray<AdminProductSummary>;
+  items: ReadonlyArray<AdminProductListSummary>;
+  readiness: {
+    activeProducts: number;
+    inactiveProducts: number;
+    missingPrimaryMedia: number;
+    missingPrices: number;
+    unavailableSkus: number;
+  };
+  pricingContext: {
+    marketId: string;
+    locationId: string | null;
+    currency: string;
+  };
   nextCursor: string | null;
 };
 
@@ -221,10 +249,24 @@ export type AdminUnitCreateRequest = AuthenticatedRequest & {
 };
 
 export type AdminProductListRequest = AuthenticatedRequest & {
+  marketId: string;
+  locationId: string | null;
   query?: string;
   status?: CatalogStatus;
   cursor?: string;
   limit?: number;
+};
+
+export type AdminProductMediaContentRequest = AuthenticatedRequest & {
+  productId: string;
+  mediaId: string;
+};
+
+export type AdminProductMediaContent = {
+  bytes: ArrayBuffer;
+  mimeType: string;
+  etag: string;
+  version: number;
 };
 
 export type AdminProductCustomerDetailInput = {
@@ -386,6 +428,9 @@ export type AdminCatalogService = {
   removeAdminProductMedia(
     request: AdminProductMediaRemoveRequest,
   ): Promise<RpcResult<AdminProductMediaView>>;
+  getAdminProductMediaContent(
+    request: AdminProductMediaContentRequest,
+  ): Promise<RpcResult<AdminProductMediaContent>>;
   createAdminSku(request: AdminSkuCreateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   updateAdminSku(request: AdminSkuUpdateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   setAdminSkuAvailability(

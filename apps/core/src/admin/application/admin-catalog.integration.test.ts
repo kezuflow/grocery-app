@@ -464,7 +464,14 @@ describe("catalog administration", () => {
     ).toBe(false);
   });
   it("denies unauthenticated and non-staff readers", async () => {
-    expect(await core.listAdminProducts({ requestId: "r1", headers: {} })).toMatchObject({
+    expect(
+      await core.listAdminProducts({
+        requestId: "r1",
+        headers: {},
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({
       ok: false,
       error: { code: "UNAUTHENTICATED" },
     });
@@ -473,6 +480,8 @@ describe("catalog administration", () => {
       await core.listAdminProducts({
         requestId: crypto.randomUUID(),
         headers: { cookie: nonStaff.cookie },
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
       }),
     ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
@@ -547,6 +556,8 @@ describe("catalog administration", () => {
     const productFirst = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
       query: "Paged product",
       status: "inactive",
       limit: 20,
@@ -559,12 +570,84 @@ describe("catalog administration", () => {
     const productSecond = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
       query: "Paged product",
       status: "inactive",
       limit: 20,
       cursor: productFirst.value.nextCursor!,
     });
     expect(productSecond).toMatchObject({ ok: true, value: { items: { length: 20 } } });
+  });
+
+  it("resolves Product readiness only in an explicit valid pricing context", async () => {
+    const manager = await seedManager();
+    const { productId, unitGramId } = await seedProduct();
+    const invalid = await core.listAdminProducts({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      marketId: "missing-market",
+      locationId: null,
+    });
+    expect(invalid).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const skuId = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sku
+          (id, product_id, code, name, sellable_unit_id, sell_quantity,
+           consumption_base_quantity, status, sort_order, version, created_at, updated_at)
+         VALUES (?, ?, ?, 'Overview pack', ?, 250, 250, 'active', 1, 1, ?, ?)`,
+      ).bind(skuId, productId, `OVERVIEW_${crypto.randomUUID().slice(0, 8)}`, unitGramId, now, now),
+      env.DB.prepare(
+        `INSERT INTO price_version
+          (id, sku_id, currency, amount_minor, valid_from, valid_to, version, created_at,
+           market_id, location_id, price_type)
+         VALUES (?, ?, 'PHP', 2500, ?, NULL, 1, ?, 'market-metro-cebu',
+                 'location-cebu-central', 'STANDARD')`,
+      ).bind(crypto.randomUUID(), skuId, now - 1_000, now),
+      env.DB.prepare(
+        `INSERT INTO sku_location_availability
+          (sku_id, location_id, availability_status, sourcing_mode, version)
+         VALUES (?, 'location-cebu-central', 'AVAILABLE', 'STOCKED', 1)`,
+      ).bind(skuId),
+    ]);
+
+    const page = await core.listAdminProducts({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+      query: productId,
+    });
+    expect(page.ok).toBe(true);
+    if (!page.ok) return;
+    expect(page.value.pricingContext).toEqual({
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+      currency: "PHP",
+    });
+    expect(page.value.items).toEqual([]);
+
+    const productPage = await core.listAdminProducts({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+      limit: 100,
+    });
+    expect(productPage.ok).toBe(true);
+    if (!productPage.ok) return;
+    const product = productPage.value.items.find((item) => item.productId === productId);
+    expect(product).toMatchObject({
+      activeSkuCount: 1,
+      pricedSkuCount: 1,
+      availableSkuCount: 1,
+      primaryMedia: null,
+      priceRange: { minimumMinor: 2_500, maximumMinor: 2_500, currency: "PHP" },
+    });
+    expect(productPage.value.readiness.missingPrimaryMedia).toBeGreaterThanOrEqual(1);
   });
 
   it("creates a category and a unit idempotently with conflicts on duplicates", async () => {
@@ -1085,6 +1168,22 @@ describe("Product media administration", () => {
     });
     expect(await bucket.head(metadata!.objectKey)).not.toBeNull();
 
+    const content = await core.getAdminProductMediaContent({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      mediaId: uploaded.value.mediaId,
+    });
+    expect(content).toMatchObject({
+      ok: true,
+      value: { mimeType: "image/jpeg", version: 1 },
+    });
+    if (content.ok) {
+      expect(new Uint8Array(content.value.bytes)).toEqual(new Uint8Array(jpeg()));
+      expect(content.value.etag).toMatch(/^".+"$/);
+      expect(content.value).not.toHaveProperty("objectKey");
+    }
+
     const replay = await core.uploadAdminProductMedia({
       ...firstRequest,
       requestId: crypto.randomUUID(),
@@ -1244,8 +1343,9 @@ describe("Product media administration", () => {
     expect(await bucket.head(objectKey)).toBeNull();
   });
 
-  it("denies media mutation without global catalog management", async () => {
+  it("denies media access without global Catalog authority", async () => {
     const locationStaff = await seedManager({ scope: "location" });
+    const globalStaff = await seedManager();
     const { productId } = await seedProduct();
     const denied = await core.uploadAdminProductMedia({
       requestId: crypto.randomUUID(),
@@ -1260,5 +1360,26 @@ describe("Product media administration", () => {
       idempotencyKey: `media-${crypto.randomUUID()}`,
     });
     expect(denied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    const uploaded = await core.uploadAdminProductMedia({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: globalStaff.cookie },
+      productId,
+      bytes: jpeg(),
+      mimeType: "image/jpeg",
+      altText: "Protected",
+      isPrimary: true,
+      sortOrder: 0,
+      expectedProductVersion: 1,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    });
+    if (!uploaded.ok) throw new Error(JSON.stringify(uploaded.error));
+    expect(
+      await core.getAdminProductMediaContent({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: locationStaff.cookie },
+        productId,
+        mediaId: uploaded.value.mediaId,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 });

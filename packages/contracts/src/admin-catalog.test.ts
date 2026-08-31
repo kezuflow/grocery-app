@@ -19,6 +19,10 @@ import {
   type AdminProductMediaRemoveRequest,
   type AdminProductMediaUpdateRequest,
   type AdminProductMediaUploadRequest,
+  type AdminProductListRequest,
+  type AdminProductPage,
+  type AdminProductMediaContentRequest,
+  type AdminProductMediaContent,
 } from "./admin-catalog";
 
 describe("catalog contracts", () => {
@@ -61,6 +65,63 @@ describe("catalog contracts", () => {
       idempotencyKey: "media-remove-1",
     } satisfies AdminProductMediaRemoveRequest);
     expect(upload).not.toHaveProperty("objectKey");
+  });
+
+  it("publishes secure Product media reads without storage keys", () => {
+    const request = {
+      requestId: "request-media-content",
+      headers: {},
+      productId: "prod-1",
+      mediaId: "media-1",
+    } satisfies AdminProductMediaContentRequest;
+    const content = {
+      bytes: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
+      mimeType: "image/jpeg",
+      etag: '"digest-1"',
+      version: 3,
+    } satisfies AdminProductMediaContent;
+    expect(request).not.toHaveProperty("objectKey");
+    expect(content).not.toHaveProperty("objectKey");
+  });
+
+  it("requires explicit pricing context and publishes catalog readiness", () => {
+    void ({
+      requestId: "request-products",
+      headers: {},
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+    } satisfies AdminProductListRequest);
+    void ({
+      items: [
+        {
+          productId: "prod-1",
+          slug: "red-onion",
+          name: "Red onion",
+          categoryCode: "FRESH_PRODUCE",
+          status: "active",
+          skuCount: 2,
+          activeSkuCount: 2,
+          pricedSkuCount: 1,
+          availableSkuCount: 1,
+          primaryMedia: { mediaId: "media-1", altText: "Red onion", version: 3 },
+          priceRange: { minimumMinor: 2500, maximumMinor: 3000, currency: "PHP" },
+          version: 2,
+        },
+      ],
+      readiness: {
+        activeProducts: 1,
+        inactiveProducts: 0,
+        missingPrimaryMedia: 0,
+        missingPrices: 1,
+        unavailableSkus: 1,
+      },
+      pricingContext: {
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+        currency: "PHP",
+      },
+      nextCursor: null,
+    } satisfies AdminProductPage);
   });
 
   it("publishes canonical unit conversion and sourcing contracts", () => {

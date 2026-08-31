@@ -25,6 +25,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
+import { useAdminContext } from "../admin-context-provider";
 
 type LoadState =
   | { phase: "loading" }
@@ -43,13 +44,22 @@ export default function CatalogPage() {
   const createIntent = useAdminCommandIntent();
   const pagination = useAdminPagination();
   const categoryPagination = useAdminPagination();
+  const adminContext = useAdminContext();
+  const pricingTarget =
+    adminContext.state.phase === "ready"
+      ? (adminContext.state.scopes.find((option) => option.kind === "location") ??
+        adminContext.state.scopes.find((option) => option.kind === "market"))
+      : null;
 
   const load = useCallback(
     (search: string, cursor: string | null, categoryCursor: string | null) => {
       setState({ phase: "loading" });
       void (async () => {
         try {
+          if (!pricingTarget) return;
           const params = new URLSearchParams({ limit: "50" });
+          params.set("marketId", pricingTarget.marketId);
+          if (pricingTarget.kind === "location") params.set("locationId", pricingTarget.locationId);
           if (search.trim() !== "") params.set("query", search.trim());
           if (cursor) params.set("cursor", cursor);
           const [productsResponse, categoriesResponse, unitsResponse] = await Promise.all([
@@ -87,7 +97,7 @@ export default function CatalogPage() {
         }
       })();
     },
-    [],
+    [pricingTarget],
   );
 
   useEffect(

@@ -15,7 +15,7 @@ import type {
   AdminProductDetailRequest,
   AdminProductListRequest,
   AdminProductPage,
-  AdminProductSummary,
+  AdminProductListSummary,
   AdminUnitListRequest,
   AdminUnitSummary,
   RpcResult,
@@ -247,6 +247,26 @@ export async function listAdminProducts(
   const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
   if (!access.ok) return access;
 
+  const target = await deps.db
+    .prepare(
+      `SELECT m.id AS marketId, m.currency, fl.id AS locationId
+       FROM market m LEFT JOIN fulfillment_location fl
+         ON fl.market_id=m.id AND fl.id=?
+       WHERE m.id=?`,
+    )
+    .bind(request.locationId, request.marketId)
+    .first<{ marketId: string; currency: string; locationId: string | null }>();
+  if (!target || (request.locationId !== null && target.locationId !== request.locationId)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "The selected market/location pricing context does not exist",
+        requestId: request.requestId,
+      },
+    };
+  }
+
   const limit = boundListLimit(request.limit);
   if (limit === "invalid") {
     return {
@@ -299,17 +319,78 @@ export async function listAdminProducts(
     binds.push(request.status);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const now = Date.now();
   const rows = await deps.db
     .prepare(
       `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status, p.version,
               p.created_at AS createdAt,
-              (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id) AS skuCount
+              (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id) AS skuCount,
+              (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id AND s.status='active') AS activeSkuCount,
+              (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id AND s.status='active'
+                AND EXISTS (
+                  SELECT 1 FROM price_version pv WHERE pv.sku_id=s.id AND pv.market_id=?
+                    AND ((? IS NULL AND pv.location_id IS NULL)
+                      OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+                    AND pv.price_type='STANDARD' AND pv.valid_from<=?
+                    AND (pv.valid_to IS NULL OR pv.valid_to>?)
+                )) AS pricedSkuCount,
+              (SELECT COUNT(*) FROM sku s JOIN sku_location_availability sla
+                 ON sla.sku_id=s.id AND sla.location_id=? AND sla.availability_status='AVAILABLE'
+               WHERE s.product_id=p.id AND s.status='active') AS availableSkuCount,
+              (SELECT pm.id FROM product_media pm
+               WHERE pm.product_id=p.id AND pm.status='active' AND pm.is_primary=1 LIMIT 1) AS mediaId,
+              (SELECT pm.alt_text FROM product_media pm
+               WHERE pm.product_id=p.id AND pm.status='active' AND pm.is_primary=1 LIMIT 1) AS mediaAltText,
+              (SELECT pm.version FROM product_media pm
+               WHERE pm.product_id=p.id AND pm.status='active' AND pm.is_primary=1 LIMIT 1) AS mediaVersion,
+              (SELECT MIN((SELECT pv.amount_minor FROM price_version pv
+                WHERE pv.sku_id=s.id AND pv.market_id=?
+                  AND ((? IS NULL AND pv.location_id IS NULL)
+                    OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+                  AND pv.price_type='STANDARD' AND pv.valid_from<=?
+                  AND (pv.valid_to IS NULL OR pv.valid_to>?)
+                ORDER BY CASE WHEN pv.location_id=? THEN 0 ELSE 1 END,
+                         pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1))
+               FROM sku s WHERE s.product_id=p.id AND s.status='active') AS minimumMinor,
+              (SELECT MAX((SELECT pv.amount_minor FROM price_version pv
+                WHERE pv.sku_id=s.id AND pv.market_id=?
+                  AND ((? IS NULL AND pv.location_id IS NULL)
+                    OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+                  AND pv.price_type='STANDARD' AND pv.valid_from<=?
+                  AND (pv.valid_to IS NULL OR pv.valid_to>?)
+                ORDER BY CASE WHEN pv.location_id=? THEN 0 ELSE 1 END,
+                         pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1))
+               FROM sku s WHERE s.product_id=p.id AND s.status='active') AS maximumMinor
        FROM product p JOIN category c ON c.id = p.category_id
        ${where}
        ORDER BY p.created_at DESC, p.id DESC
        LIMIT ?`,
     )
-    .bind(...binds, limit + 1)
+    .bind(
+      request.marketId,
+      request.locationId,
+      request.locationId,
+      request.locationId,
+      now,
+      now,
+      request.locationId ?? "",
+      request.marketId,
+      request.locationId,
+      request.locationId,
+      request.locationId,
+      now,
+      now,
+      request.locationId,
+      request.marketId,
+      request.locationId,
+      request.locationId,
+      request.locationId,
+      now,
+      now,
+      request.locationId,
+      ...binds,
+      limit + 1,
+    )
     .all<{
       productId: string;
       slug: string;
@@ -318,23 +399,105 @@ export async function listAdminProducts(
       status: "active" | "inactive";
       createdAt: number;
       skuCount: number;
+      activeSkuCount: number;
+      pricedSkuCount: number;
+      availableSkuCount: number;
+      mediaId: string | null;
+      mediaAltText: string | null;
+      mediaVersion: number | null;
+      minimumMinor: number | null;
+      maximumMinor: number | null;
       version: number;
     }>();
   const hasMore = rows.results.length > limit;
   const pageRows = rows.results.slice(0, limit);
-  const items: AdminProductSummary[] = pageRows.map((row) => ({
+  const items: AdminProductListSummary[] = pageRows.map((row) => ({
     productId: row.productId,
     slug: row.slug,
     name: row.name,
     categoryCode: row.categoryCode,
     status: row.status,
     skuCount: row.skuCount,
+    activeSkuCount: row.activeSkuCount,
+    pricedSkuCount: row.pricedSkuCount,
+    availableSkuCount: row.availableSkuCount,
+    primaryMedia:
+      row.mediaId && row.mediaAltText !== null && row.mediaVersion !== null
+        ? { mediaId: row.mediaId, altText: row.mediaAltText, version: row.mediaVersion }
+        : null,
+    priceRange:
+      row.minimumMinor !== null && row.maximumMinor !== null
+        ? {
+            minimumMinor: row.minimumMinor,
+            maximumMinor: row.maximumMinor,
+            currency: target.currency,
+          }
+        : null,
     version: row.version,
   }));
   const last = pageRows[pageRows.length - 1];
   const nextCursor =
     hasMore && last ? encodeStaffCursor({ createdAt: last.createdAt, id: last.productId }) : null;
-  return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
+  const [productStatuses, missingPrimaryMedia, missingPrices, unavailableSkus] = await Promise.all([
+    deps.db
+      .prepare(
+        `SELECT SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) AS activeProducts,
+                SUM(CASE WHEN status='inactive' THEN 1 ELSE 0 END) AS inactiveProducts
+         FROM product`,
+      )
+      .first<{ activeProducts: number | null; inactiveProducts: number | null }>(),
+    deps.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM product p
+         WHERE NOT EXISTS (SELECT 1 FROM product_media pm
+           WHERE pm.product_id=p.id AND pm.status='active' AND pm.is_primary=1)`,
+      )
+      .first<{ count: number }>(),
+    deps.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM sku s JOIN product p ON p.id=s.product_id
+         WHERE p.status='active' AND s.status='active' AND NOT EXISTS (
+           SELECT 1 FROM price_version pv WHERE pv.sku_id=s.id AND pv.market_id=?
+             AND ((? IS NULL AND pv.location_id IS NULL)
+               OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+             AND pv.price_type='STANDARD' AND pv.valid_from<=?
+             AND (pv.valid_to IS NULL OR pv.valid_to>?))`,
+      )
+      .bind(request.marketId, request.locationId, request.locationId, request.locationId, now, now)
+      .first<{ count: number }>(),
+    request.locationId === null
+      ? Promise.resolve({ count: 0 })
+      : deps.db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM sku s JOIN product p ON p.id=s.product_id
+             LEFT JOIN sku_location_availability sla
+               ON sla.sku_id=s.id AND sla.location_id=?
+             WHERE p.status='active' AND s.status='active'
+               AND (sla.availability_status IS NULL OR sla.availability_status<>'AVAILABLE')`,
+          )
+          .bind(request.locationId)
+          .first<{ count: number }>(),
+  ]);
+  return {
+    ok: true,
+    value: {
+      items,
+      nextCursor,
+      pricingContext: {
+        marketId: target.marketId,
+        locationId: request.locationId,
+        currency: target.currency,
+      },
+      readiness: {
+        activeProducts: productStatuses?.activeProducts ?? 0,
+        inactiveProducts: productStatuses?.inactiveProducts ?? 0,
+        missingPrimaryMedia: missingPrimaryMedia?.count ?? 0,
+        missingPrices: missingPrices?.count ?? 0,
+        unavailableSkus: unavailableSkus?.count ?? 0,
+      },
+    },
+    requestId: request.requestId,
+  };
 }
 
 type SkuRow = {

@@ -16,6 +16,7 @@ const coreMocks = vi.hoisted(() => ({
   uploadAdminProductMedia: vi.fn(),
   updateAdminProductMedia: vi.fn(),
   removeAdminProductMedia: vi.fn(),
+  getAdminProductMediaContent: vi.fn(),
   createAdminSku: vi.fn(),
   updateAdminSku: vi.fn(),
   setAdminSkuAvailability: vi.fn(),
@@ -43,6 +44,7 @@ import {
   DELETE as removeProductMedia,
   PATCH as updateProductMedia,
 } from "./catalog/products/[product-id]/media/[media-id]/route";
+import { GET as getProductMediaContent } from "./catalog/products/[product-id]/media/[media-id]/content/route";
 import { POST as createSku } from "./catalog/skus/route";
 import { PATCH as updateSku } from "./catalog/skus/[sku-id]/route";
 import { PUT as setAvailability } from "./catalog/skus/[sku-id]/availability/route";
@@ -172,9 +174,10 @@ describe("catalog and inventory BFF routes", () => {
     coreMocks.setAdminProductStatus.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
     await listProducts(
-      new Request("https://x/products?query=onion&status=inactive&limit=25&cursor=next", {
-        headers: COOKIE,
-      }),
+      new Request(
+        "https://x/products?marketId=market-2&locationId=location-2&query=onion&status=inactive&limit=25&cursor=next",
+        { headers: COOKIE },
+      ),
     );
     await getProduct(
       new Request("https://x/products/p1?marketId=market-2&locationId=location-2", {
@@ -196,6 +199,8 @@ describe("catalog and inventory BFF routes", () => {
       status: "inactive",
       limit: 25,
       cursor: "next",
+      marketId: "market-2",
+      locationId: "location-2",
     });
     expect(coreMocks.setAdminProductStatus.mock.calls[0][0]).toMatchObject({
       productId: "prod-1",
@@ -206,6 +211,12 @@ describe("catalog and inventory BFF routes", () => {
       marketId: "market-2",
       locationId: "location-2",
     });
+  });
+
+  it("requires explicit Product-list pricing context", async () => {
+    const response = await listProducts(new Request("https://x/products", { headers: COOKIE }));
+    expect(response.status).toBe(400);
+    expect(coreMocks.listAdminProducts).not.toHaveBeenCalled();
   });
 
   it("whitelists and delegates Product create and update fields", async () => {
@@ -309,6 +320,40 @@ describe("catalog and inventory BFF routes", () => {
       expectedProductVersion: 5,
     });
     expect(coreMocks.removeAdminProductMedia.mock.calls[0][0]).not.toHaveProperty("objectKey");
+  });
+
+  it("serves authorized Product media bytes with private conditional caching", async () => {
+    coreMocks.getAdminProductMediaContent.mockResolvedValue({
+      ok: true,
+      value: {
+        bytes: new Uint8Array([1, 2, 3]).buffer,
+        mimeType: "image/webp",
+        etag: '"media-etag"',
+        version: 4,
+      },
+      requestId: "media-content",
+    });
+    const response = await getProductMediaContent(
+      new Request("https://x/products/prod-1/media/media-1/content", { headers: COOKIE }),
+      mediaParams,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/webp");
+    expect(response.headers.get("etag")).toBe('"media-etag"');
+    expect(response.headers.get("cache-control")).toContain("private");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(coreMocks.getAdminProductMediaContent.mock.calls[0][0]).toMatchObject({
+      productId: "prod-1",
+      mediaId: "media-1",
+    });
+
+    const notModified = await getProductMediaContent(
+      new Request("https://x/products/prod-1/media/media-1/content", {
+        headers: { ...COOKIE, "if-none-match": '"media-etag"' },
+      }),
+      mediaParams,
+    );
+    expect(notModified.status).toBe(304);
   });
 
   it("delegates sku create/update/availability/price", async () => {

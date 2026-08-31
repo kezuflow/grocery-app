@@ -2,6 +2,8 @@ import {
   adminProductMediaMaxBytes,
   adminProductMediaMimeTypes,
   type AdminProductMediaRemoveRequest,
+  type AdminProductMediaContentRequest,
+  type AdminProductMediaContent,
   type AdminProductMediaUpdateRequest,
   type AdminProductMediaUploadRequest,
   type AdminProductMediaView,
@@ -21,6 +23,35 @@ export type ProductMediaDeps = CatalogAdministrationDeps & { bucket: R2Bucket };
 const UPLOAD_SCOPE = "admin.catalog.product-media.upload";
 const UPDATE_SCOPE = "admin.catalog.product-media.update";
 const REMOVE_SCOPE = "admin.catalog.product-media.remove";
+
+/** Read active Product media through Core without exposing its internal R2 key. */
+export async function getAdminProductMediaContent(
+  deps: ProductMediaDeps,
+  request: AdminProductMediaContentRequest,
+): Promise<RpcResult<AdminProductMediaContent>> {
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
+  if (!access.ok) return access;
+  const metadata = await deps.db
+    .prepare(
+      `SELECT object_key AS objectKey, mime_type AS mimeType, version
+       FROM product_media WHERE id=? AND product_id=? AND status='active'`,
+    )
+    .bind(request.mediaId, request.productId)
+    .first<{ objectKey: string; mimeType: string; version: number }>();
+  if (!metadata) return failure("NOT_FOUND", "Product media not found", request.requestId);
+  const object = await deps.bucket.get(metadata.objectKey);
+  if (!object) return failure("NOT_FOUND", "Product media content not found", request.requestId);
+  return {
+    ok: true,
+    value: {
+      bytes: await object.arrayBuffer(),
+      mimeType: metadata.mimeType,
+      etag: object.httpEtag,
+      version: metadata.version,
+    },
+    requestId: request.requestId,
+  };
+}
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
