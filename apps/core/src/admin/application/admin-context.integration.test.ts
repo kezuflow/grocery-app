@@ -169,6 +169,14 @@ describe("scoped admin context", () => {
       parentCode: "payments",
       kind: "destination",
     });
+    expect(context.value.navigation).toContainEqual({
+      code: "commerce-configuration",
+      label: "Pricing & fees",
+      href: "/admin/commerce-configuration",
+      section: "finance",
+      parentCode: null,
+      kind: "workspace",
+    });
     expect(context.value.navigation).not.toContainEqual(
       expect.objectContaining({ section: "operations" }),
     );

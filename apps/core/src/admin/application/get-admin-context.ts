@@ -240,6 +240,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["payments.read", "payments.manage"],
   },
   {
+    code: "commerce-configuration",
+    label: "Pricing & fees",
+    href: "/admin/commerce-configuration",
+    section: "finance",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["memberships.read", "payments.read"],
+  },
+  {
     code: "promotions",
     label: "Promotions",
     href: "/admin/promotions",

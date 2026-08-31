@@ -17,6 +17,10 @@ const coreMocks = vi.hoisted(() => ({
   cancelAdminMembership: vi.fn(),
   listAdminOrderIssues: vi.fn(),
   applyAdminOrderIssueAction: vi.fn(),
+  getMembershipPriceConfiguration: vi.fn(),
+  updateMembershipPriceConfiguration: vi.fn(),
+  getServiceFeeConfiguration: vi.fn(),
+  updateServiceFeeConfiguration: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({
@@ -32,6 +36,14 @@ import { GET as listCases } from "./payments/reconciliation/route";
 import { POST as resolveCase } from "./payments/reconciliation/[case-id]/resolve/route";
 import { GET as listIssues } from "./order-issues/route";
 import { POST as issueAction } from "./order-issues/[issue-id]/actions/route";
+import {
+  GET as membershipPrice,
+  POST as updateMembershipPrice,
+} from "./commerce-configuration/membership-price/route";
+import {
+  GET as serviceFee,
+  POST as updateServiceFee,
+} from "./commerce-configuration/service-fee/route";
 
 beforeEach(() => {
   for (const mock of Object.values(coreMocks)) mock.mockReset();
@@ -150,5 +162,57 @@ describe("finance BFF routes", () => {
     );
     expect(response.status).toBe(400);
     expect(coreMocks.requestAdminRefund).not.toHaveBeenCalled();
+  });
+
+  it("delegates effective-dated commerce configuration reads and versioned commands", async () => {
+    coreMocks.getMembershipPriceConfiguration.mockResolvedValue({
+      ok: true,
+      value: {},
+      requestId: "r",
+    });
+    coreMocks.updateMembershipPriceConfiguration.mockResolvedValue({
+      ok: true,
+      value: {},
+      requestId: "r",
+    });
+    coreMocks.getServiceFeeConfiguration.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    coreMocks.updateServiceFeeConfiguration.mockResolvedValue({
+      ok: true,
+      value: {},
+      requestId: "r",
+    });
+
+    await membershipPrice(new Request("https://x/membership-price", { headers: COOKIE }));
+    await updateMembershipPrice(
+      jsonRequest("https://x/membership-price", {
+        expectedVersion: 3,
+        amountMinor: 35_000,
+        currency: "PHP",
+        effectiveFrom: "2026-09-01T00:00:00.000Z",
+        reason: "Approved annual review",
+      }),
+    );
+    await serviceFee(new Request("https://x/service-fee", { headers: COOKIE }));
+    await updateServiceFee(
+      jsonRequest("https://x/service-fee", {
+        expectedVersion: 4,
+        feeType: "MIXED",
+        flatMinor: 1_500,
+        percentageBasisPoints: 250,
+        currency: "PHP",
+        effectiveFrom: "2026-09-01T00:00:00.000Z",
+        reason: "Approved fee review",
+      }),
+    );
+
+    expect(coreMocks.updateMembershipPriceConfiguration.mock.calls[0][0]).toMatchObject({
+      expectedVersion: 3,
+      idempotencyKey: "idem-1",
+    });
+    expect(coreMocks.updateServiceFeeConfiguration.mock.calls[0][0]).toMatchObject({
+      expectedVersion: 4,
+      feeType: "MIXED",
+      idempotencyKey: "idem-1",
+    });
   });
 });
