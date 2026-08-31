@@ -160,6 +160,45 @@ async function installDeterministicReads(page: Page) {
       }),
     ),
   );
+  await page.route("**/api/admin/catalog/products?**", (route) =>
+    route.fulfill(
+      json({
+        ok: true,
+        requestId: "visual-products",
+        value: {
+          items: [
+            {
+              productId: "product-abiu",
+              slug: "abiu",
+              name: "Abiu",
+              categoryCode: "FRUITS",
+              status: "active",
+              skuCount: 1,
+              activeSkuCount: 1,
+              pricedSkuCount: 1,
+              availableSkuCount: 1,
+              primaryMedia: null,
+              priceRange: { minimumMinor: 8_500, maximumMinor: 8_500, currency: "PHP" },
+              version: 1,
+            },
+          ],
+          readiness: {
+            activeProducts: 227,
+            inactiveProducts: 0,
+            missingPrimaryMedia: 227,
+            missingPrices: 0,
+            unavailableSkus: 0,
+          },
+          pricingContext: {
+            marketId: "market-metro-cebu",
+            locationId: "location-cebu-central",
+            currency: "PHP",
+          },
+          nextCursor: null,
+        },
+      }),
+    ),
+  );
   await page.route("**/api/admin/analytics/definitions?**", (route) =>
     route.fulfill(
       json({
@@ -307,6 +346,7 @@ async function installDeterministicReads(page: Page) {
 async function capture(page: Page, route: string, heading: string, name: string) {
   await page.goto(route);
   await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+  await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot(name, {
     animations: "disabled",

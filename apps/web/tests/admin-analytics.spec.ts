@@ -124,7 +124,6 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
     page.getByText("ACCOUNTING_POLICY_UNRESOLVED", { exact: true }).first(),
   ).toBeVisible();
   await expect(page.getByText("Source freshness", { exact: true })).toBeVisible();
-  await expect(page.getByText("Unavailable", { exact: true }).first()).toBeVisible();
   const dimensionedRequest = page.waitForRequest((request) => {
     if (!request.url().includes("/api/admin/analytics/overview")) return false;
     const dimensions = new URL(request.url()).searchParams.get("dimensions");

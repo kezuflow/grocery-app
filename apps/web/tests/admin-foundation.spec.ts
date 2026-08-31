@@ -59,14 +59,17 @@ test("the authenticated mobile navigation is keyboard and screen-reader accessib
   await expect(trigger).toBeFocused();
 });
 
-test("the desktop shell persists its collapsed navigation preference", async ({ adminPage }) => {
+test("the desktop shell defaults to the rail and persists an explicit expanded preference", async ({
+  adminPage,
+}) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin");
-  const collapse = adminPage.getByRole("button", { name: "Collapse admin navigation" });
-  await collapse.click();
-  await expect(adminPage.getByRole("button", { name: "Expand admin navigation" })).toBeVisible();
+  const expand = adminPage.getByRole("button", { name: "Expand admin navigation" });
+  await expect(expand).toBeVisible();
+  await expand.click();
+  await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible();
   await adminPage.reload();
-  await expect(adminPage.getByRole("button", { name: "Expand admin navigation" })).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible();
 });
 
 test("Core-authorized workspaces expose hierarchical breadcrumbs", async ({ adminPage }) => {
