@@ -125,6 +125,19 @@ export async function requestOrderCancellation(
       await completeScope(database, scope, command.idempotencyKey, order.id);
       return { ok: true, value: { state: "CANCELED" }, requestId: command.requestId };
     }
+    const existingRefund = await database
+      .prepare(
+        `SELECT 1 AS found FROM payment_refund
+         WHERE payment_intent_id IN (${initialSet.members.map(() => "?").join(",")})
+         LIMIT 1`,
+      )
+      .bind(...initialSet.members.map((member) => member.paymentIntentId))
+      .first<{ found: number }>();
+    if (existingRefund)
+      throw appError(
+        "FINANCIAL_OPERATION_REQUIRES_REVIEW",
+        "An existing refund must be reconciled before coordinated cancellation",
+      );
     const snapshot = await database
       .prepare("SELECT cutoff_at FROM order_fulfillment_snapshot WHERE order_id=?")
       .bind(order.id)

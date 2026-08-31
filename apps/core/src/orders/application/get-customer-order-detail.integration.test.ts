@@ -2,7 +2,11 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { getCustomerOrderDetail } from "./get-customer-order-detail";
 
-async function seedOrder(options: { mode: "INSTANT" | "SCHEDULED"; withQuote: boolean }) {
+async function seedOrder(options: {
+  mode: "INSTANT" | "SCHEDULED";
+  withQuote: boolean;
+  withRefund?: boolean;
+}) {
   const suffix = crypto.randomUUID();
   const customerId = `customer-${suffix}`;
   const otherCustomerId = `other-${suffix}`;
@@ -123,10 +127,14 @@ async function seedOrder(options: { mode: "INSTANT" | "SCHEDULED"; withQuote: bo
     env.DB.prepare(
       "INSERT INTO order_issue (id, order_id, customer_id, category, status, details, assigned_staff_id, resolution, version, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 'QUALITY', 'INVESTIGATING', 'Bruised produce', NULL, 'internal resolution note', 2, ?, ?, ?)",
     ).bind(`issue-${suffix}`, orderId, customerId, `issue-key-${suffix}`, now + 50, now + 60),
-    env.DB.prepare(
-      "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 500, 'PHP', 'PROCESSING', 'internal refund reason', ?, 1, ?, ?)",
-    ).bind(`refund-${suffix}`, intentId, `refund-key-${suffix}`, now + 70, now + 80),
   ]);
+
+  if (options.withRefund)
+    await env.DB.prepare(
+      "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 500, 'PHP', 'PROCESSING', 'internal refund reason', ?, 1, ?, ?)",
+    )
+      .bind(`refund-${suffix}`, intentId, `refund-key-${suffix}`, now + 70, now + 80)
+      .run();
 
   if (options.withQuote) {
     await env.DB.batch([
@@ -166,7 +174,7 @@ async function seedOrder(options: { mode: "INSTANT" | "SCHEDULED"; withQuote: bo
 
 describe("getCustomerOrderDetail", () => {
   it("returns owned immutable snapshots, safe projections, actions, and a stable timeline", async () => {
-    const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true });
+    const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true, withRefund: true });
     const result = await getCustomerOrderDetail(env.DB, {
       customerId: fixture.customerId,
       orderId: fixture.orderId,
@@ -199,7 +207,7 @@ describe("getCustomerOrderDetail", () => {
         {
           action: "CANCEL",
           available: false,
-          disabledReason: "COMMITTED_ORDER_CANCELLATION_UNAVAILABLE",
+          disabledReason: "REFUND_ALREADY_IN_PROGRESS",
         },
       ]),
     });
@@ -209,6 +217,30 @@ describe("getCustomerOrderDetail", () => {
     expect(JSON.stringify(result.value)).not.toMatch(
       /provider-secret|assigned_staff|internal resolution|internal refund|latitude|longitude|location-cebu|zone-cebu|rider/i,
     );
+  });
+
+  it("returns a Core-calculated cancellation preview before the Scheduled cutoff", async () => {
+    const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true });
+    const result = await getCustomerOrderDetail(env.DB, {
+      customerId: fixture.customerId,
+      orderId: fixture.orderId,
+      requestId: "detail-cancellation-preview",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        cancellation: {
+          status: null,
+          requiredRefundMinor: 28_500,
+          retainedServiceFeeMinor: 0,
+          currency: "PHP",
+        },
+        actions: expect.arrayContaining([
+          { action: "CANCEL", available: true, disabledReason: null },
+        ]),
+      },
+    });
   });
 
   it("returns NOT_FOUND for another customer and null components for legacy totals", async () => {

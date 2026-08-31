@@ -132,6 +132,12 @@ export type CustomerOrderDetailView = {
     issuedAt: string | null;
   };
   timeline: readonly CustomerTimelineEntry[];
+  cancellation: {
+    status: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION" | null;
+    requiredRefundMinor: number | null;
+    retainedServiceFeeMinor: number | null;
+    currency: string;
+  };
   actions: readonly CustomerOrderActionView[];
 };
 

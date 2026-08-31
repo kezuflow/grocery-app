@@ -115,12 +115,18 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
         occurredAt: "2026-08-30T00:00:00.000Z",
       },
     ],
+    cancellation: {
+      status: null,
+      requiredRefundMinor: 28_500,
+      retainedServiceFeeMinor: 0,
+      currency: "PHP",
+    },
     actions: [
       { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
       {
         action: "CANCEL",
-        available: false,
-        disabledReason: "COMMITTED_ORDER_CANCELLATION_UNAVAILABLE",
+        available: true,
+        disabledReason: null,
       },
     ],
   };
@@ -136,7 +142,8 @@ describe("customer order detail", () => {
     expect(html).toContain("Bruised");
     expect(html).toContain("invoice is not yet available");
     expect(html).toContain("Order confirmed");
-    expect(html).toContain("Committed order cancellation unavailable");
+    expect(html).toContain("Refund if canceled now");
+    expect(html).toContain("₱285.00");
   });
 
   it("states when historical monetary components are unavailable", () => {

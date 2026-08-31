@@ -70,6 +70,7 @@ describe("customer order contracts", () => {
       "issues",
       "invoice",
       "timeline",
+      "cancellation",
       "actions",
     ];
 

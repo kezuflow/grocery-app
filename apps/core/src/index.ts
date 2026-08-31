@@ -2275,9 +2275,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.ordersRpc.getCustomerOrderDetail(input);
   }
 
-  async cancelCustomerOrder(
-    input: import("@freshmarkets/contracts").CancelCustomerOrderRequest,
-  ) {
+  async cancelCustomerOrder(input: import("@freshmarkets/contracts").CancelCustomerOrderRequest) {
     return this.ordersRpc.cancelCustomerOrder(input);
   }
 

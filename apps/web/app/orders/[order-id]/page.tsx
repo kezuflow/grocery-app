@@ -9,6 +9,7 @@ import { OrderTimeline } from "../../../components/storefront/orders/order-timel
 import { ReorderAction } from "../../../components/storefront/orders/reorder-action";
 import { OrderIssueForm } from "../../../components/storefront/orders/order-issue-form";
 import { AmendmentFlow } from "../../../components/storefront/orders/amendment-flow";
+import { CancelOrderAction } from "../../../components/storefront/orders/cancel-order-action";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -27,6 +28,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
   const reorderAction = order.actions.find((action) => action.action === "REORDER");
   const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
   const amendmentAction = order.actions.find((action) => action.action === "REQUEST_AMENDMENT");
+  const cancelAction = order.actions.find((action) => action.action === "CANCEL");
   const address = order.fulfillment.address;
   const addressLine = [
     address.addressLine1,
@@ -155,7 +157,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               {order.actions
                 .filter(
                   (action) =>
-                    !["REORDER", "SUBMIT_ISSUE", "REQUEST_AMENDMENT"].includes(action.action),
+                    !["REORDER", "SUBMIT_ISSUE", "REQUEST_AMENDMENT", "CANCEL"].includes(
+                      action.action,
+                    ),
                 )
                 .map((action) => (
                   <div
@@ -184,6 +188,17 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                 orderVersion={order.version}
                 available={amendmentAction.available}
               />
+            ) : null}
+            {cancelAction ? (
+              <div className="mt-4">
+                <CancelOrderAction
+                  orderId={order.orderId}
+                  orderVersion={order.version}
+                  available={cancelAction.available}
+                  disabledReason={cancelAction.disabledReason}
+                  cancellation={order.cancellation}
+                />
+              </div>
             ) : null}
           </section>
 

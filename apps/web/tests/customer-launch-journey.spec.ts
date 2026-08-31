@@ -135,6 +135,12 @@ test("presents membership and safe post-commit customer actions as one bounded j
         occurredAt: "2026-08-30T00:00:00.000Z",
       },
     ],
+    cancellation: {
+      status: null,
+      requiredRefundMinor: null,
+      retainedServiceFeeMinor: null,
+      currency: "PHP",
+    },
     actions: [
       { action: "REORDER", available: true, disabledReason: null },
       { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
@@ -142,7 +148,7 @@ test("presents membership and safe post-commit customer actions as one bounded j
       {
         action: "CANCEL",
         available: false,
-        disabledReason: "COMMITTED_ORDER_CANCELLATION_UNAVAILABLE",
+        disabledReason: "ORDER_NOT_CANCELABLE",
       },
     ],
   };
@@ -262,7 +268,7 @@ test("presents membership and safe post-commit customer actions as one bounded j
   await page.goto("/orders/order-1");
   await expect(page.getByText("Order FM-2026-ORDER1")).toBeVisible();
   await expect(page.getByText("Order confirmed")).toBeVisible();
-  await expect(page.getByText("Committed order cancellation unavailable")).toBeVisible();
+  await expect(page.getByText("This order can no longer be canceled.")).toBeVisible();
   await expect(page.getByText("An invoice is not yet available for this order.")).toBeVisible();
 
   await page.getByRole("button", { name: "Buy again" }).click();

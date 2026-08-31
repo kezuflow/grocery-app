@@ -288,6 +288,23 @@ describe("explicit cancellation and refund orchestration", () => {
     expect(row?.status).toBe("COMMITTED");
   });
 
+  it("routes an order with an existing refund to financial review", async () => {
+    const fixture = await paidOrderFixture();
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund (id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at) VALUES (?,?,500,'PHP','PROCESSING','goodwill',?,1,?,?)",
+    )
+      .bind(crypto.randomUUID(), fixture.intentId, `existing-${crypto.randomUUID()}`, now, now)
+      .run();
+
+    const outcome = await cancelOrder(env.DB, command(fixture.orderId));
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      error: { code: "FINANCIAL_OPERATION_REQUIRES_REVIEW" },
+    });
+  });
+
   it("enforces optimistic versions and replays the same key identically", async () => {
     const fixture = await paidOrderFixture();
     const stale = await cancelOrder(env.DB, { ...command(fixture.orderId), expectedVersion: 9 });

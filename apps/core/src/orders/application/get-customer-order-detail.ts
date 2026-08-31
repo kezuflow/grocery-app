@@ -18,6 +18,8 @@ import {
   toCustomerOrderIssueView,
   type CustomerIssueStorageRow,
 } from "./list-customer-order-issues";
+import { decideOrderCancellation } from "../domain/cancellation-policy";
+import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
 
 type DetailQuery = { customerId: string; orderId: string; requestId: string };
 
@@ -108,6 +110,8 @@ function actions(input: {
   status: string;
   cutoffAt: number | null;
   invoiceStatus: CustomerOrderDetailView["invoice"]["status"];
+  cancellationAvailable: boolean;
+  cancellationDisabledReason: string | null;
 }): CustomerOrderActionView[] {
   const amendable =
     input.mode === "SCHEDULED" &&
@@ -133,8 +137,8 @@ function actions(input: {
     },
     {
       action: "CANCEL",
-      available: false,
-      disabledReason: "COMMITTED_ORDER_CANCELLATION_UNAVAILABLE",
+      available: input.cancellationAvailable,
+      disabledReason: input.cancellationDisabledReason,
     },
   ];
 }
@@ -203,20 +207,21 @@ export async function getCustomerOrderDetail(
       error: { code: "NOT_FOUND", message: "Order not found", requestId: query.requestId },
     };
 
-  const [itemsResult, paymentsResult, amendmentRows, issuesResult, invoiceRow] = await Promise.all([
-    database
-      .prepare(
-        `SELECT id AS orderItemId, sku_id AS skuId, product_name_snapshot AS productName,
+  const [itemsResult, paymentsResult, amendmentRows, issuesResult, invoiceRow, cancellationRow] =
+    await Promise.all([
+      database
+        .prepare(
+          `SELECT id AS orderItemId, sku_id AS skuId, product_name_snapshot AS productName,
                 variant_name_snapshot AS variantName, unit_snapshot AS unit, quantity,
                 base_quantity AS baseQuantity, unit_price_minor AS unitPriceMinor,
                 line_total_minor AS lineTotalMinor
          FROM order_item WHERE order_id=? ORDER BY id`,
-      )
-      .bind(query.orderId)
-      .all<CustomerOrderLineSnapshot>(),
-    database
-      .prepare(
-        `SELECT DISTINCT pi.id AS paymentId, pi.purpose, pi.status,
+        )
+        .bind(query.orderId)
+        .all<CustomerOrderLineSnapshot>(),
+      database
+        .prepare(
+          `SELECT DISTINCT pi.id AS paymentId, pi.purpose, pi.status,
                 pi.amount_minor AS amountMinor, pi.currency,
                 pi.created_at AS createdAt, pi.updated_at AS updatedAt
          FROM payment_intent pi
@@ -227,20 +232,20 @@ export async function getCustomerOrderDetail(
            UNION SELECT payment_intent_id FROM paid_order_amendment
                  WHERE order_id=? AND payment_intent_id IS NOT NULL
          ) ORDER BY pi.created_at, pi.id`,
-      )
-      .bind(query.orderId, query.orderId)
-      .all<{
-        paymentId: string;
-        purpose: "GROCERY_CHECKOUT" | "ORDER_AMENDMENT";
-        status: PaymentState;
-        amountMinor: number;
-        currency: string;
-        createdAt: number;
-        updatedAt: number;
-      }>(),
-    database
-      .prepare(
-        `SELECT id, status, version, currency, total_minor AS totalMinor,
+        )
+        .bind(query.orderId, query.orderId)
+        .all<{
+          paymentId: string;
+          purpose: "GROCERY_CHECKOUT" | "ORDER_AMENDMENT";
+          status: PaymentState;
+          amountMinor: number;
+          currency: string;
+          createdAt: number;
+          updatedAt: number;
+        }>(),
+      database
+        .prepare(
+          `SELECT id, status, version, currency, total_minor AS totalMinor,
                 merchandise_subtotal_minor AS merchandiseSubtotalMinor,
                 item_discount_minor AS itemDiscountMinor,
                 order_discount_minor AS orderDiscountMinor,
@@ -249,48 +254,61 @@ export async function getCustomerOrderDetail(
                 service_fee_minor AS serviceFeeMinor, tax_minor AS taxMinor,
                 committed_at AS committedAt, created_at AS createdAt, updated_at AS updatedAt
          FROM paid_order_amendment WHERE order_id=? ORDER BY created_at,id`,
-      )
-      .bind(query.orderId)
-      .all<{
-        id: string;
-        status: CustomerOrderDetailView["amendments"][number]["status"];
-        version: number;
-        currency: string;
-        totalMinor: number;
-        merchandiseSubtotalMinor: number;
-        itemDiscountMinor: number;
-        orderDiscountMinor: number;
-        deliverySubtotalMinor: number;
-        deliveryDiscountMinor: number;
-        serviceFeeMinor: number;
-        taxMinor: number;
-        committedAt: number | null;
-        createdAt: number;
-        updatedAt: number;
-      }>(),
-    database
-      .prepare(
-        `SELECT i.id AS issueId, i.order_id AS orderId, i.category, i.status, i.details,
+        )
+        .bind(query.orderId)
+        .all<{
+          id: string;
+          status: CustomerOrderDetailView["amendments"][number]["status"];
+          version: number;
+          currency: string;
+          totalMinor: number;
+          merchandiseSubtotalMinor: number;
+          itemDiscountMinor: number;
+          orderDiscountMinor: number;
+          deliverySubtotalMinor: number;
+          deliveryDiscountMinor: number;
+          serviceFeeMinor: number;
+          taxMinor: number;
+          committedAt: number | null;
+          createdAt: number;
+          updatedAt: number;
+        }>(),
+      database
+        .prepare(
+          `SELECT i.id AS issueId, i.order_id AS orderId, i.category, i.status, i.details,
                 i.version, i.created_at AS createdAt, i.updated_at AS updatedAt,
                 COALESCE((SELECT json_group_array(oil.order_item_id)
                           FROM order_issue_line oil WHERE oil.issue_id=i.id), '[]')
                   AS affectedOrderItemIdsJson
          FROM order_issue i WHERE i.order_id=? AND i.customer_id=? ORDER BY i.created_at,i.id`,
-      )
-      .bind(query.orderId, query.customerId)
-      .all<CustomerIssueStorageRow>(),
-    database
-      .prepare(
-        `SELECT status, invoice_identifier AS invoiceIdentifier, issued_at AS issuedAt
+        )
+        .bind(query.orderId, query.customerId)
+        .all<CustomerIssueStorageRow>(),
+      database
+        .prepare(
+          `SELECT status, invoice_identifier AS invoiceIdentifier, issued_at AS issuedAt
          FROM order_invoice_readiness WHERE order_id=?`,
-      )
-      .bind(query.orderId)
-      .first<{
-        status: "PENDING_TAX_CONFIGURATION" | "READY_FOR_ISSUANCE" | "ISSUED";
-        invoiceIdentifier: string | null;
-        issuedAt: number | null;
-      }>(),
-  ]);
+        )
+        .bind(query.orderId)
+        .first<{
+          status: "PENDING_TAX_CONFIGURATION" | "READY_FOR_ISSUANCE" | "ISSUED";
+          invoiceIdentifier: string | null;
+          issuedAt: number | null;
+        }>(),
+      database
+        .prepare(
+          `SELECT status,required_refund_minor AS requiredRefundMinor,
+                retained_service_fee_minor AS retainedServiceFeeMinor,currency
+         FROM order_cancellation WHERE order_id=?`,
+        )
+        .bind(query.orderId)
+        .first<{
+          status: CustomerOrderDetailView["cancellation"]["status"];
+          requiredRefundMinor: number;
+          retainedServiceFeeMinor: number;
+          currency: string;
+        }>(),
+    ]);
 
   const amendments = await Promise.all(
     amendmentRows.results.map(async (amendment) => {
@@ -367,6 +385,51 @@ export async function getCustomerOrderDetail(
     createdAt: new Date(refund.createdAt).toISOString(),
     updatedAt: new Date(refund.updatedAt).toISOString(),
   }));
+  const unresolvedIndependentRefund = refundsResult.results.some((refund) =>
+    ["REQUESTED", "APPROVED", "PROCESSING", "ESCALATED"].includes(refund.status),
+  );
+  const initialRefundSet =
+    cancellationRow || unresolvedIndependentRefund
+      ? null
+      : await buildCancellationRefundSet(database, query.orderId, 0);
+  const cancellationDecision = initialRefundSet
+    ? decideOrderCancellation({
+        actor: "CUSTOMER",
+        cause: "CUSTOMER_REQUEST",
+        mode: row.fulfillmentMode,
+        orderState: row.status as import("../domain/order-state-machine").OrderLifecycleState,
+        serviceFeeMinor: row.serviceFeeMinor,
+        grossPaidMinor: initialRefundSet.grossPaidMinor,
+        now: Date.now(),
+        cutoffAt: row.cutoffAt,
+      })
+    : null;
+  const cancellation: CustomerOrderDetailView["cancellation"] = cancellationRow
+    ? cancellationRow
+    : cancellationDecision?.allowed
+      ? {
+          status: null,
+          requiredRefundMinor: cancellationDecision.refundMinor,
+          retainedServiceFeeMinor: cancellationDecision.retainedServiceFeeMinor,
+          currency: initialRefundSet!.currency,
+        }
+      : {
+          status: null,
+          requiredRefundMinor: null,
+          retainedServiceFeeMinor: null,
+          currency: row.currency,
+        };
+  const cancellationDisabledReason = cancellationRow
+    ? "CANCELLATION_ALREADY_REQUESTED"
+    : unresolvedIndependentRefund
+      ? "REFUND_ALREADY_IN_PROGRESS"
+      : cancellationDecision?.allowed
+        ? null
+        : cancellationDecision?.code === "CANCELLATION_WINDOW_CLOSED"
+          ? "CANCELLATION_WINDOW_CLOSED"
+          : cancellationDecision?.code === "CUTOFF_EVIDENCE_MISSING"
+            ? "CANCELLATION_CONFIGURATION_UNAVAILABLE"
+            : "ORDER_NOT_CANCELABLE";
   const issues = issuesResult.results.map(toCustomerOrderIssueView);
   const invoice: CustomerOrderDetailView["invoice"] = invoiceRow
     ? {
@@ -454,11 +517,14 @@ export async function getCustomerOrderDetail(
       issues,
       invoice,
       timeline: buildCustomerOrderTimeline(facts),
+      cancellation,
       actions: actions({
         mode: row.fulfillmentMode,
         status: row.status,
         cutoffAt: row.cutoffAt,
         invoiceStatus: invoice.status,
+        cancellationAvailable: cancellationDecision?.allowed === true && !cancellationRow,
+        cancellationDisabledReason,
       }),
     },
     requestId: query.requestId,
