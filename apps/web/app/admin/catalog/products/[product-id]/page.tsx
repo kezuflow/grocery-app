@@ -28,6 +28,7 @@ import {
 } from "../../../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
+import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
 
 type LoadState =
@@ -273,6 +274,8 @@ export default function ProductDetailPage({
           {notice}
         </p>
       ) : null}
+
+      <ProductDetailSummary product={product} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 lg:col-span-2">

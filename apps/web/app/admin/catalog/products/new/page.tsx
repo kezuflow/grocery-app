@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
+import { CommandBanner, StepIndicator } from "@/components/admin/admin-compositions";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -65,7 +66,7 @@ export default function NewProductPage() {
     }
   }
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-[1280px] space-y-5">
       <nav className="text-sm text-[var(--fm-text-muted)]">
         <Link className="underline" href="/admin/catalog/products">
           Products
@@ -74,24 +75,31 @@ export default function NewProductPage() {
       </nav>
       <PageHeader
         title="Add product"
-        description="Create Product identity, its shared inventory pool, and ordered customer details."
+        description="Create the global Product identity and shared inventory pool before attaching media, SKUs, prices, and availability."
+      />
+      <StepIndicator
+        currentStep={1}
+        steps={["Product identity", "Media and variants", "Pricing and availability"]}
+      />
+      <CommandBanner
+        tone="info"
+        title="Creation sequence"
+        message="The initial legal command creates Product identity and its inventory pool. Media, SKU, price, and availability commands become available on the resulting Product detail workspace."
       />
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      <section className="max-w-3xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6">
-        <ProductForm
-          value={value}
-          categories={categories}
-          units={units}
-          pending={intent.pending}
-          submitLabel="Create product"
-          onChange={setValue}
-          onSubmit={submit}
-        />
-      </section>
+      <ProductForm
+        value={value}
+        categories={categories}
+        units={units}
+        pending={intent.pending}
+        submitLabel="Create product"
+        onChange={setValue}
+        onSubmit={submit}
+      />
     </div>
   );
 }

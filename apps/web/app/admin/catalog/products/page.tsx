@@ -5,20 +5,13 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
+import { ProductListView } from "@/components/admin/product-list-view";
 import { useAdminContext } from "../../admin-context-provider";
-import { PageHeader, StatusBadge } from "@/components/admin/admin-shell";
+import { FilterBar, PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -82,7 +75,6 @@ export default function ProductsPage() {
     pagination.reset();
     router.replace(`/admin/catalog/products${next.size ? `?${next}` : ""}`);
   }
-  const items = payload?.ok ? payload.value.items : [];
   return (
     <div className="space-y-6">
       <PageHeader
@@ -108,8 +100,8 @@ export default function ProductsPage() {
         </Alert>
       ) : null}
       {payload?.ok ? (
-        <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
-          <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] p-4 sm:flex-row">
+        <>
+          <FilterBar>
             <Input
               aria-label="Search products"
               value={query}
@@ -127,63 +119,15 @@ export default function ProductsPage() {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
-          </div>
-          <Table aria-label="Products">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>SKUs</TableHead>
-                <TableHead>
-                  <span className="sr-only">Open</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((product) => (
-                <TableRow key={product.productId}>
-                  <TableCell>
-                    <span className="font-medium">{product.name}</span>
-                    <span className="block text-xs text-[var(--fm-text-muted)]">
-                      {product.slug}
-                    </span>
-                  </TableCell>
-                  <TableCell>{product.categoryCode}</TableCell>
-                  <TableCell>
-                    <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
-                      {product.status}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>{product.skuCount}</TableCell>
-                  <TableCell>
-                    <Link
-                      className="font-medium text-[var(--fm-info)] underline"
-                      href={`/admin/catalog/products/${product.productId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
-                    >
-                      View
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {items.length === 0 ? (
-            <p role="status" className="p-6 text-sm text-[var(--fm-text-muted)]">
-              {payload.value.items.length === 0
-                ? query.trim() || status !== "all"
-                  ? "No products match these filters."
-                  : "No products have been created."
-                : "No products match these filters."}
-            </p>
-          ) : null}
+          </FilterBar>
+          <ProductListView page={payload.value} fromQuery={searchParams.toString()} />
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}
             nextCursor={payload.value.nextCursor}
             onPrevious={pagination.previous}
             onNext={pagination.next}
           />
-        </section>
+        </>
       ) : null}
     </div>
   );
