@@ -50,7 +50,15 @@ const sourceFilePattern =
   /^[a-z0-9]+(?:[-.][a-z0-9]+)*(?:\.(?:test|spec))?\.(?:ts|tsx|js|jsx|mjs|cjs|css|json|jsonc)$/;
 const migrationPattern = /^\d{4}_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$/;
 const docPattern = /^[A-Z][A-Z0-9_]*\.md$/;
+const datedSuperpowersPlanPattern =
+  /^docs\/superpowers\/plans\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 const violations = [];
+
+export function isDocumentationPathCompliant(relativePath) {
+  const normalizedPath = relativePath.split(sep).join("/");
+  const filename = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
+  return docPattern.test(filename) || datedSuperpowersPlanPattern.test(normalizedPath);
+}
 
 function display(path) {
   return relative(root, path).split(sep).join("/");
@@ -91,7 +99,7 @@ async function walk(directory) {
       continue;
     }
     if (path.includes(`${sep}docs${sep}`) && normalized.endsWith(".md")) {
-      if (!docPattern.test(normalized))
+      if (!isDocumentationPathCompliant(display(path)))
         fail(path, "canonical Markdown docs must use uppercase names with underscores");
       continue;
     }

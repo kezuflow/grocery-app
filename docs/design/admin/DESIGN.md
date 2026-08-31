@@ -14,6 +14,8 @@ Do not recreate generic primitives. Custom components are justified only when th
 
 Use [Shadcn UI Kit Dashboard](https://shadcnuikit.com/dashboard/) as the visual and interaction reference for the admin shell, ecommerce/product screens, order screens, payment/transaction screens, analytics, tables, forms, dialogs, filters, empty states, settings, and responsive behavior. Adapt its patterns to FreshMarkets domain commands and read models; do not copy branding, proprietary assets, placeholder data, generic edit/delete actions, or interactions that bypass Core policy.
 
+The reproduction is clean-room: public rendered pages may be inspected for geometry, hierarchy, density, responsive behavior, and interaction vocabulary only. FreshMarkets owns the resulting code, copy, data, icons, and assets. Reference demo values are never copied into Admin and never used as fallback data.
+
 Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/storefront tokens. The initial admin theme is light-only, uses a neutral operational canvas with orange as the controlled accent, and exposes a fixed five-step orange data-visualization palette through admin-scoped design tokens. Staff may collapse navigation, but no runtime color/font/radius/theme customizer is included. Semantic success, warning, danger, information, and status colors retain their meanings and are not replaced with orange.
 
 ## Information Architecture
@@ -32,12 +34,14 @@ Navigation items and actions are capability-aware. A user may see a workspace bu
 
 ## Global Shell
 
-- A 252px persistent sidebar on desktop collapses to a 72px icon rail and remembers that browser preference. On narrower screens it becomes a Sheet/drawer; the admin shell has no truncated bottom navigation.
+- Desktop defaults to a 72px icon rail. Staff may expand it to 252px, and the browser remembers that preference. On narrower screens it becomes a Sheet/drawer; the admin shell has no truncated bottom navigation.
 - Section labels and nested links follow the Information Architecture above. Parent labels navigate to their overview, a separate chevron toggles children, the most-specific matching route is active, and the active child's parent opens automatically. Collapsed groups use accessible tooltips/flyouts.
-- Header includes breadcrumb, current market/location scope, cycle context where relevant, search/command affordance, notifications/exceptions indicator, and user menu.
+- A 64px top bar aligns with the rail and keeps the FreshMarkets Admin identity, breadcrumb/context, current market/location scope, cycle context where relevant, search/command affordance, notifications/exceptions indicator, and user menu visible without turning those controls into business authority.
 - Scope selection is explicit and never silently changes a command's target.
 - Use URL-addressable filters/tabs for operational queues.
 - Show an environment/status indicator for non-production contexts.
+
+The main canvas uses a broad neutral background, 24px desktop page gutters, thin neutral borders, restrained shadows, and compact card headers. Card grids follow the reference geometry but their contents remain operational: no congratulatory, revenue, review, visit-source, or other demo modules appear unless an approved authoritative read model supports the exact decision.
 
 ## Overview
 
@@ -53,6 +57,12 @@ The overview is a prioritized operational briefing, not four generic statistic c
 - recent material operations.
 
 Visual choices follow the question: KPI trend, queue count, capacity bar, aging table, timeline, or exception list. Every summary links to the filtered workspace that can resolve it.
+
+The overview consumes one purpose-built, scope-aware Admin overview read model. A section the caller cannot read is represented as denied rather than zero. A supported section whose authority is not implemented is explicitly unavailable. Generated time and source freshness are visible so operators can distinguish current truth from stale or partial data.
+
+## Pricing And Fees
+
+`/admin/commerce-configuration` is a global-scope workspace with separate Membership Price and Instant Service Fee tabs. Each tab independently enforces its existing read/manage capabilities, shows current and next effective configuration, explains customer impact and invariants, and submits only an effective-dated replacement with reason, confirmation, idempotency, and expected version. It never exposes generic history editing or rewrites existing Subscription, Quote, or Order snapshots.
 
 ## Page Archetypes
 

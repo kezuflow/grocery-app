@@ -578,11 +578,13 @@ Phases 1 and 7–11.
 
 ### Web/UI work
 
-- Apply the light-only `.fm-admin` neutral/orange design system and fixed five-step orange chart palette, adapted from the Shadcn UI Kit reference and isolated from storefront styling.
-- Build the collapsible grouped admin navigation and responsive Sheet with Overview; Commerce; Operations; Finance; and Administration sections.
+- Apply the light-only `.fm-admin` neutral/orange design system and fixed five-step orange chart palette as a clean-room adaptation of the public Shadcn UI Kit reference, isolated from storefront styling. Desktop defaults to a 72px icon rail and remembers an optional 252px expansion.
+- Build the collapsible grouped admin navigation, 64px header, scope/context controls, and responsive Sheet with Overview; Commerce; Operations; Finance; and Administration sections.
+- Build shared dashboard-grid, metric/chart, table/filter, editor, detail, settings-tab, step, banner, command-dialog, and complete page-state compositions before migrating page families.
 - Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category, including variants, prices, availability, media, customer-facing details, hierarchy, status, contained products, and audit context.
 - Orders: Order List, Order Detail, and Order Issues, including items, financial snapshots, payment, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit context. Do not add admin Order creation.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation, with contextual refund/retry/reconcile commands.
+- Pricing & fees: add `/admin/commerce-configuration` with independently authorized Membership Price and Instant Service Fee tabs over the existing global effective-dated commands.
 - Customers, Privacy Queue, Memberships, Promotions, Inventory, Procurement Requirements, Receiving, Fulfillment, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit Log, and Fulfillment Mode Settings list/detail/configuration flows as applicable.
 
 ### Cloudflare resources
@@ -594,6 +596,20 @@ Phases 1 and 7–11.
 - Playwright operational flows, capability/location scopes, keyboard/accessibility, loading/empty/error states, and no raw-row leakage.
 - Catalog coverage includes category hierarchy and lifecycle, product create/detail/edit/deactivate, variants, media, price/availability, stale-version and permission failures, and list-to-detail breadcrumb/filter preservation.
 - Navigation coverage includes capability-filtered sections/children, specific-route active state, collapsed icon rail, mobile Sheet, keyboard/focus behavior, and strict storefront/admin token isolation.
+- Overview/catalog coverage includes scope-aware denied/unavailable sections, authoritative freshness, explicit list pricing context, catalog-readiness totals, and authenticated private media delivery without R2-key leakage.
+- Maintain FreshMarkets-owned visual baselines for shared Admin archetypes at `1440x1200`, `1024x1366`, and `390x844`.
+
+### Approved redesign delivery batches
+
+1. Canonical documentation, tokens, shell, navigation, and shared states.
+2. Shared table, form, detail, chart, step, banner, and command compositions.
+3. Operational overview, catalog list/readiness additions, and secure media delivery.
+4. Orders, issues, payments, reconciliation, and pricing/fees.
+5. Customers, memberships, promotions, staff, and roles.
+6. Inventory, procurement, receiving, fulfillment, delivery, exceptions, analytics, audit, and settings.
+7. Responsive, accessibility, visual-parity, and performance hardening plus complete deterministic Admin verification.
+
+Each batch keeps existing routes usable, uses test-first behavior changes, runs focused verification, and lands as an independently reviewable conventional commit on `main`.
 
 ### Not in this phase
 

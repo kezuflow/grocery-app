@@ -17,13 +17,18 @@ Build these only once they appear across multiple workspaces:
 - `PageHeader`: title, description, breadcrumbs, scope, primary/secondary actions.
 - `FilterBar`: debounced search, select/date/status filters, clear-all, URL state.
 - `AdminDataTable`: server-side data, keyset pagination, row selection, responsive fallback, loading/empty/error states.
+- `AdminDashboardGrid`: responsive reference-aligned grid for operational cards, charts, queues, and recent activity.
 - `StatusBadge` / domain status components: stable label, tone, icon, accessible text.
 - `MetricCard` only for decision-relevant metrics; never as default dashboard filler.
+- `AdminChartCard`: accessible Recharts composition with an explicit title, definition/freshness context, non-visual summary, and unavailable state.
 - `Timeline`: ordered domain/audit/delivery events.
 - `ExceptionQueue`: severity, age, owner, reason, legal resolution actions.
 - `ConfirmCommandDialog`: consequence, target, reason, idempotent submit, result state.
 - `ScopeSelector`: explicit market/location context with permission-aware options.
 - `DetailSection` / `DetailField`: consistent read-only domain presentation.
+- `EditorLayout`: sticky summary/action rail plus grouped fields for product and configuration authoring.
+- `DetailWorkspace`: resource header, summary strip, legal actions, tabs/sections, timeline, and audit context.
+- `SettingsTabs`, `StepIndicator`, and `CommandBanner`: shared configuration navigation, bounded workflow progress, and pending/conflict/success feedback.
 
 ### Layer 3: domain compositions
 
@@ -36,6 +41,7 @@ Build these only once they appear across multiple workspaces:
 - `StaffScopeEditor`, `CapabilityMatrix`, `AuditEventList`.
 - `ProductListTable`, `ProductEditor`, `ProductMediaManager`, `SkuVariantEditor`, `SkuPricePanel`, and `SkuAvailabilityPanel`.
 - `CategoryListTable`, `CategoryEditor`, `CategoryTree`, and `CategoryProductList`.
+- `CommerceConfigurationTabs`, `MembershipPriceEditor`, and `ServiceFeeEditor`.
 
 Domain compositions must consume purpose-built DTOs and call explicit Core commands. They must not infer legal transitions from arbitrary strings or modify data locally as if the mutation succeeded.
 
@@ -89,6 +95,7 @@ Do not turn exception resolution into an arbitrary edit form.
 - Preserve row identity and action access when tables collapse.
 - Use semantic headings, labels, table structures, focus management, keyboard menus, and live status announcements.
 - Ensure color tones meet contrast and have text/icon alternatives.
+- Recharts visualizations include an accessible label/description and a textual value summary; charts are never the only way to obtain an operational value.
 
 ## Testing Expectations
 

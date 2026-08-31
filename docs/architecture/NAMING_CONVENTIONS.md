@@ -10,6 +10,7 @@ Repository path, migration, documentation, and workspace-package conventions are
 - Next/vinext route conventions are allowed where required: `page.tsx`, `layout.tsx`, `route.ts`, `loading.tsx`, `error.tsx`, `not-found.tsx`, `middleware.ts`, and dynamic segments such as `[slug]`, `[...path]`, and `[[...path]]`.
 - Type declaration files may use the generated `worker-configuration.d.ts` name.
 - Documentation filenames use uppercase kebab-free names already established by the repository, such as `ARCHITECTURE.md`; new canonical docs should use uppercase letters and underscores only when matching an existing document family.
+- User-approved Superpowers execution plans may use the standard dated lowercase form `docs/superpowers/plans/YYYY-MM-DD-lowercase-kebab.md`; they are implementation artifacts rather than canonical architecture/product documents.
 
 ## Database And Packages
 
