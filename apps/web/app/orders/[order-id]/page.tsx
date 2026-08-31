@@ -29,6 +29,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
   const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
   const amendmentAction = order.actions.find((action) => action.action === "REQUEST_AMENDMENT");
   const cancelAction = order.actions.find((action) => action.action === "CANCEL");
+  const summaryAction = order.actions.find(
+    (action) => action.action === "VIEW_TRANSACTION_SUMMARY",
+  );
   const address = order.fulfillment.address;
   const addressLine = [
     address.addressLine1,
@@ -153,13 +156,25 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                 <ReorderAction orderId={order.orderId} available={reorderAction.available} />
               </div>
             ) : null}
+            {summaryAction?.available ? (
+              <Link
+                href={`/orders/${encodeURIComponent(order.orderId)}/transaction-summary`}
+                className="mt-4 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 text-sm font-bold"
+              >
+                View transaction summary
+              </Link>
+            ) : null}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {order.actions
                 .filter(
                   (action) =>
-                    !["REORDER", "SUBMIT_ISSUE", "REQUEST_AMENDMENT", "CANCEL"].includes(
-                      action.action,
-                    ),
+                    ![
+                      "REORDER",
+                      "SUBMIT_ISSUE",
+                      "REQUEST_AMENDMENT",
+                      "VIEW_TRANSACTION_SUMMARY",
+                      "CANCEL",
+                    ].includes(action.action),
                 )
                 .map((action) => (
                   <div

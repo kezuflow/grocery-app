@@ -123,6 +123,7 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
     },
     actions: [
       { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
+      { action: "VIEW_TRANSACTION_SUMMARY", available: true, disabledReason: null },
       {
         action: "CANCEL",
         available: true,
@@ -144,6 +145,7 @@ describe("customer order detail", () => {
     expect(html).toContain("Order confirmed");
     expect(html).toContain("Refund if canceled now");
     expect(html).toContain("₱285.00");
+    expect(html).toContain("View transaction summary");
   });
 
   it("states when historical monetary components are unavailable", () => {

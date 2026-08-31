@@ -64,7 +64,13 @@ export type CustomerTimelineEntry = {
 };
 
 export type CustomerOrderActionView = {
-  action: "REORDER" | "SUBMIT_ISSUE" | "REQUEST_AMENDMENT" | "VIEW_INVOICE" | "CANCEL";
+  action:
+    | "REORDER"
+    | "SUBMIT_ISSUE"
+    | "REQUEST_AMENDMENT"
+    | "VIEW_TRANSACTION_SUMMARY"
+    | "VIEW_INVOICE"
+    | "CANCEL";
   available: boolean;
   disabledReason: string | null;
 };

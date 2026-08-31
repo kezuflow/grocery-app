@@ -131,6 +131,11 @@ function actions(input: {
           : "AMENDMENT_WINDOW_CLOSED",
     },
     {
+      action: "VIEW_TRANSACTION_SUMMARY",
+      available: true,
+      disabledReason: null,
+    },
+    {
       action: "VIEW_INVOICE",
       available: input.invoiceStatus === "ISSUED",
       disabledReason: input.invoiceStatus === "ISSUED" ? null : "INVOICE_NOT_AVAILABLE",
