@@ -1,17 +1,20 @@
-import Link from "next/link";
+"use client";
+
+import { usePathname } from "next/navigation";
+import { SettingsTabs } from "./admin-compositions";
+
+const tabs = [
+  { id: "overview", label: "Overview", href: "/admin/payments/overview" },
+  { id: "transactions", label: "Transactions", href: "/admin/payments/transactions" },
+  { id: "reconciliation", label: "Reconciliation", href: "/admin/payments/reconciliation" },
+];
 
 export function PaymentNavigation() {
-  return (
-    <nav aria-label="Payment administration" className="flex flex-wrap gap-3 text-sm">
-      <Link className="underline" href="/admin/payments/overview">
-        Overview
-      </Link>
-      <Link className="underline" href="/admin/payments/transactions">
-        Transactions
-      </Link>
-      <Link className="underline" href="/admin/payments/reconciliation">
-        Reconciliation
-      </Link>
-    </nav>
-  );
+  const pathname = usePathname();
+  const activeId = pathname.includes("/reconciliation")
+    ? "reconciliation"
+    : pathname.includes("/transactions")
+      ? "transactions"
+      : "overview";
+  return <SettingsTabs activeId={activeId} label="Payment administration" tabs={tabs} />;
 }
