@@ -51,7 +51,7 @@ export function AdminShell({
   scopeLabel: string;
   environment: string;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const pathname = usePathname();
   const active = mostSpecificActiveNavigation(items, pathname);
   const activeItem = active ? items.find((item) => item.code === active.code) : undefined;
@@ -67,7 +67,8 @@ export function AdminShell({
     : [{ label: "Admin" }];
 
   useEffect(() => {
-    setCollapsed(window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY) === "true");
+    const savedPreference = window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
+    setCollapsed(savedPreference === null ? true : savedPreference === "true");
   }, []);
 
   function changeCollapsed(next: boolean) {

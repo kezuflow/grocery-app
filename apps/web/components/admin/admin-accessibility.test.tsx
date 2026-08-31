@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
-import { AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
+import { AdminShell, AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
 import { AdminCursorPagination } from "./admin-controls";
 import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
-import { AdminPageState, AdminLiveRegion } from "./admin-page-state";
+import { AdminPageState, AdminLiveRegion, type AdminPageStateKind } from "./admin-page-state";
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
@@ -52,6 +52,21 @@ describe("shared Admin accessibility contract", () => {
   it("keeps the Admin visual scope on the Admin layout boundary", () => {
     const layout = readFileSync(new URL("../../app/admin/layout.tsx", import.meta.url), "utf8");
     expect(layout).toMatch(/className="fm-admin/);
+  });
+
+  it("server-renders a first-time desktop visit with the 72px icon rail", () => {
+    useAdminContext.mockReturnValue({ state: { phase: "loading" }, retry: vi.fn() });
+    const markup = renderToStaticMarkup(
+      createElement(AdminShell, {
+        items: [],
+        scopeLabel: "Scope: Global",
+        environment: "test",
+        children: createElement("div", null, "Overview"),
+      }),
+    );
+
+    expect(markup).toContain("w-[var(--fm-admin-sidebar-collapsed)]");
+    expect(markup).toContain('aria-label="Expand admin navigation"');
   });
 
   it("gives shell states headings and status semantics", () => {
@@ -191,7 +206,17 @@ describe("shared Admin accessibility contract", () => {
   });
 
   it("renders all distinct shared page states with recoverable semantics", () => {
-    const variants = ["loading", "empty", "filtered-empty", "permission-empty", "error"] as const;
+    const variants = [
+      "loading",
+      "empty",
+      "filtered-empty",
+      "permission-empty",
+      "unavailable",
+      "pending",
+      "conflict",
+      "success",
+      "error",
+    ] as ReadonlyArray<AdminPageStateKind>;
     const markup = variants
       .map((state) =>
         renderToStaticMarkup(
@@ -210,6 +235,10 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("No data is available yet");
     expect(markup).toContain("No results match the active filters");
     expect(markup).toContain("The selected scope or your permissions do not expose data");
+    expect(markup).toContain("Authoritative data for this section is not available");
+    expect(markup).toContain("The command is still pending authoritative confirmation");
+    expect(markup).toContain("The record changed since this page was loaded");
+    expect(markup).toContain("The authoritative command completed successfully");
     expect(markup).toContain("Request reference: request-1");
     expect(markup).toContain("Retry");
   });

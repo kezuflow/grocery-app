@@ -8,6 +8,10 @@ export type AdminPageStateKind =
   | "empty"
   | "filtered-empty"
   | "permission-empty"
+  | "unavailable"
+  | "pending"
+  | "conflict"
+  | "success"
   | "error";
 
 const defaultMessages: Record<AdminPageStateKind, string> = {
@@ -15,6 +19,10 @@ const defaultMessages: Record<AdminPageStateKind, string> = {
   empty: "No data is available yet.",
   "filtered-empty": "No results match the active filters.",
   "permission-empty": "The selected scope or your permissions do not expose data.",
+  unavailable: "Authoritative data for this section is not available.",
+  pending: "The command is still pending authoritative confirmation.",
+  conflict: "The record changed since this page was loaded.",
+  success: "The authoritative command completed successfully.",
   error: "The workspace could not be loaded.",
 };
 
@@ -69,8 +77,14 @@ export function AdminPageState({
   return (
     <section
       aria-live="polite"
-      className="rounded-[var(--fm-radius-panel)] border border-dashed bg-white p-6 text-sm"
-      role="status"
+      className={`rounded-[var(--fm-radius-panel)] border bg-white p-6 text-sm ${
+        state === "conflict"
+          ? "border-[var(--fm-warning-border)]"
+          : state === "success"
+            ? "border-[var(--fm-success-border)]"
+            : "border-dashed border-[var(--fm-border)]"
+      }`}
+      role={state === "conflict" ? "alert" : "status"}
     >
       <h2 className="font-semibold">
         {title ?? (state === "filtered-empty" ? "No matching results" : "Nothing to show")}
