@@ -426,11 +426,19 @@ function completeScope(
 }
 
 function throwPolicy(code: string): never {
+  const errorCode =
+    code === "CANCELLATION_WINDOW_CLOSED"
+      ? "FINANCIAL_OPERATION_REQUIRES_REVIEW"
+      : code === "CUTOFF_EVIDENCE_MISSING"
+        ? "CONFIGURATION_ERROR"
+        : "ILLEGAL_TRANSITION";
   throw appError(
-    code === "CANCELLATION_WINDOW_CLOSED" ? "FINANCIAL_OPERATION_REQUIRES_REVIEW" : code,
+    errorCode,
     code === "CANCELLATION_WINDOW_CLOSED"
       ? "The customer cancellation window is closed"
-      : "Order is not cancelable",
+      : code === "CUTOFF_EVIDENCE_MISSING"
+        ? "The scheduled order cutoff snapshot is missing"
+        : "Order is not cancelable",
   );
 }
 

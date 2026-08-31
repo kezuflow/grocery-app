@@ -20,6 +20,18 @@ describe("Orders RPC adapter", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED", requestId: "orders-detail-adapter" },
     });
+    const cancellation = await rpc.cancelCustomerOrder({
+      requestId: "orders-cancel-adapter",
+      headers: {},
+      orderId: "order-1",
+      expectedVersion: 1,
+      reason: "Plans changed",
+      idempotencyKey: "orders-cancel-key",
+    });
+    expect(cancellation).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED", requestId: "orders-cancel-adapter" },
+    });
     const reorder = await rpc.reorderOrder({
       requestId: "orders-reorder-adapter",
       headers: {},

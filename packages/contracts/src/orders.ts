@@ -137,6 +137,27 @@ export type CustomerOrderDetailView = {
 
 export type CustomerOrderDetailRequest = AuthenticatedRequest & { orderId: string };
 
+export type CancelCustomerOrderRequest = AuthenticatedRequest & {
+  orderId: string;
+  expectedVersion: number;
+  reason: string;
+  idempotencyKey: string;
+};
+
+export type OrderCancellationView = {
+  cancellationId: string;
+  status: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION";
+  requiredRefundMinor: number;
+  retainedServiceFeeMinor: number;
+  currency: string;
+  refunds: readonly {
+    paymentId: string;
+    refundId: string | null;
+    amountMinor: number;
+    status: RefundState | "NOT_REQUESTED";
+  }[];
+};
+
 export type ReorderSkippedReason =
   | "SKU_INACTIVE"
   | "PRODUCT_INACTIVE"
@@ -240,6 +261,9 @@ export type OrdersService = {
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;
+  cancelCustomerOrder(
+    request: CancelCustomerOrderRequest,
+  ): Promise<RpcResult<OrderCancellationView>>;
   reorderOrder(request: ReorderOrderRequest): Promise<RpcResult<ReorderResultView>>;
   submitCustomerOrderIssue(
     request: SubmitCustomerOrderIssueRequest,

@@ -3,10 +3,41 @@ import {
   customerOrderIssueCategories,
   type CustomerOrderDetailView,
   type CustomerOrderIssueView,
+  type CancelCustomerOrderRequest,
+  type OrderCancellationView,
   type ReorderResultView,
 } from "./orders";
 
 describe("customer order contracts", () => {
+  it("publishes a customer-only cancellation command and provider-neutral refund set", () => {
+    const request = {
+      requestId: "request-1",
+      headers: {},
+      orderId: "order-1",
+      expectedVersion: 3,
+      reason: "Plans changed",
+      idempotencyKey: "cancel-order-1-v3",
+    } satisfies CancelCustomerOrderRequest;
+    const cancellation = {
+      cancellationId: "cancellation-1",
+      status: "REFUNDS_PROCESSING",
+      requiredRefundMinor: 97_500,
+      retainedServiceFeeMinor: 2_500,
+      currency: "PHP",
+      refunds: [
+        {
+          paymentId: "payment-1",
+          refundId: "refund-1",
+          amountMinor: 97_500,
+          status: "PROCESSING",
+        },
+      ],
+    } satisfies OrderCancellationView;
+
+    expect(request).not.toHaveProperty("actor");
+    expect(request).not.toHaveProperty("cause");
+    expect(cancellation.refunds[0]).not.toHaveProperty("provider");
+  });
   it("contains purpose-built customer fields without provider, staff, audit, or routing leakage", () => {
     type Keys = keyof CustomerOrderDetailView;
     const forbidden: readonly string[] = [

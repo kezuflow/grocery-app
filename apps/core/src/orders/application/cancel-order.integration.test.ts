@@ -307,11 +307,25 @@ describe("explicit cancellation and refund orchestration", () => {
     }
   });
 
+  it("does not reveal or mutate an order owned by another customer", async () => {
+    const fixture = await paidOrderFixture();
+    const outcome = await cancelOrder(env.DB, {
+      ...command(fixture.orderId),
+      customerId: "another-customer",
+    });
+
+    expect(outcome).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    const order = await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+      .bind(fixture.orderId)
+      .first<{ status: string; version: number }>();
+    expect(order).toEqual({ status: "COMMITTED", version: 1 });
+  });
+
   it.each([
     ["OUT_FOR_DELIVERY", "FINANCIAL_OPERATION_REQUIRES_REVIEW"],
-    ["DELIVERED", "ORDER_NOT_CANCELABLE"],
-    ["CANCELED", "ORDER_NOT_CANCELABLE"],
-    ["EXPIRED", "ORDER_NOT_CANCELABLE"],
+    ["DELIVERED", "ILLEGAL_TRANSITION"],
+    ["CANCELED", "ILLEGAL_TRANSITION"],
+    ["EXPIRED", "ILLEGAL_TRANSITION"],
   ])(
     "rejects cancellation from the terminal or late lifecycle state %s",
     async (status, expectedCode) => {

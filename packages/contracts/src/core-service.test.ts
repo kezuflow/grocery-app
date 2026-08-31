@@ -44,6 +44,7 @@ import type {
   PreviewDeliveryBatchRouteRequest,
   RiderBatchList,
 } from "./delivery-maps";
+import type { CancelCustomerOrderRequest, OrderCancellationView } from "./orders";
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
@@ -65,6 +66,16 @@ type HasGenericStringAction = {
 }[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
+  it("exposes customer order cancellation on the Core binding", () => {
+    type CancelSignature = Expect<
+      Equal<
+        CoreServiceBinding["cancelCustomerOrder"],
+        (request: CancelCustomerOrderRequest) => Promise<RpcResult<OrderCancellationView>>
+      >
+    >;
+    void (true as CancelSignature);
+    expect(true).toBe(true);
+  });
   it("publishes a constrained mock simulator without client-controlled money", () => {
     type SimulationSignature = Expect<
       Equal<

@@ -1,10 +1,13 @@
 import type {
   AuthenticatedRequest,
+  CancelCustomerOrderRequest,
   CustomerOrderDetailRequest,
   CreateOrderAmendmentRequest,
   ListCustomerOrderIssuesRequest,
   ReorderOrderRequest,
   SubmitCustomerOrderIssueRequest,
+  AppErrorCode,
+  OrderCancellationView,
 } from "@freshmarkets/contracts";
 import {
   idempotencyKeySchema,
@@ -19,6 +22,8 @@ import { reorderOrder } from "../orders/application/reorder-order";
 import { listCustomerOrderIssues } from "../orders/application/list-customer-order-issues";
 import { submitCustomerOrderIssue } from "../orders/application/submit-customer-order-issue";
 import { createOrderAmendment } from "../orders/application/create-order-amendment";
+import { requestOrderCancellation } from "../orders/application/cancel-order";
+import { requestRefund } from "../payments/application/request-refund";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
 
@@ -46,6 +51,78 @@ export function createOrdersRpc(context: CoreRpcContext) {
         orderId: validation.data.orderId,
         requestId: input.requestId,
       });
+    },
+    async cancelCustomerOrder(input: CancelCustomerOrderRequest) {
+      const validation = authenticatedRequestSchema
+        .extend({
+          orderId: identifierSchema,
+          expectedVersion: positiveIntegerSchema,
+          reason: z.string().trim().min(1).max(500),
+          idempotencyKey: idempotencyKeySchema,
+        })
+        .safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      const result = await requestOrderCancellation(
+        context.env.DB,
+        {
+          orderId: validation.data.orderId,
+          expectedVersion: validation.data.expectedVersion,
+          reason: validation.data.reason,
+          actor: "CUSTOMER",
+          cause: "CUSTOMER_REQUEST",
+          customerId: customer.value.customerId,
+          idempotencyKey: validation.data.idempotencyKey,
+          requestId: input.requestId,
+        },
+        {
+          requestRefund: async (refundInput) => {
+            const refund = await requestRefund(context.env.DB, context.paymentProviders(), {
+              ...refundInput,
+              actorId: customer.value.user.id,
+              requestId: input.requestId,
+            });
+            return refund.ok
+              ? {
+                  ok: true as const,
+                  refundId: refund.value.refundId,
+                  refundState: refund.value.state,
+                }
+              : { ok: false as const, refundState: "REJECTED" as const };
+          },
+        },
+      );
+      if (!result.ok)
+        return {
+          ok: false as const,
+          error: { ...result.error, code: result.error.code as AppErrorCode },
+        };
+      if (
+        !result.value.cancellationId ||
+        !result.value.status ||
+        result.value.requiredRefundMinor === undefined ||
+        result.value.retainedServiceFeeMinor === undefined ||
+        !result.value.currency ||
+        !result.value.refunds
+      )
+        return {
+          ok: false as const,
+          error: {
+            code: "INTERNAL_ERROR" as const,
+            message: "Cancellation result is incomplete",
+            requestId: input.requestId,
+          },
+        };
+      const value: OrderCancellationView = {
+        cancellationId: result.value.cancellationId,
+        status: result.value.status,
+        requiredRefundMinor: result.value.requiredRefundMinor,
+        retainedServiceFeeMinor: result.value.retainedServiceFeeMinor,
+        currency: result.value.currency,
+        refunds: result.value.refunds,
+      };
+      return { ok: true as const, value, requestId: input.requestId };
     },
     async reorderOrder(input: ReorderOrderRequest) {
       const validation = authenticatedRequestSchema

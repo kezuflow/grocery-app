@@ -57,7 +57,9 @@ export async function cancelAdminOrder(
     {
       orderId: request.orderId,
       expectedVersion: request.expectedVersion,
-      reasonCode: reason,
+      reason,
+      actor: "BUSINESS",
+      cause: "OPERATIONAL_FAILURE",
       idempotencyKey: request.idempotencyKey,
       requestId: request.requestId,
     },
@@ -70,7 +72,11 @@ export async function cancelAdminOrder(
               requestId: request.requestId,
             });
             return refund.ok
-              ? { ok: true, refundState: "PROCESSING" as const }
+              ? {
+                  ok: true,
+                  refundId: refund.value.refundId,
+                  refundState: refund.value.state,
+                }
               : { ok: false, refundState: "REJECTED" as const };
           }
         : undefined,
