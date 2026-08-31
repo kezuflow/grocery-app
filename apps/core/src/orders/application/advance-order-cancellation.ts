@@ -1,4 +1,5 @@
 import type { RefundState } from "@freshmarkets/contracts";
+import { projectOrderCancellationNotification } from "../../notifications/application/project-domain-notifications";
 
 export async function advanceOrderCancellation(
   database: D1Database,
@@ -31,6 +32,20 @@ export async function advanceOrderCancellation(
       )
       .bind(now, member.cancellation_id)
       .run();
+  try {
+    if (completed)
+      await projectOrderCancellationNotification(database, {
+        cancellationId: member.cancellation_id,
+        state: "COMPLETED",
+      });
+    else if (["REJECTED", "FAILED", "ESCALATED"].includes(input.refundState))
+      await projectOrderCancellationNotification(database, {
+        cancellationId: member.cancellation_id,
+        state: "EXCEPTION",
+      });
+  } catch {
+    // Notifications remain a retryable projection, never refund authority.
+  }
   return { applied: (update.meta?.changes ?? 0) === 1, completed };
 }
 

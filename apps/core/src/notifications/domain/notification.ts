@@ -10,6 +10,11 @@ export const notificationTypes = [
   "RENEWAL_ACTION_REQUIRED",
   "TRIAL_ENDING",
   "FIRST_PAID_RENEWAL_UPCOMING",
+  "ORDER_CANCELLATION_REQUESTED",
+  "ORDER_REFUND_PROGRESSING",
+  "ORDER_REFUND_COMPLETED",
+  "ORDER_CANCELLATION_COMPLETED",
+  "ORDER_REFUND_EXCEPTION",
 ] as const;
 
 export type NotificationType = (typeof notificationTypes)[number];
@@ -25,9 +30,22 @@ export function validateNotification(input: {
     return { ok: false as const, code: "INVALID_RECIPIENT" };
   const encoded = JSON.stringify(input.templateData);
   if (encoded.length > 16_384) return { ok: false as const, code: "PAYLOAD_TOO_LARGE" };
-  if (/token=|authorization|provider_reference/i.test(encoded))
+  if (/token=|authorization|provider_?reference|staff_?identity|routing_?authority/i.test(encoded))
     return { ok: false as const, code: "UNSAFE_PAYLOAD" };
   return { ok: true as const, type: input.type as NotificationType, encoded };
+}
+
+export function projectCancellationNotification(input: {
+  state: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION";
+}): { eventType: NotificationType } {
+  return {
+    eventType: {
+      REQUESTED: "ORDER_CANCELLATION_REQUESTED",
+      REFUNDS_PROCESSING: "ORDER_REFUND_PROGRESSING",
+      COMPLETED: "ORDER_CANCELLATION_COMPLETED",
+      EXCEPTION: "ORDER_REFUND_EXCEPTION",
+    }[input.state] as NotificationType,
+  };
 }
 
 export function retryDelayMs(attempt: number): number {

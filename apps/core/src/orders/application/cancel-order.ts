@@ -12,6 +12,7 @@ import {
 } from "../domain/cancellation-policy";
 import { advanceOrderCancellation } from "./advance-order-cancellation";
 import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
+import { projectOrderCancellationNotification } from "../../notifications/application/project-domain-notifications";
 
 export type CancelOrderCommand = {
   orderId: string;
@@ -230,6 +231,7 @@ export async function requestOrderCancellation(
     const results = await database.batch(statements);
     if (nextOrderState !== order.status && (results[0]?.meta?.changes ?? 0) !== 1)
       throw appError("STALE_VERSION", "Order changed; refresh");
+    await projectCancellationSafely(database, cancellationId, "REQUESTED");
 
     for (const member of refundSet.members) {
       if (!ports?.requestRefund) continue;
@@ -265,9 +267,12 @@ export async function requestOrderCancellation(
         )
         .bind(Date.now(), cancellationId)
         .run();
+    const finalView = (await cancellationView(database, order.id))!;
+    if (finalView.status)
+      await projectCancellationSafely(database, cancellationId, finalView.status);
     return {
       ok: true,
-      value: (await cancellationView(database, order.id))!,
+      value: finalView,
       requestId: command.requestId,
     };
   } catch (error) {
@@ -283,6 +288,18 @@ export async function requestOrderCancellation(
       detail.message ?? "Cancellation failed",
       command.requestId,
     );
+  }
+}
+
+async function projectCancellationSafely(
+  database: D1Database,
+  cancellationId: string,
+  state: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION",
+): Promise<void> {
+  try {
+    await projectOrderCancellationNotification(database, { cancellationId, state });
+  } catch {
+    // Notification delivery intent is retryable and never owns cancellation.
   }
 }
 

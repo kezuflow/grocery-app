@@ -1,4 +1,4 @@
-import type { NotificationType } from "../domain/notification";
+import { projectCancellationNotification, type NotificationType } from "../domain/notification";
 import { enqueueNotification } from "./enqueue-notification";
 
 type Fact = {
@@ -166,5 +166,70 @@ export async function projectDomainNotifications(
     });
     if (!before && result.ok) inserted++;
   }
+  const cancellations = await database.prepare("SELECT id,status FROM order_cancellation").all<{
+    id: string;
+    status: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION";
+  }>();
+  for (const cancellation of cancellations.results) {
+    const result = await projectOrderCancellationNotification(database, {
+      cancellationId: cancellation.id,
+      state: cancellation.status,
+      scheduledAt: now,
+    });
+    if (result.inserted) inserted++;
+  }
   return inserted;
+}
+
+export async function projectOrderCancellationNotification(
+  database: D1Database,
+  input: {
+    cancellationId: string;
+    state: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION";
+    scheduledAt?: number;
+  },
+): Promise<{ inserted: boolean }> {
+  const row = await database
+    .prepare(
+      `SELECT oc.id,oc.required_refund_minor AS amountMinor,oc.currency,
+              o.id AS orderId,o.order_number AS orderNumber,o.customer_id AS customerId,u.email
+       FROM order_cancellation oc
+       JOIN grocery_order o ON o.id=oc.order_id
+       JOIN customer c ON c.id=o.customer_id
+       JOIN user u ON u.id=c.auth_user_id
+       WHERE oc.id=?`,
+    )
+    .bind(input.cancellationId)
+    .first<{
+      id: string;
+      amountMinor: number;
+      currency: string;
+      orderId: string;
+      orderNumber: string | null;
+      customerId: string;
+      email: string;
+    }>();
+  if (!row) return { inserted: false };
+  const eventType = projectCancellationNotification({ state: input.state }).eventType;
+  const identity = `order-cancellation:${row.id}:${eventType}`;
+  const before = await database
+    .prepare("SELECT 1 AS found FROM notification_outbox WHERE idempotency_key=?")
+    .bind(identity)
+    .first();
+  const result = await enqueueNotification(database, {
+    type: eventType,
+    aggregateType: "ORDER_CANCELLATION",
+    aggregateId: row.id,
+    customerId: row.customerId,
+    recipient: row.email,
+    templateData: {
+      orderNumber: row.orderNumber ?? row.orderId,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      templateVersion: 1,
+    },
+    scheduledAt: input.scheduledAt ?? Date.now(),
+    idempotencyKey: identity,
+  });
+  return { inserted: !before && result.ok };
 }

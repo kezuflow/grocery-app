@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { notificationTypes, retryDelayMs, validateNotification } from "./notification";
+import {
+  notificationTypes,
+  projectCancellationNotification,
+  retryDelayMs,
+  validateNotification,
+} from "./notification";
 
 describe("notification policy", () => {
   it("closes the launch type vocabulary and rejects unsafe payloads", () => {
-    expect(notificationTypes).toHaveLength(11);
+    expect(notificationTypes).toHaveLength(16);
     expect(
       validateNotification({
         type: "ORDER_CONFIRMED",
@@ -21,6 +26,17 @@ describe("notification policy", () => {
         templateData: { url: "https://x?token=secret" },
       }).ok,
     ).toBe(false);
+  });
+  it("maps cancellation states to a closed customer notification vocabulary", () => {
+    expect(projectCancellationNotification({ state: "REQUESTED" }).eventType).toBe(
+      "ORDER_CANCELLATION_REQUESTED",
+    );
+    expect(projectCancellationNotification({ state: "COMPLETED" }).eventType).toBe(
+      "ORDER_CANCELLATION_COMPLETED",
+    );
+    expect(projectCancellationNotification({ state: "EXCEPTION" }).eventType).toBe(
+      "ORDER_REFUND_EXCEPTION",
+    );
   });
   it("bounds exponential retry delay", () => {
     expect(retryDelayMs(1)).toBe(60_000);
