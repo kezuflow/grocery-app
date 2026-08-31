@@ -356,10 +356,27 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 
 ### Customer cancellation
 
-- Customer grocery-order cancellation is not in the mock-payment launch. It is absent from the Core
-  entrypoint, shared Service Binding contract, and Web customer surface.
-- Internal operational cancellation machinery remains an operations seam and is not customer
-  authority. Membership-cancellation UX remains unresolved and is not inferred here.
+- Migration `0050_coordinated_order_cancellations.sql` persists one Orders-owned cancellation
+  aggregate and the exact original/amendment Payment refund set. Canonical verified Refund
+  observations advance each member; partial success does not mark the Order canceled.
+- Customer cancellation is exposed through the typed Service Binding and thin Web route. Instant
+  locks at `FULFILLMENT_PENDING` and retains the snapshotted FreshMarkets Service Fee. Scheduled
+  locks at the earlier of cutoff or fulfillment start and coordinates every committed addition.
+  FreshMarkets-caused cancellation refunds the applicable set in full.
+- Core supplies the exact current refund/retained-fee preview to the accessible customer confirmation
+  flow. Existing unrelated refunds route to financial review. Global-scope `refunds.manage` retains
+  the separately audited, required-reason staff exception path after the customer lock.
+- Cancellation/refund transitions project durable, deduplicated notification intents. Delivery
+  failure never changes Order, cancellation, Payment, or Refund state.
+
+### Provisional transaction summary
+
+- Core publishes an ownership-scoped summary over immutable Order/item/address/financial,
+  Payment/Refund, amendment, and invoice-readiness snapshots. The printable customer page says
+  `NOT AN OFFICIAL BIR INVOICE` and does not invent seller/TIN, official serial, or tax facts.
+- `notifications@freshmarkets.ph` is the intended transactional sender but is not enabled:
+  `freshmarkets.ph` is not currently onboarded for Cloudflare Email Sending. Missing sender
+  configuration remains a retryable fail-closed delivery condition.
 
 ### Operations exception convergence
 
@@ -371,16 +388,16 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 
 ## Maturity by area
 
-| Area                       | Current evidence                                                                                                                         | Not established                                             |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests                                                                  | Production deployment acceptance                            |
-| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                                                                       | Production sender/domain and OAuth configuration            |
-| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                                                                             | Approved production polygons/geocoder and Mapbox secret     |
-| Checkout/orders            | Opaque Core fulfillment options, accepted quotes/promotions, mock payment reaction, immutable detail/timeline, reorder/issues/amendments | Production payment and committed-cancellation/refund policy |
-| Membership                 | Customer experience plus provider-neutral trial/authorization/renewal state                                                              | Approved production mandates and automatic charges          |
-| Operations                 | Scoped commands/read models and local integration tests                                                                                  | Complete staff/rider authenticated Playwright acceptance    |
-| Notifications              | Durable launch email outbox/attempts, leases, retry and safe projection                                                                  | Production sender/domain and delivery acceptance            |
-| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright                                                     | Production deployment acceptance remains external           |
+| Area                       | Current evidence                                                                                                                                                                                    | Not established                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests                                                                                                                             | Production deployment acceptance                          |
+| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                                                                                                                                  | Production sender/domain and OAuth configuration          |
+| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                                                                                                                                        | Approved production polygons/geocoder and Mapbox secret   |
+| Checkout/orders            | Opaque Core fulfillment options, accepted quotes/promotions, mock payment reaction, immutable detail/timeline, reorder/issues/amendments, coordinated cancellation, provisional transaction summary | Production payment provider and official invoice issuance |
+| Membership                 | Customer experience plus provider-neutral trial/authorization/renewal state                                                                                                                         | Approved production mandates and automatic charges        |
+| Operations                 | Scoped commands/read models and local integration tests                                                                                                                                             | Complete staff/rider authenticated Playwright acceptance  |
+| Notifications              | Durable email outbox/attempts, leases, retry, cancellation/refund projections, and safe templates                                                                                                   | Production sender/domain and delivery acceptance          |
+| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright                                                                                                                | Production deployment acceptance remains external         |
 
 ## Verification truthfulness
 

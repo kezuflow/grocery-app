@@ -372,7 +372,7 @@ Phase 6; provider integration port from Phase 0.
 
 - Provider-neutral Payments context, payment intents/attempts by purpose, provider mappings/adapters, signed durable event inbox, canonical payment state, and reconciliation.
 - Explicit idempotent reactions from canonical sufficient Payments outcomes to Membership activation/recovery and Order commitment.
-- Order commitment transaction, immutable snapshots, amendments, and internal cancellation/refund policy seams. Customer grocery cancellation remains unexposed for the mock-payment launch.
+- Order commitment transaction, immutable snapshots, amendments, and coordinated customer/business cancellation with canonical refund-member completion.
 
 ### D1/data changes
 
@@ -384,7 +384,7 @@ Phase 6; provider integration port from Phase 0.
 
 ### Web/UI work
 
-- Membership/grocery payment handoff and return, pending/success/failure/recovery pages, committed order detail, and pre-cutoff add-on flow. Browser return state never asserts payment success.
+- Membership/grocery payment handoff and return, pending/success/failure/recovery pages, committed order detail, mode-aware cancellation, printable provisional transaction summary, and pre-cutoff add-on flow. Browser return state never asserts payment success.
 
 ### Cloudflare resources
 

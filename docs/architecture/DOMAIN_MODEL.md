@@ -289,6 +289,14 @@ The controlled recording of purchased goods received, rejected, or short. Receiv
 
 A shortage, partial supplier fill, quality rejection, receiving discrepancy, unexpected unavailability, fulfillment shortage, or delivery failure requiring resolution. Allowed resolutions are domain-specific and may include alternate sourcing, operator-approved replacement, affected-line cancellation, retry/reschedule, partial refund, refund, or escalation.
 
+### OrderCancellation
+
+An Orders-owned aggregate that coordinates operational cancellation with a fixed set of Payments-owned refunds. Customer Instant cancellation is legal only before `FULFILLMENT_PENDING` and retains the committed FreshMarkets Service Fee. Customer Scheduled cancellation is legal only before both cutoff and fulfillment start, and includes the original payment plus all committed paid additions; additions have no independent cancellation authority. FreshMarkets-caused cancellation retains no Service Fee. The Order becomes `CANCELED` only after every required refund member is canonically `SUCCEEDED`; rejection or ambiguity is an exception, not implied success. A separately audited global `refunds.manage` exception refund may occur after lock without reopening the customer command.
+
+### ProvisionalTransactionSummary
+
+An ownership-scoped read model over immutable Order, item, financial, address, Payment, Refund, amendment, and invoice-readiness snapshots. It is useful for customer records and printing but is explicitly not an official BIR invoice and owns no seller identity, tax computation, serial, issuance, or retention policy.
+
 The current release does not include a customer-directed substitution engine.
 
 ## Fulfillment and Delivery
