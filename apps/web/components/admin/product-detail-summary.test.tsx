@@ -6,6 +6,17 @@ import { ProductDetailSummary } from "./product-detail-summary";
 const product = {
   productId: "product-1",
   name: "Red onion",
+  description: "Firm red onions for everyday cooking.",
+  categoryName: "Roots, Tubers & Bulbs",
+  status: "active",
+  version: 3,
+  customerDetails: [{ detailId: "detail-1", label: "Storage", value: "Keep cool.", sortOrder: 1 }],
+  inventoryPool: {
+    inventoryPoolId: "pool-1",
+    baseUnitId: "unit-gram",
+    baseUnitCode: "GRAM",
+    baseUnitSymbol: "g",
+  },
   media: [
     {
       mediaId: "media-1",
@@ -47,6 +58,10 @@ describe("ProductDetailSummary", () => {
     expect(html).toContain("Active SKUs");
     expect(html).toContain("1 / 1");
     expect(html).toContain("/media/media-1/content?v=2");
+    expect(html).toContain("Product overview");
+    expect(html).toContain("Catalog facts");
+    expect(html).toContain("Inventory base unit");
+    expect(html).toContain("Location · location-1");
     expect(html).not.toContain("Revenue");
     expect(html).not.toContain("Orders");
   });

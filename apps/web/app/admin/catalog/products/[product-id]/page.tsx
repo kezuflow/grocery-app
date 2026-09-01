@@ -241,7 +241,7 @@ export default function ProductDetailPage({
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title={product.name}
-        description={`${product.categoryName} · ${product.slug}`}
+        description={`${product.categoryName} · ${product.skus.length} SKU${product.skus.length === 1 ? "" : "s"} · ${product.inventoryPool.baseUnitCode}`}
         action={
           <span className="flex items-center gap-2">
             <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
@@ -269,158 +269,165 @@ export default function ProductDetailPage({
         </p>
       ) : null}
 
-      <ProductDetailSummary product={product} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 lg:col-span-2">
-          <h2 className="font-semibold">Customer-facing details</h2>
-          {product.description ? (
-            <p className="mt-3 text-sm">{product.description}</p>
-          ) : (
-            <p className="mt-3 text-sm text-[var(--fm-text-muted)]">No description provided.</p>
-          )}
-          {product.customerDetails.length ? (
-            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-              {product.customerDetails.map((detail) => (
-                <div key={detail.detailId}>
-                  <dt className="text-xs font-semibold text-[var(--fm-text-muted)]">
-                    {detail.label}
-                  </dt>
-                  <dd className="text-sm">{detail.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-        </section>
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5">
-          <h2 className="font-semibold">Inventory pool</h2>
-          <p className="mt-2 text-sm">
-            Base unit: {product.inventoryPool.baseUnitCode} ({product.inventoryPool.baseUnitSymbol})
-          </p>
-          <p className="mt-1 font-mono text-xs text-[var(--fm-text-muted)]">
-            {product.inventoryPool.inventoryPoolId}
-          </p>
-        </section>
+      <div
+        aria-label="Product detail sections"
+        className="sticky top-[4.5rem] z-20 -mx-1 overflow-x-auto rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white/95 px-2 shadow-sm backdrop-blur"
+      >
+        <div className="flex min-w-max gap-1 py-1">
+          {[
+            ["Overview", "#product-overview"],
+            ["Media", "#product-media"],
+            ["Status", "#product-status"],
+            ["SKUs", "#product-skus"],
+            ["Audit", "#product-audit"],
+          ].map(([label, href]) => (
+            <a
+              className="rounded-md px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)] hover:text-[var(--fm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+              href={href}
+              key={href}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
       </div>
 
-      <ListPageSection
-        title="Product media"
-        description="Canonical images are validated in Core, stored in R2, and attached through guarded Product versions."
-      >
-        {canManageProduct ? (
-          <form
-            className="grid gap-3 border-b border-[var(--fm-border)] p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_7rem_8rem_auto] md:items-end"
-            onSubmit={uploadMedia}
-          >
-            <label className="grid gap-1 text-sm font-medium">
-              Product media image
-              <Input name="file" type="file" accept="image/jpeg,image/png,image/webp" required />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              Media alt text
-              <Input name="altText" maxLength={300} required />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              Media sort order
-              <Input name="sortOrder" type="number" min={0} max={10000} defaultValue={0} required />
-            </label>
-            <label className="flex h-10 items-center gap-2 text-sm font-medium">
-              <input name="isPrimary" type="checkbox" value="true" />
-              Primary image
-            </label>
-            <input name="isPrimary" type="hidden" value="false" />
-            <Button type="submit" disabled={commandIntent.pending}>
-              Upload media
-            </Button>
-          </form>
-        ) : null}
-        {product.media.length ? (
-          <ul className="divide-y divide-[var(--fm-border)]">
-            {product.media.map((media) => (
-              <li key={`${media.mediaId}-${media.version}`} className="p-4 text-sm">
-                {canManageProduct ? (
-                  <form
-                    className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_7rem_8rem_auto_auto] md:items-end"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const fields = new FormData(event.currentTarget);
-                      void run(
-                        `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
-                        "PATCH",
-                        {
-                          altText: String(fields.get("altText") ?? ""),
-                          isPrimary: fields.get("isPrimary") === "true",
-                          sortOrder: Number(fields.get("sortOrder")),
-                          expectedProductVersion: product.version,
-                        },
-                        "Media updated.",
-                      );
-                    }}
-                  >
-                    <label className="grid gap-1 font-medium">
-                      Alt text for {media.altText}
-                      <Input name="altText" defaultValue={media.altText} maxLength={300} required />
-                    </label>
-                    <label className="grid gap-1 font-medium">
-                      Order for {media.altText}
-                      <Input
-                        name="sortOrder"
-                        type="number"
-                        min={0}
-                        max={10000}
-                        defaultValue={media.sortOrder}
-                        required
-                      />
-                    </label>
-                    <label className="flex h-10 items-center gap-2 font-medium">
-                      <input
-                        name="isPrimary"
-                        type="checkbox"
-                        value="true"
-                        defaultChecked={media.isPrimary}
-                      />
-                      Primary
-                    </label>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="outline"
-                      disabled={commandIntent.pending}
-                      aria-label={`Save ${media.altText}`}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      disabled={commandIntent.pending}
-                      aria-label={`Review remove ${media.altText}`}
-                      onClick={(event) => {
-                        mediaTrigger.current = event.currentTarget;
-                        setMediaToRemove(media);
+      <div id="product-overview" className="scroll-mt-32">
+        <ProductDetailSummary product={product} />
+      </div>
+
+      <div id="product-media" className="scroll-mt-32">
+        <ListPageSection
+          title="Product media"
+          description="Canonical images are validated in Core, stored in R2, and attached through guarded Product versions."
+        >
+          {canManageProduct ? (
+            <form
+              className="grid gap-3 border-b border-[var(--fm-border)] p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_7rem_8rem_auto] md:items-end"
+              onSubmit={uploadMedia}
+            >
+              <label className="grid gap-1 text-sm font-medium">
+                Product media image
+                <Input name="file" type="file" accept="image/jpeg,image/png,image/webp" required />
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Media alt text
+                <Input name="altText" maxLength={300} required />
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Media sort order
+                <Input
+                  name="sortOrder"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  defaultValue={0}
+                  required
+                />
+              </label>
+              <label className="flex h-10 items-center gap-2 text-sm font-medium">
+                <input name="isPrimary" type="checkbox" value="true" />
+                Primary image
+              </label>
+              <input name="isPrimary" type="hidden" value="false" />
+              <Button type="submit" disabled={commandIntent.pending}>
+                Upload media
+              </Button>
+            </form>
+          ) : null}
+          {product.media.length ? (
+            <ul className="divide-y divide-[var(--fm-border)]">
+              {product.media.map((media) => (
+                <li key={`${media.mediaId}-${media.version}`} className="p-4 text-sm">
+                  {canManageProduct ? (
+                    <form
+                      className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_7rem_8rem_auto_auto] md:items-end"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const fields = new FormData(event.currentTarget);
+                        void run(
+                          `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
+                          "PATCH",
+                          {
+                            altText: String(fields.get("altText") ?? ""),
+                            isPrimary: fields.get("isPrimary") === "true",
+                            sortOrder: Number(fields.get("sortOrder")),
+                            expectedProductVersion: product.version,
+                          },
+                          "Media updated.",
+                        );
                       }}
                     >
-                      Remove
-                    </Button>
-                  </form>
-                ) : (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{media.altText}</span>
-                    <span>{media.isPrimary ? "Primary" : `Order ${media.sortOrder}`}</span>
-                  </div>
-                )}
-                <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
-                  {media.mimeType} · attachment v{media.version}
-                  {media.isPrimary ? " · Current primary" : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No canonical media attached.</p>
-        )}
-      </ListPageSection>
+                      <label className="grid gap-1 font-medium">
+                        Alt text for {media.altText}
+                        <Input
+                          name="altText"
+                          defaultValue={media.altText}
+                          maxLength={300}
+                          required
+                        />
+                      </label>
+                      <label className="grid gap-1 font-medium">
+                        Order for {media.altText}
+                        <Input
+                          name="sortOrder"
+                          type="number"
+                          min={0}
+                          max={10000}
+                          defaultValue={media.sortOrder}
+                          required
+                        />
+                      </label>
+                      <label className="flex h-10 items-center gap-2 font-medium">
+                        <input
+                          name="isPrimary"
+                          type="checkbox"
+                          value="true"
+                          defaultChecked={media.isPrimary}
+                        />
+                        Primary
+                      </label>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="outline"
+                        disabled={commandIntent.pending}
+                        aria-label={`Save ${media.altText}`}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={commandIntent.pending}
+                        aria-label={`Review remove ${media.altText}`}
+                        onClick={(event) => {
+                          mediaTrigger.current = event.currentTarget;
+                          setMediaToRemove(media);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </form>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{media.altText}</span>
+                      <span>{media.isPrimary ? "Primary" : `Order ${media.sortOrder}`}</span>
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
+                    {media.mimeType} · attachment v{media.version}
+                    {media.isPrimary ? " · Current primary" : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No canonical media attached.</p>
+          )}
+        </ListPageSection>
+      </div>
       <ConfirmCommandDialog
         open={mediaToRemove !== null}
         title={`Remove ${mediaToRemove?.altText ?? "media"}?`}
@@ -447,302 +454,308 @@ export default function ProductDetailPage({
       />
 
       {product.allowedActions.includes("SET_STATUS") ? (
-        <ListPageSection
-          title="Product status"
-          description="Inactive products leave all storefront surfaces. Historical snapshots remain intact."
-        >
-          <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-            <Input
-              aria-label="Reason"
-              placeholder="reason (required)"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              className="sm:w-72"
-            />
-            <Button
-              ref={statusTrigger}
-              size="sm"
-              variant={product.status === "active" ? "destructive" : "default"}
-              onClick={() => {
-                if (reason.trim() === "") {
-                  setNotice("A reason is required.");
-                  return;
-                }
-                setConfirmingStatus(true);
-              }}
-            >
-              {product.status === "active" ? "Review deactivation" : "Review activation"}
-            </Button>
-          </div>
-        </ListPageSection>
+        <div id="product-status" className="scroll-mt-32">
+          <ListPageSection
+            title="Product status"
+            description="Inactive products leave all storefront surfaces. Historical snapshots remain intact."
+          >
+            <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+              <Input
+                aria-label="Reason"
+                placeholder="reason (required)"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                className="sm:w-72"
+              />
+              <Button
+                ref={statusTrigger}
+                size="sm"
+                variant={product.status === "active" ? "destructive" : "default"}
+                onClick={() => {
+                  if (reason.trim() === "") {
+                    setNotice("A reason is required.");
+                    return;
+                  }
+                  setConfirmingStatus(true);
+                }}
+              >
+                {product.status === "active" ? "Review deactivation" : "Review activation"}
+              </Button>
+            </div>
+          </ListPageSection>
+        </div>
       ) : null}
 
-      <ListPageSection
-        title="SKUs"
-        description="Fixed variants with exact base-unit consumption. Prices are versioned; availability is per location."
-      >
-        {canManageProduct ? (
-          <div className="grid gap-1 border-b border-[var(--fm-border)] p-4 text-sm font-medium sm:max-w-md">
-            <label htmlFor="catalog-command-target">Catalog command target</label>
-            <select
-              id="catalog-command-target"
-              value={catalogTarget}
-              onChange={(event) => setCatalogTarget(event.target.value)}
-              className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+      <div id="product-skus" className="scroll-mt-32">
+        <ListPageSection
+          title="SKUs"
+          description="Fixed variants with exact base-unit consumption. Prices are versioned; availability is per location."
+        >
+          {canManageProduct ? (
+            <div className="grid gap-1 border-b border-[var(--fm-border)] p-4 text-sm font-medium sm:max-w-md">
+              <label htmlFor="catalog-command-target">Catalog command target</label>
+              <select
+                id="catalog-command-target"
+                value={catalogTarget}
+                onChange={(event) => setCatalogTarget(event.target.value)}
+                className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+              >
+                <option value="">Select a market or location…</option>
+                {targetOptions.map((option) => (
+                  <option
+                    key={
+                      option.kind === "market"
+                        ? `market:${option.marketId}`
+                        : `location:${option.locationId}`
+                    }
+                    value={
+                      option.kind === "market"
+                        ? `market:${option.marketId}`
+                        : `location:${option.locationId}`
+                    }
+                  >
+                    {option.kind === "market"
+                      ? `${option.marketName} · market prices`
+                      : `${option.locationName} · location prices and availability`}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                Price and availability commands apply only to this explicit Core-authorized target.
+              </span>
+            </div>
+          ) : null}
+          {canManageProduct ? (
+            <form
+              className="flex flex-col gap-2 border-b border-[var(--fm-border)] p-4 sm:flex-row sm:items-center"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const unit = units.find((candidate) => candidate.unitId === newSku.unitId);
+                if (
+                  newSku.code.trim() === "" ||
+                  newSku.name.trim() === "" ||
+                  !unit ||
+                  Number.isNaN(Number(newSku.sellQuantity)) ||
+                  Number.isNaN(Number(newSku.consumption))
+                ) {
+                  setNotice("Code, name, unit, sell quantity, and base consumption are required.");
+                  return;
+                }
+                void run(`${BASE}/skus`, "POST", {
+                  productId,
+                  code: newSku.code.trim().toUpperCase(),
+                  name: newSku.name.trim(),
+                  sellableUnitId: unit.unitId,
+                  sellQuantity: Math.round(Number(newSku.sellQuantity)),
+                  consumptionBaseQuantity: Math.round(Number(newSku.consumption)),
+                });
+              }}
             >
-              <option value="">Select a market or location…</option>
-              {targetOptions.map((option) => (
-                <option
-                  key={
-                    option.kind === "market"
-                      ? `market:${option.marketId}`
-                      : `location:${option.locationId}`
-                  }
-                  value={
-                    option.kind === "market"
-                      ? `market:${option.marketId}`
-                      : `location:${option.locationId}`
-                  }
-                >
-                  {option.kind === "market"
-                    ? `${option.marketName} · market prices`
-                    : `${option.locationName} · location prices and availability`}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs font-normal text-[var(--fm-text-muted)]">
-              Price and availability commands apply only to this explicit Core-authorized target.
-            </span>
-          </div>
-        ) : null}
-        {canManageProduct ? (
-          <form
-            className="flex flex-col gap-2 border-b border-[var(--fm-border)] p-4 sm:flex-row sm:items-center"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const unit = units.find((candidate) => candidate.unitId === newSku.unitId);
-              if (
-                newSku.code.trim() === "" ||
-                newSku.name.trim() === "" ||
-                !unit ||
-                Number.isNaN(Number(newSku.sellQuantity)) ||
-                Number.isNaN(Number(newSku.consumption))
-              ) {
-                setNotice("Code, name, unit, sell quantity, and base consumption are required.");
-                return;
-              }
-              void run(`${BASE}/skus`, "POST", {
-                productId,
-                code: newSku.code.trim().toUpperCase(),
-                name: newSku.name.trim(),
-                sellableUnitId: unit.unitId,
-                sellQuantity: Math.round(Number(newSku.sellQuantity)),
-                consumptionBaseQuantity: Math.round(Number(newSku.consumption)),
-              });
-            }}
-          >
-            <Input
-              aria-label="SKU code"
-              placeholder="CODE"
-              value={newSku.code}
-              onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
-              className="sm:w-40"
-            />
-            <Input
-              aria-label="SKU name"
-              placeholder="e.g. 250 g"
-              value={newSku.name}
-              onChange={(event) => setNewSku({ ...newSku, name: event.target.value })}
-              className="sm:w-32"
-            />
-            <select
-              aria-label="Sellable unit"
-              value={newSku.unitId}
-              onChange={(event) => setNewSku({ ...newSku, unitId: event.target.value })}
-              className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
-            >
-              <option value="">unit…</option>
-              {units.map((unit) => (
-                <option key={unit.unitId} value={unit.unitId}>
-                  {unit.code} ({unit.dimension})
-                </option>
-              ))}
-            </select>
-            <Input
-              aria-label="Sell quantity"
-              placeholder="sell qty"
-              value={newSku.sellQuantity}
-              onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
-              className="sm:w-24"
-            />
-            <Input
-              aria-label="Base consumption"
-              placeholder="base qty"
-              value={newSku.consumption}
-              onChange={(event) => setNewSku({ ...newSku, consumption: event.target.value })}
-              className="sm:w-28"
-            />
-            <Button type="submit" size="sm">
-              Add SKU
-            </Button>
-          </form>
-        ) : null}
-        {product.skus.length === 0 ? (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No SKUs defined.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>SKU</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Availability</TableHead>
-                <TableHead>Targeted commands</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {product.skus.map((sku) => (
-                <TableRow key={sku.skuId}>
-                  <TableCell className="font-mono text-xs">{sku.code}</TableCell>
-                  <TableCell>
-                    {sku.name}
-                    {sku.merchandisingLabel ? (
-                      <span className="ml-1 text-xs text-[var(--fm-text-muted)]">
-                        ({sku.merchandisingLabel})
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {sku.priceMinor === null || !sku.currency
-                      ? "—"
-                      : `${new Intl.NumberFormat(undefined, {
-                          style: "currency",
-                          currency: sku.currency,
-                        }).format(sku.priceMinor / 100)} (v${sku.priceVersion})`}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge tone={sku.availability === "AVAILABLE" ? "success" : "neutral"}>
-                      {sku.availability ?? "unset"}
-                    </StatusBadge>
-                    {product.pricingContext.locationId ? (
-                      <span className="block text-xs text-[var(--fm-text-muted)]">
-                        {product.pricingContext.locationId}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    {canManageProduct ? (
-                      <span className="flex flex-wrap items-center gap-1">
-                        <Input
-                          aria-label={`New price for ${sku.code}`}
-                          value={priceBySku[sku.skuId] ?? ""}
-                          onChange={(event) =>
-                            setPriceBySku({ ...priceBySku, [sku.skuId]: event.target.value })
-                          }
-                          className="w-24"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const pesos = Number(priceBySku[sku.skuId]);
-                            if (Number.isNaN(pesos) || pesos <= 0) {
-                              setNotice("Enter a positive price.");
-                              return;
-                            }
-                            if (!selectedTarget || !selectedMarketId) {
-                              setNotice("Select an explicit market or location target.");
-                              return;
-                            }
-                            setSkuCommand({
-                              kind: "PRICE",
-                              skuId: sku.skuId,
-                              skuCode: sku.code,
-                              marketId: selectedMarketId,
-                              locationId: selectedLocationId,
-                              currency: selectedTarget.currency,
-                              amountMinor: Math.round(pesos * 100),
-                              expectedVersion: sku.priceVersion ?? 0,
-                              targetLabel:
-                                selectedTarget.kind === "market"
-                                  ? selectedTarget.marketName
-                                  : selectedTarget.locationName,
-                            });
-                          }}
-                        >
-                          Review price
-                        </Button>
-                        <select
-                          aria-label={`Sourcing mode for ${sku.code}`}
-                          value={sourcingBySku[sku.skuId] ?? sku.sourcingMode ?? "STOCKED"}
-                          onChange={(event) =>
-                            setSourcingBySku({
-                              ...sourcingBySku,
-                              [sku.skuId]: event.target.value as SourcingMode,
-                            })
-                          }
-                          className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 text-xs"
-                        >
-                          <option value="STOCKED">Stocked</option>
-                          <option value="PLANNED">Planned</option>
-                          <option value="ON_DEMAND">On demand</option>
-                          <option value="MIXED">Mixed</option>
-                        </select>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={selectedTarget?.kind !== "location"}
-                          onClick={() => {
-                            if (selectedTarget?.kind !== "location") {
-                              setNotice("Select a location target for availability.");
-                              return;
-                            }
-                            setSkuCommand({
-                              kind: "AVAILABILITY",
-                              skuId: sku.skuId,
-                              skuCode: sku.code,
-                              locationId: selectedTarget.locationId,
-                              availabilityStatus:
-                                sku.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE",
-                              sourcingMode:
-                                sourcingBySku[sku.skuId] ?? sku.sourcingMode ?? "STOCKED",
-                              expectedVersion: sku.availabilityVersion ?? 0,
-                              targetLabel: selectedTarget.locationName,
-                            });
-                          }}
-                        >
-                          {sku.availability === "AVAILABLE"
-                            ? "Review unavailable"
-                            : "Review available"}
-                        </Button>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-[var(--fm-text-muted)]">Read only</span>
-                    )}
-                  </TableCell>
+              <Input
+                aria-label="SKU code"
+                placeholder="CODE"
+                value={newSku.code}
+                onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
+                className="sm:w-40"
+              />
+              <Input
+                aria-label="SKU name"
+                placeholder="e.g. 250 g"
+                value={newSku.name}
+                onChange={(event) => setNewSku({ ...newSku, name: event.target.value })}
+                className="sm:w-32"
+              />
+              <select
+                aria-label="Sellable unit"
+                value={newSku.unitId}
+                onChange={(event) => setNewSku({ ...newSku, unitId: event.target.value })}
+                className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+              >
+                <option value="">unit…</option>
+                {units.map((unit) => (
+                  <option key={unit.unitId} value={unit.unitId}>
+                    {unit.code} ({unit.dimension})
+                  </option>
+                ))}
+              </select>
+              <Input
+                aria-label="Sell quantity"
+                placeholder="sell qty"
+                value={newSku.sellQuantity}
+                onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
+                className="sm:w-24"
+              />
+              <Input
+                aria-label="Base consumption"
+                placeholder="base qty"
+                value={newSku.consumption}
+                onChange={(event) => setNewSku({ ...newSku, consumption: event.target.value })}
+                className="sm:w-28"
+              />
+              <Button type="submit" size="sm">
+                Add SKU
+              </Button>
+            </form>
+          ) : null}
+          {product.skus.length === 0 ? (
+            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No SKUs defined.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Availability</TableHead>
+                  <TableHead>Targeted commands</TableHead>
                 </TableRow>
+              </TableHeader>
+              <TableBody>
+                {product.skus.map((sku) => (
+                  <TableRow key={sku.skuId}>
+                    <TableCell className="font-mono text-xs">{sku.code}</TableCell>
+                    <TableCell>
+                      {sku.name}
+                      {sku.merchandisingLabel ? (
+                        <span className="ml-1 text-xs text-[var(--fm-text-muted)]">
+                          ({sku.merchandisingLabel})
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {sku.priceMinor === null || !sku.currency
+                        ? "—"
+                        : `${new Intl.NumberFormat(undefined, {
+                            style: "currency",
+                            currency: sku.currency,
+                          }).format(sku.priceMinor / 100)} (v${sku.priceVersion})`}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge tone={sku.availability === "AVAILABLE" ? "success" : "neutral"}>
+                        {sku.availability ?? "unset"}
+                      </StatusBadge>
+                      {product.pricingContext.locationId ? (
+                        <span className="block text-xs text-[var(--fm-text-muted)]">
+                          {product.pricingContext.locationId}
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      {canManageProduct ? (
+                        <span className="flex flex-wrap items-center gap-1">
+                          <Input
+                            aria-label={`New price for ${sku.code}`}
+                            value={priceBySku[sku.skuId] ?? ""}
+                            onChange={(event) =>
+                              setPriceBySku({ ...priceBySku, [sku.skuId]: event.target.value })
+                            }
+                            className="w-24"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const pesos = Number(priceBySku[sku.skuId]);
+                              if (Number.isNaN(pesos) || pesos <= 0) {
+                                setNotice("Enter a positive price.");
+                                return;
+                              }
+                              if (!selectedTarget || !selectedMarketId) {
+                                setNotice("Select an explicit market or location target.");
+                                return;
+                              }
+                              setSkuCommand({
+                                kind: "PRICE",
+                                skuId: sku.skuId,
+                                skuCode: sku.code,
+                                marketId: selectedMarketId,
+                                locationId: selectedLocationId,
+                                currency: selectedTarget.currency,
+                                amountMinor: Math.round(pesos * 100),
+                                expectedVersion: sku.priceVersion ?? 0,
+                                targetLabel:
+                                  selectedTarget.kind === "market"
+                                    ? selectedTarget.marketName
+                                    : selectedTarget.locationName,
+                              });
+                            }}
+                          >
+                            Review price
+                          </Button>
+                          <select
+                            aria-label={`Sourcing mode for ${sku.code}`}
+                            value={sourcingBySku[sku.skuId] ?? sku.sourcingMode ?? "STOCKED"}
+                            onChange={(event) =>
+                              setSourcingBySku({
+                                ...sourcingBySku,
+                                [sku.skuId]: event.target.value as SourcingMode,
+                              })
+                            }
+                            className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 text-xs"
+                          >
+                            <option value="STOCKED">Stocked</option>
+                            <option value="PLANNED">Planned</option>
+                            <option value="ON_DEMAND">On demand</option>
+                            <option value="MIXED">Mixed</option>
+                          </select>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={selectedTarget?.kind !== "location"}
+                            onClick={() => {
+                              if (selectedTarget?.kind !== "location") {
+                                setNotice("Select a location target for availability.");
+                                return;
+                              }
+                              setSkuCommand({
+                                kind: "AVAILABILITY",
+                                skuId: sku.skuId,
+                                skuCode: sku.code,
+                                locationId: selectedTarget.locationId,
+                                availabilityStatus:
+                                  sku.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE",
+                                sourcingMode:
+                                  sourcingBySku[sku.skuId] ?? sku.sourcingMode ?? "STOCKED",
+                                expectedVersion: sku.availabilityVersion ?? 0,
+                                targetLabel: selectedTarget.locationName,
+                              });
+                            }}
+                          >
+                            {sku.availability === "AVAILABLE"
+                              ? "Review unavailable"
+                              : "Review available"}
+                          </Button>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[var(--fm-text-muted)]">Read only</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </ListPageSection>
+      </div>
+      <div id="product-audit" className="scroll-mt-32">
+        <ListPageSection title="Recent audit">
+          {product.recentAudit.length ? (
+            <ol className="divide-y divide-[var(--fm-border)]">
+              {product.recentAudit.map((audit) => (
+                <li key={audit.auditEventId} className="p-4 text-sm">
+                  <span className="font-medium">{audit.action}</span>
+                  <span className="block text-[var(--fm-text-muted)]">
+                    {new Date(audit.occurredAt).toLocaleString()} ·{" "}
+                    {audit.correlationId ?? "No request reference"}
+                  </span>
+                </li>
               ))}
-            </TableBody>
-          </Table>
-        )}
-      </ListPageSection>
-      <ListPageSection title="Recent audit">
-        {product.recentAudit.length ? (
-          <ol className="divide-y divide-[var(--fm-border)]">
-            {product.recentAudit.map((audit) => (
-              <li key={audit.auditEventId} className="p-4 text-sm">
-                <span className="font-medium">{audit.action}</span>
-                <span className="block text-[var(--fm-text-muted)]">
-                  {new Date(audit.occurredAt).toLocaleString()} ·{" "}
-                  {audit.correlationId ?? "No request reference"}
-                </span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
-        )}
-      </ListPageSection>
+            </ol>
+          ) : (
+            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
+          )}
+        </ListPageSection>
+      </div>
       <ConfirmCommandDialog
         open={confirmingStatus}
         title={product.status === "active" ? "Deactivate product?" : "Activate product?"}
