@@ -52,6 +52,7 @@ Domain compositions must consume purpose-built DTOs and call explicit Core comma
 - Accept a typed read-model row, not a database entity.
 - Define columns around the operator's decision.
 - Support server-side cursor pagination, stable sorting, filter tokens, row links, and selection only when safe.
+- Keep filter and column-visibility controls in one table toolbar; replace them with the applicable bulk-command controls while rows are selected.
 - Expose loading skeleton, empty, filtered-empty, error, stale/conflict, and partial-action-result states.
 - Put secondary fields in responsive expansion/detail rather than making desktop columns unreadable.
 

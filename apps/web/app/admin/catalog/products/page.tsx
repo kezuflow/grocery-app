@@ -11,7 +11,7 @@ import {
   type BulkProductSelection,
 } from "@/components/admin/product-list-view";
 import { useAdminContext } from "../../admin-context-provider";
-import { FilterBar, PageHeader } from "@/components/admin/admin-shell";
+import { PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,31 +178,39 @@ export default function ProductsPage() {
       ) : null}
       {payload?.ok ? (
         <>
-          <FilterBar>
-            <Input
-              aria-label="Search products"
-              value={query}
-              onChange={(event) => setFilter("query", event.target.value)}
-              placeholder="Search products"
-              className="sm:max-w-xs"
-            />
-            <select
-              aria-label="Product status"
-              value={status}
-              onChange={(event) => setFilter("status", event.target.value)}
-              className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </FilterBar>
           <ProductListView
             page={payload.value}
             fromQuery={searchParams.toString()}
             canManage={canManage}
             deactivationPending={bulkPending}
             onDeactivateSelected={deactivateProducts}
+            activeFilterCount={Number(query.trim().length > 0) + Number(status !== "all")}
+            filters={
+              <>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Search
+                  <Input
+                    aria-label="Search products"
+                    value={query}
+                    onChange={(event) => setFilter("query", event.target.value)}
+                    placeholder="Search products"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Status
+                  <select
+                    aria-label="Product status"
+                    value={status}
+                    onChange={(event) => setFilter("status", event.target.value)}
+                    className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 font-normal"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+              </>
+            }
           />
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}

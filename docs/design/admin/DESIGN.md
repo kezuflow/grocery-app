@@ -80,6 +80,7 @@ Products and categories referenced by committed or historical records are deacti
 
 - Title, scope, cycle/date context, primary action.
 - Filter row with search, status, date/cycle, location/zone, and saved-view-ready URL state.
+- Product list table controls use a compact Filters popover on the left and a Columns visibility popover on the right. When safe bulk selection is active, that same toolbar becomes the selection count plus Deactivate and Cancel controls instead of adding a second competing action row.
 - Result count and pagination.
 - Dense table with stable columns, row status, age/deadline, owner, and next action.
 - Bulk actions only where domain semantics define safe bulk commands.

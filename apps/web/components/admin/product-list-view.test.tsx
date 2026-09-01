@@ -73,6 +73,7 @@ describe("ProductListView", () => {
     expect(html).toContain("0 / 2 available");
     expect(html).toContain("/api/admin/catalog/products/product-onion/media/media-1/content?v=2");
     expect(html).toContain('href="/admin/catalog/products/product-onion?from=status%3Dactive"');
+    expect(html).toContain("Columns");
     expect(html).not.toContain("objectKey");
     expect(html).not.toContain("Rating");
   });
@@ -90,9 +91,13 @@ describe("ProductListView", () => {
           fromQuery="status=active"
           canManage
           onDeactivateSelected={onDeactivateSelected}
+          filters={<input aria-label="Search products" />}
         />,
       );
     });
+
+    expect(container.textContent).toContain("Filters");
+    expect(container.textContent).toContain("Columns");
 
     const productCheckbox = container.querySelector<HTMLButtonElement>(
       '[aria-label="Select Red onion"]',
@@ -103,6 +108,8 @@ describe("ProductListView", () => {
 
     expect(container.textContent).toContain("1 selected");
     expect(container.textContent).toContain("Deactivate");
+    expect(container.textContent).not.toContain("Filters");
+    expect(container.textContent).not.toContain("Columns");
     const cancelButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent?.trim() === "Cancel",
     );
@@ -111,6 +118,8 @@ describe("ProductListView", () => {
     act(() => cancelButton?.click());
 
     expect(container.textContent).not.toContain("1 selected");
+    expect(container.textContent).toContain("Filters");
+    expect(container.textContent).toContain("Columns");
     expect(onDeactivateSelected).not.toHaveBeenCalled();
   });
 });

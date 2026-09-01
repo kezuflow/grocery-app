@@ -1,17 +1,28 @@
 "use client";
 
 import type { AdminProductPage } from "@freshmarkets/contracts";
-import { ImageIcon, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Columns3, ImageIcon, ListFilter, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
 import { ConfirmCommandDialog } from "./admin-controls";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
 type ProductListItem = AdminProductPage["items"][number];
+
+type ProductColumnKey = "category" | "price" | "sku" | "availability" | "status";
+
+const PRODUCT_COLUMN_OPTIONS: ReadonlyArray<{ key: ProductColumnKey; label: string }> = [
+  { key: "category", label: "Category" },
+  { key: "price", label: "Resolved price" },
+  { key: "sku", label: "SKU readiness" },
+  { key: "availability", label: "Availability" },
+  { key: "status", label: "Status" },
+];
 
 export type BulkProductSelection = Pick<ProductListItem, "productId" | "name" | "version"> & {
   idempotencyKey: string;
@@ -48,6 +59,8 @@ export function ProductListView({
   canManage = false,
   deactivationPending = false,
   onDeactivateSelected,
+  filters,
+  activeFilterCount = 0,
 }: {
   page: AdminProductPage;
   fromQuery: string;
@@ -57,10 +70,15 @@ export function ProductListView({
     products: ReadonlyArray<BulkProductSelection>,
     reason: string,
   ) => Promise<BulkProductDeactivationResult>;
+  filters?: ReactNode;
+  activeFilterCount?: number;
 }) {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [confirmingDeactivation, setConfirmingDeactivation] = useState(false);
   const [result, setResult] = useState<BulkProductDeactivationResult | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<ReadonlySet<ProductColumnKey>>(
+    () => new Set(PRODUCT_COLUMN_OPTIONS.map((column) => column.key)),
+  );
   const selectionKeys = useRef(new Map<string, string>());
   const deactivateTrigger = useRef<HTMLButtonElement>(null);
   const selectableProducts = page.items.filter((product) => product.status === "active");
@@ -103,6 +121,15 @@ export function ProductListView({
     setSelectedIds(new Set());
     selectionKeys.current.clear();
     setConfirmingDeactivation(false);
+  }
+
+  function setColumnVisible(column: ProductColumnKey, visible: boolean) {
+    setVisibleColumns((current) => {
+      const next = new Set(current);
+      if (visible) next.add(column);
+      else next.delete(column);
+      return next;
+    });
   }
 
   async function deactivateSelected(reason: string) {
@@ -167,7 +194,70 @@ export function ProductListView({
               Cancel
             </Button>
           </div>
-        ) : null}
+        ) : (
+          <div
+            role="toolbar"
+            aria-label="Product table controls"
+            className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5"
+          >
+            {filters ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" size="sm" variant="outline">
+                    <ListFilter aria-hidden="true" />
+                    Filters
+                    {activeFilterCount > 0 ? (
+                      <span className="rounded-full bg-[var(--fm-admin-accent-soft)] px-1.5 text-xs text-[var(--fm-admin-accent-strong)]">
+                        {activeFilterCount}
+                      </span>
+                    ) : null}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-80 border-[var(--fm-border)] bg-white p-3 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+                >
+                  <div className="grid gap-3">{filters}</div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <span />
+            )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" size="sm" variant="outline">
+                  <Columns3 aria-hidden="true" />
+                  Columns
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-56 border-[var(--fm-border)] bg-white p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+              >
+                <p className="px-2 pb-1.5 text-xs font-medium text-[var(--fm-text-muted)]">
+                  Show columns
+                </p>
+                <div className="grid gap-0.5">
+                  {PRODUCT_COLUMN_OPTIONS.map((column) => (
+                    <label
+                      key={column.key}
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-[var(--fm-hover)]"
+                    >
+                      <Checkbox
+                        aria-label={`Toggle ${column.label} column`}
+                        checked={visibleColumns.has(column.key)}
+                        onCheckedChange={(checked) =>
+                          setColumnVisible(column.key, checked === true)
+                        }
+                      />
+                      <span>{column.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
         {result ? (
           result.failed.length > 0 ? (
             <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
@@ -222,11 +312,11 @@ export function ProductListView({
                   </TableHead>
                 ) : null}
                 <TableHead>Product</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Resolved price</TableHead>
-                <TableHead>SKU readiness</TableHead>
-                <TableHead>Availability</TableHead>
-                <TableHead>Status</TableHead>
+                {visibleColumns.has("category") ? <TableHead>Category</TableHead> : null}
+                {visibleColumns.has("price") ? <TableHead>Resolved price</TableHead> : null}
+                {visibleColumns.has("sku") ? <TableHead>SKU readiness</TableHead> : null}
+                {visibleColumns.has("availability") ? <TableHead>Availability</TableHead> : null}
+                {visibleColumns.has("status") ? <TableHead>Status</TableHead> : null}
                 <TableHead>
                   <span className="sr-only">Open</span>
                 </TableHead>
@@ -274,39 +364,51 @@ export function ProductListView({
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell>{product.categoryCode}</TableCell>
-                  <TableCell>
-                    <span
-                      className={product.priceRange ? "font-medium" : "text-[var(--fm-text-muted)]"}
-                    >
-                      {priceRange(product)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium">
-                      {product.pricedSkuCount} / {product.activeSkuCount}
-                    </span>
-                    <span className="block text-xs text-[var(--fm-text-muted)]">
-                      active SKUs priced
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium">
-                      {product.availableSkuCount} / {product.activeSkuCount} available
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      className={
-                        product.status === "active"
-                          ? "border-[var(--fm-success-border)] bg-[var(--fm-success-soft)]"
-                          : undefined
-                      }
-                      variant="secondary"
-                    >
-                      {product.status}
-                    </Badge>
-                  </TableCell>
+                  {visibleColumns.has("category") ? (
+                    <TableCell>{product.categoryCode}</TableCell>
+                  ) : null}
+                  {visibleColumns.has("price") ? (
+                    <TableCell>
+                      <span
+                        className={
+                          product.priceRange ? "font-medium" : "text-[var(--fm-text-muted)]"
+                        }
+                      >
+                        {priceRange(product)}
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumns.has("sku") ? (
+                    <TableCell>
+                      <span className="font-medium">
+                        {product.pricedSkuCount} / {product.activeSkuCount}
+                      </span>
+                      <span className="block text-xs text-[var(--fm-text-muted)]">
+                        active SKUs priced
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumns.has("availability") ? (
+                    <TableCell>
+                      <span className="font-medium">
+                        {product.availableSkuCount} / {product.activeSkuCount} available
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumns.has("status") ? (
+                    <TableCell>
+                      <Badge
+                        className={
+                          product.status === "active"
+                            ? "border-[var(--fm-success-border)] bg-[var(--fm-success-soft)]"
+                            : undefined
+                        }
+                        variant="secondary"
+                      >
+                        {product.status}
+                      </Badge>
+                    </TableCell>
+                  ) : null}
                   <TableCell>
                     <a
                       className="font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
