@@ -11,6 +11,9 @@ export default defineConfig({
   plugins: [
     vinext(),
     cloudflare({
+      configPath: "./wrangler.jsonc",
+      auxiliaryWorkers: [{ configPath: "../core/wrangler.jsonc" }],
+      persistState: { path: "../core/.wrangler/state" },
       viteEnvironment: {
         name: "rsc",
         childEnvironments: ["ssr"],

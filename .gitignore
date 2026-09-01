@@ -17,3 +17,6 @@ playwright-report/
 
 # Local isolated implementation worktrees
 .worktrees/
+
+# Codex attachment cache
+.codex-remote-attachments/

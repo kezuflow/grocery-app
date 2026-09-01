@@ -20,7 +20,7 @@
     "check": "pnpm format:check && pnpm naming:check && pnpm terminology:check && pnpm migration:check && pnpm commit:check && pnpm architecture:check && pnpm readiness:check && pnpm lint && pnpm typecheck && pnpm test && pnpm -r build",
     "dev:web": "pnpm --filter @freshmarkets/web dev",
     "dev:core": "pnpm --filter @freshmarkets/core dev",
-    "dev": "pnpm --parallel --filter @freshmarkets/core --filter @freshmarkets/web run dev",
+    "dev": "pnpm dev:web",
     "dev:stack": "pnpm --filter @freshmarkets/web exec wrangler dev -c dist/server/wrangler.json -c ../core/wrangler.jsonc --persist-to ../core/.wrangler/state --port 3000"
   },
   "devDependencies": {

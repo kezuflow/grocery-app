@@ -108,16 +108,35 @@ describe("shared Admin accessibility contract", () => {
 
     expect(markup).toContain("w-[var(--fm-admin-sidebar-collapsed)]");
     expect(markup).toContain('aria-label="Expand admin navigation"');
+    expect(shell).toContain('aria-label="freshmarkets admin home"');
+    expect(markup).toContain("lucide-sprout");
+    expect(markup).not.toContain(">freshmarkets</span>");
     expect(shell).not.toContain("overflow-y-auto");
     expect(shell).toContain("h-9 items-center justify-center");
     expect(shell).toContain("text-sm font-normal hover:bg-[var(--fm-hover)]");
     expect(shell).toContain('activeCode === child.code && "font-medium');
+    expect(shell).toContain('className="hidden size-8 rounded-lg lg:inline-flex"');
+    expect(shell).toContain("PanelLeftOpen");
+    expect(shell).toContain("PanelLeftClose");
+    expect(shell).toContain("ChevronsUpDown");
     expect(shell).toContain(
-      'className="absolute -right-3 top-3 z-10 size-6 rounded-full bg-white shadow-sm"',
+      'className="border-[var(--fm-border)] bg-white text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"',
     );
-    expect(shell.slice(shell.indexOf("function AdminSidebar"))).toContain(
+    expect(shell.slice(shell.indexOf("function AdminHeader"))).toContain(
       'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
     );
+    const headerSource = shell.slice(
+      shell.indexOf("function AdminHeader"),
+      shell.indexOf("function AdminScopeSelector"),
+    );
+    const sidebarSource = shell.slice(shell.indexOf("function AdminSidebar"));
+    expect(headerSource).toContain('aria-label="freshmarkets admin home"');
+    expect(headerSource).toContain("<Sprout");
+    expect(sidebarSource).not.toContain('aria-label="freshmarkets admin home"');
+    expect(sidebarSource).not.toContain(
+      'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
+    );
+    expect(headerSource).toMatch(/<span[^>]*>\s*freshmarkets\s*<\/span>/);
   });
 
   it("gives shell states headings and status semantics", () => {
@@ -244,16 +263,19 @@ describe("shared Admin accessibility contract", () => {
             timezone: "Asia/Manila",
           },
         ],
-        selectedScope: null,
+        selectedScope: {
+          kind: "LOCATION",
+          marketId: "market-1",
+          locationId: "location-1",
+        },
       },
       retry: vi.fn(),
       selectScope: vi.fn(),
     });
     const markup = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
     expect(markup).toContain('aria-label="Active admin scope"');
-    expect(markup).toContain("Select scope");
     expect(markup).toContain("Location One");
-    expect(markup).toContain("Location Two");
+    expect(shell).toContain("<SelectItem");
   });
 
   it("renders labelled cursor controls and uses a focus-managed reason confirmation", () => {

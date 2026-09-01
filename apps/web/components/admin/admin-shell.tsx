@@ -1,7 +1,14 @@
 "use client";
 
 import type { AdminSelectedScope } from "@freshmarkets/contracts";
-import { ChevronDown, ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronsUpDown,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sprout,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -9,6 +16,7 @@ import { adminSelectableScopes, useAdminContext } from "../../app/admin/admin-co
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../ui/select";
 import {
   Sheet,
   SheetClose,
@@ -79,9 +87,15 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
-      <AdminHeader items={items} scopeLabel={scopeLabel} environment={environment} />
+      <AdminHeader
+        items={items}
+        scopeLabel={scopeLabel}
+        environment={environment}
+        collapsed={collapsed}
+        onCollapsedChange={changeCollapsed}
+      />
       <div className="flex w-full">
-        <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
+        <AdminSidebar items={items} collapsed={collapsed} />
         <main
           id="main-content"
           aria-labelledby="admin-page-title"
@@ -102,27 +116,52 @@ function AdminHeader({
   items,
   scopeLabel,
   environment,
+  collapsed,
+  onCollapsedChange,
 }: {
   items: ReadonlyArray<AdminNavigationEntry>;
   scopeLabel: string;
   environment: string;
+  collapsed: boolean;
+  onCollapsedChange: (next: boolean) => void;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-header)]">
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <AdminMobileMenu items={items} />
           <Link
             href="/admin"
             prefetch={false}
-            className="text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)]"
+            aria-label="freshmarkets admin home"
+            className="flex h-10 select-none items-center gap-2 rounded-lg text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
           >
-            FreshMarkets{" "}
-            <span className="hidden font-normal text-[var(--fm-text-muted)] sm:inline">Admin</span>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-admin-accent)] text-white shadow-sm">
+              <Sprout className="size-4.5" aria-hidden="true" />
+            </span>
+            {!collapsed ? (
+              <span className="truncate pr-1 text-sm font-semibold tracking-[-0.02em]">
+                freshmarkets
+              </span>
+            ) : null}
           </Link>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
+            className="hidden size-8 rounded-lg lg:inline-flex"
+            onClick={() => onCollapsedChange(!collapsed)}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="size-4" aria-hidden="true" />
+            ) : (
+              <PanelLeftClose className="size-4" aria-hidden="true" />
+            )}
+          </Button>
+          <AdminScopeSelector fallbackLabel={scopeLabel} />
         </div>
         <div className="flex items-center gap-2 text-xs text-[var(--fm-text-muted)]">
-          <AdminScopeSelector fallbackLabel={scopeLabel} />
           {environment !== "production" ? (
             <span className="hidden rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] px-2 py-1 font-semibold uppercase tracking-wide text-[var(--fm-warning)] sm:inline-flex">
               {environment}
@@ -143,7 +182,17 @@ function AdminHeader({
 
 function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
   const { state, selectScope } = useAdminContext();
-  if (state.phase !== "ready") return <span>{fallbackLabel}</span>;
+  if (state.phase !== "ready") {
+    return (
+      <span className="inline-flex h-7 items-center gap-2 rounded-lg px-2.5 text-[0.8rem] font-medium">
+        <span
+          className="size-4 shrink-0 rounded-full bg-[var(--fm-admin-accent)]"
+          aria-hidden="true"
+        />
+        {fallbackLabel.replace(/^Scope:\s*/, "")}
+      </span>
+    );
+  }
   const selections: Array<{ value: AdminSelectedScope; label: string }> = adminSelectableScopes(
     state.context,
     state.scopes,
@@ -166,28 +215,46 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
       label: option?.kind === "location" ? option.locationName : scope.locationId,
     };
   });
+  const selectedValue = state.selectedScope ? JSON.stringify(state.selectedScope) : undefined;
+  const selectedLabel = selections.find(
+    (selection) => JSON.stringify(selection.value) === selectedValue,
+  )?.label;
   return (
-    <label className="flex items-center gap-2">
-      <span className="hidden sm:inline">Scope</span>
-      <select
+    <Select
+      value={selectedValue}
+      onValueChange={(value) => selectScope(JSON.parse(value) as AdminSelectedScope)}
+    >
+      <SelectTrigger
         aria-label="Active admin scope"
-        className="max-w-40 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1"
-        value={state.selectedScope ? JSON.stringify(state.selectedScope) : ""}
-        onChange={(event) => {
-          if (event.target.value) selectScope(JSON.parse(event.target.value) as AdminSelectedScope);
-        }}
+        className="h-7 max-w-52 gap-2 rounded-lg border-transparent px-2.5 text-[0.8rem] font-medium shadow-none hover:bg-[var(--fm-hover)] focus-visible:border-[var(--fm-border)] focus-visible:ring-[var(--fm-focus)]/20 [&>svg:last-child]:hidden"
       >
-        {state.selectedScope === null ? <option value="">Select scope…</option> : null}
+        <span
+          className="size-4 shrink-0 rounded-full bg-[var(--fm-admin-accent)]"
+          aria-hidden="true"
+        />
+        <span className="truncate">{selectedLabel ?? "Select scope…"}</span>
+        <ChevronsUpDown
+          className="size-3.5 shrink-0 text-[var(--fm-text-muted)]"
+          aria-hidden="true"
+        />
+      </SelectTrigger>
+      <SelectContent
+        position="popper"
+        side="bottom"
+        sideOffset={4}
+        align="start"
+        className="border-[var(--fm-border)] bg-white text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+      >
         {selections.map((selection) => {
           const value = JSON.stringify(selection.value);
           return (
-            <option key={value} value={value}>
+            <SelectItem key={value} value={value}>
               {selection.label}
-            </option>
+            </SelectItem>
           );
         })}
-      </select>
-    </label>
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -290,11 +357,9 @@ function MobileNavigationParent({
 function AdminSidebar({
   items,
   collapsed,
-  onCollapsedChange,
 }: {
   items: ReadonlyArray<AdminNavigationEntry>;
   collapsed: boolean;
-  onCollapsedChange: (next: boolean) => void;
 }) {
   const pathname = usePathname();
   const groups = groupAdminNavigation(items);
@@ -323,16 +388,6 @@ function AdminSidebar({
             : "w-[var(--fm-admin-sidebar-expanded)] px-3",
         )}
       >
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
-          className="absolute -right-3 top-3 z-10 size-6 rounded-full bg-white shadow-sm"
-          onClick={() => onCollapsedChange(!collapsed)}
-        >
-          {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
-        </Button>
         <nav aria-label="Admin navigation" className="space-y-2 overflow-x-visible">
           {groups.map((group) => (
             <div key={group.code}>

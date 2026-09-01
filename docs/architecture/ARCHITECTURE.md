@@ -127,6 +127,8 @@ Remediation decisions that preserve compatibility while aligning the current imp
 
 Web communicates with Core through a Cloudflare Service Binding and typed RPC methods. Shared source types live in `packages/contracts`; contracts are application DTOs, not database models.
 
+Local vinext development runs Core as a Cloudflare Vite auxiliary Worker so Web and Core share one local runtime and the typed RPC binding remains valid across program reloads. This is a development topology only; Web and Core remain separate deployments.
+
 Rules:
 
 - Do not add CORS or public API authentication between Web and Core.

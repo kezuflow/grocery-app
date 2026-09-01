@@ -28,16 +28,17 @@ pnpm --filter @freshmarkets/web types
 
 ## Local development
 
-For normal framework development, run Core and Web in separate terminals:
+Run the vinext Web Worker and its Core auxiliary Worker together in one Vite runtime:
 
 ```sh
-pnpm dev:core
-pnpm dev:web
+pnpm dev
 ```
 
-Web is available at `http://localhost:3000`. The standalone Core Worker listens
-on Wrangler's default `http://127.0.0.1:8787`, while browser-facing Better Auth
-routes remain under Web at `http://localhost:3000/api/auth/*`.
+Web is available at `http://localhost:3000`. Keeping both Workers in the same local
+runtime preserves the `CORE` RPC binding across vinext program reloads. Browser-facing
+Better Auth routes remain under Web at `http://localhost:3000/api/auth/*`. Use
+`pnpm dev:core` only when working on Core in isolation. Both commands use Core's
+existing local state under `apps/core/.wrangler/state`.
 
 For the production-built Web Worker plus Core in one Cloudflare local runtime, first build Web, then run the multi-config Wrangler smoke stack:
 

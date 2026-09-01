@@ -34,9 +34,9 @@ Navigation items and actions are capability-aware and selected-scope aware. Core
 
 ## Global Shell
 
-- Desktop defaults to a 72px icon rail. Staff may expand it to 252px, and the browser remembers that preference. On narrower screens it becomes a Sheet/drawer; the admin shell has no truncated bottom navigation.
+- Desktop defaults to a 72px icon rail and expands to 252px. The browser remembers that preference. On narrower screens the rail becomes a Sheet/drawer; the admin shell has no truncated bottom navigation.
 - Section labels and nested links follow the Information Architecture above. Parent labels navigate to their overview, a separate chevron toggles children, the most-specific matching route is active, and the active child's parent opens automatically. Collapsed groups use accessible tooltips/flyouts.
-- A 64px top bar aligns with the rail and keeps the FreshMarkets Admin identity, breadcrumb/context, current market/location scope, cycle context where relevant, search/command affordance, notifications/exceptions indicator, and user menu visible without turning those controls into business authority.
+- A 64px top bar begins with the compact FreshMarkets mark; the lowercase `freshmarkets` wordmark appears beside it only while the desktop rail is expanded. The rail toggle and compact current-scope switcher follow it. The toggle uses the matching panel-open/panel-close icon for the rail state; the scope switcher uses a small accent marker, selected scope label, and visible up/down switcher indicator. Environment, marketplace, cycle context where relevant, search/command affordance, notifications/exceptions indicator, and user menu remain utility controls rather than business authority.
 - Scope selection is explicit and never silently changes a command's target.
 - Use URL-addressable filters/tabs for operational queues.
 - Show an environment/status indicator for non-production contexts.
