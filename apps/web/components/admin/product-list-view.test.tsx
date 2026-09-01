@@ -34,6 +34,13 @@ const page: AdminProductPage = {
       availableSkuCount: 0,
       primaryMedia: { mediaId: "media-1", altText: "Red onions", version: 2 },
       priceRange: { minimumMinor: 2_500, maximumMinor: 3_000, currency: "PHP" },
+      inventoryPosition: {
+        locationId: "location-cebu-central",
+        onHandBase: 10_000,
+        reservedBase: 1_000,
+        availableBase: 9_000,
+        version: 2,
+      },
       version: 3,
     },
   ],
@@ -46,9 +53,12 @@ const page: AdminProductPage = {
   },
   pricingContext: {
     marketId: "market-metro-cebu",
+    marketName: "Metro Cebu",
     locationId: "location-cebu-central",
+    locationName: "Central Cebu",
     currency: "PHP",
   },
+  viewMode: "LOCATION_OPERATIONS",
   nextCursor: null,
 };
 
@@ -70,8 +80,11 @@ describe("ProductListView", () => {
     expect(html).toContain("Catalog readiness");
     expect(html).toContain("Missing prices");
     expect(html).toContain("₱25.00–₱30.00");
-    expect(html).toContain("0 / 2 available");
-    expect(html).toContain("/api/admin/catalog/products/product-onion/media/media-1/content?v=2");
+    expect(html).toContain("0 / 2 selling");
+    expect(html).toContain("9,000 available");
+    expect(html).toContain(
+      "/api/admin/catalog/products/product-onion/media/media-1/content?v=2&amp;locationId=location-cebu-central",
+    );
     expect(html).toContain('href="/admin/catalog/products/product-onion?from=status%3Dactive"');
     expect(html).toContain("Columns");
     expect(html).not.toContain("objectKey");

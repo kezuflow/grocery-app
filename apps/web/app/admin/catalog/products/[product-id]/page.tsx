@@ -38,7 +38,7 @@ type LoadState =
 
 const BASE = "/api/admin/catalog";
 
-type SkuCommandConfirmation =
+type VariantCommandConfirmation =
   | {
       kind: "PRICE";
       skuId: string;
@@ -82,11 +82,10 @@ export default function ProductDetailPage({
     name: "",
     unitId: "",
     sellQuantity: "",
-    consumption: "",
   });
   const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
   const [sourcingBySku, setSourcingBySku] = useState<Record<string, SourcingMode>>({});
-  const [skuCommand, setSkuCommand] = useState<SkuCommandConfirmation | null>(null);
+  const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
       ? "Product created."
@@ -101,17 +100,33 @@ export default function ProductDetailPage({
       ? catalogTarget === `market:${option.marketId}`
       : catalogTarget === `location:${option.locationId}`,
   );
-  const selectedMarketId = selectedTarget?.marketId;
+  const selectedMarketId = catalogTarget.startsWith("market:")
+    ? catalogTarget.slice("market:".length)
+    : selectedTarget?.marketId;
   const selectedLocationId = selectedTarget?.kind === "location" ? selectedTarget.locationId : null;
+  const selectedCurrency =
+    selectedTarget?.currency ??
+    targetOptions.find((option) => option.marketId === selectedMarketId)?.currency;
+  const selectedTargetLabel =
+    selectedTarget?.kind === "location" ? selectedTarget.locationName : "Global catalog";
 
   useEffect(() => {
     if (adminContext.state.phase !== "ready") return;
     const selected = adminContext.state.selectedScope;
-    if (selected?.kind === "MARKET") setCatalogTarget(`market:${selected.marketId}`);
-    else if (selected?.kind === "LOCATION") setCatalogTarget(`location:${selected.locationId}`);
+    if (selected?.kind === "LOCATION") {
+      setCatalogTarget(`location:${selected.locationId}`);
+      return;
+    }
+    if (selected?.kind === "GLOBAL") {
+      const marketId = adminContext.state.scopes.find(
+        (option) => option.kind === "location",
+      )?.marketId;
+      if (marketId) setCatalogTarget(`market:${marketId}`);
+    }
   }, [adminContext.state]);
 
   const load = useCallback(() => {
+    if (!selectedMarketId) return;
     const requestNumber = loadRequest.current + 1;
     loadRequest.current = requestNumber;
     setState({ phase: "loading" });
@@ -119,15 +134,7 @@ export default function ProductDetailPage({
       try {
         const [productResponse, unitsResponse] = await Promise.all([
           fetch(
-            `${BASE}/products/${encodeURIComponent(productId)}${
-              selectedMarketId
-                ? `?marketId=${encodeURIComponent(selectedMarketId)}${
-                    selectedLocationId
-                      ? `&locationId=${encodeURIComponent(selectedLocationId)}`
-                      : ""
-                  }`
-                : ""
-            }`,
+            `${BASE}/products/${encodeURIComponent(productId)}?marketId=${encodeURIComponent(selectedMarketId)}&locationId=${encodeURIComponent(selectedLocationId ?? "")}`,
           ),
           fetch(`${BASE}/units`),
         ]);
@@ -236,12 +243,31 @@ export default function ProductDetailPage({
   const { product, units } = state;
   const from = searchParams.get("from");
   const canManageProduct = product.allowedActions.includes("UPDATE");
+  const canManageLocation =
+    product.viewMode === "LOCATION_OPERATIONS" &&
+    adminContext.state.phase === "ready" &&
+    adminContext.state.context.capabilities.includes("catalog.manage");
+  const canManageTarget = canManageProduct || canManageLocation;
+  const detailSections =
+    product.viewMode === "LOCATION_OPERATIONS"
+      ? [
+          ["Overview", "#product-overview"],
+          ["Sell variants", "#product-variants"],
+          ["Audit", "#product-audit"],
+        ]
+      : [
+          ["Overview", "#product-overview"],
+          ["Media", "#product-media"],
+          ["Status", "#product-status"],
+          ["Sell variants", "#product-variants"],
+          ["Audit", "#product-audit"],
+        ];
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title={product.name}
-        description={`${product.categoryName} · ${product.skus.length} SKU${product.skus.length === 1 ? "" : "s"} · ${product.inventoryPool.baseUnitCode}`}
+        description={`${product.categoryName} · ${product.skus.length} sell variant${product.skus.length === 1 ? "" : "s"} · shared ${product.inventoryPool.baseUnitCode} inventory`}
         action={
           <span className="flex items-center gap-2">
             <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
@@ -274,13 +300,7 @@ export default function ProductDetailPage({
         className="sticky top-[4.5rem] z-20 -mx-1 overflow-x-auto rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white/95 px-2 shadow-sm backdrop-blur"
       >
         <div className="flex min-w-max gap-1 py-1">
-          {[
-            ["Overview", "#product-overview"],
-            ["Media", "#product-media"],
-            ["Status", "#product-status"],
-            ["SKUs", "#product-skus"],
-            ["Audit", "#product-audit"],
-          ].map(([label, href]) => (
+          {detailSections.map(([label, href]) => (
             <a
               className="rounded-md px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)] hover:text-[var(--fm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
               href={href}
@@ -486,42 +506,22 @@ export default function ProductDetailPage({
         </div>
       ) : null}
 
-      <div id="product-skus" className="scroll-mt-32">
+      <div id="product-variants" className="scroll-mt-32">
         <ListPageSection
-          title="SKUs"
-          description="Fixed variants with exact base-unit consumption. Prices are versioned; availability is per location."
+          title="Sell variants"
+          description="Customer choices consume exact quantities from this Product's one shared inventory pool. Selling status is separate from physical stock."
         >
-          {canManageProduct ? (
+          {canManageTarget ? (
             <div className="grid gap-1 border-b border-[var(--fm-border)] p-4 text-sm font-medium sm:max-w-md">
-              <label htmlFor="catalog-command-target">Catalog command target</label>
-              <select
-                id="catalog-command-target"
-                value={catalogTarget}
-                onChange={(event) => setCatalogTarget(event.target.value)}
-                className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
-              >
-                <option value="">Select a market or location…</option>
-                {targetOptions.map((option) => (
-                  <option
-                    key={
-                      option.kind === "market"
-                        ? `market:${option.marketId}`
-                        : `location:${option.locationId}`
-                    }
-                    value={
-                      option.kind === "market"
-                        ? `market:${option.marketId}`
-                        : `location:${option.locationId}`
-                    }
-                  >
-                    {option.kind === "market"
-                      ? `${option.marketName} · market prices`
-                      : `${option.locationName} · location prices and availability`}
-                  </option>
-                ))}
-              </select>
+              <span>Operational context</span>
+              <div className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-surface-muted)] px-3 py-2 font-normal">
+                {product.pricingContext.locationName ?? "Global catalog"} ·{" "}
+                {product.pricingContext.locationId
+                  ? "location pricing and selling"
+                  : "market pricing"}
+              </div>
               <span className="text-xs font-normal text-[var(--fm-text-muted)]">
-                Price and availability commands apply only to this explicit Core-authorized target.
+                This explicit context follows the Admin scope selector and is revalidated by Core.
               </span>
             </div>
           ) : null}
@@ -535,10 +535,15 @@ export default function ProductDetailPage({
                   newSku.code.trim() === "" ||
                   newSku.name.trim() === "" ||
                   !unit ||
-                  Number.isNaN(Number(newSku.sellQuantity)) ||
-                  Number.isNaN(Number(newSku.consumption))
+                  Number.isNaN(Number(newSku.sellQuantity))
                 ) {
-                  setNotice("Code, name, unit, sell quantity, and base consumption are required.");
+                  setNotice("Code, name, unit, and sell quantity are required.");
+                  return;
+                }
+                const convertedNumerator =
+                  Math.round(Number(newSku.sellQuantity)) * unit.conversionNumerator;
+                if (convertedNumerator % unit.conversionDenominator !== 0) {
+                  setNotice("This quantity does not convert to an exact base-unit amount.");
                   return;
                 }
                 void run(`${BASE}/skus`, "POST", {
@@ -547,19 +552,19 @@ export default function ProductDetailPage({
                   name: newSku.name.trim(),
                   sellableUnitId: unit.unitId,
                   sellQuantity: Math.round(Number(newSku.sellQuantity)),
-                  consumptionBaseQuantity: Math.round(Number(newSku.consumption)),
+                  consumptionBaseQuantity: convertedNumerator / unit.conversionDenominator,
                 });
               }}
             >
               <Input
-                aria-label="SKU code"
+                aria-label="Variant code"
                 placeholder="CODE"
                 value={newSku.code}
                 onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
                 className="sm:w-40"
               />
               <Input
-                aria-label="SKU name"
+                aria-label="Variant name"
                 placeholder="e.g. 250 g"
                 value={newSku.name}
                 onChange={(event) => setNewSku({ ...newSku, name: event.target.value })}
@@ -585,28 +590,26 @@ export default function ProductDetailPage({
                 onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
                 className="sm:w-24"
               />
-              <Input
-                aria-label="Base consumption"
-                placeholder="base qty"
-                value={newSku.consumption}
-                onChange={(event) => setNewSku({ ...newSku, consumption: event.target.value })}
-                className="sm:w-28"
-              />
+              <span className="text-xs text-[var(--fm-text-muted)] sm:max-w-40">
+                Base consumption is derived from the controlled unit conversion.
+              </span>
               <Button type="submit" size="sm">
-                Add SKU
+                Add variant
               </Button>
             </form>
           ) : null}
           {product.skus.length === 0 ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No SKUs defined.</p>
+            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No sell variants defined.</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>SKU</TableHead>
+                  <TableHead>Variant code</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Consumes</TableHead>
                   <TableHead>Price</TableHead>
-                  <TableHead>Availability</TableHead>
+                  <TableHead>Selling status</TableHead>
+                  <TableHead>Stock status</TableHead>
                   <TableHead>Targeted commands</TableHead>
                 </TableRow>
               </TableHeader>
@@ -622,6 +625,10 @@ export default function ProductDetailPage({
                         </span>
                       ) : null}
                     </TableCell>
+                    <TableCell>
+                      {sku.consumptionBaseQuantity.toLocaleString()}{" "}
+                      {product.inventoryPool.baseUnitSymbol}
+                    </TableCell>
                     <TableCell className="text-xs">
                       {sku.priceMinor === null || !sku.currency
                         ? "—"
@@ -632,16 +639,43 @@ export default function ProductDetailPage({
                     </TableCell>
                     <TableCell>
                       <StatusBadge tone={sku.availability === "AVAILABLE" ? "success" : "neutral"}>
-                        {sku.availability ?? "unset"}
+                        {sku.availability === "AVAILABLE"
+                          ? "Selling"
+                          : sku.availability === "UNAVAILABLE"
+                            ? "Not selling"
+                            : "Not configured"}
                       </StatusBadge>
                       {product.pricingContext.locationId ? (
                         <span className="block text-xs text-[var(--fm-text-muted)]">
-                          {product.pricingContext.locationId}
+                          {product.pricingContext.locationName}
                         </span>
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      {canManageProduct ? (
+                      {product.inventoryPool.position ? (
+                        <StatusBadge
+                          tone={
+                            product.inventoryPool.position.availableBase >=
+                            sku.consumptionBaseQuantity
+                              ? "success"
+                              : "neutral"
+                          }
+                        >
+                          {product.inventoryPool.position.availableBase >=
+                          sku.consumptionBaseQuantity
+                            ? "In stock"
+                            : "Insufficient stock"}
+                        </StatusBadge>
+                      ) : (
+                        <span className="text-xs text-[var(--fm-text-muted)]">
+                          {product.viewMode === "LOCATION_OPERATIONS"
+                            ? "No stock recorded"
+                            : "No location context"}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {canManageTarget ? (
                         <span className="flex flex-wrap items-center gap-1">
                           <Input
                             aria-label={`New price for ${sku.code}`}
@@ -660,23 +694,20 @@ export default function ProductDetailPage({
                                 setNotice("Enter a positive price.");
                                 return;
                               }
-                              if (!selectedTarget || !selectedMarketId) {
-                                setNotice("Select an explicit market or location target.");
+                              if (!selectedMarketId || !selectedCurrency) {
+                                setNotice("The explicit pricing context is unavailable.");
                                 return;
                               }
-                              setSkuCommand({
+                              setVariantCommand({
                                 kind: "PRICE",
                                 skuId: sku.skuId,
                                 skuCode: sku.code,
                                 marketId: selectedMarketId,
                                 locationId: selectedLocationId,
-                                currency: selectedTarget.currency,
+                                currency: selectedCurrency,
                                 amountMinor: Math.round(pesos * 100),
                                 expectedVersion: sku.priceVersion ?? 0,
-                                targetLabel:
-                                  selectedTarget.kind === "market"
-                                    ? selectedTarget.marketName
-                                    : selectedTarget.locationName,
+                                targetLabel: selectedTargetLabel,
                               });
                             }}
                           >
@@ -704,10 +735,12 @@ export default function ProductDetailPage({
                             disabled={selectedTarget?.kind !== "location"}
                             onClick={() => {
                               if (selectedTarget?.kind !== "location") {
-                                setNotice("Select a location target for availability.");
+                                setNotice(
+                                  "A location context is required to change selling status.",
+                                );
                                 return;
                               }
-                              setSkuCommand({
+                              setVariantCommand({
                                 kind: "AVAILABILITY",
                                 skuId: sku.skuId,
                                 skuCode: sku.code,
@@ -722,8 +755,8 @@ export default function ProductDetailPage({
                             }}
                           >
                             {sku.availability === "AVAILABLE"
-                              ? "Review unavailable"
-                              : "Review available"}
+                              ? "Review stop selling"
+                              : "Review start selling"}
                           </Button>
                         </span>
                       ) : (
@@ -764,7 +797,7 @@ export default function ProductDetailPage({
         consequence={
           product.status === "active"
             ? "The Product leaves storefront availability. Variants, prices, inventory history, and committed order snapshots remain intact."
-            : "The Product becomes active, while each SKU price and location availability remains independently authoritative."
+            : "The Product becomes active, while each variant price and location selling status remains independently authoritative."
         }
         initialReason={reason}
         confirmLabel={product.status === "active" ? "Confirm deactivation" : "Confirm activation"}
@@ -782,22 +815,22 @@ export default function ProductDetailPage({
         }}
       />
       <ConfirmCommandDialog
-        open={skuCommand !== null}
-        title={skuCommand?.kind === "PRICE" ? "Set SKU price?" : "Change SKU availability?"}
-        resource={skuCommand?.skuCode ?? "SKU"}
-        scope={skuCommand?.targetLabel ?? "Catalog target"}
+        open={variantCommand !== null}
+        title={variantCommand?.kind === "PRICE" ? "Set variant price?" : "Change selling status?"}
+        resource={variantCommand?.skuCode ?? "Sell variant"}
+        scope={variantCommand?.targetLabel ?? "Catalog target"}
         consequence={
-          skuCommand?.kind === "PRICE"
-            ? `This creates a new ${skuCommand.currency} price version for exactly ${skuCommand.amountMinor} minor units.`
-            : `This sets ${skuCommand?.availabilityStatus ?? "availability"} with ${skuCommand?.sourcingMode ?? "the selected"} sourcing at this location.`
+          variantCommand?.kind === "PRICE"
+            ? `This creates a new ${variantCommand.currency} price version for exactly ${variantCommand.amountMinor} minor units.`
+            : `This sets ${variantCommand?.availabilityStatus ?? "selling status"} with ${variantCommand?.sourcingMode ?? "the selected"} sourcing at this location.`
         }
         reasonRequired={false}
-        confirmLabel={skuCommand?.kind === "PRICE" ? "Confirm price" : "Confirm availability"}
+        confirmLabel={variantCommand?.kind === "PRICE" ? "Confirm price" : "Confirm selling status"}
         pending={commandIntent.pending}
-        onCancel={() => setSkuCommand(null)}
+        onCancel={() => setVariantCommand(null)}
         onConfirm={() => {
-          const pendingCommand = skuCommand;
-          setSkuCommand(null);
+          const pendingCommand = variantCommand;
+          setVariantCommand(null);
           if (!pendingCommand) return;
           if (pendingCommand.kind === "PRICE") {
             void run(

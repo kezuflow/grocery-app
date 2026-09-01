@@ -11,11 +11,13 @@ type RouteContext = {
 /** Authenticated same-origin media adapter; internal R2 identity stays in Core. */
 async function GETHandler(request: Request, context: RouteContext) {
   const { "product-id": productId, "media-id": mediaId } = await context.params;
+  const locationId = new URL(request.url).searchParams.get("locationId") ?? undefined;
   const result = await coreClient(env.CORE).getAdminProductMediaContent({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
     mediaId,
+    locationId,
   });
   if (!result.ok) {
     const status =

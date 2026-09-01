@@ -81,7 +81,7 @@ test.beforeEach(async ({ page }) => {
         marketCode: "CEBU",
         locationId: "location-cebu-central",
         locationCode: "CENTRAL",
-        locationName: "Cebu Central",
+        locationName: "Central Cebu",
         currency: "PHP",
         timezone: "Asia/Manila",
       },

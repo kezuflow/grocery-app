@@ -29,8 +29,22 @@ export async function getAdminProductMediaContent(
   deps: ProductMediaDeps,
   request: AdminProductMediaContentRequest,
 ): Promise<RpcResult<AdminProductMediaContent>> {
-  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "catalog.read",
+    request.locationId,
+  );
   if (!access.ok) return access;
+  if (request.locationId) {
+    const inventoryAccess = await resolveCatalogAdministrationAccess(
+      deps,
+      request,
+      "inventory.read",
+      request.locationId,
+    );
+    if (!inventoryAccess.ok) return inventoryAccess;
+  }
   const metadata = await deps.db
     .prepare(
       `SELECT object_key AS objectKey, mime_type AS mimeType, version

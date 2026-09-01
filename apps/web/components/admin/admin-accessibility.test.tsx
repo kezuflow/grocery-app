@@ -92,10 +92,12 @@ describe("shared Admin accessibility contract", () => {
     expect(globals).toMatch(
       /\.fm-admin \{[\s\S]*font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;/,
     );
+    expect(globals).toContain(".fm-admin-sidebar-tooltip svg");
+    expect(shell).toContain('className="fm-admin-sidebar-tooltip rounded-lg"');
     expect(shell).toContain('className="text-2xl font-bold tracking-[-0.025em]"');
   });
 
-  it("server-renders a first-time desktop visit with the 72px icon rail", () => {
+  it("server-renders a first-time desktop visit with the reference-aligned 64px icon rail", () => {
     useAdminContext.mockReturnValue({ state: { phase: "loading" }, retry: vi.fn() });
     const markup = renderToStaticMarkup(
       createElement(AdminShell, {
@@ -110,15 +112,33 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain('aria-label="Expand admin navigation"');
     expect(shell).toContain('aria-label="freshmarkets admin home"');
     expect(markup).toContain("lucide-sprout");
-    expect(markup).not.toContain(">freshmarkets</span>");
-    expect(shell).not.toContain("overflow-y-auto");
-    expect(shell).toContain("h-9 items-center justify-center");
-    expect(shell).toContain("text-sm font-normal hover:bg-[var(--fm-hover)]");
-    expect(shell).toContain('activeCode === child.code && "font-medium');
-    expect(shell).toContain('className="hidden size-8 rounded-lg lg:inline-flex"');
+    expect(shell).toContain(
+      "relative hidden shrink-0 bg-transparent transition-[width] duration-200 ease-linear md:block",
+    );
+    expect(shell).toContain(
+      "fixed inset-y-0 z-20 hidden h-svh transition-[width,padding] duration-200 ease-linear md:flex",
+    );
+    expect(shell).toContain("w-[66px] py-2 pl-3 pr-1");
+    expect(shell).toContain("overflow-y-auto");
+    expect(shell).toContain('aria-label="Search admin navigation"');
+    expect(shell).toContain("md:rounded-xl md:shadow-[var(--fm-shadow-shell)]");
+    expect(shell).toContain("transition-[width] duration-200 ease-linear");
+    expect(shell).toContain("transition-[width,height,padding] duration-150 ease-in-out");
+    expect(shell).toContain("transition-[max-width,margin,opacity] duration-200 ease-linear");
+    expect(shell).toContain("flex h-8 items-center gap-2 overflow-hidden rounded-lg text-left");
+    expect(shell).toContain(
+      'activeCode === child.code &&\n                  "bg-[var(--fm-admin-sidebar-active)] font-medium',
+    );
+    expect(shell).toContain("hidden size-9 rounded-lg border");
     expect(shell).toContain("PanelLeftOpen");
     expect(shell).toContain("PanelLeftClose");
     expect(shell).toContain("ChevronsUpDown");
+    expect(shell).toContain('aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}');
+    expect(shell).toContain("<AdminThemeToggle />");
+    expect(shell).toContain('aria-label="Account menu"');
+    expect(shell).toContain('role="menuitem"');
+    expect(shell).toContain('fetch("/api/auth/sign-out"');
+    expect(shell).toContain('window.location.assign("/auth/login")');
     expect(shell).toContain(
       'className="border-[var(--fm-border)] bg-white text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"',
     );
@@ -131,17 +151,23 @@ describe("shared Admin accessibility contract", () => {
     );
     const sidebarSource = shell.slice(shell.indexOf("function AdminSidebar"));
     expect(headerSource).toContain('aria-label="freshmarkets admin home"');
-    expect(headerSource).toContain("<Sprout");
-    expect(sidebarSource).not.toContain('aria-label="freshmarkets admin home"');
+    expect(headerSource).toContain("md:hidden");
+    expect(sidebarSource).toContain('aria-label="freshmarkets admin home"');
+    expect(sidebarSource).toContain("<Sprout");
     expect(sidebarSource).not.toContain(
       'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
     );
-    expect(sidebarSource).toContain('aria-controls={`admin-nav-children-${item.code}`}');
-    expect(sidebarSource).toContain('<span className="flex-1">{item.label}</span>');
+    expect(sidebarSource).toContain(
+      "aria-controls={collapsed ? undefined : `admin-nav-children-${item.code}`}",
+    );
+    expect(sidebarSource).toContain('collapsed ? "ml-0 max-w-0 opacity-0"');
+    expect(sidebarSource).toContain('collapsed ? "w-8 px-2" : "w-full px-2"');
+    expect(sidebarSource).toContain('role="menu"');
+    expect(sidebarSource).toContain('side="right"');
     expect(sidebarSource).not.toContain(
       'aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}',
     );
-    expect(headerSource).toMatch(/<span[^>]*>\s*freshmarkets\s*<\/span>/);
+    expect(sidebarSource).toContain("freshmarkets");
   });
 
   it("gives shell states headings and status semantics", () => {

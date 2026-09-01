@@ -245,18 +245,39 @@ export async function listAdminProducts(
   deps: CatalogAdministrationDeps,
   request: AdminProductListRequest,
 ): Promise<RpcResult<AdminProductPage>> {
-  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "catalog.read",
+    request.locationId ?? undefined,
+  );
   if (!access.ok) return access;
+  if (request.locationId !== null) {
+    const inventoryAccess = await resolveCatalogAdministrationAccess(
+      deps,
+      request,
+      "inventory.read",
+      request.locationId,
+    );
+    if (!inventoryAccess.ok) return inventoryAccess;
+  }
 
   const target = await deps.db
     .prepare(
-      `SELECT m.id AS marketId, m.currency, fl.id AS locationId
+      `SELECT m.id AS marketId, m.name AS marketName, m.currency,
+              fl.id AS locationId, fl.name AS locationName
        FROM market m LEFT JOIN fulfillment_location fl
          ON fl.market_id=m.id AND fl.id=?
        WHERE m.id=?`,
     )
     .bind(request.locationId, request.marketId)
-    .first<{ marketId: string; currency: string; locationId: string | null }>();
+    .first<{
+      marketId: string;
+      marketName: string;
+      currency: string;
+      locationId: string | null;
+      locationName: string | null;
+    }>();
   if (!target || (request.locationId !== null && target.locationId !== request.locationId)) {
     return {
       ok: false,
@@ -329,6 +350,7 @@ export async function listAdminProducts(
         .prepare(
           `WITH page AS (
              SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode,
+                    p.inventory_pool_id AS inventoryPoolId,
                     p.status, p.version, p.created_at AS createdAt
              FROM product p JOIN category c ON c.id=p.category_id
              ${where}
@@ -380,10 +402,14 @@ export async function listAdminProducts(
                   COALESCE(sr.pricedSkuCount, 0) AS pricedSkuCount,
                   COALESCE(sr.availableSkuCount, 0) AS availableSkuCount,
                   pm.mediaId, pm.mediaAltText, pm.mediaVersion,
-                  sr.minimumMinor, sr.maximumMinor
+                  sr.minimumMinor, sr.maximumMinor,
+                  ib.on_hand AS onHandBase, ib.reserved AS reservedBase,
+                  ib.version AS inventoryVersion
            FROM page p
            LEFT JOIN sku_rollup sr ON sr.productId=p.productId
            LEFT JOIN primary_media pm ON pm.productId=p.productId
+           LEFT JOIN inventory_balance ib
+             ON ib.inventory_pool_id=p.inventoryPoolId AND ib.location_id=?
            ORDER BY p.createdAt DESC, p.productId DESC`,
         )
         .bind(
@@ -396,6 +422,7 @@ export async function listAdminProducts(
           request.locationId,
           now,
           now,
+          request.locationId ?? "",
           request.locationId ?? "",
         )
         .all<{
@@ -414,6 +441,9 @@ export async function listAdminProducts(
           mediaVersion: number | null;
           minimumMinor: number | null;
           maximumMinor: number | null;
+          onHandBase: number | null;
+          reservedBase: number | null;
+          inventoryVersion: number | null;
           version: number;
         }>();
       setD1SpanAttributes(span, result.meta);
@@ -443,6 +473,19 @@ export async function listAdminProducts(
             minimumMinor: row.minimumMinor,
             maximumMinor: row.maximumMinor,
             currency: target.currency,
+          }
+        : null,
+    inventoryPosition:
+      request.locationId !== null &&
+      row.onHandBase !== null &&
+      row.reservedBase !== null &&
+      row.inventoryVersion !== null
+        ? {
+            locationId: request.locationId,
+            onHandBase: row.onHandBase,
+            reservedBase: row.reservedBase,
+            availableBase: row.onHandBase - row.reservedBase,
+            version: row.inventoryVersion,
           }
         : null,
     version: row.version,
@@ -523,9 +566,12 @@ export async function listAdminProducts(
       nextCursor,
       pricingContext: {
         marketId: target.marketId,
+        marketName: target.marketName,
         locationId: request.locationId,
+        locationName: target.locationName,
         currency: target.currency,
       },
+      viewMode: request.locationId === null ? "GLOBAL_CATALOG" : "LOCATION_OPERATIONS",
       readiness: {
         activeProducts: readiness?.activeProducts ?? 0,
         inactiveProducts: readiness?.inactiveProducts ?? 0,
@@ -562,32 +608,50 @@ export async function getAdminProduct(
   deps: CatalogAdministrationDeps,
   request: AdminProductDetailRequest,
 ): Promise<RpcResult<AdminProductDetail>> {
-  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.read");
-  if (!access.ok) return access;
-
-  const defaultMarket = await defaultMarketId(deps.db);
-  const marketId = request.marketId ?? defaultMarket;
-  if (!marketId || (request.locationId && !request.marketId)) {
+  if (!request.marketId || request.locationId === undefined) {
     return {
       ok: false,
       error: {
         code: "VALIDATION_FAILED",
-        message: "A valid market is required for the selected Catalog target",
+        message: "An explicit market and location target is required",
         requestId: request.requestId,
       },
     };
   }
-  const locationId =
-    request.locationId ?? (request.marketId ? null : DEFAULT_FULFILLMENT_LOCATION_ID);
+  const marketId = request.marketId;
+  const locationId = request.locationId;
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "catalog.read",
+    locationId ?? undefined,
+  );
+  if (!access.ok) return access;
+  if (locationId !== null) {
+    const inventoryAccess = await resolveCatalogAdministrationAccess(
+      deps,
+      request,
+      "inventory.read",
+      locationId,
+    );
+    if (!inventoryAccess.ok) return inventoryAccess;
+  }
   const target = await deps.db
     .prepare(
-      `SELECT m.id AS marketId, m.currency, fl.id AS locationId
+      `SELECT m.id AS marketId, m.name AS marketName, m.currency,
+              fl.id AS locationId, fl.name AS locationName
        FROM market m LEFT JOIN fulfillment_location fl
          ON fl.market_id=m.id AND fl.id=?
        WHERE m.id=?`,
     )
     .bind(locationId, marketId)
-    .first<{ marketId: string; currency: string; locationId: string | null }>();
+    .first<{
+      marketId: string;
+      marketName: string;
+      currency: string;
+      locationId: string | null;
+      locationName: string | null;
+    }>();
   if (!target || (locationId && target.locationId !== locationId)) {
     return {
       ok: false,
@@ -674,7 +738,7 @@ export async function getAdminProduct(
     )
     .all<SkuRow>();
 
-  const [details, media, audits, manage] = await Promise.all([
+  const [details, media, audits, manage, inventoryPosition] = await Promise.all([
     deps.db
       .prepare(
         "SELECT id AS detailId, label, value, sort_order AS sortOrder FROM product_detail WHERE product_id=? ORDER BY sort_order, id",
@@ -701,7 +765,16 @@ export async function getAdminProduct(
       .all<
         Omit<AdminProductDetail["recentAudit"][number], "occurredAt"> & { occurredAt: number }
       >(),
-    resolveCatalogAdministrationAccess(deps, request, "catalog.manage"),
+    resolveCatalogAdministrationAccess(deps, request, "catalog.manage", locationId ?? undefined),
+    locationId
+      ? deps.db
+          .prepare(
+            `SELECT on_hand AS onHandBase, reserved AS reservedBase, version
+             FROM inventory_balance WHERE inventory_pool_id=? AND location_id=?`,
+          )
+          .bind(product.inventoryPoolId, locationId)
+          .first<{ onHandBase: number; reservedBase: number; version: number }>()
+      : Promise.resolve(null),
   ]);
 
   return {
@@ -723,13 +796,26 @@ export async function getAdminProduct(
         baseUnitId: product.baseUnitId,
         baseUnitCode: product.baseUnitCode,
         baseUnitSymbol: product.baseUnitSymbol,
+        position:
+          locationId && inventoryPosition
+            ? {
+                locationId,
+                onHandBase: inventoryPosition.onHandBase,
+                reservedBase: inventoryPosition.reservedBase,
+                availableBase: inventoryPosition.onHandBase - inventoryPosition.reservedBase,
+                version: inventoryPosition.version,
+              }
+            : null,
       },
       pricingContext: {
         marketId: target.marketId,
+        marketName: target.marketName,
         locationId,
+        locationName: target.locationName,
         currency: target.currency,
       },
-      allowedActions: manage.ok ? ["UPDATE", "SET_STATUS"] : [],
+      viewMode: locationId === null ? "GLOBAL_CATALOG" : "LOCATION_OPERATIONS",
+      allowedActions: locationId === null && manage.ok ? ["UPDATE", "SET_STATUS"] : [],
       recentAudit: audits.results.map((audit) => ({
         ...audit,
         occurredAt: new Date(audit.occurredAt).toISOString(),

@@ -134,6 +134,112 @@ async function seedProduct(): Promise<{
 }
 
 describe("catalog administration", () => {
+  it("serves a location Product projection without granting global Product ownership", async () => {
+    const manager = await seedManager({ scope: "location" });
+    const seeded = await seedProduct();
+    const skuId = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sku
+          (id, product_id, code, name, sellable_unit_id, sell_quantity,
+           consumption_base_quantity, status, sort_order, version, created_at, updated_at)
+         VALUES (?, ?, ?, '250 g', ?, 250, 250, 'active', 0, 1, ?, ?)`,
+      ).bind(
+        skuId,
+        seeded.productId,
+        `LOCAL_${crypto.randomUUID().slice(0, 8)}`,
+        seeded.unitGramId,
+        now,
+        now,
+      ),
+      env.DB.prepare(
+        `INSERT INTO inventory_balance
+          (location_id, inventory_pool_id, on_hand, reserved, version)
+         VALUES ('location-cebu-central', ?, 150000, 5000, 1)`,
+      ).bind(seeded.poolId),
+    ]);
+
+    const page = await core.listAdminProducts({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+      limit: 100,
+    });
+    expect(page).toMatchObject({
+      ok: true,
+      value: {
+        viewMode: "LOCATION_OPERATIONS",
+        pricingContext: { locationName: "Central Cebu" },
+      },
+    });
+    if (!page.ok) return;
+    expect(page.value.items.find((item) => item.productId === seeded.productId)).toMatchObject({
+      inventoryPosition: {
+        onHandBase: 150000,
+        reservedBase: 5000,
+        availableBase: 145000,
+      },
+    });
+
+    const detail = await core.getAdminProduct({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId: seeded.productId,
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: {
+        viewMode: "LOCATION_OPERATIONS",
+        allowedActions: [],
+        inventoryPool: { position: { availableBase: 145000 } },
+      },
+    });
+
+    expect(
+      await core.setAdminSkuAvailability({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId,
+        locationId: "location-cebu-central",
+        availabilityStatus: "AVAILABLE",
+        sourcingMode: "STOCKED",
+        expectedVersion: 0,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await core.setAdminSkuPrice({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId,
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+        currency: "PHP",
+        amountMinor: 2_999,
+        validFrom: now,
+        expectedVersion: 0,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await core.createAdminProduct({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        categoryId: seeded.categoryId,
+        slug: `forbidden-${crypto.randomUUID().slice(0, 8)}`,
+        name: "Forbidden duplicate",
+        description: null,
+        customerDetails: [],
+        inventoryBaseUnitId: seeded.unitGramId,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+
   it("creates and updates a Product with ordered customer details and guarded replay", async () => {
     const manager = await seedManager();
     const seeded = await seedProduct();
@@ -213,6 +319,8 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId: created.value.productId,
+      marketId: "market-metro-cebu",
+      locationId: null,
     });
     expect(detail).toMatchObject({
       ok: true,
@@ -625,7 +733,9 @@ describe("catalog administration", () => {
     if (!page.ok) return;
     expect(page.value.pricingContext).toEqual({
       marketId: "market-metro-cebu",
+      marketName: "Metro Cebu",
       locationId: "location-cebu-central",
+      locationName: "Central Cebu",
       currency: "PHP",
     });
     expect(page.value.items).toEqual([]);
@@ -927,14 +1037,18 @@ describe("catalog administration", () => {
     expect(updated.value).toMatchObject({ merchandisingLabel: "Pack", version: 2 });
 
     const auditRow = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'CATALOG.SKU_PRICE_SET'",
-    ).first<{ count: number }>();
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'CATALOG.SKU_PRICE_SET' AND json_extract(details_json, '$.skuId')=?",
+    )
+      .bind(sku.value.skuId)
+      .first<{ count: number }>();
     expect(auditRow?.count ?? 0).toBe(3);
 
     const detail = await core.getAdminProduct({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId,
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
     });
     expect(detail.ok).toBe(true);
     if (!detail.ok) return;
@@ -1087,6 +1201,8 @@ describe("catalog administration", () => {
         requestId: crypto.randomUUID(),
         headers: { cookie: manager.cookie },
         productId,
+        marketId: "market-metro-cebu",
+        locationId: null,
       }),
     ).toMatchObject({ ok: true, value: { status: "inactive" } });
   });
@@ -1317,6 +1433,8 @@ describe("Product media administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId,
+      marketId: "market-metro-cebu",
+      locationId: null,
     });
     expect(detail).toMatchObject({
       ok: true,

@@ -81,7 +81,7 @@ export function ProductForm({
                     }
                   />
                   <span className="block text-xs font-normal text-[var(--fm-text-muted)]">
-                    Describe the Product without changing SKU, price, or inventory truth.
+                    Describe the Product without changing Variant, price, or inventory truth.
                   </span>
                 </label>
               </CardContent>

@@ -19,6 +19,10 @@ export function resolveAdminProductPricingTarget(
   if (selectedScope?.kind === "MARKET") {
     return { marketId: selectedScope.marketId, locationId: null };
   }
+  if (selectedScope?.kind === "GLOBAL") {
+    const option = scopes[0];
+    return option ? { marketId: option.marketId, locationId: null } : null;
+  }
   const option =
     scopes.find((candidate) => candidate.kind === "location") ??
     scopes.find((candidate) => candidate.kind === "market");

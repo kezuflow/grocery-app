@@ -142,9 +142,13 @@ body {
 
 .fm-admin {
   color-scheme: light;
-  --fm-admin-canvas: #f8fafc;
-  --fm-admin-surface: #ffffff;
-  --fm-admin-surface-muted: #f1f5f9;
+  --fm-admin-canvas: lab(96.9618% 0.344366 0.0810146);
+  --fm-admin-content: lab(100% 0 0);
+  --fm-admin-surface: lab(100% 0 0);
+  --fm-admin-surface-muted: lab(96.52% -0.0000298023 0.0000119209);
+  --fm-admin-sidebar-text: lab(42.3743% 0.000625849 -0.0228286);
+  --fm-admin-sidebar-active: lab(89.5304% 0.00107288 -0.0380397);
+  --fm-admin-sidebar-active-text: lab(0% 0 0);
   --fm-admin-accent: #f97316;
   --fm-admin-accent-strong: #c2410c;
   --fm-admin-accent-soft: #fff7ed;
@@ -153,21 +157,101 @@ body {
   --fm-admin-chart-3: #fb923c;
   --fm-admin-chart-4: #ea580c;
   --fm-admin-chart-5: #9a3412;
-  --fm-admin-sidebar-expanded: 252px;
-  --fm-admin-sidebar-collapsed: 72px;
+  --fm-admin-sidebar-expanded: 256px;
+  --fm-admin-sidebar-collapsed: 64px;
   --fm-background: var(--fm-admin-surface);
   --fm-surface-soft: var(--fm-admin-canvas);
   --fm-surface-muted: var(--fm-admin-surface-muted);
   --fm-primary-lime: var(--fm-admin-accent);
   --fm-primary-dark: #7c2d12;
-  --fm-focus: #c2410c;
-  --fm-hover: #fff7ed;
-  --fm-border: #e2e8f0;
+  --fm-text: lab(2.75381% 0 0);
+  --fm-text-muted: lab(48.496% 0 0);
+  --fm-focus: lab(66.128% -0.0000298023 0.0000119209);
+  --fm-hover: lab(96.52% -0.0000298023 0.0000119209);
+  --fm-border: lab(90.952% 0 -0.0000119209);
   --fm-shadow-card: 0 8px 24px rgb(15 23 42 / 6%);
   --fm-shadow-header: 0 1px 0 rgb(15 23 42 / 8%);
+  --fm-shadow-shell: 0 1px 3px rgb(15 23 42 / 10%), 0 1px 2px -1px rgb(15 23 42 / 10%);
   background: var(--fm-admin-canvas);
-  color: #0f172a;
+  color: var(--fm-text);
   font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+html.fm-admin-dark,
+html.fm-admin-dark .fm-admin {
+  color-scheme: dark;
+  --fm-admin-canvas: lab(7.78201% -0.0000149012 0);
+  --fm-admin-content: lab(2.75381% 0 0);
+  --fm-admin-surface: lab(7.78201% -0.0000149012 0);
+  --fm-admin-surface-muted: lab(15.204% 0 -0.00000596046);
+  --fm-admin-sidebar-text: lab(71.8359% 0.000983477 -0.0342488);
+  --fm-admin-sidebar-active: lab(18.0029% 0.000312924 -0.0114143);
+  --fm-admin-sidebar-active-text: lab(99.9994% 0.00113249 -0.0418425);
+  --fm-admin-accent: #f97316;
+  --fm-admin-accent-strong: #fb923c;
+  --fm-admin-accent-soft: #2b1b12;
+  --fm-background: var(--fm-admin-surface);
+  --fm-surface-soft: var(--fm-admin-canvas);
+  --fm-surface-muted: var(--fm-admin-surface-muted);
+  --fm-primary-lime: var(--fm-admin-accent);
+  --fm-primary-dark: #fdba74;
+  --fm-text: lab(98.26% 0 0);
+  --fm-text-muted: lab(66.128% -0.0000298023 0.0000119209);
+  --fm-focus: lab(48.496% 0 0);
+  --fm-hover: lab(15.204% 0 -0.00000596046);
+  --fm-border: lab(100% 0 0 / 10%);
+  --fm-danger-soft: #35191b;
+  --fm-warning-soft: #332713;
+  --fm-info-soft: #152936;
+  --fm-success-soft: #172b1d;
+  --fm-shadow-card: 0 8px 24px rgb(0 0 0 / 22%);
+  --fm-shadow-overlay: 0 18px 48px rgb(0 0 0 / 38%);
+  --fm-shadow-shell: 0 1px 3px rgb(0 0 0 / 35%), 0 1px 2px -1px rgb(0 0 0 / 45%);
+}
+
+html.fm-admin-dark .fm-admin {
+  color-scheme: dark;
+  background: var(--fm-admin-canvas);
+  color: var(--fm-text);
+}
+
+html.fm-admin-dark .fm-admin :where(.bg-white),
+html.fm-admin-dark .fm-admin :where([class~="bg-white/90"], [class~="bg-white/95"]) {
+  background-color: var(--fm-admin-surface);
+}
+
+html.fm-admin-dark :where([data-slot="popover-content"], [data-slot="select-content"]) {
+  border-color: var(--fm-border);
+  background-color: var(--fm-admin-surface);
+  color: var(--fm-text);
+}
+
+.fm-admin-sidebar-tooltip {
+  background-color: lab(2.75381% 0 0);
+  color: lab(98.26% 0 0);
+}
+
+.fm-admin-sidebar-tooltip svg {
+  background-color: lab(2.75381% 0 0);
+  fill: lab(2.75381% 0 0);
+}
+
+html.fm-admin-dark .fm-admin-sidebar-tooltip {
+  background-color: lab(98.26% 0 0);
+  color: lab(2.75381% 0 0);
+}
+
+html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
+  background-color: lab(98.26% 0 0);
+  fill: lab(98.26% 0 0);
+}
+
+.fm-admin-sidebar-scroll {
+  scrollbar-width: none;
+}
+
+.fm-admin-sidebar-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 a {

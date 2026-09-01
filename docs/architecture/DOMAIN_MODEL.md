@@ -131,9 +131,11 @@ A global, ordered catalog classification used for marketplace discovery and prod
 
 A global catalog concept such as Red Onion or Eggs. Products are not duplicated per location. They contain customer-facing identity, categorization, and descriptive content.
 
+Admin exposes the same Product in two projections: Global owns identity, Category, media, and SellableVariant configuration; an operational-location projection owns no duplicate Product and focuses on that location's resolved price, selling status, sourcing mode, and shared inventory position. The current Admin selector presents Global and Central Cebu while keeping the internal Market hierarchy available to authorization and commerce policy.
+
 ### SKU / SellableVariant
 
-A database-configurable fixed purchasable variant such as 250 g, 1 kg, 6 pieces, or 12 pieces. Sizes are operational data managed through Catalog commands and never hard-coded application branches. A SKU defines:
+A database-configurable fixed purchasable variant such as 250 g, 1 kg, 6 pieces, or 12 pieces. Normal Admin copy calls these **Sell variants** or **Variants**; SKU remains the stable internal and integration identity. Sizes are operational data managed through Catalog commands and never hard-coded application branches. A SKU defines:
 
 - product and stable SKU identity;
 - display/packaging label, integer sell quantity, and controlled sell unit;
@@ -149,13 +151,15 @@ The canonical integer unit used for physical stock and demand accounting for a P
 
 Catalog owns a controlled, data-driven unit registry. A unit has identifier, code, display name, dimension, exact conversion to its dimension's canonical base unit, and active status. Initial controlled sell-unit codes include `G`, `KG`, `ML`, `L`, and `PC`. Conversions use exact integer/rational factors and may occur only within the same dimension; kilograms convert to grams, liters to milliliters, and pieces remain count-based.
 
-Packaging words such as pack, bunch, tray, head, or bottle are SKU-specific merchandising labels, not global units with universal conversion. A 12-piece egg tray records `12 PIECE` consumption on that SKU; another Product's pack may consume a different base quantity. The persisted SKU conversion is the authority used by Cart, Inventory, Quote, and Order snapshots.
+For controlled standard units, Admin derives exact base consumption from integer sell quantity and the unit's rational conversion; Core verifies the same derivation. Packaging words such as pack, bunch, tray, head, or bottle are SKU-specific merchandising labels, not global units with universal conversion. A 12-piece egg tray records `12 PIECE` consumption on that SKU; another Product's pack may consume a different Product-specific base quantity. The persisted SKU conversion is the authority used by Cart, Inventory, Quote, and Order snapshots.
 
 The current release supports fixed variants only. Variable-weight settlement, post-pick repricing, capture adjustment, and weight-driven supplemental charge/refund flows are explicitly out of scope.
 
 ### LocationAvailability
 
 The relationship that declares whether a global SKU can be sold at a location under the currently resolved FulfillmentMode and how its inventory is sourced there. It may also hold safety-buffer and operational configuration. `INSTANT` presentation is sellable only when the approved current-availability policy can fulfill the SKU's exact base-unit consumption; ordinary replenishment is not inserted into checkout to manufacture availability.
+
+Admin labels this configured relationship **Selling status**. It is distinct from **Stock status**, which is derived from the location's shared Product inventory position and the Variant's exact base consumption. A Variant may be configured to sell while temporarily lacking stock, or be stopped from selling while physical stock remains.
 
 ### Price
 

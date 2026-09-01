@@ -238,6 +238,42 @@ describe("scoped admin context", () => {
     );
   });
 
+  it("publishes location Products only when both Catalog and Inventory reads are held", async () => {
+    const staff = await staffCookie({
+      permissionCodes: ["catalog.read", "inventory.read"],
+      scope: { kind: "location", locationId: "location-cebu-central" },
+    });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+    expect(context.value.navigation).toContainEqual({
+      code: "location-products",
+      label: "Products",
+      href: "/admin/catalog/products",
+      section: "operations",
+      scopeKinds: ["LOCATION"],
+      parentCode: null,
+      kind: "workspace",
+    });
+
+    const catalogOnly = await staffCookie({
+      permissionCodes: ["catalog.read"],
+      scope: { kind: "location", locationId: "location-cebu-central" },
+    });
+    const catalogOnlyContext = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: catalogOnly.cookie },
+    });
+    expect(catalogOnlyContext.ok).toBe(true);
+    if (!catalogOnlyContext.ok) return;
+    expect(catalogOnlyContext.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "location-products" }),
+    );
+  });
+
   it("nests Memberships under Customers without granting customer-record destinations", async () => {
     const staff = await staffCookie({
       permissionCodes: ["memberships.read"],
@@ -291,7 +327,7 @@ describe("scoped admin context", () => {
         marketCode: "METRO_CEBU",
         locationId: "location-cebu-central",
         locationCode: "CEBU_CENTRAL",
-        locationName: "Cebu Central",
+        locationName: "Central Cebu",
         currency: "PHP",
         timezone: "Asia/Manila",
       },

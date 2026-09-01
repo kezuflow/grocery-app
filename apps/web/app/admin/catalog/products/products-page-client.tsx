@@ -63,7 +63,10 @@ export function ProductsPageClient({
   );
   const canManage =
     adminContext.state.phase === "ready" &&
+    adminContext.state.selectedScope?.kind === "GLOBAL" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
+  const locationOperations =
+    adminContext.state.phase === "ready" && adminContext.state.selectedScope?.kind === "LOCATION";
 
   useEffect(() => {
     if (!pricingTarget) return;
@@ -180,7 +183,11 @@ export function ProductsPageClient({
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Manage global Product identity, customer details, variants, media, pricing, and availability."
+        description={
+          locationOperations
+            ? "Manage Central Cebu prices, selling status, sourcing, and shared Product inventory position."
+            : "Manage global Product identity, customer details, sell variants, media, and market pricing."
+        }
         action={
           canManage ? (
             <Button asChild>
@@ -191,7 +198,9 @@ export function ProductsPageClient({
           ) : null
         }
       />
-      <WorkspaceNavigation parentCode="products" label="Product administration" />
+      {!locationOperations ? (
+        <WorkspaceNavigation parentCode="products" label="Product administration" />
+      ) : null}
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
       {payload && !payload.ok ? (
         <Alert variant="destructive">

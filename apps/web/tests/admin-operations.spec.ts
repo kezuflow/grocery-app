@@ -45,11 +45,11 @@ test("a signed-in account without operational capability sees the denied state",
   await deniedAdminPage.goto("/admin/procurement");
   const scopeControl = deniedAdminPage.getByRole("combobox", { name: "Active admin scope" });
   if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
-    await scopeControl.selectOption({ label: "Cebu Central" });
+    await scopeControl.selectOption({ label: "Central Cebu" });
   } else {
     await scopeControl.click();
     await deniedAdminPage
-      .getByRole("option", { name: "Cebu Central" })
+      .getByRole("option", { name: "Central Cebu" })
       .evaluate((option) => (option as HTMLElement).click());
   }
   await expect(deniedAdminPage.getByRole("alert")).toContainText(
@@ -110,7 +110,7 @@ test("exception workspace renders typed source fields and unavailable actions", 
         marketCode: "CEBU",
         locationId: "location-cebu-central",
         locationCode: "CENTRAL",
-        locationName: "Cebu Central",
+        locationName: "Central Cebu",
         currency: "PHP",
         timezone: "Asia/Manila",
       },

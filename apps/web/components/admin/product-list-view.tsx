@@ -14,14 +14,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 
 type ProductListItem = AdminProductPage["items"][number];
 
-type ProductColumnKey = "category" | "price" | "sku" | "availability" | "status";
+type ProductColumnKey = "category" | "price" | "variant" | "selling" | "inventory" | "status";
 
 const PRODUCT_COLUMN_OPTIONS: ReadonlyArray<{ key: ProductColumnKey; label: string }> = [
   { key: "category", label: "Category" },
   { key: "price", label: "Resolved price" },
-  { key: "sku", label: "SKU readiness" },
-  { key: "availability", label: "Availability" },
-  { key: "status", label: "Status" },
+  { key: "variant", label: "Variant readiness" },
+  { key: "selling", label: "Selling status" },
+  { key: "inventory", label: "Shared inventory" },
+  { key: "status", label: "Catalog status" },
 ];
 
 export type BulkProductSelection = Pick<ProductListItem, "productId" | "name" | "version"> & {
@@ -86,6 +87,12 @@ export function ProductListView({
   const allSelected =
     selectableProducts.length > 0 && selectedIds.size === selectableProducts.length;
   const someSelected = selectedIds.size > 0 && !allSelected;
+  const locationOperations = page.viewMode === "LOCATION_OPERATIONS";
+  const columnOptions = locationOperations
+    ? PRODUCT_COLUMN_OPTIONS
+    : PRODUCT_COLUMN_OPTIONS.filter(
+        (column) => column.key !== "selling" && column.key !== "inventory",
+      );
 
   useEffect(() => {
     const currentSelectable = new Set(selectableProducts.map((product) => product.productId));
@@ -153,7 +160,9 @@ export function ProductListView({
     ["Inactive products", page.readiness.inactiveProducts],
     ["Missing primary media", page.readiness.missingPrimaryMedia],
     ["Missing prices", page.readiness.missingPrices],
-    ["Unavailable SKUs", page.readiness.unavailableSkus],
+    page.viewMode === "LOCATION_OPERATIONS"
+      ? (["Variants not selling", page.readiness.unavailableSkus] as const)
+      : (["Location selling status", "Choose Central Cebu"] as const),
   ] as const;
   return (
     <div className="space-y-4">
@@ -238,7 +247,7 @@ export function ProductListView({
                   Show columns
                 </p>
                 <div className="grid gap-0.5">
-                  {PRODUCT_COLUMN_OPTIONS.map((column) => (
+                  {columnOptions.map((column) => (
                     <label
                       key={column.key}
                       className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-[var(--fm-hover)]"
@@ -314,9 +323,14 @@ export function ProductListView({
                 <TableHead>Product</TableHead>
                 {visibleColumns.has("category") ? <TableHead>Category</TableHead> : null}
                 {visibleColumns.has("price") ? <TableHead>Resolved price</TableHead> : null}
-                {visibleColumns.has("sku") ? <TableHead>SKU readiness</TableHead> : null}
-                {visibleColumns.has("availability") ? <TableHead>Availability</TableHead> : null}
-                {visibleColumns.has("status") ? <TableHead>Status</TableHead> : null}
+                {visibleColumns.has("variant") ? <TableHead>Variant readiness</TableHead> : null}
+                {locationOperations && visibleColumns.has("selling") ? (
+                  <TableHead>Selling status</TableHead>
+                ) : null}
+                {locationOperations && visibleColumns.has("inventory") ? (
+                  <TableHead>Shared inventory</TableHead>
+                ) : null}
+                {visibleColumns.has("status") ? <TableHead>Catalog status</TableHead> : null}
                 <TableHead>
                   <span className="sr-only">Open</span>
                 </TableHead>
@@ -348,7 +362,7 @@ export function ProductListView({
                           className="size-11 rounded-md border border-[var(--fm-border)] object-cover"
                           height={44}
                           loading="lazy"
-                          src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}`}
+                          src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}${page.pricingContext.locationId ? `&locationId=${encodeURIComponent(page.pricingContext.locationId)}` : ""}`}
                           width={44}
                         />
                       ) : (
@@ -378,21 +392,38 @@ export function ProductListView({
                       </span>
                     </TableCell>
                   ) : null}
-                  {visibleColumns.has("sku") ? (
+                  {visibleColumns.has("variant") ? (
                     <TableCell>
                       <span className="font-medium">
                         {product.pricedSkuCount} / {product.activeSkuCount}
                       </span>
                       <span className="block text-xs text-[var(--fm-text-muted)]">
-                        active SKUs priced
+                        active variants priced
                       </span>
                     </TableCell>
                   ) : null}
-                  {visibleColumns.has("availability") ? (
+                  {locationOperations && visibleColumns.has("selling") ? (
                     <TableCell>
                       <span className="font-medium">
-                        {product.availableSkuCount} / {product.activeSkuCount} available
+                        {product.availableSkuCount} / {product.activeSkuCount} selling
                       </span>
+                    </TableCell>
+                  ) : null}
+                  {locationOperations && visibleColumns.has("inventory") ? (
+                    <TableCell>
+                      {product.inventoryPosition ? (
+                        <>
+                          <span className="font-medium">
+                            {product.inventoryPosition.availableBase.toLocaleString()} available
+                          </span>
+                          <span className="block text-xs text-[var(--fm-text-muted)]">
+                            {product.inventoryPosition.onHandBase.toLocaleString()} on hand ·{" "}
+                            {product.inventoryPosition.reservedBase.toLocaleString()} reserved
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[var(--fm-text-muted)]">No stock recorded</span>
+                      )}
                     </TableCell>
                   ) : null}
                   {visibleColumns.has("status") ? (

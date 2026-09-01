@@ -27,16 +27,16 @@ export type CatalogAdministrationAccess = {
 type CapabilityPair = "catalog.read" | "catalog.manage" | "inventory.read";
 
 /**
- * Catalog administration is global: callers need the named capability plus a
- * global scope. Inventory reads are operational-location scoped instead — the
- * caller needs `inventory.read` and global scope, the location's market, or
- * that exact location.
+ * Catalog identity administration is global. When an operational location is
+ * supplied, Product projection reads and location-owned price/availability
+ * commands may instead be authorized by global, parent-market, or exact
+ * location scope. Inventory reads use the same operational scope rule.
  */
 export async function resolveCatalogAdministrationAccess(
   deps: CatalogAdministrationDeps,
   request: AuthenticatedRequest,
   capability: CapabilityPair,
-  inventoryLocationId?: string,
+  operationalLocationId?: string,
 ): Promise<RpcResult<CatalogAdministrationAccess>> {
   const database = drizzle(deps.db, { schema: iamSchema });
   const context = await applicationContextForRequest(
@@ -59,14 +59,14 @@ export async function resolveCatalogAdministrationAccess(
   const holdsCapability = context.value.capabilities.includes(capability);
   const globalScope = context.value.scopes.some((scope) => scope.kind === "global");
   let scopeAuthorized = globalScope;
-  if (capability === "inventory.read" && inventoryLocationId !== undefined) {
+  if (operationalLocationId !== undefined) {
     const marketRow = await deps.db
       .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
-      .bind(inventoryLocationId)
+      .bind(operationalLocationId)
       .first<{ market_id: string }>();
     scopeAuthorized = hasOperationalScope(
       context.value.scopes,
-      inventoryLocationId,
+      operationalLocationId,
       marketRow?.market_id,
     );
   }
@@ -75,7 +75,10 @@ export async function resolveCatalogAdministrationAccess(
       ok: false,
       error: {
         code: "FORBIDDEN",
-        message: `Global-scope ${capability} is required`,
+        message:
+          operationalLocationId === undefined
+            ? `Global-scope ${capability} is required`
+            : `${capability} is required for the selected operational location`,
         requestId: request.requestId,
       },
     };

@@ -144,7 +144,7 @@ export default function CatalogPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Catalog"
-        description="Global products, categories, units, and SKU definitions. Prices are versioned; availability is location-specific."
+        description="Global Products, Categories, controlled units, and Sell variant definitions. Prices are versioned; selling status is location-specific."
       />
 
       {state.phase === "loading" ? (
@@ -265,7 +265,7 @@ export default function CatalogPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>SKUs</TableHead>
+                    <TableHead>Variants</TableHead>
                     <TableHead>
                       <span className="sr-only">Detail link</span>
                     </TableHead>

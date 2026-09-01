@@ -68,16 +68,16 @@ export default function NewProductPage() {
     <div className="mx-auto max-w-[1280px] space-y-5">
       <PageHeader
         title="Add product"
-        description="Create the global Product identity and shared inventory pool before attaching media, SKUs, prices, and availability."
+        description="Create the global Product identity and shared inventory pool before attaching media, sell variants, prices, and selling status."
       />
       <StepIndicator
         currentStep={1}
-        steps={["Product identity", "Media and variants", "Pricing and availability"]}
+        steps={["Product identity", "Media and variants", "Pricing and selling"]}
       />
       <CommandBanner
         tone="info"
         title="Creation sequence"
-        message="The initial legal command creates Product identity and its inventory pool. Media, SKU, price, and availability commands become available on the resulting Product detail workspace."
+        message="The initial legal command creates Product identity and its inventory pool. Media, variant, price, and selling-status commands become available on the resulting Product detail workspace."
       />
       {error ? (
         <Alert variant="destructive">

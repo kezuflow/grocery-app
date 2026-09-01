@@ -201,7 +201,7 @@ describe("admin navigation mapping", () => {
     });
   });
 
-  it("shows only Core-declared location navigation for Cebu Central", () => {
+  it("shows only Core-declared location navigation for Central Cebu", () => {
     const items = [
       overview,
       {
@@ -250,6 +250,15 @@ describe("admin navigation mapping", () => {
         kind: "workspace" as const,
       },
       {
+        code: "location-products",
+        label: "Products",
+        href: "/admin/catalog/products",
+        section: "operations" as const,
+        scopeKinds: ["LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
         code: "inventory",
         label: "Inventory",
         href: "/admin/inventory",
@@ -267,7 +276,7 @@ describe("admin navigation mapping", () => {
         marketId: "market-metro-cebu",
         locationId: "location-cebu-central",
       }).map((item) => item.code),
-    ).toEqual(["overview", "orders", "inventory", "audit"]);
+    ).toEqual(["overview", "orders", "location-products", "inventory", "audit"]);
   });
 
   it("groups Memberships inside Customers instead of creating a top-level workspace", () => {

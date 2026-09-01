@@ -34,6 +34,7 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "customers-privacy",
   "memberships",
   "promotions",
+  "location-products",
   "inventory",
   "delivery",
   "payments",
@@ -69,6 +70,7 @@ export const ADMIN_SECTION_LABELS: Readonly<Record<AdminNavigationSectionCode, s
 const ICONS: Partial<Record<string, LucideIcon>> = {
   overview: LayoutDashboard,
   products: Boxes,
+  "location-products": Boxes,
   orders: ClipboardList,
   inventory: Warehouse,
   delivery: Truck,

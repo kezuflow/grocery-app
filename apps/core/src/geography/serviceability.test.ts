@@ -63,7 +63,7 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
       },
       {
         code: "CEBU_CENTRAL",
-        name: "Cebu Central",
+        name: "Central Cebu",
         type: "FULFILLMENT_CENTER",
         priority: 1,
         capabilities: ["PICKING", "PACKING", "DISPATCH"],

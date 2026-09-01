@@ -24,7 +24,7 @@ Build these only once they appear across multiple workspaces:
 - `Timeline`: ordered domain/audit/delivery events.
 - `ExceptionQueue`: severity, age, owner, reason, legal resolution actions.
 - `ConfirmCommandDialog`: consequence, target, reason, idempotent submit, result state.
-- `ScopeSelector`: explicit market/location context with permission-aware options.
+- `ScopeSelector`: explicit Global/operational-location context with permission-aware options; the internal Market layer is not a current Admin selector choice.
 - `DetailSection` / `DetailField`: consistent read-only domain presentation.
 - `EditorLayout`: sticky summary/action rail plus grouped fields for product and configuration authoring.
 - `DetailWorkspace`: resource header, summary strip, legal actions, tabs/sections, timeline, and audit context.

@@ -52,7 +52,18 @@ function singleAssignedScope(
   if (context.scopes.length !== 1) return null;
   const assigned = context.scopes[0]!;
   if (assigned.kind === "global") return { kind: "GLOBAL" };
-  if (assigned.kind === "market") return { kind: "MARKET", marketId: assigned.marketId };
+  if (assigned.kind === "market") {
+    const locations = options.filter(
+      (option) => option.kind === "location" && option.marketId === assigned.marketId,
+    );
+    return locations.length === 1 && locations[0]?.kind === "location"
+      ? {
+          kind: "LOCATION",
+          marketId: locations[0].marketId,
+          locationId: locations[0].locationId,
+        }
+      : null;
+  }
   const location = options.find(
     (option) => option.kind === "location" && option.locationId === assigned.locationId,
   );

@@ -63,8 +63,7 @@ test("a catalog read-only principal sees no Product or Category mutation control
   ).toBeVisible();
   await expect(catalogReadOnlyPage.getByRole("link", { name: "Add product" })).toHaveCount(0);
   await catalogReadOnlyPage.getByRole("link", { name: "View" }).first().click();
-  await expect(catalogReadOnlyPage.getByRole("button", { name: "Add SKU" })).toHaveCount(0);
-  await expect(catalogReadOnlyPage.getByLabel("Catalog command target")).toHaveCount(0);
+  await expect(catalogReadOnlyPage.getByRole("button", { name: "Add variant" })).toHaveCount(0);
 
   await catalogReadOnlyPage.goto("/admin/catalog/categories");
   await expect(catalogReadOnlyPage.getByRole("link", { name: "Add category" })).toHaveCount(0);
@@ -88,24 +87,37 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
     adminPage.getByRole("heading", { level: 1, name: "E2E authored product" }),
   ).toBeVisible();
   await expect(adminPage.getByText("Keep refrigerated.")).toBeVisible();
-  await adminPage.getByLabel("SKU code").fill(`E2E_${suffix.slice(0, 8)}`);
-  await adminPage.getByLabel("SKU name").fill("250 g");
+  await adminPage.getByLabel("Variant code").fill(`E2E_${suffix.slice(0, 8)}`);
+  await adminPage.getByLabel("Variant name").fill("250 g");
   await adminPage.getByLabel("Sellable unit").selectOption("unit-gram");
   await adminPage.getByLabel("Sell quantity").fill("250");
-  await adminPage.getByLabel("Base consumption").fill("250");
-  await adminPage.getByRole("button", { name: "Add SKU" }).click();
+  await adminPage.getByRole("button", { name: "Add variant" }).click();
   await expect(adminPage.getByText("Applied.", { exact: true })).toBeVisible();
-  await adminPage.getByLabel("Catalog command target").selectOption({
-    label: "Cebu Central · location prices and availability",
-  });
   await adminPage.getByLabel(/New price for E2E_/).fill("29.99");
   await adminPage.getByRole("button", { name: "Review price" }).click();
-  await expect(adminPage.getByRole("alertdialog")).toContainText("Cebu Central");
+  await expect(adminPage.getByRole("alertdialog")).toContainText("Global catalog");
   await expect(adminPage.getByRole("alertdialog")).toContainText("2999 minor units");
   await adminPage.getByRole("button", { name: "Keep unchanged" }).click();
-  await adminPage.getByRole("button", { name: "Review available" }).click();
+  const scopeControl = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
+    await scopeControl.selectOption({ label: "Central Cebu" });
+  } else {
+    await scopeControl.click();
+    await adminPage
+      .getByRole("option", { name: "Central Cebu" })
+      .evaluate((option) => (option as HTMLElement).click());
+  }
+  await adminPage.getByRole("button", { name: "Review start selling" }).click();
   await expect(adminPage.getByRole("alertdialog")).toContainText("STOCKED sourcing");
   await adminPage.getByRole("button", { name: "Keep unchanged" }).click();
+  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
+    await scopeControl.selectOption({ label: "Global" });
+  } else {
+    await scopeControl.click();
+    await adminPage
+      .getByRole("option", { name: "Global" })
+      .evaluate((option) => (option as HTMLElement).click());
+  }
   await adminPage.getByRole("link", { name: "Edit product" }).click();
   await adminPage.getByLabel("Product name").fill("E2E updated product");
   await adminPage.getByRole("button", { name: "Save product" }).click();

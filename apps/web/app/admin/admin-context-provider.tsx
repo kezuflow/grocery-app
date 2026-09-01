@@ -52,11 +52,13 @@ export function adminSelectableScopes(
     ? [{ kind: "GLOBAL" }]
     : [];
   for (const option of options) {
-    selections.push(
-      option.kind === "market"
-        ? { kind: "MARKET", marketId: option.marketId }
-        : { kind: "LOCATION", marketId: option.marketId, locationId: option.locationId },
-    );
+    if (option.kind === "location") {
+      selections.push({
+        kind: "LOCATION",
+        marketId: option.marketId,
+        locationId: option.locationId,
+      });
+    }
   }
   return selections.filter(
     (scope, index) => selections.findIndex((candidate) => sameScope(candidate, scope)) === index,

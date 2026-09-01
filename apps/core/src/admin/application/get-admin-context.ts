@@ -35,6 +35,7 @@ const WORKSPACES: ReadonlyArray<{
   parentCode: string | null;
   kind: AdminNavigationItem["kind"];
   capabilities: ReadonlyArray<Capability>;
+  capabilityMode?: "ANY" | "ALL";
 }> = [
   {
     code: "overview",
@@ -125,6 +126,16 @@ const WORKSPACES: ReadonlyArray<{
     parentCode: null,
     kind: "workspace",
     capabilities: ["inventory.read", "inventory.adjust"],
+  },
+  {
+    code: "location-products",
+    label: "Products",
+    href: "/admin/catalog/products",
+    section: "operations",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["catalog.read", "inventory.read"],
+    capabilityMode: "ALL",
   },
   {
     code: "delivery",
@@ -299,7 +310,10 @@ const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "audit",
 ]);
 
-const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set(["inventory"]);
+const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "location-products",
+  "inventory",
+]);
 
 const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "delivery",
@@ -320,7 +334,9 @@ export function adminNavigationFor(
   return WORKSPACES.filter(
     (workspace) =>
       workspace.capabilities.length === 0 ||
-      workspace.capabilities.some((capability) => capabilities.includes(capability)),
+      (workspace.capabilityMode === "ALL"
+        ? workspace.capabilities.every((capability) => capabilities.includes(capability))
+        : workspace.capabilities.some((capability) => capabilities.includes(capability))),
   ).map(({ code, label, href, section, parentCode, kind }) => ({
     code,
     label,

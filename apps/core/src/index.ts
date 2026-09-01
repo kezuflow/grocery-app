@@ -665,7 +665,7 @@ const catalogProductUpdateSchema = catalogProductCreateSchema
 const catalogProductDetailSchema = authenticatedRequestSchema.extend({
   productId: validationSchema.string().trim().min(1).max(200),
   marketId: validationSchema.string().trim().min(1).max(200).optional(),
-  locationId: validationSchema.string().trim().min(1).max(200).optional(),
+  locationId: validationSchema.string().trim().min(1).max(200).nullable().optional(),
 });
 
 const catalogProductStatusSchema = authenticatedRequestSchema.extend({
@@ -705,6 +705,7 @@ const catalogProductMediaRemoveSchema = catalogProductMediaMetadataSchema.pick({
 const catalogProductMediaContentSchema = authenticatedRequestSchema.extend({
   productId: validationSchema.string().trim().min(1).max(200),
   mediaId: validationSchema.string().trim().min(1).max(200),
+  locationId: validationSchema.string().trim().min(1).max(200).optional(),
 });
 
 const catalogSkuCreateSchema = authenticatedRequestSchema.extend({

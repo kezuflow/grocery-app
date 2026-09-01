@@ -10,9 +10,9 @@ import { setD1SpanAttributes, traceOperation } from "../../observability";
 import type { AdminContextDeps } from "./get-admin-context";
 
 /**
- * Permitted scope-selector options for the active Staff principal: only the
- * active markets/locations reachable by global, market, or location
- * assignment. Polygon geometry and location-ranking rules are never exposed.
+ * Permitted scope-selector options for the active Staff principal. The Admin
+ * experience deliberately exposes operational locations, not internal market
+ * hierarchy; market assignments still expand to their reachable locations.
  */
 export async function listAdminScopes(
   deps: AdminContextDeps,
@@ -86,19 +86,6 @@ export async function listAdminScopes(
 
   const marketById = new Map(markets.results.map((market) => [market.id, market]));
   const options: AdminScopeOptionView[] = [];
-  for (const market of markets.results) {
-    const reachable = isGlobal || assignedMarketIds.has(market.id);
-    if (reachable) {
-      options.push({
-        kind: "market",
-        marketId: market.id,
-        marketCode: market.code,
-        marketName: market.name,
-        currency: market.currency,
-        timezone: market.timezone,
-      });
-    }
-  }
   for (const location of locations.results) {
     const market = marketById.get(location.market_id);
     if (!market) continue;

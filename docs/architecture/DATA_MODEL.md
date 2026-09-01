@@ -131,6 +131,8 @@ The launch implementation adds normalized detail and SKU-level availability stor
 
 `inventory_pools` makes shared physical inventory explicit where multiple SKUs consume one product pool. `sourcing_mode` is constrained to `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED`; it never encodes `INSTANT`/`SCHEDULED`. Packaging labels have no global conversion row: each SKU records its exact `inventory_quantity_base`. Core verifies the sell-unit conversion is dimension-compatible but uses the persisted SKU consumption for inventory, Quote, and Order effects.
 
+The Admin location Product read model joins, but never duplicates, `products`, `skus`, effective `prices`, `sku_location_availability`, and the single `inventory_balance` for `(inventory_pool_id, location_id)`. Selling status comes from `sku_location_availability`; stock status is derived separately from `on_hand - reserved` compared with each Variant's `inventory_quantity_base`. Migration `0051_central_cebu_admin_scope.sql` changes only the current location's display name to `Central Cebu`; stable IDs/codes and the parent Market remain unchanged.
+
 ## Delivery Pricing, Scheduled Cycles, and Capacity
 
 - `delivery_fee_configurations(id PK, market_id FK, location_id FK, currency, minimum_delivery_fee_minor, per_kilometer_rate_minor, status ACTIVE|RETIRED, version, effective_from, effective_to NULL, created_at, updated_at, UNIQUE(location_id, version))`

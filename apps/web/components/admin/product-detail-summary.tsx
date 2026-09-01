@@ -25,9 +25,9 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
         ? money(minimum, product.pricingContext.currency)
         : `${money(minimum, product.pricingContext.currency)}–${money(maximum, product.pricingContext.currency)}`;
   const primary = product.media.find((media) => media.isPrimary) ?? product.media[0] ?? null;
-  const pricingTarget = product.pricingContext.locationId
-    ? `Location · ${product.pricingContext.locationId}`
-    : `Market · ${product.pricingContext.marketId}`;
+  const pricingTarget = product.pricingContext.locationName
+    ? `Location · ${product.pricingContext.locationName}`
+    : "Global catalog · market pricing";
 
   return (
     <div className="space-y-4">
@@ -41,7 +41,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
               alt={primary.altText}
               className="aspect-square w-full rounded-xl border border-[var(--fm-border)] bg-white object-cover"
               height={640}
-              src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}`}
+              src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}${product.pricingContext.locationId ? `&locationId=${encodeURIComponent(product.pricingContext.locationId)}` : ""}`}
               width={640}
             />
           ) : (
@@ -64,7 +64,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
                   height={96}
                   key={media.mediaId}
                   loading="lazy"
-                  src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(media.mediaId)}/content?v=${media.version}`}
+                  src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(media.mediaId)}/content?v=${media.version}${product.pricingContext.locationId ? `&locationId=${encodeURIComponent(product.pricingContext.locationId)}` : ""}`}
                   width={96}
                 />
               ))}
@@ -163,22 +163,33 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
           className="xl:col-span-1"
           label="Resolved price"
           value={priceValue}
-          unavailableReason="No active SKU has a valid price in this context."
+          unavailableReason="No active variant has a valid price in this context."
         />
         <MetricCard
           className="xl:col-span-1"
-          label="Active SKUs"
+          label="Active variants"
           value={String(activeSkus.length)}
         />
         <MetricCard
           className="xl:col-span-1"
-          label="Priced SKUs"
+          label="Priced variants"
           value={`${priced.length} / ${activeSkus.length}`}
         />
         <MetricCard
           className="xl:col-span-1"
-          label="Available SKUs"
-          value={`${available.length} / ${activeSkus.length}`}
+          label={
+            product.viewMode === "LOCATION_OPERATIONS"
+              ? "Shared inventory available"
+              : "Selling variants"
+          }
+          value={
+            product.inventoryPool.position
+              ? `${product.inventoryPool.position.availableBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
+              : product.viewMode === "LOCATION_OPERATIONS"
+                ? null
+                : `${available.length} / ${activeSkus.length}`
+          }
+          unavailableReason="No stock balance has been recorded for this Product at Central Cebu."
         />
       </AdminDashboardGrid>
     </div>

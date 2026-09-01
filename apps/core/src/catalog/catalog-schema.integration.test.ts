@@ -119,7 +119,7 @@ describe("catalog detail and SKU-availability schema", () => {
     );
   });
 
-  it("marks the launch SKU available for Cebu Central without product-level dependence", async () => {
+  it("marks the launch SKU available for Central Cebu without product-level dependence", async () => {
     const availability = await env.DB.prepare(
       "SELECT availability_status FROM sku_location_availability WHERE sku_id=? AND location_id='location-cebu-central'",
     )

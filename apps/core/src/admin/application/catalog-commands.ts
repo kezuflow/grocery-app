@@ -1203,7 +1203,12 @@ export async function setAdminSkuAvailability(
   deps: CatalogAdministrationDeps,
   request: AdminSkuAvailabilityRequest,
 ): Promise<RpcResult<AdminCatalogSkuSummary>> {
-  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "catalog.manage",
+    request.locationId,
+  );
   if (!access.ok) return access;
 
   const sku = await deps.db
@@ -1326,7 +1331,12 @@ export async function setAdminSkuPrice(
   deps: CatalogAdministrationDeps,
   request: AdminSkuPriceRequest,
 ): Promise<RpcResult<AdminCatalogSkuSummary>> {
-  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "catalog.manage",
+    request.locationId ?? undefined,
+  );
   if (!access.ok) return access;
 
   const currency = request.currency.trim().toUpperCase();

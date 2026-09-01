@@ -70,3 +70,5 @@ Email verification and password-reset delivery use the Core auth-email port and 
 `0040_analytics_dimension_safety.sql` preserves the original refund and inventory-adjustment definitions as `SUPERSEDED`, publishes their dimension-safe version 2 definitions, and keeps one current `APPROVED` definition per metric code.
 
 `0041_admin_catalog_authoring.sql` adds the guarded Category hierarchy and optimistic version, creates hierarchy/status indexes, and introduces the canonical Product media attachment metadata with one active primary image per Product. Media bytes remain Core-owned in R2; this table is the authoritative attachment record.
+
+`0051_central_cebu_admin_scope.sql` renames the current launch fulfillment location to the user-facing `Central Cebu` label. Stable location and market identifiers remain unchanged; Admin hides the internal market layer from its scope selector while Core retains the multi-market geography model.

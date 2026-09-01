@@ -22,7 +22,7 @@ const scopes = [
     marketCode: "CEBU",
     locationId: "cebu-central",
     locationCode: "CEBU_CENTRAL",
-    locationName: "Cebu Central",
+    locationName: "Central Cebu",
     currency: "PHP",
     timezone: "Asia/Manila",
   },
@@ -41,10 +41,10 @@ describe("Admin Product pricing target", () => {
     ).toEqual({ marketId: "market-cebu", locationId: null });
   });
 
-  it("uses the first location as the pricing view for Global catalog administration", () => {
+  it("uses the first reachable market without silently selecting its location for Global", () => {
     expect(resolveAdminProductPricingTarget({ kind: "GLOBAL" }, scopes)).toEqual({
       marketId: "market-cebu",
-      locationId: "cebu-central",
+      locationId: null,
     });
   });
 

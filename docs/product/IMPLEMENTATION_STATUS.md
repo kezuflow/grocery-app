@@ -150,7 +150,7 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
   sellable SKUs use `G`/`KG`/`PC` controlled units; assembled packs/bunches keep exact internal gram
   recipes with customer-facing approximate contents notes and staff packing instructions stored in
   OPERATIONS-only SKU detail rows.
-- Every launch SKU carries positive versioned Metro Cebu STANDARD pricing and Cebu Central
+- Every launch SKU carries positive versioned Metro Cebu STANDARD pricing and Central Cebu
   `AVAILABLE` state through `sku_location_availability`; Scheduled display ignores on-hand inventory.
 - Storefront browsing uses Core's bounded `getMarketplaceHome` rails and database-side cursor
   pagination; Web renders Core media/details with no slug-image map and placeholder fallback.
@@ -379,7 +379,7 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
   selection. Demo-only prototype concepts (pickup toggle, multi-store hub selection, ratings,
   tips, invented promotion codes) are intentionally absent.
 - `migration 0023` seeds 17 additional Cebu produce products with fixed 250 g/500 g/1 kg SKUs,
-  market-scoped standard prices, and Cebu Central availability so rails render with real data.
+  market-scoped standard prices, and Central Cebu selling status so rails render with real data.
 - Cart interaction is Core-authoritative through `/api/commerce/cart`; add-to-cart for anonymous
   visitors presents a sign-in affordance and preserves browsing context. Pre-authentication
   add-to-cart remains an approved design decision without a Core anonymous-cart capability and is
@@ -424,7 +424,7 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - Admin Context navigation entries now carry Core-owned `GLOBAL`, `MARKET`, and `LOCATION`
   applicability in addition to capability, section, and parent metadata. Web only narrows this
   already-authorized set when the operator changes scope.
-- Cebu Central and other Location selections retain scoped Overview, Orders, Inventory, Delivery,
+- Central Cebu and other Location selections retain scoped Overview, Orders, Products, Inventory, Delivery,
   Analytics, Audit, and Fulfillment Mode destinations when authorized. Global Products, Customers,
   Memberships, Promotions, Payments/Pricing, and Staff administration are removed from both the
   desktop sidebar and mobile navigation.

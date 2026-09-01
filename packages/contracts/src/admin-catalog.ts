@@ -82,6 +82,7 @@ export type AdminProductListSummary = AdminProductSummary & {
     maximumMinor: number;
     currency: string;
   } | null;
+  inventoryPosition: AdminProductInventoryPosition | null;
 };
 
 export type AdminProductPage = {
@@ -95,9 +96,12 @@ export type AdminProductPage = {
   };
   pricingContext: {
     marketId: string;
+    marketName: string;
     locationId: string | null;
+    locationName: string | null;
     currency: string;
   };
+  viewMode: "GLOBAL_CATALOG" | "LOCATION_OPERATIONS";
   nextCursor: string | null;
 };
 
@@ -135,9 +139,12 @@ export type AdminProductDetail = {
   inventoryPool: AdminProductInventoryPoolView;
   pricingContext: {
     marketId: string;
+    marketName: string;
     locationId: string | null;
+    locationName: string | null;
     currency: string;
   };
+  viewMode: "GLOBAL_CATALOG" | "LOCATION_OPERATIONS";
   allowedActions: ReadonlyArray<"UPDATE" | "SET_STATUS">;
   recentAudit: ReadonlyArray<AdminAuditEventListItem>;
   skus: ReadonlyArray<AdminCatalogSkuSummary>;
@@ -169,6 +176,15 @@ export type AdminProductInventoryPoolView = {
   baseUnitId: string;
   baseUnitCode: CanonicalBaseUnitCode;
   baseUnitSymbol: string;
+  position: AdminProductInventoryPosition | null;
+};
+
+export type AdminProductInventoryPosition = {
+  locationId: string;
+  onHandBase: number;
+  reservedBase: number;
+  availableBase: number;
+  version: number;
 };
 
 export type AdminInventoryItem = {
@@ -260,6 +276,7 @@ export type AdminProductListRequest = AuthenticatedRequest & {
 export type AdminProductMediaContentRequest = AuthenticatedRequest & {
   productId: string;
   mediaId: string;
+  locationId?: string;
 };
 
 export type AdminProductMediaContent = {
@@ -299,7 +316,7 @@ export type AdminProductUpdateRequest = AuthenticatedRequest & {
 export type AdminProductDetailRequest = AuthenticatedRequest & {
   productId: string;
   marketId?: string;
-  locationId?: string;
+  locationId?: string | null;
 };
 
 export type AdminProductStatusRequest = AuthenticatedRequest & {
@@ -394,9 +411,10 @@ export type AdminInventoryLedgerRequest = AuthenticatedRequest & {
 };
 
 /**
- * Catalog administration. Reads require `catalog.read` and commands
- * `catalog.manage`, both plus a global scope in Core. Prices are versioned
- * inserts; history is never rewritten.
+ * Global Catalog administration requires global scope. A location-scoped
+ * Product projection requires catalog plus inventory read authority for that
+ * location; only location price, selling-status, and sourcing commands may be
+ * performed from it. Prices are versioned inserts; history is never rewritten.
  */
 export type AdminCatalogService = {
   listAdminCategories(request: AdminCategoryListRequest): Promise<RpcResult<AdminCategoryPage>>;

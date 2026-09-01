@@ -105,6 +105,13 @@ describe("catalog contracts", () => {
           availableSkuCount: 1,
           primaryMedia: { mediaId: "media-1", altText: "Red onion", version: 3 },
           priceRange: { minimumMinor: 2500, maximumMinor: 3000, currency: "PHP" },
+          inventoryPosition: {
+            locationId: "location-cebu-central",
+            onHandBase: 10_000,
+            reservedBase: 1_000,
+            availableBase: 9_000,
+            version: 2,
+          },
           version: 2,
         },
       ],
@@ -117,9 +124,12 @@ describe("catalog contracts", () => {
       },
       pricingContext: {
         marketId: "market-metro-cebu",
+        marketName: "Metro Cebu",
         locationId: "location-cebu-central",
+        locationName: "Central Cebu",
         currency: "PHP",
       },
+      viewMode: "LOCATION_OPERATIONS",
       nextCursor: null,
     } satisfies AdminProductPage);
   });
@@ -268,12 +278,16 @@ describe("catalog contracts", () => {
         baseUnitId: "unit-gram",
         baseUnitCode: "GRAM",
         baseUnitSymbol: "g",
+        position: null,
       },
       pricingContext: {
         marketId: "market-metro-cebu",
+        marketName: "Metro Cebu",
         locationId: "location-cebu-central",
+        locationName: "Central Cebu",
         currency: "PHP",
       },
+      viewMode: "LOCATION_OPERATIONS",
       allowedActions: ["UPDATE", "SET_STATUS"],
       recentAudit: [],
       skus: [],

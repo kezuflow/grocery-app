@@ -78,7 +78,7 @@ async function seedStaff(options: {
   return { cookie: principal.cookie };
 }
 
-/** One product with a gram pool and a balance row at Cebu Central. */
+/** One product with a gram pool and a balance row at Central Cebu. */
 async function seedInventory(): Promise<{ productId: string; poolId: string }> {
   const now = Date.now();
   const categoryId = crypto.randomUUID();

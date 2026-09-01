@@ -2,12 +2,18 @@
 
 import type { AdminSelectedScope } from "@freshmarkets/contracts";
 import {
+  Bell,
   ChevronDown,
   ChevronsUpDown,
+  LoaderCircle,
+  LogOut,
   Menu,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Sprout,
+  Sun,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,6 +22,8 @@ import { adminSelectableScopes, useAdminContext } from "../../app/admin/admin-co
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../ui/select";
 import {
   Sheet,
@@ -28,6 +36,7 @@ import {
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
+import { useAdminTheme } from "./admin-theme-provider";
 import {
   adminNavigationFromContext,
   adminNavigationItemsForScope,
@@ -86,21 +95,26 @@ export function AdminShell({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
-      <AdminHeader
-        items={items}
-        scopeLabel={scopeLabel}
-        environment={environment}
-        collapsed={collapsed}
-        onCollapsedChange={changeCollapsed}
-      />
-      <div className="flex w-full">
-        <AdminSidebar items={items} collapsed={collapsed} />
+    <div className="flex min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
+      <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
+      <div
+        className={cn(
+          "min-w-0 flex-1 bg-[var(--fm-admin-content)] md:my-2 md:mr-2 md:overflow-clip md:rounded-xl md:shadow-[var(--fm-shadow-shell)]",
+          collapsed && "md:ml-2",
+        )}
+      >
+        <AdminHeader
+          items={items}
+          scopeLabel={scopeLabel}
+          environment={environment}
+          collapsed={collapsed}
+          onCollapsedChange={changeCollapsed}
+        />
         <main
           id="main-content"
           aria-labelledby="admin-page-title"
           tabIndex={-1}
-          className="min-w-0 flex-1 px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8"
+          className="min-w-0 flex-1 bg-[var(--fm-admin-content)] px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8"
         >
           <div className="mx-auto w-full max-w-[var(--fm-container-admin)] space-y-4">
             <AdminBreadcrumbs items={breadcrumbs} />
@@ -126,31 +140,29 @@ function AdminHeader({
   onCollapsedChange: (next: boolean) => void;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-header)]">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-[var(--fm-admin-content)]/90 backdrop-blur-md md:rounded-t-xl">
+      <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-2">
           <AdminMobileMenu items={items} />
           <Link
             href="/admin"
             prefetch={false}
             aria-label="freshmarkets admin home"
-            className="flex h-10 select-none items-center gap-2 rounded-lg text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+            className="flex h-9 select-none items-center gap-2 rounded-lg text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:hidden"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-admin-accent)] text-white shadow-sm">
               <Sprout className="size-4.5" aria-hidden="true" />
             </span>
-            {!collapsed ? (
-              <span className="truncate pr-1 text-sm font-semibold tracking-[-0.02em]">
-                freshmarkets
-              </span>
-            ) : null}
+            <span className="truncate pr-1 text-sm font-semibold tracking-[-0.02em]">
+              freshmarkets
+            </span>
           </Link>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
-            className="hidden size-8 rounded-lg lg:inline-flex"
+            className="hidden size-9 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-sm hover:bg-[var(--fm-admin-surface-muted)] md:inline-flex"
             onClick={() => onCollapsedChange(!collapsed)}
           >
             {collapsed ? (
@@ -161,7 +173,7 @@ function AdminHeader({
           </Button>
           <AdminScopeSelector fallbackLabel={scopeLabel} />
         </div>
-        <div className="flex items-center gap-2 text-xs text-[var(--fm-text-muted)]">
+        <div className="flex items-center gap-1.5 text-xs text-[var(--fm-text-muted)]">
           {environment !== "production" ? (
             <span className="hidden rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] px-2 py-1 font-semibold uppercase tracking-wide text-[var(--fm-warning)] sm:inline-flex">
               {environment}
@@ -174,9 +186,134 @@ function AdminHeader({
           >
             Marketplace
           </Link>
+          <span
+            className="mx-1 hidden h-5 w-px bg-[var(--fm-border)] sm:block"
+            aria-hidden="true"
+          />
+          <Link
+            href="/admin/issues/operational-exceptions"
+            prefetch={false}
+            aria-label="Open operational exceptions"
+            className="inline-flex size-9 items-center justify-center rounded-lg hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+          >
+            <Bell className="size-4" aria-hidden="true" />
+          </Link>
+          <AdminThemeToggle />
+          <AdminIdentity />
         </div>
       </div>
     </header>
+  );
+}
+
+function AdminThemeToggle() {
+  const { theme, toggleTheme } = useAdminTheme();
+  const dark = theme === "dark";
+  return (
+    <button
+      type="button"
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-pressed={dark}
+      className="relative inline-flex size-9 items-center justify-center rounded-lg hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+      onClick={toggleTheme}
+    >
+      <Sun
+        className={cn(
+          "absolute size-4 transition-[transform,opacity] duration-200",
+          dark ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100",
+        )}
+        aria-hidden="true"
+      />
+      <Moon
+        className={cn(
+          "absolute size-4 transition-[transform,opacity] duration-200",
+          dark ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0",
+        )}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+function AdminIdentity() {
+  const { state } = useAdminContext();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  if (state.phase !== "ready") return null;
+  const label = state.context.displayName || state.context.email;
+  const initial = label.trim().charAt(0).toUpperCase() || "F";
+
+  async function signOut() {
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      const response = await fetch("/api/auth/sign-out", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        setSignOutError("Unable to sign out. Try again.");
+        setSigningOut(false);
+        return;
+      }
+      window.location.assign("/auth/login");
+    } catch {
+      setSignOutError("Unable to sign out. Check your connection and try again.");
+      setSigningOut(false);
+    }
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Open account menu for ${label}`}
+          className="ml-0.5 flex items-center gap-1 rounded-lg p-1 hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+        >
+          <span className="flex size-8 items-center justify-center rounded-full bg-[var(--fm-admin-accent-soft)] text-xs font-semibold text-[var(--fm-admin-accent-strong)] ring-1 ring-inset ring-[var(--fm-admin-accent)]/20">
+            {initial}
+          </span>
+          <ChevronDown
+            className="hidden size-3.5 text-[var(--fm-text-muted)] sm:block"
+            aria-hidden="true"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        role="menu"
+        aria-label="Account menu"
+        className="w-64 border-[var(--fm-border)] bg-white p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+      >
+        <div className="px-2 py-2">
+          <p className="truncate text-sm font-semibold">{label}</p>
+          <p className="truncate text-xs text-[var(--fm-text-muted)]">{state.context.email}</p>
+        </div>
+        <div className="my-1 h-px bg-[var(--fm-border)]" aria-hidden="true" />
+        <Button
+          type="button"
+          variant="ghost"
+          role="menuitem"
+          disabled={signingOut}
+          className="w-full justify-start text-[var(--fm-destructive)] hover:bg-[var(--fm-danger-soft)] hover:text-[var(--fm-destructive)]"
+          onClick={signOut}
+        >
+          {signingOut ? (
+            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <LogOut className="size-4" aria-hidden="true" />
+          )}
+          {signingOut ? "Signing out…" : "Sign out"}
+        </Button>
+        {signOutError ? (
+          <p role="alert" className="px-2 pb-1 pt-2 text-xs text-[var(--fm-destructive)]">
+            {signOutError}
+          </p>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -268,7 +405,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
       <SheetTrigger
         ref={triggerRef}
         aria-label="Open admin navigation"
-        className="rounded-[var(--fm-radius-control)] p-2 hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] lg:hidden"
+        className="rounded-[var(--fm-radius-control)] p-2 hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:hidden"
       >
         <Menu className="size-5" />
       </SheetTrigger>
@@ -370,9 +507,11 @@ function MobileNavigationParent({
 function AdminSidebar({
   items,
   collapsed,
+  onCollapsedChange,
 }: {
   items: ReadonlyArray<AdminNavigationEntry>;
   collapsed: boolean;
+  onCollapsedChange: (next: boolean) => void;
 }) {
   const pathname = usePathname();
   const groups = groupAdminNavigation(items);
@@ -385,6 +524,24 @@ function AdminSidebar({
     [active?.code, active?.parentCode],
   );
   const [openParents, setOpenParents] = useState<ReadonlySet<string>>(initiallyOpen);
+  const [query, setQuery] = useState("");
+
+  const visibleGroups = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.flatMap((item) => {
+          if (item.label.toLocaleLowerCase().includes(normalized)) return [item];
+          const children = item.children.filter((child) =>
+            child.label.toLocaleLowerCase().includes(normalized),
+          );
+          return children.length > 0 ? [{ ...item, children }] : [];
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [groups, query]);
 
   useEffect(() => {
     if (!active) return;
@@ -395,47 +552,125 @@ function AdminSidebar({
     <TooltipProvider>
       <aside
         className={cn(
-          "sticky top-16 hidden min-h-[calc(100vh-4rem)] shrink-0 self-start border-r border-[var(--fm-border)] bg-white py-2 transition-[width] duration-200 lg:block",
+          "relative hidden shrink-0 bg-transparent transition-[width] duration-200 ease-linear md:block",
           collapsed
-            ? "w-[var(--fm-admin-sidebar-collapsed)] px-2"
-            : "w-[var(--fm-admin-sidebar-expanded)] px-3",
+            ? "w-[var(--fm-admin-sidebar-collapsed)]"
+            : "w-[var(--fm-admin-sidebar-expanded)]",
         )}
       >
-        <nav aria-label="Admin navigation" className="space-y-2 overflow-x-visible">
-          {groups.map((group) => (
-            <div key={group.code}>
-              {!collapsed && group.code !== "overview" ? (
-                <p className="px-2 pb-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                  {group.label}
+        <div
+          className={cn(
+            "fixed inset-y-0 z-20 hidden h-svh transition-[width,padding] duration-200 ease-linear md:flex",
+            collapsed ? "w-[66px] py-2 pl-3 pr-1" : "w-[var(--fm-admin-sidebar-expanded)] p-2",
+          )}
+        >
+          <div className="flex size-full flex-col bg-[var(--fm-admin-canvas)] text-[var(--fm-admin-sidebar-text)]">
+            <div className="flex shrink-0 flex-col gap-2 p-2">
+              <Link
+                href="/admin"
+                prefetch={false}
+                aria-label="freshmarkets admin home"
+                className={cn(
+                  "flex shrink-0 items-center overflow-hidden rounded-lg font-semibold tracking-[-0.02em] text-[var(--fm-text)] transition-[width,height,padding] duration-150 ease-in-out hover:bg-[var(--fm-admin-sidebar-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+                  collapsed ? "size-8 p-0" : "h-10 w-full px-2",
+                )}
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-admin-accent)] text-white shadow-sm">
+                  <Sprout className="size-4.5" aria-hidden="true" />
+                </span>
+                <span
+                  className={cn(
+                    "overflow-hidden whitespace-nowrap text-sm transition-[max-width,margin,opacity] duration-200 ease-linear",
+                    collapsed ? "ml-0 max-w-0 opacity-0" : "ml-2 max-w-40 opacity-100",
+                  )}
+                >
+                  freshmarkets
+                </span>
+              </Link>
+              {collapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Search admin navigation"
+                      className="flex size-8 items-center justify-center rounded-lg text-[var(--fm-admin-sidebar-text)] hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+                      onClick={() => onCollapsedChange(false)}
+                    >
+                      <Search className="size-4" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="fm-admin-sidebar-tooltip rounded-lg">
+                    Search
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div className="relative px-2">
+                  <Search
+                    className="pointer-events-none absolute left-[18px] top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    aria-label="Search admin navigation"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search..."
+                    className="h-8 bg-[var(--fm-admin-content)] pl-8 text-sm shadow-none"
+                  />
+                </div>
+              )}
+            </div>
+            <nav
+              aria-label="Admin navigation"
+              className={cn(
+                "fm-admin-sidebar-scroll min-h-0 flex-1 space-y-0 overflow-x-visible",
+                collapsed ? "overflow-y-hidden" : "overflow-y-auto",
+              )}
+            >
+              {visibleGroups.map((group) => (
+                <div key={group.code} className="relative flex w-full min-w-0 flex-col p-2">
+                  {group.code !== "overview" ? (
+                    <p
+                      className={cn(
+                        "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70 transition-[margin,opacity] duration-200 ease-linear",
+                        collapsed ? "-mt-8 opacity-0" : "mt-0 opacity-100",
+                      )}
+                    >
+                      {group.label}
+                    </p>
+                  ) : null}
+                  <div className="space-y-0">
+                    {group.items.map((item) => (
+                      <DesktopNavigationParent
+                        key={item.code}
+                        item={item}
+                        collapsed={collapsed}
+                        activeCode={active?.code ?? null}
+                        open={openParents.has(item.code)}
+                        onToggle={() =>
+                          setOpenParents((current) => {
+                            const next = new Set(current);
+                            if (next.has(item.code)) next.delete(item.code);
+                            else next.add(item.code);
+                            return next;
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {items.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
+                  No workspaces permitted.
+                </p>
+              ) : visibleGroups.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
+                  No matching workspaces.
                 </p>
               ) : null}
-              <div className="space-y-0.5">
-                {group.items.map((item) => (
-                  <DesktopNavigationParent
-                    key={item.code}
-                    item={item}
-                    collapsed={collapsed}
-                    activeCode={active?.code ?? null}
-                    open={openParents.has(item.code)}
-                    onToggle={() =>
-                      setOpenParents((current) => {
-                        const next = new Set(current);
-                        if (next.has(item.code)) next.delete(item.code);
-                        else next.add(item.code);
-                        return next;
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-          {items.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
-              No workspaces permitted.
-            </p>
-          ) : null}
-        </nav>
+            </nav>
+          </div>
+        </div>
       </aside>
     </TooltipProvider>
   );
@@ -454,97 +689,118 @@ function DesktopNavigationParent({
   open: boolean;
   onToggle: () => void;
 }) {
+  const [collapsedMenuOpen, setCollapsedMenuOpen] = useState(false);
   const parentActive =
     activeCode === item.code || item.children.some((child) => child.code === activeCode);
-  if (collapsed) {
-    return (
-      <div className="group relative">
+  const controlClassName = cn(
+    "flex h-8 items-center gap-2 overflow-hidden rounded-lg text-left text-sm font-normal text-[var(--fm-admin-sidebar-text)] transition-[width,height,padding] duration-150 ease-in-out hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+    collapsed ? "w-8 px-2" : "w-full px-2",
+    parentActive &&
+      "bg-[var(--fm-admin-sidebar-active)] text-[var(--fm-admin-sidebar-active-text)]",
+  );
+  const label = (
+    <span
+      className={cn(
+        "min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,margin,opacity] duration-200 ease-linear",
+        collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100",
+      )}
+    >
+      {item.label}
+    </span>
+  );
+  const controlContent = (
+    <>
+      <item.icon className="size-4 shrink-0" aria-hidden="true" />
+      {label}
+      {item.children.length > 0 ? (
+        <ChevronDown
+          className={cn(
+            "ml-auto size-4 shrink-0 transition-[max-width,opacity,transform] duration-200 ease-linear",
+            collapsed ? "max-w-0 opacity-0" : "max-w-4 opacity-100",
+            !open && "-rotate-90",
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
+    </>
+  );
+
+  return (
+    <div className="relative">
+      {item.children.length > 0 ? (
+        <Popover
+          open={collapsed && collapsedMenuOpen}
+          onOpenChange={(next) => {
+            if (collapsed) setCollapsedMenuOpen(next);
+          }}
+        >
+          <Tooltip>
+            <PopoverTrigger asChild>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={collapsed ? item.label : undefined}
+                  aria-expanded={collapsed ? collapsedMenuOpen : open}
+                  aria-controls={collapsed ? undefined : `admin-nav-children-${item.code}`}
+                  className={controlClassName}
+                  onClick={collapsed ? undefined : onToggle}
+                >
+                  {controlContent}
+                </button>
+              </TooltipTrigger>
+            </PopoverTrigger>
+            {collapsed ? (
+              <TooltipContent side="right" className="fm-admin-sidebar-tooltip rounded-lg">
+                {item.label}
+              </TooltipContent>
+            ) : null}
+          </Tooltip>
+          {collapsed ? (
+            <PopoverContent
+              side="right"
+              align="start"
+              sideOffset={4}
+              role="menu"
+              aria-label={item.label}
+              className="w-max min-w-32 max-w-64 rounded-[10px] border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-1 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+            >
+              <p className="px-2 py-1 text-xs text-[var(--fm-text-muted)]">{item.label}</p>
+              {item.children.map((child) => (
+                <Link
+                  key={child.code}
+                  href={child.href}
+                  prefetch={false}
+                  role="menuitem"
+                  className="block rounded-md px-2 py-1.5 text-sm outline-none hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)] focus:bg-[var(--fm-admin-sidebar-active)] focus:text-[var(--fm-admin-sidebar-active-text)]"
+                >
+                  {child.label}
+                </Link>
+              ))}
+            </PopoverContent>
+          ) : null}
+        </Popover>
+      ) : (
         <Tooltip>
           <TooltipTrigger asChild>
-            {item.children.length > 0 ? (
-              <button
-                type="button"
-                aria-label={item.label}
-                className={cn(
-                  "flex h-9 w-full items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
-                  parentActive &&
-                    "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
-                )}
-              >
-                <item.icon className="size-5" aria-hidden="true" />
-              </button>
-            ) : (
-              <Link
-                href={item.href}
-                prefetch={false}
-                aria-label={item.label}
-                aria-current={parentActive ? "page" : undefined}
-                className={cn(
-                  "flex h-9 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]",
-                  parentActive &&
-                    "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
-                )}
-              >
-                <item.icon className="size-5" aria-hidden="true" />
-              </Link>
-            )}
+            <Link
+              href={item.href}
+              prefetch={false}
+              aria-label={collapsed ? item.label : undefined}
+              aria-current={activeCode === item.code ? "page" : undefined}
+              className={controlClassName}
+            >
+              {controlContent}
+            </Link>
           </TooltipTrigger>
-          <TooltipContent side="right">{item.label}</TooltipContent>
+          {collapsed ? (
+            <TooltipContent side="right" className="fm-admin-sidebar-tooltip rounded-lg">
+              {item.label}
+            </TooltipContent>
+          ) : null}
         </Tooltip>
-        {item.children.length > 0 ? (
-          <div className="invisible absolute left-full top-0 z-40 ml-2 w-52 rounded-lg border border-[var(--fm-border)] bg-white p-2 opacity-0 shadow-[var(--fm-shadow-overlay)] transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
-            <p className="px-2 py-1 text-xs font-medium">{item.label}</p>
-            {item.children.map((child) => (
-              <Link
-                key={child.code}
-                href={child.href}
-                prefetch={false}
-                className="block rounded px-2 py-2 text-sm hover:bg-[var(--fm-hover)]"
-              >
-                {child.label}
-              </Link>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-  return (
-    <div>
-      {item.children.length > 0 ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={`admin-nav-children-${item.code}`}
-          className={cn(
-            "flex h-9 w-full items-center gap-2 rounded-[var(--fm-radius-control)] px-2 py-1.5 text-left text-sm font-normal hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
-            parentActive && "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
-          )}
-          onClick={onToggle}
-        >
-          <item.icon className="size-4" aria-hidden="true" />
-          <span className="flex-1">{item.label}</span>
-          <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />
-        </button>
-      ) : (
-        <Link
-          href={item.href}
-          prefetch={false}
-          aria-current={activeCode === item.code ? "page" : undefined}
-          className={cn(
-            "flex h-9 flex-1 items-center gap-2 rounded-[var(--fm-radius-control)] px-2 py-1.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
-            parentActive && "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
-          )}
-        >
-          <item.icon className="size-4" aria-hidden="true" />
-          {item.label}
-        </Link>
       )}
-      {open && item.children.length > 0 ? (
-        <div
-          id={`admin-nav-children-${item.code}`}
-          className="ml-4 border-l border-[var(--fm-border)] pl-2"
-        >
+      {!collapsed && open && item.children.length > 0 ? (
+        <div id={`admin-nav-children-${item.code}`} className="ml-4 pl-2">
           {item.children.map((child) => (
             <Link
               key={child.code}
@@ -552,8 +808,9 @@ function DesktopNavigationParent({
               prefetch={false}
               aria-current={activeCode === child.code ? "page" : undefined}
               className={cn(
-                "block rounded px-2 py-1.5 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
-                activeCode === child.code && "font-medium text-[var(--fm-admin-accent-strong)]",
+                "block rounded-lg px-2 py-1.5 text-sm text-[var(--fm-admin-sidebar-text)] hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)]",
+                activeCode === child.code &&
+                  "bg-[var(--fm-admin-sidebar-active)] font-medium text-[var(--fm-admin-sidebar-active-text)]",
               )}
             >
               {child.label}

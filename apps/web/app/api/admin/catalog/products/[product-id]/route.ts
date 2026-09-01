@@ -11,12 +11,13 @@ async function GETHandler(
 ) {
   const { "product-id": productId } = await context.params;
   const params = new URL(request.url).searchParams;
+  const locationId = params.has("locationId") ? params.get("locationId") || null : undefined;
   const result = await coreClient(env.CORE).getAdminProduct({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
     marketId: params.get("marketId") ?? undefined,
-    locationId: params.get("locationId") ?? undefined,
+    locationId,
   });
   return adminJson(result);
 }

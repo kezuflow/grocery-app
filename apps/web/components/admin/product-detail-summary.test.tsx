@@ -4,6 +4,7 @@ import type { AdminProductDetail } from "@freshmarkets/contracts";
 import { ProductDetailSummary } from "./product-detail-summary";
 
 const product = {
+  viewMode: "LOCATION_OPERATIONS",
   productId: "product-1",
   name: "Red onion",
   description: "Firm red onions for everyday cooking.",
@@ -28,7 +29,13 @@ const product = {
       version: 2,
     },
   ],
-  pricingContext: { marketId: "market-1", locationId: "location-1", currency: "PHP" },
+  pricingContext: {
+    marketId: "market-1",
+    marketName: "Metro Cebu",
+    locationId: "location-1",
+    locationName: "Central Cebu",
+    currency: "PHP",
+  },
   skus: [
     {
       skuId: "sku-1",
@@ -52,16 +59,16 @@ const product = {
 } as unknown as AdminProductDetail;
 
 describe("ProductDetailSummary", () => {
-  it("shows only authoritative Product media, SKU, price, and availability values", () => {
+  it("shows only authoritative Product media, variant, price, and availability values", () => {
     const html = renderToStaticMarkup(<ProductDetailSummary product={product} />);
     expect(html).toContain("₱25.00");
-    expect(html).toContain("Active SKUs");
+    expect(html).toContain("Active variants");
     expect(html).toContain("1 / 1");
     expect(html).toContain("/media/media-1/content?v=2");
     expect(html).toContain("Product overview");
     expect(html).toContain("Catalog facts");
     expect(html).toContain("Inventory base unit");
-    expect(html).toContain("Location · location-1");
+    expect(html).toContain("Location · Central Cebu");
     expect(html).not.toContain("Revenue");
     expect(html).not.toContain("Orders");
   });
