@@ -1,13 +1,5 @@
 import type { AdminAuditEventView } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "../../../components/ui/breadcrumb";
 import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 
 export type AuditDetailState =
@@ -49,21 +41,6 @@ export function AuditDetailView({ state }: { state: AuditDetailState }) {
   const event = state.event;
   return (
     <div className="mx-auto max-w-[1000px] space-y-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin/audit">Audit</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{event.auditEventId}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
       <PageHeader title={event.action} description={`Audit event ${event.auditEventId}`} />
       <ListPageSection title="Event" description="Immutable action and scope metadata.">
         <dl className="grid gap-4 p-4 text-sm sm:grid-cols-2">

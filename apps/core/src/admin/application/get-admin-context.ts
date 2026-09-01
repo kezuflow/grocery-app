@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type {
   AdminContextView,
   AdminNavigationItem,
+  AdminNavigationScopeKind,
   AuthenticatedRequest,
   Capability,
   RpcResult,
@@ -100,16 +101,7 @@ const WORKSPACES: ReadonlyArray<{
     label: "Categories",
     href: "/admin/catalog/categories",
     section: "commerce",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["catalog.read", "catalog.manage"],
-  },
-  {
-    code: "categories-list",
-    label: "Category list",
-    href: "/admin/catalog/categories",
-    section: "commerce",
-    parentCode: "categories",
+    parentCode: "products",
     kind: "destination",
     capabilities: ["catalog.read", "catalog.manage"],
   },
@@ -118,7 +110,7 @@ const WORKSPACES: ReadonlyArray<{
     label: "Add category",
     href: "/admin/catalog/categories/new",
     section: "commerce",
-    parentCode: "categories",
+    parentCode: "products",
     kind: "destination",
     capabilities: ["catalog.manage"],
   },
@@ -130,33 +122,6 @@ const WORKSPACES: ReadonlyArray<{
     parentCode: null,
     kind: "workspace",
     capabilities: ["inventory.read", "inventory.adjust"],
-  },
-  {
-    code: "procurement",
-    label: "Procurement",
-    href: "/admin/procurement",
-    section: "operations",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["procurement.read", "procurement.manage"],
-  },
-  {
-    code: "receiving",
-    label: "Receiving",
-    href: "/admin/receiving",
-    section: "operations",
-    parentCode: "procurement",
-    kind: "destination",
-    capabilities: ["procurement.read", "procurement.manage"],
-  },
-  {
-    code: "fulfillment",
-    label: "Fulfillment",
-    href: "/admin/fulfillment",
-    section: "operations",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["fulfillment.read", "fulfillment.manage"],
   },
   {
     code: "delivery",
@@ -322,6 +287,28 @@ const WORKSPACES: ReadonlyArray<{
   },
 ];
 
+const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "overview",
+  "orders",
+  "orders-list",
+  "orders-issues",
+  "analytics",
+  "audit",
+]);
+
+const LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "inventory",
+  "delivery",
+  "settings",
+  "settings-fulfillment-mode",
+]);
+
+function navigationScopeKindsFor(code: string): ReadonlyArray<AdminNavigationScopeKind> {
+  if (ALL_SCOPE_NAVIGATION_CODES.has(code)) return ["GLOBAL", "MARKET", "LOCATION"];
+  if (LOCATION_NAVIGATION_CODES.has(code)) return ["GLOBAL", "LOCATION"];
+  return ["GLOBAL"];
+}
+
 export function adminNavigationFor(
   capabilities: ReadonlyArray<Capability>,
 ): ReadonlyArray<AdminNavigationItem> {
@@ -334,6 +321,7 @@ export function adminNavigationFor(
     label,
     href,
     section,
+    scopeKinds: navigationScopeKindsFor(code),
     parentCode,
     kind,
   }));

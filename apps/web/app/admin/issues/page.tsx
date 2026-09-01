@@ -128,14 +128,16 @@ export default function IssuesPage() {
               {notice}
             </p>
           ) : null}
-          <div className="p-4">
-            <Input
-              aria-label="Issue action reason"
-              placeholder="reason for the next action"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </div>
+          {page.items.length > 0 ? (
+            <div className="p-4">
+              <Input
+                aria-label="Issue action reason"
+                placeholder="Reason for the next action"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </div>
+          ) : null}
           {page.items.length === 0 ? (
             <p className="p-5 pt-0 text-sm text-[var(--fm-text-muted)]">No customer issues.</p>
           ) : (

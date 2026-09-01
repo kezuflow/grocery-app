@@ -239,12 +239,6 @@ export default function ProductDetailPage({
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      <nav className="text-sm text-[var(--fm-text-muted)]">
-        <Link className="underline" href={`/admin/catalog/products${from ? `?${from}` : ""}`}>
-          Products
-        </Link>{" "}
-        / {product.name}
-      </nav>
       <PageHeader
         title={product.name}
         description={`${product.categoryName} · ${product.slug}`}

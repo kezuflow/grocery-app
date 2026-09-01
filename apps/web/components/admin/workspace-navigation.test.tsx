@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AdminNavigationItem } from "@freshmarkets/contracts";
+vi.mock("next/link", () => ({ default: () => null }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/customers" }));
 import { workspaceTabsFromNavigation } from "./workspace-navigation";
+
+const globalScope = ["GLOBAL"] as const;
 
 const navigation: AdminNavigationItem[] = [
   {
@@ -9,6 +12,7 @@ const navigation: AdminNavigationItem[] = [
     label: "Customers",
     href: "/admin/customers",
     section: "commerce",
+    scopeKinds: globalScope,
     parentCode: null,
     kind: "workspace",
   },
@@ -17,6 +21,7 @@ const navigation: AdminNavigationItem[] = [
     label: "Customer list",
     href: "/admin/customers",
     section: "commerce",
+    scopeKinds: globalScope,
     parentCode: "customers",
     kind: "destination",
   },
@@ -25,6 +30,7 @@ const navigation: AdminNavigationItem[] = [
     label: "Privacy queue",
     href: "/admin/customers/privacy",
     section: "commerce",
+    scopeKinds: globalScope,
     parentCode: "customers",
     kind: "destination",
   },
@@ -33,6 +39,7 @@ const navigation: AdminNavigationItem[] = [
     label: "Staff",
     href: "/admin/staff",
     section: "administration",
+    scopeKinds: globalScope,
     parentCode: null,
     kind: "workspace",
   },
@@ -55,6 +62,50 @@ describe("workspaceTabsFromNavigation", () => {
     expect(workspaceTabsFromNavigation(navigation, "staff", "/admin/staff")).toEqual({
       activeId: "staff",
       tabs: [{ id: "staff", label: "Staff", href: "/admin/staff" }],
+    });
+  });
+
+  it("presents Categories as a Products tab", () => {
+    expect(
+      workspaceTabsFromNavigation(
+        [
+          {
+            code: "products",
+            label: "Products",
+            href: "/admin/catalog/products",
+            section: "commerce",
+            scopeKinds: globalScope,
+            parentCode: null,
+            kind: "workspace",
+          },
+          {
+            code: "products-list",
+            label: "Product list",
+            href: "/admin/catalog/products",
+            section: "commerce",
+            scopeKinds: globalScope,
+            parentCode: "products",
+            kind: "destination",
+          },
+          {
+            code: "categories",
+            label: "Categories",
+            href: "/admin/catalog/categories",
+            section: "commerce",
+            scopeKinds: globalScope,
+            parentCode: "products",
+            kind: "destination",
+          },
+        ],
+        "products",
+        "/admin/catalog/categories",
+      ),
+    ).toEqual({
+      activeId: "categories",
+      tabs: [
+        { id: "products-list", label: "Product list", href: "/admin/catalog/products" },
+        { id: "categories", label: "Categories", href: "/admin/catalog/categories" },
+      ],
     });
   });
 });

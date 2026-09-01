@@ -7,6 +7,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { applicationContext } from "../../auth/authorization";
 import { iamSchema } from "../../iam/schema";
+import { setD1SpanAttributes, traceOperation } from "../../observability";
 import type { AdminContextDeps } from "./get-admin-context";
 
 /**
@@ -58,16 +59,31 @@ export async function listAdminScopes(
     scopes.filter((scope) => scope.kind === "location").map((scope) => scope.locationId),
   );
 
-  const markets = await deps.db
-    .prepare(
-      "SELECT id, code, name, currency, timezone FROM market WHERE status = 'active' ORDER BY code",
-    )
-    .all<{ id: string; code: string; name: string; currency: string; timezone: string }>();
-  const locations = await deps.db
-    .prepare(
-      "SELECT id, market_id, code, name FROM fulfillment_location WHERE status = 'active' ORDER BY code",
-    )
-    .all<{ id: string; market_id: string; code: string; name: string }>();
+  const traceContext = { requestId: request.requestId, readModel: "admin.scopes" };
+  const markets = await traceOperation("db.admin.scopes.markets", traceContext, async (span) => {
+    const result = await deps.db
+      .prepare(
+        "SELECT id, code, name, currency, timezone FROM market WHERE status = 'active' ORDER BY code",
+      )
+      .all<{ id: string; code: string; name: string; currency: string; timezone: string }>();
+    setD1SpanAttributes(span, result.meta);
+    span.setAttribute("db.rows.returned", result.results.length);
+    return result;
+  });
+  const locations = await traceOperation(
+    "db.admin.scopes.locations",
+    traceContext,
+    async (span) => {
+      const result = await deps.db
+        .prepare(
+          "SELECT id, market_id, code, name FROM fulfillment_location WHERE status = 'active' ORDER BY code",
+        )
+        .all<{ id: string; market_id: string; code: string; name: string }>();
+      setD1SpanAttributes(span, result.meta);
+      span.setAttribute("db.rows.returned", result.results.length);
+      return result;
+    },
+  );
 
   const marketById = new Map(markets.results.map((market) => [market.id, market]));
   const options: AdminScopeOptionView[] = [];

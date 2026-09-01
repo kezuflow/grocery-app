@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { log, requestId } from "./observability";
+import { log, observeCoreRpc, requestId } from "./observability";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -45,5 +45,22 @@ describe("Core observability boundary", () => {
     expect(
       requestId(new Request("https://core.invalid", { headers: { "x-request-id": valid } })),
     ).toBe(valid);
+  });
+
+  it("records a safe RPC completion without serializing response data", async () => {
+    const write = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const requestId = "ddeb27fb-d9a0-4b8d-8c15-0f765799db42";
+
+    const result = await observeCoreRpc("admin.test", requestId, async () => ({
+      ok: true as const,
+      value: { secretCustomerValue: "must-not-be-logged" },
+      requestId,
+    }));
+
+    expect(result.ok).toBe(true);
+    const output = String(write.mock.calls[0]?.[0]);
+    expect(output).toContain('"operation":"admin.test"');
+    expect(output).toContain(`"requestId":"${requestId}"`);
+    expect(output).not.toContain("must-not-be-logged");
   });
 });

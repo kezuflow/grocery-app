@@ -10,14 +10,6 @@ import { Input } from "../../../../../components/ui/input";
 import { Skeleton } from "../../../../../components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../../../../../components/ui/alert";
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "../../../../../components/ui/breadcrumb";
-import {
   PageHeader,
   ListPageSection,
   StatusBadge,
@@ -120,21 +112,6 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin/staff/roles">Roles</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{role.code}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
       <PageHeader
         title={role.name}
         description={`${role.code} · v${role.version}`}

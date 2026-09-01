@@ -6,7 +6,6 @@ import type {
   AdminProductSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
@@ -89,22 +88,8 @@ export default function EditProductPage() {
       </Alert>
     );
   if (!detail || !value) return <Skeleton className="h-80 w-full" />;
-  const from = searchParams.get("from");
   return (
     <div className="space-y-6">
-      <nav className="text-sm text-[var(--fm-text-muted)]">
-        <Link className="underline" href={`/admin/catalog/products${from ? `?${from}` : ""}`}>
-          Products
-        </Link>{" "}
-        /{" "}
-        <Link
-          className="underline"
-          href={`/admin/catalog/products/${productId}${from ? `?from=${encodeURIComponent(from)}` : ""}`}
-        >
-          {detail.name}
-        </Link>{" "}
-        / Edit
-      </nav>
       <PageHeader
         title="Edit product"
         description="Identity and customer details are version-guarded and audited; variants remain separate commands."

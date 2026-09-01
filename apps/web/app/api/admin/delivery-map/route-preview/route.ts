@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
@@ -13,12 +15,12 @@ const bodySchema = z.union([
   dispatchContextSchema.options[1].extend({ orderedDeliveries: orderedDeliveriesSchema }).strict(),
 ]);
 
-export async function POST(request: Request) {
-  const requestId = crypto.randomUUID();
+async function POSTHandler(request: Request) {
+  const requestId = webRequestId(request);
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return validationFailure(requestId, "Invalid route preview request");
 
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).previewDeliveryBatchRoute({
       requestId,
       headers: requestHeaders(request),
@@ -26,3 +28,5 @@ export async function POST(request: Request) {
     }),
   );
 }
+
+export const POST = observeAdminRoute("admin.delivery_map.route_preview.post", POSTHandler);

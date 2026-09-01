@@ -1,5 +1,6 @@
 import { deliveryJobStates, type DeliveryJobState } from "@freshmarkets/contracts";
 import { identifierSchema, positiveIntegerSchema, z } from "@freshmarkets/validation";
+import { adminJson } from "@/lib/http/admin-route-observability";
 
 const deliverySchema = z
   .object({
@@ -40,7 +41,7 @@ export const deliveryJobStateSchema = z.enum(deliveryJobStates);
 export type DispatchContext = z.infer<typeof dispatchContextSchema>;
 
 export function validationFailure(requestId: string, message: string): Response {
-  return Response.json(
+  return adminJson(
     {
       ok: false as const,
       error: { code: "VALIDATION_FAILED" as const, message, requestId },

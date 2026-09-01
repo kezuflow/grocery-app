@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adminCapabilityCodes,
+  adminNavigationScopeKinds,
   adminNavigationSectionCodes,
   isAdminCapability,
   type AdminContextView,
@@ -21,6 +22,7 @@ describe("admin foundation contracts", () => {
       "finance",
       "administration",
     ]);
+    expect(adminNavigationScopeKinds).toEqual(["GLOBAL", "MARKET", "LOCATION"]);
   });
 
   it("keeps context and audit as purpose-built DTOs", () => {
@@ -36,6 +38,7 @@ describe("admin foundation contracts", () => {
           label: "Audit log",
           href: "/admin/audit",
           section: "administration",
+          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
           parentCode: null,
           kind: "workspace",
         },

@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
@@ -12,15 +14,15 @@ const schema = z.object({
   reason: z.string().trim().min(1),
   idempotencyKey: z.string().trim().min(1).optional(),
 });
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const params = new URL(request.url).searchParams;
-  const locationId = requiredLocation(params);
+  const locationId = requiredLocation(request, params);
   if (locationId instanceof Response) return locationId;
-  const limit = optionalLimit(params);
+  const limit = optionalLimit(request, params);
   if (limit instanceof Response) return limit;
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).listOperationalExceptions({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
       locationId,
       cursor: params.get("cursor") ?? undefined,
@@ -28,21 +30,25 @@ export async function GET(request: Request) {
     }),
   );
 }
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
-    return invalid("exception, reason, and current expectedVersion are required");
+    return invalid(request, "exception, reason, and current expectedVersion are required");
   try {
     const meta = commandMeta(request, parsed.data);
-    return Response.json(
+    return adminJson(
       await coreClient(env.CORE).resolveAdminOperationalException({
-        requestId: crypto.randomUUID(),
+        requestId: webRequestId(request),
         headers: requestHeaders(request),
         ...parsed.data,
         ...meta,
       }),
     );
   } catch (error) {
-    return invalid((error as Error).message);
+    return invalid(request, (error as Error).message);
   }
 }
+
+export const GET = observeAdminRoute("admin.exceptions.get", GETHandler);
+
+export const POST = observeAdminRoute("admin.exceptions.post", POSTHandler);

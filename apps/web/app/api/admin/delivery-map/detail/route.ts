@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
@@ -17,8 +19,8 @@ const QUERY_KEYS = new Set([
   "expectedVersion",
 ]);
 
-export async function GET(request: Request) {
-  const requestId = crypto.randomUUID();
+async function GETHandler(request: Request) {
+  const requestId = webRequestId(request);
   const params = new URL(request.url).searchParams;
   const context = parseQueryContext(params);
   const jobId = parseRequiredIdentifier(params, "jobId");
@@ -27,7 +29,7 @@ export async function GET(request: Request) {
     return validationFailure(requestId, "Invalid delivery map detail request");
   }
 
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).getDeliveryMapDetail({
       requestId,
       headers: requestHeaders(request),
@@ -37,3 +39,5 @@ export async function GET(request: Request) {
     }),
   );
 }
+
+export const GET = observeAdminRoute("admin.delivery_map.detail.get", GETHandler);

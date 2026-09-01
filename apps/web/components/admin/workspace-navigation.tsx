@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { AdminNavigationItem } from "@freshmarkets/contracts";
 import { useAdminContext } from "../../app/admin/admin-context-provider";
 import { SettingsTabs, type SettingsTab } from "./admin-compositions";
+import { adminNavigationItemsForScope } from "./admin-navigation";
 
 export function workspaceTabsFromNavigation(
   navigation: ReadonlyArray<AdminNavigationItem>,
@@ -36,7 +37,11 @@ export function WorkspaceNavigation({ parentCode, label }: { parentCode: string;
   const pathname = usePathname();
   const admin = useAdminContext();
   if (admin.state.phase !== "ready") return null;
-  const model = workspaceTabsFromNavigation(admin.state.context.navigation, parentCode, pathname);
+  const model = workspaceTabsFromNavigation(
+    adminNavigationItemsForScope(admin.state.context.navigation, admin.state.selectedScope),
+    parentCode,
+    pathname,
+  );
   return model.tabs.length > 1 ? (
     <SettingsTabs activeId={model.activeId} label={label} tabs={model.tabs} />
   ) : null;

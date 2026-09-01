@@ -29,7 +29,7 @@ import {
 } from "./validation";
 import { handleProviderWebhook } from "./payments/http/provider-webhook";
 import { drizzle } from "drizzle-orm/d1";
-import { log, requestId } from "./observability";
+import { log, observeCoreRpc, requestId } from "./observability";
 import { createAuth, type AuthEnvironment } from "./auth/service";
 import { resolveServiceability } from "./geography/serviceability";
 import { buildGeocoderPort } from "./geography/infrastructure/runtime-geocoder";
@@ -989,13 +989,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly operationsRpc = createOperationsRpc(this.rpcContext);
 
   async getAdminOverview(input: import("@freshmarkets/contracts").AdminOverviewRequest) {
-    const validation = adminOverviewSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return getAdminOverviewQuery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
+    return observeCoreRpc("admin.overview", input.requestId, async () => {
+      const validation = adminOverviewSchema.safeParse(input);
+      if (!validation.success)
+        return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+      return getAdminOverviewQuery(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      );
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -1055,36 +1057,40 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.authRpc.getApplicationContext(input);
   }
   async getAdminContext(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return getAdminContextQuery(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        environment:
-          this.runtimeConfiguration().environment === "test"
-            ? "development"
-            : this.runtimeConfiguration().environment,
-      },
-      validation.data,
-    );
+    return observeCoreRpc("admin.context", input.requestId, async () => {
+      const validation = authenticatedRequestSchema.safeParse(input);
+      if (!validation.success)
+        return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+      return getAdminContextQuery(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          environment:
+            this.runtimeConfiguration().environment === "test"
+              ? "development"
+              : this.runtimeConfiguration().environment,
+        },
+        validation.data,
+      );
+    });
   }
   async listAdminScopes(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return listAdminScopesQuery(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        environment:
-          this.runtimeConfiguration().environment === "test"
-            ? "development"
-            : this.runtimeConfiguration().environment,
-      },
-      validation.data,
-    );
+    return observeCoreRpc("admin.scopes", input.requestId, async () => {
+      const validation = authenticatedRequestSchema.safeParse(input);
+      if (!validation.success)
+        return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+      return listAdminScopesQuery(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          environment:
+            this.runtimeConfiguration().environment === "test"
+              ? "development"
+              : this.runtimeConfiguration().environment,
+        },
+        validation.data,
+      );
+    });
   }
   async listMetricDefinitions(
     input: import("@freshmarkets/contracts").ListMetricDefinitionsRequest,
@@ -1552,22 +1558,26 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     );
   }
   async listAdminProducts(input: import("@freshmarkets/contracts").AdminProductListRequest) {
-    const validation = catalogProductListSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return listAdminProductsQuery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
+    return observeCoreRpc("admin.products.list", input.requestId, async () => {
+      const validation = catalogProductListSchema.safeParse(input);
+      if (!validation.success)
+        return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+      return listAdminProductsQuery(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      );
+    });
   }
   async createAdminProduct(input: import("@freshmarkets/contracts").AdminProductCreateRequest) {
-    const validation = catalogProductCreateSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return createAdminProductCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
+    return observeCoreRpc("admin.products.create", input.requestId, async () => {
+      const validation = catalogProductCreateSchema.safeParse(input);
+      if (!validation.success)
+        return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+      return createAdminProductCommand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      );
+    });
   }
   async getAdminProduct(input: import("@freshmarkets/contracts").AdminProductDetailRequest) {
     const validation = catalogProductDetailSchema.safeParse(input);

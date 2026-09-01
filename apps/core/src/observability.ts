@@ -1,3 +1,5 @@
+import { tracing } from "cloudflare:workers";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export type LogContext = Readonly<Record<string, boolean | number | string | undefined>>;
@@ -35,6 +37,10 @@ function safeLogContext(
   return safe;
 }
 
+function elapsedMs(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
 export function log(level: LogLevel, event: string, context: LogContext = {}): void {
   const payload = {
     timestamp: new Date().toISOString(),
@@ -52,4 +58,75 @@ export function log(level: LogLevel, event: string, context: LogContext = {}): v
 export function requestId(request: Request): string {
   const inbound = request.headers.get("x-request-id");
   return inbound && SAFE_REQUEST_ID.test(inbound) ? inbound : crypto.randomUUID();
+}
+
+export async function traceOperation<T>(
+  name: string,
+  context: LogContext,
+  operation: (span: Span) => Promise<T>,
+): Promise<T> {
+  return tracing.enterSpan(name, async (span) => {
+    span.setAttributes(safeLogContext(context));
+    const startedAt = performance.now();
+    try {
+      const result = await operation(span);
+      span.setAttribute("result", "success");
+      return result;
+    } catch (error) {
+      span.setAttribute("result", "exception");
+      throw error;
+    } finally {
+      span.setAttribute("duration.ms", elapsedMs(startedAt));
+    }
+  });
+}
+
+type RpcOutcome = {
+  ok?: unknown;
+  error?: { code?: unknown };
+};
+
+export async function observeCoreRpc<T>(
+  operationName: string,
+  correlationId: string,
+  operation: (span: Span) => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now();
+  try {
+    const result = await traceOperation(
+      `rpc.${operationName}`,
+      { requestId: correlationId, operation: operationName },
+      operation,
+    );
+    const outcome = result as RpcOutcome;
+    const succeeded = outcome?.ok !== false;
+    const errorCode =
+      !succeeded && typeof outcome.error?.code === "string" ? outcome.error.code : undefined;
+    log(succeeded ? "info" : "warn", "core.rpc.completed", {
+      requestId: correlationId,
+      operation: operationName,
+      durationMs: elapsedMs(startedAt),
+      result: succeeded ? "success" : "error",
+      errorCode,
+    });
+    return result;
+  } catch (error) {
+    log("error", "core.rpc.completed", {
+      requestId: correlationId,
+      operation: operationName,
+      durationMs: elapsedMs(startedAt),
+      result: "exception",
+    });
+    throw error;
+  }
+}
+
+export function setD1SpanAttributes(span: Span, meta: D1Meta): void {
+  span.setAttributes({
+    "db.duration.ms": meta.duration,
+    "db.sql.duration.ms": meta.timings?.sql_duration_ms,
+    "db.rows.read": meta.rows_read,
+    "db.rows.written": meta.rows_written,
+    "db.attempts": meta.total_attempts,
+  });
 }

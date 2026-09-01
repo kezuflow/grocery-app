@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
@@ -19,28 +21,32 @@ const schema = z.object({
   idempotencyKey: z.string().trim().min(1).optional(),
 });
 
-export async function GET(request: Request) {
-  return Response.json(
+async function GETHandler(request: Request) {
+  return adminJson(
     await coreClient(env.CORE).getServiceFeeConfiguration({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
     }),
   );
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return invalid("valid Service Fee configuration is required");
+  if (!parsed.success) return invalid(request, "valid Service Fee configuration is required");
   try {
-    return Response.json(
+    return adminJson(
       await coreClient(env.CORE).updateServiceFeeConfiguration({
-        requestId: crypto.randomUUID(),
+        requestId: webRequestId(request),
         headers: requestHeaders(request),
         ...parsed.data,
         idempotencyKey: requireIdempotencyKey(request, parsed.data.idempotencyKey),
       }),
     );
   } catch (error) {
-    return invalid((error as Error).message);
+    return invalid(request, (error as Error).message);
   }
 }
+
+export const GET = observeAdminRoute("admin.commerce_configuration.service_fee.get", GETHandler);
+
+export const POST = observeAdminRoute("admin.commerce_configuration.service_fee.post", POSTHandler);

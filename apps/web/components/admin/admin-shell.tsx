@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 import {
   adminNavigationFromContext,
+  adminNavigationItemsForScope,
   groupAdminNavigation,
   mostSpecificActiveNavigation,
   type AdminNavigationEntry,
@@ -113,6 +114,7 @@ function AdminHeader({
           <AdminMobileMenu items={items} />
           <Link
             href="/admin"
+            prefetch={false}
             className="text-lg font-bold tracking-[-0.03em] text-[var(--fm-primary-dark)]"
           >
             FreshMarkets{" "}
@@ -128,6 +130,7 @@ function AdminHeader({
           ) : null}
           <Link
             href="/"
+            prefetch={false}
             className="hidden rounded-[var(--fm-radius-control)] px-2 py-1 font-medium hover:bg-[var(--fm-hover)] sm:inline-flex"
           >
             Marketplace
@@ -217,7 +220,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
           {groups.map((group) => (
             <div key={group.code}>
               {group.code !== "overview" ? (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+                <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
                   {group.label}
                 </p>
               ) : null}
@@ -247,9 +250,10 @@ function MobileNavigationParent({
       <SheetClose asChild>
         <Link
           href={item.href}
+          prefetch={false}
           aria-current={parentActive ? "page" : undefined}
           className={cn(
-            "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-semibold hover:bg-[var(--fm-hover)]",
+            "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
             parentActive && "bg-[var(--fm-active)] text-[var(--fm-active-text)]",
           )}
         >
@@ -265,6 +269,7 @@ function MobileNavigationParent({
               <SheetClose key={child.code} asChild>
                 <Link
                   href={child.href}
+                  prefetch={false}
                   aria-current={childActive ? "page" : undefined}
                   className={cn(
                     "block min-h-10 rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
@@ -312,24 +317,31 @@ function AdminSidebar({
     <TooltipProvider>
       <aside
         className={cn(
-          "sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 border-r border-[var(--fm-border)] bg-white py-4 transition-[width] duration-200 lg:block",
+          "sticky top-16 hidden min-h-[calc(100vh-4rem)] shrink-0 self-start border-r border-[var(--fm-border)] bg-white py-2 transition-[width] duration-200 lg:block",
           collapsed
             ? "w-[var(--fm-admin-sidebar-collapsed)] px-2"
             : "w-[var(--fm-admin-sidebar-expanded)] px-3",
         )}
       >
-        <nav
-          aria-label="Admin navigation"
-          className="h-[calc(100%-3rem)] space-y-5 overflow-y-auto overflow-x-visible"
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
+          className="absolute -right-3 top-3 z-10 size-6 rounded-full bg-white shadow-sm"
+          onClick={() => onCollapsedChange(!collapsed)}
         >
+          {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+        </Button>
+        <nav aria-label="Admin navigation" className="space-y-2 overflow-x-visible">
           {groups.map((group) => (
             <div key={group.code}>
               {!collapsed && group.code !== "overview" ? (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+                <p className="px-2 pb-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
                   {group.label}
                 </p>
               ) : null}
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {group.items.map((item) => (
                   <DesktopNavigationParent
                     key={item.code}
@@ -356,23 +368,6 @@ function AdminSidebar({
             </p>
           ) : null}
         </nav>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
-          className={cn("mt-2 w-full", collapsed ? "px-0" : "justify-end")}
-          onClick={() => onCollapsedChange(!collapsed)}
-        >
-          {collapsed ? (
-            <ChevronRight className="size-4" />
-          ) : (
-            <>
-              <span className="sr-only">Collapse</span>
-              <ChevronLeft className="size-4" />
-            </>
-          )}
-        </Button>
       </aside>
     </TooltipProvider>
   );
@@ -400,10 +395,11 @@ function DesktopNavigationParent({
           <TooltipTrigger asChild>
             <Link
               href={item.href}
+              prefetch={false}
               aria-label={item.label}
               aria-current={parentActive ? "page" : undefined}
               className={cn(
-                "flex min-h-11 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]",
+                "flex h-9 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]",
                 parentActive &&
                   "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
               )}
@@ -415,11 +411,12 @@ function DesktopNavigationParent({
         </Tooltip>
         {item.children.length > 0 ? (
           <div className="invisible absolute left-full top-0 z-40 ml-2 w-52 rounded-lg border border-[var(--fm-border)] bg-white p-2 opacity-0 shadow-[var(--fm-shadow-overlay)] transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
-            <p className="px-2 py-1 text-xs font-semibold">{item.label}</p>
+            <p className="px-2 py-1 text-xs font-medium">{item.label}</p>
             {item.children.map((child) => (
               <Link
                 key={child.code}
                 href={child.href}
+                prefetch={false}
                 className="block rounded px-2 py-2 text-sm hover:bg-[var(--fm-hover)]"
               >
                 {child.label}
@@ -435,9 +432,10 @@ function DesktopNavigationParent({
       <div className="flex items-center gap-1">
         <Link
           href={item.href}
+          prefetch={false}
           aria-current={activeCode === item.code ? "page" : undefined}
           className={cn(
-            "flex min-h-10 flex-1 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2 text-sm font-semibold hover:bg-[var(--fm-hover)]",
+            "flex h-9 flex-1 items-center gap-2 rounded-[var(--fm-radius-control)] px-2 py-1.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
             parentActive && "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
           )}
         >
@@ -449,7 +447,7 @@ function DesktopNavigationParent({
             type="button"
             aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
             aria-expanded={open}
-            className="rounded p-2 hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+            className="rounded p-1.5 hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
             onClick={onToggle}
           >
             <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />
@@ -457,15 +455,16 @@ function DesktopNavigationParent({
         ) : null}
       </div>
       {open && item.children.length > 0 ? (
-        <div className="ml-5 border-l border-[var(--fm-border)] pl-3">
+        <div className="ml-4 border-l border-[var(--fm-border)] pl-2">
           {item.children.map((child) => (
             <Link
               key={child.code}
               href={child.href}
+              prefetch={false}
               aria-current={activeCode === child.code ? "page" : undefined}
               className={cn(
-                "block rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
-                activeCode === child.code && "font-semibold text-[var(--fm-admin-accent-strong)]",
+                "block rounded px-2 py-1.5 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
+                activeCode === child.code && "font-medium text-[var(--fm-admin-accent-strong)]",
               )}
             >
               {child.label}
@@ -507,7 +506,11 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
           </h1>
           <AlertDescription>
             Sign in with a staff account to open the admin workspace.{" "}
-            <Link href="/login" className="font-medium underline">
+            <Link
+              href="/auth/login?redirectTo=/admin"
+              prefetch={false}
+              className="font-medium underline"
+            >
               Go to sign in
             </Link>
           </AlertDescription>
@@ -556,7 +559,9 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
   }
   return (
     <AdminShell
-      items={adminNavigationFromContext(state.context.navigation)}
+      items={adminNavigationFromContext(
+        adminNavigationItemsForScope(state.context.navigation, state.selectedScope),
+      )}
       scopeLabel={scopeSummary(state.context.scopes)}
       environment={state.context.environment}
     >
@@ -575,15 +580,9 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-b border-[var(--fm-border)] pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fm-admin-accent-strong)]">
-          FreshMarkets Admin
-        </p>
-        <h1
-          id="admin-page-title"
-          className="mt-1 text-2xl font-bold tracking-[-0.02em] sm:text-3xl"
-        >
+        <h1 id="admin-page-title" className="text-2xl font-bold tracking-[-0.025em]">
           {title}
         </h1>
         {description ? (

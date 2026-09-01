@@ -1,7 +1,6 @@
 "use client";
 
 import type { AdminCategoryPage, AdminCategorySummary, RpcResult } from "@freshmarkets/contracts";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CategoryForm, type CategoryFormValue } from "@/components/admin/category-form";
@@ -54,12 +53,6 @@ export default function NewCategoryPage() {
   }
   return (
     <div className="space-y-6">
-      <nav className="text-sm text-[var(--fm-text-muted)]">
-        <Link href="/admin/catalog/categories" className="underline">
-          Categories
-        </Link>{" "}
-        / Add
-      </nav>
       <PageHeader
         title="Add category"
         description="Create a durable node in the global Catalog hierarchy."

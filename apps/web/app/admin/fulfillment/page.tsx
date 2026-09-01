@@ -20,6 +20,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
+import { AdminPageState } from "../../../components/admin/admin-page-state";
 
 export default function FulfillmentPage() {
   const { locationId, label } = useAdminLocation();
@@ -96,7 +97,13 @@ export default function FulfillmentPage() {
         title="Fulfillment"
         description="Location-scoped picking and packing work. Core exposes only legal next actions."
       />
-      {state === "loading" ? (
+      {!locationId ? (
+        <AdminPageState
+          state="permission-empty"
+          title="Select a permitted location"
+          message="Choose a location scope in the Admin header to open the fulfillment queue."
+        />
+      ) : state === "loading" ? (
         <div role="status" aria-label="Loading fulfillment">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="mt-3 h-12 w-full" />
@@ -123,14 +130,16 @@ export default function FulfillmentPage() {
           title="Work queue"
           description={`Current location: ${label}. Refresh after a stale-version response.`}
         >
-          <div className="p-4">
-            <Input
-              aria-label="Fulfillment action reason"
-              placeholder="reason for a shortage (required by Core when applicable)"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </div>
+          {page.items.length > 0 ? (
+            <div className="p-4">
+              <Input
+                aria-label="Fulfillment action reason"
+                placeholder="Reason for a shortage (required by Core when applicable)"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </div>
+          ) : null}
           {notice ? (
             <p role="status" className="border-b p-3 text-sm">
               {notice}

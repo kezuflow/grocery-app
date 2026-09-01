@@ -1,19 +1,21 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
 /** Order cancellation through the canonical command. Transport only. */
-export async function POST(request: Request, context: { params: Promise<{ "order-id": string }> }) {
+async function POSTHandler(request: Request, context: { params: Promise<{ "order-id": string }> }) {
   const { "order-id": orderId } = await context.params;
   const idempotencyKey = request.headers.get("idempotency-key") ?? "";
   if (idempotencyKey.trim() === "") {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "An idempotency-key header is required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
@@ -27,13 +29,13 @@ export async function POST(request: Request, context: { params: Promise<{ "order
   } | null;
   const reason = typeof body?.reason === "string" ? body.reason : body?.reasonCode;
   if (typeof reason !== "string" || !Number.isInteger(body?.expectedVersion)) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "reason and integer expectedVersion are required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
@@ -41,7 +43,7 @@ export async function POST(request: Request, context: { params: Promise<{ "order
   }
   const payload = body as { resolution?: unknown; expectedVersion: number };
   const result = await coreClient(env.CORE).cancelAdminOrder({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     orderId,
     reason,
@@ -50,5 +52,7 @@ export async function POST(request: Request, context: { params: Promise<{ "order
     expectedVersion: payload.expectedVersion,
     idempotencyKey,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const POST = observeAdminRoute("admin.orders.by_order_id.cancel.post", POSTHandler);

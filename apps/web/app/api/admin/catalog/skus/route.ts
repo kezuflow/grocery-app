@@ -1,18 +1,20 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
 /** SKU creation. Transport only; dimension checks happen in Core. */
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const idempotencyKey = request.headers.get("idempotency-key") ?? "";
   if (idempotencyKey.trim() === "") {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "An idempotency-key header is required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
@@ -27,21 +29,21 @@ export async function POST(request: Request) {
     !Number.isInteger(body?.sellQuantity) ||
     !Number.isInteger(body?.consumptionBaseQuantity)
   ) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message:
             "productId, code, name, sellableUnitId, sellQuantity, and consumptionBaseQuantity are required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
   }
   const result = await coreClient(env.CORE).createAdminSku({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId: body.productId,
     code: body.code,
@@ -54,5 +56,7 @@ export async function POST(request: Request) {
     sortOrder: typeof body.sortOrder === "number" ? body.sortOrder : 0,
     idempotencyKey,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const POST = observeAdminRoute("admin.catalog.skus.post", POSTHandler);

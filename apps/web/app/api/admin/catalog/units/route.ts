@@ -1,26 +1,28 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
 /** Thin same-origin BFF adapters for the unit registry. Transport only. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const result = await coreClient(env.CORE).listAdminUnits({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
   });
-  return Response.json(result);
+  return adminJson(result);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const idempotencyKey = request.headers.get("idempotency-key") ?? "";
   if (idempotencyKey.trim() === "") {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "An idempotency-key header is required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
@@ -37,21 +39,21 @@ export async function POST(request: Request) {
     !Number.isInteger(body?.conversionNumerator) ||
     !Number.isInteger(body?.conversionDenominator)
   ) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message:
             "Canonical unit code, display name, dimension, base, and conversion are required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
   }
   const result = await coreClient(env.CORE).createAdminUnit({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     code: body.code,
     displayName: body.displayName,
@@ -61,5 +63,9 @@ export async function POST(request: Request) {
     conversionDenominator: body.conversionDenominator as number,
     idempotencyKey,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const GET = observeAdminRoute("admin.catalog.units.get", GETHandler);
+
+export const POST = observeAdminRoute("admin.catalog.units.post", POSTHandler);

@@ -54,11 +54,17 @@ export const adminNavigationSectionCodes = [
 
 export type AdminNavigationSectionCode = (typeof adminNavigationSectionCodes)[number];
 
+export const adminNavigationScopeKinds = ["GLOBAL", "MARKET", "LOCATION"] as const;
+
+export type AdminNavigationScopeKind = (typeof adminNavigationScopeKinds)[number];
+
 export type AdminNavigationItem = {
   code: string;
   label: string;
   href: string;
   section: AdminNavigationSectionCode;
+  /** Selected Admin scopes where this Core-authorized entry is relevant. */
+  scopeKinds: ReadonlyArray<AdminNavigationScopeKind>;
   parentCode: string | null;
   kind: "section" | "workspace" | "destination";
 };

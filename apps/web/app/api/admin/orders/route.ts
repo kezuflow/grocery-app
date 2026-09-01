@@ -1,19 +1,21 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
-function parseLimit(params: URLSearchParams): number | undefined | Response {
+function parseLimit(params: URLSearchParams, requestId: string): number | undefined | Response {
   const raw = params.get("limit");
   if (raw === null || raw.trim() === "") return undefined;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "limit must be an integer between 1 and 100",
-          requestId: crypto.randomUUID(),
+          requestId: requestId,
         },
       },
       { status: 400 },
@@ -23,16 +25,18 @@ function parseLimit(params: URLSearchParams): number | undefined | Response {
 }
 
 /** Thin same-origin BFF adapter for the order list. Transport only. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const params = new URL(request.url).searchParams;
-  const limit = parseLimit(params);
+  const limit = parseLimit(params, webRequestId(request));
   if (limit instanceof Response) return limit;
   const result = await coreClient(env.CORE).listAdminOrders({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     status: params.get("status") ?? undefined,
     cursor: params.get("cursor") ?? undefined,
     limit,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const GET = observeAdminRoute("admin.orders.get", GETHandler);

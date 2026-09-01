@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
@@ -7,10 +9,10 @@ type RouteContext = {
 };
 
 /** Authenticated same-origin media adapter; internal R2 identity stays in Core. */
-export async function GET(request: Request, context: RouteContext) {
+async function GETHandler(request: Request, context: RouteContext) {
   const { "product-id": productId, "media-id": mediaId } = await context.params;
   const result = await coreClient(env.CORE).getAdminProductMediaContent({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
     mediaId,
@@ -24,7 +26,7 @@ export async function GET(request: Request, context: RouteContext) {
           : result.error.code === "NOT_FOUND"
             ? 404
             : 400;
-    return Response.json(result, { status });
+    return adminJson(result, { status });
   }
   const headers = {
     "cache-control": "private, max-age=300, must-revalidate",
@@ -37,3 +39,8 @@ export async function GET(request: Request, context: RouteContext) {
   }
   return new Response(result.value.bytes, { status: 200, headers });
 }
+
+export const GET = observeAdminRoute(
+  "admin.catalog.products.by_product_id.media.by_media_id.content.get",
+  GETHandler,
+);

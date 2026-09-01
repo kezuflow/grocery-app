@@ -18,6 +18,7 @@
     "@base-ui/react": "^1.7.0",
     "@better-auth-ui/core": "^1.7.14",
     "@better-auth-ui/react": "^1.7.14",
+    "@fontsource-variable/dm-sans": "5.3.0",
     "@freshmarkets/config": "workspace:*",
     "@freshmarkets/contracts": "workspace:*",
     "@freshmarkets/validation": "workspace:*",

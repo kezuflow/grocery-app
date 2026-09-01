@@ -270,6 +270,7 @@ export default function StaffPage() {
                         <TableCell>
                           <Link
                             href={`/admin/staff/${member.staffId}`}
+                            prefetch={false}
                             className="text-xs font-medium text-[var(--fm-info)] underline"
                           >
                             Manage

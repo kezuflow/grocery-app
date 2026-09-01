@@ -167,6 +167,7 @@ body {
   --fm-shadow-header: 0 1px 0 rgb(15 23 42 / 8%);
   background: var(--fm-admin-canvas);
   color: #0f172a;
+  font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
 a {

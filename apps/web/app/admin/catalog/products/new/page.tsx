@@ -6,7 +6,6 @@ import type {
   AdminUnitSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
@@ -67,12 +66,6 @@ export default function NewProductPage() {
   }
   return (
     <div className="mx-auto max-w-[1280px] space-y-5">
-      <nav className="text-sm text-[var(--fm-text-muted)]">
-        <Link className="underline" href="/admin/catalog/products">
-          Products
-        </Link>{" "}
-        / Add
-      </nav>
       <PageHeader
         title="Add product"
         description="Create the global Product identity and shared inventory pool before attaching media, SKUs, prices, and availability."

@@ -11,14 +11,6 @@ import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "../../../../components/ui/breadcrumb";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 
 type LoadState =
@@ -176,21 +168,6 @@ export default function PromotionDetailPage({
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin/promotions">Promotions</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{promotion.code}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
       <PageHeader
         title={promotion.name}
         description={`${promotion.code} · v${promotion.version}`}

@@ -1,19 +1,21 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
 /** SKU update. Transport only; Core owns version guards. */
-export async function PATCH(request: Request, context: { params: Promise<{ "sku-id": string }> }) {
+async function PATCHHandler(request: Request, context: { params: Promise<{ "sku-id": string }> }) {
   const { "sku-id": skuId } = await context.params;
   const idempotencyKey = request.headers.get("idempotency-key") ?? "";
   if (idempotencyKey.trim() === "") {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "An idempotency-key header is required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
@@ -21,20 +23,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ "sku-
   }
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!Number.isInteger(body?.expectedVersion)) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "An integer expectedVersion is required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
   }
   const result = await coreClient(env.CORE).updateAdminSku({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     skuId,
     name: typeof body?.name === "string" ? body.name : undefined,
@@ -45,5 +47,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ "sku-
     expectedVersion: body!.expectedVersion as number,
     idempotencyKey,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const PATCH = observeAdminRoute("admin.catalog.skus.by_sku_id.patch", PATCHHandler);

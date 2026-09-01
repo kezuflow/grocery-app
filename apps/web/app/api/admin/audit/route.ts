@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
@@ -12,20 +14,20 @@ function queryValue(params: URLSearchParams, name: string): string | undefined {
  * enforcement, pagination bounds, and redaction happen in Core; this route
  * validates transport shape only.
  */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const params = new URL(request.url).searchParams;
   const limitParam = queryValue(params, "limit");
   let limit: number | undefined;
   if (limitParam !== undefined) {
     const parsed = Number(limitParam);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-      return Response.json(
+      return adminJson(
         {
           ok: false as const,
           error: {
             code: "VALIDATION_FAILED" as const,
             message: "limit must be an integer between 1 and 100",
-            requestId: crypto.randomUUID(),
+            requestId: webRequestId(request),
           },
         },
         { status: 400 },
@@ -35,7 +37,7 @@ export async function GET(request: Request) {
   }
 
   const result = await coreClient(env.CORE).listAdminAuditEvents({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     action: queryValue(params, "action"),
     resourceType: queryValue(params, "resourceType"),
@@ -47,5 +49,7 @@ export async function GET(request: Request) {
     cursor: queryValue(params, "cursor"),
     limit,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const GET = observeAdminRoute("admin.audit.get", GETHandler);

@@ -3,14 +3,6 @@ import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AdminAuditEventPage } from "@freshmarkets/contracts";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "../../../components/ui/breadcrumb";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
@@ -56,17 +48,6 @@ function formatInstant(iso: string): string {
 export default function AuditPage() {
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Audit</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
       <PageHeader
         title="Audit log"
         description="Immutable material operations, scoped to your assigned market and locations."
@@ -313,6 +294,7 @@ function AuditWorkspace() {
                     <TableCell>
                       <Link
                         href={`/admin/audit/${item.auditEventId}`}
+                        prefetch={false}
                         className="text-xs font-medium text-[var(--fm-info)] underline"
                       >
                         Detail

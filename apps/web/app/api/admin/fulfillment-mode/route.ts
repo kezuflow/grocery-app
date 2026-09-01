@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
@@ -14,30 +16,34 @@ const schema = z.object({
   expectedVersion: z.number().int().nonnegative().nullable(),
   idempotencyKey: z.string().trim().min(1).optional(),
 });
-export async function GET(request: Request) {
-  const locationId = requiredLocation(new URL(request.url).searchParams);
+async function GETHandler(request: Request) {
+  const locationId = requiredLocation(request, new URL(request.url).searchParams);
   if (locationId instanceof Response) return locationId;
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).getFulfillmentMode({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
       locationId,
     }),
   );
 }
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return invalid("valid fulfillment mode configuration is required");
+  if (!parsed.success) return invalid(request, "valid fulfillment mode configuration is required");
   try {
-    return Response.json(
+    return adminJson(
       await coreClient(env.CORE).activateFulfillmentMode({
-        requestId: crypto.randomUUID(),
+        requestId: webRequestId(request),
         headers: requestHeaders(request),
         ...parsed.data,
         idempotencyKey: requireIdempotencyKey(request, parsed.data.idempotencyKey),
       }),
     );
   } catch (error) {
-    return invalid((error as Error).message);
+    return invalid(request, (error as Error).message);
   }
 }
+
+export const GET = observeAdminRoute("admin.fulfillment_mode.get", GETHandler);
+
+export const POST = observeAdminRoute("admin.fulfillment_mode.post", POSTHandler);

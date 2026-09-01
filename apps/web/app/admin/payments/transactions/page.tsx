@@ -130,6 +130,7 @@ export default function PaymentTransactionsPage() {
                       <Link
                         className="font-medium underline"
                         href={`/admin/payments/transactions/${payment.paymentIntentId}`}
+                        prefetch={false}
                       >
                         Open
                       </Link>

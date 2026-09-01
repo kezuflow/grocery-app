@@ -285,6 +285,7 @@ export default function CatalogPage() {
                       <TableCell>
                         <Link
                           href={`/admin/catalog/products/${product.productId}`}
+                          prefetch={false}
                           className="text-xs font-medium text-[var(--fm-info)] underline"
                         >
                           Manage

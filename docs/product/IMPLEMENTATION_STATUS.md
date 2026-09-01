@@ -102,6 +102,11 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - Commerce configuration presents the global effective-dated Membership price and Instant-only FreshMarkets Service Fee streams through typed reads and guarded replacement commands. Capability checks, global scope, stable idempotency keys, expected versions, explicit confirmation/reason evidence, conflict recovery, and immutable audit/history remain authoritative in Core. No schema migration was required.
 - Final local verification passed formatting, naming, migrations, architecture/security/readiness checks, lint, type checks, 1,458 tests across 260 files, Core Worker dry-run build, Web vinext build and compatibility (`100%`, 14 supported, 0 partial, 0 issues), and all 56 deterministic Admin Playwright tests. Visual regression covers eight approved archetypes at desktop, tablet, and mobile viewports for 24 committed baselines. Production deployment acceptance remains external; the Web build retains its non-fatal large-chunk advisory.
 
+## Admin workflow simplification (2026-09-01)
+
+- Categories now appear inside the Products workspace rather than as a separate top-level navigation item. Operations primary navigation is reduced to Inventory and Delivery; Procurement, Receiving, and Fulfillment retain their independent Core state machines and contextual advanced routes without burdening the default operator path.
+- Inventory now exposes explicit Add stock and Remove stock actions using a positive base-unit quantity. The Web adapter maps those actions to Core's signed, capability-scoped, version-guarded, idempotent adjustment command, and the UI shows immutable dated stock activity with the reason and actor evidence preserved.
+
 ## Runtime and persistence reliability remediation (2026-08-30)
 
 - The populated `0020 -> 0021 -> current` migration path now preserves commerce history and foreign-key integrity; the verifier exercises that real pre-`0021` boundary as well as fresh, Analytics, and cart/inbox upgrade paths. Retired inventory triggers remain absent.
@@ -393,6 +398,16 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
   timestamps exist, owner, reason, and source-derived permitted actions. Resolution remains owned
   by each source command and its immutable audit event; unsupported actions are explicitly
   unavailable in the convergence view.
+
+### Scope-aware Admin navigation
+
+- Admin Context navigation entries now carry Core-owned `GLOBAL`, `MARKET`, and `LOCATION`
+  applicability in addition to capability, section, and parent metadata. Web only narrows this
+  already-authorized set when the operator changes scope.
+- Cebu Central and other Location selections retain scoped Overview, Orders, Inventory, Delivery,
+  Analytics, Audit, and Fulfillment Mode destinations when authorized. Global Products, Customers,
+  Memberships, Promotions, Payments/Pricing, and Staff administration are removed from both the
+  desktop sidebar and mobile navigation.
 
 ## Maturity by area
 

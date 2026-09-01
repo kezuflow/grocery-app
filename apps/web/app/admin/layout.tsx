@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "@fontsource-variable/dm-sans/wght.css";
 import { AdminContextProvider } from "./admin-context-provider";
 import { AdminShellBoundary } from "../../components/admin/admin-shell";
 

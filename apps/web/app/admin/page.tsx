@@ -1,12 +1,17 @@
 "use client";
 
 import type { AdminOverviewView, AdminSelectedScope, RpcResult } from "@freshmarkets/contracts";
-import { useEffect, useMemo, useState } from "react";
-import { AdminOverviewViewContent } from "@/components/admin/admin-overview-view";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AdminPageState } from "@/components/admin/admin-page-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { useAdminContext } from "./admin-context-provider";
+
+const AdminOverviewViewContent = lazy(() =>
+  import("@/components/admin/admin-overview-view").then((module) => ({
+    default: module.AdminOverviewViewContent,
+  })),
+);
 
 function scopeQuery(scope: AdminSelectedScope, timezone: string) {
   const query = new URLSearchParams({ scopeKind: scope.kind, timezone });
@@ -88,7 +93,11 @@ export default function AdminPage() {
           requestId={overview.error.requestId}
         />
       ) : null}
-      {overview?.ok ? <AdminOverviewViewContent overview={overview.value} /> : null}
+      {overview?.ok ? (
+        <Suspense fallback={<AdminPageState state="loading" />}>
+          <AdminOverviewViewContent overview={overview.value} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
@@ -6,10 +8,12 @@ import { requestHeaders } from "@/lib/core-client/request";
  * Thin same-origin BFF adapter for permitted admin scope options. Scope
  * resolution happens in Core; this route is transport only.
  */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const result = await coreClient(env.CORE).listAdminScopes({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const GET = observeAdminRoute("admin.scopes.get", GETHandler);

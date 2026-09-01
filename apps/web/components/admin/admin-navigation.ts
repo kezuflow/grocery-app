@@ -1,13 +1,15 @@
-import type { AdminNavigationItem, AdminNavigationSectionCode } from "@freshmarkets/contracts";
+import type {
+  AdminNavigationItem,
+  AdminNavigationSectionCode,
+  AdminSelectedScope,
+} from "@freshmarkets/contracts";
 import {
   BarChart3,
   BadgeDollarSign,
   Boxes,
   ClipboardList,
   CreditCard,
-  FolderTree,
   LayoutDashboard,
-  PackageCheck,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -23,7 +25,6 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "products-list",
   "products-create",
   "categories",
-  "categories-list",
   "categories-create",
   "orders",
   "orders-list",
@@ -34,9 +35,6 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "memberships",
   "promotions",
   "inventory",
-  "procurement",
-  "receiving",
-  "fulfillment",
   "delivery",
   "payments",
   "payments-overview",
@@ -71,11 +69,8 @@ export const ADMIN_SECTION_LABELS: Readonly<Record<AdminNavigationSectionCode, s
 const ICONS: Partial<Record<string, LucideIcon>> = {
   overview: LayoutDashboard,
   products: Boxes,
-  categories: FolderTree,
   orders: ClipboardList,
   inventory: Warehouse,
-  procurement: PackageCheck,
-  fulfillment: PackageCheck,
   delivery: Truck,
   customers: Users,
   memberships: ShieldCheck,
@@ -103,6 +98,22 @@ export type AdminNavigationGroup = {
 /** Legacy exports remain empty so workspaces cannot invent child links in Web. */
 export const STAFF_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [];
 export const CUSTOMER_SUB_NAVIGATION: ReadonlyArray<AdminNavigationItem> = [];
+
+/**
+ * Narrows Core-authorized navigation to entries Core marks as relevant to the
+ * operator's selected scope. It never adds a route or grants authority.
+ */
+export function adminNavigationItemsForScope(
+  items: ReadonlyArray<AdminNavigationItem>,
+  selectedScope: AdminSelectedScope | null,
+): ReadonlyArray<AdminNavigationItem> {
+  if (!selectedScope) return items;
+  const applicable = items.filter((item) => item.scopeKinds?.includes(selectedScope.kind) === true);
+  const applicableCodes = new Set(applicable.map((item) => item.code));
+  return applicable.filter(
+    (item) => item.parentCode === null || applicableCodes.has(item.parentCode),
+  );
+}
 
 export function adminNavigationFromContext(
   items: ReadonlyArray<AdminNavigationItem>,

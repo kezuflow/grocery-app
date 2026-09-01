@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import {
   adminProductMediaMaxBytes,
@@ -7,18 +9,18 @@ import {
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
-function invalid(message: string): Response {
-  return Response.json(
+function invalid(message: string, requestId: string): Response {
+  return adminJson(
     {
       ok: false as const,
-      error: { code: "VALIDATION_FAILED" as const, message, requestId: crypto.randomUUID() },
+      error: { code: "VALIDATION_FAILED" as const, message, requestId },
     },
     { status: 400 },
   );
 }
 
 /** Parse same-origin multipart bytes; Core still validates content and owns R2. */
-export async function POST(
+async function POSTHandler(
   request: Request,
   context: { params: Promise<{ "product-id": string }> },
 ) {
@@ -46,10 +48,11 @@ export async function POST(
   ) {
     return invalid(
       "A JPEG, PNG, or WebP file up to 5 MiB, alt text, primary flag, sort order, expected Product version, and idempotency-key are required",
+      webRequestId(request),
     );
   }
   const result = await coreClient(env.CORE).uploadAdminProductMedia({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
     bytes: await file.arrayBuffer(),
@@ -60,5 +63,10 @@ export async function POST(
     expectedProductVersion,
     idempotencyKey,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
+
+export const POST = observeAdminRoute(
+  "admin.catalog.products.by_product_id.media.post",
+  POSTHandler,
+);

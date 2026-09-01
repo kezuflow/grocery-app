@@ -8,9 +8,13 @@ export type WebRequestContext = {
   coreHeaders: Record<string, string>;
 };
 
-export function webRequestContext(request: Request): WebRequestContext {
+export function webRequestId(request: Request): string {
   const inbound = request.headers.get("x-request-id");
-  const requestId = inbound && UUID_PATTERN.test(inbound) ? inbound : crypto.randomUUID();
+  return inbound && UUID_PATTERN.test(inbound) ? inbound : crypto.randomUUID();
+}
+
+export function webRequestContext(request: Request): WebRequestContext {
+  const requestId = webRequestId(request);
   return {
     requestId,
     coreHeaders: { ...requestHeaders(request), "x-request-id": requestId },

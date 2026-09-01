@@ -1,18 +1,20 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 import { optionalLimit, requiredLocation } from "../operations-route-utils";
 
 /** Same-origin transport adapter for the scoped procurement requirement queue. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const params = new URL(request.url).searchParams;
-  const locationId = requiredLocation(params);
+  const locationId = requiredLocation(request, params);
   if (locationId instanceof Response) return locationId;
-  const limit = optionalLimit(params);
+  const limit = optionalLimit(request, params);
   if (limit instanceof Response) return limit;
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).listProcurementRequirements({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
       locationId,
       cycleId: params.get("cycleId") ?? undefined,
@@ -21,3 +23,5 @@ export async function GET(request: Request) {
     }),
   );
 }
+
+export const GET = observeAdminRoute("admin.procurement.get", GETHandler);

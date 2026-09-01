@@ -1,19 +1,21 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
-function parseLimit(params: URLSearchParams): number | undefined | Response {
+function parseLimit(params: URLSearchParams, requestId: string): number | undefined | Response {
   const raw = params.get("limit");
   if (raw === null || raw.trim() === "") return undefined;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "limit must be an integer between 1 and 100",
-          requestId: crypto.randomUUID(),
+          requestId: requestId,
         },
       },
       { status: 400 },
@@ -23,19 +25,19 @@ function parseLimit(params: URLSearchParams): number | undefined | Response {
 }
 
 /** Thin same-origin BFF adapter for the product list. Transport only. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const params = new URL(request.url).searchParams;
-  const limit = parseLimit(params);
+  const limit = parseLimit(params, webRequestId(request));
   if (limit instanceof Response) return limit;
   const status = params.get("status");
   if (status !== null && status !== "active" && status !== "inactive") {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "status must be active or inactive",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
@@ -43,20 +45,20 @@ export async function GET(request: Request) {
   }
   const marketId = params.get("marketId")?.trim() ?? "";
   if (!marketId) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "An explicit marketId pricing context is required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
   }
   const result = await coreClient(env.CORE).listAdminProducts({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     marketId,
     locationId: params.get("locationId")?.trim() || null,
@@ -65,11 +67,11 @@ export async function GET(request: Request) {
     cursor: params.get("cursor") ?? undefined,
     limit,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
 
 /** Whitelisted Product creation adapter; Core remains authoritative for validation and writes. */
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const customerDetails = body?.customerDetails;
@@ -90,21 +92,21 @@ export async function POST(request: Request) {
         Number.isInteger((detail as Record<string, unknown>).sortOrder),
     )
   ) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "Valid Product fields and an idempotency-key are required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
   }
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).createAdminProduct({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
       categoryId: body.categoryId,
       slug: body.slug,
@@ -123,3 +125,7 @@ export async function POST(request: Request) {
     }),
   );
 }
+
+export const GET = observeAdminRoute("admin.catalog.products.get", GETHandler);
+
+export const POST = observeAdminRoute("admin.catalog.products.post", POSTHandler);

@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import type { EligibleRiderPage, EligibleRiderView, RpcResult } from "@freshmarkets/contracts";
 import { identifierSchema, idempotencyKeySchema, z } from "@freshmarkets/validation";
@@ -34,8 +36,8 @@ const commandSchema = z.union([
     .strict(),
 ]);
 
-export async function GET(request: Request) {
-  const requestId = crypto.randomUUID();
+async function GETHandler(request: Request) {
+  const requestId = webRequestId(request);
   const params = new URL(request.url).searchParams;
   const context = parseQueryContext(params);
   if (!hasOnlyQueryKeys(params, GET_QUERY_KEYS) || !context) {
@@ -53,7 +55,7 @@ export async function GET(request: Request) {
   let totalCount: number | null = null;
   for (let call = 0; call < ELIGIBLE_RIDER_MAX_CORE_PAGE_CALLS; call += 1) {
     const result = await core.getEligibleRiders({ ...baseRequest, ...(cursor ? { cursor } : {}) });
-    if (!result.ok) return Response.json(result);
+    if (!result.ok) return adminJson(result);
     const page = result.value;
     if (
       !isEligibleRiderPageEnvelope(page) ||
@@ -63,10 +65,10 @@ export async function GET(request: Request) {
       (page.nextCursor !== null && seenCursors.has(page.nextCursor)) ||
       (page.nextCursor !== null && page.riders.length === 0)
     ) {
-      return Response.json(paginationFailure(requestId));
+      return adminJson(paginationFailure(requestId));
     }
     if (!page.riders.every(isEligibleRider)) {
-      return Response.json(paginationFailure(requestId));
+      return adminJson(paginationFailure(requestId));
     }
     projectionRevision ??= page.projectionRevision;
     totalCount ??= page.totalCount;
@@ -76,34 +78,34 @@ export async function GET(request: Request) {
       riders.length + page.riders.length > totalCount ||
       riders.length + page.riders.length > ELIGIBLE_RIDER_MAX_ITEMS
     ) {
-      return Response.json(paginationFailure(requestId));
+      return adminJson(paginationFailure(requestId));
     }
     for (const rider of page.riders) {
       if (
         seenRiderIds.has(rider.riderId) ||
         (lastRiderId !== null && compareText(rider.riderId, lastRiderId) <= 0)
       ) {
-        return Response.json(paginationFailure(requestId));
+        return adminJson(paginationFailure(requestId));
       }
       seenRiderIds.add(rider.riderId);
       lastRiderId = rider.riderId;
     }
     riders.push(...page.riders);
     if (page.nextCursor === null) {
-      if (riders.length !== totalCount) return Response.json(paginationFailure(requestId));
+      if (riders.length !== totalCount) return adminJson(paginationFailure(requestId));
       riders.sort(
         (left, right) =>
           compareText(left.displayName, right.displayName) ||
           compareText(left.riderId, right.riderId),
       );
-      return Response.json({ ok: true, value: riders, requestId } satisfies RpcResult<
+      return adminJson({ ok: true, value: riders, requestId } satisfies RpcResult<
         ReadonlyArray<EligibleRiderView>
       >);
     }
     seenCursors.add(page.nextCursor);
     cursor = page.nextCursor;
   }
-  return Response.json(paginationFailure(requestId));
+  return adminJson(paginationFailure(requestId));
 }
 
 type EligibleRiderPageEnvelope = Omit<EligibleRiderPage, "riders"> & { riders: unknown[] };
@@ -184,8 +186,8 @@ function paginationFailure(requestId: string): RpcResult<never> {
   };
 }
 
-export async function POST(request: Request) {
-  const requestId = crypto.randomUUID();
+async function POSTHandler(request: Request) {
+  const requestId = webRequestId(request);
   const parsed = commandSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return validationFailure(requestId, "Invalid delivery batch request");
 
@@ -201,7 +203,7 @@ export async function POST(request: Request) {
   }
   const { idempotencyKey: _bodyKey, ...command } = parsed.data;
 
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).createAndAssignDeliveryBatch({
       requestId,
       headers: requestHeaders(request),
@@ -210,3 +212,7 @@ export async function POST(request: Request) {
     }),
   );
 }
+
+export const GET = observeAdminRoute("admin.delivery_batches.get", GETHandler);
+
+export const POST = observeAdminRoute("admin.delivery_batches.post", POSTHandler);

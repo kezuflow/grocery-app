@@ -95,15 +95,8 @@ export default function CategoryDetailPage() {
     );
   const category = result.value;
   const from = searchParams.get("from");
-  const categoryListHref = `/admin/catalog/categories${from ? `?${from}` : ""}`;
   return (
     <div className="space-y-6">
-      <nav className="text-sm text-[var(--fm-text-muted)]">
-        <Link className="underline" href={categoryListHref}>
-          Categories
-        </Link>{" "}
-        / {category.name}
-      </nav>
       <PageHeader
         title={category.name}
         description={`${category.code} · Version ${category.version}`}
@@ -191,6 +184,7 @@ export default function CategoryDetailPage() {
                 <Link
                   className="font-medium underline"
                   href={`/admin/catalog/categories/${child.categoryId}`}
+                  prefetch={false}
                 >
                   {child.name}
                 </Link>
@@ -209,6 +203,7 @@ export default function CategoryDetailPage() {
                 <Link
                   className="font-medium underline"
                   href={`/admin/catalog/products/${product.productId}`}
+                  prefetch={false}
                 >
                   {product.name}
                 </Link>

@@ -112,6 +112,7 @@ export default function PaymentReconciliationPage() {
                         <Link
                           className="font-mono text-xs underline"
                           href={`/admin/payments/transactions/${item.paymentIntentId}`}
+                          prefetch={false}
                         >
                           {item.paymentIntentId}
                         </Link>

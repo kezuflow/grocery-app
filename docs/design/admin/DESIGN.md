@@ -23,14 +23,14 @@ Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/sto
 Primary navigation is organized around operational ownership:
 
 - Overview: Overview.
-- Commerce: Products (Product List, Add Product), Categories (Category List, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Privacy Queue), Memberships, and Promotions.
-- Operations: Inventory, Procurement (Requirements, Receiving), Fulfillment, Delivery, and Operational Exceptions.
+- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Privacy Queue), Memberships, and Promotions. Categories are catalog organization within Products, never a separate top-level workspace.
+- Operations: Inventory, Delivery, and Operational Exceptions. Inventory is the primary stock workspace and presents explicit Add stock and Remove stock actions with dated immutable activity. Procurement, Receiving, and Fulfillment remain distinct Core-owned workflows and purpose-built compatibility routes, but are reached contextually from Orders or exceptions rather than occupying primary navigation.
 - Finance: Payments (Overview, Transactions, Reconciliation) and Analytics.
 - Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Fulfillment Mode).
 
 Resource-specific detail and edit screens are contextual destinations, not permanent navigation items. Product, category, order, customer, membership, promotion, payment, staff, role, issue, and audit detail routes open from their owning list and preserve breadcrumbs back to the filtered list. A stable create route may appear as a nested shortcut; a route requiring a resource ID may not.
 
-Navigation items and actions are capability-aware. A user may see a workspace but receive a scoped empty state if they have no records in the permitted market/location; unauthorized actions remain unavailable in Core.
+Navigation items and actions are capability-aware and selected-scope aware. Core supplies both the authorized entries and their supported scope kinds; Web only narrows that set. Global selection shows the complete authorized administration. Market selection shows Overview, Orders, Analytics, and Audit when authorized. Location selection (for example Cebu Central) shows Overview, Orders, Inventory, Delivery, Analytics, Audit, and location Settings when authorized; it hides global Products, Customers, Memberships, Promotions, Payments/Pricing, and Staff administration. Unauthorized actions remain unavailable in Core regardless of visibility.
 
 ## Global Shell
 
@@ -72,7 +72,7 @@ The overview consumes one purpose-built, scope-aware Admin overview read model. 
 - Orders: Order List, Order Detail, and Order Issues. Detail composes items, immutable financial snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit history.
 - Customers, Memberships, and Promotions: list/detail workspaces plus the Customer Privacy Queue and the approved explicit commands for each domain.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation. Refund and retry/reconcile actions are contextual commands from detail or exception states, not generic row edits.
-- Operations and administration: Inventory, Procurement Requirements, Receiving, Fulfillment, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit, and Fulfillment Mode settings.
+- Operations and administration: Inventory stock levels/activity, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit, and Fulfillment Mode settings. Procurement, Receiving, and Fulfillment screens remain available as contextual advanced workflows while the default operator path stays focused on stock in/out.
 
 Products and categories referenced by committed or historical records are deactivated rather than hard-deleted. Archival is used only where the owning aggregate explicitly defines an archive transition. Admin does not provide a Create Order workflow: Orders originate from the authoritative checkout/payment commitment flow.
 
@@ -159,9 +159,9 @@ Every workspace designs:
 
 - Orders: protect commitment truth and operational resolution.
 - Catalog: manage global product identity and location availability/prices.
-- Inventory: inspect location balances, reservations, ledger, and adjustments.
-- Procurement: turn committed demand into requirements and receiving decisions.
-- Fulfillment: progress work and resolve shortages.
+- Inventory: inspect location balances and record simple stock additions/removals with server-dated immutable activity.
+- Procurement and Receiving: preserve committed-demand and receiving correctness behind contextual advanced workflows; do not make them the default stock-entry vocabulary.
+- Fulfillment: preserve paid-order picking/packing transitions behind Orders and exception handling; do not represent fulfillment as a generic inventory edit.
 - Delivery: manage capacity, batches, riders, stops, and failed delivery.
 - Customers: support identity-linked customer context without editing auth records.
 - Subscriptions: manage membership state and billing failures, not grocery orders.

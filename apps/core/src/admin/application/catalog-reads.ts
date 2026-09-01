@@ -21,6 +21,7 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { DEFAULT_FULFILLMENT_LOCATION_ID, DEFAULT_MARKET_CODE } from "@freshmarkets/config";
+import { setD1SpanAttributes, traceOperation } from "../../observability";
 import {
   boundListLimit,
   decodeStaffCursor,
@@ -320,9 +321,13 @@ export async function listAdminProducts(
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const now = Date.now();
-  const rows = await deps.db
-    .prepare(
-      `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status, p.version,
+  const rows = await traceOperation(
+    "db.admin.products.list",
+    { requestId: request.requestId, readModel: "admin.products.list" },
+    async (span) => {
+      const result = await deps.db
+        .prepare(
+          `SELECT p.id AS productId, p.slug, p.name, c.code AS categoryCode, p.status, p.version,
               p.created_at AS createdAt,
               (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id) AS skuCount,
               (SELECT COUNT(*) FROM sku s WHERE s.product_id = p.id AND s.status='active') AS activeSkuCount,
@@ -365,50 +370,55 @@ export async function listAdminProducts(
        ${where}
        ORDER BY p.created_at DESC, p.id DESC
        LIMIT ?`,
-    )
-    .bind(
-      request.marketId,
-      request.locationId,
-      request.locationId,
-      request.locationId,
-      now,
-      now,
-      request.locationId ?? "",
-      request.marketId,
-      request.locationId,
-      request.locationId,
-      request.locationId,
-      now,
-      now,
-      request.locationId,
-      request.marketId,
-      request.locationId,
-      request.locationId,
-      request.locationId,
-      now,
-      now,
-      request.locationId,
-      ...binds,
-      limit + 1,
-    )
-    .all<{
-      productId: string;
-      slug: string;
-      name: string;
-      categoryCode: string;
-      status: "active" | "inactive";
-      createdAt: number;
-      skuCount: number;
-      activeSkuCount: number;
-      pricedSkuCount: number;
-      availableSkuCount: number;
-      mediaId: string | null;
-      mediaAltText: string | null;
-      mediaVersion: number | null;
-      minimumMinor: number | null;
-      maximumMinor: number | null;
-      version: number;
-    }>();
+        )
+        .bind(
+          request.marketId,
+          request.locationId,
+          request.locationId,
+          request.locationId,
+          now,
+          now,
+          request.locationId ?? "",
+          request.marketId,
+          request.locationId,
+          request.locationId,
+          request.locationId,
+          now,
+          now,
+          request.locationId,
+          request.marketId,
+          request.locationId,
+          request.locationId,
+          request.locationId,
+          now,
+          now,
+          request.locationId,
+          ...binds,
+          limit + 1,
+        )
+        .all<{
+          productId: string;
+          slug: string;
+          name: string;
+          categoryCode: string;
+          status: "active" | "inactive";
+          createdAt: number;
+          skuCount: number;
+          activeSkuCount: number;
+          pricedSkuCount: number;
+          availableSkuCount: number;
+          mediaId: string | null;
+          mediaAltText: string | null;
+          mediaVersion: number | null;
+          minimumMinor: number | null;
+          maximumMinor: number | null;
+          version: number;
+        }>();
+      setD1SpanAttributes(span, result.meta);
+      span.setAttribute("db.rows.returned", result.results.length);
+      return result;
+    },
+  );
   const hasMore = rows.results.length > limit;
   const pageRows = rows.results.slice(0, limit);
   const items: AdminProductListSummary[] = pageRows.map((row) => ({

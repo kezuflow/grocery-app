@@ -6,7 +6,6 @@ import type {
   AdminCategorySummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CategoryForm, type CategoryFormValue } from "@/components/admin/category-form";
@@ -89,22 +88,6 @@ export default function EditCategoryPage() {
   if (!value || !detail) return <Skeleton className="h-80 w-full" />;
   return (
     <div className="space-y-6">
-      <nav className="text-sm text-[var(--fm-text-muted)]">
-        <Link
-          className="underline"
-          href={`/admin/catalog/categories${searchParams.get("from") ? `?${searchParams.get("from")}` : ""}`}
-        >
-          Categories
-        </Link>{" "}
-        /{" "}
-        <Link
-          className="underline"
-          href={`/admin/catalog/categories/${categoryId}${searchParams.get("from") ? `?from=${encodeURIComponent(searchParams.get("from")!)}` : ""}`}
-        >
-          {detail.name}
-        </Link>{" "}
-        / Edit
-      </nav>
       <PageHeader
         title="Edit category"
         description="Identity and hierarchy changes are version-guarded and audited."

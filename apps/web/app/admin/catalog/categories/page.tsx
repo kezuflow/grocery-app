@@ -19,6 +19,7 @@ import {
 import { PageHeader, StatusBadge } from "@/components/admin/admin-shell";
 import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
 import { useAdminContext } from "../../admin-context-provider";
+import { WorkspaceNavigation } from "@/components/admin/workspace-navigation";
 
 export default function CategoriesPage() {
   const router = useRouter();
@@ -67,11 +68,14 @@ export default function CategoriesPage() {
         action={
           canManage ? (
             <Button asChild>
-              <Link href="/admin/catalog/categories/new">Add category</Link>
+              <Link href="/admin/catalog/categories/new" prefetch={false}>
+                Add category
+              </Link>
             </Button>
           ) : null
         }
       />
+      <WorkspaceNavigation parentCode="products" label="Product administration" />
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
       {payload && !payload.ok ? (
         <Alert variant="destructive">
@@ -134,6 +138,7 @@ export default function CategoriesPage() {
                     <Link
                       className="font-medium text-[var(--fm-info)] underline"
                       href={`/admin/catalog/categories/${item.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
+                      prefetch={false}
                     >
                       View
                     </Link>

@@ -18,6 +18,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../../components/admin/admin-controls";
+import { AdminPageState } from "../../../../components/admin/admin-page-state";
 export default function OperationalExceptionsPage() {
   const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<OperationalExceptionPage | null>(null);
@@ -60,13 +61,20 @@ export default function OperationalExceptionsPage() {
         title="Operational exceptions"
         description={`Cross-domain exception visibility for ${label}, with source-owned resolution commands.`}
       />
-      {state === "loading" ? (
+      {!locationId ? (
+        <AdminPageState
+          state="permission-empty"
+          title="Select a permitted location"
+          message="Choose a location scope in the Admin header to inspect operational exceptions."
+        />
+      ) : null}
+      {locationId && state === "loading" ? (
         <div role="status" aria-label="Loading operational exceptions">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="mt-3 h-12 w-full" />
         </div>
       ) : null}
-      {state === "error" ? (
+      {locationId && state === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Operational exceptions could not be loaded</AlertTitle>
           <AlertDescription>
@@ -82,7 +90,7 @@ export default function OperationalExceptionsPage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {state === "ready" && page ? (
+      {locationId && state === "ready" && page ? (
         <ListPageSection
           title="Exception queue"
           description="Open the source workspace to resolve an exception with its current aggregate version."

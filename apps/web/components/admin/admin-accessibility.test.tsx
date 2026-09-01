@@ -26,6 +26,7 @@ vi.mock("next/link", () => ({ default: ({ children }: { children: unknown }) => 
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
 
 const shell = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
+const globals = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 const sheet = readFileSync(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
 const table = readFileSync(new URL("../ui/table.tsx", import.meta.url), "utf8");
 const alertDialog = readFileSync(new URL("../ui/alert-dialog.tsx", import.meta.url), "utf8");
@@ -38,6 +39,41 @@ const inventoryPage = readFileSync(
   new URL("../../app/admin/inventory/page.tsx", import.meta.url),
   "utf8",
 );
+const auditPage = readFileSync(new URL("../../app/admin/audit/page.tsx", import.meta.url), "utf8");
+const newProductPage = readFileSync(
+  new URL("../../app/admin/catalog/products/new/page.tsx", import.meta.url),
+  "utf8",
+);
+const newCategoryPage = readFileSync(
+  new URL("../../app/admin/catalog/categories/new/page.tsx", import.meta.url),
+  "utf8",
+);
+const issuesPage = readFileSync(
+  new URL("../../app/admin/issues/page.tsx", import.meta.url),
+  "utf8",
+);
+const privacyPage = readFileSync(
+  new URL("../../app/admin/customers/privacy/page.tsx", import.meta.url),
+  "utf8",
+);
+const locationOnlyPages = [
+  "../../app/admin/procurement/page.tsx",
+  "../../app/admin/receiving/page.tsx",
+  "../../app/admin/fulfillment/page.tsx",
+  "../../app/admin/issues/operational-exceptions/page.tsx",
+  "../../app/admin/settings/fulfillment-mode/page.tsx",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+const dynamicAdminPages = [
+  "../../app/admin/promotions/[promotion-id]/page.tsx",
+  "../../app/admin/customers/[customer-id]/page.tsx",
+  "../../app/admin/staff/[staff-id]/page.tsx",
+  "../../app/admin/staff/roles/[role-id]/page.tsx",
+  "../../app/admin/audit/audit-detail-view.tsx",
+  "../../app/admin/catalog/products/[product-id]/page.tsx",
+  "../../app/admin/catalog/products/[product-id]/edit/page.tsx",
+  "../../app/admin/catalog/categories/[category-id]/page.tsx",
+  "../../app/admin/catalog/categories/[category-id]/edit/page.tsx",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
 
 describe("shared Admin accessibility contract", () => {
   it("exposes labelled main content, active navigation, and a focusable mobile menu", () => {
@@ -52,6 +88,11 @@ describe("shared Admin accessibility contract", () => {
   it("keeps the Admin visual scope on the Admin layout boundary", () => {
     const layout = readFileSync(new URL("../../app/admin/layout.tsx", import.meta.url), "utf8");
     expect(layout).toMatch(/className="fm-admin/);
+    expect(layout).toContain('import "@fontsource-variable/dm-sans/wght.css"');
+    expect(globals).toMatch(
+      /\.fm-admin \{[\s\S]*font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;/,
+    );
+    expect(shell).toContain('className="text-2xl font-bold tracking-[-0.025em]"');
   });
 
   it("server-renders a first-time desktop visit with the 72px icon rail", () => {
@@ -67,6 +108,16 @@ describe("shared Admin accessibility contract", () => {
 
     expect(markup).toContain("w-[var(--fm-admin-sidebar-collapsed)]");
     expect(markup).toContain('aria-label="Expand admin navigation"');
+    expect(shell).not.toContain("overflow-y-auto");
+    expect(shell).toContain("h-9 items-center justify-center");
+    expect(shell).toContain("text-sm font-normal hover:bg-[var(--fm-hover)]");
+    expect(shell).toContain('activeCode === child.code && "font-medium');
+    expect(shell).toContain(
+      'className="absolute -right-3 top-3 z-10 size-6 rounded-full bg-white shadow-sm"',
+    );
+    expect(shell.slice(shell.indexOf("function AdminSidebar"))).toContain(
+      'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
+    );
   });
 
   it("gives shell states headings and status semantics", () => {
@@ -94,6 +145,7 @@ describe("shared Admin accessibility contract", () => {
     expect(loading).toContain("Loading admin shell");
     expect(unauthenticated).toContain('id="admin-page-title"');
     expect(unauthenticated).toContain("Sign in required");
+    expect(shell).toContain('href="/auth/login?redirectTo=/admin"');
     expect(forbidden).toContain("Staff access required");
     expect(error).toContain('role="alert"');
     expect(error).toContain("Request reference: req-1");
@@ -131,6 +183,23 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain('scope="col"');
     expect(markup).toContain('tabindex="0"');
     expect(markup).toContain('id="admin-page-title"');
+    expect(markup).not.toContain("FreshMarkets Admin");
+  });
+
+  it("keeps permanent route context singular and hides unavailable queue actions", () => {
+    expect(auditPage).not.toContain("<Breadcrumb>");
+    expect(newProductPage).not.toContain("<nav");
+    expect(newCategoryPage).not.toContain("<nav");
+    for (const page of dynamicAdminPages) {
+      expect(page).not.toContain("<Breadcrumb>");
+      expect(page).not.toContain("<nav");
+    }
+    expect(issuesPage).toContain("page.items.length > 0");
+    expect(privacyPage).toContain("state.page.items.length > 0");
+    for (const page of locationOnlyPages) {
+      expect(page).toContain('state="permission-empty"');
+      expect(page).toContain("Select a permitted location");
+    }
   });
 
   it("names the mobile dialog close action", () => {

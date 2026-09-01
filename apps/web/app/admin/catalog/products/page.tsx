@@ -1,17 +1,22 @@
 "use client";
 
-import type { AdminProductPage, RpcResult } from "@freshmarkets/contracts";
+import type { AdminProductPage, AdminProductSummary, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
-import { ProductListView } from "@/components/admin/product-list-view";
+import {
+  ProductListView,
+  type BulkProductDeactivationResult,
+  type BulkProductSelection,
+} from "@/components/admin/product-list-view";
 import { useAdminContext } from "../../admin-context-provider";
 import { FilterBar, PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspaceNavigation } from "@/components/admin/workspace-navigation";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -19,6 +24,8 @@ export default function ProductsPage() {
   const query = searchParams.get("query") ?? "";
   const status = searchParams.get("status") ?? "all";
   const [payload, setPayload] = useState<RpcResult<AdminProductPage> | null>(null);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const pagination = useAdminPagination();
   const adminContext = useAdminContext();
   const pricingTarget =
@@ -67,13 +74,80 @@ export default function ProductsPage() {
           },
         }),
       );
-  }, [pagination.cursor, pricingTarget?.locationId, pricingTarget?.marketId, query, status]);
+  }, [
+    pagination.cursor,
+    pricingTarget?.locationId,
+    pricingTarget?.marketId,
+    query,
+    reloadVersion,
+    status,
+  ]);
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") next.set(key, value);
     else next.delete(key);
     pagination.reset();
     router.replace(`/admin/catalog/products${next.size ? `?${next}` : ""}`);
+  }
+
+  async function deactivateProducts(
+    products: ReadonlyArray<BulkProductSelection>,
+    reason: string,
+  ): Promise<BulkProductDeactivationResult> {
+    if (bulkPending) return { succeeded: [], failed: [] };
+    setBulkPending(true);
+    const outcome: {
+      succeeded: Array<{ productId: string; name: string }>;
+      failed: Array<{
+        productId: string;
+        name: string;
+        message: string;
+        requestId: string | null;
+      }>;
+    } = { succeeded: [], failed: [] };
+    try {
+      for (const product of products) {
+        try {
+          const response = await fetch(
+            `/api/admin/catalog/products/${encodeURIComponent(product.productId)}/status`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "idempotency-key": product.idempotencyKey,
+              },
+              body: JSON.stringify({
+                status: "inactive",
+                reason,
+                expectedVersion: product.version,
+              }),
+            },
+          );
+          const result = (await response.json()) as RpcResult<AdminProductSummary>;
+          if (result.ok) {
+            outcome.succeeded.push({ productId: product.productId, name: product.name });
+          } else {
+            outcome.failed.push({
+              productId: product.productId,
+              name: product.name,
+              message: result.error.message,
+              requestId: result.error.requestId,
+            });
+          }
+        } catch {
+          outcome.failed.push({
+            productId: product.productId,
+            name: product.name,
+            message: "Network error while deactivating this product.",
+            requestId: null,
+          });
+        }
+      }
+      setReloadVersion((current) => current + 1);
+      return outcome;
+    } finally {
+      setBulkPending(false);
+    }
   }
   return (
     <div className="space-y-6">
@@ -83,11 +157,14 @@ export default function ProductsPage() {
         action={
           canManage ? (
             <Button asChild>
-              <Link href="/admin/catalog/products/new">Add product</Link>
+              <Link href="/admin/catalog/products/new" prefetch={false}>
+                Add product
+              </Link>
             </Button>
           ) : null
         }
       />
+      <WorkspaceNavigation parentCode="products" label="Product administration" />
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
       {payload && !payload.ok ? (
         <Alert variant="destructive">
@@ -120,7 +197,13 @@ export default function ProductsPage() {
               <option value="inactive">Inactive</option>
             </select>
           </FilterBar>
-          <ProductListView page={payload.value} fromQuery={searchParams.toString()} />
+          <ProductListView
+            page={payload.value}
+            fromQuery={searchParams.toString()}
+            canManage={canManage}
+            deactivationPending={bulkPending}
+            onDeactivateSelected={deactivateProducts}
+          />
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}
             nextCursor={payload.value.nextCursor}

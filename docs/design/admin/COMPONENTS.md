@@ -13,7 +13,7 @@ Primitive styling may be themed, but behavior, accessibility, and composition sh
 Build these only once they appear across multiple workspaces:
 
 - `AdminShell`: sidebar, header, scope/cycle context, responsive navigation.
-- `AdminNavigation`: Core-provided section/parent/child links, expanded and icon-rail modes, mobile Sheet, route-aware expansion, tooltips, and keyboard navigation.
+- `AdminNavigation`: Core-provided section/parent/child links narrowed by Core-declared selected-scope applicability, expanded and icon-rail modes, mobile Sheet, route-aware expansion, tooltips, and keyboard navigation.
 - `PageHeader`: title, description, breadcrumbs, scope, primary/secondary actions.
 - `FilterBar`: debounced search, select/date/status filters, clear-all, URL state.
 - `AdminDataTable`: server-side data, keyset pagination, row selection, responsive fallback, loading/empty/error states.

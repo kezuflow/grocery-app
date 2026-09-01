@@ -256,6 +256,7 @@ export default function CustomersPage() {
                       <TableCell>
                         <Link
                           href={`/admin/customers/${customer.customerId}`}
+                          prefetch={false}
                           className="text-xs font-medium text-[var(--fm-info)] underline"
                         >
                           Manage

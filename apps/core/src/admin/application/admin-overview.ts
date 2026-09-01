@@ -11,6 +11,7 @@ import type { AuthInstance } from "../../auth/service";
 import { listAdminAuditEvents } from "../../audit/application/list-audit-events";
 import { listOperationalExceptions } from "../../audit/application/list-operational-exceptions";
 import { iamSchema } from "../../iam/schema";
+import { setD1SpanAttributes, traceOperation } from "../../observability";
 
 export type AdminOverviewDeps = { auth: AuthInstance; db: D1Database };
 
@@ -64,11 +65,20 @@ export async function getAdminOverview(
     if (!context.value.scopes.some((scope) => scope.kind === "global")) {
       return failure("FORBIDDEN", "Global Admin scope is required", request.requestId);
     }
-    const rows = await deps.db
-      .prepare(
-        "SELECT id AS locationId, market_id AS marketId FROM fulfillment_location WHERE status='active' ORDER BY id",
-      )
-      .all<{ locationId: string; marketId: string }>();
+    const rows = await traceOperation(
+      "db.admin.overview.locations",
+      { requestId: request.requestId, readModel: "admin.overview" },
+      async (span) => {
+        const result = await deps.db
+          .prepare(
+            "SELECT id AS locationId, market_id AS marketId FROM fulfillment_location WHERE status='active' ORDER BY id",
+          )
+          .all<{ locationId: string; marketId: string }>();
+        setD1SpanAttributes(span, result.meta);
+        span.setAttribute("db.rows.returned", result.results.length);
+        return result;
+      },
+    );
     locations = rows.results;
   } else if (selected.kind === "MARKET") {
     const market = await deps.db
@@ -85,12 +95,21 @@ export async function getAdminOverview(
     ) {
       return failure("FORBIDDEN", "Selected market scope is required", request.requestId);
     }
-    const rows = await deps.db
-      .prepare(
-        "SELECT id AS locationId, market_id AS marketId FROM fulfillment_location WHERE status='active' AND market_id=? ORDER BY id",
-      )
-      .bind(selected.marketId)
-      .all<{ locationId: string; marketId: string }>();
+    const rows = await traceOperation(
+      "db.admin.overview.locations",
+      { requestId: request.requestId, readModel: "admin.overview" },
+      async (span) => {
+        const result = await deps.db
+          .prepare(
+            "SELECT id AS locationId, market_id AS marketId FROM fulfillment_location WHERE status='active' AND market_id=? ORDER BY id",
+          )
+          .bind(selected.marketId)
+          .all<{ locationId: string; marketId: string }>();
+        setD1SpanAttributes(span, result.meta);
+        span.setAttribute("db.rows.returned", result.results.length);
+        return result;
+      },
+    );
     locations = rows.results;
   } else {
     const location = await deps.db
@@ -177,13 +196,22 @@ export async function getAdminOverview(
   let workloadStages: AdminOverviewView["workloadStages"] = [];
   if (canReadOperations && locationIds.length > 0) {
     const marks = placeholders(locationIds);
-    const workload = await deps.db
-      .prepare(
-        `SELECT status AS code, COUNT(*) AS count FROM fulfillment_record
-         WHERE location_id IN (${marks}) GROUP BY status ORDER BY status`,
-      )
-      .bind(...locationIds)
-      .all<{ code: string; count: number }>();
+    const workload = await traceOperation(
+      "db.admin.overview.workload",
+      { requestId: request.requestId, readModel: "admin.overview" },
+      async (span) => {
+        const result = await deps.db
+          .prepare(
+            `SELECT status AS code, COUNT(*) AS count FROM fulfillment_record
+             WHERE location_id IN (${marks}) GROUP BY status ORDER BY status`,
+          )
+          .bind(...locationIds)
+          .all<{ code: string; count: number }>();
+        setD1SpanAttributes(span, result.meta);
+        span.setAttribute("db.rows.returned", result.results.length);
+        return result;
+      },
+    );
     workloadStages = workload.results.map((row) => ({
       code: row.code,
       label: row.code.toLowerCase().replaceAll("_", " "),

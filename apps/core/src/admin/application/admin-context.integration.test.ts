@@ -128,6 +128,7 @@ describe("scoped admin context", () => {
       label: "Audit log",
       href: "/admin/audit",
       section: "administration",
+      scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
       parentCode: null,
       kind: "workspace",
     });
@@ -147,6 +148,7 @@ describe("scoped admin context", () => {
       label: "Products",
       href: "/admin/catalog/products",
       section: "commerce",
+      scopeKinds: ["GLOBAL"],
       parentCode: null,
       kind: "workspace",
     });
@@ -155,9 +157,22 @@ describe("scoped admin context", () => {
       label: "Product list",
       href: "/admin/catalog/products",
       section: "commerce",
+      scopeKinds: ["GLOBAL"],
       parentCode: "products",
       kind: "destination",
     });
+    expect(context.value.navigation).toContainEqual({
+      code: "categories",
+      label: "Categories",
+      href: "/admin/catalog/categories",
+      section: "commerce",
+      scopeKinds: ["GLOBAL"],
+      parentCode: "products",
+      kind: "destination",
+    });
+    expect(context.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "categories-list" }),
+    );
     expect(context.value.navigation).not.toContainEqual(
       expect.objectContaining({ code: "products-create" }),
     );
@@ -166,6 +181,7 @@ describe("scoped admin context", () => {
       label: "Transactions",
       href: "/admin/payments/transactions",
       section: "finance",
+      scopeKinds: ["GLOBAL"],
       parentCode: "payments",
       kind: "destination",
     });
@@ -174,6 +190,7 @@ describe("scoped admin context", () => {
       label: "Pricing & fees",
       href: "/admin/commerce-configuration",
       section: "finance",
+      scopeKinds: ["GLOBAL"],
       parentCode: null,
       kind: "workspace",
     });

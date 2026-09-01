@@ -1,8 +1,31 @@
+"use client";
+
 import type { AdminProductPage } from "@freshmarkets/contracts";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
+import { ConfirmCommandDialog } from "./admin-controls";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+
+type ProductListItem = AdminProductPage["items"][number];
+
+export type BulkProductSelection = Pick<ProductListItem, "productId" | "name" | "version"> & {
+  idempotencyKey: string;
+};
+
+export type BulkProductDeactivationResult = {
+  succeeded: ReadonlyArray<{ productId: string; name: string }>;
+  failed: ReadonlyArray<{
+    productId: string;
+    name: string;
+    message: string;
+    requestId: string | null;
+  }>;
+};
 
 function money(amountMinor: number, currency: string) {
   return new Intl.NumberFormat("en-PH", {
@@ -22,10 +45,82 @@ function priceRange(product: AdminProductPage["items"][number]) {
 export function ProductListView({
   page,
   fromQuery,
+  canManage = false,
+  deactivationPending = false,
+  onDeactivateSelected,
 }: {
   page: AdminProductPage;
   fromQuery: string;
+  canManage?: boolean;
+  deactivationPending?: boolean;
+  onDeactivateSelected?: (
+    products: ReadonlyArray<BulkProductSelection>,
+    reason: string,
+  ) => Promise<BulkProductDeactivationResult>;
 }) {
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [confirmingDeactivation, setConfirmingDeactivation] = useState(false);
+  const [result, setResult] = useState<BulkProductDeactivationResult | null>(null);
+  const selectionKeys = useRef(new Map<string, string>());
+  const deactivateTrigger = useRef<HTMLButtonElement>(null);
+  const selectableProducts = page.items.filter((product) => product.status === "active");
+  const selectedProducts = page.items.filter((product) => selectedIds.has(product.productId));
+  const allSelected =
+    selectableProducts.length > 0 && selectedIds.size === selectableProducts.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  useEffect(() => {
+    const currentSelectable = new Set(selectableProducts.map((product) => product.productId));
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((productId) => currentSelectable.has(productId)));
+      const unchanged =
+        next.size === current.size && [...next].every((productId) => current.has(productId));
+      return unchanged ? current : next;
+    });
+    for (const productId of selectionKeys.current.keys()) {
+      if (!currentSelectable.has(productId)) selectionKeys.current.delete(productId);
+    }
+  }, [page.items]);
+
+  function selectProduct(productId: string, checked: boolean) {
+    setResult(null);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(productId);
+        if (!selectionKeys.current.has(productId)) {
+          selectionKeys.current.set(productId, crypto.randomUUID());
+        }
+      } else {
+        next.delete(productId);
+        selectionKeys.current.delete(productId);
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+    selectionKeys.current.clear();
+    setConfirmingDeactivation(false);
+  }
+
+  async function deactivateSelected(reason: string) {
+    if (!onDeactivateSelected || selectedProducts.length === 0) return;
+    setConfirmingDeactivation(false);
+    const outcome = await onDeactivateSelected(
+      selectedProducts.map((product) => ({
+        productId: product.productId,
+        name: product.name,
+        version: product.version,
+        idempotencyKey: selectionKeys.current.get(product.productId) ?? crypto.randomUUID(),
+      })),
+      reason,
+    );
+    setResult(outcome);
+    clearSelection();
+  }
+
   const readiness = [
     ["Active products", page.readiness.activeProducts],
     ["Inactive products", page.readiness.inactiveProducts],
@@ -43,10 +138,89 @@ export function ProductListView({
       </AdminDashboardGrid>
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
+        {selectedIds.size > 0 ? (
+          <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium" role="status" aria-live="polite">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                ref={deactivateTrigger}
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={deactivationPending || !onDeactivateSelected}
+                onClick={() => setConfirmingDeactivation(true)}
+              >
+                <Trash2 aria-hidden="true" />
+                Deactivate
+              </Button>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={deactivationPending}
+              onClick={clearSelection}
+            >
+              <X aria-hidden="true" />
+              Cancel
+            </Button>
+          </div>
+        ) : null}
+        {result ? (
+          result.failed.length > 0 ? (
+            <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+              <AlertTitle>Bulk deactivation finished with exceptions</AlertTitle>
+              <AlertDescription>
+                <p>
+                  {result.succeeded.length} deactivated; {result.failed.length} failed.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {result.failed.map((failure) => (
+                    <li key={failure.productId}>
+                      {failure.name}: {failure.message}
+                      {failure.requestId ? ` (request ${failure.requestId})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <p className="border-b border-[var(--fm-border)] px-4 py-3 text-sm" role="status">
+              {result.succeeded.length} product{result.succeeded.length === 1 ? "" : "s"}{" "}
+              deactivated.
+            </p>
+          )
+        ) : null}
         <div className="overflow-x-auto">
           <Table aria-label="Products">
             <TableHeader>
               <TableRow>
+                {canManage ? (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      aria-label="Select all active products"
+                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                      disabled={selectableProducts.length === 0 || deactivationPending}
+                      onCheckedChange={(checked) => {
+                        setResult(null);
+                        if (checked === true) {
+                          for (const product of selectableProducts) {
+                            if (!selectionKeys.current.has(product.productId)) {
+                              selectionKeys.current.set(product.productId, crypto.randomUUID());
+                            }
+                          }
+                          setSelectedIds(
+                            new Set(selectableProducts.map((product) => product.productId)),
+                          );
+                        } else {
+                          clearSelection();
+                        }
+                      }}
+                    />
+                  </TableHead>
+                ) : null}
                 <TableHead>Product</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Resolved price</TableHead>
@@ -60,7 +234,22 @@ export function ProductListView({
             </TableHeader>
             <TableBody>
               {page.items.map((product) => (
-                <TableRow key={product.productId}>
+                <TableRow
+                  key={product.productId}
+                  data-state={selectedIds.has(product.productId) ? "selected" : undefined}
+                >
+                  {canManage ? (
+                    <TableCell className="w-12">
+                      <Checkbox
+                        aria-label={`Select ${product.name}`}
+                        checked={selectedIds.has(product.productId)}
+                        disabled={product.status !== "active" || deactivationPending}
+                        onCheckedChange={(checked) =>
+                          selectProduct(product.productId, checked === true)
+                        }
+                      />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="min-w-64">
                     <div className="flex items-center gap-3">
                       {product.primaryMedia ? (
@@ -137,6 +326,19 @@ export function ProductListView({
           </p>
         ) : null}
       </section>
+      <ConfirmCommandDialog
+        open={confirmingDeactivation}
+        title={`Deactivate ${selectedIds.size} product${selectedIds.size === 1 ? "" : "s"}?`}
+        resource={selectedProducts.map((product) => product.name).join(", ")}
+        scope="Global Catalog"
+        consequence="Selected Products leave storefront availability. Variants, prices, inventory history, and committed order snapshots remain intact."
+        confirmLabel="Confirm deactivation"
+        cancelLabel="Cancel"
+        pending={deactivationPending}
+        restoreFocusRef={deactivateTrigger}
+        onCancel={() => setConfirmingDeactivation(false)}
+        onConfirm={(reason) => void deactivateSelected(reason)}
+      />
     </div>
   );
 }

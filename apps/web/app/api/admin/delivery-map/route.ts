@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import {
   deliveryJobStates,
@@ -21,8 +23,8 @@ const DELIVERY_MAP_MAX_PAGE_ITEMS = 250;
 const DELIVERY_MAP_MAX_ITEMS = 5_000;
 const DELIVERY_STATUSES = new Set<string>(deliveryJobStates);
 
-export async function GET(request: Request) {
-  const requestId = crypto.randomUUID();
+async function GETHandler(request: Request) {
+  const requestId = webRequestId(request);
   const params = new URL(request.url).searchParams;
   const context = parseQueryContext(params);
   const statuses = parseOptionalStatuses(params);
@@ -49,7 +51,7 @@ export async function GET(request: Request) {
   let generatedAt: string | null = null;
   for (let call = 0; call < DELIVERY_MAP_MAX_CORE_PAGE_CALLS; call += 1) {
     const result = await core.getDeliveryMap({ ...baseRequest, ...(cursor ? { cursor } : {}) });
-    if (!result.ok) return Response.json(result);
+    if (!result.ok) return adminJson(result);
     const page = result.value;
     if (
       !isDeliveryMapPageEnvelope(page, context) ||
@@ -59,10 +61,10 @@ export async function GET(request: Request) {
       (page.nextCursor !== null && seenCursors.has(page.nextCursor)) ||
       (page.nextCursor !== null && page.pins.length === 0)
     ) {
-      return Response.json(paginationFailure(requestId));
+      return adminJson(paginationFailure(requestId));
     }
     if (!page.pins.every((pin) => isDeliveryMapPin(pin, context))) {
-      return Response.json(paginationFailure(requestId));
+      return adminJson(paginationFailure(requestId));
     }
     projectionRevision ??= page.projectionRevision;
     totalCount ??= page.totalCount;
@@ -74,21 +76,21 @@ export async function GET(request: Request) {
       pins.length + page.pins.length > totalCount ||
       pins.length + page.pins.length > DELIVERY_MAP_MAX_ITEMS
     ) {
-      return Response.json(paginationFailure(requestId));
+      return adminJson(paginationFailure(requestId));
     }
     for (const pin of page.pins) {
       if (
         seenJobIds.has(pin.jobId) ||
         (lastJobId !== null && compareIdentifiers(pin.jobId, lastJobId) <= 0)
       ) {
-        return Response.json(paginationFailure(requestId));
+        return adminJson(paginationFailure(requestId));
       }
       seenJobIds.add(pin.jobId);
       lastJobId = pin.jobId;
     }
     pins.push(...page.pins);
     if (page.nextCursor === null) {
-      if (pins.length !== totalCount) return Response.json(paginationFailure(requestId));
+      if (pins.length !== totalCount) return adminJson(paginationFailure(requestId));
       const value: DeliveryMapView = {
         ...context,
         pins,
@@ -98,12 +100,12 @@ export async function GET(request: Request) {
         totalCount,
         generatedAt,
       };
-      return Response.json({ ok: true, value, requestId } satisfies RpcResult<DeliveryMapView>);
+      return adminJson({ ok: true, value, requestId } satisfies RpcResult<DeliveryMapView>);
     }
     seenCursors.add(page.nextCursor);
     cursor = page.nextCursor;
   }
-  return Response.json(paginationFailure(requestId));
+  return adminJson(paginationFailure(requestId));
 }
 
 type DeliveryMapPageEnvelope = Omit<DeliveryMapView, "pins"> & { pins: unknown[] };
@@ -270,3 +272,5 @@ function paginationFailure(requestId: string): RpcResult<never> {
     },
   };
 }
+
+export const GET = observeAdminRoute("admin.delivery_map.get", GETHandler);

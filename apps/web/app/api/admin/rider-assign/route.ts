@@ -1,3 +1,5 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
@@ -10,10 +12,10 @@ const bodySchema = z.object({
 });
 
 /** Assign an open delivery job to an active staff rider. Core enforces scope. */
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
-    return Response.json(
+    return adminJson(
       { ok: false, error: { code: "VALIDATION_FAILED", message: "Invalid rider assignment" } },
       { status: 400 },
     );
@@ -25,14 +27,14 @@ export async function POST(request: Request) {
       new URL(request.url).searchParams.get("v") ?? undefined,
     );
   } catch (error) {
-    return Response.json(
+    return adminJson(
       { ok: false, error: { code: "VALIDATION_FAILED", message: (error as Error).message } },
       { status: 400 },
     );
   }
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).assignRider({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
       orderId: parsed.data.orderId,
       riderAuthUserId: parsed.data.riderAuthUserId,
@@ -41,3 +43,5 @@ export async function POST(request: Request) {
     }),
   );
 }
+
+export const POST = observeAdminRoute("admin.rider_assign.post", POSTHandler);

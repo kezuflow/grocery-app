@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { cn } from "../../lib/utils";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 
@@ -162,7 +163,7 @@ export function SettingsTabs({
     <nav aria-label={label} className="overflow-x-auto border-b border-[var(--fm-border)]">
       <div className="flex min-w-max gap-1">
         {tabs.map((tab) => (
-          <a
+          <Link
             aria-current={activeId === tab.id ? "page" : undefined}
             aria-disabled={tab.disabled || undefined}
             className={cn(
@@ -173,9 +174,10 @@ export function SettingsTabs({
             )}
             href={tab.href}
             key={tab.id}
+            prefetch={false}
           >
             {tab.label}
-          </a>
+          </Link>
         ))}
       </div>
     </nav>

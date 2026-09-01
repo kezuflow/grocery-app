@@ -46,6 +46,16 @@ Admin and Maps behavior remains independently pinned while its transport awaits 
 mechanical extraction. This pass changes no locked business invariant and does not claim that later
 customer product phases are complete.
 
+## Admin Performance Stabilization Pass (2026-09-01)
+
+Before further feature expansion, complete the bounded Admin performance pass in
+`docs/product/ADMIN_PERFORMANCE_STABILIZATION_PLAN.md`. The pass must establish measured
+Web/Core/D1 baselines, remove the Admin bootstrap waterfall and inappropriate route prefetching,
+reuse authorization work within each Core RPC, and replace measured query fan-out with
+purpose-built set-based read models. It preserves Core authority, Service Binding transport,
+capability and scope enforcement, typed DTOs, and every locked business invariant. D1 indexes or
+projections are permitted only when production telemetry and `EXPLAIN QUERY PLAN` justify them.
+
 ## Remediation Pass 2 — Commerce Invariants (2026-08-26)
 
 The second bounded pass moves the existing compatibility checkout path onto the
@@ -573,7 +583,7 @@ Phases 1 and 7–11.
 ### RPC/contracts
 
 - Finalize admin query DTOs and command result/error UX metadata.
-- Extend Admin Context navigation with Core-authorized section and parent metadata; Web renders the hierarchy without inventing links or permissions.
+- Extend Admin Context navigation with Core-authorized section, parent, and selected-scope applicability metadata; Web narrows and renders the hierarchy without inventing links or permissions.
 - Add purpose-built category detail/update/status and product create/update/detail/media contracts with idempotency and expected-version guards. Preserve explicit SKU, price-version, availability, and status commands rather than exposing arbitrary row updates.
 
 ### Web/UI work
@@ -581,11 +591,11 @@ Phases 1 and 7–11.
 - Apply the light-only `.fm-admin` neutral/orange design system and fixed five-step orange chart palette as a clean-room adaptation of the public Shadcn UI Kit reference, isolated from storefront styling. Desktop defaults to a 72px icon rail and remembers an optional 252px expansion.
 - Build the collapsible grouped admin navigation, 64px header, scope/context controls, and responsive Sheet with Overview; Commerce; Operations; Finance; and Administration sections.
 - Build shared dashboard-grid, metric/chart, table/filter, editor, detail, settings-tab, step, banner, command-dialog, and complete page-state compositions before migrating page families.
-- Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category, including variants, prices, availability, media, customer-facing details, hierarchy, status, contained products, and audit context.
+- Catalog: Product List, Add Product, Product Detail, and Edit Product, with Category List, Add Category, Category Detail, and Edit Category nested inside the Products workspace; include variants, prices, availability, media, customer-facing details, hierarchy, status, contained products, and audit context.
 - Orders: Order List, Order Detail, and Order Issues, including items, financial snapshots, payment, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit context. Do not add admin Order creation.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation, with contextual refund/retry/reconcile commands.
 - Pricing & fees: add `/admin/commerce-configuration` with independently authorized Membership Price and Instant Service Fee tabs over the existing global effective-dated commands.
-- Customers, Privacy Queue, Memberships, Promotions, Inventory, Procurement Requirements, Receiving, Fulfillment, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit Log, and Fulfillment Mode Settings list/detail/configuration flows as applicable.
+- Customers, Privacy Queue, Memberships, Promotions, Inventory, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit Log, and Fulfillment Mode Settings list/detail/configuration flows as applicable. Inventory uses explicit Add stock/Remove stock actions with dated ledger history; Procurement, Receiving, and Fulfillment remain contextual advanced routes rather than primary navigation.
 
 ### Cloudflare resources
 
@@ -595,7 +605,7 @@ Phases 1 and 7–11.
 
 - Playwright operational flows, capability/location scopes, keyboard/accessibility, loading/empty/error states, and no raw-row leakage.
 - Catalog coverage includes category hierarchy and lifecycle, product create/detail/edit/deactivate, variants, media, price/availability, stale-version and permission failures, and list-to-detail breadcrumb/filter preservation.
-- Navigation coverage includes capability-filtered sections/children, specific-route active state, collapsed icon rail, mobile Sheet, keyboard/focus behavior, and strict storefront/admin token isolation.
+- Navigation coverage includes capability-filtered sections/children, Core-declared Global/Market/Location applicability, specific-route active state, collapsed icon rail, mobile Sheet, keyboard/focus behavior, and strict storefront/admin token isolation.
 - Overview/catalog coverage includes scope-aware denied/unavailable sections, authoritative freshness, explicit list pricing context, catalog-readiness totals, and authenticated private media delivery without R2-key leakage.
 - Maintain FreshMarkets-owned visual baselines for shared Admin archetypes at `1440x1200`, `1024x1366`, and `390x844`.
 

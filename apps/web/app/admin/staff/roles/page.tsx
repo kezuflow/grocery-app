@@ -195,6 +195,7 @@ export default function RolesPage() {
                       <TableCell>
                         <Link
                           href={`/admin/staff/roles/${role.roleId}`}
+                          prefetch={false}
                           className="text-xs font-medium text-[var(--fm-info)] underline"
                         >
                           {role.status === "ACTIVE" ? "Edit" : "View"}

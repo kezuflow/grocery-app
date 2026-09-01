@@ -1,25 +1,27 @@
+import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
 /** Thin same-origin BFF adapter for one product detail. */
-export async function GET(
+async function GETHandler(
   request: Request,
   context: { params: Promise<{ "product-id": string }> },
 ) {
   const { "product-id": productId } = await context.params;
   const params = new URL(request.url).searchParams;
   const result = await coreClient(env.CORE).getAdminProduct({
-    requestId: crypto.randomUUID(),
+    requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
     marketId: params.get("marketId") ?? undefined,
     locationId: params.get("locationId") ?? undefined,
   });
-  return Response.json(result);
+  return adminJson(result);
 }
 
-export async function PATCH(
+async function PATCHHandler(
   request: Request,
   context: { params: Promise<{ "product-id": string }> },
 ) {
@@ -45,21 +47,21 @@ export async function PATCH(
         Number.isInteger((detail as Record<string, unknown>).sortOrder),
     )
   ) {
-    return Response.json(
+    return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
           message: "Valid Product fields, expectedVersion, and idempotency-key are required",
-          requestId: crypto.randomUUID(),
+          requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
   }
-  return Response.json(
+  return adminJson(
     await coreClient(env.CORE).updateAdminProduct({
-      requestId: crypto.randomUUID(),
+      requestId: webRequestId(request),
       headers: requestHeaders(request),
       productId,
       categoryId: body.categoryId,
@@ -79,3 +81,7 @@ export async function PATCH(
     }),
   );
 }
+
+export const GET = observeAdminRoute("admin.catalog.products.by_product_id.get", GETHandler);
+
+export const PATCH = observeAdminRoute("admin.catalog.products.by_product_id.patch", PATCHHandler);

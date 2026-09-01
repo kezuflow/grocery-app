@@ -153,6 +153,7 @@ export default function OrdersPage() {
                       <Link
                         className="text-xs font-medium underline"
                         href={`/admin/orders/${order.orderId}`}
+                        prefetch={false}
                       >
                         Open
                       </Link>

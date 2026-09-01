@@ -3,6 +3,8 @@ import type {
   AnalyticsDimensionKey,
   AnalyticsWindow,
 } from "@freshmarkets/contracts";
+import { adminJson } from "@/lib/http/admin-route-observability";
+import { webRequestId } from "@/lib/http/request-context";
 
 const DIMENSION_KEYS = new Set<AnalyticsDimensionKey>([
   "marketId",
@@ -14,11 +16,11 @@ const DIMENSION_KEYS = new Set<AnalyticsDimensionKey>([
   "inventoryAdjustmentReason",
 ]);
 
-export function invalid(message: string): Response {
-  return Response.json(
+export function invalid(request: Request, message: string): Response {
+  return adminJson(
     {
       ok: false as const,
-      error: { code: "VALIDATION_FAILED" as const, message, requestId: crypto.randomUUID() },
+      error: { code: "VALIDATION_FAILED" as const, message, requestId: webRequestId(request) },
     },
     { status: 400 },
   );
@@ -38,23 +40,27 @@ function validTimezone(timezone: string): boolean {
   }
 }
 
-export function parseWindow(params: URLSearchParams): AnalyticsWindow | Response {
+export function parseWindow(request: Request, params: URLSearchParams): AnalyticsWindow | Response {
   const startAt = value(params, "startAt");
   const endAt = value(params, "endAt");
   const timezone = value(params, "timezone");
   if (!startAt || !endAt || !timezone) {
-    return invalid("startAt, endAt, and timezone are required");
+    return invalid(request, "startAt, endAt, and timezone are required");
   }
   const start = Date.parse(startAt);
   const end = Date.parse(endAt);
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
-    return invalid("startAt and endAt must be valid ISO instants with startAt before endAt");
+    return invalid(
+      request,
+      "startAt and endAt must be valid ISO instants with startAt before endAt",
+    );
   }
-  if (!validTimezone(timezone)) return invalid("timezone must be a valid IANA timezone");
+  if (!validTimezone(timezone)) return invalid(request, "timezone must be a valid IANA timezone");
   return { startAt, endAt, timezone };
 }
 
 export function parseDimensions(
+  request: Request,
   params: URLSearchParams,
 ): ReadonlyArray<AnalyticsDimension> | Response {
   const raw = value(params, "dimensions");
@@ -62,7 +68,7 @@ export function parseDimensions(
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length > 4)
-      return invalid("dimensions must be a JSON array with at most four entries");
+      return invalid(request, "dimensions must be a JSON array with at most four entries");
     const dimensions: AnalyticsDimension[] = [];
     const keys = new Set<string>();
     for (const item of parsed) {
@@ -76,7 +82,7 @@ export function parseDimensions(
         (item as { value: string }).value.length > 200 ||
         keys.has((item as { key: string }).key)
       ) {
-        return invalid("dimensions contain an unsupported, duplicate, or oversized entry");
+        return invalid(request, "dimensions contain an unsupported, duplicate, or oversized entry");
       }
       keys.add((item as { key: string }).key);
       dimensions.push({
@@ -86,11 +92,11 @@ export function parseDimensions(
     }
     return dimensions;
   } catch {
-    return invalid("dimensions must be valid JSON");
+    return invalid(request, "dimensions must be valid JSON");
   }
 }
 
-export function parseScope(params: URLSearchParams) {
+export function parseScope(request: Request, params: URLSearchParams) {
   const kind = value(params, "scopeKind");
   const locationId = value(params, "locationId");
   const marketId = value(params, "marketId");
@@ -101,21 +107,24 @@ export function parseScope(params: URLSearchParams) {
   if (kind === "LOCATION" && marketId && locationId) {
     return { kind: "LOCATION" as const, marketId, locationId };
   }
-  return invalid("An explicit valid scopeKind and its required identifiers are required");
+  return invalid(request, "An explicit valid scopeKind and its required identifiers are required");
 }
 
-export function parseMetricCode(metricCode: string): string | Response {
+export function parseMetricCode(request: Request, metricCode: string): string | Response {
   if (!/^[a-z][a-z0-9_]{1,99}$/.test(metricCode)) {
-    return invalid("metricCode must contain lowercase letters, numbers, and underscores");
+    return invalid(request, "metricCode must contain lowercase letters, numbers, and underscores");
   }
   return metricCode;
 }
 
-export function parseDefinitionVersion(params: URLSearchParams): number | undefined | Response {
+export function parseDefinitionVersion(
+  request: Request,
+  params: URLSearchParams,
+): number | undefined | Response {
   const raw = value(params, "definitionVersion");
   if (!raw) return undefined;
   const version = Number(raw);
   return Number.isInteger(version) && version > 0
     ? version
-    : invalid("definitionVersion must be a positive integer");
+    : invalid(request, "definitionVersion must be a positive integer");
 }

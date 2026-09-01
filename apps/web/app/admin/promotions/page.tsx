@@ -220,6 +220,7 @@ export default function PromotionsPage() {
                       <TableCell>
                         <Link
                           href={`/admin/promotions/${promotion.promotionId}`}
+                          prefetch={false}
                           className="text-xs font-medium text-[var(--fm-info)] underline"
                         >
                           Manage

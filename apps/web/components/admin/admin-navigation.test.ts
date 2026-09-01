@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   adminNavigationFromContext,
+  adminNavigationItemsForScope,
   groupAdminNavigation,
   mostSpecificActiveNavigation,
 } from "./admin-navigation";
+
+const allScopes = ["GLOBAL", "MARKET", "LOCATION"] as const;
+const globalScope = ["GLOBAL"] as const;
 
 const overview = {
   code: "overview",
   label: "Overview",
   href: "/admin",
   section: "overview" as const,
+  scopeKinds: allScopes,
   parentCode: null,
   kind: "workspace" as const,
 };
@@ -19,6 +24,7 @@ const audit = {
   label: "Audit log",
   href: "/admin/audit",
   section: "administration" as const,
+  scopeKinds: allScopes,
   parentCode: null,
   kind: "workspace" as const,
 };
@@ -38,6 +44,7 @@ describe("admin navigation mapping", () => {
         label: "Mystery",
         href: "/admin/mystery",
         section: "commerce",
+        scopeKinds: allScopes,
         parentCode: null,
         kind: "workspace",
       },
@@ -46,6 +53,7 @@ describe("admin navigation mapping", () => {
         label: "Orders",
         href: "/admin/orders",
         section: "commerce",
+        scopeKinds: allScopes,
         parentCode: null,
         kind: "workspace",
       },
@@ -66,6 +74,7 @@ describe("admin navigation mapping", () => {
         label: "Pricing & fees",
         href: "/admin/commerce-configuration",
         section: "finance",
+        scopeKinds: globalScope,
         parentCode: null,
         kind: "workspace",
       },
@@ -87,6 +96,7 @@ describe("admin navigation mapping", () => {
           label: "Products",
           href: "/admin/catalog/products",
           section: "commerce",
+          scopeKinds: globalScope,
           parentCode: null,
           kind: "workspace",
         },
@@ -95,6 +105,7 @@ describe("admin navigation mapping", () => {
           label: "Product list",
           href: "/admin/catalog/products",
           section: "commerce",
+          scopeKinds: globalScope,
           parentCode: "products",
           kind: "destination",
         },
@@ -105,6 +116,35 @@ describe("admin navigation mapping", () => {
     expect(groups[1]?.items[0]?.children.map((child) => child.code)).toEqual(["products-list"]);
   });
 
+  it("groups Categories inside Products instead of creating a top-level workspace", () => {
+    const groups = groupAdminNavigation(
+      adminNavigationFromContext([
+        {
+          code: "products",
+          label: "Products",
+          href: "/admin/catalog/products",
+          section: "commerce",
+          scopeKinds: globalScope,
+          parentCode: null,
+          kind: "workspace",
+        },
+        {
+          code: "categories",
+          label: "Categories",
+          href: "/admin/catalog/categories",
+          section: "commerce",
+          scopeKinds: globalScope,
+          parentCode: "products",
+          kind: "destination",
+        },
+      ]),
+    );
+
+    expect(groups[0]?.items).toHaveLength(1);
+    expect(groups[0]?.items[0]?.code).toBe("products");
+    expect(groups[0]?.items[0]?.children.map((child) => child.code)).toEqual(["categories"]);
+  });
+
   it("selects the most-specific route and reports its parent", () => {
     const items = adminNavigationFromContext([
       {
@@ -112,6 +152,7 @@ describe("admin navigation mapping", () => {
         label: "Products",
         href: "/admin/catalog/products",
         section: "commerce",
+        scopeKinds: globalScope,
         parentCode: null,
         kind: "workspace",
       },
@@ -120,6 +161,7 @@ describe("admin navigation mapping", () => {
         label: "Add product",
         href: "/admin/catalog/products/new",
         section: "commerce",
+        scopeKinds: globalScope,
         parentCode: "products",
         kind: "destination",
       },
@@ -138,6 +180,7 @@ describe("admin navigation mapping", () => {
         label: "Products",
         href: "/admin/catalog/products",
         section: "commerce",
+        scopeKinds: globalScope,
         parentCode: null,
         kind: "workspace",
       },
@@ -146,6 +189,7 @@ describe("admin navigation mapping", () => {
         label: "Product list",
         href: "/admin/catalog/products",
         section: "commerce",
+        scopeKinds: globalScope,
         parentCode: "products",
         kind: "destination",
       },
@@ -155,5 +199,93 @@ describe("admin navigation mapping", () => {
       code: "products-list",
       parentCode: "products",
     });
+  });
+
+  it("shows only Core-declared location navigation for Cebu Central", () => {
+    const items = [
+      overview,
+      {
+        code: "orders",
+        label: "Orders",
+        href: "/admin/orders",
+        section: "commerce" as const,
+        scopeKinds: allScopes,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "products",
+        label: "Products",
+        href: "/admin/catalog/products",
+        section: "commerce" as const,
+        scopeKinds: globalScope,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "customers",
+        label: "Customers",
+        href: "/admin/customers",
+        section: "commerce" as const,
+        scopeKinds: globalScope,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "memberships",
+        label: "Memberships",
+        href: "/admin/memberships",
+        section: "commerce" as const,
+        scopeKinds: globalScope,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "promotions",
+        label: "Promotions",
+        href: "/admin/promotions",
+        section: "commerce" as const,
+        scopeKinds: globalScope,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "inventory",
+        label: "Inventory",
+        href: "/admin/inventory",
+        section: "operations" as const,
+        scopeKinds: ["GLOBAL", "LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      audit,
+    ];
+
+    expect(
+      adminNavigationItemsForScope(items, {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      }).map((item) => item.code),
+    ).toEqual(["overview", "orders", "inventory", "audit"]);
+  });
+
+  it("fails closed for a stale scoped payload without applicability metadata", () => {
+    const staleItem = {
+      code: "customers",
+      label: "Customers",
+      href: "/admin/customers",
+      section: "commerce",
+      parentCode: null,
+      kind: "workspace",
+    } as unknown as typeof overview;
+
+    expect(
+      adminNavigationItemsForScope([staleItem], {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      }),
+    ).toEqual([]);
   });
 });

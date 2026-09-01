@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import type {
   AdminInventoryLedgerPage,
   AdminInventoryPage,
@@ -38,19 +37,35 @@ type LedgerLoadState =
   | { phase: "error"; key: string; message: string; requestId: string | null }
   | { phase: "ready"; key: string; page: AdminInventoryLedgerPage };
 
+type StockMovement = "ADD" | "REMOVE";
+
+function formatActivityDate(value: string): string {
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Manila",
+  }).format(new Date(value));
+}
+
 export default function InventoryPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const loadRequest = useRef(0);
   const ledgerRequest = useRef(0);
   const { locationId, label: locationLabel } = useAdminLocation();
-  const [ledgerFor, setLedgerFor] = useState<{ poolId: string; name: string } | null>(null);
+  const [ledgerFor, setLedgerFor] = useState<{
+    poolId: string;
+    name: string;
+    baseUnitSymbol: string;
+  } | null>(null);
   const [ledgerState, setLedgerState] = useState<LedgerLoadState>({ phase: "idle" });
-  const [adjustDelta, setAdjustDelta] = useState<Record<string, string>>({});
+  const [ledgerReloadVersion, setLedgerReloadVersion] = useState(0);
+  const [adjustQuantity, setAdjustQuantity] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<{
     poolId: string;
     productName: string;
     baseUnitSymbol: string;
     version: number;
+    movement: StockMovement;
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adjustmentIntent = useAdminCommandIntent();
@@ -93,8 +108,8 @@ export default function InventoryPage() {
     if (locationId) load(locationId, pagination.cursor);
   }, [load, locationId, pagination.cursor]);
 
-  function loadLedger(poolId: string, name: string) {
-    setLedgerFor({ poolId, name });
+  function loadLedger(poolId: string, name: string, baseUnitSymbol: string) {
+    setLedgerFor({ poolId, name, baseUnitSymbol });
     setLedgerState({ phase: "idle" });
     ledgerPagination.reset();
   }
@@ -133,7 +148,7 @@ export default function InventoryPage() {
         }
       }
     })();
-  }, [ledgerFor, ledgerPagination.cursor, locationId]);
+  }, [ledgerFor, ledgerPagination.cursor, ledgerReloadVersion, locationId]);
 
   const ledgerKey =
     ledgerFor && locationId
@@ -146,16 +161,22 @@ export default function InventoryPage() {
         ? { phase: "loading", key: ledgerKey }
         : { phase: "idle" };
 
-  async function adjust(poolId: string, expectedVersion: number, reason: string) {
+  async function adjust(
+    poolId: string,
+    expectedVersion: number,
+    movement: StockMovement,
+    reason: string,
+  ) {
     if (!locationId) {
       setNotice("Select an explicit location scope before adjusting inventory.");
       return;
     }
-    const delta = Number(adjustDelta[poolId]);
-    if (Number.isNaN(delta) || !Number.isInteger(delta)) {
-      setNotice("An integer delta and a reason are required.");
+    const quantity = Number(adjustQuantity[poolId]);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setNotice("Enter a whole-number quantity greater than zero.");
       return;
     }
+    const delta = movement === "ADD" ? quantity : -quantity;
     let payload: RpcResult<unknown>;
     try {
       payload = await adjustmentIntent.submit(async (idempotencyKey) => {
@@ -167,7 +188,8 @@ export default function InventoryPage() {
             body: JSON.stringify({
               locationId,
               inventoryPoolId: poolId,
-              delta,
+              operation: movement,
+              quantityBase: Math.abs(delta),
               reason,
               expectedVersion,
             }),
@@ -182,12 +204,22 @@ export default function InventoryPage() {
     if (payload.ok || payload.error?.code === "STALE_VERSION") {
       setNotice(
         payload.ok
-          ? "Adjustment applied."
+          ? movement === "ADD"
+            ? "Stock added. The dated activity entry is shown below."
+            : "Stock removed. The dated activity entry is shown below."
           : (payload.error?.message ?? "Version conflict; refresh."),
       );
       if (payload.ok) {
-        setAdjustDelta({});
+        if (confirming?.poolId === poolId) {
+          setLedgerFor({
+            poolId,
+            name: confirming.productName,
+            baseUnitSymbol: confirming.baseUnitSymbol,
+          });
+        }
+        setAdjustQuantity({});
         setConfirming(null);
+        setLedgerReloadVersion((current) => current + 1);
       }
       load(locationId, pagination.cursor);
     } else {
@@ -199,14 +231,14 @@ export default function InventoryPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Inventory"
-        description="Location balances in base units. Adjustments are guarded, idempotent, and write ledger evidence."
+        description="Add or remove stock for the selected location. Every change records its date, reason, and staff actor."
       />
 
       {!locationId ? (
         <Alert>
           <AlertTitle>Location scope required</AlertTitle>
           <AlertDescription>
-            {locationLabel} in the Admin header to inspect inventory.
+            Choose a location in the Admin header to inspect and update inventory.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -244,11 +276,10 @@ export default function InventoryPage() {
             </p>
           ) : null}
 
-          <ListPageSection title="Location">
-            <p className="p-4 text-sm">{locationLabel}</p>
-          </ListPageSection>
-
-          <ListPageSection title="Balances" description="On-hand minus reserved is sellable stock.">
+          <ListPageSection
+            title="Stock levels"
+            description={`${locationLabel}. Enter a positive quantity, then choose Add stock or Remove stock.`}
+          >
             {state.page.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
                 No inventory records for this location.
@@ -260,11 +291,10 @@ export default function InventoryPage() {
                     <TableRow>
                       <TableHead>Product</TableHead>
                       <TableHead>On hand</TableHead>
-                      <TableHead>Reserved</TableHead>
-                      <TableHead>Adjust ±</TableHead>
-                      <TableHead>
-                        <span className="sr-only">Ledger link</span>
-                      </TableHead>
+                      <TableHead>Available</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Update stock</TableHead>
+                      <TableHead>Activity</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -273,29 +303,40 @@ export default function InventoryPage() {
                         <TableCell className="font-medium">{item.productName}</TableCell>
                         <TableCell className="text-xs">
                           {item.onHandBase} {item.baseUnitSymbol}
+                          <span className="block text-[var(--fm-text-muted)]">
+                            {item.reservedBase} reserved
+                          </span>
                         </TableCell>
-                        <TableCell className="text-xs">{item.reservedBase}</TableCell>
+                        <TableCell className="text-xs font-medium">
+                          {item.onHandBase - item.reservedBase} {item.baseUnitSymbol}
+                        </TableCell>
                         <TableCell>
-                          <span className="flex items-center gap-1">
-                            <Input
-                              aria-label={`Adjustment delta for ${item.productName}`}
-                              value={adjustDelta[item.inventoryPoolId] ?? ""}
-                              onChange={(event) =>
-                                setAdjustDelta({
-                                  ...adjustDelta,
-                                  [item.inventoryPoolId]: event.target.value,
-                                })
-                              }
-                              className="w-20"
-                            />
+                          <Input
+                            aria-label={`Stock quantity for ${item.productName}`}
+                            type="number"
+                            min="1"
+                            step="1"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={adjustQuantity[item.inventoryPoolId] ?? ""}
+                            onChange={(event) =>
+                              setAdjustQuantity({
+                                ...adjustQuantity,
+                                [item.inventoryPoolId]: event.target.value,
+                              })
+                            }
+                            className="w-24"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span className="flex flex-wrap items-center gap-2">
                             <Button
                               size="sm"
-                              variant="outline"
                               disabled={adjustmentIntent.pending}
                               onClick={() => {
-                                const delta = Number(adjustDelta[item.inventoryPoolId]);
-                                if (!Number.isInteger(delta)) {
-                                  setNotice("Enter an integer adjustment before confirmation.");
+                                const quantity = Number(adjustQuantity[item.inventoryPoolId]);
+                                if (!Number.isInteger(quantity) || quantity <= 0) {
+                                  setNotice("Enter a whole-number quantity greater than zero.");
                                   return;
                                 }
                                 setConfirming({
@@ -303,10 +344,32 @@ export default function InventoryPage() {
                                   productName: item.productName,
                                   baseUnitSymbol: item.baseUnitSymbol,
                                   version: item.version,
+                                  movement: "ADD",
                                 });
                               }}
                             >
-                              Apply
+                              Add stock
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={adjustmentIntent.pending}
+                              onClick={() => {
+                                const quantity = Number(adjustQuantity[item.inventoryPoolId]);
+                                if (!Number.isInteger(quantity) || quantity <= 0) {
+                                  setNotice("Enter a whole-number quantity greater than zero.");
+                                  return;
+                                }
+                                setConfirming({
+                                  poolId: item.inventoryPoolId,
+                                  productName: item.productName,
+                                  baseUnitSymbol: item.baseUnitSymbol,
+                                  version: item.version,
+                                  movement: "REMOVE",
+                                });
+                              }}
+                            >
+                              Remove stock
                             </Button>
                           </span>
                         </TableCell>
@@ -314,9 +377,15 @@ export default function InventoryPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => loadLedger(item.inventoryPoolId, item.productName)}
+                            onClick={() =>
+                              loadLedger(
+                                item.inventoryPoolId,
+                                item.productName,
+                                item.baseUnitSymbol,
+                              )
+                            }
                           >
-                            Ledger
+                            View activity
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -324,8 +393,8 @@ export default function InventoryPage() {
                   </TableBody>
                 </Table>
                 <p className="px-4 pb-3 text-xs text-[var(--fm-text-muted)]">
-                  Adjustments use the guarded command; confirmation requires a reason and a version
-                  conflict asks you to refresh.
+                  The date and time are recorded automatically. Removing stock cannot reduce
+                  available inventory below zero.
                 </p>
                 <AdminCursorPagination
                   pageNumber={pagination.pageNumber}
@@ -339,8 +408,8 @@ export default function InventoryPage() {
 
           {ledgerFor ? (
             <ListPageSection
-              title={`Ledger — ${ledgerFor.name}`}
-              description="Append-only movement evidence for this pool at this location."
+              title={`Stock activity — ${ledgerFor.name}`}
+              description={`Dated stock movements for ${locationLabel}. History cannot be edited.`}
             >
               {visibleLedgerState.phase === "loading" ? (
                 <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
@@ -368,24 +437,29 @@ export default function InventoryPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>When</TableHead>
-                      <TableHead>Movement</TableHead>
-                      <TableHead>Δ Quantity</TableHead>
-                      <TableHead>Δ Reserved</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Quantity</TableHead>
                       <TableHead>Reason</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {visibleLedgerState.page.items.map((entry) => (
                       <TableRow key={entry.entryId}>
-                        <TableCell className="whitespace-nowrap font-mono text-xs">
-                          {entry.createdAt.replace("T", " ").replace(/\.\d+Z$/, "Z")}
+                        <TableCell className="whitespace-nowrap text-xs">
+                          {formatActivityDate(entry.createdAt)}
                         </TableCell>
-                        <TableCell className="text-xs">{entry.movementType}</TableCell>
+                        <TableCell className="text-xs">
+                          {entry.movementType === "MANUAL_ADJUSTMENT"
+                            ? entry.quantityDeltaBase >= 0
+                              ? "Stock added"
+                              : "Stock removed"
+                            : entry.movementType.replaceAll("_", " ").toLowerCase()}
+                        </TableCell>
                         <TableCell className="text-xs font-semibold">
-                          {entry.quantityDeltaBase}
+                          {entry.quantityDeltaBase > 0 ? "+" : ""}
+                          {entry.quantityDeltaBase} {ledgerFor.baseUnitSymbol}
                         </TableCell>
-                        <TableCell className="text-xs">{entry.reservationDeltaBase}</TableCell>
                         <TableCell className="max-w-64 truncate text-xs">
                           {entry.reasonCode ?? "—"}
                         </TableCell>
@@ -402,27 +476,30 @@ export default function InventoryPage() {
                 onPrevious={ledgerPagination.previous}
                 onNext={ledgerPagination.next}
               />
-              <p className="p-4 text-xs">
-                <Link href="/admin" className="text-[var(--fm-info)] underline">
-                  Back to overview
-                </Link>
-              </p>
             </ListPageSection>
           ) : null}
           <AdminConfirmationDialog
             open={confirming !== null}
-            title="Confirm inventory adjustment"
+            title={
+              confirming?.movement === "ADD" ? "Confirm stock addition" : "Confirm stock removal"
+            }
             resource={
               confirming
-                ? `${confirming.productName} · ${adjustDelta[confirming.poolId] ?? ""} ${confirming.baseUnitSymbol}`
+                ? `${confirming.productName} · ${adjustQuantity[confirming.poolId] ?? ""} ${confirming.baseUnitSymbol}`
                 : "Inventory balance"
             }
             scope={locationLabel}
-            consequence="This writes an immutable inventory ledger movement and changes sellable stock."
+            consequence="This changes sellable stock and records the current date, staff actor, and reason in immutable activity history."
             pending={adjustmentIntent.pending}
             onCancel={() => setConfirming(null)}
             onConfirm={(confirmedReason) =>
-              confirming && void adjust(confirming.poolId, confirming.version, confirmedReason)
+              confirming &&
+              void adjust(
+                confirming.poolId,
+                confirming.version,
+                confirming.movement,
+                confirmedReason,
+              )
             }
           />
         </>

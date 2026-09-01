@@ -175,15 +175,17 @@ export default function PrivacyQueuePage() {
                 </Button>
               ))}
             </div>
-            <div className="p-4 pb-0">
-              <Input
-                aria-label="Shared action reason"
-                placeholder="reason for the next action (required)"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                className="sm:w-96"
-              />
-            </div>
+            {state.page.items.length > 0 ? (
+              <div className="p-4 pb-0">
+                <Input
+                  aria-label="Shared action reason"
+                  placeholder="Reason for the next action (required)"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  className="sm:w-96"
+                />
+              </div>
+            ) : null}
             {state.page.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
                 No {statusFilter} requests.
@@ -205,6 +207,7 @@ export default function PrivacyQueuePage() {
                       <TableCell>
                         <Link
                           href={`/admin/customers/${request.customerId}`}
+                          prefetch={false}
                           className="font-mono text-xs text-[var(--fm-info)] underline"
                         >
                           {request.customerId}

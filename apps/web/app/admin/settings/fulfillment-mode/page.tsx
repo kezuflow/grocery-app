@@ -9,6 +9,7 @@ import { ListPageSection, PageHeader, StatusBadge } from "../../../../components
 import { useAdminLocation } from "../../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
+import { AdminPageState } from "../../../../components/admin/admin-page-state";
 export default function FulfillmentModePage() {
   const { locationId, label } = useAdminLocation();
   const [configuration, setConfiguration] = useState<FulfillmentModeConfigurationView | null>(null);
@@ -91,7 +92,13 @@ export default function FulfillmentModePage() {
         description="Explicit location configuration. INSTANT and SCHEDULED are the only fulfillment modes; WEEKLY is Scheduled cadence."
       />
       <WorkspaceNavigation parentCode="settings" label="Settings administration" />
-      {state === "loading" ? (
+      {!locationId ? (
+        <AdminPageState
+          state="permission-empty"
+          title="Select a permitted location"
+          message="Choose a location scope in the Admin header to inspect fulfillment-mode configuration."
+        />
+      ) : state === "loading" ? (
         <div role="status" aria-label="Loading fulfillment mode">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="mt-3 h-40 w-full" />
