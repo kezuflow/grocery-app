@@ -107,6 +107,26 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - Categories now appear inside the Products workspace rather than as a separate top-level navigation item. Operations primary navigation is reduced to Inventory and Delivery; Procurement, Receiving, and Fulfillment retain their independent Core state machines and contextual advanced routes without burdening the default operator path.
 - Inventory now exposes explicit Add stock and Remove stock actions using a positive base-unit quantity. The Web adapter maps those actions to Core's signed, capability-scoped, version-guarded, idempotent adjustment command, and the UI shows immutable dated stock activity with the reason and actor evidence preserved.
 
+## Admin performance stabilization pass (2026-09-01)
+
+- Phases 1–6 of `ADMIN_PERFORMANCE_STABILIZATION_PLAN.md` are locally implemented: correlated
+  Web/Core/D1 timing, disabled dense Admin prefetch, one typed bootstrap read, request-scoped IAM
+  reuse, bounded set-based Overview/Product reads, and data-conditional chart loading. Core remains
+  the sole authentication, authorization, scope, business, and D1 authority.
+- Local evidence proves one browser bootstrap request, one Better Auth session resolution per
+  bootstrap RPC, one set-based exception statement across multiple locations, one Product readiness
+  statement, and no Recharts or storefront-font request for an empty Admin Overview. No index,
+  projection, cache, infrastructure, schema, or migration change was approved.
+- Integrated verification passed formatting, naming, terminology, migration upgrades,
+  architecture/readiness checks, zero-warning lint, all workspace type checks, vinext compatibility
+  (`100%`, 14 supported, 0 partial, 0 issues), 1,503 tests across 265 files, Core dry-run and Web
+  production builds, and 90 managed Web/Core/D1 Playwright flows with two environment-gated skips.
+  Full-page Admin visual baselines remain stale against unrelated shell changes in the dirty
+  worktree and were not silently replaced.
+- Production cold/warm p50/p95/p99, rows-read evidence, transfer/parse timing, and resulting budgets
+  remain external because the authenticated Cloudflare account has no configured production Worker
+  for this repository. The pass therefore makes no production latency or SLO claim.
+
 ## Runtime and persistence reliability remediation (2026-08-30)
 
 - The populated `0020 -> 0021 -> current` migration path now preserves commerce history and foreign-key integrity; the verifier exercises that real pre-`0021` boundary as well as fresh, Analytics, and cart/inbox upgrade paths. Retired inventory triggers remain absent.

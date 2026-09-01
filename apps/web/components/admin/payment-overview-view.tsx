@@ -1,9 +1,11 @@
 "use client";
 
 import type { AdminPaymentOverview } from "@freshmarkets/contracts";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { lazy, Suspense } from "react";
 import { AdminChartCard, AdminDashboardGrid, MetricCard } from "./admin-compositions";
 import { ListPageSection, StatusBadge } from "./admin-shell";
+
+const AdminBarChart = lazy(() => import("./admin-bar-chart"));
 
 function money(value: number, currency: string) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
@@ -13,6 +15,7 @@ export function PaymentOverviewView({ overview }: { overview: AdminPaymentOvervi
   const workload = Object.entries(overview.intentCounts)
     .filter(([code]) => code !== "total")
     .map(([code, count]) => ({ code, count }));
+  const hasWorkload = workload.some(({ count }) => count > 0);
   return (
     <div className="space-y-4">
       <AdminDashboardGrid ariaLabel="Payment workload" className="xl:grid-cols-4">
@@ -46,17 +49,17 @@ export function PaymentOverviewView({ overview }: { overview: AdminPaymentOvervi
           description="Canonical payment intents grouped by current state."
           summary={workload.map((item) => `${item.code}: ${item.count}`)}
         >
-          <div className="h-72 pt-4" aria-hidden="true">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={workload} margin={{ left: -18, right: 8 }}>
-                <CartesianGrid vertical={false} stroke="var(--fm-border)" />
-                <XAxis dataKey="code" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
-                <Tooltip cursor={{ fill: "var(--fm-surface-muted)" }} />
-                <Bar dataKey="count" fill="var(--fm-admin-accent)" radius={[5, 5, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {hasWorkload ? (
+            <div className="h-72 pt-4" aria-hidden="true">
+              <Suspense fallback={<div className="h-full animate-pulse rounded-md bg-muted" />}>
+                <AdminBarChart data={workload} categoryKey="code" valueKey="count" />
+              </Suspense>
+            </div>
+          ) : (
+            <p className="py-12 text-center text-sm text-[var(--fm-text-muted)]">
+              No payment workload in the selected scope.
+            </p>
+          )}
         </AdminChartCard>
         <ListPageSection title="Settled volume and refunds">
           {overview.totalsByCurrency.length ? (

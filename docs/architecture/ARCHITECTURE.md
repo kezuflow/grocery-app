@@ -210,6 +210,12 @@ method surface and Worker lifecycle. The landed Admin and Maps transport groups 
 the composition root until their independent workstreams authorize a mechanical move; they may
 not be used as precedent for adding new business logic there.
 
+Within one Admin RPC, Core resolves Better Auth session identity and Application IAM into one
+immutable internal access context. That context includes the active Staff identity already read
+during IAM resolution and is passed to nested application reads; nested reads never resolve the
+session or Staff row again. The public `getApplicationContext` projection strips this internal
+Staff evidence and continues to expose only its canonical contract.
+
 ## Read and Write Architecture
 
 Use pragmatic CQRS-lite:

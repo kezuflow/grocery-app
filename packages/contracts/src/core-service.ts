@@ -136,6 +136,7 @@ export const coreServiceMethodNames = [
   "auth",
   "getApplicationContext",
   "getAdminContext",
+  "getAdminBootstrap",
   "getAdminOverview",
   "getMembershipPriceConfiguration",
   "updateMembershipPriceConfiguration",

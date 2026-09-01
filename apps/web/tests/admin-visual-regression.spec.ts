@@ -26,103 +26,108 @@ function json(value: unknown) {
 async function installDeterministicReads(page: Page) {
   await page.clock.setFixedTime(new Date("2026-08-31T08:00:00.000Z"));
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.route("**/api/admin/overview?**", (route) =>
-    route.fulfill(
-      json({
-        ok: true,
-        requestId: "visual-overview",
-        value: {
-          generatedAt: "2026-08-31T08:00:00.000Z",
-          selectedScope: { kind: "GLOBAL" },
-          timezone: "Asia/Manila",
-          cards: [
-            {
-              code: "OPEN_ORDERS",
-              label: "Open orders",
-              value: 18,
-              unavailableReason: null,
-              href: "/admin/orders",
-            },
-            {
-              code: "PAYMENT_ACTION",
-              label: "Payments requiring action",
-              value: 3,
-              unavailableReason: null,
-              href: "/admin/payments",
-            },
-            {
-              code: "OPEN_EXCEPTIONS",
-              label: "Open exceptions",
-              value: 5,
-              unavailableReason: null,
-              href: "/admin/issues/operational-exceptions",
-            },
-            {
-              code: "ACTIVE_PRODUCTS",
-              label: "Active products",
-              value: 226,
-              unavailableReason: null,
-              href: "/admin/catalog/products",
-            },
-          ],
-          workloadStages: [
-            { code: "COMMITTED", label: "Committed", count: 8 },
-            { code: "PICKING", label: "Picking", count: 6 },
-            { code: "READY", label: "Ready", count: 4 },
-          ],
-          exceptions: [
-            {
-              kind: "FULFILLMENT_SHORTAGE",
-              source: "FULFILLMENT",
-              severity: "HIGH",
-              ageMinutes: 30,
-              ownerId: null,
-              referenceId: "exception-1",
-              orderId: "order-1042",
-              locationId: "location-cebu-central",
-              reason: "Required base units unavailable",
-              permittedActions: ["ALTERNATE_SOURCE", "ESCALATE"],
-              detail: "Order order-1042 requires an alternate source.",
-              href: "/admin/issues/operational-exceptions",
-            },
-            {
-              kind: "DELIVERY_FAILED",
-              source: "DELIVERY",
-              severity: "MEDIUM",
-              ageMinutes: 60,
-              ownerId: "staff-dispatch",
-              referenceId: "exception-2",
-              orderId: "order-1041",
-              locationId: "location-cebu-central",
-              reason: "Recipient unavailable",
-              permittedActions: ["RETRY_DELIVERY", "RESCHEDULE"],
-              detail: "Delivery retry decision is required.",
-              href: "/admin/issues/operational-exceptions",
-            },
-          ],
-          recentOperations: [
-            {
-              auditEventId: "audit-1",
-              action: "ORDER.COMMITTED",
-              resourceType: "order",
-              resourceId: "order-1042",
-              occurredAt: "2026-08-31T07:45:00.000Z",
-              actorId: null,
-              marketId: "market-metro-cebu",
-              locationId: "location-cebu-central",
-              reason: null,
-              correlationId: "request-1042",
-            },
-          ],
-          freshness: {
-            computedAt: "2026-08-31T08:00:00.000Z",
-            sourceWatermark: "2026-08-31T07:59:00.000Z",
-          },
-          deniedSections: [],
+  const deterministicOverview = {
+    ok: true,
+    requestId: "visual-overview",
+    value: {
+      generatedAt: "2026-08-31T08:00:00.000Z",
+      selectedScope: { kind: "GLOBAL" },
+      timezone: "Asia/Manila",
+      cards: [
+        {
+          code: "OPEN_ORDERS",
+          label: "Open orders",
+          value: 18,
+          unavailableReason: null,
+          href: "/admin/orders",
         },
-      }),
-    ),
-  );
+        {
+          code: "PAYMENT_ACTION",
+          label: "Payments requiring action",
+          value: 3,
+          unavailableReason: null,
+          href: "/admin/payments",
+        },
+        {
+          code: "OPEN_EXCEPTIONS",
+          label: "Open exceptions",
+          value: 5,
+          unavailableReason: null,
+          href: "/admin/issues/operational-exceptions",
+        },
+        {
+          code: "ACTIVE_PRODUCTS",
+          label: "Active products",
+          value: 226,
+          unavailableReason: null,
+          href: "/admin/catalog/products",
+        },
+      ],
+      workloadStages: [
+        { code: "COMMITTED", label: "Committed", count: 8 },
+        { code: "PICKING", label: "Picking", count: 6 },
+        { code: "READY", label: "Ready", count: 4 },
+      ],
+      exceptions: [
+        {
+          kind: "FULFILLMENT_SHORTAGE",
+          source: "FULFILLMENT",
+          severity: "HIGH",
+          ageMinutes: 30,
+          ownerId: null,
+          referenceId: "exception-1",
+          orderId: "order-1042",
+          locationId: "location-cebu-central",
+          reason: "Required base units unavailable",
+          permittedActions: ["ALTERNATE_SOURCE", "ESCALATE"],
+          detail: "Order order-1042 requires an alternate source.",
+          href: "/admin/issues/operational-exceptions",
+        },
+        {
+          kind: "DELIVERY_FAILED",
+          source: "DELIVERY",
+          severity: "MEDIUM",
+          ageMinutes: 60,
+          ownerId: "staff-dispatch",
+          referenceId: "exception-2",
+          orderId: "order-1041",
+          locationId: "location-cebu-central",
+          reason: "Recipient unavailable",
+          permittedActions: ["RETRY_DELIVERY", "RESCHEDULE"],
+          detail: "Delivery retry decision is required.",
+          href: "/admin/issues/operational-exceptions",
+        },
+      ],
+      recentOperations: [
+        {
+          auditEventId: "audit-1",
+          action: "ORDER.COMMITTED",
+          resourceType: "order",
+          resourceId: "order-1042",
+          occurredAt: "2026-08-31T07:45:00.000Z",
+          actorId: null,
+          marketId: "market-metro-cebu",
+          locationId: "location-cebu-central",
+          reason: null,
+          correlationId: "request-1042",
+        },
+      ],
+      freshness: {
+        computedAt: "2026-08-31T08:00:00.000Z",
+        sourceWatermark: "2026-08-31T07:59:00.000Z",
+      },
+      deniedSections: [],
+    },
+  };
+  await page.route("**/api/admin/bootstrap?**", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      ok: boolean;
+      value?: { overview?: unknown };
+    };
+    if (payload.ok && payload.value) payload.value.overview = deterministicOverview.value;
+    await route.fulfill({ response, ...json(payload) });
+  });
   await page.route("**/api/admin/orders?**", (route) =>
     route.fulfill(
       json({

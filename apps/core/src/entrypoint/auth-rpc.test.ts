@@ -12,5 +12,6 @@ describe("Auth RPC adapter", () => {
       value: { authenticated: false },
       requestId: "auth-adapter",
     });
+    if (result.ok) expect(result.value).not.toHaveProperty("staffIdentity");
   });
 });

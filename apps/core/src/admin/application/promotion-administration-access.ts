@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
-import { applicationContext } from "../../auth/authorization";
+import {
+  applicationContextForRequest,
+  type ResolvedApplicationContext,
+} from "../../auth/authorization";
 import type { AuthInstance } from "../../auth/service";
 import { iamSchema } from "../../iam/schema";
 import {
@@ -13,6 +15,7 @@ import {
 export type PromotionAdministrationDeps = {
   auth: AuthInstance;
   db: D1Database;
+  accessContext?: ResolvedApplicationContext;
 };
 
 export type PromotionAdministrationAccess = {
@@ -30,7 +33,12 @@ export async function resolvePromotionAdministrationAccess(
   capability: "promotions.read" | "promotions.manage",
 ): Promise<RpcResult<PromotionAdministrationAccess>> {
   const database = drizzle(deps.db, { schema: iamSchema });
-  const context = await applicationContext(deps.auth, database, request);
+  const context = await applicationContextForRequest(
+    deps.auth,
+    database,
+    request,
+    deps.accessContext,
+  );
   if (!context.ok) return context;
   if (!context.value.authenticated || !context.value.principal) {
     return {
@@ -55,12 +63,7 @@ export async function resolvePromotionAdministrationAccess(
       },
     };
   }
-  const staff = await database
-    .select({ id: iamSchema.staffIdentity.id })
-    .from(iamSchema.staffIdentity)
-    .where(eq(iamSchema.staffIdentity.authUserId, context.value.principal.userId))
-    .limit(1);
-  const staffRecord = staff[0];
+  const staffRecord = context.value.staffIdentity;
   if (!staffRecord) {
     return {
       ok: false,

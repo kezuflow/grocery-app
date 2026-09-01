@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { createAuth } from "../../auth/service";
+import { getAdminBootstrap } from "./admin-bootstrap";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -95,6 +97,13 @@ describe("scoped admin context", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED" },
     });
+    expect(
+      await core.getAdminBootstrap({
+        requestId: "r3",
+        headers: {},
+        timezone: "Asia/Manila",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
   });
 
   it("returns FORBIDDEN for an authenticated non-staff user", async () => {
@@ -108,6 +117,19 @@ describe("scoped admin context", () => {
       ok: false,
       error: { code: "FORBIDDEN" },
     });
+  });
+
+  it("treats a revoked or expired Better Auth session as unauthenticated", async () => {
+    const user = await signUp();
+    await env.DB.prepare("DELETE FROM session WHERE user_id=?").bind(user.userId).run();
+
+    expect(
+      await core.getAdminBootstrap({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: user.cookie },
+        timezone: "Asia/Manila",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
   });
 
   it("derives staff identity, canonical capabilities, scopes, and capability-filtered navigation", async () => {
@@ -238,5 +260,62 @@ describe("scoped admin context", () => {
     ]);
     expect(JSON.stringify(scopes.value)).not.toContain("location-other-empty");
     expect(JSON.stringify(scopes.value)).not.toContain("polygon");
+  });
+
+  it("returns one authoritative bootstrap result and derives the only assigned scope", async () => {
+    const staff = await staffCookie({ permissionCodes: ["audit.read"] });
+    const result = await core.getAdminBootstrap({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+      timezone: "UTC",
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+
+    expect(result.value.context.capabilities).toEqual(["audit.read"]);
+    expect(result.value.scopes).toHaveLength(1);
+    expect(result.value.selection).toEqual({
+      selectedScope: {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      },
+      source: "SINGLE_ASSIGNMENT",
+      requestedScopeAccepted: null,
+      timezone: "Asia/Manila",
+    });
+    expect(result.value.overview?.selectedScope).toEqual(result.value.selection.selectedScope);
+  });
+
+  it("rejects stale browser scope evidence without granting it or locking out Staff", async () => {
+    const staff = await staffCookie({ permissionCodes: ["audit.read"] });
+    const result = await core.getAdminBootstrap({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+      selectedScope: { kind: "GLOBAL" },
+      timezone: "Asia/Manila",
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+
+    expect(result.value.selection.requestedScopeAccepted).toBe(false);
+    expect(result.value.selection.source).toBe("SINGLE_ASSIGNMENT");
+    expect(result.value.selection.selectedScope).toMatchObject({ kind: "LOCATION" });
+  });
+
+  it("resolves Better Auth and IAM once across bootstrap context, scopes, overview, and audit", async () => {
+    const staff = await staffCookie({ permissionCodes: ["audit.read"] });
+    const auth = createAuth(env);
+    const session = vi.spyOn(auth.api, "getSession");
+
+    const result = await getAdminBootstrap(
+      { auth, db: env.DB, environment: "test" },
+      {
+        requestId: crypto.randomUUID(),
+        headers: { cookie: staff.cookie },
+        timezone: "Asia/Manila",
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(session).toHaveBeenCalledTimes(1);
   });
 });

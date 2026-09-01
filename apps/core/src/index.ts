@@ -80,6 +80,7 @@ import {
   resolveAdminOperationalException,
 } from "./admin/application/operations-commands";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
+import { getAdminBootstrap as getAdminBootstrapQuery } from "./admin/application/admin-bootstrap";
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
 import { listAdminAuditEvents as listAdminAuditEventsQuery } from "./audit/application/list-audit-events";
 import { getAdminAuditEvent as getAdminAuditEventQuery } from "./audit/application/get-audit-event";
@@ -610,19 +611,26 @@ const catalogProductListSchema = authenticatedRequestSchema.extend({
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 
+const adminSelectedScopeSchema = validationSchema.discriminatedUnion("kind", [
+  validationSchema.object({ kind: validationSchema.literal("GLOBAL") }),
+  validationSchema.object({
+    kind: validationSchema.literal("MARKET"),
+    marketId: validationSchema.string().trim().min(1).max(200),
+  }),
+  validationSchema.object({
+    kind: validationSchema.literal("LOCATION"),
+    marketId: validationSchema.string().trim().min(1).max(200),
+    locationId: validationSchema.string().trim().min(1).max(200),
+  }),
+]);
+
 const adminOverviewSchema = authenticatedRequestSchema.extend({
-  selectedScope: validationSchema.discriminatedUnion("kind", [
-    validationSchema.object({ kind: validationSchema.literal("GLOBAL") }),
-    validationSchema.object({
-      kind: validationSchema.literal("MARKET"),
-      marketId: validationSchema.string().trim().min(1).max(200),
-    }),
-    validationSchema.object({
-      kind: validationSchema.literal("LOCATION"),
-      marketId: validationSchema.string().trim().min(1).max(200),
-      locationId: validationSchema.string().trim().min(1).max(200),
-    }),
-  ]),
+  selectedScope: adminSelectedScopeSchema,
+  timezone: validationSchema.string().trim().min(1).max(100),
+});
+
+const adminBootstrapSchema = authenticatedRequestSchema.extend({
+  selectedScope: adminSelectedScopeSchema.optional(),
   timezone: validationSchema.string().trim().min(1).max(100),
 });
 
@@ -995,6 +1003,25 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
       return getAdminOverviewQuery(
         { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      );
+    });
+  }
+
+  async getAdminBootstrap(input: import("@freshmarkets/contracts").AdminBootstrapRequest) {
+    return observeCoreRpc("admin.bootstrap", input.requestId, async () => {
+      const validation = adminBootstrapSchema.safeParse(input);
+      if (!validation.success)
+        return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+      return getAdminBootstrapQuery(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          environment:
+            this.runtimeConfiguration().environment === "test"
+              ? "development"
+              : this.runtimeConfiguration().environment,
+        },
         validation.data,
       );
     });

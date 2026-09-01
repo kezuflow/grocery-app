@@ -1,16 +1,10 @@
 "use client";
 
 import type { MetricSeriesView } from "@freshmarkets/contracts";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { lazy, Suspense } from "react";
 import { AdminChartCard, AdminDashboardGrid } from "./admin-compositions";
+
+const AdminLineChart = lazy(() => import("./admin-line-chart"));
 
 export function AnalyticsChartGrid({ series }: { series: ReadonlyArray<MetricSeriesView> }) {
   if (series.length === 0) return null;
@@ -34,22 +28,9 @@ export function AnalyticsChartGrid({ series }: { series: ReadonlyArray<MetricSer
           >
             {metric.availability === "AVAILABLE" && data.length > 0 ? (
               <div className="h-64 pt-4" aria-hidden="true">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data} margin={{ left: -18, right: 8 }}>
-                    <CartesianGrid vertical={false} stroke="var(--fm-border)" />
-                    <XAxis dataKey="occurredAt" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
-                    <Tooltip cursor={{ stroke: "var(--fm-border)" }} />
-                    <Line
-                      connectNulls={false}
-                      dataKey="value"
-                      dot={false}
-                      stroke="var(--fm-admin-accent)"
-                      strokeWidth={2}
-                      type="monotone"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<div className="h-full animate-pulse rounded-md bg-muted" />}>
+                  <AdminLineChart data={data} categoryKey="occurredAt" valueKey="value" />
+                </Suspense>
               </div>
             ) : (
               <p className="py-8 text-sm text-[var(--fm-text-muted)]">

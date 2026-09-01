@@ -9,7 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  AdminBootstrapView,
   AdminContextView,
+  AdminOverviewView,
   AdminScopeOptionView,
   AdminSelectedScope,
   RpcResult,
@@ -25,6 +27,7 @@ export type AdminContextState =
       context: AdminContextView;
       scopes: ReadonlyArray<AdminScopeOptionView>;
       selectedScope: AdminSelectedScope | null;
+      overview: AdminOverviewView | null;
     };
 
 type AdminContextValue = {
@@ -34,6 +37,7 @@ type AdminContextValue = {
 };
 
 const AdminContextContext = createContext<AdminContextValue | null>(null);
+const PREFERRED_SCOPE_KEY = "freshmarkets.admin.preferred-scope";
 
 export function adminSelectableScopes(
   context: AdminContextView,
@@ -54,30 +58,55 @@ export function adminSelectableScopes(
   );
 }
 
-function assignedDefault(
-  context: AdminContextView,
-  options: ReadonlyArray<AdminScopeOptionView>,
-): AdminSelectedScope | null {
-  if (context.scopes.length !== 1) return null;
-  const scope = context.scopes[0]!;
-  if (scope.kind === "global") return { kind: "GLOBAL" };
-  if (scope.kind === "market") return { kind: "MARKET", marketId: scope.marketId };
-  const option = options.find(
-    (candidate) => candidate.kind === "location" && candidate.locationId === scope.locationId,
+function sameScope(left: AdminSelectedScope, right: AdminSelectedScope): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "GLOBAL") return true;
+  if (left.kind === "MARKET" && right.kind === "MARKET") return left.marketId === right.marketId;
+  return (
+    left.kind === "LOCATION" &&
+    right.kind === "LOCATION" &&
+    left.marketId === right.marketId &&
+    left.locationId === right.locationId
   );
-  return option?.kind === "location"
-    ? { kind: "LOCATION", marketId: option.marketId, locationId: option.locationId }
-    : null;
 }
 
-function sameScope(left: AdminSelectedScope, right: AdminSelectedScope): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+function storedPreferredScope(): AdminSelectedScope | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PREFERRED_SCOPE_KEY) ?? "null") as unknown;
+    if (!value || typeof value !== "object" || !("kind" in value)) return null;
+    const record = value as Record<string, unknown>;
+    if (record.kind === "GLOBAL") return { kind: "GLOBAL" };
+    if (record.kind === "MARKET" && typeof record.marketId === "string") {
+      return { kind: "MARKET", marketId: record.marketId };
+    }
+    if (
+      record.kind === "LOCATION" &&
+      typeof record.marketId === "string" &&
+      typeof record.locationId === "string"
+    ) {
+      return { kind: "LOCATION", marketId: record.marketId, locationId: record.locationId };
+    }
+  } catch {
+    // Invalid browser preference is ignored; Core remains scope authority.
+  }
+  return null;
+}
+
+function bootstrapUrl(scope: AdminSelectedScope | null): string {
+  const query = new URLSearchParams({
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  });
+  if (scope) {
+    query.set("scopeKind", scope.kind);
+    if (scope.kind !== "GLOBAL") query.set("marketId", scope.marketId);
+    if (scope.kind === "LOCATION") query.set("locationId", scope.locationId);
+  }
+  return `/api/admin/bootstrap?${query}`;
 }
 
 /**
- * Client boundary that fetches the Core-derived admin context and scope
- * options once per mount (with manual retry). It renders only what Core
- * returns and never computes capabilities or permissions itself.
+ * Client boundary hydrated by one Core-owned bootstrap result. Browser scope
+ * preference is only a request hint; Core proves it against current Staff IAM.
  */
 export function AdminContextProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AdminContextState>({ phase: "loading" });
@@ -92,7 +121,8 @@ export function AdminContextProvider({ children }: { children: ReactNode }) {
         `freshmarkets.admin.scope:${current.context.staffId}`,
         JSON.stringify(scope),
       );
-      return { ...current, selectedScope: scope };
+      sessionStorage.setItem(PREFERRED_SCOPE_KEY, JSON.stringify(scope));
+      return { ...current, selectedScope: scope, overview: null };
     });
   }, []);
 
@@ -101,57 +131,42 @@ export function AdminContextProvider({ children }: { children: ReactNode }) {
     setState({ phase: "loading" });
     void (async () => {
       try {
-        const [contextResponse, scopesResponse] = await Promise.all([
-          fetch("/api/admin/context"),
-          fetch("/api/admin/scopes"),
-        ]);
-        const context = (await contextResponse.json()) as RpcResult<AdminContextView>;
-        if (!context.ok) {
+        const preferredScope = storedPreferredScope();
+        const response = await fetch(bootstrapUrl(preferredScope));
+        const bootstrap = (await response.json()) as RpcResult<AdminBootstrapView>;
+        if (!bootstrap.ok) {
           if (!active) return;
-          if (context.error.code === "UNAUTHENTICATED") {
+          if (bootstrap.error.code === "UNAUTHENTICATED") {
             setState({ phase: "unauthenticated" });
-          } else if (context.error.code === "FORBIDDEN") {
+          } else if (bootstrap.error.code === "FORBIDDEN") {
             setState({ phase: "forbidden" });
           } else {
             setState({
               phase: "error",
-              message: context.error.message,
-              requestId: context.error.requestId,
+              message: bootstrap.error.message,
+              requestId: bootstrap.error.requestId,
             });
           }
           return;
         }
-        const scopes = (await scopesResponse.json()) as RpcResult<
-          ReadonlyArray<AdminScopeOptionView>
-        >;
         if (!active) return;
-        if (!scopes.ok) {
-          setState({
-            phase: "error",
-            message: scopes.error.message,
-            requestId: scopes.error.requestId,
-          });
-          return;
+        const { context, scopes, selection, overview } = bootstrap.value;
+        const selectedScope = selection.selectedScope;
+        if (selectedScope) {
+          sessionStorage.setItem(
+            `freshmarkets.admin.scope:${context.staffId}`,
+            JSON.stringify(selectedScope),
+          );
+          sessionStorage.setItem(PREFERRED_SCOPE_KEY, JSON.stringify(selectedScope));
+        } else if (preferredScope) {
+          sessionStorage.removeItem(PREFERRED_SCOPE_KEY);
         }
-        const permitted = adminSelectableScopes(context.value, scopes.value);
-        const storedRaw = sessionStorage.getItem(
-          `freshmarkets.admin.scope:${context.value.staffId}`,
-        );
-        let stored: AdminSelectedScope | null = null;
-        try {
-          stored = storedRaw ? (JSON.parse(storedRaw) as AdminSelectedScope) : null;
-        } catch {
-          stored = null;
-        }
-        const selectedScope =
-          stored && permitted.some((candidate) => sameScope(candidate, stored))
-            ? stored
-            : assignedDefault(context.value, scopes.value);
         setState({
           phase: "ready",
-          context: context.value,
-          scopes: scopes.value,
+          context,
+          scopes,
           selectedScope,
+          overview,
         });
       } catch {
         if (active) {

@@ -13,11 +13,25 @@ import type { AuthInstance } from "./service";
 
 type Database = ReturnType<typeof import("drizzle-orm/d1").drizzle>;
 
+export type ResolvedStaffIdentity = Readonly<{
+  id: string;
+  authUserId: string;
+  displayName: string;
+  status: string;
+}>;
+
+/** Internal immutable access result; the Staff record never crosses the public auth contract. */
+export type ResolvedApplicationContext = Readonly<
+  ApplicationContext & {
+    staffIdentity: ResolvedStaffIdentity | null;
+  }
+>;
+
 export async function applicationContext(
   auth: AuthInstance,
   database: Database,
   request: AuthContextRequest,
-): Promise<RpcResult<ApplicationContext>> {
+): Promise<RpcResult<ResolvedApplicationContext>> {
   const traceContext = { requestId: request.requestId };
   const session = await traceOperation("auth.session", traceContext, () =>
     auth.api.getSession({
@@ -28,7 +42,13 @@ export async function applicationContext(
   if (!session) {
     return {
       ok: true,
-      value: { authenticated: false, principal: null, capabilities: [], scopes: [] },
+      value: {
+        authenticated: false,
+        principal: null,
+        capabilities: [],
+        scopes: [],
+        staffIdentity: null,
+      },
       requestId: request.requestId,
     };
   }
@@ -101,10 +121,40 @@ export async function applicationContext(
         scopes: [...new Set(scopes.map((scope) => JSON.stringify(scope)))].map(
           (scope) => JSON.parse(scope) as Scope,
         ),
+        staffIdentity: staffRecord
+          ? {
+              id: staffRecord.id,
+              authUserId: staffRecord.authUserId,
+              displayName: staffRecord.displayName,
+              status: staffRecord.status,
+            }
+          : null,
       },
       requestId: request.requestId,
     };
   });
+}
+
+export async function applicationContextForRequest(
+  auth: AuthInstance,
+  database: Database,
+  request: AuthContextRequest,
+  resolved?: ResolvedApplicationContext,
+): Promise<RpcResult<ResolvedApplicationContext>> {
+  if (resolved) return { ok: true, value: resolved, requestId: request.requestId };
+  return applicationContext(auth, database, request);
+}
+
+/** Public auth DTO projection that deliberately strips internal Staff resolution evidence. */
+export async function publicApplicationContext(
+  auth: AuthInstance,
+  database: Database,
+  request: AuthContextRequest,
+): Promise<RpcResult<ApplicationContext>> {
+  const result = await applicationContextForRequest(auth, database, request);
+  if (!result.ok) return result;
+  const { staffIdentity: _staffIdentity, ...value } = result.value;
+  return { ok: true, value, requestId: result.requestId };
 }
 
 export function can(capabilities: ReadonlyArray<Capability>, required: Capability): boolean {

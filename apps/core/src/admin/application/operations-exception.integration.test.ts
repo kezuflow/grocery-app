@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { listOperationalExceptions } from "../../audit/application/list-operational-exceptions";
+import {
+  listOperationalExceptions,
+  listOperationalExceptionsForLocations,
+} from "../../audit/application/list-operational-exceptions";
 
 describe("converged operational exceptions", () => {
   it("orders and ages receiving discrepancies by persisted UTC timestamps", async () => {
@@ -63,6 +66,65 @@ describe("converged operational exceptions", () => {
       ownerId: null,
     });
     expect(item?.ageMinutes).toBeGreaterThanOrEqual(1);
+  });
+
+  it("reads multiple locations with one bounded D1 statement", async () => {
+    const suffix = crypto.randomUUID();
+    const secondLocationId = `location-second-${suffix}`;
+    const firstRequirementId = `requirement-first-${suffix}`;
+    const firstExceptionId = `exception-first-${suffix}`;
+    const secondRequirementId = `requirement-second-${suffix}`;
+    const secondExceptionId = `exception-second-${suffix}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO procurement_requirement
+          (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version)
+         VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1)`,
+      ).bind(firstRequirementId, `cycle-first-${suffix}`),
+      env.DB.prepare(
+        `INSERT INTO supply_exception
+          (id, requirement_id, kind, affected_quantity, status, created_at, version)
+         VALUES (?, ?, 'SHORTAGE', 5, 'OPEN', ?, 1)`,
+      ).bind(firstExceptionId, firstRequirementId, Date.now() - 1),
+      env.DB.prepare(
+        `INSERT INTO fulfillment_location
+          (id, market_id, code, name, type, latitude, longitude, status, version, created_at, updated_at)
+         VALUES (?, 'market-metro-cebu', ?, 'Second location', 'FULFILLMENT_CENTER',
+                 10.32, 123.89, 'active', 1, 0, 0)`,
+      ).bind(secondLocationId, `SECOND_${suffix.slice(0, 8)}`),
+      env.DB.prepare(
+        `INSERT INTO procurement_requirement
+          (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version)
+         VALUES (?, ?, ?, 'pool-red-onion', 10, 'ORDERED', 1)`,
+      ).bind(secondRequirementId, `cycle-second-${suffix}`, secondLocationId),
+      env.DB.prepare(
+        `INSERT INTO supply_exception
+          (id, requirement_id, kind, affected_quantity, status, created_at, version)
+         VALUES (?, ?, 'SHORTAGE', 5, 'OPEN', ?, 1)`,
+      ).bind(secondExceptionId, secondRequirementId, Date.now()),
+    ]);
+
+    let prepareCount = 0;
+    const countingDatabase = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "prepare") return Reflect.get(target, property, receiver);
+        return (sql: string) => {
+          prepareCount += 1;
+          return target.prepare(sql);
+        };
+      },
+    });
+    const rows = await listOperationalExceptionsForLocations(countingDatabase, {
+      locationIds: ["location-cebu-central", secondLocationId],
+      limit: 100,
+    });
+
+    expect(prepareCount).toBe(1);
+    expect(rows).toContainEqual(expect.objectContaining({ referenceId: firstExceptionId }));
+    expect(rows).toContainEqual(expect.objectContaining({ referenceId: secondExceptionId }));
+    const locations = rows.map((row) => row.locationId);
+    expect(locations).toContain("location-cebu-central");
+    expect(locations).toContain(secondLocationId);
   });
 
   it("derives action sets from actual source rows", async () => {

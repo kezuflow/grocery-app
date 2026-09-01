@@ -1,26 +1,39 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getAdminContext, listAdminScopes, listAdminAuditEvents, getAdminAuditEvent } = vi.hoisted(
-  () => ({
-    getAdminContext: vi.fn(),
-    listAdminScopes: vi.fn(),
-    listAdminAuditEvents: vi.fn(),
-    getAdminAuditEvent: vi.fn(),
-  }),
-);
+const {
+  getAdminBootstrap,
+  getAdminContext,
+  listAdminScopes,
+  listAdminAuditEvents,
+  getAdminAuditEvent,
+} = vi.hoisted(() => ({
+  getAdminBootstrap: vi.fn(),
+  getAdminContext: vi.fn(),
+  listAdminScopes: vi.fn(),
+  listAdminAuditEvents: vi.fn(),
+  getAdminAuditEvent: vi.fn(),
+}));
 
 vi.mock("cloudflare:workers", () => ({
   env: {
-    CORE: { getAdminContext, listAdminScopes, listAdminAuditEvents, getAdminAuditEvent },
+    CORE: {
+      getAdminBootstrap,
+      getAdminContext,
+      listAdminScopes,
+      listAdminAuditEvents,
+      getAdminAuditEvent,
+    },
   },
 }));
 
 import { GET as getContext } from "@/app/api/admin/context/route";
+import { GET as getBootstrap } from "@/app/api/admin/bootstrap/route";
 import { GET as getScopes } from "@/app/api/admin/scopes/route";
 import { GET as listAudit } from "@/app/api/admin/audit/route";
 import { GET as getAuditDetail } from "@/app/api/admin/audit/[audit-event-id]/route";
 
 beforeEach(() => {
+  getAdminBootstrap.mockReset();
   getAdminContext.mockReset();
   listAdminScopes.mockReset();
   listAdminAuditEvents.mockReset();
@@ -28,6 +41,24 @@ beforeEach(() => {
 });
 
 describe("admin foundation BFF routes", () => {
+  it("maps optional scope evidence and delegates one bootstrap RPC", async () => {
+    getAdminBootstrap.mockResolvedValue({ ok: true, value: {}, requestId: "bootstrap-1" });
+    const response = await getBootstrap(
+      new Request(
+        "https://freshmarkets.ph/api/admin/bootstrap?scopeKind=LOCATION&marketId=m1&locationId=l1&timezone=Asia%2FManila",
+        { headers: { cookie: "session=abc" } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getAdminBootstrap).toHaveBeenCalledTimes(1);
+    expect(getAdminBootstrap.mock.calls[0][0]).toMatchObject({
+      headers: { cookie: "session=abc" },
+      selectedScope: { kind: "LOCATION", marketId: "m1", locationId: "l1" },
+      timezone: "Asia/Manila",
+    });
+  });
+
   it("delegates context to Core once, forwarding cookies and a request id", async () => {
     getAdminContext.mockResolvedValue({
       ok: true,

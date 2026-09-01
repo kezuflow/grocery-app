@@ -1,6 +1,7 @@
 # FreshMarkets Admin Performance Stabilization Plan
 
-Status: phased execution in progress; Phases 1 and 2 locally implemented and verified.
+Status: local execution complete through Phase 7; production evidence and visual-baseline
+reconciliation remain pending.
 
 ## Purpose
 
@@ -179,6 +180,169 @@ Implementation and acceptance validation are complete.
   infrastructure change was made. The production build continues to report its pre-existing large
   client-chunk warning, which is evidence to inspect in Phase 6 rather than grounds for an
   unmeasured optimization here.
+
+## Phase 3 execution record — 2026-09-01
+
+Implementation and acceptance validation are complete.
+
+- Core now exposes `getAdminBootstrap(AdminBootstrapRequest) -> AdminBootstrapView`, one
+  purpose-built first-render composition containing the Staff Admin context, reachable active scope
+  options, Core-proven selection evidence, and the initial scope-aware Overview when a scope is
+  available. The Web adapter delegates exactly one typed Service Binding RPC.
+- The client provider performs one `/api/admin/bootstrap` browser request instead of parallel
+  context/scopes requests followed by Overview. A validated browser preference is accepted only
+  when currently reachable. Stale or tampered evidence is rejected and safely falls back to the
+  sole assigned scope or an explicit selection-required state; it never grants scope authority.
+- Market and Location selections use the canonical configured timezone. Global selection retains
+  an explicitly supplied, Core-validated IANA timezone. Context loading, unauthenticated,
+  forbidden, selection-required, network-error, and retry states remain explicit.
+- A production-build managed Web/Core/D1 browser test observed exactly one first-render Admin read,
+  `/api/admin/bootstrap`; `/api/admin/context`, `/api/admin/scopes`, and `/api/admin/overview` were
+  absent. The Overview rendered useful operational data, and the existing authenticated,
+  unauthenticated, non-Staff, responsive-navigation, breadcrumb, and token-isolation flows passed.
+- Validation: all three package type checks passed; 16 focused contract tests, 51 focused Web unit
+  tests, 13 focused Core Worker integration tests, and 8 managed Playwright tests passed. The
+  production vinext build passed with the already-recorded large-chunk warning.
+- No schema, migration, cache, index, projection, infrastructure, capability, authorization,
+  business-rule, or lifecycle change was made. The typed RPC/DTO addition is documented in
+  `API_CONTRACTS.md`.
+
+The directional pre-Phase-1 trace had three browser reads and about 4.2 seconds to useful Overview
+data. Phase 3 proves the browser request-count reduction from three to one in the managed stack;
+production cold/warm percentiles remain unavailable, so no latency budget or percentile claim is
+established.
+
+## Phase 4 execution record — 2026-09-01
+
+Implementation and acceptance validation are complete.
+
+- Core's internal authorization resolution now returns one immutable request-scoped access context
+  containing Better Auth principal evidence, canonical capabilities/scopes, and the already-resolved
+  Staff identity. The public application-context RPC strips the internal Staff evidence and retains
+  its existing DTO.
+- Admin context, scope options, Overview, nested Audit, and all Catalog, Customer, Finance, Staff,
+  Promotion, Operations, and Audit access helpers consume the resolved Staff identity instead of
+  querying it again. Bootstrap resolves the access context once and passes it to every nested read.
+- A direct Worker integration assertion proves one `getSession` invocation across bootstrap,
+  context, scopes, Overview, and nested Audit. Reuse is limited to one RPC invocation; there is no
+  cross-request authorization cache.
+- Validation: Core typecheck and zero-warning lint passed; 13 focused Core files passed 101 tests,
+  covering unauthenticated and non-Staff access, roles/capabilities, global and operational scopes,
+  stale scope evidence, revoked sessions, nested Audit, and the major Admin read families. The
+  production-build managed stack passed the same 8 Admin bootstrap/foundation Playwright flows.
+- No schema, migration, RPC, public DTO, capability, authorization outcome, business rule, index,
+  projection, cache, or infrastructure change was made. The internal request-context behavior is
+  recorded in `ARCHITECTURE.md` and `API_CONTRACTS.md`.
+
+Production percentile after-measurements remain unavailable. Local evidence establishes a strict
+authorization-resolution count reduction for bootstrap from three independent resolutions to one;
+it does not establish a production latency percentile or budget.
+
+## Phase 5 execution record — 2026-09-01
+
+The evidence-independent query refactors are complete and locally verified. Index authorization
+remains intentionally pending.
+
+- Operational exceptions now use one bounded `UNION ALL` projection across an arbitrary authorized
+  location set. A JSON table-valued scope input keeps both D1 statement count and bind count
+  constant as location count grows. The Overview no longer performs four exception queries per
+  location; its exception list and open-exception count are each one set-based statement.
+- Product listing pages the relevant Products first, ranks the current location-over-market price
+  once per relevant SKU, aggregates SKU readiness and price range once per Product, and resolves
+  primary media once per Product. The four separate global readiness reads are one conditional,
+  set-based readiness statement. Existing search, status, cursor, price precedence, availability,
+  primary-media, and multi-scope DTO semantics are unchanged.
+- Query-count evidence: the Overview exception list changed from `4 × location count` statements
+  to one; a two-location Worker integration test asserts one D1 statement. Product list readiness
+  changed from four D1 statements to one, while the repeated per-Product/per-SKU correlated
+  subqueries were replaced by CTE/window/grouped sets.
+- Populated local D1 `EXPLAIN QUERY PLAN` for the exact generated SQL shows no correlated scalar
+  subquery in the Product page/readiness plans. Existing indexes are used for category PK,
+  `price_version_scope_active_idx`, primary media, SKU/location availability, and owning-record
+  joins. It still reports Product/SKU/source scans and temporary ordering for the Product page,
+  current-price ranking, and exception union. Those are candidates for production rows-read
+  investigation, not index authorization.
+- Validation: Core typecheck and zero-warning lint passed; 6 focused Core Worker files passed 41
+  tests, including pagination/filtering over more than 100 Products, explicit pricing context,
+  price/availability/media readiness, multi-location exception semantics, Overview scopes, and
+  authorization reuse. The production vinext build and 4 managed Admin bootstrap/Catalog
+  Playwright reads passed.
+- No schema, migration, index, FTS, projection, cache, RPC, DTO, authorization, capability,
+  business-rule, or infrastructure change was made.
+
+Production rows-read/rows-returned evidence remains unavailable because no configured production
+Worker exists. Consequently no index or projection is approved in this phase, and the remaining
+scan/temp-sort observations are recorded rather than guessed away.
+
+## Phase 6 execution record — 2026-09-01
+
+Implementation and focused payload acceptance validation are complete.
+
+- Recharts is no longer a static dependency of the Overview, Analytics chart grid, or Payments
+  overview components. Bar and line renderers are separate lazy client boundaries and are requested
+  only when an available, non-empty chart is actually rendered. Empty Overview and zero-workload
+  Payments states retain explicit text instead of downloading a chart runtime for an empty plot.
+- The production build isolates the shared Recharts Cartesian runtime in a 335,918-byte minified
+  chunk, with 21,057-byte bar and 17,440-byte line renderer chunks. A non-chart Overview therefore
+  avoids at least 356,975 minified artifact bytes that were previously reachable from the eagerly
+  imported Overview component. These are build-artifact bytes, not compressed production transfer
+  measurements.
+- A production-build managed Web/Core/D1 browser assertion proves that the seeded empty Overview
+  requests neither chart renderer. The same trace proves the Admin route requests its scoped DM
+  Sans Latin font and does not request the storefront Open Sans or Outfit Latin fonts. No font,
+  global style, token, or Admin/storefront boundary change was justified.
+- Validation: Web typecheck passed; 17 focused Admin Vitest files passed 82 tests; the production
+  vinext build passed; and the managed bootstrap payload/font/chart assertion passed. Existing
+  chart summaries remain available to assistive technology while visual chart containers remain
+  decorative.
+- The repository's existing full-page visual baselines are currently stale against unrelated Admin
+  shell changes already present in the dirty worktree (branding/header/navigation and responsive
+  shell dimensions). After correcting the Phase 3 bootstrap fixture, all three viewport runs render
+  the expected chart data consistently, but the full-page baseline comparison still fails outside
+  this phase's chart boundary. Baselines were not silently replaced, and the mismatch is carried to
+  Phase 7 closeout.
+- No schema, migration, RPC, DTO, authorization, capability, business-rule, index, projection,
+  cache, infrastructure, design-token, or font change was made.
+
+Production transfer/parse timing and cold/warm percentile evidence remain unavailable because no
+configured production Worker exists. The local artifact and browser-request evidence supports the
+conditional-loading change but does not establish a production payload or latency budget.
+
+## Phase 7 execution record — 2026-09-01
+
+Integrated local verification is complete; production and visual acceptance remain explicitly
+pending.
+
+- Formatting, naming, canonical terminology, fresh/populated migrations, architecture boundaries,
+  readiness/security rules, zero-warning lint, all workspace type checks, and vinext compatibility
+  (`100%`, 14 supported, 0 partial, 0 issues) passed.
+- The complete package suite passed 1,503 tests across 265 files: Config 2, Contracts 77,
+  Domain-shared 2, Validation 2, Web 561, and Core Worker 859. Core's Wrangler production dry-run
+  and the Web vinext production build passed. The Web build retains its non-fatal large-chunk
+  advisory, whose largest artifact is the route-isolated 1,827,109-byte Mapbox GL chunk rather than
+  a shared Admin bootstrap dependency.
+- The managed production-build Web/Core/D1 browser matrix passed 90 flows with two
+  environment-gated skips. It covers authentication/Staff denial, capabilities, Global and
+  operational scopes, bootstrap request count, idle-prefetch suppression, Catalog, Customer,
+  Finance, Operations, Promotions, Analytics, Staff, responsive/focus behavior, and representative
+  customer journeys. Deterministic fixtures were migrated from the removed context/scopes browser
+  waterfall to the typed bootstrap result.
+- The three full-page Admin visual checks consistently render their chart content but fail against
+  committed baselines because the dirty worktree already contains unrelated shell branding,
+  navigation, and responsive-dimension changes. The baselines were preserved for owner review;
+  this pass does not claim visual acceptance while that mismatch remains.
+- `IMPLEMENTATION_STATUS.md` now records the pass as descriptive implementation status.
+  `ARCHITECTURE.md` and `API_CONTRACTS.md` record the approved request-scoped authorization and
+  bootstrap contract decisions. No data-model document or migration update was needed.
+- No schema, migration, index, projection, FTS, cache, queue, Durable Object, Workflow,
+  infrastructure, public API, authentication policy, capability, operational-scope, or locked
+  business-invariant change was made.
+
+Phase 7 cannot compare production cold/warm percentiles or evaluate an evidence-derived budget:
+Phase 1 found no configured production Worker and deployment was not authorized. Production
+p50/p95/p99, rows-read/rows-returned, and transfer/parse sampling must occur after the owner provides
+or authorizes a representative deployment and controlled Admin principal. Until then, there is no
+approved SLO and no authorization for speculative D1 indexes or projections.
 
 ## Model and token-efficiency strategy
 

@@ -1,11 +1,10 @@
-import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type {
   AdminScopeOptionView,
   AuthenticatedRequest,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { applicationContext } from "../../auth/authorization";
+import { applicationContextForRequest } from "../../auth/authorization";
 import { iamSchema } from "../../iam/schema";
 import { setD1SpanAttributes, traceOperation } from "../../observability";
 import type { AdminContextDeps } from "./get-admin-context";
@@ -20,7 +19,12 @@ export async function listAdminScopes(
   request: AuthenticatedRequest,
 ): Promise<RpcResult<ReadonlyArray<AdminScopeOptionView>>> {
   const database = drizzle(deps.db, { schema: iamSchema });
-  const context = await applicationContext(deps.auth, database, request);
+  const context = await applicationContextForRequest(
+    deps.auth,
+    database,
+    request,
+    deps.accessContext,
+  );
   if (!context.ok) return context;
   if (!context.value.authenticated || !context.value.principal) {
     return {
@@ -33,12 +37,7 @@ export async function listAdminScopes(
     };
   }
 
-  const staff = await database
-    .select({ id: iamSchema.staffIdentity.id, status: iamSchema.staffIdentity.status })
-    .from(iamSchema.staffIdentity)
-    .where(eq(iamSchema.staffIdentity.authUserId, context.value.principal.userId))
-    .limit(1);
-  const staffRecord = staff[0];
+  const staffRecord = context.value.staffIdentity;
   if (!staffRecord || staffRecord.status !== "active") {
     return {
       ok: false,

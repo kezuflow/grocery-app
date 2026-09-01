@@ -1,4 +1,5 @@
 import { expect, test } from "./admin-authenticated-fixture";
+import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
 /**
  * Admin operations board flow against a provisioned local stack. Skips when
@@ -42,9 +43,15 @@ test("a signed-in account without operational capability sees the denied state",
   deniedAdminPage,
 }) => {
   await deniedAdminPage.goto("/admin/procurement");
-  await deniedAdminPage.getByRole("combobox", { name: "Active admin scope" }).selectOption({
-    label: "Cebu Central",
-  });
+  const scopeControl = deniedAdminPage.getByRole("combobox", { name: "Active admin scope" });
+  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
+    await scopeControl.selectOption({ label: "Cebu Central" });
+  } else {
+    await scopeControl.click();
+    await deniedAdminPage
+      .getByRole("option", { name: "Cebu Central" })
+      .evaluate((option) => (option as HTMLElement).click());
+  }
   await expect(deniedAdminPage.getByRole("alert")).toContainText(
     "Procurement access is not permitted for this scope.",
   );
@@ -86,45 +93,35 @@ test("fulfillment-mode activation succeeds with capability and is denied without
 test("exception workspace renders typed source fields and unavailable actions", async ({
   page,
 }) => {
-  await page.route("**/api/admin/context", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "e2e",
-        value: {
-          staffId: "staff-e2e",
-          displayName: "E2E",
-          email: "e2e@example.com",
-          capabilities: ["fulfillment.manage"],
-          scopes: [],
-          navigation: [],
-          environment: "test",
-        },
-      }),
-    }),
-  );
-  await page.route("**/api/admin/scopes", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "e2e",
-        value: [
-          {
-            kind: "location",
-            marketId: "market-e2e",
-            marketCode: "CEBU",
-            locationId: "location-cebu-central",
-            locationCode: "CENTRAL",
-            locationName: "Cebu Central",
-            currency: "PHP",
-            timezone: "Asia/Manila",
-          },
-        ],
-      }),
-    }),
-  );
+  await installAdminBootstrapFixture(page, {
+    context: {
+      staffId: "staff-e2e",
+      displayName: "E2E",
+      email: "e2e@example.com",
+      capabilities: ["fulfillment.manage"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+      navigation: [],
+      environment: "test",
+    },
+    scopes: [
+      {
+        kind: "location",
+        marketId: "market-e2e",
+        marketCode: "CEBU",
+        locationId: "location-cebu-central",
+        locationCode: "CENTRAL",
+        locationName: "Cebu Central",
+        currency: "PHP",
+        timezone: "Asia/Manila",
+      },
+    ],
+    selectedScope: {
+      kind: "LOCATION",
+      marketId: "market-e2e",
+      locationId: "location-cebu-central",
+    },
+    timezone: "Asia/Manila",
+  });
   await page.route("**/api/admin/exceptions**", async (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -153,9 +150,6 @@ test("exception workspace renders typed source fields and unavailable actions", 
     }),
   );
   await page.goto("/admin/issues/operational-exceptions");
-  await page.getByRole("combobox", { name: "Active admin scope" }).selectOption({
-    label: "Cebu Central",
-  });
   await expect(page.getByText("RECEIVING").first()).toBeVisible();
   await expect(page.getByText("Source-owned; unavailable here")).toBeVisible();
   await expect(page.getByText("Age unavailable")).toBeVisible();

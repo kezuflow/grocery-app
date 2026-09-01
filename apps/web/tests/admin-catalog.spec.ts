@@ -38,7 +38,7 @@ test("a provisioned Staff reader can scan the Category workspace", async ({ admi
   await adminPage.goto("/admin/catalog/categories");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Categories" })).toBeVisible();
   await expect(
-    adminPage.locator("#main-content").getByRole("link", { name: "Add category" }),
+    adminPage.locator("#main-content").getByRole("link", { name: "Add category" }).first(),
   ).toBeVisible();
   await expect(adminPage.getByRole("table", { name: "Categories" })).toBeVisible();
   await expect(adminPage.getByRole("navigation", { name: "Results pagination" })).toBeVisible();
@@ -48,7 +48,7 @@ test("a provisioned Staff reader can scan the Product workspace", async ({ admin
   await adminPage.goto("/admin/catalog/products");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
   await expect(
-    adminPage.locator("#main-content").getByRole("link", { name: "Add product" }),
+    adminPage.locator("#main-content").getByRole("link", { name: "Add product" }).first(),
   ).toBeVisible();
   await expect(adminPage.getByRole("table", { name: "Products" })).toBeVisible();
   await expect(adminPage.getByRole("navigation", { name: "Results pagination" })).toBeVisible();

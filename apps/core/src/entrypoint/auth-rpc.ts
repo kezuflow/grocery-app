@@ -1,5 +1,5 @@
 import type { AuthContextRequest, AuthRequest, AuthResponse } from "@freshmarkets/contracts";
-import { applicationContext } from "../auth/authorization";
+import { publicApplicationContext } from "../auth/authorization";
 import type { CoreRpcContext } from "./context";
 
 export function createAuthRpc(context: CoreRpcContext) {
@@ -15,7 +15,7 @@ export function createAuthRpc(context: CoreRpcContext) {
     },
 
     getApplicationContext(input: AuthContextRequest) {
-      return applicationContext(context.auth, context.iamDatabase, input);
+      return publicApplicationContext(context.auth, context.iamDatabase, input);
     },
   };
 }

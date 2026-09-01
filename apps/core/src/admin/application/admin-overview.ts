@@ -6,14 +6,22 @@ import type {
   Capability,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { applicationContext, hasOperationalScope } from "../../auth/authorization";
+import {
+  applicationContextForRequest,
+  hasOperationalScope,
+  type ResolvedApplicationContext,
+} from "../../auth/authorization";
 import type { AuthInstance } from "../../auth/service";
 import { listAdminAuditEvents } from "../../audit/application/list-audit-events";
-import { listOperationalExceptions } from "../../audit/application/list-operational-exceptions";
+import { listOperationalExceptionsForLocations } from "../../audit/application/list-operational-exceptions";
 import { iamSchema } from "../../iam/schema";
 import { setD1SpanAttributes, traceOperation } from "../../observability";
 
-export type AdminOverviewDeps = { auth: AuthInstance; db: D1Database };
+export type AdminOverviewDeps = {
+  auth: AuthInstance;
+  db: D1Database;
+  accessContext?: ResolvedApplicationContext;
+};
 
 function failure(
   code: "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_FAILED",
@@ -46,10 +54,11 @@ export async function getAdminOverview(
     );
   }
 
-  const context = await applicationContext(
+  const context = await applicationContextForRequest(
     deps.auth,
     drizzle(deps.db, { schema: iamSchema }),
     request,
+    deps.accessContext,
   );
   if (!context.ok) return context;
   if (!context.value.authenticated || !context.value.principal) {
@@ -179,17 +188,9 @@ export async function getAdminOverview(
 
   const exceptions =
     canReadExceptions && locationIds.length > 0
-      ? (
-          await Promise.all(
-            locationIds.map((locationId) =>
-              listOperationalExceptions(deps.db, { locationId, limit: 12 }),
-            ),
-          )
+      ? (await listOperationalExceptionsForLocations(deps.db, { locationIds, limit: 12 })).map(
+          ({ queueKey: _queueKey, ...item }) => ({ ...item, href: "/admin/exceptions" }),
         )
-          .flat()
-          .sort((left, right) => right.queueKey.localeCompare(left.queueKey))
-          .slice(0, 12)
-          .map(({ queueKey: _queueKey, ...item }) => ({ ...item, href: "/admin/exceptions" }))
       : [];
 
   let openExceptionCount: number | null = null;
@@ -219,22 +220,33 @@ export async function getAdminOverview(
     }));
   }
   if (canReadExceptions && locationIds.length > 0) {
-    const marks = placeholders(locationIds);
     const count = await deps.db
       .prepare(
-        `SELECT
-          (SELECT COUNT(*) FROM supply_exception se JOIN procurement_requirement pr ON pr.id=se.requirement_id
-            WHERE pr.location_id IN (${marks}) AND se.status NOT IN ('RESOLVED','CLOSED')) +
-          (SELECT COUNT(*) FROM fulfillment_record f
-            WHERE f.location_id IN (${marks}) AND f.status='SHORTED') +
-          (SELECT COUNT(*) FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
-            WHERE f.location_id IN (${marks}) AND d.status='FAILED') +
-          (SELECT COUNT(*) FROM receiving_record rr JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id
-            WHERE pr.location_id IN (${marks})
-              AND (rr.rejected_quantity>0 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity))
-              AND rr.status!='NOT_STARTED') AS count`,
+        `WITH selected_locations(location_id) AS (SELECT value FROM json_each(?)),
+         open_exceptions AS (
+           SELECT se.id FROM supply_exception se
+           JOIN procurement_requirement pr ON pr.id=se.requirement_id
+           JOIN selected_locations sl ON sl.location_id=pr.location_id
+           WHERE se.status NOT IN ('RESOLVED','CLOSED')
+           UNION ALL
+           SELECT f.id FROM fulfillment_record f
+           JOIN selected_locations sl ON sl.location_id=f.location_id
+           WHERE f.status='SHORTED'
+           UNION ALL
+           SELECT d.id FROM delivery_job d
+           JOIN fulfillment_record f ON f.order_id=d.order_id
+           JOIN selected_locations sl ON sl.location_id=f.location_id
+           WHERE d.status='FAILED'
+           UNION ALL
+           SELECT rr.id FROM receiving_record rr
+           JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id
+           JOIN selected_locations sl ON sl.location_id=pr.location_id
+           WHERE (rr.rejected_quantity>0
+                  OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity))
+             AND rr.status!='NOT_STARTED'
+         ) SELECT COUNT(*) AS count FROM open_exceptions`,
       )
-      .bind(...locationIds, ...locationIds, ...locationIds, ...locationIds)
+      .bind(JSON.stringify([...new Set(locationIds)]))
       .first<{ count: number }>();
     openExceptionCount = count?.count ?? 0;
   }
@@ -279,7 +291,9 @@ export async function getAdminOverview(
       ? { marketId: selected.marketId, locationId: selected.locationId }
       : {}),
   };
-  const recent = canReadAudit ? await listAdminAuditEvents(deps, auditRequest) : null;
+  const recent = canReadAudit
+    ? await listAdminAuditEvents({ ...deps, accessContext: context.value }, auditRequest)
+    : null;
   const recentOperations = recent?.ok ? recent.value.items : [];
   const generatedAt = new Date().toISOString();
   return {

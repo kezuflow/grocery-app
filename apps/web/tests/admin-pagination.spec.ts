@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./admin-authenticated-fixture";
+import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
 let stackUp = false;
 test.beforeAll(async ({ request }) => {
@@ -11,57 +12,87 @@ test.beforeAll(async ({ request }) => {
 });
 test.beforeEach(async ({ page }) => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
-  await page.route("**/api/admin/context", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "pagination-context",
-        value: {
-          staffId: "staff-pagination",
-          displayName: "Pagination Operator",
-          email: "pagination@example.com",
-          capabilities: [
-            "customers.read",
-            "catalog.read",
-            "promotions.read",
-            "payments.read",
-            "procurement.read",
-          ],
-          scopes: [{ kind: "location", locationId: "location-cebu-central" }],
-          navigation: [
-            { code: "customers", label: "Customers", href: "/admin/customers" },
-            { code: "catalog", label: "Catalog", href: "/admin/catalog" },
-            { code: "promotions", label: "Promotions", href: "/admin/promotions" },
-            { code: "payments", label: "Payments", href: "/admin/payments" },
-            { code: "procurement", label: "Procurement", href: "/admin/procurement" },
-          ],
-          environment: "test",
+  await installAdminBootstrapFixture(page, {
+    context: {
+      staffId: "staff-pagination",
+      displayName: "Pagination Operator",
+      email: "pagination@example.com",
+      capabilities: [
+        "customers.read",
+        "catalog.read",
+        "promotions.read",
+        "payments.read",
+        "procurement.read",
+      ],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+      navigation: [
+        {
+          code: "customers",
+          label: "Customers",
+          href: "/admin/customers",
+          section: "commerce",
+          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
+          parentCode: null,
+          kind: "workspace",
         },
-      }),
-    }),
-  );
-  await page.route("**/api/admin/scopes", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "pagination-scopes",
-        value: [
-          {
-            kind: "location",
-            marketId: "market-metro-cebu",
-            marketCode: "CEBU",
-            locationId: "location-cebu-central",
-            locationCode: "CENTRAL",
-            locationName: "Cebu Central",
-            currency: "PHP",
-            timezone: "Asia/Manila",
-          },
-        ],
-      }),
-    }),
-  );
+        {
+          code: "catalog",
+          label: "Catalog",
+          href: "/admin/catalog",
+          section: "commerce",
+          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
+          parentCode: null,
+          kind: "workspace",
+        },
+        {
+          code: "promotions",
+          label: "Promotions",
+          href: "/admin/promotions",
+          section: "commerce",
+          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
+          parentCode: null,
+          kind: "workspace",
+        },
+        {
+          code: "payments",
+          label: "Payments",
+          href: "/admin/payments",
+          section: "finance",
+          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
+          parentCode: null,
+          kind: "workspace",
+        },
+        {
+          code: "procurement",
+          label: "Procurement",
+          href: "/admin/procurement",
+          section: "operations",
+          scopeKinds: ["LOCATION"],
+          parentCode: null,
+          kind: "workspace",
+        },
+      ],
+      environment: "test",
+    },
+    scopes: [
+      {
+        kind: "location",
+        marketId: "market-metro-cebu",
+        marketCode: "CEBU",
+        locationId: "location-cebu-central",
+        locationCode: "CENTRAL",
+        locationName: "Cebu Central",
+        currency: "PHP",
+        timezone: "Asia/Manila",
+      },
+    ],
+    selectedScope: {
+      kind: "LOCATION",
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+    },
+    timezone: "Asia/Manila",
+  });
 });
 
 function result(value: unknown) {

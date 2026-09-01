@@ -13,119 +13,161 @@ function severity(quantity: number): OperationalExceptionItem["severity"] {
   return "MEDIUM";
 }
 
-function queueKey(at: number | null, source: string, id: string): string {
-  return `${String(at ?? 0).padStart(13, "0")}:${source}:${id}`;
+type ExceptionRow = {
+  source: "PROCUREMENT" | "RECEIVING" | "FULFILLMENT" | "DELIVERY";
+  referenceId: string;
+  orderId: string | null;
+  locationId: string;
+  reason: string;
+  affectedQuantity: number | null;
+  expectedQuantity: number | null;
+  acceptedQuantity: number | null;
+  rejectedQuantity: number | null;
+  ownerId: string | null;
+  occurredAt: number;
+  recordStatus: string | null;
+  queueKey: string;
+};
+
+/** One bounded set-based exception projection across any authorized location set. */
+export async function listOperationalExceptionsForLocations(
+  database: D1Database,
+  query: { locationIds: ReadonlyArray<string>; cursorKey?: string; limit?: number },
+): Promise<Array<OperationalExceptionProjection>> {
+  if (query.locationIds.length === 0) return [];
+  const now = Date.now();
+  const rows = await database
+    .prepare(
+      `WITH selected_locations(location_id) AS (
+         SELECT value FROM json_each(?)
+       ), exception_rows AS (
+         SELECT 'PROCUREMENT' AS source, se.id AS referenceId, NULL AS orderId,
+                pr.location_id AS locationId, se.kind AS reason,
+                se.affected_quantity AS affectedQuantity,
+                NULL AS expectedQuantity, NULL AS acceptedQuantity, NULL AS rejectedQuantity,
+                NULL AS ownerId, se.created_at AS occurredAt, NULL AS recordStatus
+         FROM supply_exception se
+         JOIN procurement_requirement pr ON pr.id=se.requirement_id
+         JOIN selected_locations sl ON sl.location_id=pr.location_id
+         WHERE se.status NOT IN ('RESOLVED','CLOSED')
+         UNION ALL
+         SELECT 'FULFILLMENT', f.id, f.order_id, f.location_id, 'FULFILLMENT_SHORTAGE',
+                NULL, NULL, NULL, NULL, NULL, f.updated_at, f.status
+         FROM fulfillment_record f
+         JOIN selected_locations sl ON sl.location_id=f.location_id
+         WHERE f.status='SHORTED'
+         UNION ALL
+         SELECT 'DELIVERY', d.id, d.order_id, f.location_id, 'DELIVERY_FAILED',
+                NULL, NULL, NULL, NULL, d.rider_user_id, d.updated_at, d.status
+         FROM delivery_job d
+         JOIN fulfillment_record f ON f.order_id=d.order_id
+         JOIN selected_locations sl ON sl.location_id=f.location_id
+         WHERE d.status='FAILED'
+         UNION ALL
+         SELECT 'RECEIVING', rr.id, NULL, pr.location_id, 'RECEIVING_DISCREPANCY',
+                NULL, rr.expected_quantity, rr.accepted_quantity, rr.rejected_quantity,
+                NULL, rr.updated_at, rr.status
+         FROM receiving_record rr
+         JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id
+         JOIN selected_locations sl ON sl.location_id=pr.location_id
+         WHERE (rr.rejected_quantity>0
+                OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity))
+           AND rr.status!='NOT_STARTED'
+       ), keyed AS (
+         SELECT *, printf('%013d', occurredAt)||':'||source||':'||referenceId AS queueKey
+         FROM exception_rows
+       )
+       SELECT * FROM keyed
+       WHERE (? IS NULL OR queueKey < ?)
+       ORDER BY queueKey DESC
+       LIMIT ?`,
+    )
+    .bind(
+      JSON.stringify([...new Set(query.locationIds)]),
+      query.cursorKey ?? null,
+      query.cursorKey ?? null,
+      query.limit ?? 51,
+    )
+    .all<ExceptionRow>();
+
+  return rows.results.map((row): OperationalExceptionProjection => {
+    if (row.source === "PROCUREMENT") {
+      const affectedQuantity = row.affectedQuantity ?? 0;
+      return {
+        kind: "PROCUREMENT_SHORTAGE",
+        source: row.source,
+        severity: severity(affectedQuantity),
+        ageMinutes: ageMinutes(row.occurredAt, now),
+        ownerId: null,
+        referenceId: row.referenceId,
+        orderId: null,
+        locationId: row.locationId,
+        reason: row.reason,
+        permittedActions: [],
+        queueKey: row.queueKey,
+        detail: `Procurement shortage (${row.reason}); ${affectedQuantity} base units affected.`,
+      };
+    }
+    if (row.source === "RECEIVING") {
+      const expected = row.expectedQuantity ?? 0;
+      const accepted = row.acceptedQuantity ?? 0;
+      const rejected = row.rejectedQuantity ?? 0;
+      return {
+        kind: "RECEIVING_DISCREPANCY",
+        source: row.source,
+        severity: rejected > 0 ? "HIGH" : "MEDIUM",
+        ageMinutes: ageMinutes(row.occurredAt, now),
+        ownerId: null,
+        referenceId: row.referenceId,
+        orderId: null,
+        locationId: row.locationId,
+        reason: row.reason,
+        permittedActions: [],
+        queueKey: row.queueKey,
+        detail: `Expected ${expected}, accepted ${accepted}, rejected ${rejected}.`,
+      };
+    }
+    if (row.source === "FULFILLMENT") {
+      return {
+        kind: "FULFILLMENT_SHORTAGE",
+        source: row.source,
+        severity: "HIGH",
+        ageMinutes: ageMinutes(row.occurredAt, now),
+        ownerId: null,
+        referenceId: row.referenceId,
+        orderId: row.orderId,
+        locationId: row.locationId,
+        reason: row.reason,
+        permittedActions: ["RETRY_FULFILLMENT"],
+        queueKey: row.queueKey,
+        detail: `Fulfillment ${row.recordStatus ?? "SHORTED"}; resolve or restock before packing.`,
+      };
+    }
+    return {
+      kind: "DELIVERY_FAILED",
+      source: row.source,
+      severity: "HIGH",
+      ageMinutes: ageMinutes(row.occurredAt, now),
+      ownerId: row.ownerId,
+      referenceId: row.referenceId,
+      orderId: row.orderId,
+      locationId: row.locationId,
+      reason: row.reason,
+      permittedActions: ["RETRY_DELIVERY", "ESCALATE"],
+      queueKey: row.queueKey,
+      detail: "Failed delivery; retry from the delivery queue.",
+    };
+  });
 }
 
-/** Derived queue projection; source aggregates remain authoritative for writes. */
-export async function listOperationalExceptions(
+/** Single-location compatibility wrapper over the set-based projection. */
+export function listOperationalExceptions(
   database: D1Database,
   query: { locationId: string; cursorKey?: string; limit?: number },
 ): Promise<Array<OperationalExceptionProjection>> {
-  const now = Date.now();
-  const [procurement, shortages, deliveries, receiving] = await Promise.all([
-    database
-      .prepare(
-        "SELECT se.id, se.kind, se.affected_quantity, se.created_at, pr.location_id FROM supply_exception se JOIN procurement_requirement pr ON pr.id=se.requirement_id WHERE pr.location_id=? AND se.status NOT IN ('RESOLVED','CLOSED') AND (? IS NULL OR (printf('%013d', se.created_at)||':PROCUREMENT:'||se.id) < ?) ORDER BY se.created_at DESC, se.id DESC LIMIT ?",
-      )
-      .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
-      .all<{
-        id: string;
-        kind: string;
-        affected_quantity: number;
-        created_at: number;
-        location_id: string;
-      }>(),
-    database
-      .prepare(
-        "SELECT id, order_id, status, updated_at FROM fulfillment_record WHERE location_id=? AND status='SHORTED' AND (? IS NULL OR (printf('%013d', updated_at)||':FULFILLMENT:'||id) < ?) ORDER BY updated_at DESC, id DESC LIMIT ?",
-      )
-      .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
-      .all<{ id: string; order_id: string; status: string; updated_at: number }>(),
-    database
-      .prepare(
-        "SELECT d.id, d.order_id, d.status, d.rider_user_id, d.updated_at FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE f.location_id=? AND d.status='FAILED' AND (? IS NULL OR (printf('%013d', d.updated_at)||':DELIVERY:'||d.id) < ?) ORDER BY d.updated_at DESC, d.id DESC LIMIT ?",
-      )
-      .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
-      .all<{
-        id: string;
-        order_id: string;
-        status: string;
-        rider_user_id: string | null;
-        updated_at: number;
-      }>(),
-    database
-      .prepare(
-        "SELECT rr.id, rr.expected_quantity, rr.accepted_quantity, rr.rejected_quantity, rr.updated_at, pr.location_id FROM receiving_record rr JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id WHERE pr.location_id=? AND (rr.rejected_quantity>0 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity)) AND rr.status!='NOT_STARTED' AND (? IS NULL OR (printf('%013d', rr.updated_at)||':RECEIVING:'||rr.id) < ?) ORDER BY rr.updated_at DESC, rr.id DESC LIMIT ?",
-      )
-      .bind(query.locationId, query.cursorKey ?? null, query.cursorKey ?? null, query.limit ?? 51)
-      .all<{
-        id: string;
-        expected_quantity: number;
-        accepted_quantity: number;
-        rejected_quantity: number;
-        location_id: string;
-        updated_at: number;
-      }>(),
-  ]);
-  const rows: OperationalExceptionProjection[] = [
-    ...procurement.results.map((r) => ({
-      kind: "PROCUREMENT_SHORTAGE" as const,
-      source: "PROCUREMENT" as const,
-      severity: severity(r.affected_quantity),
-      ageMinutes: ageMinutes(r.created_at, now),
-      ownerId: null,
-      referenceId: r.id,
-      orderId: null,
-      locationId: r.location_id,
-      reason: r.kind,
-      permittedActions: [],
-      queueKey: queueKey(r.created_at, "PROCUREMENT", r.id),
-      detail: `Procurement shortage (${r.kind}); ${r.affected_quantity} base units affected.`,
-    })),
-    ...receiving.results.map((r) => ({
-      kind: "RECEIVING_DISCREPANCY" as const,
-      source: "RECEIVING" as const,
-      severity: r.rejected_quantity > 0 ? ("HIGH" as const) : ("MEDIUM" as const),
-      ageMinutes: ageMinutes(r.updated_at, now),
-      ownerId: null,
-      referenceId: r.id,
-      orderId: null,
-      locationId: r.location_id,
-      reason: "RECEIVING_DISCREPANCY",
-      permittedActions: [],
-      queueKey: queueKey(r.updated_at, "RECEIVING", r.id),
-      detail: `Expected ${r.expected_quantity}, accepted ${r.accepted_quantity}, rejected ${r.rejected_quantity}.`,
-    })),
-    ...shortages.results.map((r) => ({
-      kind: "FULFILLMENT_SHORTAGE" as const,
-      source: "FULFILLMENT" as const,
-      severity: "HIGH" as const,
-      ageMinutes: ageMinutes(r.updated_at, now),
-      ownerId: null,
-      referenceId: r.id,
-      orderId: r.order_id,
-      locationId: query.locationId,
-      reason: "FULFILLMENT_SHORTAGE",
-      permittedActions: ["RETRY_FULFILLMENT"] as const,
-      queueKey: queueKey(r.updated_at, "FULFILLMENT", r.id),
-      detail: `Fulfillment ${r.status}; resolve or restock before packing.`,
-    })),
-    ...deliveries.results.map((r) => ({
-      kind: "DELIVERY_FAILED" as const,
-      source: "DELIVERY" as const,
-      severity: "HIGH" as const,
-      ageMinutes: ageMinutes(r.updated_at, now),
-      ownerId: r.rider_user_id,
-      referenceId: r.id,
-      orderId: r.order_id,
-      locationId: query.locationId,
-      reason: "DELIVERY_FAILED",
-      permittedActions: ["RETRY_DELIVERY", "ESCALATE"] as const,
-      queueKey: queueKey(r.updated_at, "DELIVERY", r.id),
-      detail: "Failed delivery; retry from the delivery queue.",
-    })),
-  ];
-  // Match SQLite's binary TEXT comparison used by the cursor predicates.
-  return rows.sort((a, b) => (a.queueKey === b.queueKey ? 0 : a.queueKey < b.queueKey ? 1 : -1));
+  return listOperationalExceptionsForLocations(database, {
+    locationIds: [query.locationId],
+    ...(query.cursorKey === undefined ? {} : { cursorKey: query.cursorKey }),
+    ...(query.limit === undefined ? {} : { limit: query.limit }),
+  });
 }

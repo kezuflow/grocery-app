@@ -315,6 +315,7 @@ Customer cancellation accepts no actor or cause authority from Web. Core resolve
 
 - `admin.context.get() -> AdminContextView`
 - `admin.scopes.list() -> AdminScopeOptionView[]`
+- `admin.bootstrap.get({ selectedScope?, timezone }) -> AdminBootstrapView`
 - `admin.overview.get({ selectedScope, timezone }) -> AdminOverviewView`
 - `admin.audit.list(filters, page) -> AdminAuditEventPage`
 - `admin.audit.get({ auditEventId }) -> AdminAuditEventView`
@@ -335,6 +336,20 @@ Customer cancellation accepts no actor or cause authority from Web. Core resolve
 - `admin.capabilities.list() -> CapabilityDefinitionView[]`
 
 Admin context derives the active Staff principal, canonical capability vocabulary, and global/market/location scopes from the Better Auth session plus Application IAM. It returns only permitted navigation and scope-selector options. Web never manufactures a capability or infers authorization from navigation visibility.
+
+`AdminBootstrapView` is the purpose-built first-render composition for the Admin shell and
+Overview. It contains `AdminContextView`, reachable `AdminScopeOptionView` entries, Core-proven
+selected-scope evidence, and the initial `AdminOverviewView` when a scope is selected. An optional
+browser scope preference is only a hint: Core accepts it only when it is currently reachable,
+otherwise falls back to the sole assigned scope or returns `SELECTION_REQUIRED` evidence without
+granting access. Market and Location selections use the canonical configured timezone; Global uses
+the validated request timezone. The Web adapter delegates one typed Service Binding RPC and does
+not join or derive authoritative data.
+
+Core resolves the bootstrap's Better Auth session, Staff identity, roles, capabilities, and scopes
+once. Context, scope-option, Overview, and nested Audit reads consume the same immutable internal
+access result. This is request-scoped reuse only: it is never cached across RPCs, does not alter
+capability or scope checks, and the internal Staff evidence is not part of any public DTO.
 
 `AdminOverviewView` is generated for one Core-authorized selected scope and reporting timezone. It contains `generatedAt`, bounded operational cards, workload-stage counts, bounded active exceptions, bounded recent material operations, per-section freshness, and `deniedSections`. Cards and stages carry stable workspace/filter destinations and explicit availability; missing authority is never projected as numeric zero. Core composes the view from owning read models and applies each capability plus market/location scope independently. A global Staff principal with the required capabilities receives all Admin-safe sections and all reachable market/location records.
 

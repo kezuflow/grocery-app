@@ -26,8 +26,24 @@ function scopeQuery(scope: AdminSelectedScope, timezone: string) {
 export default function AdminPage() {
   const { state: context } = useAdminContext();
   const [attempt, setAttempt] = useState(0);
-  const [overview, setOverview] = useState<RpcResult<AdminOverviewView> | null>(null);
+  const [loadedOverview, setLoadedOverview] = useState<{
+    scopeKey: string;
+    result: RpcResult<AdminOverviewView>;
+  } | null>(null);
   const selectedScope = context.phase === "ready" ? context.selectedScope : null;
+  const selectedScopeKey = selectedScope ? JSON.stringify(selectedScope) : null;
+  const bootstrapOverview = context.phase === "ready" ? context.overview : null;
+  const bootstrapMatchesSelection = Boolean(
+    selectedScope &&
+    bootstrapOverview &&
+    JSON.stringify(bootstrapOverview.selectedScope) === JSON.stringify(selectedScope),
+  );
+  const visibleOverview: RpcResult<AdminOverviewView> | null =
+    loadedOverview?.scopeKey === selectedScopeKey
+      ? loadedOverview.result
+      : bootstrapMatchesSelection && bootstrapOverview
+        ? { ok: true, value: bootstrapOverview, requestId: "bootstrap" }
+        : null;
   const timezone = useMemo(() => {
     if (context.phase !== "ready" || !selectedScope) return "UTC";
     const option = context.scopes.find((candidate) =>
@@ -43,20 +59,28 @@ export default function AdminPage() {
   useEffect(() => {
     if (!selectedScope) return;
     let active = true;
-    setOverview(null);
+    if (bootstrapMatchesSelection) {
+      return () => {
+        active = false;
+      };
+    }
+    setLoadedOverview(null);
     void fetch(`/api/admin/overview?${scopeQuery(selectedScope, timezone)}`)
       .then((response) => response.json() as Promise<RpcResult<AdminOverviewView>>)
       .then((payload) => {
-        if (active) setOverview(payload);
+        if (active) setLoadedOverview({ scopeKey: JSON.stringify(selectedScope), result: payload });
       })
       .catch(() => {
         if (active) {
-          setOverview({
-            ok: false,
-            error: {
-              code: "INTERNAL_ERROR",
-              message: "Network error loading the operational overview.",
-              requestId: "unavailable",
+          setLoadedOverview({
+            scopeKey: JSON.stringify(selectedScope),
+            result: {
+              ok: false,
+              error: {
+                code: "INTERNAL_ERROR",
+                message: "Network error loading the operational overview.",
+                requestId: "unavailable",
+              },
             },
           });
         }
@@ -64,7 +88,7 @@ export default function AdminPage() {
     return () => {
       active = false;
     };
-  }, [attempt, selectedScope, timezone]);
+  }, [attempt, bootstrapMatchesSelection, selectedScope, timezone]);
 
   return (
     <div className="space-y-5">
@@ -84,18 +108,18 @@ export default function AdminPage() {
           message="Choose a permitted market, location, or global scope from the header."
         />
       ) : null}
-      {selectedScope && overview === null ? <AdminPageState state="loading" /> : null}
-      {overview && !overview.ok ? (
+      {selectedScope && visibleOverview === null ? <AdminPageState state="loading" /> : null}
+      {visibleOverview && !visibleOverview.ok ? (
         <AdminPageState
           state="error"
-          message={overview.error.message}
+          message={visibleOverview.error.message}
           onRetry={() => setAttempt((value) => value + 1)}
-          requestId={overview.error.requestId}
+          requestId={visibleOverview.error.requestId}
         />
       ) : null}
-      {overview?.ok ? (
+      {visibleOverview?.ok ? (
         <Suspense fallback={<AdminPageState state="loading" />}>
-          <AdminOverviewViewContent overview={overview.value} />
+          <AdminOverviewViewContent overview={visibleOverview.value} />
         </Suspense>
       ) : null}
     </div>

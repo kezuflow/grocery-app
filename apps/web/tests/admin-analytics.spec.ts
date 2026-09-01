@@ -1,4 +1,5 @@
 import { expect, test } from "./admin-authenticated-fixture";
+import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
 let stackUp = false;
 test.beforeAll(async ({ request }) => {
@@ -14,30 +15,30 @@ test.beforeEach(async () => {
 });
 
 test("Analytics workspace renders numeric and unavailable Core values", async ({ page }) => {
-  await page.route("**/api/admin/context", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "analytics-e2e",
-        value: {
-          staffId: "staff-analytics",
-          displayName: "Analytics Operator",
-          email: "analytics@example.com",
-          capabilities: ["analytics.read"],
-          scopes: [{ kind: "global" }],
-          navigation: [{ code: "analytics", label: "Analytics", href: "/admin/analytics" }],
-          environment: "test",
+  await installAdminBootstrapFixture(page, {
+    context: {
+      staffId: "staff-analytics",
+      displayName: "Analytics Operator",
+      email: "analytics@example.com",
+      capabilities: ["analytics.read"],
+      scopes: [{ kind: "global" }],
+      navigation: [
+        {
+          code: "analytics",
+          label: "Analytics",
+          href: "/admin/analytics",
+          section: "finance",
+          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
+          parentCode: null,
+          kind: "workspace",
         },
-      }),
-    }),
-  );
-  await page.route("**/api/admin/scopes", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ ok: true, requestId: "analytics-e2e", value: [] }),
-    }),
-  );
+      ],
+      environment: "test",
+    },
+    scopes: [],
+    selectedScope: { kind: "GLOBAL" },
+    timezone: "Asia/Manila",
+  });
   await page.route("**/api/admin/analytics/definitions**", (route) =>
     route.fulfill({
       contentType: "application/json",

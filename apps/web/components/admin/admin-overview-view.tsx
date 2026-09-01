@@ -2,10 +2,12 @@
 
 import type { AdminOverviewView } from "@freshmarkets/contracts";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { lazy, Suspense } from "react";
 import { AdminChartCard, AdminDashboardGrid, MetricCard } from "./admin-compositions";
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+
+const AdminBarChart = lazy(() => import("./admin-bar-chart"));
 
 function label(value: string) {
   return value.toLowerCase().replaceAll("_", " ");
@@ -58,15 +60,13 @@ export function AdminOverviewViewContent({ overview }: { overview: AdminOverview
         >
           {overview.workloadStages.length ? (
             <div className="h-72 pt-4" aria-hidden="true">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overview.workloadStages} margin={{ left: -18, right: 8 }}>
-                  <CartesianGrid vertical={false} stroke="var(--fm-border)" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
-                  <Tooltip cursor={{ fill: "var(--fm-surface-muted)" }} />
-                  <Bar dataKey="count" fill="var(--fm-admin-accent)" radius={[5, 5, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <Suspense fallback={<div className="h-full animate-pulse rounded-md bg-muted" />}>
+                <AdminBarChart
+                  data={overview.workloadStages}
+                  categoryKey="label"
+                  valueKey="count"
+                />
+              </Suspense>
             </div>
           ) : (
             <p className="py-12 text-center text-sm text-[var(--fm-text-muted)]">
