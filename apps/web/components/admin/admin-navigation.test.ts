@@ -254,7 +254,7 @@ describe("admin navigation mapping", () => {
         label: "Inventory",
         href: "/admin/inventory",
         section: "operations" as const,
-        scopeKinds: ["GLOBAL", "LOCATION"] as const,
+        scopeKinds: ["LOCATION"] as const,
         parentCode: null,
         kind: "workspace" as const,
       },
@@ -268,6 +268,25 @@ describe("admin navigation mapping", () => {
         locationId: "location-cebu-central",
       }).map((item) => item.code),
     ).toEqual(["overview", "orders", "inventory", "audit"]);
+  });
+
+  it("hides location-only Inventory when Global is selected", () => {
+    expect(
+      adminNavigationItemsForScope(
+        [
+          {
+            code: "inventory",
+            label: "Inventory",
+            href: "/admin/inventory",
+            section: "operations",
+            scopeKinds: ["LOCATION"],
+            parentCode: null,
+            kind: "workspace",
+          },
+        ],
+        { kind: "GLOBAL" },
+      ),
+    ).toEqual([]);
   });
 
   it("fails closed for a stale scoped payload without applicability metadata", () => {

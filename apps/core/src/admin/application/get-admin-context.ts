@@ -296,8 +296,9 @@ const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "audit",
 ]);
 
-const LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
-  "inventory",
+const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set(["inventory"]);
+
+const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "delivery",
   "settings",
   "settings-fulfillment-mode",
@@ -305,7 +306,8 @@ const LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 
 function navigationScopeKindsFor(code: string): ReadonlyArray<AdminNavigationScopeKind> {
   if (ALL_SCOPE_NAVIGATION_CODES.has(code)) return ["GLOBAL", "MARKET", "LOCATION"];
-  if (LOCATION_NAVIGATION_CODES.has(code)) return ["GLOBAL", "LOCATION"];
+  if (LOCATION_ONLY_NAVIGATION_CODES.has(code)) return ["LOCATION"];
+  if (GLOBAL_AND_LOCATION_NAVIGATION_CODES.has(code)) return ["GLOBAL", "LOCATION"];
   return ["GLOBAL"];
 }
 

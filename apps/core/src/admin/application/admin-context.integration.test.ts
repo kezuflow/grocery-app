@@ -199,6 +199,23 @@ describe("scoped admin context", () => {
     );
   });
 
+  it("marks Inventory as location-only even for a globally scoped Staff principal", async () => {
+    const staff = await staffCookie({
+      permissionCodes: ["inventory.read"],
+      scope: { kind: "global" },
+    });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+
+    expect(context.value.navigation).toContainEqual(
+      expect.objectContaining({ code: "inventory", scopeKinds: ["LOCATION"] }),
+    );
+  });
+
   it("returns only active markets and locations reachable by the assigned scope", async () => {
     const staff = await staffCookie({ permissionCodes: ["audit.read"] });
     const scopes = await core.listAdminScopes({
