@@ -311,14 +311,12 @@ function MobileNavigationParent({
   item: AdminNavigationParent;
   activeCode?: string;
 }) {
-  const parentActive = activeCode === item.code;
+  const parentActive =
+    activeCode === item.code || item.children.some((child) => child.code === activeCode);
   return (
     <div>
-      <SheetClose asChild>
-        <Link
-          href={item.href}
-          prefetch={false}
-          aria-current={parentActive ? "page" : undefined}
+      {item.children.length > 0 ? (
+        <div
           className={cn(
             "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
             parentActive && "bg-[var(--fm-active)] text-[var(--fm-active-text)]",
@@ -326,8 +324,23 @@ function MobileNavigationParent({
         >
           <item.icon className="size-4" aria-hidden="true" />
           {item.label}
-        </Link>
-      </SheetClose>
+        </div>
+      ) : (
+        <SheetClose asChild>
+          <Link
+            href={item.href}
+            prefetch={false}
+            aria-current={parentActive ? "page" : undefined}
+            className={cn(
+              "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
+              parentActive && "bg-[var(--fm-active)] text-[var(--fm-active-text)]",
+            )}
+          >
+            <item.icon className="size-4" aria-hidden="true" />
+            {item.label}
+          </Link>
+        </SheetClose>
+      )}
       {item.children.length > 0 ? (
         <div className="ml-8 border-l border-[var(--fm-border)] pl-2">
           {item.children.map((child) => {
@@ -448,19 +461,33 @@ function DesktopNavigationParent({
       <div className="group relative">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Link
-              href={item.href}
-              prefetch={false}
-              aria-label={item.label}
-              aria-current={parentActive ? "page" : undefined}
-              className={cn(
-                "flex h-9 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]",
-                parentActive &&
-                  "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
-              )}
-            >
-              <item.icon className="size-5" aria-hidden="true" />
-            </Link>
+            {item.children.length > 0 ? (
+              <button
+                type="button"
+                aria-label={item.label}
+                className={cn(
+                  "flex h-9 w-full items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+                  parentActive &&
+                    "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
+                )}
+              >
+                <item.icon className="size-5" aria-hidden="true" />
+              </button>
+            ) : (
+              <Link
+                href={item.href}
+                prefetch={false}
+                aria-label={item.label}
+                aria-current={parentActive ? "page" : undefined}
+                className={cn(
+                  "flex h-9 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]",
+                  parentActive &&
+                    "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
+                )}
+              >
+                <item.icon className="size-5" aria-hidden="true" />
+              </Link>
+            )}
           </TooltipTrigger>
           <TooltipContent side="right">{item.label}</TooltipContent>
         </Tooltip>
@@ -491,8 +518,7 @@ function DesktopNavigationParent({
           aria-controls={`admin-nav-children-${item.code}`}
           className={cn(
             "flex h-9 w-full items-center gap-2 rounded-[var(--fm-radius-control)] px-2 py-1.5 text-left text-sm font-normal hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
-            parentActive &&
-              "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
+            parentActive && "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
           )}
           onClick={onToggle}
         >

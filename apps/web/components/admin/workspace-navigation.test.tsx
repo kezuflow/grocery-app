@@ -35,6 +35,15 @@ const navigation: AdminNavigationItem[] = [
     kind: "destination",
   },
   {
+    code: "memberships",
+    label: "Memberships",
+    href: "/admin/memberships",
+    section: "commerce",
+    scopeKinds: globalScope,
+    parentCode: "customers",
+    kind: "destination",
+  },
+  {
     code: "staff",
     label: "Staff",
     href: "/admin/staff",
@@ -54,6 +63,18 @@ describe("workspaceTabsFromNavigation", () => {
       tabs: [
         { id: "customers-list", label: "Customer list", href: "/admin/customers" },
         { id: "customers-privacy", label: "Privacy queue", href: "/admin/customers/privacy" },
+        { id: "memberships", label: "Memberships", href: "/admin/memberships" },
+      ],
+    });
+  });
+
+  it("marks Memberships active inside Customer administration", () => {
+    expect(workspaceTabsFromNavigation(navigation, "customers", "/admin/memberships")).toEqual({
+      activeId: "memberships",
+      tabs: [
+        { id: "customers-list", label: "Customer list", href: "/admin/customers" },
+        { id: "customers-privacy", label: "Privacy queue", href: "/admin/customers/privacy" },
+        { id: "memberships", label: "Memberships", href: "/admin/memberships" },
       ],
     });
   });

@@ -238,6 +238,44 @@ describe("scoped admin context", () => {
     );
   });
 
+  it("nests Memberships under Customers without granting customer-record destinations", async () => {
+    const staff = await staffCookie({
+      permissionCodes: ["memberships.read"],
+      scope: { kind: "global" },
+    });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+
+    expect(context.value.navigation).toContainEqual({
+      code: "customers",
+      label: "Customers",
+      href: "/admin/customers",
+      section: "commerce",
+      scopeKinds: ["GLOBAL"],
+      parentCode: null,
+      kind: "workspace",
+    });
+    expect(context.value.navigation).toContainEqual({
+      code: "memberships",
+      label: "Memberships",
+      href: "/admin/memberships",
+      section: "commerce",
+      scopeKinds: ["GLOBAL"],
+      parentCode: "customers",
+      kind: "destination",
+    });
+    expect(context.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "customers-list" }),
+    );
+    expect(context.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "customers-privacy" }),
+    );
+  });
+
   it("returns only active markets and locations reachable by the assigned scope", async () => {
     const staff = await staffCookie({ permissionCodes: ["audit.read"] });
     const scopes = await core.listAdminScopes({

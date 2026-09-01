@@ -19,6 +19,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
+import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 
 export default function MembershipsPage() {
   const [page, setPage] = useState<AdminMembershipPage | null>(null);
@@ -94,6 +95,7 @@ export default function MembershipsPage() {
         title="Memberships"
         description="Subscription lifecycle administration through canonical Membership commands."
       />
+      <WorkspaceNavigation parentCode="customers" label="Customer administration" />
       {state === "loading" ? (
         <div role="status">
           <Skeleton className="h-10 w-full" />

@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type {
   ApplicationContext,
   AuthContextRequest,
@@ -54,56 +54,58 @@ export async function applicationContext(
   }
 
   return traceOperation("iam.resolve", traceContext, async () => {
-    const staff = await traceOperation("iam.staff", traceContext, () =>
+    const accessRows = await traceOperation("iam.access", traceContext, () =>
       database
-        .select()
+        .select({
+          staffId: iamSchema.staffIdentity.id,
+          staffAuthUserId: iamSchema.staffIdentity.authUserId,
+          staffDisplayName: iamSchema.staffIdentity.displayName,
+          staffStatus: iamSchema.staffIdentity.status,
+          permissionCode: iamSchema.permission.code,
+          scopeKind: iamSchema.staffScope.scopeKind,
+          scopeMarketId: iamSchema.staffScope.marketId,
+          scopeLocationId: iamSchema.staffScope.locationId,
+        })
         .from(iamSchema.staffIdentity)
-        .where(eq(iamSchema.staffIdentity.authUserId, session.user.id))
-        .limit(1),
+        .leftJoin(iamSchema.staffRole, eq(iamSchema.staffRole.staffId, iamSchema.staffIdentity.id))
+        .leftJoin(
+          iamSchema.rolePermission,
+          eq(iamSchema.rolePermission.roleId, iamSchema.staffRole.roleId),
+        )
+        .leftJoin(
+          iamSchema.permission,
+          eq(iamSchema.permission.id, iamSchema.rolePermission.permissionId),
+        )
+        .leftJoin(
+          iamSchema.staffScope,
+          eq(iamSchema.staffScope.staffId, iamSchema.staffIdentity.id),
+        )
+        .where(eq(iamSchema.staffIdentity.authUserId, session.user.id)),
     );
-    const staffRecord = staff[0];
+    const firstAccessRow = accessRows[0];
+    const staffRecord = firstAccessRow
+      ? {
+          id: firstAccessRow.staffId,
+          authUserId: firstAccessRow.staffAuthUserId,
+          displayName: firstAccessRow.staffDisplayName,
+          status: firstAccessRow.staffStatus,
+        }
+      : null;
     const capabilities: Capability[] = [];
     const scopes: Scope[] = [];
 
     if (staffRecord?.status === "active") {
-      const roles = await traceOperation("iam.roles", traceContext, () =>
-        database
-          .select({ roleId: iamSchema.staffRole.roleId })
-          .from(iamSchema.staffRole)
-          .where(eq(iamSchema.staffRole.staffId, staffRecord.id)),
-      );
-      const roleIds = roles.map((item) => item.roleId);
-      if (roleIds.length) {
-        const permissions = await traceOperation("iam.permissions", traceContext, () =>
-          database
-            .select({ code: iamSchema.permission.code })
-            .from(iamSchema.rolePermission)
-            .innerJoin(
-              iamSchema.permission,
-              eq(iamSchema.permission.id, iamSchema.rolePermission.permissionId),
-            )
-            .where(inArray(iamSchema.rolePermission.roleId, roleIds)),
-        );
-        for (const permission of permissions) {
-          // Canonical dot-form capabilities only; historical colon-form rows are
-          // unrecognized compatibility data.
-          if (isAdminCapability(permission.code)) {
-            capabilities.push(permission.code);
-          }
+      for (const row of accessRows) {
+        // Canonical dot-form capabilities only; historical colon-form rows are
+        // unrecognized compatibility data.
+        if (row.permissionCode && isAdminCapability(row.permissionCode)) {
+          capabilities.push(row.permissionCode);
         }
-      }
-      const staffScopes = await traceOperation("iam.scopes", traceContext, () =>
-        database
-          .select()
-          .from(iamSchema.staffScope)
-          .where(eq(iamSchema.staffScope.staffId, staffRecord.id)),
-      );
-      for (const scope of staffScopes) {
-        if (scope.scopeKind === "global") scopes.push({ kind: "global" });
-        else if (scope.scopeKind === "market" && scope.marketId)
-          scopes.push({ kind: "market", marketId: scope.marketId });
-        else if (scope.scopeKind === "location" && scope.locationId)
-          scopes.push({ kind: "location", locationId: scope.locationId });
+        if (row.scopeKind === "global") scopes.push({ kind: "global" });
+        else if (row.scopeKind === "market" && row.scopeMarketId)
+          scopes.push({ kind: "market", marketId: row.scopeMarketId });
+        else if (row.scopeKind === "location" && row.scopeLocationId)
+          scopes.push({ kind: "location", locationId: row.scopeLocationId });
       }
     }
 

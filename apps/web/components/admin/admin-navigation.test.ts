@@ -237,8 +237,8 @@ describe("admin navigation mapping", () => {
         href: "/admin/memberships",
         section: "commerce" as const,
         scopeKinds: globalScope,
-        parentCode: null,
-        kind: "workspace" as const,
+        parentCode: "customers",
+        kind: "destination" as const,
       },
       {
         code: "promotions",
@@ -268,6 +268,35 @@ describe("admin navigation mapping", () => {
         locationId: "location-cebu-central",
       }).map((item) => item.code),
     ).toEqual(["overview", "orders", "inventory", "audit"]);
+  });
+
+  it("groups Memberships inside Customers instead of creating a top-level workspace", () => {
+    const groups = groupAdminNavigation(
+      adminNavigationFromContext([
+        {
+          code: "customers",
+          label: "Customers",
+          href: "/admin/customers",
+          section: "commerce",
+          scopeKinds: globalScope,
+          parentCode: null,
+          kind: "workspace",
+        },
+        {
+          code: "memberships",
+          label: "Memberships",
+          href: "/admin/memberships",
+          section: "commerce",
+          scopeKinds: globalScope,
+          parentCode: "customers",
+          kind: "destination",
+        },
+      ]),
+    );
+
+    expect(groups[0]?.items).toHaveLength(1);
+    expect(groups[0]?.items[0]?.code).toBe("customers");
+    expect(groups[0]?.items[0]?.children.map((child) => child.code)).toEqual(["memberships"]);
   });
 
   it("hides location-only Inventory when Global is selected", () => {

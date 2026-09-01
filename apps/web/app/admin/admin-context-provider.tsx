@@ -16,6 +16,11 @@ import type {
   AdminSelectedScope,
   RpcResult,
 } from "@freshmarkets/contracts";
+import {
+  ADMIN_PRODUCT_PRICING_TARGET_COOKIE,
+  resolveAdminProductPricingTarget,
+  serializeAdminProductPricingTarget,
+} from "@/lib/admin/product-pricing-target";
 
 export type AdminContextState =
   | { phase: "loading" }
@@ -92,6 +97,17 @@ function storedPreferredScope(): AdminSelectedScope | null {
   return null;
 }
 
+function persistProductPricingTarget(
+  selectedScope: AdminSelectedScope | null,
+  scopes: ReadonlyArray<AdminScopeOptionView>,
+) {
+  const target = resolveAdminProductPricingTarget(selectedScope, scopes);
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = target
+    ? `${ADMIN_PRODUCT_PRICING_TARGET_COOKIE}=${serializeAdminProductPricingTarget(target)}; Path=/admin; SameSite=Lax${secure}`
+    : `${ADMIN_PRODUCT_PRICING_TARGET_COOKIE}=; Max-Age=0; Path=/admin; SameSite=Lax${secure}`;
+}
+
 function bootstrapUrl(scope: AdminSelectedScope | null): string {
   const query = new URLSearchParams({
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -106,7 +122,7 @@ function bootstrapUrl(scope: AdminSelectedScope | null): string {
 
 /**
  * Client boundary hydrated by one Core-owned bootstrap result. Browser scope
- * preference is only a request hint; Core proves it against current Staff IAM.
+ * and Product pricing preferences are request hints; Core proves access again.
  */
 export function AdminContextProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AdminContextState>({ phase: "loading" });
@@ -122,6 +138,7 @@ export function AdminContextProvider({ children }: { children: ReactNode }) {
         JSON.stringify(scope),
       );
       sessionStorage.setItem(PREFERRED_SCOPE_KEY, JSON.stringify(scope));
+      persistProductPricingTarget(scope, current.scopes);
       return { ...current, selectedScope: scope, overview: null };
     });
   }, []);
@@ -161,6 +178,7 @@ export function AdminContextProvider({ children }: { children: ReactNode }) {
         } else if (preferredScope) {
           sessionStorage.removeItem(PREFERRED_SCOPE_KEY);
         }
+        persistProductPricingTarget(selectedScope, scopes);
         setState({
           phase: "ready",
           context,

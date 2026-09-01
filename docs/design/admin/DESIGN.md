@@ -23,7 +23,7 @@ Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/sto
 Primary navigation is organized around operational ownership:
 
 - Overview: Overview.
-- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Privacy Queue), Memberships, and Promotions. Categories are catalog organization within Products, never a separate top-level workspace.
+- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Privacy Queue, Memberships), and Promotions. Categories are catalog organization within Products, and Memberships is customer lifecycle administration within Customers; neither is a separate top-level workspace.
 - Operations: Inventory, Delivery, and Operational Exceptions. Inventory is the primary stock workspace and presents explicit Add stock and Remove stock actions with dated immutable activity. Procurement, Receiving, and Fulfillment remain distinct Core-owned workflows and purpose-built compatibility routes, but are reached contextually from Orders or exceptions rather than occupying primary navigation.
 - Finance: Payments (Overview, Transactions, Reconciliation) and Analytics.
 - Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Fulfillment Mode).
@@ -125,6 +125,11 @@ Products and categories referenced by committed or historical records are deacti
 - Filters include clear-all, visible active filter tokens, URL persistence, and safe defaults (current cycle/current scope).
 - Table row links are keyboard accessible; action menus must not trap focus.
 - Bulk operations display a preflight count and result summary, with partial failures explicit.
+- Initial list data travels with the vinext Server Component response through a typed Core Service
+  Binding read and crosses the client boundary as a plain DTO. Do not serialize navigation as
+  `RSC route -> mounted client -> same-origin list API`; browser list APIs remain for subsequent
+  cursor pages, scope changes, refreshes, and commands. Any browser-stored scope/pricing value is a
+  non-authoritative hint that Core validates again.
 
 ## States
 

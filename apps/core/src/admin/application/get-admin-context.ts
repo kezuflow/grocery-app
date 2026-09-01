@@ -142,7 +142,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "commerce",
     parentCode: null,
     kind: "workspace",
-    capabilities: ["customers.read", "customers.manage"],
+    capabilities: ["customers.read", "customers.manage", "memberships.read", "memberships.manage"],
   },
   {
     code: "customers-list",
@@ -167,8 +167,8 @@ const WORKSPACES: ReadonlyArray<{
     label: "Memberships",
     href: "/admin/memberships",
     section: "commerce",
-    parentCode: null,
-    kind: "workspace",
+    parentCode: "customers",
+    kind: "destination",
     capabilities: ["memberships.read", "memberships.manage"],
   },
   {

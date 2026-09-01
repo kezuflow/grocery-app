@@ -6,10 +6,10 @@ const adminSource = (path: string) => readFileSync(new URL(path, import.meta.url
 
 const denseLinkSources = [
   "../../app/admin/audit/page.tsx",
-  "../../app/admin/catalog/categories/page.tsx",
+  "../../app/admin/catalog/categories/categories-page-client.tsx",
   "../../app/admin/catalog/categories/[category-id]/page.tsx",
   "../../app/admin/catalog/page.tsx",
-  "../../app/admin/catalog/products/page.tsx",
+  "../../app/admin/catalog/products/products-page-client.tsx",
   "../../app/admin/customers/page.tsx",
   "../../app/admin/customers/privacy/page.tsx",
   "../../app/admin/orders/page.tsx",
