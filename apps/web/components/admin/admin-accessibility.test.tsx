@@ -136,6 +136,11 @@ describe("shared Admin accessibility contract", () => {
     expect(sidebarSource).not.toContain(
       'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
     );
+    expect(sidebarSource).toContain('aria-controls={`admin-nav-children-${item.code}`}');
+    expect(sidebarSource).toContain('<span className="flex-1">{item.label}</span>');
+    expect(sidebarSource).not.toContain(
+      'aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}',
+    );
     expect(headerSource).toMatch(/<span[^>]*>\s*freshmarkets\s*<\/span>/);
   });
 

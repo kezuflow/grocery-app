@@ -484,7 +484,23 @@ function DesktopNavigationParent({
   }
   return (
     <div>
-      <div className="flex items-center gap-1">
+      {item.children.length > 0 ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={`admin-nav-children-${item.code}`}
+          className={cn(
+            "flex h-9 w-full items-center gap-2 rounded-[var(--fm-radius-control)] px-2 py-1.5 text-left text-sm font-normal hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+            parentActive &&
+              "bg-[var(--fm-admin-accent-soft)] text-[var(--fm-admin-accent-strong)]",
+          )}
+          onClick={onToggle}
+        >
+          <item.icon className="size-4" aria-hidden="true" />
+          <span className="flex-1">{item.label}</span>
+          <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />
+        </button>
+      ) : (
         <Link
           href={item.href}
           prefetch={false}
@@ -497,20 +513,12 @@ function DesktopNavigationParent({
           <item.icon className="size-4" aria-hidden="true" />
           {item.label}
         </Link>
-        {item.children.length > 0 ? (
-          <button
-            type="button"
-            aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
-            aria-expanded={open}
-            className="rounded p-1.5 hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
-            onClick={onToggle}
-          >
-            <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />
-          </button>
-        ) : null}
-      </div>
+      )}
       {open && item.children.length > 0 ? (
-        <div className="ml-4 border-l border-[var(--fm-border)] pl-2">
+        <div
+          id={`admin-nav-children-${item.code}`}
+          className="ml-4 border-l border-[var(--fm-border)] pl-2"
+        >
           {item.children.map((child) => (
             <Link
               key={child.code}
