@@ -26,15 +26,6 @@ const navigation: AdminNavigationItem[] = [
     kind: "destination",
   },
   {
-    code: "customers-privacy",
-    label: "Privacy requests",
-    href: "/admin/customers/privacy",
-    section: "commerce",
-    scopeKinds: globalScope,
-    parentCode: "customers",
-    kind: "destination",
-  },
-  {
     code: "memberships",
     label: "Memberships",
     href: "/admin/memberships",
@@ -56,13 +47,10 @@ const navigation: AdminNavigationItem[] = [
 
 describe("workspaceTabsFromNavigation", () => {
   it("uses only Core-provided destinations and deduplicates the parent route", () => {
-    expect(
-      workspaceTabsFromNavigation(navigation, "customers", "/admin/customers/privacy"),
-    ).toEqual({
-      activeId: "customers-privacy",
+    expect(workspaceTabsFromNavigation(navigation, "customers", "/admin/customers")).toEqual({
+      activeId: "customers-list",
       tabs: [
         { id: "customers-list", label: "Customer list", href: "/admin/customers" },
-        { id: "customers-privacy", label: "Privacy requests", href: "/admin/customers/privacy" },
         { id: "memberships", label: "Memberships", href: "/admin/memberships" },
       ],
     });
@@ -73,7 +61,6 @@ describe("workspaceTabsFromNavigation", () => {
       activeId: "memberships",
       tabs: [
         { id: "customers-list", label: "Customer list", href: "/admin/customers" },
-        { id: "customers-privacy", label: "Privacy requests", href: "/admin/customers/privacy" },
         { id: "memberships", label: "Memberships", href: "/admin/memberships" },
       ],
     });

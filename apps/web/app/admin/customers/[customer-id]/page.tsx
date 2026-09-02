@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useState, use } from "react";
-import Link from "next/link";
 import type { AdminCustomerDetail, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
@@ -22,8 +21,6 @@ type LoadState =
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready"; customer: AdminCustomerDetail };
 
-const CLOSURE_TYPES = ["ACCESS", "CORRECTION", "CLOSURE", "ANONYMIZATION"] as const;
-
 export default function CustomerDetailPage({
   params,
 }: {
@@ -32,7 +29,6 @@ export default function CustomerDetailPage({
   const { "customer-id": customerId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
-  const [closureType, setClosureType] = useState<(typeof CLOSURE_TYPES)[number]>("CLOSURE");
   const [notice, setNotice] = useState<string | null>(null);
   const commandIntent = useAdminCommandIntent();
 
@@ -169,50 +165,6 @@ export default function CustomerDetailPage({
           >
             Revoke sessions
           </Button>
-        </div>
-      </ListPageSection>
-
-      <ListPageSection
-        title="Privacy / closure request"
-        description="Opens an auditable request in the privacy queue. Completion never deletes order, payment, or audit history."
-      >
-        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-          <select
-            aria-label="Request type"
-            value={closureType}
-            onChange={(event) =>
-              setClosureType(event.target.value as (typeof CLOSURE_TYPES)[number])
-            }
-            className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
-          >
-            {CLOSURE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              if (reason.trim() === "") {
-                setNotice("A reason is required.");
-                return;
-              }
-              void run(`/api/admin/customers/${encodeURIComponent(customerId)}/closure-requests`, {
-                requestType: closureType,
-                reason: reason.trim(),
-              });
-            }}
-          >
-            Open request
-          </Button>
-          <Link
-            href="/admin/customers/privacy"
-            className="text-xs font-medium text-[var(--fm-info)] underline"
-          >
-            Open privacy queue
-          </Link>
         </div>
       </ListPageSection>
 

@@ -11,7 +11,6 @@ const denseLinkSources = [
   "../../app/admin/catalog/page.tsx",
   "../../app/admin/catalog/products/products-page-client.tsx",
   "../../app/admin/customers/page.tsx",
-  "../../app/admin/customers/privacy/page.tsx",
   "../../app/admin/orders/page.tsx",
   "../../app/admin/payments/reconciliation/page.tsx",
   "../../app/admin/payments/transactions/page.tsx",

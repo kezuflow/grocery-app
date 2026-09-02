@@ -89,7 +89,7 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 
 ## Admin Operations UI Phase 12 (2026-08-30)
 
-- The approved Admin screen inventory is implemented through the typed Web-to-Core Service Binding: Core-authorized hierarchical navigation; Catalog Product and Category list/create/detail/edit/lifecycle; canonical R2-backed Product media administration; complete Order and Payment workspaces; and the existing Customer/Privacy, Membership, Promotion, Inventory, Procurement/Receiving, Fulfillment, Delivery, exception, Analytics, Staff/Role, Audit, and fulfillment-mode surfaces.
+- The approved Admin screen inventory is implemented through the typed Web-to-Core Service Binding: Core-authorized hierarchical navigation; Catalog Product and Category list/create/detail/edit/lifecycle; canonical R2-backed Product media administration; complete Order and Payment workspaces; and the existing Customer, Membership, Promotion, Inventory, Procurement/Receiving, Fulfillment, Delivery, exception, Analytics, Staff/Role, Audit, and fulfillment-mode surfaces. The privacy/account-closure schema, service, lifecycle, and audit evidence remain implemented, while the standalone Admin page and customer-detail controls are deferred pending an approved operational procedure.
 - Migration `0041_admin_catalog_authoring.sql` adds guarded Category hierarchy/version fields and the canonical `product_media` association. Product media bytes are validated and stored through Core's `PRODUCT_MEDIA` R2 binding; Web has no D1 or R2 authority. The version-controlled storefront image metadata path remains compatibility-only until public Catalog delivery consumes canonical R2 media.
 - Order detail composes immutable quote/order financial and item snapshots, Payments, amendments, fulfillment, delivery, exceptions, timeline, Core-derived actions, and Audit. Payment overview/detail composes canonical intent, attempt, refund, provider-safe event, reaction, and reconciliation projections; provider references, provider-event identifiers, hashes/payloads, and reconciliation JSON do not leave Core.
 - Shared Admin compositions provide Core-derived breadcrumbs, typed responsive tables, explicit loading/empty/filtered/scope/error states, cursor controls, exact-impact confirmations, detail/timeline layouts, and live command results. The complete deterministic Admin Playwright set passed against the managed vinext + Core/D1 stack; exact final evidence is recorded in `docs/superpowers/reports/ADMIN_DASHBOARD_PHASE_12_FINAL.md`.
@@ -234,8 +234,10 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
   global scope; commands are idempotent, version-guarded, reason-gated, and audited.
 - A cross-cutting fix guards versioned batch audit rows so a stale command can never leave orphaned
   audit evidence (`fix(admin): guard audit rows against stale versions`).
-- Web adds eight thin BFF adapters and the Customers workspace (list/search + invite, detail with
-  access/session/closure actions and audit table, privacy queue with per-status legal actions).
+- Web retains the thin privacy BFF adapters for the preserved Core capability. The current Customers
+  workspace provides list/search + invite and detail access/session actions with an audit table;
+  the former standalone privacy queue and customer-detail privacy controls are deferred pending an
+  approved intake, identity-verification, retention, and escalation procedure.
 - Deferred: `admin.customers.update` (no approved application-owned mutable profile fields),
   support notes and segments (unapproved good-to-haves), invitation acceptance/provisioning.
 - Deterministic authenticated Playwright coverage exercises the real Customer workspace plus a

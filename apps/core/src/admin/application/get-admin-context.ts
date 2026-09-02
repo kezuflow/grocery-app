@@ -165,15 +165,6 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["customers.read", "customers.manage"],
   },
   {
-    code: "customers-privacy",
-    label: "Privacy requests",
-    href: "/admin/customers/privacy",
-    section: "commerce",
-    parentCode: "customers",
-    kind: "destination",
-    capabilities: ["customers.read", "customers.manage"],
-  },
-  {
     code: "memberships",
     label: "Memberships",
     href: "/admin/memberships",

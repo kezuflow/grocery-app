@@ -25,7 +25,7 @@ Product administration uses two deliberately different projections. Global shows
 Primary navigation is organized around operational ownership:
 
 - Overview: Overview.
-- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Privacy Requests, Memberships), and Promotions. Categories are catalog organization within Products, and Memberships is customer lifecycle administration within Customers; neither is a separate top-level workspace.
+- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Memberships), and Promotions. Categories are catalog organization within Products, and Memberships is customer lifecycle administration within Customers; neither is a separate top-level workspace. Privacy/account-closure handling has no standalone Admin destination in the current release.
 - Operations: Inventory, Delivery, and Operational Exceptions. Inventory is the primary stock workspace and presents explicit Add stock and Remove stock actions with dated immutable activity. Procurement, Receiving, and Fulfillment remain distinct Core-owned workflows and purpose-built compatibility routes, but are reached contextually from Orders or exceptions rather than occupying primary navigation.
 - Finance: Payments (Overview, Transactions, Reconciliation) and Analytics.
 - Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Fulfillment Mode).
@@ -72,7 +72,7 @@ The overview consumes one purpose-built, scope-aware Admin overview read model. 
 
 - Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category. Product workspaces cover identity, categorization, customer-facing details, primary/ordered media, persisted SKU variants, exact base-unit consumption, prices, location availability/sourcing, status, and audit history. Category workspaces cover parent hierarchy, name/slug/code, icon, sort order, status, contained products, and audit history.
 - Orders: Order List, Order Detail, and Order Issues. Detail composes items, immutable financial snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit history.
-- Customers, Memberships, and Promotions: list/detail workspaces plus Customer Privacy Requests and the approved explicit commands for each domain.
+- Customers, Memberships, and Promotions: list/detail workspaces and the approved explicit commands for each domain. The privacy/account-closure lifecycle remains a Core capability and audit seam, but is intentionally omitted from the current Admin navigation and page inventory until an owner-approved intake and retention procedure exists.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation. Refund and retry/reconcile actions are contextual commands from detail or exception states, not generic row edits.
 - Operations and administration: Inventory stock levels/activity, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit, and Fulfillment Mode settings. Procurement, Receiving, and Fulfillment screens remain available as contextual advanced workflows while the default operator path stays focused on stock in/out.
 

@@ -310,8 +310,27 @@ describe("scoped admin context", () => {
     expect(context.value.navigation).not.toContainEqual(
       expect.objectContaining({ code: "customers-list" }),
     );
-    expect(context.value.navigation).not.toContainEqual(
-      expect.objectContaining({ code: "customers-privacy" }),
+  });
+
+  it("publishes Customer list without a standalone privacy destination", async () => {
+    const staff = await staffCookie({
+      permissionCodes: ["customers.read"],
+      scope: { kind: "global" },
+    });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+
+    expect(context.value.navigation.map((item) => item.code)).toEqual([
+      "overview",
+      "customers",
+      "customers-list",
+    ]);
+    expect(context.value.navigation.map((item) => item.href)).not.toContain(
+      "/admin/customers/privacy",
     );
   });
 

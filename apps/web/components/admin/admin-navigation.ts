@@ -31,7 +31,6 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "orders-issues",
   "customers",
   "customers-list",
-  "customers-privacy",
   "memberships",
   "promotions",
   "location-products",

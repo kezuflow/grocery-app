@@ -52,10 +52,6 @@ const issuesPage = readFileSync(
   new URL("../../app/admin/issues/page.tsx", import.meta.url),
   "utf8",
 );
-const privacyPage = readFileSync(
-  new URL("../../app/admin/customers/privacy/page.tsx", import.meta.url),
-  "utf8",
-);
 const locationOnlyPages = [
   "../../app/admin/procurement/page.tsx",
   "../../app/admin/receiving/page.tsx",
@@ -255,7 +251,6 @@ describe("shared Admin accessibility contract", () => {
       expect(page).not.toContain("<nav");
     }
     expect(issuesPage).toContain("issues.length > 0");
-    expect(privacyPage).toContain("requests.length > 0");
     for (const page of locationOnlyPages) {
       expect(page).toContain('state="permission-empty"');
       expect(page).toContain("Select a permitted location");

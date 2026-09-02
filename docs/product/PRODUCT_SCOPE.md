@@ -35,7 +35,7 @@ The The current release may operate one live fulfillment location, but its domai
 - Google OAuth, email/password, email verification, password reset, persistent secure sessions.
 - Customer/staff application records linked to Better Auth user IDs.
 - Capability-based RBAC with global/market/location scopes.
-- Privacy/account-closure baseline: data-subject request intake, account-closure request, request status, audit trail, an explicit distinction between disabling account access, deletion, and anonymization, and retention-policy hooks. Closing authentication access never silently destroys legally or operationally required order/payment/audit history; exact Philippine retention/anonymization rules remain gated on authoritative legal/accounting confirmation.
+- Privacy/account-closure baseline: Core retains data-subject request intake, account-closure request status, audit trail, an explicit distinction between disabling account access, deletion, and anonymization, and retention-policy hooks. The current Admin release intentionally exposes no standalone privacy queue or customer-detail privacy controls until an owner-approved intake, identity-verification, retention, and escalation procedure exists. Closing authentication access never silently destroys legally or operationally required order/payment/audit history; exact Philippine retention/anonymization rules remain gated on authoritative legal/accounting confirmation.
 
 ### Customer commerce
 

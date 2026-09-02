@@ -23,11 +23,6 @@ test("an unauthenticated visitor cannot open the customers workspace", async ({ 
   await expect(page.getByRole("alert")).toContainText("staff account");
 });
 
-test("an unauthenticated visitor cannot open the privacy queue", async ({ page }) => {
-  await page.goto("/admin/customers/privacy");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
 test("a provisioned Staff reader opens the real Customer workspace", async ({ adminPage }) => {
   await adminPage.goto("/admin/customers");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Customers" })).toBeVisible();
