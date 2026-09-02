@@ -27,7 +27,7 @@ const navigation: AdminNavigationItem[] = [
   },
   {
     code: "customers-privacy",
-    label: "Privacy queue",
+    label: "Privacy requests",
     href: "/admin/customers/privacy",
     section: "commerce",
     scopeKinds: globalScope,
@@ -62,7 +62,7 @@ describe("workspaceTabsFromNavigation", () => {
       activeId: "customers-privacy",
       tabs: [
         { id: "customers-list", label: "Customer list", href: "/admin/customers" },
-        { id: "customers-privacy", label: "Privacy queue", href: "/admin/customers/privacy" },
+        { id: "customers-privacy", label: "Privacy requests", href: "/admin/customers/privacy" },
         { id: "memberships", label: "Memberships", href: "/admin/memberships" },
       ],
     });
@@ -73,7 +73,7 @@ describe("workspaceTabsFromNavigation", () => {
       activeId: "memberships",
       tabs: [
         { id: "customers-list", label: "Customer list", href: "/admin/customers" },
-        { id: "customers-privacy", label: "Privacy queue", href: "/admin/customers/privacy" },
+        { id: "customers-privacy", label: "Privacy requests", href: "/admin/customers/privacy" },
         { id: "memberships", label: "Memberships", href: "/admin/memberships" },
       ],
     });

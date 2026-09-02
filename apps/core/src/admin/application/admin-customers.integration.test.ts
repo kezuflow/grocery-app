@@ -390,5 +390,9 @@ describe("customer crm commands", () => {
     expect(
       queue.value.items.some((item) => item.privacyRequestId === requested.value!.privacyRequestId),
     ).toBe(true);
+    expect(
+      queue.value.items.find((item) => item.privacyRequestId === requested.value!.privacyRequestId)
+        ?.version,
+    ).toBe(completed.version);
   });
 });

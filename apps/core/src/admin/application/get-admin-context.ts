@@ -166,7 +166,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "customers-privacy",
-    label: "Privacy queue",
+    label: "Privacy requests",
     href: "/admin/customers/privacy",
     section: "commerce",
     parentCode: "customers",

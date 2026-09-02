@@ -772,7 +772,7 @@ export async function listPrivacyRequests(
   const rows = await deps.db
     .prepare(
       `SELECT id, customer_id, request_type, status, requested_at, verified_at, resolved_at,
-              assigned_staff_id, reason, resolution
+              assigned_staff_id, reason, resolution, version
        FROM privacy_request ${where} ORDER BY requested_at DESC, id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)

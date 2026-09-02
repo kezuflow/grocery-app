@@ -600,7 +600,7 @@ Phases 1 and 7–11.
 - Orders: Order List, Order Detail, and Order Issues, including items, financial snapshots, payment, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit context. Do not add admin Order creation.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation, with contextual refund/retry/reconcile commands.
 - Pricing & fees: add `/admin/commerce-configuration` with independently authorized Membership Price and Instant Service Fee tabs over the existing global effective-dated commands.
-- Customers with nested Privacy Queue and Memberships, plus Promotions, Inventory, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit Log, and Fulfillment Mode Settings list/detail/configuration flows as applicable. Inventory uses explicit Add stock/Remove stock actions with dated ledger history; Procurement, Receiving, and Fulfillment remain contextual advanced routes rather than primary navigation.
+- Customers with nested Privacy Requests and Memberships, plus Promotions, Inventory, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit Log, and Fulfillment Mode Settings list/detail/configuration flows as applicable. Inventory uses explicit Add stock/Remove stock actions with dated ledger history; Procurement, Receiving, and Fulfillment remain contextual advanced routes rather than primary navigation.
 
 ### Cloudflare resources
 

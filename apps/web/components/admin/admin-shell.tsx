@@ -91,6 +91,9 @@ export function AdminShell({
       "/admin/catalog/categories/new",
       "/admin/orders",
       "/admin/issues",
+      "/admin/customers",
+      "/admin/customers/privacy",
+      "/admin/memberships",
     ].includes(pathname) &&
     !pathname.startsWith("/admin/orders/") &&
     !pathname.startsWith("/admin/issues/");
