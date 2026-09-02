@@ -2,6 +2,7 @@
 
 import type { AdminProductPage, AdminProductSummary, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
@@ -16,29 +17,35 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WorkspaceNavigation } from "@/components/admin/workspace-navigation";
 import {
-  resolveAdminProductPricingTarget,
-  type AdminProductPricingTarget,
-} from "@/lib/admin/product-pricing-target";
+  resolveAdminProductScopeTarget,
+  type AdminProductScopeTarget,
+} from "@/lib/admin/product-scope-target";
 
 type ProductsPageClientProps = {
   initialPayload: RpcResult<AdminProductPage> | null;
-  initialPricingTarget: AdminProductPricingTarget | null;
+  initialScopeTarget: AdminProductScopeTarget | null;
   initialQuery: string;
   initialStatus: string;
 };
 
-function samePricingTarget(
-  left: AdminProductPricingTarget | null,
-  right: AdminProductPricingTarget | null,
+function sameScopeTarget(
+  left: AdminProductScopeTarget | null,
+  right: AdminProductScopeTarget | null,
 ): boolean {
-  return left?.marketId === right?.marketId && left?.locationId === right?.locationId;
+  if (left?.kind !== right?.kind) return false;
+  if (left?.kind === "GLOBAL") return true;
+  return (
+    left?.kind === "LOCATION" &&
+    right?.kind === "LOCATION" &&
+    left.marketId === right.marketId &&
+    left.locationId === right.locationId
+  );
 }
 
 export function ProductsPageClient({
   initialPayload,
-  initialPricingTarget,
+  initialScopeTarget,
   initialQuery,
   initialStatus,
 }: ProductsPageClientProps) {
@@ -51,13 +58,10 @@ export function ProductsPageClient({
   const [reloadVersion, setReloadVersion] = useState(0);
   const pagination = useAdminPagination();
   const adminContext = useAdminContext();
-  const pricingTarget = useMemo(
+  const scopeTarget = useMemo(
     () =>
       adminContext.state.phase === "ready"
-        ? resolveAdminProductPricingTarget(
-            adminContext.state.selectedScope,
-            adminContext.state.scopes,
-          )
+        ? resolveAdminProductScopeTarget(adminContext.state.selectedScope)
         : null,
     [adminContext.state],
   );
@@ -65,24 +69,24 @@ export function ProductsPageClient({
     adminContext.state.phase === "ready" &&
     adminContext.state.selectedScope?.kind === "GLOBAL" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
-  const locationOperations =
-    adminContext.state.phase === "ready" && adminContext.state.selectedScope?.kind === "LOCATION";
-
   useEffect(() => {
-    if (!pricingTarget) return;
+    if (!scopeTarget) return;
     const filterNavigationPending = query !== initialQuery || status !== initialStatus;
     if (filterNavigationPending && !pagination.cursor && reloadVersion === 0) return;
     const serverPayloadMatches =
       initialPayload !== null &&
       !pagination.cursor &&
       reloadVersion === 0 &&
-      samePricingTarget(pricingTarget, initialPricingTarget);
+      sameScopeTarget(scopeTarget, initialScopeTarget);
     if (serverPayloadMatches) return;
 
     setPayload(null);
     const params = new URLSearchParams({ limit: "50" });
-    params.set("marketId", pricingTarget.marketId);
-    if (pricingTarget.locationId) params.set("locationId", pricingTarget.locationId);
+    params.set("scopeKind", scopeTarget.kind);
+    if (scopeTarget.kind === "LOCATION") {
+      params.set("marketId", scopeTarget.marketId);
+      params.set("locationId", scopeTarget.locationId);
+    }
     if (query.trim()) params.set("query", query.trim());
     if (status !== "all") params.set("status", status);
     if (pagination.cursor) params.set("cursor", pagination.cursor);
@@ -101,11 +105,11 @@ export function ProductsPageClient({
       );
   }, [
     initialPayload,
-    initialPricingTarget,
+    initialScopeTarget,
     initialQuery,
     initialStatus,
     pagination.cursor,
-    pricingTarget,
+    scopeTarget,
     query,
     reloadVersion,
     status,
@@ -183,24 +187,17 @@ export function ProductsPageClient({
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description={
-          locationOperations
-            ? "Manage Central Cebu prices, selling status, sourcing, and shared Product inventory position."
-            : "Manage global Product identity, customer details, sell variants, media, and market pricing."
-        }
         action={
           canManage ? (
-            <Button asChild>
+            <Button asChild size="sm" className="fm-admin-reference-primary">
               <Link href="/admin/catalog/products/new" prefetch={false}>
+                <Plus aria-hidden="true" />
                 Add product
               </Link>
             </Button>
           ) : null
         }
       />
-      {!locationOperations ? (
-        <WorkspaceNavigation parentCode="products" label="Product administration" />
-      ) : null}
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
       {payload && !payload.ok ? (
         <Alert variant="destructive">

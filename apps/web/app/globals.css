@@ -220,10 +220,129 @@ html.fm-admin-dark .fm-admin :where([class~="bg-white/90"], [class~="bg-white/95
   background-color: var(--fm-admin-surface);
 }
 
-html.fm-admin-dark :where([data-slot="popover-content"], [data-slot="select-content"]) {
+html.fm-admin-dark
+  :where(
+    [data-slot="dropdown-menu-content"],
+    [data-slot="popover-content"],
+    [data-slot="select-content"]
+  ) {
   border-color: var(--fm-border);
   background-color: var(--fm-admin-surface);
   color: var(--fm-text);
+}
+
+.fm-product-status-active {
+  border-color: #4ade80;
+  background-color: #f0fdf4;
+  color: #166534;
+}
+
+.fm-product-status-inactive {
+  border-color: #f87171;
+  background-color: var(--fm-danger-soft);
+  color: var(--fm-destructive);
+}
+
+.fm-order-status-success {
+  border-color: #4ade80;
+  background-color: #f0fdf4;
+  color: #166534;
+}
+
+.fm-order-status-warning {
+  border-color: #fbbf24;
+  background-color: #fffbeb;
+  color: #92400e;
+}
+
+.fm-order-status-info {
+  border-color: #7dd3fc;
+  background-color: #f0f9ff;
+  color: #075985;
+}
+
+.fm-order-status-accent {
+  border-color: #c4b5fd;
+  background-color: #f5f3ff;
+  color: #5b21b6;
+}
+
+.fm-order-status-danger {
+  border-color: #fca5a5;
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+
+.fm-order-status-neutral {
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
+  color: #475569;
+}
+
+html.fm-admin-dark :where(.fm-product-status-active, .fm-product-status-inactive) {
+  color: rgb(255 255 255 / 80%);
+}
+
+html.fm-admin-dark
+  :where(
+    .fm-order-status-success,
+    .fm-order-status-warning,
+    .fm-order-status-info,
+    .fm-order-status-accent,
+    .fm-order-status-danger,
+    .fm-order-status-neutral
+  ) {
+  color: rgb(255 255 255 / 82%);
+}
+
+html.fm-admin-dark .fm-order-status-success {
+  background-color: rgb(20 83 45 / 70%);
+}
+
+html.fm-admin-dark .fm-order-status-warning {
+  background-color: rgb(120 53 15 / 70%);
+}
+
+html.fm-admin-dark .fm-order-status-info {
+  background-color: rgb(12 74 110 / 70%);
+}
+
+html.fm-admin-dark .fm-order-status-accent {
+  background-color: rgb(76 29 149 / 70%);
+}
+
+html.fm-admin-dark .fm-order-status-danger {
+  background-color: rgb(127 29 29 / 70%);
+}
+
+html.fm-admin-dark .fm-order-status-neutral {
+  background-color: rgb(51 65 85 / 70%);
+}
+
+html.fm-admin-dark .fm-product-status-active {
+  background-color: rgb(20 83 45 / 70%);
+}
+
+.fm-admin-reference-primary {
+  height: 2rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background-color: lab(7.78201% -0.0000149012 0);
+  padding-inline: 10px;
+  color: lab(98.26% 0 0);
+}
+
+.fm-admin-reference-primary:hover {
+  background-color: lab(7.78201% -0.0000149012 0 / 80%);
+}
+
+html.fm-admin-dark .fm-admin-reference-primary {
+  background-color: lab(90.952% 0 -0.0000119209);
+  color: lab(7.78201% -0.0000149012 0);
+}
+
+html.fm-admin-dark .fm-admin-reference-primary:hover {
+  background-color: lab(90.952% 0 -0.0000119209 / 80%);
 }
 
 .fm-admin-sidebar-tooltip {

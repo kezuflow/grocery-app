@@ -41,6 +41,15 @@ test("a provisioned Staff reader can scan the Category workspace", async ({ admi
     adminPage.locator("#main-content").getByRole("link", { name: "Add category" }).first(),
   ).toBeVisible();
   await expect(adminPage.getByRole("table", { name: "Categories" })).toBeVisible();
+  await expect(adminPage.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
+  await adminPage
+    .getByRole("button", { name: /Open actions for/ })
+    .first()
+    .click();
+  await expect(adminPage.getByRole("menuitem", { name: "View details" })).toBeVisible();
+  await expect(adminPage.getByRole("menuitem", { name: "Edit category" })).toBeVisible();
+  await expect(adminPage.getByRole("menuitem", { name: "Copy ID" })).toBeVisible();
+  await adminPage.keyboard.press("Escape");
   await expect(adminPage.getByRole("navigation", { name: "Results pagination" })).toBeVisible();
 });
 
@@ -62,7 +71,11 @@ test("a catalog read-only principal sees no Product or Category mutation control
     catalogReadOnlyPage.getByRole("heading", { level: 1, name: "Products" }),
   ).toBeVisible();
   await expect(catalogReadOnlyPage.getByRole("link", { name: "Add product" })).toHaveCount(0);
-  await catalogReadOnlyPage.getByRole("link", { name: "View" }).first().click();
+  await catalogReadOnlyPage
+    .getByRole("button", { name: /Open actions for/ })
+    .first()
+    .click();
+  await catalogReadOnlyPage.getByRole("menuitem", { name: "View details" }).click();
   await expect(catalogReadOnlyPage.getByRole("button", { name: "Add variant" })).toHaveCount(0);
 
   await catalogReadOnlyPage.goto("/admin/catalog/categories");

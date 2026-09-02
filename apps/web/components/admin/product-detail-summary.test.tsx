@@ -4,7 +4,6 @@ import type { AdminProductDetail } from "@freshmarkets/contracts";
 import { ProductDetailSummary } from "./product-detail-summary";
 
 const product = {
-  viewMode: "LOCATION_OPERATIONS",
   productId: "product-1",
   name: "Red onion",
   description: "Firm red onions for everyday cooking.",
@@ -29,7 +28,8 @@ const product = {
       version: 2,
     },
   ],
-  pricingContext: {
+  scope: {
+    kind: "LOCATION",
     marketId: "market-1",
     marketName: "Metro Cebu",
     locationId: "location-1",
@@ -53,7 +53,6 @@ const product = {
       priceVersion: 1,
       availability: "AVAILABLE",
       availabilityVersion: 1,
-      sourcingMode: "STOCKED",
     },
   ],
 } as unknown as AdminProductDetail;
@@ -68,7 +67,8 @@ describe("ProductDetailSummary", () => {
     expect(html).toContain("Product overview");
     expect(html).toContain("Catalog facts");
     expect(html).toContain("Inventory base unit");
-    expect(html).toContain("Location · Central Cebu");
+    expect(html).toContain("Central Cebu price");
+    expect(html).not.toContain("Pricing context");
     expect(html).not.toContain("Revenue");
     expect(html).not.toContain("Orders");
   });

@@ -45,10 +45,9 @@ export default function CatalogPage() {
   const pagination = useAdminPagination();
   const categoryPagination = useAdminPagination();
   const adminContext = useAdminContext();
-  const pricingTarget =
-    adminContext.state.phase === "ready"
-      ? (adminContext.state.scopes.find((option) => option.kind === "location") ??
-        adminContext.state.scopes.find((option) => option.kind === "market"))
+  const productScope =
+    adminContext.state.phase === "ready" && adminContext.state.selectedScope?.kind === "GLOBAL"
+      ? "GLOBAL"
       : null;
 
   const load = useCallback(
@@ -56,10 +55,8 @@ export default function CatalogPage() {
       setState({ phase: "loading" });
       void (async () => {
         try {
-          if (!pricingTarget) return;
-          const params = new URLSearchParams({ limit: "50" });
-          params.set("marketId", pricingTarget.marketId);
-          if (pricingTarget.kind === "location") params.set("locationId", pricingTarget.locationId);
+          if (!productScope) return;
+          const params = new URLSearchParams({ limit: "50", scopeKind: "GLOBAL" });
           if (search.trim() !== "") params.set("query", search.trim());
           if (cursor) params.set("cursor", cursor);
           const [productsResponse, categoriesResponse, unitsResponse] = await Promise.all([
@@ -97,7 +94,7 @@ export default function CatalogPage() {
         }
       })();
     },
-    [pricingTarget],
+    [productScope],
   );
 
   useEffect(

@@ -1,7 +1,18 @@
 "use client";
 
 import type { AdminProductPage } from "@freshmarkets/contracts";
-import { Columns3, ImageIcon, ListFilter, Trash2, X } from "lucide-react";
+import {
+  Clipboard,
+  Columns3,
+  EllipsisVertical,
+  Eye,
+  ImageIcon,
+  ListFilter,
+  Pencil,
+  PowerOff,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
 import { ConfirmCommandDialog } from "./admin-controls";
@@ -9,6 +20,13 @@ import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
@@ -18,11 +36,11 @@ type ProductColumnKey = "category" | "price" | "variant" | "selling" | "inventor
 
 const PRODUCT_COLUMN_OPTIONS: ReadonlyArray<{ key: ProductColumnKey; label: string }> = [
   { key: "category", label: "Category" },
-  { key: "price", label: "Resolved price" },
-  { key: "variant", label: "Variant readiness" },
+  { key: "price", label: "Location price" },
+  { key: "variant", label: "Variants" },
   { key: "selling", label: "Selling status" },
   { key: "inventory", label: "Shared inventory" },
-  { key: "status", label: "Catalog status" },
+  { key: "status", label: "Status" },
 ];
 
 export type BulkProductSelection = Pick<ProductListItem, "productId" | "name" | "version"> & {
@@ -76,6 +94,8 @@ export function ProductListView({
 }) {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [confirmingDeactivation, setConfirmingDeactivation] = useState(false);
+  const [rowToDeactivate, setRowToDeactivate] = useState<ProductListItem | null>(null);
+  const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
   const [result, setResult] = useState<BulkProductDeactivationResult | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<ReadonlySet<ProductColumnKey>>(
     () => new Set(PRODUCT_COLUMN_OPTIONS.map((column) => column.key)),
@@ -87,11 +107,12 @@ export function ProductListView({
   const allSelected =
     selectableProducts.length > 0 && selectedIds.size === selectableProducts.length;
   const someSelected = selectedIds.size > 0 && !allSelected;
-  const locationOperations = page.viewMode === "LOCATION_OPERATIONS";
+  const locationScope = page.scope.kind === "LOCATION" ? page.scope : null;
+  const locationOperations = locationScope !== null;
   const columnOptions = locationOperations
     ? PRODUCT_COLUMN_OPTIONS
     : PRODUCT_COLUMN_OPTIONS.filter(
-        (column) => column.key !== "selling" && column.key !== "inventory",
+        (column) => !["price", "selling", "inventory"].includes(column.key),
       );
 
   useEffect(() => {
@@ -155,15 +176,44 @@ export function ProductListView({
     clearSelection();
   }
 
-  const readiness = [
-    ["Active products", page.readiness.activeProducts],
-    ["Inactive products", page.readiness.inactiveProducts],
-    ["Missing primary media", page.readiness.missingPrimaryMedia],
-    ["Missing prices", page.readiness.missingPrices],
-    page.viewMode === "LOCATION_OPERATIONS"
-      ? (["Variants not selling", page.readiness.unavailableSkus] as const)
-      : (["Location selling status", "Choose Central Cebu"] as const),
-  ] as const;
+  async function deactivateProduct(product: ProductListItem, reason: string) {
+    if (!onDeactivateSelected) return;
+    setRowToDeactivate(null);
+    const outcome = await onDeactivateSelected(
+      [
+        {
+          productId: product.productId,
+          name: product.name,
+          version: product.version,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      ],
+      reason,
+    );
+    setResult(outcome);
+  }
+
+  async function copyProductId(productId: string) {
+    await navigator.clipboard.writeText(productId);
+    setCopiedProductId(productId);
+    window.setTimeout(() => {
+      setCopiedProductId((current) => (current === productId ? null : current));
+    }, 2_000);
+  }
+
+  const readiness = locationOperations
+    ? ([
+        ["Active products", page.readiness.activeProducts],
+        ["Inactive products", page.readiness.inactiveProducts],
+        ["Missing primary media", page.readiness.missingPrimaryMedia],
+        ["Missing location prices", page.readiness.missingPrices],
+        ["Variants not selling", page.readiness.unavailableSkus],
+      ] as const)
+    : ([
+        ["Active products", page.readiness.activeProducts],
+        ["Inactive products", page.readiness.inactiveProducts],
+        ["Missing primary media", page.readiness.missingPrimaryMedia],
+      ] as const);
   return (
     <div className="space-y-4">
       <h2 className="sr-only">Catalog readiness</h2>
@@ -322,17 +372,19 @@ export function ProductListView({
                 ) : null}
                 <TableHead>Product</TableHead>
                 {visibleColumns.has("category") ? <TableHead>Category</TableHead> : null}
-                {visibleColumns.has("price") ? <TableHead>Resolved price</TableHead> : null}
-                {visibleColumns.has("variant") ? <TableHead>Variant readiness</TableHead> : null}
+                {locationOperations && visibleColumns.has("price") ? (
+                  <TableHead>Location price</TableHead>
+                ) : null}
+                {visibleColumns.has("variant") ? <TableHead>Variants</TableHead> : null}
                 {locationOperations && visibleColumns.has("selling") ? (
                   <TableHead>Selling status</TableHead>
                 ) : null}
                 {locationOperations && visibleColumns.has("inventory") ? (
                   <TableHead>Shared inventory</TableHead>
                 ) : null}
-                {visibleColumns.has("status") ? <TableHead>Catalog status</TableHead> : null}
-                <TableHead>
-                  <span className="sr-only">Open</span>
+                {visibleColumns.has("status") ? <TableHead>Status</TableHead> : null}
+                <TableHead className="w-12 text-right">
+                  <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -362,7 +414,7 @@ export function ProductListView({
                           className="size-11 rounded-md border border-[var(--fm-border)] object-cover"
                           height={44}
                           loading="lazy"
-                          src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}${page.pricingContext.locationId ? `&locationId=${encodeURIComponent(page.pricingContext.locationId)}` : ""}`}
+                          src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
                           width={44}
                         />
                       ) : (
@@ -381,7 +433,7 @@ export function ProductListView({
                   {visibleColumns.has("category") ? (
                     <TableCell>{product.categoryCode}</TableCell>
                   ) : null}
-                  {visibleColumns.has("price") ? (
+                  {locationOperations && visibleColumns.has("price") ? (
                     <TableCell>
                       <span
                         className={
@@ -395,10 +447,9 @@ export function ProductListView({
                   {visibleColumns.has("variant") ? (
                     <TableCell>
                       <span className="font-medium">
-                        {product.pricedSkuCount} / {product.activeSkuCount}
-                      </span>
-                      <span className="block text-xs text-[var(--fm-text-muted)]">
-                        active variants priced
+                        {locationOperations
+                          ? `${product.pricedSkuCount} / ${product.activeSkuCount}`
+                          : `${product.activeSkuCount} / ${product.skuCount}`}
                       </span>
                     </TableCell>
                   ) : null}
@@ -429,24 +480,68 @@ export function ProductListView({
                   {visibleColumns.has("status") ? (
                     <TableCell>
                       <Badge
-                        className={
+                        className={`h-5 rounded-full px-2 py-0.5 font-medium capitalize whitespace-nowrap ${
                           product.status === "active"
-                            ? "border-[var(--fm-success-border)] bg-[var(--fm-success-soft)]"
-                            : undefined
-                        }
+                            ? "fm-product-status-active"
+                            : "fm-product-status-inactive"
+                        }`}
                         variant="secondary"
                       >
                         {product.status}
                       </Badge>
                     </TableCell>
                   ) : null}
-                  <TableCell>
-                    <a
-                      className="font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
-                      href={`/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
-                    >
-                      View
-                    </a>
+                  <TableCell className="w-12 text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Open actions for ${product.name}`}
+                          className="size-7 rounded-md"
+                        >
+                          <EllipsisVertical aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <a
+                            href={`/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
+                          >
+                            <Eye aria-hidden="true" />
+                            View details
+                          </a>
+                        </DropdownMenuItem>
+                        {canManage ? (
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`/admin/catalog/products/${product.productId}/edit${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
+                            >
+                              <Pencil aria-hidden="true" />
+                              Edit product
+                            </a>
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem onSelect={() => void copyProductId(product.productId)}>
+                          <Clipboard aria-hidden="true" />
+                          {copiedProductId === product.productId ? "ID copied" : "Copy ID"}
+                        </DropdownMenuItem>
+                        {canManage && product.status === "active" ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
+                              disabled={deactivationPending || !onDeactivateSelected}
+                              onSelect={() => setRowToDeactivate(product)}
+                            >
+                              <PowerOff aria-hidden="true" />
+                              Deactivate
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -471,6 +566,20 @@ export function ProductListView({
         restoreFocusRef={deactivateTrigger}
         onCancel={() => setConfirmingDeactivation(false)}
         onConfirm={(reason) => void deactivateSelected(reason)}
+      />
+      <ConfirmCommandDialog
+        open={rowToDeactivate !== null}
+        title="Deactivate product?"
+        resource={rowToDeactivate?.name ?? "Product"}
+        scope="Global Catalog"
+        consequence="This Product leaves storefront availability. Variants, prices, inventory history, and committed order snapshots remain intact."
+        confirmLabel="Confirm deactivation"
+        cancelLabel="Cancel"
+        pending={deactivationPending}
+        onCancel={() => setRowToDeactivate(null)}
+        onConfirm={(reason) => {
+          if (rowToDeactivate) void deactivateProduct(rowToDeactivate, reason);
+        }}
       />
     </div>
   );

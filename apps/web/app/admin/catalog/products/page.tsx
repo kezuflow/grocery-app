@@ -2,8 +2,8 @@ import type { AdminProductPage, RpcResult } from "@freshmarkets/contracts";
 import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import { cache } from "react";
-import { parseAdminProductPricingTargetCookie } from "@/lib/admin/product-pricing-target";
-import type { AdminProductPricingTarget } from "@/lib/admin/product-pricing-target";
+import { parseAdminProductScopeTargetCookie } from "@/lib/admin/product-scope-target";
+import type { AdminProductScopeTarget } from "@/lib/admin/product-scope-target";
 import { coreClient } from "@/lib/core-client/core";
 import { coreRequestHeaders } from "@/lib/core-client/request";
 import { ProductsPageClient } from "./products-page-client";
@@ -34,28 +34,33 @@ const loadInitialProductPage = cache(
     status: string,
   ): Promise<{
     payload: RpcResult<AdminProductPage> | null;
-    pricingTarget: AdminProductPricingTarget | null;
+    scopeTarget: AdminProductScopeTarget | null;
   }> => {
     const incomingHeaders = await headers();
-    const pricingTarget = parseAdminProductPricingTargetCookie(incomingHeaders.get("cookie"));
+    const scopeTarget = parseAdminProductScopeTargetCookie(incomingHeaders.get("cookie"));
     const requestId = crypto.randomUUID();
     if (status !== "all" && status !== "active" && status !== "inactive") {
-      return { payload: invalidProductStatus(requestId), pricingTarget };
+      return { payload: invalidProductStatus(requestId), scopeTarget };
     }
-    if (!pricingTarget) return { payload: null, pricingTarget: null };
+    if (!scopeTarget) return { payload: null, scopeTarget: null };
     const result = await coreClient(env.CORE).listAdminProducts({
       requestId,
       headers: {
         ...coreRequestHeaders(new Headers(incomingHeaders)),
         "x-request-id": requestId,
       },
-      marketId: pricingTarget.marketId,
-      locationId: pricingTarget.locationId,
+      ...(scopeTarget.kind === "LOCATION"
+        ? {
+            scopeKind: "LOCATION" as const,
+            marketId: scopeTarget.marketId,
+            locationId: scopeTarget.locationId,
+          }
+        : { scopeKind: "GLOBAL" as const }),
       query: query || undefined,
       status: status === "all" ? undefined : status,
       limit: 50,
     });
-    return { payload: plainResult(result), pricingTarget };
+    return { payload: plainResult(result), scopeTarget };
   },
 );
 
@@ -68,13 +73,13 @@ export default async function ProductsPage({
   const params = await searchParams;
   const query = params.query?.trim() ?? "";
   const status = params.status ?? "all";
-  const { payload: initialPayload, pricingTarget } = await loadInitialProductPage(query, status);
+  const { payload: initialPayload, scopeTarget } = await loadInitialProductPage(query, status);
 
   return (
     <ProductsPageClient
-      key={`${pricingTarget?.marketId ?? "pending"}:${pricingTarget?.locationId ?? "market"}:${query}:${status}`}
+      key={`${scopeTarget?.kind ?? "pending"}:${scopeTarget?.kind === "LOCATION" ? scopeTarget.locationId : "global"}:${query}:${status}`}
       initialPayload={initialPayload}
-      initialPricingTarget={pricingTarget}
+      initialScopeTarget={scopeTarget}
       initialQuery={query}
       initialStatus={status}
     />

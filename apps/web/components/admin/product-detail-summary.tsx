@@ -1,5 +1,5 @@
 import type { AdminProductDetail } from "@freshmarkets/contracts";
-import { Boxes, ImageIcon, MapPin, Tag } from "lucide-react";
+import { Boxes, ImageIcon, Tag } from "lucide-react";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
 import { Badge } from "../ui/badge";
 
@@ -12,22 +12,21 @@ function money(amountMinor: number, currency: string) {
 }
 
 export function ProductDetailSummary({ product }: { product: AdminProductDetail }) {
+  const locationScope = product.scope.kind === "LOCATION" ? product.scope : null;
   const activeSkus = product.skus.filter((sku) => sku.status === "active");
   const priced = activeSkus.filter((sku) => sku.priceMinor !== null && sku.currency !== null);
-  const available = activeSkus.filter((sku) => sku.availability === "AVAILABLE");
   const prices = priced.map((sku) => sku.priceMinor!).sort((left, right) => left - right);
   const minimum = prices[0];
   const maximum = prices.at(-1);
   const priceValue =
     minimum === undefined || maximum === undefined
       ? null
-      : minimum === maximum
-        ? money(minimum, product.pricingContext.currency)
-        : `${money(minimum, product.pricingContext.currency)}–${money(maximum, product.pricingContext.currency)}`;
+      : !locationScope
+        ? null
+        : minimum === maximum
+          ? money(minimum, locationScope.currency)
+          : `${money(minimum, locationScope.currency)}–${money(maximum, locationScope.currency)}`;
   const primary = product.media.find((media) => media.isPrimary) ?? product.media[0] ?? null;
-  const pricingTarget = product.pricingContext.locationName
-    ? `Location · ${product.pricingContext.locationName}`
-    : "Global catalog · market pricing";
 
   return (
     <div className="space-y-4">
@@ -41,7 +40,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
               alt={primary.altText}
               className="aspect-square w-full rounded-xl border border-[var(--fm-border)] bg-white object-cover"
               height={640}
-              src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}${product.pricingContext.locationId ? `&locationId=${encodeURIComponent(product.pricingContext.locationId)}` : ""}`}
+              src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
               width={640}
             />
           ) : (
@@ -64,7 +63,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
                   height={96}
                   key={media.mediaId}
                   loading="lazy"
-                  src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(media.mediaId)}/content?v=${media.version}${product.pricingContext.locationId ? `&locationId=${encodeURIComponent(product.pricingContext.locationId)}` : ""}`}
+                  src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(media.mediaId)}/content?v=${media.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
                   width={96}
                 />
               ))}
@@ -137,60 +136,50 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
                   </dd>
                 </div>
               </div>
-              <div className="flex min-w-0 gap-2 rounded-lg bg-[var(--fm-surface-muted)] p-3">
-                <MapPin
-                  className="mt-0.5 size-4 shrink-0 text-[var(--fm-text-muted)]"
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <dt className="text-xs text-[var(--fm-text-muted)]">Pricing context</dt>
-                  <dd className="truncate text-sm font-medium">{pricingTarget}</dd>
-                </div>
-              </div>
-              <div className="min-w-0 rounded-lg bg-[var(--fm-surface-muted)] p-3">
-                <dt className="text-xs text-[var(--fm-text-muted)]">Catalog reference</dt>
-                <dd className="truncate font-mono text-xs font-medium" title={product.productId}>
-                  {product.productId} · v{product.version}
-                </dd>
-              </div>
             </dl>
           </div>
         </section>
       </div>
 
       <AdminDashboardGrid ariaLabel="Product readiness" className="sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          className="xl:col-span-1"
-          label="Resolved price"
-          value={priceValue}
-          unavailableReason="No active variant has a valid price in this context."
-        />
+        {locationScope ? (
+          <MetricCard
+            className="xl:col-span-1"
+            label={`${locationScope.locationName} price`}
+            value={priceValue}
+            unavailableReason="No active variant has an exact price at this location."
+          />
+        ) : null}
         <MetricCard
           className="xl:col-span-1"
           label="Active variants"
           value={String(activeSkus.length)}
         />
-        <MetricCard
-          className="xl:col-span-1"
-          label="Priced variants"
-          value={`${priced.length} / ${activeSkus.length}`}
-        />
-        <MetricCard
-          className="xl:col-span-1"
-          label={
-            product.viewMode === "LOCATION_OPERATIONS"
-              ? "Shared inventory available"
-              : "Selling variants"
-          }
-          value={
-            product.inventoryPool.position
-              ? `${product.inventoryPool.position.availableBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
-              : product.viewMode === "LOCATION_OPERATIONS"
-                ? null
-                : `${available.length} / ${activeSkus.length}`
-          }
-          unavailableReason="No stock balance has been recorded for this Product at Central Cebu."
-        />
+        {locationScope ? (
+          <MetricCard
+            className="xl:col-span-1"
+            label="Priced variants"
+            value={`${priced.length} / ${activeSkus.length}`}
+          />
+        ) : (
+          <MetricCard
+            className="xl:col-span-1"
+            label="Media assets"
+            value={String(product.media.length)}
+          />
+        )}
+        {locationScope ? (
+          <MetricCard
+            className="xl:col-span-1"
+            label="Shared inventory available"
+            value={
+              product.inventoryPool.position
+                ? `${product.inventoryPool.position.availableBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
+                : null
+            }
+            unavailableReason="No stock balance has been recorded for this Product at this location."
+          />
+        ) : null}
       </AdminDashboardGrid>
     </div>
   );

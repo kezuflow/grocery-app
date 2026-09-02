@@ -90,7 +90,7 @@ export function CategoryForm({
           onChange={(event) => onChange({ ...value, sortOrder: Number(event.target.value) })}
         />
       </label>
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" size="sm" className="fm-admin-reference-primary" disabled={pending}>
         {pending ? "Saving…" : submitLabel}
       </Button>
     </form>

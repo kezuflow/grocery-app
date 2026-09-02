@@ -51,14 +51,14 @@ const page: AdminProductPage = {
     missingPrices: 1,
     unavailableSkus: 2,
   },
-  pricingContext: {
+  scope: {
+    kind: "LOCATION",
     marketId: "market-metro-cebu",
     marketName: "Metro Cebu",
     locationId: "location-cebu-central",
     locationName: "Central Cebu",
     currency: "PHP",
   },
-  viewMode: "LOCATION_OPERATIONS",
   nextCursor: null,
 };
 
@@ -78,15 +78,23 @@ describe("ProductListView", () => {
   it("renders catalog readiness, secure media, resolved prices, and availability", () => {
     const html = renderToStaticMarkup(<ProductListView page={page} fromQuery="status=active" />);
     expect(html).toContain("Catalog readiness");
-    expect(html).toContain("Missing prices");
+    expect(html).toContain("Missing location prices");
     expect(html).toContain("₱25.00–₱30.00");
     expect(html).toContain("0 / 2 selling");
     expect(html).toContain("9,000 available");
     expect(html).toContain(
       "/api/admin/catalog/products/product-onion/media/media-1/content?v=2&amp;locationId=location-cebu-central",
     );
-    expect(html).toContain('href="/admin/catalog/products/product-onion?from=status%3Dactive"');
+    expect(html).toContain('aria-label="Open actions for Red onion"');
+    expect(html).not.toContain(">View</a>");
+    expect(html).toContain("rounded-full");
     expect(html).toContain("Columns");
+    expect(html).toContain(">Variants</th>");
+    expect(html).toContain(">Status</th>");
+    expect(html).not.toContain("Variant readiness");
+    expect(html).not.toContain("Catalog status");
+    expect(html).not.toContain("active variants priced");
+    expect(html).not.toContain("active variants");
     expect(html).not.toContain("objectKey");
     expect(html).not.toContain("Rating");
   });
@@ -134,5 +142,36 @@ describe("ProductListView", () => {
     expect(container.textContent).toContain("Filters");
     expect(container.textContent).toContain("Columns");
     expect(onDeactivateSelected).not.toHaveBeenCalled();
+  });
+
+  it("opens a vertical row action menu with product commands", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <ProductListView
+          page={page}
+          fromQuery="status=active"
+          canManage
+          onDeactivateSelected={vi.fn()}
+        />,
+      );
+    });
+
+    const actions = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Open actions for Red onion"]',
+    );
+    expect(actions?.querySelector(".lucide-ellipsis-vertical")).not.toBeNull();
+
+    await act(async () => {
+      actions?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+
+    expect(document.body.textContent).toContain("View details");
+    expect(document.body.textContent).toContain("Edit product");
+    expect(document.body.textContent).toContain("Copy ID");
+    expect(document.body.textContent).toContain("Deactivate");
   });
 });

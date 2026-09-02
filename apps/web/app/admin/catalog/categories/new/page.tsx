@@ -53,10 +53,7 @@ export default function NewCategoryPage() {
   }
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Add category"
-        description="Create a durable node in the global Catalog hierarchy."
-      />
+      <PageHeader title="Add category" />
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>
