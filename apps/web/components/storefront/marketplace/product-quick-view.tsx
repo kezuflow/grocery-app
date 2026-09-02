@@ -81,7 +81,13 @@ export function ProductQuickView({
   ).slice(0, 6);
 
   async function add() {
-    if (!selected || selected.priceMinor === null || !presentation) return;
+    if (
+      !selected ||
+      selected.priceMinor === null ||
+      selected.availability !== "AVAILABLE" ||
+      !presentation
+    )
+      return;
     setPending(true);
     const result = await addToCart(selected.id, quantity, {
       name: presentation.name,
@@ -209,7 +215,7 @@ export function ProductQuickView({
                       key={variant.id}
                       className={cn(
                         "flex cursor-pointer items-center justify-between gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-sm has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]",
-                        variant.priceMinor === null
+                        variant.availability !== "AVAILABLE"
                           ? "border-[var(--fm-border)] opacity-60"
                           : "border-[var(--fm-border)]",
                       )}
@@ -221,15 +227,17 @@ export function ProductQuickView({
                           value={variant.id}
                           checked={variantId === variant.id}
                           onChange={() => setVariantId(variant.id)}
-                          disabled={variant.priceMinor === null}
+                          disabled={variant.availability !== "AVAILABLE"}
                           className="size-4 accent-[var(--fm-primary-dark)]"
                         />
                         <span className="font-semibold">{variant.label}</span>
                       </span>
                       <span className="fm-font-display text-base font-bold tabular-nums">
-                        {variant.priceMinor === null || variant.currency === null
-                          ? "Unavailable"
-                          : formatMoney(variant.priceMinor, variant.currency)}
+                        {variant.availability === "OUT_OF_STOCK"
+                          ? "Out of stock"
+                          : variant.priceMinor === null || variant.currency === null
+                            ? "Unavailable"
+                            : formatMoney(variant.priceMinor, variant.currency)}
                       </span>
                     </label>
                   ))}
@@ -328,7 +336,10 @@ export function ProductQuickView({
               type="button"
               onClick={() => void add()}
               disabled={
-                pending || !selected || selected.priceMinor === null || !presentation.available
+                pending ||
+                !selected ||
+                selected.priceMinor === null ||
+                selected.availability !== "AVAILABLE"
               }
               className="inline-flex h-11 flex-1 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-4 text-sm font-bold text-[var(--fm-primary-dark)] transition-colors hover:bg-[#a9e83f] disabled:opacity-60 sm:flex-none sm:px-6"
             >

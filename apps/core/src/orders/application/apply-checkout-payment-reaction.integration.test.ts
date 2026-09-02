@@ -15,7 +15,7 @@ let counter = 0;
 
 async function seededCheckout(
   options: {
-    sourcingMode?: "STOCKED" | "PLANNED" | "MIXED";
+    fulfillmentMode?: "INSTANT" | "SCHEDULED";
     onHand?: number;
     quantity?: number;
   } = {},
@@ -24,6 +24,22 @@ async function seededCheckout(
   const customerId = `cust-co-${n}-${crypto.randomUUID().slice(0, 8)}`;
   const authId = `auth-${customerId}`;
   const now = Date.now();
+  const fulfillmentMode = options.fulfillmentMode ?? "SCHEDULED";
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE global_fulfillment_mode SET active_mode=?,cadence=?,version=version+1,updated_at=? WHERE id='global'",
+    ).bind(fulfillmentMode, fulfillmentMode === "SCHEDULED" ? "WEEKLY" : null, now),
+    env.DB.prepare(
+      "UPDATE fulfillment_location_readiness SET instant_promise_minutes=30,max_concurrent_instant_orders=20,dispatch_ready=1,updated_at=? WHERE location_id='location-cebu-central'",
+    ).bind(now),
+  ]);
+  if (fulfillmentMode === "INSTANT") {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO service_fee_configuration
+        (id,fee_type,flat_minor,percentage_basis_points,currency,effective_from,effective_to,version,reason,created_at)
+       VALUES ('checkout-reaction-instant-fee','FLAT',500,0,'PHP',0,NULL,1,'test',0)`,
+    ).run();
+  }
   await env.DB.prepare(
     "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
   )
@@ -50,7 +66,7 @@ async function seededCheckout(
   await env.DB.prepare(
     "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, 'unit-gram', 'STOCKED', ?, 1, 1)",
   )
-    .bind(poolId, productId, options.sourcingMode ?? "STOCKED")
+    .bind(poolId, productId, "STOCKED")
     .run();
   await env.DB.prepare(
     "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, description, status, created_at, updated_at) VALUES (?, (SELECT id FROM category LIMIT 1), ?, ?, 'Co Product', NULL, 'active', 1, 1)",
@@ -67,15 +83,18 @@ async function seededCheckout(
   )
     .bind(productId)
     .run();
-  if (options.sourcingMode !== "PLANNED") {
-    await env.DB.prepare(
-      "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) VALUES ('location-cebu-central', ?, ?, 0, 1)",
-    )
-      .bind(poolId, options.onHand ?? 100_000)
-      .run();
-  }
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO price_version (id, sku_id, market_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'PHP', 15000, 'STANDARD', 0, 1, 1)",
+    "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'AVAILABLE', 'PLANNED', 1)",
+  )
+    .bind(skuId)
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) VALUES ('location-cebu-central', ?, ?, 0, 1)",
+  )
+    .bind(poolId, options.onHand ?? 100_000)
+    .run();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO price_version (id, sku_id, market_id, location_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'location-cebu-central', 'PHP', 15000, 'STANDARD', 0, 1, 1)",
   )
     .bind(crypto.randomUUID(), skuId)
     .run();
@@ -101,6 +120,9 @@ async function createQuote(
     "SELECT id FROM delivery_cycle WHERE status='OPEN' ORDER BY delivery_date ASC LIMIT 1",
   ).all<{ id: string }>();
   expect(cycles.results.length).toBeGreaterThan(0);
+  const mode = await env.DB.prepare(
+    "SELECT active_mode mode FROM global_fulfillment_mode WHERE id='global'",
+  ).first<{ mode: "INSTANT" | "SCHEDULED" }>();
   return createCheckoutQuote(
     env.DB,
     {
@@ -108,7 +130,7 @@ async function createQuote(
       cartId: fixture.cartId,
       cartVersion: 3,
       addressId: fixture.addressId,
-      deliveryCycleId: cycles.results[0].id,
+      deliveryCycleId: mode?.mode === "INSTANT" ? null : cycles.results[0].id,
       promotionCodes,
       idempotencyKey: `quote-${crypto.randomUUID()}`,
       requestId: crypto.randomUUID(),
@@ -316,6 +338,7 @@ describe("order commitment from canonical payment reactions", () => {
     const { intentId, reactionId } = await intentWithReaction(
       quote.value.quoteId,
       fixture.customerId,
+      quote.value.totalMinor,
     );
 
     const outcome = await applyCheckoutPaymentReaction(env.DB, {
@@ -352,8 +375,8 @@ describe("order commitment from canonical payment reactions", () => {
     expect(orders?.count).toBe(0);
   });
 
-  it("commits once from SUCCEEDED with snapshots and stocked reservations", async () => {
-    const fixture = await seededCheckout({ sourcingMode: "STOCKED" });
+  it("commits once from SUCCEEDED with Scheduled snapshots and demand", async () => {
+    const fixture = await seededCheckout();
     const quote = await createQuote(fixture);
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
     const { intentId, reactionId } = await intentWithReaction(
@@ -428,13 +451,13 @@ describe("order commitment from canonical payment reactions", () => {
     )
       .bind(outcome.orderId, fixture.poolId)
       .first<{ total: number }>();
-    expect(reservations?.total).toBe(2000);
+    expect(reservations?.total).toBe(0);
     const demand = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM committed_demand WHERE order_id=?",
     )
       .bind(outcome.orderId)
       .first<{ count: number }>();
-    expect(demand?.count).toBe(0);
+    expect(demand?.count).toBe(1);
     const delivery = await env.DB.prepare(
       `SELECT dj.id AS job_id, dj.location_id, dj.zone_id, dj.cycle_id,
               ds.id AS stop_id, ds.batch_id, ds.sequence,
@@ -480,8 +503,8 @@ describe("order commitment from canonical payment reactions", () => {
     });
   });
 
-  it("creates committed demand for planned procurement and splits hybrid", async () => {
-    const planned = await seededCheckout({ sourcingMode: "PLANNED" });
+  it("creates all committed demand in Scheduled mode regardless of legacy sourcing", async () => {
+    const planned = await seededCheckout();
     const plannedQuote = await createQuote(planned);
     if (!plannedQuote.ok) throw new Error(JSON.stringify(plannedQuote.error));
     const plannedIntent = await intentWithReaction(plannedQuote.value.quoteId, planned.customerId);
@@ -499,7 +522,7 @@ describe("order commitment from canonical payment reactions", () => {
       .first<{ total: number }>();
     expect(demand?.total).toBe(2000);
 
-    const hybrid = await seededCheckout({ sourcingMode: "MIXED", onHand: 1500 });
+    const hybrid = await seededCheckout({ onHand: 1500 });
     const hybridQuote = await createQuote(hybrid);
     if (!hybridQuote.ok) throw new Error(JSON.stringify(hybridQuote.error));
     const hybridIntent = await intentWithReaction(hybridQuote.value.quoteId, hybrid.customerId);
@@ -522,8 +545,8 @@ describe("order commitment from canonical payment reactions", () => {
         .bind(hybridOutcome.orderId!)
         .first<{ total: number }>(),
     ]);
-    expect(reservationTotal?.total).toBe(1500);
-    expect(demandTotal?.total).toBe(500);
+    expect(reservationTotal?.total).toBe(0);
+    expect(demandTotal?.total).toBe(2000);
   });
 
   it("records a finance exception for an expired quote instead of committing", async () => {
@@ -652,13 +675,22 @@ describe("order commitment from canonical payment reactions", () => {
   });
 
   it("retries a paid commitment with the same identities after stock recovers", async () => {
-    const fixture = await seededCheckout({ sourcingMode: "STOCKED", onHand: 0 });
+    const fixture = await seededCheckout({
+      fulfillmentMode: "INSTANT",
+      onHand: 100_000,
+    });
     const quote = await createQuote(fixture);
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
     const { intentId, reactionId } = await intentWithReaction(
       quote.value.quoteId,
       fixture.customerId,
+      quote.value.totalMinor,
     );
+    await env.DB.prepare(
+      "UPDATE inventory_balance SET on_hand=0 WHERE location_id='location-cebu-central' AND inventory_pool_id=?",
+    )
+      .bind(fixture.poolId)
+      .run();
 
     const failed = await applyCheckoutPaymentReaction(env.DB, {
       reactionId,

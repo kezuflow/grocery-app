@@ -175,8 +175,8 @@ export async function createOrderAmendment(
         `SELECT s.name variantName,s.sellable_unit_id unit,s.consumption_base_quantity consumption,
                 p.name productName
          FROM sku s JOIN product p ON p.id=s.product_id
-         JOIN location_product_availability lpa ON lpa.product_id=p.id AND lpa.location_id=?
-         WHERE s.id=? AND s.status='active' AND p.status='active' AND lpa.availability_status='AVAILABLE'`,
+         JOIN sku_location_availability sla ON sla.sku_id=s.id AND sla.location_id=?
+         WHERE s.id=? AND s.status='active' AND p.status='active' AND sla.availability_status='AVAILABLE'`,
       )
       .bind(order.location_id, addition.skuId)
       .first<{ variantName: string; unit: string; consumption: number; productName: string }>();
@@ -186,9 +186,9 @@ export async function createOrderAmendment(
       .prepare(
         `SELECT amount_minor FROM price_version pv JOIN fulfillment_location fl ON fl.id=?
          WHERE pv.sku_id=? AND pv.market_id=fl.market_id AND pv.currency=? AND pv.price_type='STANDARD'
-           AND (pv.location_id IS NULL OR pv.location_id=fl.id)
+           AND pv.location_id=fl.id
            AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
-         ORDER BY (pv.location_id IS NOT NULL) DESC,pv.version DESC LIMIT 1`,
+         ORDER BY pv.version DESC LIMIT 1`,
       )
       .bind(order.location_id, addition.skuId, order.currency, now, now)
       .first<{ amount_minor: number }>();

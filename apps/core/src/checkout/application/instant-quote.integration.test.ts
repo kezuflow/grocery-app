@@ -252,6 +252,19 @@ describe("instant checkout quotes", () => {
   });
 
   it("rejects Scheduled checkout without eligible membership", async () => {
+    const current = await getLocationMode(env.DB, {
+      locationId: LOCATION,
+      requestId: crypto.randomUUID(),
+    });
+    if (!current.ok) throw new Error("global mode missing");
+    await setFulfillmentLocationMode(env.DB, {
+      locationId: LOCATION,
+      activeMode: "SCHEDULED",
+      cadence: "WEEKLY",
+      expectedVersion: current.value.version,
+      idempotencyKey: `mode-sched-${crypto.randomUUID()}`,
+      requestId: crypto.randomUUID(),
+    });
     const basket = await seedBasket({ onHand: 100_000, member: false });
     const result = await createCheckoutQuote(
       env.DB,
@@ -382,7 +395,7 @@ describe("instant checkout quotes", () => {
     );
   });
 
-  it("refuses non-stocked sourcing from the instant path", async () => {
+  it("ignores legacy sourcing configuration in the Instant path", async () => {
     await configureInstant();
     const basket = await seedBasket({ onHand: 100_000, sourcing: "PLANNED" });
     const result = await createCheckoutQuote(
@@ -390,32 +403,19 @@ describe("instant checkout quotes", () => {
       command(basket.customerId, basket.cartId, basket.addressId),
       quoteDependencies,
     );
-    expect(result).toMatchObject({ ok: false, error: { code: "UNAVAILABLE_ITEM" } });
+    expect(result).toMatchObject({ ok: true });
     await env.DB.prepare(
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
   });
 
-  it("fails closed to INSTANT_MODE_UNAVAILABLE when no instant location serves the zone", async () => {
-    // Revert the shared seeded location to Scheduled for this case.
-    const current = await getLocationMode(env.DB, {
-      locationId: LOCATION,
-      requestId: crypto.randomUUID(),
-    });
-    if (!current.ok) throw new Error("default location was not found");
-    await setFulfillmentLocationMode(env.DB, {
-      locationId: LOCATION,
-      activeMode: "SCHEDULED",
-      cadence: "WEEKLY",
-      promiseMinutes: null,
-      maxConcurrentInstantOrders: null,
-      expectedVersion: current.value.version || null,
-      idempotencyKey: `mode-sched-${crypto.randomUUID()}`,
-      requestId: crypto.randomUUID(),
-    });
+  it("fails closed when the closest Instant location is not dispatch-ready", async () => {
+    await configureInstant();
     await env.DB.prepare(
-      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
-    ).run();
+      "UPDATE fulfillment_location_readiness SET dispatch_ready=0 WHERE location_id=?",
+    )
+      .bind(LOCATION)
+      .run();
     const basket = await seedBasket({ onHand: 100_000 });
     const result = await createCheckoutQuote(
       env.DB,
@@ -423,7 +423,10 @@ describe("instant checkout quotes", () => {
       quoteDependencies,
     );
     expect(result).toMatchObject({ ok: false, error: { code: "INSTANT_MODE_UNAVAILABLE" } });
-    // Restore instant mode for any later tests in this file.
-    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE fulfillment_location_readiness SET dispatch_ready=1 WHERE location_id=?",
+    )
+      .bind(LOCATION)
+      .run();
   });
 });

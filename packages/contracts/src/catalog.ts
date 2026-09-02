@@ -17,6 +17,7 @@ export type CatalogVariant = {
   priceMinor: number | null;
   currency: string | null;
   priceVersion: number | null;
+  availability: "AVAILABLE" | "OUT_OF_STOCK" | "PRICE_UNAVAILABLE" | "LOCATION_REQUIRED";
 };
 
 export type CatalogMedia = { src: string; alt: string };

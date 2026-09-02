@@ -28,7 +28,11 @@ export function ProductView({ slug }: { slug: string }) {
       .then((result) => {
         const nextView = result.value ?? null;
         setView(nextView);
-        setSelectedVariantId(nextView?.product.variants[0]?.id ?? "");
+        setSelectedVariantId(
+          nextView?.product.variants.find((variant) => variant.availability === "AVAILABLE")?.id ??
+            nextView?.product.variants[0]?.id ??
+            "",
+        );
       })
       .catch(() => {
         if (!controller.signal.aborted) setView(null);
@@ -70,7 +74,8 @@ export function ProductView({ slug }: { slug: string }) {
   const selectedPrice = selectedVariant?.priceMinor ?? null;
 
   async function add() {
-    if (!selectedVariant || selectedPrice === null || !product.available) return;
+    if (!selectedVariant || selectedPrice === null || selectedVariant.availability !== "AVAILABLE")
+      return;
     setStatus("");
     const result = await addToCart(selectedVariant.id, quantity, {
       name: product.name,
@@ -142,6 +147,7 @@ export function ProductView({ slug }: { slug: string }) {
                   value={variant.id}
                   checked={selectedVariant?.id === variant.id}
                   onChange={() => setSelectedVariantId(variant.id)}
+                  disabled={variant.availability !== "AVAILABLE"}
                   className="size-4 accent-[var(--fm-primary-dark)]"
                 />
                 <span>
@@ -155,12 +161,14 @@ export function ProductView({ slug }: { slug: string }) {
                 </span>
               </span>
               <span className="fm-font-display shrink-0 text-right text-base font-bold">
-                {variant.priceMinor === null
-                  ? "Unavailable"
-                  : new Intl.NumberFormat("en-PH", {
-                      style: "currency",
-                      currency: variant.currency ?? "PHP",
-                    }).format(variant.priceMinor / 100)}
+                {variant.availability === "OUT_OF_STOCK"
+                  ? "Out of stock"
+                  : variant.priceMinor === null
+                    ? "Unavailable"
+                    : new Intl.NumberFormat("en-PH", {
+                        style: "currency",
+                        currency: variant.currency ?? "PHP",
+                      }).format(variant.priceMinor / 100)}
               </span>
             </label>
           ))}
@@ -198,7 +206,11 @@ export function ProductView({ slug }: { slug: string }) {
           <Button
             type="button"
             onClick={() => void add()}
-            disabled={!selectedVariant || selectedPrice === null || !view.product.available}
+            disabled={
+              !selectedVariant ||
+              selectedPrice === null ||
+              selectedVariant.availability !== "AVAILABLE"
+            }
           >
             Add to cart
           </Button>

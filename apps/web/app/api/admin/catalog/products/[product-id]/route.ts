@@ -11,13 +11,32 @@ async function GETHandler(
 ) {
   const { "product-id": productId } = await context.params;
   const params = new URL(request.url).searchParams;
-  const locationId = params.has("locationId") ? params.get("locationId") || null : undefined;
+  const scopeKind = params.get("scopeKind");
+  const marketId = params.get("marketId")?.trim() ?? "";
+  const locationId = params.get("locationId")?.trim() ?? "";
+  if (
+    scopeKind !== "GLOBAL" &&
+    !(scopeKind === "LOCATION" && marketId.length > 0 && locationId.length > 0)
+  ) {
+    return adminJson(
+      {
+        ok: false as const,
+        error: {
+          code: "VALIDATION_FAILED" as const,
+          message: "An explicit GLOBAL or LOCATION Product scope is required",
+          requestId: webRequestId(request),
+        },
+      },
+      { status: 400 },
+    );
+  }
   const result = await coreClient(env.CORE).getAdminProduct({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
-    marketId: params.get("marketId") ?? undefined,
-    locationId,
+    ...(scopeKind === "LOCATION"
+      ? { scopeKind: "LOCATION" as const, marketId, locationId }
+      : { scopeKind: "GLOBAL" as const }),
   });
   return adminJson(result);
 }

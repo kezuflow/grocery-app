@@ -8,7 +8,6 @@ export type QuoteLine = {
   baseQuantity: number;
   unitPriceMinor: number;
   lineTotalMinor: number;
-  sourcingMode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 };
 
 export type QuoteMoney = {

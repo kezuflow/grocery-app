@@ -5,6 +5,7 @@ import { defaultCurrency } from "../../geography/market-defaults";
 import { checkoutEligibility } from "../../commerce/service";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
+import { closestLocation } from "../../geography/geometry";
 
 export type CheckoutEvaluation = {
   eligible: boolean;
@@ -54,18 +55,35 @@ export async function evaluateCheckout(
       .bind(command.cycleId)
       .first<{ minimum_basket_minor: number; currency: string }>(),
   ]);
-  const routing = address?.delivery_zone_code
+  const routingCandidates = address?.delivery_zone_code
     ? await database
         .prepare(
-          "SELECT dz.id zone_id, ls.location_id FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id JOIN delivery_cycle dc ON dc.market_id=sa.market_id JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1 JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active' WHERE dz.code=? AND dz.status='active' AND dc.id=? ORDER BY ls.priority LIMIT 1",
+          `SELECT dz.id zone_id,fl.id,fl.id location_id,fl.latitude,fl.longitude
+             FROM delivery_zone dz
+             JOIN service_area sa ON sa.id=dz.service_area_id
+             JOIN delivery_cycle dc ON dc.market_id=sa.market_id
+             JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
+             JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active'
+             JOIN cycle_zone_capacity czc ON czc.cycle_id=dc.id AND czc.zone_id=dz.id
+               AND czc.location_id=fl.id AND czc.allocated<czc.capacity
+             JOIN global_fulfillment_mode mode ON mode.id='global' AND mode.active_mode='SCHEDULED'
+            WHERE dz.code=? AND dz.status='active' AND dc.id=?
+            ORDER BY fl.id`,
         )
         .bind(address.delivery_zone_code, command.cycleId)
-        .first<{ zone_id: string; location_id: string }>()
-    : null;
+        .all<{
+          id: string;
+          zone_id: string;
+          location_id: string;
+          latitude: number;
+          longitude: number;
+        }>()
+    : { results: [] };
+  const routing = address ? closestLocation(address, routingCandidates.results) : null;
   const [cart, fee, zoneCapacity] = await Promise.all([
     database
       .prepare(
-        "SELECT c.id, COALESCE(SUM(ci.quantity * COALESCE((SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=? WHERE pv.sku_id=ci.sku_id AND pv.market_id=dc.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND (pv.location_id IS NULL OR pv.location_id=?) AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1),0)),0) AS total_minor FROM cart c LEFT JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=? AND c.customer_id=? AND c.status='ACTIVE' GROUP BY c.id",
+        "SELECT c.id, COALESCE(SUM(ci.quantity * COALESCE((SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=? WHERE pv.sku_id=ci.sku_id AND pv.market_id=dc.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND pv.location_id=? AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY pv.version DESC LIMIT 1),0)),0) AS total_minor FROM cart c LEFT JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=? AND c.customer_id=? AND c.status='ACTIVE' GROUP BY c.id",
       )
       .bind(
         command.cycleId,

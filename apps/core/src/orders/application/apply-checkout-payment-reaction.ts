@@ -121,51 +121,30 @@ export async function applyCheckoutPaymentReaction(
     return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
   const cycleSnapshot = routingSnapshot;
 
-  const fulfillment = quote.fulfillmentSnapshot as {
-    sourcingModes: Array<"STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED">;
-    poolIds: string[];
-  } | null;
-
-  // Per-pool requested base units and sourcing split (approved planner rules).
+  // Per-pool requested base units. Supply behavior comes only from the
+  // snapshotted global fulfillment mode.
   type PoolPlan = {
     poolId: string;
     requestedBase: number;
-    sourcingMode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
-    availableBase: number;
   };
   const pools = new Map<string, PoolPlan>();
   for (const line of quote.lines) {
     const skuPool = await database
       .prepare(
-        "SELECT p.inventory_pool_id AS pool_id, ip.canonical_sourcing_mode AS sourcing_mode FROM sku s JOIN product p ON p.id=s.product_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE s.id=?",
+        "SELECT p.inventory_pool_id AS pool_id FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=?",
       )
       .bind(line.skuId)
-      .first<{ pool_id: string; sourcing_mode: PoolPlan["sourcingMode"] }>();
+      .first<{ pool_id: string }>();
     if (!skuPool) continue;
     const plan =
       pools.get(skuPool.pool_id) ??
       ({
         poolId: skuPool.pool_id,
         requestedBase: 0,
-        sourcingMode: skuPool.sourcing_mode,
-        availableBase: 0,
       } satisfies PoolPlan);
     plan.requestedBase += line.baseQuantity;
     pools.set(skuPool.pool_id, plan);
   }
-  if ([...pools.values()].some((plan) => plan.sourcingMode === "ON_DEMAND"))
-    return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
-  for (const plan of pools.values()) {
-    if (plan.sourcingMode === "PLANNED") continue;
-    const balance = await database
-      .prepare(
-        "SELECT MAX(0, on_hand-reserved) AS available FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?",
-      )
-      .bind(cycleSnapshot.locationId, plan.poolId)
-      .first<{ available: number | null }>();
-    plan.availableBase = Math.max(0, balance?.available ?? 0);
-  }
-
   const orderId = crypto.randomUUID();
   const orderNumber = `FM-${new Date(now).getUTCFullYear()}-${orderId
     .replaceAll("-", "")
@@ -183,10 +162,9 @@ export async function applyCheckoutPaymentReaction(
     phone: typeof addressSnapshot.phone === "string" ? addressSnapshot.phone : null,
   });
   const instructionsSnapshot = deliveryInstructionsSnapshot(addressSnapshot);
+  const fulfillmentSnapshot = quote.fulfillmentSnapshot as { promisedAt?: string } | null;
   const promisedAt = instant
-    ? Date.parse(
-        (fulfillment as { promisedAt?: string } | null)?.promisedAt ?? new Date(now).toISOString(),
-      )
+    ? Date.parse(fulfillmentSnapshot?.promisedAt ?? new Date(now).toISOString())
     : null;
   const statements: D1PreparedStatement[] = [
     // Unique payment-intent identity claims the entire commitment.
@@ -245,7 +223,7 @@ export async function applyCheckoutPaymentReaction(
             cycleSnapshot.locationId,
             cycleSnapshot.zoneId,
             promisedAt,
-            JSON.stringify(fulfillment?.sourcingModes ?? []),
+            "[]",
             JSON.stringify(quote.deliveryFeeSnapshot),
             now,
           )
@@ -260,7 +238,7 @@ export async function applyCheckoutPaymentReaction(
             cycleSnapshot.zoneId,
             Date.parse(cycleSnapshot.cutoffAt),
             Date.parse(cycleSnapshot.deliveryDate),
-            JSON.stringify(fulfillment?.sourcingModes ?? []),
+            "[]",
             JSON.stringify(quote.deliveryFeeSnapshot),
             now,
           ),
@@ -456,7 +434,10 @@ export async function applyCheckoutPaymentReaction(
   if (instant) {
     const mode = await database
       .prepare(
-        "SELECT max_concurrent_instant_orders FROM fulfillment_location_mode WHERE location_id=? AND active_mode='INSTANT'",
+        `SELECT readiness.max_concurrent_instant_orders
+           FROM global_fulfillment_mode mode
+           JOIN fulfillment_location_readiness readiness ON readiness.location_id=?
+          WHERE mode.id='global' AND mode.active_mode='INSTANT' AND readiness.dispatch_ready=1`,
       )
       .bind(cycleSnapshot.locationId)
       .first<{ max_concurrent_instant_orders: number | null }>();
@@ -473,16 +454,8 @@ export async function applyCheckoutPaymentReaction(
   }
 
   for (const plan of pools.values()) {
-    let reservedBase = 0;
-    let plannedBase = 0;
-    if (plan.sourcingMode === "STOCKED") {
-      reservedBase = plan.requestedBase;
-    } else if (plan.sourcingMode === "PLANNED") {
-      plannedBase = plan.requestedBase;
-    } else {
-      reservedBase = Math.min(plan.requestedBase, plan.availableBase);
-      plannedBase = plan.requestedBase - reservedBase;
-    }
+    const reservedBase = instant ? plan.requestedBase : 0;
+    const plannedBase = instant ? 0 : plan.requestedBase;
     if (reservedBase > 0) {
       statements.push(
         database
@@ -531,15 +504,9 @@ export async function applyCheckoutPaymentReaction(
   // Hard-abort sentinel: when any guarded reservation failed to land, the
   // mismatching count forces a CHECK violation that rolls back the entire
   // commitment transaction.
-  const expectedReservationRows = [...pools.values()].filter((plan) => {
-    const reserved =
-      plan.sourcingMode === "STOCKED"
-        ? plan.requestedBase
-        : plan.sourcingMode === "MIXED"
-          ? Math.min(plan.requestedBase, plan.availableBase)
-          : 0;
-    return reserved > 0;
-  }).length;
+  const expectedReservationRows = instant
+    ? [...pools.values()].filter((plan) => plan.requestedBase > 0).length
+    : 0;
   statements.push(
     createInvoiceReadinessStatement(database, {
       id: crypto.randomUUID(),

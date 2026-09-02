@@ -54,18 +54,22 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
     ],
     candidates: [
       {
+        id: "location-secondary",
         code: "SECONDARY",
         name: "Secondary",
         type: "SATELLITE",
-        priority: 2,
+        latitude: 10.8,
+        longitude: 123.8,
         capabilities: ["PICKING", "PACKING", "DISPATCH"],
         active: true,
       },
       {
+        id: "location-cebu-central",
         code: "CEBU_CENTRAL",
         name: "Central Cebu",
         type: "FULFILLMENT_CENTER",
-        priority: 1,
+        latitude: 10.51,
+        longitude: 123.51,
         capabilities: ["PICKING", "PACKING", "DISPATCH"],
         active: true,
       },
@@ -118,10 +122,12 @@ describe("serviceability resolver", () => {
       dataset({
         candidates: [
           {
+            id: "location-no-dispatch",
             code: "NO_DISPATCH",
             name: "No Dispatch",
             type: "SATELLITE",
-            priority: 1,
+            latitude: 10.5,
+            longitude: 123.5,
             capabilities: ["PICKING", "PACKING"],
             active: true,
           },

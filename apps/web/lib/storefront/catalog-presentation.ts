@@ -24,6 +24,7 @@ export type PresentationVariant = {
   contentsNote: string | null;
   sellQuantity: number;
   unitSymbol: string;
+  availability: CatalogVariant["availability"];
 };
 
 export type PresentationProduct = {
@@ -64,6 +65,7 @@ function presentationVariant(variant: CatalogVariant): PresentationVariant {
     contentsNote: variant.contentsNote,
     sellQuantity: variant.sellQuantity,
     unitSymbol: variant.unit,
+    availability: variant.availability,
   };
 }
 
@@ -86,11 +88,14 @@ export function pickDefaultVariant(
       variant.priceMinor !== null && variant.currency !== null,
   );
   if (priced.length === 0) return null;
+  const selectable = priced.some((variant) => variant.availability === "AVAILABLE")
+    ? priced.filter((variant) => variant.availability === "AVAILABLE")
+    : priced;
 
-  const assembled = priced.find((variant) => variant.merchandisingLabel !== null);
+  const assembled = selectable.find((variant) => variant.merchandisingLabel !== null);
   if (assembled) return presentationVariant(assembled);
 
-  const massSizes = priced.filter((variant) => variant.sellUnitCode !== "PC");
+  const massSizes = selectable.filter((variant) => variant.sellUnitCode !== "PC");
   if (massSizes.length > 0) {
     const closest = massSizes.reduce((best, variant) =>
       Math.abs(variant.consumptionBaseQuantity - 500) < Math.abs(best.consumptionBaseQuantity - 500)
@@ -100,7 +105,7 @@ export function pickDefaultVariant(
     return presentationVariant(closest);
   }
 
-  return presentationVariant(priced[0]!);
+  return presentationVariant(selectable[0]!);
 }
 
 export function toPresentationProduct(product: CatalogProduct): PresentationProduct {
@@ -125,7 +130,7 @@ export function toPresentationProducts(
   return products.map(toPresentationProduct);
 }
 
-/** Products eligible for merchandising rails: available with a priced variant. */
+/** Keep locally configured products visible even when their shared stock is exhausted. */
 export function railEligible(products: ReadonlyArray<PresentationProduct>): PresentationProduct[] {
-  return products.filter((product) => product.available && product.defaultVariant !== null);
+  return products.filter((product) => product.defaultVariant !== null);
 }

@@ -11,6 +11,7 @@ import {
 
 type Database = Parameters<typeof getProduct>[0];
 const db = () => env.DB as unknown as Database;
+const LOCATION_ID = "location-cebu-central";
 
 const ABIU_MEDIA_JSON =
   '{"version":1,"assetKey":"abiu.webp","altText":"Abiu — fresh market produce photo"}';
@@ -76,7 +77,11 @@ describe("catalog read models (integration)", () => {
     const ids: string[] = [];
     let pages = 0;
     do {
-      const page = await searchCatalog(db(), { limit: 24, cursor: cursor ?? undefined });
+      const page = await searchCatalog(db(), {
+        limit: 24,
+        cursor: cursor ?? undefined,
+        locationId: LOCATION_ID,
+      });
       expect(page.items.length).toBeLessThanOrEqual(24);
       ids.push(...page.items.map((item) => item.id));
       cursor = page.nextCursor;
@@ -97,6 +102,7 @@ describe("catalog read models (integration)", () => {
         categorySlug: "fruits",
         limit: 10,
         cursor: cursor ?? undefined,
+        locationId: LOCATION_ID,
       });
       for (const item of page.items) {
         slugs.add(item.category.slug);
@@ -112,11 +118,19 @@ describe("catalog read models (integration)", () => {
   });
 
   it("matches common and local names case-insensitively", async () => {
-    const results = await searchCatalog(db(), { query: "sibuyas tagalog", limit: 50 });
+    const results = await searchCatalog(db(), {
+      query: "sibuyas tagalog",
+      limit: 50,
+      locationId: LOCATION_ID,
+    });
     expect(results.items.some((item) => item.slug === "onion-red-shallot-sibuyas-tagalog")).toBe(
       true,
     );
-    const chili = await searchCatalog(db(), { query: "SILING LABUYO", limit: 50 });
+    const chili = await searchCatalog(db(), {
+      query: "SILING LABUYO",
+      limit: 50,
+      locationId: LOCATION_ID,
+    });
     expect(chili.items.map((item) => item.slug)).toContain("chili-pepper-fruit-siling-labuyo");
   });
 
@@ -146,13 +160,16 @@ describe("catalog read models (integration)", () => {
       "UPDATE sku_location_availability SET availability_status='UNAVAILABLE' WHERE sku_id IN (SELECT id FROM sku WHERE product_id=(SELECT id FROM product WHERE slug='durian'))",
     ).run();
     try {
-      const listed = await searchCatalog(db(), { query: "durian", limit: 50 });
+      const listed = await searchCatalog(db(), {
+        query: "durian",
+        limit: 50,
+        locationId: LOCATION_ID,
+      });
       expect(listed.items.map((item) => item.slug)).not.toContain("durian");
 
-      const detail = await getProduct(db(), "durian");
+      const detail = await getProduct(db(), "durian", LOCATION_ID);
       expect(detail?.product.available).toBe(false);
-      // Its priced variant data stays intact for honest detail rendering.
-      expect(detail?.product.variants.every((variant) => variant.priceMinor !== null)).toBe(true);
+      expect(detail?.product.variants).toEqual([]);
     } finally {
       await env.DB.prepare(
         "UPDATE sku_location_availability SET availability_status='AVAILABLE' WHERE sku_id IN (SELECT id FROM sku WHERE product_id=(SELECT id FROM product WHERE slug='durian'))",
@@ -161,7 +178,7 @@ describe("catalog read models (integration)", () => {
   });
 
   it("never exposes operations packing instructions publicly", async () => {
-    const view = await getProduct(db(), "chili-pepper-fruit-siling-labuyo");
+    const view = await getProduct(db(), "chili-pepper-fruit-siling-labuyo", LOCATION_ID);
     expect(view).toBeTruthy();
     const serialized = JSON.stringify(view);
     expect(serialized).toContain("Approximately 10–15 chili peppers per pack.");
@@ -177,18 +194,61 @@ describe("catalog read models (integration)", () => {
   });
 
   it("returns fixed weight variants for staples", async () => {
-    const potato = await getProduct(db(), "potato");
+    const potato = await getProduct(db(), "potato", LOCATION_ID);
     expect(potato?.product.variants.map((variant) => variant.name)).toEqual([
       "250 g",
       "500 g",
       "1 kg",
     ]);
-    const onion = await getProduct(db(), "red-onion");
+    const onion = await getProduct(db(), "red-onion", LOCATION_ID);
     expect(onion?.product.variants.map((variant) => variant.name)).toEqual(["500 g", "1 kg"]);
     for (const price of potato?.product.variants.map((v) => v.priceMinor ?? 0) ?? [])
       expect(price).toBeGreaterThan(0);
     // Reused SKUs surfaced version 2 pricing with their peso values intact.
     expect(onion?.product.variants[0]?.priceMinor).toBe(12900);
+  });
+
+  it("ignores physical stock in Scheduled mode but exposes Instant stockouts", async () => {
+    const balance = await env.DB.prepare(
+      "SELECT on_hand,reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION_ID)
+      .first<{ on_hand: number; reserved: number }>();
+    await env.DB.prepare(
+      "UPDATE inventory_balance SET on_hand=0,reserved=0 WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION_ID)
+      .run();
+    try {
+      await env.DB.prepare(
+        "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY' WHERE id='global'",
+      ).run();
+      const scheduled = await getProduct(db(), "red-onion", LOCATION_ID);
+      expect(scheduled?.product.available).toBe(true);
+      expect(
+        scheduled?.product.variants.every((variant) => variant.availability === "AVAILABLE"),
+      ).toBe(true);
+
+      await env.DB.prepare(
+        "UPDATE global_fulfillment_mode SET active_mode='INSTANT',cadence=NULL WHERE id='global'",
+      ).run();
+      const instant = await getProduct(db(), "red-onion", LOCATION_ID);
+      expect(instant?.product.available).toBe(false);
+      expect(
+        instant?.product.variants.every((variant) => variant.availability === "OUT_OF_STOCK"),
+      ).toBe(true);
+      const listed = await searchCatalog(db(), { query: "red onion", locationId: LOCATION_ID });
+      expect(listed.items.map((product) => product.slug)).toContain("red-onion");
+    } finally {
+      await env.DB.prepare(
+        "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY' WHERE id='global'",
+      ).run();
+      await env.DB.prepare(
+        "UPDATE inventory_balance SET on_hand=?,reserved=? WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+      )
+        .bind(balance?.on_hand ?? 0, balance?.reserved ?? 0, LOCATION_ID)
+        .run();
+    }
   });
 
   it("selects one deterministic price row at location precedence", async () => {
@@ -200,6 +260,11 @@ describe("catalog read models (integration)", () => {
       .first<{ value: number }>();
     const firstVersion = version?.value ?? 1;
     const now = Date.now() - 1;
+    await env.DB.prepare(
+      "UPDATE price_version SET valid_to=? WHERE sku_id=? AND location_id='location-cebu-central' AND valid_to IS NULL",
+    )
+      .bind(now, skuId)
+      .run();
     await env.DB.batch([
       env.DB.prepare(
         `INSERT OR IGNORE INTO fulfillment_location
@@ -221,8 +286,11 @@ describe("catalog read models (integration)", () => {
         expect(variant).toMatchObject({ priceMinor: 7777, priceVersion: firstVersion });
       }
     } finally {
+      await env.DB.prepare("DELETE FROM price_version WHERE sku_id=? AND version>=?")
+        .bind(skuId, firstVersion)
+        .run();
       await env.DB.prepare(
-        "DELETE FROM price_version WHERE sku_id=? AND location_id IN ('location-cebu-central', 'location-price-other')",
+        "UPDATE price_version SET valid_to=NULL WHERE id=(SELECT id FROM price_version WHERE sku_id=? AND location_id='location-cebu-central' ORDER BY valid_from DESC,version DESC LIMIT 1)",
       )
         .bind(skuId)
         .run();
@@ -233,7 +301,7 @@ describe("catalog read models (integration)", () => {
   });
 
   it("bounds home rails without materializing the whole catalog", async () => {
-    const home = await getMarketplaceHome(db(), { itemsPerRail: 8 });
+    const home = await getMarketplaceHome(db(), { itemsPerRail: 8, locationId: LOCATION_ID });
     expect(home.categories.length).toBeGreaterThanOrEqual(7);
     const itemCount = home.rails.reduce((sum, rail) => sum + rail.items.length, 0);
     expect(itemCount).toBeGreaterThan(20);
@@ -253,7 +321,11 @@ describe("catalog read models (integration)", () => {
 
     await env.DB.prepare("UPDATE product SET status='inactive' WHERE slug='rambutan'").run();
     try {
-      const listed = await searchCatalog(db(), { query: "rambutan", limit: 50 });
+      const listed = await searchCatalog(db(), {
+        query: "rambutan",
+        limit: 50,
+        locationId: LOCATION_ID,
+      });
       expect(listed.items.map((item) => item.slug)).not.toContain("rambutan");
       expect(await getProduct(db(), "rambutan")).toBeNull();
     } finally {
@@ -266,14 +338,18 @@ describe("catalog read models (integration)", () => {
       "UPDATE product SET image_metadata_json='{ broken json' WHERE slug='abiu'",
     ).run();
     try {
-      const listed = await searchCatalog(db(), { query: "abiu", limit: 50 });
+      const listed = await searchCatalog(db(), {
+        query: "abiu",
+        limit: 50,
+        locationId: LOCATION_ID,
+      });
       const abiu = listed.items.find((item) => item.slug === "abiu");
       expect(abiu).toBeTruthy();
       expect(abiu?.media ?? null).toBeNull();
       // The product remains sellable; presentation renders the placeholder.
       expect(abiu?.available).toBe(true);
 
-      const detail = await getProduct(db(), "abiu");
+      const detail = await getProduct(db(), "abiu", LOCATION_ID);
       expect(detail?.product.media ?? null).toBeNull();
     } finally {
       await env.DB.prepare("UPDATE product SET image_metadata_json=? WHERE slug='abiu'")

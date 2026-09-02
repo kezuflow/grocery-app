@@ -19,6 +19,8 @@ Build these only once they appear across multiple workspaces:
 - `AdminDataTable`: server-side data, keyset pagination, row selection, responsive fallback, loading/empty/error states.
 - `AdminDashboardGrid`: responsive reference-aligned grid for operational cards, charts, queues, and recent activity.
 - `StatusBadge` / domain status components: stable label, tone, icon, accessible text.
+- `ProductScopeProjection`: renders catalog-definition fields in Global and exact price/local-active/shared-stock fields at a Location; it never fills absent local data from Market/global fallback.
+- `GlobalFulfillmentModeControl`: a versioned Global-only `SCHEDULED`/`INSTANT` switch with readiness blockers and explicit committed-order preservation copy.
 - `MetricCard` only for decision-relevant metrics; never as default dashboard filler.
 - `AdminChartCard`: accessible Recharts composition with an explicit title, definition/freshness context, non-visual summary, and unavailable state.
 - `Timeline`: ordered domain/audit/delivery events.

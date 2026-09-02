@@ -87,9 +87,9 @@ export async function getCart(
            WHERE pv.sku_id=s.id
              AND pv.market_id=price_location.market_id
              AND pv.currency=? AND pv.price_type='STANDARD'
-             AND (pv.location_id IS NULL OR pv.location_id=c.location_id)
+             AND pv.location_id=c.location_id
              AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
-           ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1
+           ORDER BY pv.version DESC LIMIT 1
          ) AS unit_price_minor
        FROM cart_item ci
        JOIN sku s ON s.id=ci.sku_id
@@ -206,11 +206,11 @@ export async function setCartItem(
              JOIN market m ON m.id=fl.market_id
              LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id
              WHERE pv.sku_id=s.id AND pv.market_id=fl.market_id
-               AND (pv.location_id IS NULL OR pv.location_id=fl.id)
+               AND pv.location_id=fl.id
                AND pv.currency=COALESCE(mcp.currency, m.currency)
                AND pv.price_type='STANDARD'
                AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
-             ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1
+             ORDER BY pv.version DESC LIMIT 1
            ) AS unit_price_minor
          FROM sku s
          JOIN product p ON p.id=s.product_id
@@ -474,10 +474,10 @@ export async function addCartItemsBatch(
                       SELECT pv.amount_minor FROM price_version pv
                       JOIN fulfillment_location fl ON fl.id=?
                       WHERE pv.sku_id=s.id AND pv.market_id=fl.market_id
-                        AND (pv.location_id IS NULL OR pv.location_id=fl.id)
+                        AND pv.location_id=fl.id
                         AND pv.currency=? AND pv.price_type='STANDARD'
                         AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
-                      ORDER BY (pv.location_id IS NOT NULL) DESC,pv.version DESC LIMIT 1
+                      ORDER BY pv.version DESC LIMIT 1
                     ) AS unitPriceMinor
              FROM sku s JOIN product p ON p.id=s.product_id
              LEFT JOIN sku_location_availability sla

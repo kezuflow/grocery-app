@@ -1,58 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { parsePolygonGeoJson, pointInPolygon, validCoordinate } from "./geometry";
+import { closestLocation, haversineDistanceMeters, sortLocationsByDistance } from "./geometry";
 
-const square = JSON.stringify({
-  type: "Polygon",
-  coordinates: [
-    [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-      [0, 10],
-      [0, 0],
-    ],
-  ],
-});
-
-describe("geofence geometry", () => {
-  it("accepts points inside and on a polygon boundary", () => {
-    const polygon = parsePolygonGeoJson(square);
-    expect(polygon).not.toBeNull();
-    expect(pointInPolygon([5, 5], polygon!)).toBe(true);
-    expect(pointInPolygon([0, 5], polygon!)).toBe(true);
-  });
-
-  it("rejects points outside and in holes", () => {
-    const polygon = parsePolygonGeoJson(
-      JSON.stringify({
-        type: "Polygon",
-        coordinates: [
-          [
-            [0, 0],
-            [10, 0],
-            [10, 10],
-            [0, 10],
-            [0, 0],
-          ],
-          [
-            [4, 4],
-            [6, 4],
-            [6, 6],
-            [4, 6],
-            [4, 4],
-          ],
-        ],
-      }),
+describe("straight-line fulfillment location assignment", () => {
+  it("selects the closest overlapping candidate by exact Haversine distance", () => {
+    const customer = { latitude: 10.3157, longitude: 123.8854 };
+    const candidates = [
+      { id: "location-far", latitude: 10.4, longitude: 123.95 },
+      { id: "location-near", latitude: 10.32, longitude: 123.89 },
+    ];
+    expect(closestLocation(customer, candidates)?.id).toBe("location-near");
+    expect(haversineDistanceMeters(customer, candidates[1]!)).toBeLessThan(
+      haversineDistanceMeters(customer, candidates[0]!),
     );
-    expect(pointInPolygon([20, 20], polygon!)).toBe(false);
-    expect(pointInPolygon([5, 5], polygon!)).toBe(false);
   });
 
-  it("rejects malformed polygons and coordinates", () => {
-    expect(parsePolygonGeoJson("not-json")).toBeNull();
-    expect(parsePolygonGeoJson(JSON.stringify({ type: "Point", coordinates: [0, 0] }))).toBeNull();
-    expect(validCoordinate(10, 123)).toBe(true);
-    expect(validCoordinate(91, 123)).toBe(false);
-    expect(validCoordinate(10, Number.NaN)).toBe(false);
+  it("uses stable location id ordering for an exact distance tie", () => {
+    const customer = { latitude: 10, longitude: 123 };
+    const tied = [
+      { id: "location-b", latitude: 10.1, longitude: 123 },
+      { id: "location-a", latitude: 10.1, longitude: 123 },
+    ];
+    expect(sortLocationsByDistance(customer, tied).map((location) => location.id)).toEqual([
+      "location-a",
+      "location-b",
+    ]);
   });
 });

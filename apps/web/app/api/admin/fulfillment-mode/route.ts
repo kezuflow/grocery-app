@@ -4,26 +4,20 @@ import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
-import { invalid, requiredLocation } from "../operations-route-utils";
+import { invalid } from "../operations-route-utils";
 import { requireIdempotencyKey } from "@/lib/core-client/commands";
 
 const schema = z.object({
-  locationId: z.string().trim().min(1),
   fulfillmentMode: z.enum(["INSTANT", "SCHEDULED"]),
   cadence: z.enum(["WEEKLY"]).nullable().optional(),
-  promiseMinutes: z.number().int().positive().nullable().optional(),
-  maxConcurrentInstantOrders: z.number().int().positive().nullable().optional(),
-  expectedVersion: z.number().int().nonnegative().nullable(),
+  expectedVersion: z.number().int().positive(),
   idempotencyKey: z.string().trim().min(1).optional(),
 });
 async function GETHandler(request: Request) {
-  const locationId = requiredLocation(request, new URL(request.url).searchParams);
-  if (locationId instanceof Response) return locationId;
   return adminJson(
     await coreClient(env.CORE).getFulfillmentMode({
       requestId: webRequestId(request),
       headers: requestHeaders(request),
-      locationId,
     }),
   );
 }

@@ -75,11 +75,8 @@ describe("admin operations contracts", () => {
 
   it("keeps operations payloads purpose-built with integer quantities and versions", () => {
     void ({
-      locationId: "location-cebu-central",
       activeMode: "INSTANT",
       cadence: null,
-      promiseMinutes: 90,
-      maxConcurrentInstantOrders: 12,
       version: 3,
     } satisfies FulfillmentModeConfigurationView);
     void ({

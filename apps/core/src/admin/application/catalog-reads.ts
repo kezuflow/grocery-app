@@ -245,45 +245,50 @@ export async function listAdminProducts(
   deps: CatalogAdministrationDeps,
   request: AdminProductListRequest,
 ): Promise<RpcResult<AdminProductPage>> {
+  const locationScope = request.scopeKind === "LOCATION" ? request : null;
+  const locationId = locationScope?.locationId ?? null;
+  const marketId = locationScope?.marketId ?? "";
   const access = await resolveCatalogAdministrationAccess(
     deps,
     request,
     "catalog.read",
-    request.locationId ?? undefined,
+    locationId ?? undefined,
   );
   if (!access.ok) return access;
-  if (request.locationId !== null) {
+  if (locationId !== null) {
     const inventoryAccess = await resolveCatalogAdministrationAccess(
       deps,
       request,
       "inventory.read",
-      request.locationId,
+      locationId,
     );
     if (!inventoryAccess.ok) return inventoryAccess;
   }
 
-  const target = await deps.db
-    .prepare(
-      `SELECT m.id AS marketId, m.name AS marketName, m.currency,
-              fl.id AS locationId, fl.name AS locationName
-       FROM market m LEFT JOIN fulfillment_location fl
-         ON fl.market_id=m.id AND fl.id=?
-       WHERE m.id=?`,
-    )
-    .bind(request.locationId, request.marketId)
-    .first<{
-      marketId: string;
-      marketName: string;
-      currency: string;
-      locationId: string | null;
-      locationName: string | null;
-    }>();
-  if (!target || (request.locationId !== null && target.locationId !== request.locationId)) {
+  const target = locationScope
+    ? await deps.db
+        .prepare(
+          `SELECT m.id AS marketId, m.name AS marketName, m.currency,
+                  fl.id AS locationId, fl.name AS locationName
+           FROM market m JOIN fulfillment_location fl
+             ON fl.market_id=m.id AND fl.id=?
+           WHERE m.id=?`,
+        )
+        .bind(locationId, marketId)
+        .first<{
+          marketId: string;
+          marketName: string;
+          currency: string;
+          locationId: string;
+          locationName: string;
+        }>()
+    : null;
+  if (locationScope && !target) {
     return {
       ok: false,
       error: {
         code: "VALIDATION_FAILED",
-        message: "The selected market/location pricing context does not exist",
+        message: "The selected Product location scope does not exist",
         requestId: request.requestId,
       },
     };
@@ -367,8 +372,7 @@ export async function listAdminProducts(
              JOIN sku s ON s.id=pv.sku_id
              JOIN page p ON p.productId=s.product_id
              WHERE pv.market_id=?
-               AND ((? IS NULL AND pv.location_id IS NULL)
-                 OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+               AND pv.location_id=?
                AND pv.price_type='STANDARD' AND pv.valid_from<=?
                AND (pv.valid_to IS NULL OR pv.valid_to>?)
            ), sku_rollup AS (
@@ -415,15 +419,13 @@ export async function listAdminProducts(
         .bind(
           ...binds,
           limit + 1,
-          request.locationId,
-          request.marketId,
-          request.locationId,
-          request.locationId,
-          request.locationId,
+          locationId,
+          marketId,
+          locationId ?? "",
           now,
           now,
-          request.locationId ?? "",
-          request.locationId ?? "",
+          locationId ?? "",
+          locationId ?? "",
         )
         .all<{
           productId: string;
@@ -468,7 +470,7 @@ export async function listAdminProducts(
         ? { mediaId: row.mediaId, altText: row.mediaAltText, version: row.mediaVersion }
         : null,
     priceRange:
-      row.minimumMinor !== null && row.maximumMinor !== null
+      target && row.minimumMinor !== null && row.maximumMinor !== null
         ? {
             minimumMinor: row.minimumMinor,
             maximumMinor: row.maximumMinor,
@@ -476,12 +478,12 @@ export async function listAdminProducts(
           }
         : null,
     inventoryPosition:
-      request.locationId !== null &&
+      locationId !== null &&
       row.onHandBase !== null &&
       row.reservedBase !== null &&
       row.inventoryVersion !== null
         ? {
-            locationId: request.locationId,
+            locationId,
             onHandBase: row.onHandBase,
             reservedBase: row.reservedBase,
             availableBase: row.onHandBase - row.reservedBase,
@@ -509,8 +511,7 @@ export async function listAdminProducts(
              SELECT DISTINCT pv.sku_id AS skuId
              FROM price_version pv JOIN active_skus s ON s.skuId=pv.sku_id
              WHERE pv.market_id=?
-               AND ((? IS NULL AND pv.location_id IS NULL)
-                 OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+               AND pv.location_id=?
                AND pv.price_type='STANDARD' AND pv.valid_from<=?
                AND (pv.valid_to IS NULL OR pv.valid_to>?)
            ), product_readiness AS (
@@ -537,16 +538,7 @@ export async function listAdminProducts(
                   COALESCE(sr.unavailableSkus, 0) AS unavailableSkus
            FROM product_readiness pr CROSS JOIN sku_readiness sr`,
         )
-        .bind(
-          request.marketId,
-          request.locationId,
-          request.locationId,
-          request.locationId,
-          now,
-          now,
-          request.locationId,
-          request.locationId ?? "",
-        )
+        .bind(marketId, locationId ?? "", now, now, locationId, locationId ?? "")
         .all<{
           activeProducts: number;
           inactiveProducts: number;
@@ -564,20 +556,13 @@ export async function listAdminProducts(
     value: {
       items,
       nextCursor,
-      pricingContext: {
-        marketId: target.marketId,
-        marketName: target.marketName,
-        locationId: request.locationId,
-        locationName: target.locationName,
-        currency: target.currency,
-      },
-      viewMode: request.locationId === null ? "GLOBAL_CATALOG" : "LOCATION_OPERATIONS",
+      scope: target ? { kind: "LOCATION" as const, ...target } : { kind: "GLOBAL" as const },
       readiness: {
         activeProducts: readiness?.activeProducts ?? 0,
         inactiveProducts: readiness?.inactiveProducts ?? 0,
         missingPrimaryMedia: readiness?.missingPrimaryMedia ?? 0,
-        missingPrices: readiness?.missingPrices ?? 0,
-        unavailableSkus: readiness?.unavailableSkus ?? 0,
+        missingPrices: locationId ? (readiness?.missingPrices ?? 0) : 0,
+        unavailableSkus: locationId ? (readiness?.unavailableSkus ?? 0) : 0,
       },
     },
     requestId: request.requestId,
@@ -600,7 +585,6 @@ type SkuRow = {
   priceVersion: number | null;
   availability: "AVAILABLE" | "UNAVAILABLE" | null;
   availabilityVersion: number | null;
-  sourcingMode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED" | null;
 };
 
 /** One product's admin detail: identity, category, SKUs with price/availability. */
@@ -608,18 +592,9 @@ export async function getAdminProduct(
   deps: CatalogAdministrationDeps,
   request: AdminProductDetailRequest,
 ): Promise<RpcResult<AdminProductDetail>> {
-  if (!request.marketId || request.locationId === undefined) {
-    return {
-      ok: false,
-      error: {
-        code: "VALIDATION_FAILED",
-        message: "An explicit market and location target is required",
-        requestId: request.requestId,
-      },
-    };
-  }
-  const marketId = request.marketId;
-  const locationId = request.locationId;
+  const locationScope = request.scopeKind === "LOCATION" ? request : null;
+  const marketId = locationScope?.marketId ?? "";
+  const locationId = locationScope?.locationId ?? null;
   const access = await resolveCatalogAdministrationAccess(
     deps,
     request,
@@ -636,28 +611,30 @@ export async function getAdminProduct(
     );
     if (!inventoryAccess.ok) return inventoryAccess;
   }
-  const target = await deps.db
-    .prepare(
-      `SELECT m.id AS marketId, m.name AS marketName, m.currency,
-              fl.id AS locationId, fl.name AS locationName
-       FROM market m LEFT JOIN fulfillment_location fl
-         ON fl.market_id=m.id AND fl.id=?
-       WHERE m.id=?`,
-    )
-    .bind(locationId, marketId)
-    .first<{
-      marketId: string;
-      marketName: string;
-      currency: string;
-      locationId: string | null;
-      locationName: string | null;
-    }>();
-  if (!target || (locationId && target.locationId !== locationId)) {
+  const target = locationScope
+    ? await deps.db
+        .prepare(
+          `SELECT m.id AS marketId, m.name AS marketName, m.currency,
+                  fl.id AS locationId, fl.name AS locationName
+           FROM market m JOIN fulfillment_location fl
+             ON fl.market_id=m.id AND fl.id=?
+           WHERE m.id=?`,
+        )
+        .bind(locationId, marketId)
+        .first<{
+          marketId: string;
+          marketName: string;
+          currency: string;
+          locationId: string;
+          locationName: string;
+        }>()
+    : null;
+  if (locationScope && !target) {
     return {
       ok: false,
       error: {
         code: "VALIDATION_FAILED",
-        message: "The selected market/location target does not exist",
+        message: "The selected Product location scope does not exist",
         requestId: request.requestId,
       },
     };
@@ -707,35 +684,22 @@ export async function getAdminProduct(
               current_price.currency,
               current_price.version AS priceVersion,
               sla.availability_status AS availability,
-              sla.version AS availabilityVersion,
-              sla.sourcing_mode AS sourcingMode
+              sla.version AS availabilityVersion
        FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
        LEFT JOIN price_version current_price ON current_price.id = (
          SELECT pv.id FROM price_version pv
          WHERE pv.sku_id = s.id AND pv.market_id = ?
-           AND ((? IS NULL AND pv.location_id IS NULL)
-             OR (? IS NOT NULL AND (pv.location_id=? OR pv.location_id IS NULL)))
+           AND pv.location_id=?
            AND pv.price_type = 'STANDARD' AND pv.valid_from <= ?
            AND (pv.valid_to IS NULL OR pv.valid_to > ?)
-         ORDER BY CASE WHEN pv.location_id=? THEN 0 ELSE 1 END,
-                  pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
+         ORDER BY pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
        )
        LEFT JOIN sku_location_availability sla
          ON sla.sku_id = s.id AND sla.location_id = ?
        WHERE s.product_id = ?
        ORDER BY s.sort_order, s.code`,
     )
-    .bind(
-      marketId,
-      locationId,
-      locationId,
-      locationId,
-      now,
-      now,
-      locationId,
-      locationId ?? "",
-      request.productId,
-    )
+    .bind(marketId, locationId, now, now, locationId ?? "", request.productId)
     .all<SkuRow>();
 
   const [details, media, audits, manage, inventoryPosition] = await Promise.all([
@@ -807,14 +771,7 @@ export async function getAdminProduct(
               }
             : null,
       },
-      pricingContext: {
-        marketId: target.marketId,
-        marketName: target.marketName,
-        locationId,
-        locationName: target.locationName,
-        currency: target.currency,
-      },
-      viewMode: locationId === null ? "GLOBAL_CATALOG" : "LOCATION_OPERATIONS",
+      scope: target ? { kind: "LOCATION" as const, ...target } : { kind: "GLOBAL" as const },
       allowedActions: locationId === null && manage.ok ? ["UPDATE", "SET_STATUS"] : [],
       recentAudit: audits.results.map((audit) => ({
         ...audit,
@@ -1002,12 +959,11 @@ export async function readSkuSummary(
               current_price.currency,
               current_price.version AS priceVersion,
               sla.availability_status AS availability,
-              sla.version AS availabilityVersion,
-              sla.sourcing_mode AS sourcingMode
+              sla.version AS availabilityVersion
        FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
        LEFT JOIN price_version current_price ON current_price.id = (
          SELECT pv.id FROM price_version pv
-         WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id IS NULL
+         WHERE pv.sku_id = s.id AND pv.market_id = ? AND pv.location_id = ?
            AND pv.price_type = 'STANDARD' AND pv.valid_from <= ?
            AND (pv.valid_to IS NULL OR pv.valid_to > ?)
          ORDER BY pv.valid_from DESC, pv.version DESC, pv.id DESC LIMIT 1
@@ -1016,7 +972,14 @@ export async function readSkuSummary(
          ON sla.sku_id = s.id AND sla.location_id = ?
        WHERE s.id = ?`,
     )
-    .bind(marketId ?? "", now, now, DEFAULT_FULFILLMENT_LOCATION_ID, skuId)
+    .bind(
+      marketId ?? "",
+      DEFAULT_FULFILLMENT_LOCATION_ID,
+      now,
+      now,
+      DEFAULT_FULFILLMENT_LOCATION_ID,
+      skuId,
+    )
     .first<SkuRow>();
   if (!row) {
     return { ok: false, error: { code: "NOT_FOUND", message: "SKU not found", requestId } };
@@ -1037,7 +1000,6 @@ export async function readSkuSummary(
     priceVersion: row.priceVersion,
     availability: row.availability,
     availabilityVersion: row.availabilityVersion,
-    sourcingMode: row.sourcingMode,
   };
   return { ok: true, value: summary, requestId };
 }

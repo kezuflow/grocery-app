@@ -1,34 +1,36 @@
 "use client";
+
 import { useCallback, useEffect, useState } from "react";
 import type { FulfillmentModeConfigurationView, RpcResult } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
-import { useAdminLocation } from "../../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
+import { useAdminContext } from "../../admin-context-provider";
+
 export default function FulfillmentModePage() {
-  const { locationId, label } = useAdminLocation();
+  const { state: adminState } = useAdminContext();
+  const isGlobal = adminState.phase === "ready" && adminState.selectedScope?.kind === "GLOBAL";
   const [configuration, setConfiguration] = useState<FulfillmentModeConfigurationView | null>(null);
   const [state, setState] = useState("loading");
   const [mode, setMode] = useState<"INSTANT" | "SCHEDULED">("SCHEDULED");
-  const [promiseMinutes, setPromiseMinutes] = useState("");
-  const [capacity, setCapacity] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const saveIntent = useAdminCommandIntent();
+
   const load = useCallback(async () => {
+    if (!isGlobal) return;
     setState("loading");
     try {
       const payload = (await (
-        await fetch(`/api/admin/fulfillment-mode?locationId=${locationId ?? ""}`)
+        await fetch("/api/admin/fulfillment-mode")
       ).json()) as RpcResult<FulfillmentModeConfigurationView>;
       if (!payload.ok) {
         setNotice(
           payload.error.code === "FORBIDDEN"
-            ? "Fulfillment configuration is not permitted for this scope."
+            ? "Global fulfillment configuration is not permitted for this account."
             : payload.error.message,
         );
         setState("error");
@@ -36,45 +38,32 @@ export default function FulfillmentModePage() {
       }
       setConfiguration(payload.value);
       setMode(payload.value.activeMode);
-      setPromiseMinutes(payload.value.promiseMinutes?.toString() ?? "");
-      setCapacity(payload.value.maxConcurrentInstantOrders?.toString() ?? "");
       setState("ready");
     } catch {
-      setNotice("Network error loading fulfillment configuration.");
+      setNotice("Network error loading the global fulfillment configuration.");
       setState("error");
     }
-  }, [locationId]);
+  }, [isGlobal]);
+
   useEffect(() => {
-    if (locationId) void load();
-  }, [load]);
+    if (isGlobal) void load();
+  }, [isGlobal, load]);
+
   async function save() {
-    if (!configuration) return;
-    const promise = promiseMinutes.trim() === "" ? null : Number(promiseMinutes);
-    const max = capacity.trim() === "" ? null : Number(capacity);
-    if (
-      (promise !== null && (!Number.isInteger(promise) || promise <= 0)) ||
-      (max !== null && (!Number.isInteger(max) || max <= 0))
-    ) {
-      setNotice("Promise and capacity must be positive integers when supplied.");
-      return;
-    }
-    if (!locationId || saveIntent.pending) return;
+    if (!configuration || !isGlobal || saveIntent.pending) return;
     const payload = await saveIntent.submit(async (idempotencyKey) => {
       const response = await fetch("/api/admin/fulfillment-mode", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
         body: JSON.stringify({
-          locationId,
           fulfillmentMode: mode,
           cadence: mode === "SCHEDULED" ? "WEEKLY" : null,
-          promiseMinutes: promise,
-          maxConcurrentInstantOrders: max,
           expectedVersion: configuration.version,
         }),
       });
       return (await response.json()) as RpcResult<FulfillmentModeConfigurationView>;
     });
-    setNotice(payload.ok ? "Fulfillment mode configuration saved." : payload.error.message);
+    setNotice(payload.ok ? "Global fulfillment mode saved." : payload.error.message);
     if (payload.ok) {
       setConfiguration(payload.value);
       setMode(payload.value.activeMode);
@@ -85,28 +74,29 @@ export default function FulfillmentModePage() {
     )
       void load();
   }
+
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
       <PageHeader
         title="Fulfillment mode"
-        description="Explicit location configuration. INSTANT and SCHEDULED are the only fulfillment modes; WEEKLY is Scheduled cadence."
+        description="One global mode governs all new customer orders. Locations never run mixed customer modes."
       />
       <WorkspaceNavigation parentCode="settings" label="Settings administration" />
-      {!locationId ? (
+      {!isGlobal ? (
         <AdminPageState
           state="permission-empty"
-          title="Select a permitted location"
-          message="Choose a location scope in the Admin header to inspect fulfillment-mode configuration."
+          title="Switch to Global scope"
+          message="Fulfillment mode is a business-wide setting. Select Global in the Admin header to view or change it."
         />
       ) : state === "loading" ? (
-        <div role="status" aria-label="Loading fulfillment mode">
+        <div role="status" aria-label="Loading global fulfillment mode">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="mt-3 h-40 w-full" />
         </div>
       ) : null}
-      {state === "error" ? (
+      {isGlobal && state === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Fulfillment configuration could not be loaded</AlertTitle>
+          <AlertTitle>Global fulfillment configuration could not be loaded</AlertTitle>
           <AlertDescription>
             {notice}
             <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
@@ -115,10 +105,10 @@ export default function FulfillmentModePage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {state === "ready" && configuration ? (
+      {isGlobal && state === "ready" && configuration ? (
         <ListPageSection
-          title={`${label} configuration`}
-          description={`Current version ${configuration.version}. Changes never rewrite committed order snapshots.`}
+          title="FreshMarkets fulfillment"
+          description={`Current version ${configuration.version}. Committed orders keep their original mode and location snapshots.`}
         >
           {notice ? (
             <p role="status" className="border-b p-3 text-sm">
@@ -127,45 +117,34 @@ export default function FulfillmentModePage() {
           ) : null}
           <div className="grid gap-4 p-4 sm:grid-cols-2">
             <label className="space-y-1 text-sm font-medium">
-              Mode
+              Global mode
               <select
-                aria-label="Fulfillment mode"
+                aria-label="Global fulfillment mode"
                 value={mode}
                 onChange={(event) => setMode(event.target.value as "INSTANT" | "SCHEDULED")}
-                className="flex h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+                className="flex h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm dark:bg-[var(--fm-surface)]"
               >
                 <option value="SCHEDULED">Scheduled (Weekly cadence)</option>
                 <option value="INSTANT">Instant</option>
               </select>
             </label>
             <div className="space-y-1 text-sm font-medium">
-              Current state
+              Active across FreshMarkets
               <div className="pt-1">
                 <StatusBadge>{configuration.activeMode}</StatusBadge>
               </div>
             </div>
-            <label className="space-y-1 text-sm font-medium">
-              Promise minutes
-              <Input
-                aria-label="Promise minutes"
-                inputMode="numeric"
-                value={promiseMinutes}
-                onChange={(event) => setPromiseMinutes(event.target.value)}
-              />
-            </label>
-            <label className="space-y-1 text-sm font-medium">
-              Instant concurrent order limit
-              <Input
-                aria-label="Instant concurrent order limit"
-                inputMode="numeric"
-                value={capacity}
-                onChange={(event) => setCapacity(event.target.value)}
-              />
-            </label>
+          </div>
+          <div className="border-t border-[var(--fm-border)] p-4 text-sm text-[var(--fm-muted-foreground)]">
+            Switching to Instant is blocked until every open location is dispatch-ready and all
+            outstanding Scheduled demand is protected.
           </div>
           <div className="border-t border-[var(--fm-border)] p-4">
-            <Button disabled={saveIntent.pending || !locationId} onClick={() => void save()}>
-              {saveIntent.pending ? "Saving…" : "Save configuration"}
+            <Button
+              disabled={saveIntent.pending || mode === configuration.activeMode}
+              onClick={() => void save()}
+            >
+              {saveIntent.pending ? "Saving…" : "Activate global mode"}
             </Button>
           </div>
         </ListPageSection>

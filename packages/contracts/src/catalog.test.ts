@@ -21,6 +21,7 @@ function variant(overrides: Partial<CatalogVariant> = {}): CatalogVariant {
     priceMinor: 6500,
     currency: "PHP",
     priceVersion: 1,
+    availability: "AVAILABLE",
     ...overrides,
   };
 }

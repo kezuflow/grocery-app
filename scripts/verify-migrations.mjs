@@ -90,6 +90,29 @@ function assertFinalSchema(database) {
       .get().count > 0,
     "expected Cebu Central SKU availability rows",
   );
+  assert.deepEqual(
+    database
+      .prepare(
+        "SELECT code, canonical_base_code, conversion_numerator, conversion_denominator FROM unit WHERE dimension='VOLUME' ORDER BY code",
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      {
+        code: "LITER",
+        canonical_base_code: "MILLILITER",
+        conversion_numerator: 1000,
+        conversion_denominator: 1,
+      },
+      {
+        code: "MILLILITER",
+        canonical_base_code: "MILLILITER",
+        conversion_numerator: 1,
+        conversion_denominator: 1,
+      },
+    ],
+    "canonical volume units are incomplete",
+  );
 }
 
 /** Produce launch acceptance (migrations through 0025). */

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -155,7 +155,8 @@ function trackedSources() {
   })
     .split(/\r?\n/u)
     .filter(Boolean)
-    .map(normalize);
+    .map(normalize)
+    .filter((fileName) => existsSync(path.join(repositoryRoot, fileName)));
 }
 
 function main() {

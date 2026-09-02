@@ -61,7 +61,7 @@ export const inventoryPool = sqliteTable(
     legacySourcingMode: text("sourcing_mode", {
       enum: ["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"],
     }).notNull(),
-    sourcingMode: text("canonical_sourcing_mode", {
+    legacyCanonicalSourcingMode: text("canonical_sourcing_mode", {
       enum: ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"],
     })
       .notNull()
@@ -161,9 +161,6 @@ export const skuLocationAvailability = sqliteTable(
     availabilityStatus: text("availability_status", {
       enum: ["AVAILABLE", "UNAVAILABLE"],
     }).notNull(),
-    sourcingMode: text("sourcing_mode", {
-      enum: ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"],
-    }).notNull(),
     version: integer("version").notNull().default(1),
   },
   (table) => ({
@@ -188,15 +185,29 @@ export const priceVersion = sqliteTable(
     validFrom: integer("valid_from", { mode: "timestamp_ms" }).notNull(),
     validTo: integer("valid_to", { mode: "timestamp_ms" }),
     version: integer("version").notNull(),
-    // Canonical price scope added by migrations 0010/0012.
-    marketId: text("market_id").references(() => market.id, { onDelete: "restrict" }),
-    locationId: text("location_id"),
+    marketId: text("market_id")
+      .notNull()
+      .references(() => market.id, { onDelete: "restrict" }),
+    locationId: text("location_id")
+      .notNull()
+      .references(() => fulfillmentLocation.id, { onDelete: "restrict" }),
     priceType: text("price_type").notNull().default("STANDARD"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => ({
-    versionUnique: uniqueIndex("price_version_sku_version_unique").on(table.skuId, table.version),
-    activeIndex: index("price_version_active_idx").on(table.skuId, table.validFrom, table.validTo),
+    versionUnique: uniqueIndex("price_version_sku_location_type_version_unique").on(
+      table.skuId,
+      table.locationId,
+      table.priceType,
+      table.version,
+    ),
+    activeIndex: index("price_version_winner_idx").on(
+      table.skuId,
+      table.locationId,
+      table.priceType,
+      table.validFrom,
+      table.version,
+    ),
   }),
 );
 
@@ -212,7 +223,7 @@ export const locationProductAvailability = sqliteTable(
     availabilityStatus: text("availability_status", {
       enum: ["AVAILABLE", "UNAVAILABLE"],
     }).notNull(),
-    sourcingMode: text("sourcing_mode"),
+    legacySourcingMode: text("sourcing_mode"),
     validFrom: integer("valid_from", { mode: "timestamp_ms" }).notNull(),
     validTo: integer("valid_to", { mode: "timestamp_ms" }),
   },

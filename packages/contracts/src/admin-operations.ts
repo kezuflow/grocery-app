@@ -21,15 +21,15 @@ export const adminOperationsReadCapabilities = [
   "fulfillment.manage",
 ] as const;
 
-export type FulfillmentModeConfigurationView = {
-  locationId: string;
+export type GlobalFulfillmentModeConfigurationView = {
   activeMode: "INSTANT" | "SCHEDULED";
   /** `WEEKLY` is a Scheduled configuration value, never a fulfillment mode. */
   cadence: "WEEKLY" | null;
-  promiseMinutes: number | null;
-  maxConcurrentInstantOrders: number | null;
   version: number;
 };
+
+/** @deprecated Use the explicitly global name. */
+export type FulfillmentModeConfigurationView = GlobalFulfillmentModeConfigurationView;
 
 export type ProcurementRequirementView = {
   requirementId: string;
@@ -140,12 +140,10 @@ export type AdminOperationalExceptionsRequest = AdminOperationsLocationRequest &
   limit?: number;
 };
 
-export type ActivateFulfillmentModeRequest = AdminOperationsLocationRequest & {
+export type ActivateFulfillmentModeRequest = AuthenticatedRequest & {
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   cadence?: "WEEKLY" | null;
-  promiseMinutes?: number | null;
-  maxConcurrentInstantOrders?: number | null;
-  expectedVersion: number | null;
+  expectedVersion: number;
   idempotencyKey: string;
 };
 
@@ -208,7 +206,7 @@ export type ResolveAdminOperationalExceptionRequest = AdminOperationsLocationReq
 /** Scoped operational administration read and configuration surface. */
 export type AdminOperationsService = {
   getFulfillmentMode(
-    request: AdminOperationsLocationRequest,
+    request: AuthenticatedRequest,
   ): Promise<RpcResult<FulfillmentModeConfigurationView>>;
   activateFulfillmentMode(
     request: ActivateFulfillmentModeRequest,

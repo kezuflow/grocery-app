@@ -107,6 +107,13 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - Categories now appear inside the Products workspace rather than as a separate top-level navigation item. Operations primary navigation is reduced to Inventory and Delivery; Procurement, Receiving, and Fulfillment retain their independent Core state machines and contextual advanced routes without burdening the default operator path.
 - Inventory now exposes explicit Add stock and Remove stock actions using a positive base-unit quantity. The Web adapter maps those actions to Core's signed, capability-scoped, version-guarded, idempotent adjustment command, and the UI shows immutable dated stock activity with the reason and actor evidence preserved.
 
+## Global fulfillment and location commerce alignment (2026-09-02)
+
+- Migration `0052_global_fulfillment_location_commerce.sql` replaces per-location customer fulfillment modes with one versioned global `SCHEDULED`/`INSTANT` switch and separates location dispatch readiness. New Quotes follow the current global mode; committed Orders retain their mode, location, zone, promise, and cycle snapshots.
+- Catalog Product and Variant definitions remain global. Variant selling activation, exact authoritative price, and shared Product inventory are location-scoped. Market/global price fallback and active sourcing-mode configuration were removed from runtime contracts, Core decisions, and Admin UI.
+- Scheduled commerce ignores physical stock and creates committed procurement demand. Instant commerce uses exact-location shared Product inventory plus holds/reservations; locally active priced products remain visible with per-Variant Out of stock state when stock is short.
+- Overlapping geofences are assigned by exact Haversine distance with stable location-ID ties. Operational readiness/capacity may fall through to the next closest eligible location, while stock never reroutes or splits an Order.
+
 ## Admin performance stabilization pass (2026-09-01)
 
 - Phases 1–6 of `ADMIN_PERFORMANCE_STABILIZATION_PLAN.md` are locally implemented: correlated

@@ -53,7 +53,7 @@ async function sku(options: {
   ]);
   if (options.priced !== false)
     await env.DB.prepare(
-      "INSERT INTO price_version (id, sku_id, market_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'PHP', 7777, 'STANDARD', 0, 1, 1)",
+      "INSERT INTO price_version (id, sku_id, market_id, location_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'location-cebu-central', 'PHP', 7777, 'STANDARD', 0, 1, 1)",
     )
       .bind(`reorder-price-${suffix}`, skuId)
       .run();

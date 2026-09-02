@@ -5,9 +5,6 @@ import type { RpcResult } from "./common";
 export const catalogStatuses = ["active", "inactive"] as const;
 export type CatalogStatus = (typeof catalogStatuses)[number];
 
-export const sourcingModes = ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"] as const;
-export type SourcingMode = (typeof sourcingModes)[number];
-
 export const canonicalBaseUnitCodes = ["GRAM", "MILLILITER", "PIECE"] as const;
 export type CanonicalBaseUnitCode = (typeof canonicalBaseUnitCodes)[number];
 
@@ -85,6 +82,17 @@ export type AdminProductListSummary = AdminProductSummary & {
   inventoryPosition: AdminProductInventoryPosition | null;
 };
 
+export type AdminProductScope =
+  | { kind: "GLOBAL" }
+  | {
+      kind: "LOCATION";
+      marketId: string;
+      marketName: string;
+      locationId: string;
+      locationName: string;
+      currency: string;
+    };
+
 export type AdminProductPage = {
   items: ReadonlyArray<AdminProductListSummary>;
   readiness: {
@@ -94,14 +102,7 @@ export type AdminProductPage = {
     missingPrices: number;
     unavailableSkus: number;
   };
-  pricingContext: {
-    marketId: string;
-    marketName: string;
-    locationId: string | null;
-    locationName: string | null;
-    currency: string;
-  };
-  viewMode: "GLOBAL_CATALOG" | "LOCATION_OPERATIONS";
+  scope: AdminProductScope;
   nextCursor: string | null;
 };
 
@@ -121,7 +122,6 @@ export type AdminCatalogSkuSummary = {
   priceVersion: number | null;
   availability: "AVAILABLE" | "UNAVAILABLE" | null;
   availabilityVersion: number | null;
-  sourcingMode: SourcingMode | null;
 };
 
 export type AdminProductDetail = {
@@ -137,14 +137,7 @@ export type AdminProductDetail = {
   customerDetails: ReadonlyArray<AdminProductCustomerDetail>;
   media: ReadonlyArray<AdminProductMediaView>;
   inventoryPool: AdminProductInventoryPoolView;
-  pricingContext: {
-    marketId: string;
-    marketName: string;
-    locationId: string | null;
-    locationName: string | null;
-    currency: string;
-  };
-  viewMode: "GLOBAL_CATALOG" | "LOCATION_OPERATIONS";
+  scope: AdminProductScope;
   allowedActions: ReadonlyArray<"UPDATE" | "SET_STATUS">;
   recentAudit: ReadonlyArray<AdminAuditEventListItem>;
   skus: ReadonlyArray<AdminCatalogSkuSummary>;
@@ -264,14 +257,17 @@ export type AdminUnitCreateRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
-export type AdminProductListRequest = AuthenticatedRequest & {
-  marketId: string;
-  locationId: string | null;
-  query?: string;
-  status?: CatalogStatus;
-  cursor?: string;
-  limit?: number;
-};
+export type AdminProductScopeRequest =
+  | { scopeKind: "GLOBAL" }
+  | { scopeKind: "LOCATION"; marketId: string; locationId: string };
+
+export type AdminProductListRequest = AuthenticatedRequest &
+  AdminProductScopeRequest & {
+    query?: string;
+    status?: CatalogStatus;
+    cursor?: string;
+    limit?: number;
+  };
 
 export type AdminProductMediaContentRequest = AuthenticatedRequest & {
   productId: string;
@@ -313,11 +309,10 @@ export type AdminProductUpdateRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
-export type AdminProductDetailRequest = AuthenticatedRequest & {
-  productId: string;
-  marketId?: string;
-  locationId?: string | null;
-};
+export type AdminProductDetailRequest = AuthenticatedRequest &
+  AdminProductScopeRequest & {
+    productId: string;
+  };
 
 export type AdminProductStatusRequest = AuthenticatedRequest & {
   productId: string;
@@ -381,7 +376,6 @@ export type AdminSkuAvailabilityRequest = AuthenticatedRequest & {
   skuId: string;
   locationId: string;
   availabilityStatus: "AVAILABLE" | "UNAVAILABLE";
-  sourcingMode: SourcingMode;
   expectedVersion: number;
   idempotencyKey: string;
 };
@@ -389,7 +383,7 @@ export type AdminSkuAvailabilityRequest = AuthenticatedRequest & {
 export type AdminSkuPriceRequest = AuthenticatedRequest & {
   skuId: string;
   marketId: string;
-  locationId: string | null;
+  locationId: string;
   currency: string;
   amountMinor: number;
   validFrom: number;
@@ -413,7 +407,7 @@ export type AdminInventoryLedgerRequest = AuthenticatedRequest & {
 /**
  * Global Catalog administration requires global scope. A location-scoped
  * Product projection requires catalog plus inventory read authority for that
- * location; only location price, selling-status, and sourcing commands may be
+ * location; only exact-location price and local selling-status commands may be
  * performed from it. Prices are versioned inserts; history is never rewritten.
  */
 export type AdminCatalogService = {

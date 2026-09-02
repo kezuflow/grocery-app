@@ -1,5 +1,9 @@
 # FreshMarkets Dependency-Aware Implementation Plan
 
+## 2026-09-01 Approved Commerce Realignment
+
+The coordinated implementation in `docs/superpowers/plans/2026-09-01/LOCATION_SCOPED_COMMERCE_IMPLEMENTATION.md` is an authorized cross-phase correction. It replaces per-location mode authority with one global mode, removes configurable sourcing modes, requires exact-location Variant prices, separates Global catalog administration from Location commerce facts, and assigns overlapping serviceable locations by Haversine distance. Persistence, contracts, Core, Admin, marketplace behavior, tests, and canonical documentation must land together; historical committed snapshots remain immutable.
+
 ## Planning Rules
 
 Implement vertical/domain foundations in dependency order, not page order. Each phase must preserve the architecture and must not silently change locked business decisions. A phase is complete only when its domain behavior, Core contracts, persistence, Web surface, tests, and operational acceptance criteria are complete enough for the next dependent phase.

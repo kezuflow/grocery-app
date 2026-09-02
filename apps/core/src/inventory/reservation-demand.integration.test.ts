@@ -65,11 +65,6 @@ async function authenticatedCookie() {
 }
 
 async function checkoutFixture(quantity: number) {
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO fulfillment_location_mode (location_id,active_mode,cadence,promise_minutes,max_concurrent_instant_orders,version,created_at,updated_at) VALUES (?, 'SCHEDULED','WEEKLY',NULL,NULL,1,?,?)",
-  )
-    .bind(locationId, Date.now(), Date.now())
-    .run();
   const cookie = await authenticatedCookie();
   const headers = { cookie };
   const request = () => ({ headers, requestId: requestId() });
@@ -128,10 +123,23 @@ async function checkoutFixture(quantity: number) {
   };
 }
 
-async function setSourcingMode(mode: "STOCKED" | "PLANNED" | "MIXED") {
-  await env.DB.prepare("UPDATE inventory_pool SET canonical_sourcing_mode=? WHERE id=?")
-    .bind(mode, poolId)
-    .run();
+async function setFulfillmentMode(mode: "INSTANT" | "SCHEDULED") {
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE global_fulfillment_mode SET active_mode=?,cadence=?,version=version+1,updated_at=? WHERE id='global'",
+    ).bind(mode, mode === "SCHEDULED" ? "WEEKLY" : null, now),
+    env.DB.prepare(
+      "UPDATE fulfillment_location_readiness SET instant_promise_minutes=30,max_concurrent_instant_orders=20,dispatch_ready=1,updated_at=? WHERE location_id=?",
+    ).bind(now, locationId),
+  ]);
+  if (mode === "INSTANT") {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO service_fee_configuration
+        (id,fee_type,flat_minor,percentage_basis_points,currency,effective_from,effective_to,version,reason,created_at)
+       VALUES ('reservation-demand-instant-fee','FLAT',500,0,'PHP',0,NULL,1,'test',0)`,
+    ).run();
+  }
 }
 
 async function setBalance(onHand: number, reserved = 0) {
@@ -178,17 +186,15 @@ async function commit(fixture: Awaited<ReturnType<typeof checkoutFixture>>) {
     cartVersion: cartNow.value.version,
   });
   if (!options.ok) throw new Error("fulfillment options unavailable");
-  const scheduledOption = options.value.find(
-    (option) => option.mode === "SCHEDULED" && option.eligible,
-  );
-  if (!scheduledOption) throw new Error("scheduled option unavailable");
+  const selectedOption = options.value.find((option) => option.eligible);
+  if (!selectedOption) throw new Error("fulfillment option unavailable");
   const quote = await core.createCheckoutQuote({
     headers: fixture.headers,
     requestId: requestId(),
     cartId: fixture.cartId,
     cartVersion: cartNow.value.version,
     addressId: fixture.addressId,
-    fulfillmentOptionId: scheduledOption.optionId,
+    fulfillmentOptionId: selectedOption.optionId,
     idempotencyKey: `resdem-${crypto.randomUUID()}`,
   });
   if (!quote.ok) throw new Error(JSON.stringify(quote.error));
@@ -245,57 +251,49 @@ async function commit(fixture: Awaited<ReturnType<typeof checkoutFixture>>) {
 }
 
 describe("reservation and committed-demand separation", () => {
-  it("creates a reservation only for stocked sourcing", async () => {
-    await setSourcingMode("STOCKED");
+  it("creates a reservation only in global Instant mode", async () => {
+    await setFulfillmentMode("INSTANT");
     await setBalance(100_000);
-    try {
-      const fixture = await checkoutFixture(4);
-      const committed = await commit(fixture);
-      expect(committed.ok).toBe(true);
-      const orderId = (committed as { value: { orderId: string } }).value.orderId;
-      const reservations = await env.DB.prepare(
-        "SELECT COALESCE(SUM(quantity),0) AS total FROM inventory_reservation WHERE order_id=? AND inventory_pool_id=?",
-      )
-        .bind(orderId, poolId)
-        .first<{ total: number }>();
-      const demand = await env.DB.prepare(
-        "SELECT COUNT(*) AS count FROM committed_demand WHERE order_id=? AND inventory_pool_id=?",
-      )
-        .bind(orderId, poolId)
-        .first<{ count: number }>();
-      expect(reservations?.total).toBe(2000);
-      expect(demand?.count).toBe(0);
-    } finally {
-      await setSourcingMode("MIXED");
-    }
+    const fixture = await checkoutFixture(4);
+    const committed = await commit(fixture);
+    expect(committed.ok).toBe(true);
+    const orderId = (committed as { value: { orderId: string } }).value.orderId;
+    const reservations = await env.DB.prepare(
+      "SELECT COALESCE(SUM(quantity),0) AS total FROM inventory_reservation WHERE order_id=? AND inventory_pool_id=?",
+    )
+      .bind(orderId, poolId)
+      .first<{ total: number }>();
+    const demand = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM committed_demand WHERE order_id=? AND inventory_pool_id=?",
+    )
+      .bind(orderId, poolId)
+      .first<{ count: number }>();
+    expect(reservations?.total).toBe(2000);
+    expect(demand?.count).toBe(0);
   });
 
-  it("creates committed demand only for planned procurement", async () => {
-    await setSourcingMode("PLANNED");
-    try {
-      const fixture = await checkoutFixture(4);
-      const committed = await commit(fixture);
-      expect(committed.ok).toBe(true);
-      const orderId = (committed as { value: { orderId: string } }).value.orderId;
-      const demand = await env.DB.prepare(
-        "SELECT COALESCE(SUM(quantity),0) AS total FROM committed_demand WHERE order_id=? AND inventory_pool_id=?",
-      )
-        .bind(orderId, poolId)
-        .first<{ total: number }>();
-      const reservations = await env.DB.prepare(
-        "SELECT COUNT(*) AS count FROM inventory_reservation WHERE order_id=? AND inventory_pool_id=?",
-      )
-        .bind(orderId, poolId)
-        .first<{ count: number }>();
-      expect(demand?.total).toBe(2000);
-      expect(reservations?.count).toBe(0);
-    } finally {
-      await setSourcingMode("MIXED");
-    }
+  it("creates committed demand only in global Scheduled mode", async () => {
+    await setFulfillmentMode("SCHEDULED");
+    const fixture = await checkoutFixture(4);
+    const committed = await commit(fixture);
+    expect(committed.ok).toBe(true);
+    const orderId = (committed as { value: { orderId: string } }).value.orderId;
+    const demand = await env.DB.prepare(
+      "SELECT COALESCE(SUM(quantity),0) AS total FROM committed_demand WHERE order_id=? AND inventory_pool_id=?",
+    )
+      .bind(orderId, poolId)
+      .first<{ total: number }>();
+    const reservations = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM inventory_reservation WHERE order_id=? AND inventory_pool_id=?",
+    )
+      .bind(orderId, poolId)
+      .first<{ count: number }>();
+    expect(demand?.total).toBe(2000);
+    expect(reservations?.count).toBe(0);
   });
 
-  it("splits hybrid sourcing into disjoint exact quantities that reconcile", async () => {
-    await setSourcingMode("MIXED");
+  it("does not split Scheduled demand against physical stock", async () => {
+    await setFulfillmentMode("SCHEDULED");
     await setBalance(1500);
     const ledgerBefore = await holdLedgerSum();
     const fixture = await checkoutFixture(4);
@@ -314,25 +312,20 @@ describe("reservation and committed-demand separation", () => {
         .bind(orderId, poolId)
         .first<{ total: number }>(),
     ]);
-    expect((reservation?.total ?? 0) + (demand?.total ?? 0)).toBe(2000);
-    const balance = await readBalance();
-    expect(balance?.reserved ?? 0).toBeLessThanOrEqual(balance?.on_hand ?? 0);
-    expect(await holdLedgerSum()).toBeGreaterThan(ledgerBefore);
+    expect(reservation?.total ?? 0).toBe(0);
+    expect(demand?.total ?? 0).toBe(2000);
+    expect(await holdLedgerSum()).toBe(ledgerBefore);
   });
 
-  it("never reserves beyond usable stock under concurrent canonical commitments", async () => {
-    await setSourcingMode("STOCKED");
+  it("never reserves beyond usable stock under concurrent Instant commitments", async () => {
+    await setFulfillmentMode("INSTANT");
     await setBalance(3000);
-    try {
-      const [fixtureA, fixtureB] = await Promise.all([checkoutFixture(4), checkoutFixture(4)]);
-      const results = await Promise.allSettled([commit(fixtureA), commit(fixtureB)]);
-      const fulfilled = results.filter((result) => result.status === "fulfilled").length;
-      expect(fulfilled).toBe(1);
-      const balance = await readBalance();
-      expect(balance?.reserved ?? 0).toBeLessThanOrEqual(balance?.on_hand ?? 0);
-      expect(balance?.reserved ?? 0).toBe(2000);
-    } finally {
-      await setSourcingMode("MIXED");
-    }
+    const [fixtureA, fixtureB] = await Promise.all([checkoutFixture(4), checkoutFixture(4)]);
+    const results = await Promise.allSettled([commit(fixtureA), commit(fixtureB)]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled").length;
+    expect(fulfilled).toBe(1);
+    const balance = await readBalance();
+    expect(balance?.reserved ?? 0).toBeLessThanOrEqual(balance?.on_hand ?? 0);
+    expect(balance?.reserved ?? 0).toBe(2000);
   });
 });

@@ -181,14 +181,17 @@ describe("catalog and inventory BFF routes", () => {
 
     await listProducts(
       new Request(
-        "https://x/products?marketId=market-2&locationId=location-2&query=onion&status=inactive&limit=25&cursor=next",
+        "https://x/products?scopeKind=LOCATION&marketId=market-2&locationId=location-2&query=onion&status=inactive&limit=25&cursor=next",
         { headers: COOKIE },
       ),
     );
     await getProduct(
-      new Request("https://x/products/p1?marketId=market-2&locationId=location-2", {
-        headers: COOKIE,
-      }),
+      new Request(
+        "https://x/products/p1?scopeKind=LOCATION&marketId=market-2&locationId=location-2",
+        {
+          headers: COOKIE,
+        },
+      ),
       productParams,
     );
     await productStatus(
@@ -205,6 +208,7 @@ describe("catalog and inventory BFF routes", () => {
       status: "inactive",
       limit: 25,
       cursor: "next",
+      scopeKind: "LOCATION",
       marketId: "market-2",
       locationId: "location-2",
     });
@@ -214,12 +218,13 @@ describe("catalog and inventory BFF routes", () => {
     });
     expect(coreMocks.getAdminProduct.mock.calls[0][0]).toMatchObject({
       productId: "prod-1",
+      scopeKind: "LOCATION",
       marketId: "market-2",
       locationId: "location-2",
     });
   });
 
-  it("requires explicit Product-list pricing context", async () => {
+  it("requires an explicit Product scope", async () => {
     const response = await listProducts(new Request("https://x/products", { headers: COOKIE }));
     expect(response.status).toBe(400);
     expect(coreMocks.listAdminProducts).not.toHaveBeenCalled();
@@ -392,7 +397,6 @@ describe("catalog and inventory BFF routes", () => {
         {
           locationId: "location-cebu-central",
           availabilityStatus: "AVAILABLE",
-          sourcingMode: "STOCKED",
           expectedVersion: 0,
         },
         "PUT",
@@ -402,7 +406,7 @@ describe("catalog and inventory BFF routes", () => {
     await setPrice(
       jsonRequest("https://x/skus/sku-1/price", {
         marketId: "market-metro-cebu",
-        locationId: null,
+        locationId: "location-cebu-central",
         currency: "PHP",
         amountMinor: 2500,
         validFrom: 1000,
@@ -413,10 +417,10 @@ describe("catalog and inventory BFF routes", () => {
 
     expect(coreMocks.setAdminSkuAvailability.mock.calls[0][0]).toMatchObject({
       skuId: "sku-1",
-      sourcingMode: "STOCKED",
+      availabilityStatus: "AVAILABLE",
     });
     expect(coreMocks.setAdminSkuPrice.mock.calls[0][0]).toMatchObject({
-      locationId: null,
+      locationId: "location-cebu-central",
       validFrom: 1000,
       expectedVersion: 2,
     });

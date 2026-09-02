@@ -1,71 +1,46 @@
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
 
-export type LocationModeView = {
-  locationId: string;
+export type GlobalModeView = {
   activeMode: "INSTANT" | "SCHEDULED";
   cadence: "WEEKLY" | null;
-  promiseMinutes: number | null;
-  maxConcurrentInstantOrders: number | null;
   version: number;
 };
+
+export type LocationModeView = GlobalModeView;
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
-/** Read the effective fulfillment mode configuration for a location. */
-export async function getLocationMode(
+export async function getGlobalMode(
   database: D1Database,
-  query: { locationId: string; requestId: string },
-): Promise<{ ok: true; value: LocationModeView; requestId: string } | ReturnType<typeof failure>> {
-  const location = await database
-    .prepare("SELECT id FROM fulfillment_location WHERE id=? AND status='active'")
-    .bind(query.locationId)
-    .first<{ id: string }>();
-  if (!location)
-    return failure("NOT_FOUND", "Active fulfillment location not found", query.requestId);
+  query: { requestId: string },
+): Promise<{ ok: true; value: GlobalModeView; requestId: string } | ReturnType<typeof failure>> {
   const row = await database
-    .prepare(
-      "SELECT location_id, active_mode, cadence, promise_minutes, max_concurrent_instant_orders, version FROM fulfillment_location_mode WHERE location_id=?",
-    )
-    .bind(query.locationId)
+    .prepare("SELECT active_mode, cadence, version FROM global_fulfillment_mode WHERE id='global'")
     .first<{
-      location_id: string;
       active_mode: "INSTANT" | "SCHEDULED";
       cadence: "WEEKLY" | null;
-      promise_minutes: number | null;
-      max_concurrent_instant_orders: number | null;
       version: number;
     }>();
+  if (!row)
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Global fulfillment mode is not configured",
+      query.requestId,
+    );
   return {
-    ok: true as const,
-    value: row
-      ? {
-          locationId: row.location_id,
-          activeMode: row.active_mode,
-          cadence: row.cadence,
-          promiseMinutes: row.promise_minutes,
-          maxConcurrentInstantOrders: row.max_concurrent_instant_orders,
-          version: row.version,
-        }
-      : // A location without an explicit configuration runs Scheduled.
-        {
-          locationId: query.locationId,
-          activeMode: "SCHEDULED",
-          cadence: "WEEKLY",
-          promiseMinutes: null,
-          maxConcurrentInstantOrders: null,
-          version: 0,
-        },
+    ok: true,
+    value: { activeMode: row.active_mode, cadence: row.cadence, version: row.version },
     requestId: query.requestId,
   };
 }
 
 /**
- * Resolve the checkout-effective mode for a routed location. Absent or
- * incomplete configuration means Scheduled: an INSTANT configuration without
- * a promise or capacity bound fails closed instead of guessing.
+ * Resolve the one business-wide mode and the selected location's operational
+ * readiness. An inconsistent Instant configuration fails closed; it never
+ * silently crosses back to Scheduled for one location.
  */
 export async function resolveCheckoutMode(
   database: D1Database,
@@ -76,80 +51,85 @@ export async function resolveCheckoutMode(
 > {
   const row = await database
     .prepare(
-      "SELECT active_mode, promise_minutes, max_concurrent_instant_orders FROM fulfillment_location_mode WHERE location_id=?",
+      `SELECT mode.active_mode, readiness.instant_promise_minutes,
+              readiness.max_concurrent_instant_orders, readiness.dispatch_ready
+         FROM global_fulfillment_mode mode
+         LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=?
+        WHERE mode.id='global'`,
     )
     .bind(locationId)
     .first<{
       active_mode: "INSTANT" | "SCHEDULED";
-      promise_minutes: number | null;
+      instant_promise_minutes: number | null;
       max_concurrent_instant_orders: number | null;
+      dispatch_ready: number | null;
     }>();
+  if (!row) throw new Error("GLOBAL_FULFILLMENT_MODE_NOT_CONFIGURED");
+  if (row.active_mode === "SCHEDULED") return { ok: true, mode: "SCHEDULED" };
   if (
-    row &&
-    row.active_mode === "INSTANT" &&
-    row.promise_minutes !== null &&
-    row.max_concurrent_instant_orders !== null
-  ) {
-    return {
-      ok: true,
-      mode: "INSTANT",
-      promiseMinutes: row.promise_minutes,
-      maxConcurrentInstantOrders: row.max_concurrent_instant_orders,
-    };
-  }
-  return { ok: true, mode: "SCHEDULED" };
+    row.dispatch_ready !== 1 ||
+    row.instant_promise_minutes === null ||
+    row.max_concurrent_instant_orders === null
+  )
+    throw new Error("INSTANT_LOCATION_NOT_READY");
+  return {
+    ok: true,
+    mode: "INSTANT",
+    promiseMinutes: row.instant_promise_minutes,
+    maxConcurrentInstantOrders: row.max_concurrent_instant_orders,
+  };
 }
 
-export type SetLocationModeCommand = {
-  locationId: string;
+export type SetGlobalModeCommand = {
   activeMode: "INSTANT" | "SCHEDULED";
   cadence?: "WEEKLY" | null;
-  promiseMinutes: number | null;
-  maxConcurrentInstantOrders: number | null;
-  expectedVersion: number | null;
+  expectedVersion: number;
   idempotencyKey: string;
   requestId: string;
 };
 
-const SCOPE = "fulfillment.setLocationMode";
+const SCOPE = "fulfillment.setGlobalMode";
 
-/**
- * Activate the location's single fulfillment-mode configuration. The write
- * atomically retires the prior effective configuration (single-row CAS on
- * version for updates); committed orders keep their snapshots untouched.
- */
-export async function setFulfillmentLocationMode(
-  database: D1Database,
-  command: SetLocationModeCommand,
-): Promise<{ ok: true; value: LocationModeView; requestId: string } | ReturnType<typeof failure>> {
-  const cadence = command.cadence ?? null;
-  if (command.activeMode === "INSTANT") {
-    if (
-      command.promiseMinutes === null ||
-      !Number.isInteger(command.promiseMinutes) ||
-      command.promiseMinutes <= 0 ||
-      command.maxConcurrentInstantOrders === null ||
-      !Number.isInteger(command.maxConcurrentInstantOrders) ||
-      command.maxConcurrentInstantOrders <= 0
+async function instantReadinessBlocker(database: D1Database): Promise<string | null> {
+  const unready = await database
+    .prepare(
+      `SELECT location.name
+         FROM fulfillment_location location
+         LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=location.id
+        WHERE location.status='active'
+          AND (
+            readiness.location_id IS NULL OR readiness.dispatch_ready!=1 OR
+            readiness.instant_promise_minutes IS NULL OR
+            readiness.max_concurrent_instant_orders IS NULL
+          )
+        ORDER BY location.id
+        LIMIT 1`,
     )
-      return failure(
-        "VALIDATION_FAILED",
-        "INSTANT requires promiseMinutes and maxConcurrentInstantOrders",
-        command.requestId,
-      );
-    if (cadence !== null)
-      return failure("VALIDATION_FAILED", "INSTANT cannot have a cadence", command.requestId);
-  } else if (cadence !== "WEEKLY") {
-    return failure("VALIDATION_FAILED", "SCHEDULED requires WEEKLY cadence", command.requestId);
-  }
+    .first<{ name: string }>();
+  if (unready) return `${unready.name} is not ready for Instant fulfillment`;
 
-  const hash = await requestHash({
-    locationId: command.locationId,
-    activeMode: command.activeMode,
-    cadence,
-    promiseMinutes: command.promiseMinutes,
-    maxConcurrentInstantOrders: command.maxConcurrentInstantOrders,
-  });
+  const openDemand = await database
+    .prepare("SELECT COUNT(*) AS count FROM committed_demand WHERE status='OPEN'")
+    .first<{ count: number }>();
+  if ((openDemand?.count ?? 0) > 0)
+    return "Open Scheduled demand must be received, fulfilled, canceled, or explicitly protected before Instant activation";
+  return null;
+}
+
+/** Activate the single global mode under idempotency and optimistic CAS. */
+export async function setGlobalFulfillmentMode(
+  database: D1Database,
+  command: SetGlobalModeCommand,
+): Promise<{ ok: true; value: GlobalModeView; requestId: string } | ReturnType<typeof failure>> {
+  const cadence = command.cadence ?? null;
+  if (command.activeMode === "INSTANT" && cadence !== null)
+    return failure("VALIDATION_FAILED", "INSTANT cannot have a cadence", command.requestId);
+  if (command.activeMode === "SCHEDULED" && cadence !== "WEEKLY")
+    return failure("VALIDATION_FAILED", "SCHEDULED requires WEEKLY cadence", command.requestId);
+  if (!Number.isInteger(command.expectedVersion) || command.expectedVersion < 1)
+    return failure("VALIDATION_FAILED", "expectedVersion must be positive", command.requestId);
+
+  const hash = await requestHash({ activeMode: command.activeMode, cadence });
   const existingRecord = await database
     .prepare(
       "SELECT request_hash, status FROM idempotency_records WHERE scope=? AND idempotency_key=?",
@@ -164,77 +144,38 @@ export async function setFulfillmentLocationMode(
         command.requestId,
       );
     if (existingRecord.status === "SUCCEEDED")
-      return getLocationMode(database, {
-        locationId: command.locationId,
-        requestId: command.requestId,
-      });
+      return getGlobalMode(database, { requestId: command.requestId });
     return failure("CONFLICT", "The original command is still processing", command.requestId);
   }
 
-  const location = await database
-    .prepare("SELECT id FROM fulfillment_location WHERE id=? AND status='active'")
-    .bind(command.locationId)
-    .first<{ id: string }>();
-  if (!location)
-    return failure("NOT_FOUND", "Active fulfillment location not found", command.requestId);
+  const current = await getGlobalMode(database, { requestId: command.requestId });
+  if (!current.ok) return current;
+  if (current.value.activeMode !== "INSTANT" && command.activeMode === "INSTANT") {
+    const blocker = await instantReadinessBlocker(database);
+    if (blocker) return failure("CONFIGURATION_ERROR", blocker, command.requestId);
+  }
 
   const now = Date.now();
   await database
     .prepare(
-      "INSERT OR IGNORE INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES (?, ?, ?, 'location_mode', 'PROCESSING', ?, ?)",
+      "INSERT OR IGNORE INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES (?, ?, ?, 'global_fulfillment_mode', 'PROCESSING', ?, ?)",
     )
     .bind(SCOPE, command.idempotencyKey, hash, now, now)
     .run();
 
-  let applied: boolean;
-  if (command.expectedVersion === null) {
-    if (command.activeMode === "INSTANT") {
-      // First activation must be an insert; an existing configuration is a
-      // concurrent-command conflict, resolved by retrying with its version.
-      applied = await database
-        .prepare(
-          "INSERT INTO fulfillment_location_mode (location_id, active_mode, cadence, promise_minutes, max_concurrent_instant_orders, version, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, 1, ?, ?)",
-        )
-        .bind(
-          command.locationId,
-          command.activeMode,
-          command.promiseMinutes,
-          command.maxConcurrentInstantOrders,
-          now,
-          now,
-        )
-        .run()
-        .then((result) => (result.meta?.changes ?? 0) === 1)
-        .catch(() => false);
-    } else {
-      applied = await database
-        .prepare(
-          "INSERT INTO fulfillment_location_mode (location_id, active_mode, cadence, promise_minutes, max_concurrent_instant_orders, version, created_at, updated_at) VALUES (?, 'SCHEDULED', ?, NULL, NULL, 1, ?, ?)",
-        )
-        .bind(command.locationId, cadence, now, now)
-        .run()
-        .then((result) => (result.meta?.changes ?? 0) === 1)
-        .catch(() => false);
-    }
-  } else {
-    applied = await database
+  const results = await database.batch([
+    database
       .prepare(
-        "UPDATE fulfillment_location_mode SET active_mode=?, cadence=?, promise_minutes=?, max_concurrent_instant_orders=?, version=version+1, updated_at=? WHERE location_id=? AND version=?",
+        "UPDATE global_fulfillment_mode SET active_mode=?, cadence=?, version=version+1, updated_at=? WHERE id='global' AND version=?",
       )
-      .bind(
-        command.activeMode,
-        cadence,
-        command.promiseMinutes,
-        command.maxConcurrentInstantOrders,
-        now,
-        command.locationId,
-        command.expectedVersion,
+      .bind(command.activeMode, cadence, now, command.expectedVersion),
+    database
+      .prepare(
+        "UPDATE checkout_quote SET status='SUPERSEDED', version=version+1, updated_at=? WHERE status='ACTIVE'",
       )
-      .run()
-      .then((result) => (result.meta?.changes ?? 0) === 1);
-  }
-
-  if (!applied) {
+      .bind(now),
+  ]);
+  if ((results[0]?.meta?.changes ?? 0) !== 1) {
     await database
       .prepare(
         "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
@@ -242,23 +183,65 @@ export async function setFulfillmentLocationMode(
       .bind(now, SCOPE, command.idempotencyKey)
       .run();
     return failure(
-      command.expectedVersion === null ? "CONFLICT" : "STALE_VERSION",
-      command.expectedVersion === null
-        ? "A mode configuration already exists; update it with its version"
-        : "Configuration changed; refresh before retrying",
+      "STALE_VERSION",
+      "Global fulfillment mode changed; refresh before retrying",
       command.requestId,
     );
   }
-
   await database
     .prepare(
       "UPDATE idempotency_records SET status='SUCCEEDED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
     )
     .bind(now, SCOPE, command.idempotencyKey)
     .run();
+  return getGlobalMode(database, { requestId: command.requestId });
+}
 
-  return getLocationMode(database, {
-    locationId: command.locationId,
-    requestId: command.requestId,
+// Compatibility exports keep focused callers readable while persistence is
+// fully global. New RPC and UI contracts do not carry a location target.
+export async function getLocationMode(
+  database: D1Database,
+  query: { locationId?: string; requestId: string },
+) {
+  return getGlobalMode(database, query);
+}
+
+export type SetLocationModeCommand = Omit<SetGlobalModeCommand, "expectedVersion"> & {
+  expectedVersion: number | null;
+  locationId?: string;
+  promiseMinutes?: number | null;
+  maxConcurrentInstantOrders?: number | null;
+};
+
+export async function setFulfillmentLocationMode(
+  database: D1Database,
+  command: SetLocationModeCommand,
+) {
+  if (
+    command.locationId &&
+    command.promiseMinutes !== undefined &&
+    command.maxConcurrentInstantOrders !== undefined
+  ) {
+    await database
+      .prepare(
+        `UPDATE fulfillment_location_readiness
+            SET instant_promise_minutes=?, max_concurrent_instant_orders=?,
+                dispatch_ready=?, version=version+1, updated_at=?
+          WHERE location_id=?`,
+      )
+      .bind(
+        command.promiseMinutes,
+        command.maxConcurrentInstantOrders,
+        command.promiseMinutes !== null && command.maxConcurrentInstantOrders !== null ? 1 : 0,
+        Date.now(),
+        command.locationId,
+      )
+      .run();
+  }
+  const current = await getGlobalMode(database, { requestId: command.requestId });
+  if (!current.ok) return current;
+  return setGlobalFulfillmentMode(database, {
+    ...command,
+    expectedVersion: command.expectedVersion ?? current.value.version,
   });
 }

@@ -116,9 +116,8 @@ describe("admin operations reads", () => {
       await core.getFulfillmentMode({
         requestId: crypto.randomUUID(),
         headers: { cookie: globalReader },
-        locationId: `location-missing-${crypto.randomUUID()}`,
       }),
-    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    ).toMatchObject({ ok: true, value: { activeMode: "SCHEDULED" } });
   });
 
   it("scopes the converged exception queue and honors its cursor contract", async () => {
@@ -291,16 +290,13 @@ describe("admin operations reads", () => {
   });
 
   it("returns the persisted Scheduled cadence from mode activation", async () => {
-    const manager = await seedStaff("fulfillment.manage", "location");
+    const manager = await seedStaff("fulfillment.manage", "global");
     const result = await core.activateFulfillmentMode({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager },
-      locationId: "location-cebu-central",
       fulfillmentMode: "SCHEDULED",
       cadence: "WEEKLY",
-      promiseMinutes: null,
-      maxConcurrentInstantOrders: null,
-      expectedVersion: null,
+      expectedVersion: 1,
       idempotencyKey: `mode-${crypto.randomUUID()}`,
     });
     expect(result).toMatchObject({

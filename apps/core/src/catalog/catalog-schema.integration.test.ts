@@ -87,6 +87,25 @@ describe("catalog detail and SKU-availability schema", () => {
       conversion_numerator: 1000,
       conversion_denominator: 1,
     });
+    const volumeUnits = await env.DB.prepare(
+      "SELECT code, canonical_base_code, conversion_numerator, conversion_denominator, status FROM unit WHERE dimension='VOLUME' ORDER BY code",
+    ).all<Record<string, unknown>>();
+    expect(volumeUnits.results).toEqual([
+      {
+        code: "LITER",
+        canonical_base_code: "MILLILITER",
+        conversion_numerator: 1000,
+        conversion_denominator: 1,
+        status: "active",
+      },
+      {
+        code: "MILLILITER",
+        canonical_base_code: "MILLILITER",
+        conversion_numerator: 1,
+        conversion_denominator: 1,
+        status: "active",
+      },
+    ]);
     const invalidSourcing = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM inventory_pool WHERE canonical_sourcing_mode NOT IN ('STOCKED', 'PLANNED', 'ON_DEMAND', 'MIXED')",
     ).first<{ count: number }>();

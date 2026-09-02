@@ -1,8 +1,6 @@
 import { isSufficientForCommitment } from "../../payments/domain/payment";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 
-type PoolSourcing = "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
-
 export type ApplyAmendmentPaymentReactionInput = {
   reactionId: string;
   paymentIntentId: string;
@@ -12,12 +10,7 @@ export type ApplyAmendmentPaymentReactionInput = {
 
 export type AmendmentReactionOutcome = {
   applied: boolean;
-  reason:
-    | "APPLIED"
-    | "ALREADY_APPLIED"
-    | "INSUFFICIENT_STATE"
-    | "CAS_CONFLICT"
-    | "SOURCING_UNAVAILABLE";
+  reason: "APPLIED" | "ALREADY_APPLIED" | "INSUFFICIENT_STATE" | "CAS_CONFLICT";
 };
 
 /**
@@ -34,7 +27,8 @@ export async function applyAmendmentPaymentReaction(
     .prepare(
       `SELECT a.id, a.order_id, a.status, a.version, a.currency, a.total_minor,
               a.payment_intent_id, pi.amount_minor AS payment_amount_minor,
-              pi.currency AS payment_currency, f.location_id, f.cycle_id, f.zone_id
+              pi.currency AS payment_currency, f.location_id, f.cycle_id, f.zone_id,
+              f.fulfillment_mode
        FROM paid_order_amendment a
        JOIN payment_intent pi ON pi.id=a.payment_intent_id
          AND pi.purpose='ORDER_AMENDMENT' AND pi.subject_type='paid_order_amendment'
@@ -56,6 +50,7 @@ export async function applyAmendmentPaymentReaction(
       location_id: string | null;
       cycle_id: string | null;
       zone_id: string | null;
+      fulfillment_mode: "INSTANT" | "SCHEDULED";
     }>();
   if (!amendment) return { applied: false, reason: "CAS_CONFLICT" };
   if (amendment.status === "COMMITTED") return { applied: true, reason: "ALREADY_APPLIED" };
@@ -77,10 +72,9 @@ export async function applyAmendmentPaymentReaction(
 
   const lines = await database
     .prepare(
-      `SELECT l.sku_id, l.quantity, l.base_quantity, p.inventory_pool_id AS pool_id,
-              ip.canonical_sourcing_mode AS sourcing_mode
+      `SELECT l.sku_id, l.quantity, l.base_quantity, p.inventory_pool_id AS pool_id
        FROM paid_order_amendment_line l JOIN sku s ON s.id=l.sku_id
-       JOIN product p ON p.id=s.product_id JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+       JOIN product p ON p.id=s.product_id
        WHERE l.amendment_id=?`,
     )
     .bind(input.amendmentId)
@@ -89,7 +83,6 @@ export async function applyAmendmentPaymentReaction(
       quantity: number;
       base_quantity: number;
       pool_id: string;
-      sourcing_mode: PoolSourcing;
     }>()
     .then((result) => result.results);
 
@@ -101,33 +94,13 @@ export async function applyAmendmentPaymentReaction(
       .bind(now, now, input.amendmentId, amendment.version),
   ];
 
-  const perPool = new Map<string, { requested: number; mode: PoolSourcing }>();
+  const perPool = new Map<string, number>();
   for (const line of lines) {
-    const entry =
-      perPool.get(line.pool_id) ??
-      ({ requested: 0, mode: line.sourcing_mode } satisfies {
-        requested: number;
-        mode: PoolSourcing;
-      });
-    entry.requested += line.base_quantity;
-    perPool.set(line.pool_id, entry);
+    perPool.set(line.pool_id, (perPool.get(line.pool_id) ?? 0) + line.base_quantity);
   }
-  if ([...perPool.values()].some((plan) => plan.mode === "ON_DEMAND"))
-    return { applied: false, reason: "SOURCING_UNAVAILABLE" };
-  for (const [poolId, plan] of perPool) {
-    const available =
-      plan.mode === "PLANNED"
-        ? 0
-        : ((
-            await database
-              .prepare(
-                "SELECT MAX(0, on_hand-reserved) AS available FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?",
-              )
-              .bind(amendment.location_id ?? "", poolId)
-              .first<{ available: number | null }>()
-          )?.available ?? 0);
-    const reserved = plan.mode === "STOCKED" ? plan.requested : Math.min(plan.requested, available);
-    const planned = plan.requested - reserved;
+  for (const [poolId, requested] of perPool) {
+    const reserved = amendment.fulfillment_mode === "INSTANT" ? requested : 0;
+    const planned = amendment.fulfillment_mode === "SCHEDULED" ? requested : 0;
     if (reserved > 0) {
       statements.push(
         database

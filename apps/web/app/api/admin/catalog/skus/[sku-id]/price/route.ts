@@ -24,7 +24,7 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "sku-i
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (
     typeof body?.marketId !== "string" ||
-    (body?.locationId !== null && typeof body?.locationId !== "string") ||
+    typeof body?.locationId !== "string" ||
     typeof body?.currency !== "string" ||
     !Number.isInteger(body?.amountMinor) ||
     !Number.isInteger(body?.validFrom) ||
@@ -36,7 +36,7 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "sku-i
         error: {
           code: "VALIDATION_FAILED" as const,
           message:
-            "marketId, nullable locationId, currency, amountMinor, validFrom, and expectedVersion are required",
+            "marketId, locationId, currency, amountMinor, validFrom, and expectedVersion are required",
           requestId: webRequestId(request),
         },
       },
@@ -48,7 +48,7 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "sku-i
     headers: requestHeaders(request),
     skuId,
     marketId: body.marketId,
-    locationId: body.locationId as string | null,
+    locationId: body.locationId,
     currency: body.currency,
     amountMinor: body.amountMinor as number,
     validFrom: body.validFrom as number,

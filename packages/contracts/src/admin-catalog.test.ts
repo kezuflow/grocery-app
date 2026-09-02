@@ -3,7 +3,6 @@ import {
   catalogStatuses,
   adminProductMediaMaxBytes,
   adminProductMediaMimeTypes,
-  sourcingModes,
   type AdminCategoryCreateRequest,
   type AdminCategoryDetail,
   type AdminCategoryStatusRequest,
@@ -84,10 +83,11 @@ describe("catalog contracts", () => {
     expect(content).not.toHaveProperty("objectKey");
   });
 
-  it("requires explicit pricing context and publishes catalog readiness", () => {
+  it("requires an explicit Product scope and publishes catalog readiness", () => {
     void ({
       requestId: "request-products",
       headers: {},
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
     } satisfies AdminProductListRequest);
@@ -122,20 +122,19 @@ describe("catalog contracts", () => {
         missingPrices: 1,
         unavailableSkus: 1,
       },
-      pricingContext: {
+      scope: {
+        kind: "LOCATION",
         marketId: "market-metro-cebu",
         marketName: "Metro Cebu",
         locationId: "location-cebu-central",
         locationName: "Central Cebu",
         currency: "PHP",
       },
-      viewMode: "LOCATION_OPERATIONS",
       nextCursor: null,
     } satisfies AdminProductPage);
   });
 
-  it("publishes canonical unit conversion and sourcing contracts", () => {
-    expect(sourcingModes).toEqual(["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"]);
+  it("publishes canonical unit conversion contracts without sourcing configuration", () => {
     void ({
       requestId: "request-1",
       headers: {},
@@ -236,7 +235,7 @@ describe("catalog contracts", () => {
       headers: {},
       skuId: "sku-1",
       marketId: "market-metro-cebu",
-      locationId: null,
+      locationId: "location-cebu-central",
       currency: "PHP",
       amountMinor: 2500,
       validFrom: 1000,
@@ -259,7 +258,6 @@ describe("catalog contracts", () => {
       priceVersion: 4,
       availability: "AVAILABLE",
       availabilityVersion: 2,
-      sourcingMode: "STOCKED",
     } satisfies AdminCatalogSkuSummary);
     void ({
       productId: "prod-1",
@@ -280,14 +278,14 @@ describe("catalog contracts", () => {
         baseUnitSymbol: "g",
         position: null,
       },
-      pricingContext: {
+      scope: {
+        kind: "LOCATION",
         marketId: "market-metro-cebu",
         marketName: "Metro Cebu",
         locationId: "location-cebu-central",
         locationName: "Central Cebu",
         currency: "PHP",
       },
-      viewMode: "LOCATION_OPERATIONS",
       allowedActions: ["UPDATE", "SET_STATUS"],
       recentAudit: [],
       skus: [],

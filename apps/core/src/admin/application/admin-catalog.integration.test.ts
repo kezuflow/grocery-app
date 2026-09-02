@@ -163,6 +163,7 @@ describe("catalog administration", () => {
     const page = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
       limit: 100,
@@ -170,8 +171,7 @@ describe("catalog administration", () => {
     expect(page).toMatchObject({
       ok: true,
       value: {
-        viewMode: "LOCATION_OPERATIONS",
-        pricingContext: { locationName: "Central Cebu" },
+        scope: { kind: "LOCATION", locationName: "Central Cebu" },
       },
     });
     if (!page.ok) return;
@@ -187,13 +187,14 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId: seeded.productId,
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
     });
     expect(detail).toMatchObject({
       ok: true,
       value: {
-        viewMode: "LOCATION_OPERATIONS",
+        scope: { kind: "LOCATION" },
         allowedActions: [],
         inventoryPool: { position: { availableBase: 145000 } },
       },
@@ -206,7 +207,6 @@ describe("catalog administration", () => {
         skuId,
         locationId: "location-cebu-central",
         availabilityStatus: "AVAILABLE",
-        sourcingMode: "STOCKED",
         expectedVersion: 0,
         idempotencyKey: crypto.randomUUID(),
       }),
@@ -319,8 +319,7 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId: created.value.productId,
-      marketId: "market-metro-cebu",
-      locationId: null,
+      scopeKind: "GLOBAL",
     });
     expect(detail).toMatchObject({
       ok: true,
@@ -576,6 +575,7 @@ describe("catalog administration", () => {
       await core.listAdminProducts({
         requestId: "r1",
         headers: {},
+        scopeKind: "LOCATION",
         marketId: "market-metro-cebu",
         locationId: "location-cebu-central",
       }),
@@ -588,6 +588,7 @@ describe("catalog administration", () => {
       await core.listAdminProducts({
         requestId: crypto.randomUUID(),
         headers: { cookie: nonStaff.cookie },
+        scopeKind: "LOCATION",
         marketId: "market-metro-cebu",
         locationId: "location-cebu-central",
       }),
@@ -664,6 +665,7 @@ describe("catalog administration", () => {
     const productFirst = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
       query: "Paged product",
@@ -678,6 +680,7 @@ describe("catalog administration", () => {
     const productSecond = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
       query: "Paged product",
@@ -694,8 +697,9 @@ describe("catalog administration", () => {
     const invalid = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION",
       marketId: "missing-market",
-      locationId: null,
+      locationId: "location-cebu-central",
     });
     expect(invalid).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
@@ -725,13 +729,15 @@ describe("catalog administration", () => {
     const page = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
       query: productId,
     });
     expect(page.ok).toBe(true);
     if (!page.ok) return;
-    expect(page.value.pricingContext).toEqual({
+    expect(page.value.scope).toEqual({
+      kind: "LOCATION",
       marketId: "market-metro-cebu",
       marketName: "Metro Cebu",
       locationId: "location-cebu-central",
@@ -743,6 +749,7 @@ describe("catalog administration", () => {
     const productPage = await core.listAdminProducts({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
       limit: 100,
@@ -891,7 +898,7 @@ describe("catalog administration", () => {
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
-      locationId: null,
+      locationId: "location-cebu-central",
       currency: "PHP",
       amountMinor: 0,
       validFrom: Date.now(),
@@ -905,7 +912,7 @@ describe("catalog administration", () => {
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
-      locationId: null,
+      locationId: "location-cebu-central",
       currency: "USD",
       amountMinor: 2500,
       validFrom: Date.now(),
@@ -922,7 +929,7 @@ describe("catalog administration", () => {
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
-      locationId: null,
+      locationId: "location-cebu-central",
       currency: "PHP",
       amountMinor: 2500,
       validFrom: Date.now(),
@@ -940,7 +947,7 @@ describe("catalog administration", () => {
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
-      locationId: null,
+      locationId: "location-cebu-central",
       currency: "PHP",
       amountMinor: 2600,
       validFrom: successorAt,
@@ -962,7 +969,7 @@ describe("catalog administration", () => {
         headers: { cookie: manager.cookie },
         skuId: sku.value.skuId,
         marketId: "market-metro-cebu",
-        locationId: null,
+        locationId: "location-cebu-central",
         currency: "PHP",
         amountMinor: 2700,
         validFrom: racedAt,
@@ -974,7 +981,7 @@ describe("catalog administration", () => {
         headers: { cookie: manager.cookie },
         skuId: sku.value.skuId,
         marketId: "market-metro-cebu",
-        locationId: null,
+        locationId: "location-cebu-central",
         currency: "PHP",
         amountMinor: 2800,
         validFrom: racedAt,
@@ -989,7 +996,7 @@ describe("catalog administration", () => {
       headers: { cookie: manager.cookie },
       skuId: sku.value.skuId,
       marketId: "market-metro-cebu",
-      locationId: null,
+      locationId: "location-cebu-central",
       currency: "PHP",
       amountMinor: 2600,
       validFrom: successorAt,
@@ -1004,7 +1011,6 @@ describe("catalog administration", () => {
       skuId: sku.value.skuId,
       locationId: "location-cebu-central",
       availabilityStatus: "AVAILABLE",
-      sourcingMode: "STOCKED",
       expectedVersion: 0,
       idempotencyKey: `avail-${crypto.randomUUID()}`,
     });
@@ -1018,7 +1024,6 @@ describe("catalog administration", () => {
       skuId: sku.value.skuId,
       locationId: "location-cebu-central",
       availabilityStatus: "UNAVAILABLE",
-      sourcingMode: "STOCKED",
       expectedVersion: 0,
       idempotencyKey: `avail-${crypto.randomUUID()}`,
     });
@@ -1047,6 +1052,7 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId,
+      scopeKind: "LOCATION",
       marketId: "market-metro-cebu",
       locationId: "location-cebu-central",
     });
@@ -1095,7 +1101,6 @@ describe("catalog administration", () => {
       skuId: sku.value.skuId,
       locationId: secondLocationId,
       availabilityStatus: "UNAVAILABLE",
-      sourcingMode: "ON_DEMAND",
       expectedVersion: 0,
       idempotencyKey: `avail-${crypto.randomUUID()}`,
     });
@@ -1104,13 +1109,15 @@ describe("catalog administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId,
+      scopeKind: "LOCATION",
       marketId: secondMarketId,
       locationId: secondLocationId,
     });
     expect(targetedDetail).toMatchObject({
       ok: true,
       value: {
-        pricingContext: {
+        scope: {
+          kind: "LOCATION",
           marketId: secondMarketId,
           locationId: secondLocationId,
           currency: "USD",
@@ -1120,7 +1127,6 @@ describe("catalog administration", () => {
             priceMinor: 999,
             currency: "USD",
             availability: "UNAVAILABLE",
-            sourcingMode: "ON_DEMAND",
           },
         ],
       },
@@ -1201,8 +1207,7 @@ describe("catalog administration", () => {
         requestId: crypto.randomUUID(),
         headers: { cookie: manager.cookie },
         productId,
-        marketId: "market-metro-cebu",
-        locationId: null,
+        scopeKind: "GLOBAL",
       }),
     ).toMatchObject({ ok: true, value: { status: "inactive" } });
   });
@@ -1433,8 +1438,7 @@ describe("Product media administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       productId,
-      marketId: "market-metro-cebu",
-      locationId: null,
+      scopeKind: "GLOBAL",
     });
     expect(detail).toMatchObject({
       ok: true,

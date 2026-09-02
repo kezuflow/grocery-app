@@ -70,7 +70,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
         >
           <ProductMedia media={product.media} name={product.name} />
         </Link>
-        {variant ? (
+        {variant?.availability === "AVAILABLE" ? (
           <div className="absolute right-2 bottom-2">
             <AddToCartButton
               skuId={variant.id}
@@ -79,6 +79,11 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
               currency={variant.currency ?? "PHP"}
             />
           </div>
+        ) : null}
+        {variant?.availability === "OUT_OF_STOCK" ? (
+          <span className="absolute right-2 bottom-2 rounded-full bg-white px-2.5 py-1 text-xs font-semibold shadow-sm">
+            Out of stock
+          </span>
         ) : null}
       </div>
       <Link

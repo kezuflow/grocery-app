@@ -31,19 +31,16 @@ async function prepareInstantPayment(page: Page): Promise<PreparedPayment> {
   const suffix = crypto.randomUUID();
   const now = Date.now();
   executeAdminE2eSql(`
-    INSERT INTO fulfillment_location_mode (
-      location_id, active_mode, cadence, promise_minutes,
-      max_concurrent_instant_orders, version, created_at, updated_at
-    ) VALUES ('location-cebu-central', 'INSTANT', NULL, 30, 20, 1, ${now}, ${now})
-    ON CONFLICT(location_id) DO UPDATE SET
-      active_mode='INSTANT', cadence=NULL, promise_minutes=30,
-      max_concurrent_instant_orders=20, version=version+1, updated_at=${now};
+    UPDATE global_fulfillment_mode
+      SET active_mode='INSTANT',cadence=NULL,version=version+1,updated_at=${now}
+      WHERE id='global';
+    UPDATE fulfillment_location_readiness
+      SET instant_promise_minutes=30,max_concurrent_instant_orders=20,
+          dispatch_ready=1,version=version+1,updated_at=${now}
+      WHERE location_id='location-cebu-central';
     UPDATE delivery_zone_fee
       SET instant_fee_minor=5000, updated_at=${now}
       WHERE zone_id='zone-cebu-city-core' AND location_id='location-cebu-central';
-    UPDATE inventory_pool
-      SET canonical_sourcing_mode='STOCKED', updated_at=${now}
-      WHERE id='pool-red-onion';
     INSERT INTO delivery_fee_configuration (
       id, market_id, location_id, currency, minimum_delivery_fee_minor,
       per_kilometer_rate_minor, status, version, effective_from, effective_to,

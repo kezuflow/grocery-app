@@ -43,14 +43,19 @@ async function GETHandler(request: Request) {
       { status: 400 },
     );
   }
+  const scopeKind = params.get("scopeKind");
   const marketId = params.get("marketId")?.trim() ?? "";
-  if (!marketId) {
+  const locationId = params.get("locationId")?.trim() ?? "";
+  if (
+    scopeKind !== "GLOBAL" &&
+    !(scopeKind === "LOCATION" && marketId.length > 0 && locationId.length > 0)
+  ) {
     return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "An explicit marketId pricing context is required",
+          message: "An explicit GLOBAL or LOCATION Product scope is required",
           requestId: webRequestId(request),
         },
       },
@@ -60,8 +65,9 @@ async function GETHandler(request: Request) {
   const result = await coreClient(env.CORE).listAdminProducts({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
-    marketId,
-    locationId: params.get("locationId")?.trim() || null,
+    ...(scopeKind === "LOCATION"
+      ? { scopeKind: "LOCATION" as const, marketId, locationId }
+      : { scopeKind: "GLOBAL" as const }),
     query: params.get("query") ?? undefined,
     status: status ?? undefined,
     cursor: params.get("cursor") ?? undefined,

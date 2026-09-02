@@ -26,7 +26,6 @@ type LiveCartItem = {
   category_id: string;
   inventory_pool_id: string;
   consumption_base_quantity: number;
-  sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 };
 
 function rejected(code: AppErrorCode, message: string): RevalidationFailure {
@@ -46,6 +45,12 @@ export async function revalidateCheckoutQuote(
   routeDistance: RouteDistancePort,
   now = Date.now(),
 ): Promise<{ ok: true } | RevalidationFailure> {
+  const globalMode = await database
+    .prepare("SELECT active_mode FROM global_fulfillment_mode WHERE id='global'")
+    .first<{ active_mode: "INSTANT" | "SCHEDULED" }>();
+  if (!globalMode || globalMode.active_mode !== quote.fulfillmentMode)
+    return rejected("PRICE_CHANGED", "Fulfillment mode changed; accept a new quote");
+
   if (quote.fulfillmentMode !== "INSTANT") {
     const entitlement = await evaluateSubscriptionEntitlement(database, {
       customerId: quote.customerId,
@@ -69,11 +74,10 @@ export async function revalidateCheckoutQuote(
     database
       .prepare(
         `SELECT ci.sku_id, ci.quantity, p.id AS product_id, p.category_id, p.inventory_pool_id,
-                s.consumption_base_quantity, ip.canonical_sourcing_mode AS sourcing_mode
+                s.consumption_base_quantity
          FROM cart_item ci
          JOIN sku s ON s.id=ci.sku_id
          JOIN product p ON p.id=s.product_id
-         JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
          WHERE ci.cart_id=? ORDER BY ci.sku_id`,
       )
       .bind(quote.cartId)
@@ -90,8 +94,7 @@ export async function revalidateCheckoutQuote(
       !line ||
       line.quantity !== item.quantity ||
       line.productId !== item.product_id ||
-      line.baseQuantity !== item.quantity * item.consumption_base_quantity ||
-      line.sourcingMode !== item.sourcing_mode
+      line.baseQuantity !== item.quantity * item.consumption_base_quantity
     )
       return rejected("PRICE_CHANGED", "Cart contents changed; accept a new quote");
   }
@@ -109,10 +112,12 @@ export async function revalidateCheckoutQuote(
          FROM delivery_zone dz
          JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
          JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-         JOIN fulfillment_location_mode m ON m.location_id=fl.id
+         JOIN global_fulfillment_mode m ON m.id='global'
+         JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
          WHERE dz.code=? AND dz.id=? AND fl.id=? AND dz.status='active'
-           AND m.active_mode='INSTANT' AND m.promise_minutes IS NOT NULL
-           AND m.max_concurrent_instant_orders IS NOT NULL`,
+           AND m.active_mode='INSTANT' AND readiness.dispatch_ready=1
+           AND readiness.instant_promise_minutes IS NOT NULL
+           AND readiness.max_concurrent_instant_orders IS NOT NULL`,
       )
       .bind(address.delivery_zone_code ?? "", snapshot.zoneId, snapshot.locationId)
       .first<{ market_id: string; latitude: number; longitude: number }>();
@@ -167,17 +172,17 @@ export async function revalidateCheckoutQuote(
         .prepare(
           `SELECT amount_minor FROM price_version
            WHERE sku_id=? AND market_id=? AND currency=? AND price_type='STANDARD'
-             AND (location_id IS NULL OR location_id=?)
+             AND location_id=?
              AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)
-           ORDER BY (location_id IS NOT NULL) DESC, version DESC LIMIT 1`,
+           ORDER BY version DESC LIMIT 1`,
         )
         .bind(item.sku_id, marketId, quote.currency, snapshot.locationId, now, now)
         .first<{ amount_minor: number }>(),
       database
         .prepare(
-          "SELECT availability_status FROM location_product_availability WHERE location_id=? AND product_id=?",
+          "SELECT availability_status FROM sku_location_availability WHERE location_id=? AND sku_id=?",
         )
-        .bind(snapshot.locationId, item.product_id)
+        .bind(snapshot.locationId, item.sku_id)
         .first<{ availability_status: string }>(),
     ]);
     if (

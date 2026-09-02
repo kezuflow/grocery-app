@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -203,7 +203,12 @@ export function trackedProductionSources() {
   })
     .split("\0")
     .map(normalizeFileName)
-    .filter((fileName) => productionSourcePattern.test(fileName) && !fileName.endsWith(".d.ts"));
+    .filter(
+      (fileName) =>
+        productionSourcePattern.test(fileName) &&
+        !fileName.endsWith(".d.ts") &&
+        existsSync(path.join(repositoryRoot, fileName)),
+    );
 }
 
 export function verifyRepository() {

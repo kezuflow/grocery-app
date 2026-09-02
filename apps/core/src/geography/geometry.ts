@@ -76,3 +76,38 @@ export function validCoordinate(latitude: number, longitude: number): boolean {
     longitude <= 180
   );
 }
+
+const EARTH_RADIUS_METERS = 6_371_008.8;
+
+/** Exact deterministic great-circle distance used only for location ownership. */
+export function haversineDistanceMeters(
+  origin: { latitude: number; longitude: number },
+  destination: { latitude: number; longitude: number },
+): number {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = radians(destination.latitude - origin.latitude);
+  const longitudeDelta = radians(destination.longitude - origin.longitude);
+  const originLatitude = radians(origin.latitude);
+  const destinationLatitude = radians(destination.latitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(originLatitude) * Math.cos(destinationLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function closestLocation<T extends { id: string; latitude: number; longitude: number }>(
+  coordinate: { latitude: number; longitude: number },
+  candidates: readonly T[],
+): T | null {
+  return sortLocationsByDistance(coordinate, candidates)[0] ?? null;
+}
+
+export function sortLocationsByDistance<
+  T extends { id: string; latitude: number; longitude: number },
+>(coordinate: { latitude: number; longitude: number }, candidates: readonly T[]): T[] {
+  return [...candidates].sort((left, right) => {
+    const distance =
+      haversineDistanceMeters(coordinate, left) - haversineDistanceMeters(coordinate, right);
+    return distance !== 0 ? distance : left.id.localeCompare(right.id);
+  });
+}

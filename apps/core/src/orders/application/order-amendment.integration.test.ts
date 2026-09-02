@@ -50,12 +50,17 @@ async function committedOrder() {
     .bind(productId)
     .run();
   await env.DB.prepare(
+    "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, 'location-cebu-central', 'AVAILABLE', 'PLANNED', 1)",
+  )
+    .bind(skuId)
+    .run();
+  await env.DB.prepare(
     "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) VALUES ('location-cebu-central', ?, 50000, 0, 1)",
   )
     .bind(poolId)
     .run();
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO price_version (id, sku_id, market_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'PHP', 8000, 'STANDARD', 0, 1, 1)",
+    "INSERT OR IGNORE INTO price_version (id, sku_id, market_id, location_id, currency, amount_minor, price_type, valid_from, version, created_at) VALUES (?, ?, 'market-metro-cebu', 'location-cebu-central', 'PHP', 8000, 'STANDARD', 0, 1, 1)",
   )
     .bind(crypto.randomUUID(), skuId)
     .run();
@@ -176,12 +181,12 @@ describe("paid-order amendments", () => {
     });
     expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
     // Additive delta lands on the same order's operational records.
-    const reservations = await env.DB.prepare(
-      "SELECT COALESCE(SUM(quantity),0) AS total FROM inventory_reservation WHERE order_id=?",
+    const demand = await env.DB.prepare(
+      "SELECT COALESCE(SUM(quantity),0) AS total FROM committed_demand WHERE order_id=?",
     )
       .bind(fixture.orderId)
       .first<{ total: number }>();
-    expect(reservations?.total).toBe(1000);
+    expect(demand?.total).toBe(1000);
   });
 
   it("rejects unpaid or final orders and stale versions", async () => {

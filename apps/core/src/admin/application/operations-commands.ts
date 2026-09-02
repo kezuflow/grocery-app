@@ -24,8 +24,9 @@ import { startReceiving } from "../../procurement/application/start-receiving";
 import { completeReceiving } from "../../procurement/application/complete-receiving";
 import { allowedFulfillmentActions } from "../../fulfillment/application/list-fulfillment-queue";
 import { allowedDeliveryActions } from "../../delivery/application/list-delivery-dispatch";
-import { setFulfillmentLocationMode } from "../../fulfillment/application/location-mode";
+import { setGlobalFulfillmentMode } from "../../fulfillment/application/location-mode";
 import {
+  resolveGlobalFulfillmentAdministrationAccess,
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
@@ -130,19 +131,15 @@ export async function activateAdminFulfillmentMode(
   deps: OperationsAdministrationDeps,
   request: ActivateFulfillmentModeRequest,
 ): Promise<RpcResult<FulfillmentModeConfigurationView>> {
-  const permitted = await resolveOperationsAdministrationAccess(
+  const permitted = await resolveGlobalFulfillmentAdministrationAccess(
     deps,
     request,
     "fulfillment.manage",
-    request.locationId,
   );
   if (!permitted.ok) return permitted;
-  const result = await setFulfillmentLocationMode(deps.db, {
-    locationId: request.locationId,
+  const result = await setGlobalFulfillmentMode(deps.db, {
     activeMode: request.fulfillmentMode,
     cadence: request.cadence ?? null,
-    promiseMinutes: request.promiseMinutes ?? null,
-    maxConcurrentInstantOrders: request.maxConcurrentInstantOrders ?? null,
     expectedVersion: request.expectedVersion,
     idempotencyKey: request.idempotencyKey,
     requestId: request.requestId,
@@ -161,9 +158,9 @@ export async function activateAdminFulfillmentMode(
     request,
     permitted.value.authUserId,
     "OPERATIONS.FULFILLMENT_MODE_ACTIVATED",
-    "fulfillment_location_mode",
-    request.locationId,
-    request.locationId,
+    "global_fulfillment_mode",
+    "global",
+    "global",
     { activeMode: result.value.activeMode, version: result.value.version },
   );
   return result;

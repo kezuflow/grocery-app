@@ -88,7 +88,7 @@ describe("admin operations BFF routes", () => {
       cycleId: "c1",
     });
     expect(coreMocks.listDeliveryOperations.mock.calls[0][0]).toMatchObject({ locationId: "l1" });
-    expect(coreMocks.getFulfillmentMode.mock.calls[0][0]).toMatchObject({ locationId: "l1" });
+    expect(coreMocks.getFulfillmentMode.mock.calls[0][0]).toMatchObject({ headers: cookie });
     expect(coreMocks.listOperationalExceptions.mock.calls[0][0]).toMatchObject({
       locationId: "l1",
     });

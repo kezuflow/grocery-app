@@ -5,7 +5,12 @@ import type {
   ServiceabilityRequest,
   ServiceabilityResult,
 } from "@freshmarkets/contracts";
-import { parsePolygonGeoJson, pointInPolygon, validCoordinate } from "./geometry";
+import {
+  haversineDistanceMeters,
+  parsePolygonGeoJson,
+  pointInPolygon,
+  validCoordinate,
+} from "./geometry";
 import { geographySchema } from "./schema";
 
 type Database = ReturnType<typeof import("drizzle-orm/d1").drizzle>;
@@ -45,10 +50,12 @@ export type GeographyDataset = {
     active: boolean;
   }>;
   candidates: ReadonlyArray<{
+    id: string;
     code: string;
     name: string;
     type: LocationType;
-    priority: number;
+    latitude: number;
+    longitude: number;
     capabilities: ReadonlyArray<string>;
     active: boolean;
   }>;
@@ -165,7 +172,11 @@ export function evaluateServiceability(
         candidate.capabilities.includes(capability),
       ),
     )
-    .sort((left, right) => left.priority - right.priority)
+    .sort((left, right) => {
+      const distance =
+        haversineDistanceMeters(request, left) - haversineDistanceMeters(request, right);
+      return distance !== 0 ? distance : left.id.localeCompare(right.id);
+    })
     .map(({ code, name, type }) => ({ code, name, type }));
 
   return result(
@@ -245,7 +256,8 @@ export async function resolveServiceability(
           code: geographySchema.fulfillmentLocation.code,
           name: geographySchema.fulfillmentLocation.name,
           type: geographySchema.fulfillmentLocation.type,
-          priority: geographySchema.locationServiceability.priority,
+          latitude: geographySchema.fulfillmentLocation.latitude,
+          longitude: geographySchema.fulfillmentLocation.longitude,
         })
         .from(geographySchema.locationServiceability)
         .innerJoin(
@@ -268,7 +280,7 @@ export async function resolveServiceability(
             ),
           ),
         )
-        .orderBy(asc(geographySchema.locationServiceability.priority))
+        .orderBy(asc(geographySchema.fulfillmentLocation.id))
     : [];
   const locationIds = [...new Set(assignments.map((candidate) => candidate.locationId))];
   const capabilities = locationIds.length
@@ -290,10 +302,12 @@ export async function resolveServiceability(
       serviceAreas: serviceAreas.map((area) => ({ ...area, active: true })),
       deliveryZones: deliveryZones.map((zone) => ({ ...zone, active: true })),
       candidates: assignments.map((candidate) => ({
+        id: candidate.locationId,
         code: candidate.code,
         name: candidate.name,
         type: candidate.type,
-        priority: candidate.priority,
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
         active: true,
         capabilities: capabilities
           .filter((capability) => capability.locationId === candidate.locationId)

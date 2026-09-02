@@ -38,7 +38,7 @@ Rules:
 
 ## Delivery Cycle
 
-DeliveryCycle exists only for `SCHEDULED`; `WEEKLY` is a configured cadence. Location mode switching is an explicit versioned configuration command, not a DeliveryCycle state transition. Activating a new configuration atomically retires the prior effective configuration so the location has exactly one active `INSTANT`/`SCHEDULED` mode, and it never advances or rewrites existing Orders.
+DeliveryCycle exists only for `SCHEDULED`; `WEEKLY` is a configured cadence. Global mode switching is an explicit versioned configuration command, not a DeliveryCycle state transition. Activating a new configuration atomically replaces the one business-wide active `INSTANT`/`SCHEDULED` mode for uncommitted commerce, invalidates or revalidates open carts/Quotes, and never advances or rewrites existing Orders. `SCHEDULED -> INSTANT` is illegal until outstanding Scheduled commitments are protected and every location intended to remain open passes Instant readiness.
 
 ```text
 DRAFT -> SCHEDULED -> OPEN -> CUTOFF_REACHED

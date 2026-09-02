@@ -5,7 +5,7 @@ import type { CoreServiceBinding } from "@freshmarkets/contracts";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
-async function manager(capabilities: string[]) {
+async function manager(capabilities: string[], globalScope = false) {
   const email = `ops-command-${crypto.randomUUID()}@example.com`;
   const response = await SELF.fetch("https://core.example.invalid/api/auth/sign-up/email", {
     method: "POST",
@@ -44,8 +44,13 @@ async function manager(capabilities: string[]) {
       roleId,
     ),
     env.DB.prepare(
-      "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, 'location', NULL, 'location-cebu-central')",
-    ).bind(crypto.randomUUID(), staffId),
+      "INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id) VALUES (?, ?, ?, NULL, ?)",
+    ).bind(
+      crypto.randomUUID(),
+      staffId,
+      globalScope ? "global" : "location",
+      globalScope ? null : "location-cebu-central",
+    ),
   ];
   for (const capability of capabilities) {
     statements.push(
@@ -76,15 +81,14 @@ describe("admin operations commands", () => {
         idempotencyKey: "aggregate-none",
       }),
     ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
-    const { cookie } = await manager(["fulfillment.manage"]);
+    const { cookie } = await manager(["fulfillment.manage"], true);
     expect(
       await core.activateFulfillmentMode({
         requestId: crypto.randomUUID(),
         headers: { cookie },
-        locationId: "location-cebu-central",
         fulfillmentMode: "INSTANT",
         cadence: "WEEKLY",
-        expectedVersion: null,
+        expectedVersion: 1,
         idempotencyKey: `mode-${crypto.randomUUID()}`,
       }),
     ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });

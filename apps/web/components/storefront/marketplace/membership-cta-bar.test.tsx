@@ -21,6 +21,7 @@ const experience = {
     offerId: "offer",
     priceVersionId: "membership-price-version-1",
     priceVersion: 1,
+    availability: "AVAILABLE",
     code: "MEMBERSHIP_MONTHLY",
     name: "FreshMarkets Membership",
     amountMinor: 41200,

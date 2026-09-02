@@ -18,6 +18,8 @@ The reproduction is clean-room: public rendered pages may be inspected for geome
 
 Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/storefront tokens. Admin supports an explicit persisted light/dark appearance toggle in the header, uses a neutral operational canvas with orange as the controlled accent in both modes, and exposes a fixed five-step orange data-visualization palette through admin-scoped design tokens. This is a bounded appearance preference, not a runtime font, radius, or arbitrary theme customizer. Semantic success, warning, danger, information, and status colors retain their meanings and are not replaced with orange.
 
+Product administration uses two deliberately different projections. Global shows catalog identity, Category, media, and Variant definitions only. A selected operational location shows exact local prices, local Variant activation, and shared Product inventory. Global must not show resolved price, pricing context, local readiness, stock, or catalog-reference labels; location views must not show a sourcing-mode selector. The fulfillment-mode control is a Global setting because exactly one business-wide mode governs new commerce.
+
 ## Information Architecture
 
 Primary navigation is organized around operational ownership:

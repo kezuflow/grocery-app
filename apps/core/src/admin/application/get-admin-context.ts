@@ -313,13 +313,10 @@ const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "location-products",
   "inventory",
+  "delivery",
 ]);
 
-const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
-  "delivery",
-  "settings",
-  "settings-fulfillment-mode",
-]);
+const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set(["settings"]);
 
 function navigationScopeKindsFor(code: string): ReadonlyArray<AdminNavigationScopeKind> {
   if (ALL_SCOPE_NAVIGATION_CODES.has(code)) return ["GLOBAL", "MARKET", "LOCATION"];

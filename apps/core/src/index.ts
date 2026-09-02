@@ -602,14 +602,24 @@ const catalogUnitCreateSchema = authenticatedRequestSchema.extend({
   idempotencyKey: idempotencyKeySchema,
 });
 
-const catalogProductListSchema = authenticatedRequestSchema.extend({
-  marketId: validationSchema.string().trim().min(1).max(200),
-  locationId: validationSchema.string().trim().min(1).max(200).nullable(),
+const catalogProductListFields = {
   query: validationSchema.string().trim().min(1).max(100).optional(),
   status: validationSchema.enum(["active", "inactive"]).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
-});
+};
+const catalogProductListSchema = validationSchema.discriminatedUnion("scopeKind", [
+  authenticatedRequestSchema.extend({
+    scopeKind: validationSchema.literal("GLOBAL"),
+    ...catalogProductListFields,
+  }),
+  authenticatedRequestSchema.extend({
+    scopeKind: validationSchema.literal("LOCATION"),
+    marketId: validationSchema.string().trim().min(1).max(200),
+    locationId: validationSchema.string().trim().min(1).max(200),
+    ...catalogProductListFields,
+  }),
+]);
 
 const adminSelectedScopeSchema = validationSchema.discriminatedUnion("kind", [
   validationSchema.object({ kind: validationSchema.literal("GLOBAL") }),
@@ -662,11 +672,18 @@ const catalogProductUpdateSchema = catalogProductCreateSchema
     expectedVersion: validationSchema.number().int().min(1),
   });
 
-const catalogProductDetailSchema = authenticatedRequestSchema.extend({
-  productId: validationSchema.string().trim().min(1).max(200),
-  marketId: validationSchema.string().trim().min(1).max(200).optional(),
-  locationId: validationSchema.string().trim().min(1).max(200).nullable().optional(),
-});
+const catalogProductDetailSchema = validationSchema.discriminatedUnion("scopeKind", [
+  authenticatedRequestSchema.extend({
+    scopeKind: validationSchema.literal("GLOBAL"),
+    productId: validationSchema.string().trim().min(1).max(200),
+  }),
+  authenticatedRequestSchema.extend({
+    scopeKind: validationSchema.literal("LOCATION"),
+    productId: validationSchema.string().trim().min(1).max(200),
+    marketId: validationSchema.string().trim().min(1).max(200),
+    locationId: validationSchema.string().trim().min(1).max(200),
+  }),
+]);
 
 const catalogProductStatusSchema = authenticatedRequestSchema.extend({
   productId: validationSchema.string().trim().min(1).max(200),
@@ -734,7 +751,6 @@ const catalogSkuAvailabilitySchema = authenticatedRequestSchema.extend({
   skuId: validationSchema.string().trim().min(1).max(200),
   locationId: validationSchema.string().trim().min(1).max(200),
   availabilityStatus: validationSchema.enum(["AVAILABLE", "UNAVAILABLE"]),
-  sourcingMode: validationSchema.enum(["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"]),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });
@@ -742,7 +758,7 @@ const catalogSkuAvailabilitySchema = authenticatedRequestSchema.extend({
 const catalogSkuPriceSchema = authenticatedRequestSchema.extend({
   skuId: validationSchema.string().trim().min(1).max(200),
   marketId: validationSchema.string().trim().min(1).max(200),
-  locationId: validationSchema.string().trim().min(1).max(200).nullable(),
+  locationId: validationSchema.string().trim().min(1).max(200),
   currency: validationSchema.string().trim().length(3),
   amountMinor: validationSchema.number().int().min(1),
   validFrom: validationSchema.number().int().min(1),
@@ -774,12 +790,10 @@ const adminOperationalExceptionsSchema = adminOperationsLocationSchema.extend({
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
-const activateFulfillmentModeSchema = adminOperationsLocationSchema.extend({
+const activateFulfillmentModeSchema = authenticatedRequestSchema.extend({
   fulfillmentMode: validationSchema.enum(["INSTANT", "SCHEDULED"]),
   cadence: validationSchema.enum(["WEEKLY"]).nullable().optional(),
-  promiseMinutes: validationSchema.number().int().min(1).nullable().optional(),
-  maxConcurrentInstantOrders: validationSchema.number().int().min(1).nullable().optional(),
-  expectedVersion: validationSchema.number().int().min(0).nullable(),
+  expectedVersion: validationSchema.number().int().min(1),
   idempotencyKey: idempotencyKeySchema,
 });
 const adminProcurementAggregateSchema = adminOperationsLocationSchema.extend({
@@ -1752,10 +1766,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
-  async getFulfillmentMode(
-    input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
-  ) {
-    const validation = adminOperationsLocationSchema.safeParse(input);
+  async getFulfillmentMode(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminFulfillmentMode(

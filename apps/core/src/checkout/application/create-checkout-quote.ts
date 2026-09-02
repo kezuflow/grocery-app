@@ -19,6 +19,7 @@ import {
   evaluateCheckoutPromotions,
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
+import { closestLocation } from "../../geography/geometry";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -119,10 +120,9 @@ export async function createCheckoutQuote(
   const cartItems = await database
     .prepare(
       `SELECT ci.sku_id, ci.quantity, s.name AS variant_name, s.sellable_unit_id AS unit, s.consumption_base_quantity,
-              p.id AS product_id, p.name AS product_name, p.category_id, p.inventory_pool_id,
-              ip.canonical_sourcing_mode AS sourcing_mode
+              p.id AS product_id, p.name AS product_name, p.category_id, p.inventory_pool_id
        FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
-       JOIN inventory_pool ip ON ip.id=p.inventory_pool_id WHERE ci.cart_id=?`,
+       WHERE ci.cart_id=?`,
     )
     .bind(command.cartId)
     .all<{
@@ -135,17 +135,9 @@ export async function createCheckoutQuote(
       product_name: string;
       category_id: string;
       inventory_pool_id: string;
-      sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
     }>();
   if (cartItems.results.length === 0)
     return failure("VALIDATION_FAILED", "Cart is empty", command.requestId);
-  if (cartItems.results.some((item) => item.sourcing_mode === "ON_DEMAND"))
-    return failure(
-      "UNAVAILABLE_ITEM",
-      "On-demand sourcing is not configured for current checkout",
-      command.requestId,
-    );
-
   // Address serviceability evidence shared by both fulfillment modes.
   const address = await database
     .prepare("SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'")
@@ -159,22 +151,35 @@ export async function createCheckoutQuote(
     >();
   if (!address) return failure("NOT_FOUND", "Customer address not found", command.requestId);
 
-  // The routed location's active mode governs checkout semantics: a cycle id
-  // selects Scheduled; no cycle id selects Instant where a location offers it.
-  if (command.deliveryCycleId === null)
-    return createInstantQuote(
-      database,
-      repository,
-      command,
-      cartItems.results,
-      address,
-      dependencies,
+  const globalMode = await database
+    .prepare("SELECT active_mode FROM global_fulfillment_mode WHERE id='global'")
+    .first<{ active_mode: "INSTANT" | "SCHEDULED" }>();
+  if (!globalMode)
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Global fulfillment mode is not configured",
+      command.requestId,
     );
+  if (globalMode.active_mode === "INSTANT" && command.deliveryCycleId !== null)
+    return failure(
+      "INSTANT_MODE_UNAVAILABLE",
+      "FreshMarkets is currently in Instant mode",
+      command.requestId,
+    );
+  if (globalMode.active_mode === "SCHEDULED" && command.deliveryCycleId === null)
+    return failure(
+      "CYCLE_CLOSED",
+      "FreshMarkets is currently in Scheduled mode",
+      command.requestId,
+    );
+  const modeItems: QuoteItem[] = cartItems.results;
+  if (globalMode.active_mode === "INSTANT")
+    return createInstantQuote(database, repository, command, modeItems, address, dependencies);
   return createScheduledQuote(
     database,
     repository,
-    { ...command, deliveryCycleId: command.deliveryCycleId },
-    cartItems.results,
+    { ...command, deliveryCycleId: command.deliveryCycleId! },
+    modeItems,
     address,
     dependencies,
   );
@@ -223,24 +228,32 @@ async function createScheduledQuote(
     return failure("CYCLE_CLOSED", "The cycle cutoff has passed", command.requestId);
 
   // Zone routing for this cycle's market (address already resolved).
-  const routing = await database
+  const routingRows = await database
     .prepare(
-      `SELECT dz.id AS zone_id, ls.location_id, fl.name AS location_name,
+      `SELECT fl.id, dz.id AS zone_id, ls.location_id, fl.name AS location_name,
               fl.latitude, fl.longitude
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
+       JOIN global_fulfillment_mode mode ON mode.id='global' AND mode.active_mode='SCHEDULED'
+       JOIN cycle_zone_capacity capacity ON capacity.cycle_id=? AND capacity.zone_id=dz.id
+         AND capacity.location_id=fl.id AND capacity.allocated<capacity.capacity
        WHERE dz.code=? AND dz.status='active' AND sa.market_id=?
-       ORDER BY ls.priority LIMIT 1`,
+         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
+         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
+         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='DISPATCH' AND c.enabled=1)
+       ORDER BY fl.id`,
     )
-    .bind(address.delivery_zone_code ?? "", cycle.market_id)
-    .first<{
+    .bind(cycle.id, address.delivery_zone_code ?? "", cycle.market_id)
+    .all<{
+      id: string;
       zone_id: string;
       location_id: string;
       location_name: string;
       latitude: number;
       longitude: number;
     }>();
+  const routing = closestLocation(address, routingRows.results);
   if (!routing)
     return failure(
       "ADDRESS_UNSERVICEABLE",
@@ -248,17 +261,7 @@ async function createScheduledQuote(
       command.requestId,
     );
 
-  // Capacity at the routed zone/location.
-  const capacity = await database
-    .prepare(
-      "SELECT capacity, allocated FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
-    )
-    .bind(cycle.id, routing.zone_id, routing.location_id)
-    .first<{ capacity: number; allocated: number }>();
-  if (!capacity || capacity.allocated >= capacity.capacity)
-    return failure("CAPACITY_UNAVAILABLE", "No remaining delivery capacity", command.requestId);
-
-  // Location-aware pricing with fallback to market price. Missing price fails.
+  // Exact-location pricing. Missing price fails; no Market fallback exists.
   const now2 = Date.now();
   const lines: QuoteLine[] = [];
   let subtotalMinor = 0;
@@ -267,9 +270,9 @@ async function createScheduledQuote(
       .prepare(
         `SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=?
          WHERE pv.sku_id=? AND pv.market_id=dc.market_id AND pv.currency=(SELECT currency FROM market WHERE id=dc.market_id)
-           AND pv.price_type='STANDARD' AND (pv.location_id IS NULL OR pv.location_id=?)
+           AND pv.price_type='STANDARD' AND pv.location_id=?
            AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
-         ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1`,
+         ORDER BY pv.version DESC LIMIT 1`,
       )
       .bind(cycle.id, item.sku_id, routing.location_id, now2, now2)
       .first<{ amount_minor: number }>();
@@ -281,11 +284,11 @@ async function createScheduledQuote(
       );
     const availability = await database
       .prepare(
-        "SELECT availability_status FROM location_product_availability WHERE location_id=? AND product_id=?",
+        "SELECT availability_status FROM sku_location_availability WHERE location_id=? AND sku_id=?",
       )
-      .bind(routing.location_id, item.product_id)
+      .bind(routing.location_id, item.sku_id)
       .first<{ availability_status: string }>();
-    if (availability && availability.availability_status !== "AVAILABLE")
+    if (!availability || availability.availability_status !== "AVAILABLE")
       return failure(
         "UNAVAILABLE_ITEM",
         `${item.product_name} is unavailable at this location`,
@@ -304,7 +307,6 @@ async function createScheduledQuote(
       baseQuantity,
       unitPriceMinor: price.amount_minor,
       lineTotalMinor: lineTotal,
-      sourcingMode: item.sourcing_mode,
     });
   }
 
@@ -387,7 +389,6 @@ async function createScheduledQuote(
       fulfillmentSnapshot: {
         fulfillmentOptionId: command.fulfillmentOptionId ?? null,
         fulfillmentMode: "SCHEDULED" as const,
-        sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
         poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
       },
       deliveryFeeSnapshot: deliveryFee.snapshot,

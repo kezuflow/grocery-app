@@ -1,7 +1,7 @@
 import type {
   AdminDeliveryOperationsRequest,
   AdminFulfillmentQueueRequest,
-  AdminOperationsLocationRequest,
+  AuthenticatedRequest,
   AdminOperationalExceptionsRequest,
   AdminProcurementRequirementsRequest,
   AdminReceivingSessionsRequest,
@@ -22,12 +22,10 @@ import {
   allowedFulfillmentActions,
   listFulfillmentQueue as listFulfillmentRows,
 } from "../../fulfillment/application/list-fulfillment-queue";
-import {
-  getLocationMode,
-  type LocationModeView,
-} from "../../fulfillment/application/location-mode";
+import { getGlobalMode, type GlobalModeView } from "../../fulfillment/application/location-mode";
 import { listProcurementQueue } from "../../procurement/application/list-procurement-queue";
 import {
+  resolveGlobalFulfillmentAdministrationAccess,
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
@@ -37,7 +35,7 @@ import {
   encodeStaffCursor,
 } from "./staff-administration-access";
 
-function modeView(value: LocationModeView): FulfillmentModeConfigurationView {
+function modeView(value: GlobalModeView): FulfillmentModeConfigurationView {
   return value;
 }
 function pageRequest(request: {
@@ -81,16 +79,15 @@ function nextCursor(hasMore: boolean, id: string | undefined): string | null {
 
 export async function getAdminFulfillmentMode(
   deps: OperationsAdministrationDeps,
-  request: AdminOperationsLocationRequest,
+  request: AuthenticatedRequest,
 ): Promise<RpcResult<FulfillmentModeConfigurationView>> {
-  const access = await resolveOperationsAdministrationAccess(
+  const access = await resolveGlobalFulfillmentAdministrationAccess(
     deps,
     request,
     "fulfillment.read",
-    request.locationId,
   );
   if (!access.ok) return access;
-  const mode = await getLocationMode(deps.db, request);
+  const mode = await getGlobalMode(deps.db, request);
   if (!mode.ok) return mode;
   return { ok: true, value: modeView(mode.value), requestId: request.requestId };
 }

@@ -24,6 +24,7 @@ function variant(overrides: Partial<CatalogVariant> = {}): CatalogVariant {
     priceMinor: 9450,
     currency: "PHP",
     priceVersion: 1,
+    availability: "AVAILABLE",
     ...overrides,
   };
 }
@@ -160,10 +161,16 @@ describe("toPresentationProduct", () => {
 });
 
 describe("railEligible", () => {
-  it("excludes unavailable products and products without a priced variant", () => {
+  it("keeps stockouts visible but excludes products without a priced variant", () => {
     const items = [
       toPresentationProduct(product()),
-      toPresentationProduct(product({ id: "p-2", available: false })),
+      toPresentationProduct(
+        product({
+          id: "p-2",
+          available: false,
+          variants: [variant({ availability: "OUT_OF_STOCK" })],
+        }),
+      ),
       toPresentationProduct(
         product({
           id: "p-3",
@@ -172,8 +179,7 @@ describe("railEligible", () => {
       ),
     ];
     const eligible = railEligible(items);
-    expect(eligible.length).toBe(1);
-    expect(eligible[0]?.id).toBe("product-red-onion");
+    expect(eligible.map((item) => item.id)).toEqual(["product-red-onion", "p-2"]);
   });
 });
 

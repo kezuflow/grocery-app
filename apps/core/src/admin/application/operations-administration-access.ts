@@ -28,6 +28,52 @@ export type OperationsAdministrationAccessOptions = {
   concealOutOfScopeLocation?: boolean;
 };
 
+/** Global fulfillment configuration requires both capability and global scope. */
+export async function resolveGlobalFulfillmentAdministrationAccess(
+  deps: OperationsAdministrationDeps,
+  request: AuthenticatedRequest,
+  capability: "fulfillment.read" | "fulfillment.manage",
+): Promise<RpcResult<OperationsAdministrationAccess>> {
+  const database = drizzle(deps.db, { schema: iamSchema });
+  const context = await applicationContextForRequest(
+    deps.auth,
+    database,
+    request,
+    deps.accessContext,
+  );
+  if (!context.ok) return context;
+  if (!context.value.authenticated || !context.value.principal)
+    return {
+      ok: false,
+      error: {
+        code: "UNAUTHENTICATED",
+        message: "Authentication is required",
+        requestId: request.requestId,
+      },
+    };
+  if (
+    !context.value.capabilities.includes(capability) ||
+    !context.value.scopes.some((scope) => scope.kind === "global") ||
+    !context.value.staffIdentity
+  )
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: `Global-scope ${capability} is required`,
+        requestId: request.requestId,
+      },
+    };
+  return {
+    ok: true,
+    value: {
+      staffId: context.value.staffIdentity.id,
+      authUserId: context.value.principal.userId,
+    },
+    requestId: request.requestId,
+  };
+}
+
 /** Resolve the caller and verify the capability against the requested location's market scope. */
 export async function resolveOperationsAdministrationAccess(
   deps: OperationsAdministrationDeps,

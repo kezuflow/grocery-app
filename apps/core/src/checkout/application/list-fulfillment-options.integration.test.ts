@@ -12,8 +12,8 @@ describe("listFulfillmentOptions", () => {
     const now = Date.now();
     await env.DB.batch([
       env.DB.prepare(
-        "INSERT INTO fulfillment_location_mode (location_id,active_mode,cadence,promise_minutes,max_concurrent_instant_orders,version,created_at,updated_at) VALUES ('location-cebu-central','SCHEDULED','WEEKLY',NULL,NULL,1,?,?)",
-      ).bind(now, now),
+        "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+      ).bind(now),
       env.DB.prepare(
         "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
       ).bind(customerId, `auth-${customerId}`, now, now),
@@ -42,7 +42,7 @@ describe("listFulfillmentOptions", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.map((option) => option.mode)).toEqual(["INSTANT", "SCHEDULED"]);
+    expect(result.value.map((option) => option.mode)).toEqual(["SCHEDULED"]);
     expect(JSON.stringify(result.value)).not.toMatch(/location-cebu|zone-cebu|hub/i);
     expect(result.value.every((option) => option.optionId.startsWith("fulfillment_"))).toBe(true);
     const stale = await listFulfillmentOptions(

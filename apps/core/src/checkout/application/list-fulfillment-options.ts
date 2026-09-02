@@ -2,6 +2,7 @@ import type { FulfillmentOptionView, RpcResult } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
+import { sortLocationsByDistance } from "../../geography/geometry";
 
 type Query = {
   customerId: string;
@@ -12,6 +13,7 @@ type Query = {
   requestId: string;
 };
 type Candidate = {
+  id: string;
   locationId: string;
   latitude: number;
   longitude: number;
@@ -95,21 +97,32 @@ export async function listFulfillmentOptions(
       },
     };
 
-  const candidates = await database
+  const candidateRows = await database
     .prepare(
-      `SELECT fl.id locationId,fl.latitude,fl.longitude,fl.market_id marketId,
-            fm.active_mode mode,fm.promise_minutes promiseMinutes,fm.version modeVersion,dz.id zoneId
+      `SELECT fl.id id,fl.id locationId,fl.latitude,fl.longitude,fl.market_id marketId,
+            mode.active_mode mode,readiness.instant_promise_minutes promiseMinutes,
+            mode.version modeVersion,dz.id zoneId
      FROM delivery_zone dz JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
      JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-     JOIN fulfillment_location_mode fm ON fm.location_id=fl.id
-     WHERE dz.code=? AND dz.status='active' ORDER BY ls.priority,fl.id`,
+     JOIN global_fulfillment_mode mode ON mode.id='global'
+     LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
+     WHERE dz.code=? AND dz.status='active'
+       AND (mode.active_mode='SCHEDULED' OR (
+         readiness.dispatch_ready=1 AND readiness.instant_promise_minutes IS NOT NULL
+         AND readiness.max_concurrent_instant_orders IS NOT NULL
+       ))
+       AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
+       AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
+       AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='DISPATCH' AND c.enabled=1)
+     ORDER BY fl.id`,
     )
     .bind(address.delivery_zone_code)
     .all<Candidate>();
+  const orderedCandidates = sortLocationsByDistance(address, candidateRows.results);
+  let candidate = orderedCandidates[0] ?? null;
   const currentQuery = { ...query, addressVersion: address.version };
   const options: FulfillmentOptionView[] = [];
-  for (const mode of ["INSTANT", "SCHEDULED"] as const) {
-    const candidate = candidates.results.find((row) => row.mode === mode);
+  for (const mode of candidate ? [candidate.mode] : (["SCHEDULED"] as const)) {
     let reason: FulfillmentOptionView["unavailableReason"] = candidate ? null : "MODE_UNAVAILABLE";
     let cycle: { id: string; cutoff: number; delivery: number; version: number } | null = null;
     let fee: FulfillmentOptionView["feePreview"] = null;
@@ -125,16 +138,28 @@ export async function listFulfillmentOptions(
       if (unavailable) reason = "INVENTORY_UNAVAILABLE";
     }
     if (candidate && mode === "SCHEDULED") {
-      cycle = await database
-        .prepare(
-          `SELECT dc.id,dc.cutoff_at cutoff,dc.delivery_date delivery,dc.version
+      for (const operationalCandidate of orderedCandidates) {
+        const availableCycle = await database
+          .prepare(
+            `SELECT dc.id,dc.cutoff_at cutoff,dc.delivery_date delivery,dc.version
          FROM delivery_cycle dc JOIN cycle_zone_capacity c ON c.cycle_id=dc.id
           AND c.zone_id=? AND c.location_id=?
          WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>? AND c.allocated<c.capacity
          ORDER BY dc.delivery_date,dc.id LIMIT 1`,
-        )
-        .bind(candidate.zoneId, candidate.locationId, candidate.marketId, Date.now())
-        .first<{ id: string; cutoff: number; delivery: number; version: number }>();
+          )
+          .bind(
+            operationalCandidate.zoneId,
+            operationalCandidate.locationId,
+            operationalCandidate.marketId,
+            Date.now(),
+          )
+          .first<{ id: string; cutoff: number; delivery: number; version: number }>();
+        if (availableCycle) {
+          candidate = operationalCandidate;
+          cycle = availableCycle;
+          break;
+        }
+      }
       if (!cycle) reason = "CYCLE_UNAVAILABLE";
     }
     if (candidate && reason === null) {

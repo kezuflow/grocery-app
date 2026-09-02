@@ -1238,7 +1238,6 @@ export async function setAdminSkuAvailability(
       skuId: request.skuId,
       locationId: request.locationId,
       availabilityStatus: request.availabilityStatus,
-      sourcingMode: request.sourcingMode,
       expectedVersion: request.expectedVersion,
     },
   );
@@ -1270,25 +1269,19 @@ export async function setAdminSkuAvailability(
     const write = existing
       ? deps.db
           .prepare(
-            "UPDATE sku_location_availability SET availability_status=?, sourcing_mode=?, version=version+1 WHERE sku_id=? AND location_id=? AND version=?",
+            "UPDATE sku_location_availability SET availability_status=?, version=version+1 WHERE sku_id=? AND location_id=? AND version=?",
           )
           .bind(
             request.availabilityStatus,
-            request.sourcingMode,
             request.skuId,
             request.locationId,
             request.expectedVersion,
           )
       : deps.db
           .prepare(
-            "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, sourcing_mode, version) VALUES (?, ?, ?, ?, 1)",
+            "INSERT INTO sku_location_availability (sku_id, location_id, availability_status, version) VALUES (?, ?, ?, 1)",
           )
-          .bind(
-            request.skuId,
-            request.locationId,
-            request.availabilityStatus,
-            request.sourcingMode,
-          );
+          .bind(request.skuId, request.locationId, request.availabilityStatus);
     await deps.db.batch([
       write,
       deps.db.prepare("INSERT INTO admin_command_abort (id) SELECT -1 WHERE changes()=0"),
@@ -1301,7 +1294,6 @@ export async function setAdminSkuAvailability(
         before: existing ? { version: existing.version } : {},
         after: {
           availabilityStatus: request.availabilityStatus,
-          sourcingMode: request.sourcingMode,
           version: (existing?.version ?? 0) + 1,
         },
         correlationId: request.requestId,
@@ -1374,18 +1366,16 @@ export async function setAdminSkuPrice(
       "currency must match the market currency",
       request.requestId,
     );
-  if (request.locationId !== null) {
-    const location = await deps.db
-      .prepare("SELECT id FROM fulfillment_location WHERE id=? AND market_id=? AND status='active'")
-      .bind(request.locationId, request.marketId)
-      .first<{ id: string }>();
-    if (!location)
-      return failure(
-        "VALIDATION_FAILED",
-        "Location must be active and belong to the selected market",
-        request.requestId,
-      );
-  }
+  const location = await deps.db
+    .prepare("SELECT id FROM fulfillment_location WHERE id=? AND market_id=? AND status='active'")
+    .bind(request.locationId, request.marketId)
+    .first<{ id: string }>();
+  if (!location)
+    return failure(
+      "VALIDATION_FAILED",
+      "Location must be active and belong to the selected market",
+      request.requestId,
+    );
 
   const current = await deps.db
     .prepare(

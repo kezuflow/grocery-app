@@ -36,12 +36,13 @@ Better Auth does not own customer profiles, addresses, application IAM, membersh
 - `markets(id PK, organization_id FK, code UNIQUE, name, currency, timezone, status)`
 - `fulfillment_locations(id PK, market_id FK, code, name, type, address_json, latitude, longitude, status, version, UNIQUE(market_id, code))`
 - `location_capabilities(location_id FK, capability, enabled, PRIMARY KEY(location_id, capability))`
-- `fulfillment_mode_configurations(id PK, market_id FK, location_id FK, fulfillment_mode INSTANT|SCHEDULED, cadence NULL, configuration_json, effective_from, effective_to NULL, status, version)` with one effective active configuration per active location and `cadence` allowed only for `SCHEDULED`; Current-release Scheduled cadence is `WEEKLY`.
+- `global_fulfillment_mode(id PK CHECK id='global', fulfillment_mode INSTANT|SCHEDULED, cadence NULL, version, updated_at)` with one singleton authority; `cadence` is allowed only for `SCHEDULED` and the current-release cadence is `WEEKLY`.
+- `fulfillment_location_readiness(location_id PK/FK, instant_promise_minutes NULL, max_concurrent_instant_orders NULL, dispatch_ready, version, updated_at)` stores operational readiness without selecting a local customer mode.
 - `service_areas(id PK, market_id FK, code, name, polygon_geojson, polygon_version, active_from, active_to, status, UNIQUE(market_id, code, polygon_version))`
 - `delivery_zones(id PK, service_area_id FK, code, name, polygon_geojson, polygon_version, fee_rule_id FK NULL, status, UNIQUE(service_area_id, code, polygon_version))`
-- `location_serviceability(zone_id FK, location_id FK, priority, eligible, valid_from, valid_to, PRIMARY KEY(zone_id, location_id, valid_from))`
+- `location_serviceability(zone_id FK, location_id FK, eligible, valid_from, valid_to, PRIMARY KEY(zone_id, location_id, valid_from))`; legacy priority may remain non-authoritative during migration.
 
-Indexes: active service areas by market/time, active zones by service area, location status/capabilities, effective fulfillment mode by location/time, and location candidates by zone/priority. Polygon lookup may initially load a small active set and evaluate geometry in Core; retain versions and bounding-box columns/indexes if scale requires prefiltering.
+Indexes: active service areas by market/time, active zones by service area, location status/capabilities/readiness, the singleton global mode, and eligible location candidates by zone. Polygon lookup may initially load a small active set and evaluate geometry in Core; retain versions and bounding-box columns/indexes if scale requires prefiltering. Core ranks overlapping candidates using computed Haversine distance then stable location ID, never stored priority or route-provider driving time.
 
 Phase 2 materializes these geography tables and stable seed identities for `METRO_CEBU`, `CEBU_CITY`, `CEBU_CITY_CORE`, and `CEBU_CENTRAL`. The initial GeoJSON is bootstrap operational data for local development and contract validation, not an asserted legal/production Cebu City boundary. Launch requires an approved polygon source and a new versioned seed/migration; prior versions remain available for stale-resolution detection and audit context.
 
@@ -112,24 +113,24 @@ Indexes: customer/state, next billing, trial end, scheduled cancellation, and on
 - `unit_definitions(id PK, code UNIQUE, display_name, dimension MASS|VOLUME|COUNT, canonical_base_code GRAM|MILLILITER|PIECE, conversion_numerator, conversion_denominator, status, version)` with positive integer conversion factors and same-dimension conversion only.
 - `inventory_pools(id PK, product_id FK, base_unit_id FK, code, UNIQUE(product_id, code))` where the referenced unit is the dimension's canonical base unit.
 - `skus(id PK, product_id FK, inventory_pool_id FK, code UNIQUE, display_name, merchandising_label NULL, sell_quantity, sell_unit_id FK, inventory_quantity_base, status, sort_order, version)` where sell/base quantities are positive integers and persisted configuration is authoritative.
-- `location_availability(sku_id FK, location_id FK, sourcing_mode, status, safety_buffer_base, minimum_stock_base, version, PRIMARY KEY(sku_id, location_id))`
-- `prices(id PK, sku_id FK, market_id FK, location_id FK NULL, price_type, amount_minor, currency, valid_from, valid_to NULL, version, created_at)`
+- `location_availability(sku_id FK, location_id FK, status, safety_buffer_base, minimum_stock_base, version, PRIMARY KEY(sku_id, location_id))`; any legacy sourcing column is non-authoritative compatibility data.
+- `prices(id PK, sku_id FK, market_id FK, location_id FK NOT NULL, price_type, amount_minor, currency, valid_from, valid_to NULL, version, created_at)`; Market remains validated context while location is the mandatory price target.
 - `product_media(id PK, product_id FK, object_key UNIQUE, mime_type, byte_size, alt_text, is_primary, sort_order, status active|inactive, version, created_at, updated_at)`
 
-Indexes: product/category/status, SKU/product/status, availability/location/status/mode, active prices by SKU/market/location/time. Core prevents overlapping active price records for the same precedence key.
+Indexes: product/category/status, SKU/product/status, availability/location/status, active prices by SKU/location/time. Core prevents overlapping effective prices for the same exact SKU/location key; no fallback precedence exists.
 
 The launch implementation adds normalized detail and SKU-level availability storage:
 
 - `product_detail(id PK, product_id FK, label, value, sort_order, UNIQUE(product_id, label))` for ordered customer-facing product details (`Contents`, `Storage`, ...).
 - `sku_detail(id PK, sku_id FK, audience CUSTOMER|OPERATIONS, label, value, sort_order, UNIQUE(sku_id, audience, label))`; OPERATIONS rows carry staff packing instructions and are excluded from every public read model.
-- `sku_location_availability(sku_id FK, location_id FK, availability_status AVAILABLE|UNAVAILABLE, sourcing_mode, version, PRIMARY KEY(sku_id, location_id))`, the display authority for Scheduled Cebu availability. It is admin-flag driven and never derived from on-hand inventory quantities.
+- `sku_location_availability(sku_id FK, location_id FK, availability_status AVAILABLE|UNAVAILABLE, version, PRIMARY KEY(sku_id, location_id))`, the local selling-activation authority. It is administrator configured and distinct from stock status.
 - `sku.merchandising_label NULL`, `sku.sell_quantity`, `sku.version` extend persisted variant configuration; merchandising labels such as `Pack`/`Bunch` remain customer copy, never conversion units. Staff-assembled packs persist one exact gram recipe (`sell_quantity = inventory_quantity_base`) while customers see only approximate contents notes.
 
 `product_media` is the canonical Admin-managed media association. Core generates its R2 object key, validates bytes and metadata, permits at most one active primary image per Product, and treats the D1 association as authoritative. `product.image_metadata_json` remains a read-only compatibility attachment for the version-controlled launch storefront assets until public Catalog delivery is migrated to serve canonical R2 media; it does not override `product_media`, and Core rejects malformed or unsafe compatibility metadata.
 
 `category.icon_asset_key` is optional constrained presentation metadata containing a bare `.svg` filename. The SVG binaries are version-controlled Web assets under `public/category-icons`; Core applies its stricter lowercase kebab-case allow-list before resolving a public `iconSrc` and returns `null` for missing or invalid metadata. Category names remain the accessible labels, so decorative icons do not duplicate spoken text.
 
-`inventory_pools` makes shared physical inventory explicit where multiple SKUs consume one product pool. `sourcing_mode` is constrained to `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED`; it never encodes `INSTANT`/`SCHEDULED`. Packaging labels have no global conversion row: each SKU records its exact `inventory_quantity_base`. Core verifies the sell-unit conversion is dimension-compatible but uses the persisted SKU consumption for inventory, Quote, and Order effects.
+`inventory_pools` makes shared physical inventory explicit where multiple SKUs consume one product pool. Supply behavior is derived from the one global mode: Instant consumes/holds stock and Scheduled commits demand for procurement. Any legacy `sourcing_mode` column is non-authoritative compatibility data. Packaging labels have no global conversion row: each SKU records its exact `inventory_quantity_base`. Core verifies the sell-unit conversion is dimension-compatible but uses the persisted SKU consumption for inventory, Quote, and Order effects.
 
 The Admin location Product read model joins, but never duplicates, `products`, `skus`, effective `prices`, `sku_location_availability`, and the single `inventory_balance` for `(inventory_pool_id, location_id)`. Selling status comes from `sku_location_availability`; stock status is derived separately from `on_hand - reserved` compared with each Variant's `inventory_quantity_base`. Migration `0051_central_cebu_admin_scope.sql` changes only the current location's display name to `Central Cebu`; stable IDs/codes and the parent Market remain unchanged.
 
@@ -342,7 +343,7 @@ Use conditional updates against expected state/version and verify affected-row c
 
 ## Customer launch Completion Migration
 
-Migration `0047_customer_mvp_completion.sql` is the additive Customer launch boundary. It adds controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness` with exact buyer/financial/tax-policy evidence. Fulfillment locations remain unavailable to customer option discovery until their single active mode is explicitly configured; the migration does not invent operational mode authority.
+Migration `0047_customer_mvp_completion.sql` is the additive Customer launch boundary. It adds controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness` with exact buyer/financial/tax-policy evidence. Later canonicalization replaces its historical per-location mode seam with the singleton global mode plus location readiness; committed snapshots remain unchanged.
 
 Promotion claims are uncommitted Quote evidence until atomic Order commitment creates redemption/application history. `notification_outbox.idempotency_key` uniquely identifies one business notification intent, and due work is indexed by status/availability/schedule. `order_invoice_readiness` is one-to-one with Order and provider-confirmed Payment intent; its financial components must be nonnegative and reconcile exactly to the committed total before persistence.
 

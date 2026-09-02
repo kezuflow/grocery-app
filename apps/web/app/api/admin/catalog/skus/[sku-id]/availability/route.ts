@@ -25,10 +25,6 @@ async function PUTHandler(request: Request, context: { params: Promise<{ "sku-id
   if (
     typeof body?.locationId !== "string" ||
     (body?.availabilityStatus !== "AVAILABLE" && body?.availabilityStatus !== "UNAVAILABLE") ||
-    (body?.sourcingMode !== "STOCKED" &&
-      body?.sourcingMode !== "PLANNED" &&
-      body?.sourcingMode !== "ON_DEMAND" &&
-      body?.sourcingMode !== "MIXED") ||
     !Number.isInteger(body?.expectedVersion)
   ) {
     return adminJson(
@@ -36,8 +32,7 @@ async function PUTHandler(request: Request, context: { params: Promise<{ "sku-id
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message:
-            "locationId, availabilityStatus, sourcingMode, and integer expectedVersion are required",
+          message: "locationId, availabilityStatus, and integer expectedVersion are required",
           requestId: webRequestId(request),
         },
       },
@@ -50,7 +45,6 @@ async function PUTHandler(request: Request, context: { params: Promise<{ "sku-id
     skuId,
     locationId: body.locationId,
     availabilityStatus: body.availabilityStatus,
-    sourcingMode: body.sourcingMode,
     expectedVersion: body.expectedVersion as number,
     idempotencyKey,
   });

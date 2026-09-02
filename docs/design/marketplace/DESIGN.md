@@ -116,7 +116,7 @@ Use recipient, phone, barangay, city, notes, and landmark/instructions fields. E
 
 ## Fulfillment Selection
 
-Present the location's active mode commitment in customer language: an explicit Instant promise/ETA with its fee, or the Scheduled delivery date/window with any zone fee/capacity messaging. Do not expose internal hub names as choices. If a Scheduled cycle is full, offer available valid alternatives rather than accepting and silently shifting the order. Instant presentation follows the dedicated Instant-mode design specification and must not promise times the current rider supply cannot keep.
+Present the one global active mode in customer language: an explicit Instant promise/ETA with its fee, or the Scheduled delivery date/window with any zone fee/capacity messaging. Do not expose internal hub names as choices. The confirmed delivery coordinate resolves the closest operational location by straight-line distance; stock never sends the customer to another hub. If a Scheduled cycle is full, offer available valid alternatives rather than accepting and silently shifting the order. Instant presentation follows the dedicated Instant-mode design specification and must not promise times the current rider supply cannot keep.
 
 At/after a Scheduled cutoff, show that ordinary procurement-affecting changes are closed. If an additive amendment is available before cutoff, show it as a separate add-on action rather than “edit paid order.”
 

@@ -221,9 +221,9 @@ describe("scoped admin context", () => {
     );
   });
 
-  it("marks Inventory as location-only even for a globally scoped Staff principal", async () => {
+  it("marks Inventory and Delivery as location-only even for globally scoped Staff", async () => {
     const staff = await staffCookie({
-      permissionCodes: ["inventory.read"],
+      permissionCodes: ["inventory.read", "delivery.read"],
       scope: { kind: "global" },
     });
     const context = await core.getAdminContext({
@@ -235,6 +235,9 @@ describe("scoped admin context", () => {
 
     expect(context.value.navigation).toContainEqual(
       expect.objectContaining({ code: "inventory", scopeKinds: ["LOCATION"] }),
+    );
+    expect(context.value.navigation).toContainEqual(
+      expect.objectContaining({ code: "delivery", scopeKinds: ["LOCATION"] }),
     );
   });
 

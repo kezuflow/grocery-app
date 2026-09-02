@@ -12,7 +12,7 @@ Browse marketplace
  -> activate the one-month promotional trial or paid membership
  -> build cart
  -> choose a valid Cebu serviceable address
- -> receive an Instant promise or choose a Scheduled window under the location's one active mode
+ -> receive the globally active Instant promise or choose its Scheduled window
  -> pay
  -> create a locked committed order
  -> convert an Instant inventory hold to reservation, or record Scheduled reservation/planned demand
@@ -43,12 +43,12 @@ The The current release may operate one live fulfillment location, but its domai
 - Global catalog and categories.
 - Controlled unit registry for `MASS`, `VOLUME`, and `COUNT`; authoritative inventory/demand uses integer `GRAM`, `MILLILITER`, or `PIECE` base units.
 - Fixed sellable SKU sizes/packs persisted as configuration with SKU-specific integer base consumption; no universal pack/bunch/tray conversion.
-- SKU plus market/location authoritative pricing with historical snapshots and no silent zero-price fallback.
+- SKU plus exact-location authoritative pricing with historical snapshots, no Market/global fallback, and no silent zero-price fallback.
 - Canonical product media in Cloudflare R2 with stable media references/object keys and alt/accessibility text; at minimum one primary image per sellable product, associated through a basic admin upload/association flow or controlled import/seed path. Arbitrary external URLs are not the canonical media source.
 - Customer saved addresses with geocode coordinates and map confirmation where supported.
 - Structured delivery instructions (building/unit, landmark, gate/guard instruction, delivery note, recipient/contact instruction where appropriate) captured separately from structured Address fields and snapshotted immutably onto each committed Order; later Address edits never rewrite historical Order instructions.
 - Cebu City polygon serviceability and delivery-zone resolution.
-- `INSTANT` and `SCHEDULED` fulfillment with exactly one active mode per fulfillment location. Scheduled cadence starts with configurable `WEEKLY`; Instant does not require a cycle.
+- `INSTANT` and `SCHEDULED` fulfillment with exactly one versioned global active mode. Scheduled cadence starts with configurable `WEEKLY`; Instant does not require a cycle. Locations retain independent operational readiness but never select a customer mode.
 - Instant current-availability policy and expiring checkout inventory holds; Scheduled cycles/windows, fees, cutoff, capacity, planned demand, and procurement compatibility.
 - One paid calendar-month membership with a global effective-dated price/currency, per-Subscription agreed-price grandfathering, and lifecycle management using the canonical Subscription states. New price versions apply only to new Subscriptions unless an explicit migration is separately authorized.
 - One introductory Promotions grant that waives the membership fee for exactly one calendar billing month; calendar arithmetic uses the configured business timezone and persists UTC start/end instants. Introductory trial activation requires an existing recurring-capable payment authorization — establishing authorization is not payment success, no zero-value payment is synthesized, and the first paid charge becomes due at `trialEndsAt`.
@@ -67,11 +67,10 @@ The The current release may operate one live fulfillment location, but its domai
 
 ### Operations
 
-- Location-specific inventory with stocked reservation and planned procurement committed-demand semantics.
-- Hybrid sourcing calculation.
+- Location-specific shared Product inventory with Instant holds/reservations and Scheduled committed-demand/procurement semantics derived from the global mode.
 - Demand aggregation, procurement requirements, purchase/receiving records, shortages, rejections, and discrepancy handling.
 - Picking, packing, fulfillment readiness, delivery batches/jobs/stops, rider assignment, delivery events, failure reasons, and retry/reschedule commands.
-- Admin Overview, Customers, Orders, Products, Inventory, Promotions, Payments, Delivery, Analytics, and Staff & Access primary workspaces using purpose-built Core commands/read models. The selector presents Global and Central Cebu for the current release. Global Products owns identity, Categories, media, and Sell variants; Central Cebu Operations contains Products, Inventory, and Delivery, with Products focused on local price, selling status, sourcing, and the one shared Product inventory pool. Memberships lives under Customers, Categories lives under Global Products, and the default Inventory flow is dated stock in/out. Procurement, Receiving, and Fulfillment remain contextual advanced workflows over their independent Core state machines.
+- Admin Overview, Customers, Orders, Products, Inventory, Promotions, Payments, Delivery, Analytics, and Staff & Access primary workspaces using purpose-built Core commands/read models. The selector presents Global and Central Cebu for the current release. Global Products owns identity, Categories, media, and Sell variants only; Central Cebu Operations contains Products, Inventory, and Delivery, with Products focused on exact local price, local selling status, and the one shared Product inventory pool. No sourcing selector, resolved-price fallback, pricing-context label, or catalog-reference label is exposed. Memberships lives under Customers, Categories lives under Global Products, and the default Inventory flow is dated stock in/out. Procurement, Receiving, and Fulfillment remain contextual advanced workflows over their independent Core state machines.
 - A light-only clean-room Admin presentation aligned to the approved public Shadcn UI Kit dashboard geometry: a default 72px icon rail with remembered 252px expansion, responsive Sheet navigation, dense list/detail/editor/configuration archetypes, accessible charts, and FreshMarkets orange accents isolated under `.fm-admin`.
 - A global `/admin/commerce-configuration` workspace with independently authorized Membership Price and Instant Service Fee tabs over the existing effective-dated Core configuration commands. No arbitrary history editing or committed-snapshot mutation is included.
 - Capability-based Application IAM and scoped customer summary/detail, operational queue, and read-only Analytics projections. Named metrics are unavailable until one canonical versioned formula is approved.
@@ -106,15 +105,15 @@ The The current release may operate one live fulfillment location, but its domai
 4. Core permits authenticated Instant checkout without membership and requires eligible membership for Scheduled. It rejects checkout for a mode-specific entitlement failure, non-serviceable coordinate, unavailable active fulfillment mode/option, invalid or expired Instant hold, invalid/closed/cutoff/full Scheduled cycle, invalid SKU/context price, unavailable SKU, Promotion conflict/ineligibility, or below-minimum basket.
 5. A signed provider event maps to a canonical Payments outcome. An outcome sufficient under the configured commitment policy produces exactly one paid Membership activation or committed Order through an explicit idempotent command, or a visible recoverable finance exception. Browser return state and payment initiation are insufficient.
 6. The committed order cannot be rewritten when catalog prices or saved addresses change.
-7. Stocked items reserve location inventory; planned items create committed base-unit demand; hybrid items do both as calculated.
+7. Instant items hold/reserve exact-location shared Product inventory; Scheduled items create committed base-unit demand for procurement. No independent or hybrid sourcing selector exists.
 8. Procurement requirements reconcile demand, safety buffer, usable inventory, and incoming stock.
 9. Receiving discrepancies and supply shortages create explicit operational exceptions and auditable resolutions.
 10. Fulfillment and delivery state machines reject illegal transitions and enforce staff/rider scope.
 11. A rider can complete a delivery or record a failure that enters an explicit retry/reschedule/escalation path.
 12. Admin read models answer current Instant/Scheduled operational questions without exposing raw persistence rows.
-13. A location has exactly one active `INSTANT`/`SCHEDULED` configuration. Instant checkout uses current exact-base-unit availability and an expiring hold without a synthetic cycle; Scheduled checkout uses its configured window/cycle/cutoff/capacity. Switching configuration does not change committed Order snapshots.
+13. FreshMarkets has exactly one global active `INSTANT`/`SCHEDULED` configuration. Instant checkout uses current exact-location base-unit availability and an expiring hold without a synthetic cycle; Scheduled checkout uses its configured window/cycle/cutoff/capacity without requiring stock. Switching configuration revalidates uncommitted commerce and does not change committed Order snapshots.
 14. Unit conversion is controlled and same-dimension; inventory/demand quantities are integers in `GRAM`, `MILLILITER`, or `PIECE`; sellable sizes and packaging consumption come from persisted SKU configuration.
-15. Every quoteable SKU has a positive authoritative market/location price. Quote and Order snapshots preserve merchandise subtotal, item/order discounts, delivery fee/discount, tax, pre-Service-Fee total, optional Instant Service Fee configuration/calculation, and final total. Scheduled Service Fee is zero.
+15. Every quoteable SKU has a positive authoritative exact-location price with no fallback. Quote and Order snapshots preserve merchandise subtotal, item/order discounts, delivery fee/discount, tax, pre-Service-Fee total, optional Instant Service Fee configuration/calculation, and final total. Scheduled Service Fee is zero.
 16. Promotions evaluates only approved benefit/rule types, applies at most one merchandise/order and one delivery benefit deterministically, and preserves Membership-fee Promotion independence.
 17. Admin actions require named capabilities/scopes. Customer/operational views and Analytics are purpose-built derived read models; Analytics cannot mutate source state or publish a named metric without one versioned canonical definition.
 18. Delivery instructions applicable at commitment are snapshotted onto the committed Order; later Address edits never rewrite them.
@@ -136,7 +135,8 @@ The The current release may operate one live fulfillment location, but its domai
 34. Launch transactional notification intent is durable in D1 and retried independently of domain success. Core uses its Cloudflare Send Email adapter only when `EMAIL` and `AUTH_EMAIL_FROM` are configured; `notifications@freshmarkets.ph` remains disabled until the domain is owned, onboarded, and authenticated.
 35. Invoice readiness records exact committed evidence but does not claim official issuance, tax computation, or BIR compliance before the owner-approved accounting policy and serial/retention implementation. The printable customer transaction summary always says `NOT AN OFFICIAL BIR INVOICE`.
 36. A fully privileged global Administrator can reach every Admin workspace, every market/location scope, every Admin-safe record, and every legal command. Restricted principals remain capability- and scope-filtered, and denied or unavailable overview sections are never represented as fabricated zero values.
-37. Admin Product lists use an explicit authorized context. Global owns catalog definition; Central Cebu receives a non-duplicating operational projection with local price, selling status, sourcing, and shared inventory. Selling status and stock status are displayed separately, and no Product detail silently defaults to an undisclosed location. Protected media loads only through a same-origin Web adapter over a Core-authorized content read; R2 keys never reach Web or browser contracts.
+37. Admin Product lists use an explicit authorized Global or Location scope. Global owns catalog definition and exposes no local commerce facts; Central Cebu receives a non-duplicating operational projection with exact local price, local selling status, and shared inventory. Selling status and stock status are displayed separately, and no Product detail defaults or falls back to another price target. Protected media loads only through a same-origin Web adapter over a Core-authorized content read; R2 keys never reach Web or browser contracts.
+38. Overlapping eligible geofences choose the closest operational dispatch origin using exact Haversine distance and stable location-ID tie-break. Product stock never reroutes or splits an Order, and routing providers never choose its owner.
 
 ## Phase 1.5
 

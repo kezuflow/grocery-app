@@ -20,12 +20,12 @@ An internal physical or operational site. It has independent capabilities such a
 
 Invariant: customers never select a location. The application assigns one from eligible candidates.
 
-Each active fulfillment location has exactly one effective `FulfillmentMode` configuration:
+FreshMarkets has exactly one effective global `FulfillmentMode` configuration for all new commerce:
 
 - `INSTANT` — current location inventory and an expiring checkout hold back the customer promise; normal replenishment procurement is outside the checkout path.
 - `SCHEDULED` — a configured offering/window and optional cadence drive capacity, cutoff, planned demand, procurement, receiving, and scheduled delivery. Current-release Scheduled cadence is `WEEKLY`.
 
-`WEEKLY` is a cadence/configuration value, never a fundamental fulfillment mode. Mode configuration is versioned/effective-dated so a location may switch modes without mutating the fulfillment decision snapshotted on committed Orders. Market-level configuration may supply defaults or offering policy, but the resolved fulfillment location has one unambiguous active mode at checkout.
+`WEEKLY` is a cadence/configuration value, never a fundamental fulfillment mode. The global configuration is versioned so an explicit business-wide switch can change new commerce without mutating the fulfillment decision snapshotted on committed Orders. Locations do not select modes independently. A switch invalidates or revalidates uncommitted carts/Quotes; `SCHEDULED -> INSTANT` fails closed until outstanding Scheduled demand is protected and active locations meet Instant readiness.
 
 ### ServiceArea and DeliveryZone
 
@@ -36,7 +36,9 @@ Serviceability and assignment are separate:
 1. Coordinates must fall in an active service area.
 2. Coordinates resolve to an active zone.
 3. The system evaluates locations capable of serving that zone.
-4. Assignment selects an eligible location/cycle based on operational rules.
+4. Assignment filters locations by current-mode operational readiness/capacity and selects the closest dispatch origin by exact Haversine distance, then stable ascending location ID.
+
+Eligible geofences may overlap. Individual Product or Variant stock never affects assignment and never routes a basket to a farther location. Route-driving-time providers are not called to choose the owner. One cart/Order has one resolved location and is never split; changing the address re-resolves, reprices, and revalidates the entire cart.
 
 Text fields such as city or barangay are descriptive and never authoritative geofence proof.
 
@@ -131,7 +133,9 @@ A global, ordered catalog classification used for marketplace discovery and prod
 
 A global catalog concept such as Red Onion or Eggs. Products are not duplicated per location. They contain customer-facing identity, categorization, and descriptive content.
 
-Admin exposes the same Product in two projections: Global owns identity, Category, media, and SellableVariant configuration; an operational-location projection owns no duplicate Product and focuses on that location's resolved price, selling status, sourcing mode, and shared inventory position. The current Admin selector presents Global and Central Cebu while keeping the internal Market hierarchy available to authorization and commerce policy.
+Admin exposes the same Product in two projections: Global owns identity, Category, media, and SellableVariant configuration; an operational-location projection owns no duplicate Product and focuses on that location's exact price, local selling status, and shared inventory position. Global never presents resolved price, pricing context, stock, selling readiness, or catalog-reference labels. The current Admin selector presents Global and Central Cebu while keeping the internal Market hierarchy available to authorization and commerce policy.
+
+Before a Customer has supplied a confirmed address, the current one-location launch may merchandise using Central Cebu as an explicitly provisional browse context. Every displayed amount is still an exact Central Cebu SKU price, never a global or Market fallback. Address confirmation and Checkout reassign the complete cart by geofence/Haversine ownership and revalidate all exact-location prices and availability before Quote acceptance.
 
 ### SKU / SellableVariant
 
@@ -141,7 +145,7 @@ A database-configurable fixed purchasable variant such as 250 g, 1 kg, 6 pieces,
 - display/packaging label, integer sell quantity, and controlled sell unit;
 - authoritative integer quantity consumed from the Product's base inventory pool;
 - active/inactive state and sort/display order;
-- location availability and market/location price references.
+- global active state; exact-location selling activation and prices are separate location configuration.
 
 Invariant: variants do not create independent physical inventories. Red Onion 250 g and 1 kg both consume a shared gram-based inventory account.
 
@@ -157,13 +161,13 @@ The current release supports fixed variants only. Variable-weight settlement, po
 
 ### LocationAvailability
 
-The relationship that declares whether a global SKU can be sold at a location under the currently resolved FulfillmentMode and how its inventory is sourced there. It may also hold safety-buffer and operational configuration. `INSTANT` presentation is sellable only when the approved current-availability policy can fulfill the SKU's exact base-unit consumption; ordinary replenishment is not inserted into checkout to manufacture availability.
+The relationship that declares whether a global SKU is locally offered. It contains a versioned local active flag and no sourcing mode. In `INSTANT`, a globally active and locally active Variant with an exact positive location price remains visible but is sellable only when the shared Product balance covers its exact base-unit consumption. In `SCHEDULED`, the same active and priced Variant is sellable when an open cycle is before cutoff and has capacity; physical stock is not required.
 
 Admin labels this configured relationship **Selling status**. It is distinct from **Stock status**, which is derived from the location's shared Product inventory position and the Variant's exact base consumption. A Variant may be configured to sell while temporarily lacking stock, or be stopped from selling while physical stock remains.
 
 ### Price
 
-Authoritative selling price belongs to the sellable SKU and applicable market/location price context, never merely to Product. Resolution uses a versioned active location price when configured and the applicable market price otherwise. A missing, overlapping, invalid-currency, or nonpositive authoritative price makes the SKU unquoteable; price never silently becomes zero. Procurement cost, selling price, promotional adjustment, and historical Order price are distinct. Quotes and Orders snapshot all financial values; catalog price changes never rewrite history.
+Authoritative selling price belongs to the sellable SKU at one exact fulfillment location, never merely to Product or Market. There is no global or market fallback. A missing, overlapping, invalid-currency, or nonpositive exact-location price makes the SKU unquoteable; price never silently becomes zero. Procurement cost, selling price, promotional adjustment, and historical Order price are distinct. Quotes and Orders snapshot all financial values; catalog price changes never rewrite history.
 
 ## Cart, Checkout, and Commerce Commitment
 
@@ -180,7 +184,7 @@ An application orchestration, not a database entity exposed to UI. The authorita
 - cart and current SKU availability;
 - current pricing and minimum merchandise amount;
 - address coordinates and active service area/zone;
-- eligible fulfillment location, its single active `INSTANT`/`SCHEDULED` mode, and a mode-specific delivery promise;
+- the closest eligible fulfillment location, the single global `INSTANT`/`SCHEDULED` mode, and a mode-specific delivery promise;
 - for `INSTANT`, current exact base-unit availability and an expiring checkout inventory hold;
 - for `SCHEDULED`, an eligible cycle/window, cutoff, concurrency-safe capacity, and demand/procurement policy;
 - promotion eligibility/stacking;
@@ -200,7 +204,7 @@ An immutable commercial and fulfillment commitment created after a provider-conf
 
 Every Order snapshots the resolved `fulfillmentMode`, fulfillment location, service area/zone, delivery promise, delivery window, ETA/promised time where applicable, cycle/schedule identifiers required only by `SCHEDULED`, and the accepted delivery-fee calculation. Later configuration changes cannot alter those semantics.
 
-`OrderItem` snapshots product/SKU names, sellable label/unit/quantity, exact base-unit consumption, sourcing mode, unit price, item/order discount allocation, and total. The Order also snapshots applied Promotion/redemption identities and the same explicit monetary components as its Quote.
+`OrderItem` snapshots product/SKU names, sellable label/unit/quantity, exact base-unit consumption, unit price, item/order discount allocation, and total. Historical sourcing evidence may remain on legacy Orders but is not active configurable state. The Order also snapshots applied Promotion/redemption identities and the same explicit monetary components as its Quote.
 
 The sufficient canonical Payments outcome is the customer commitment boundary. A committed order cannot be casually reopened, delete lines, or inherit later catalog/address changes.
 
@@ -244,14 +248,9 @@ Order percentage/fixed benefits apply only to the approved merchandise subtotal 
 
 ## Supply and Inventory
 
-### SourcingMode
+### Mode-Derived Supply
 
-- `STOCKED`: demand is fulfilled from existing location stock.
-- `PLANNED`: paid demand enters planned procurement/replenishment aggregation.
-- `ON_DEMAND`: supply is acquired for a specific committed demand through a configured operational path rather than assumed available.
-- `MIXED`: usable stock covers an exact portion and another configured sourcing path covers the remainder.
-
-Sourcing answers how inventory is obtained; FulfillmentMode answers when/how the customer receives it. The two vocabularies are independent and the resolved combination is snapshotted. `INSTANT + STOCKED` and `SCHEDULED + PLANNED` are valid examples, not the only structurally representable combinations. A configured combination is eligible only when its owning policies can actually fulfill it; The current release does not infer an unimplemented `ON_DEMAND` path.
+Supply behavior is derived and is not configurable catalog state. `INSTANT` uses current exact-location Product inventory plus holds/reservations. `SCHEDULED` uses committed base-unit demand, cycles, cutoff, capacity, and procurement planning. No `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED` selector exists in active contracts or Admin. Historical snapshots may preserve former values only as compatibility evidence.
 
 ### LocationInventory
 
@@ -433,11 +432,11 @@ Audit logging is not event sourcing and is distinct from application diagnostics
 
 1. Core is authoritative for all business transitions and eligibility.
 2. Authentication identity never directly grants business permissions or checkout rights.
-3. Customer identity and catalog are global; serviceability, fulfillment mode, availability, SKU price, inventory, capacity, fulfillment, and staff scope are location/market-aware.
+3. Customer identity, catalog, and the active fulfillment mode are global; serviceability, local Variant activation, exact SKU price, inventory, capacity, fulfillment, and staff scope are location/market-aware.
 4. Customers provide an address and delivery choice, not a hub selection.
 5. A committed order has one immutable commercial history even when later adjustments/amendments occur.
 6. A canonical Payments outcome sufficient under the configured payment commitment policy and cycle cutoff are separate commitment boundaries.
-7. Fulfillment mode (`INSTANT`/`SCHEDULED`) and sourcing mode (`STOCKED`/`PLANNED`/`ON_DEMAND`/`MIXED`) answer different questions and cannot be represented by one field.
+7. Fulfillment mode (`INSTANT`/`SCHEDULED`) is one global authority and directly determines whether new commerce uses stock/holds or cycle demand/procurement; there is no independent sourcing-mode field.
 8. A temporary Instant checkout hold, committed physical reservation, and planned procurement demand cannot be represented by the same state/quantity.
 9. All quantities used for stock and demand are exact integer `GRAM`, `MILLILITER`, or `PIECE` base units; SKU-specific consumption is immutable in committed snapshots.
 10. All money uses integer minor units, explicit currency, and auditable component breakdowns.

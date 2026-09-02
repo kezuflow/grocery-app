@@ -26,7 +26,7 @@ interface CatalogRawDatabase {
 }
 type Database = CatalogRawDatabase;
 
-/** Launch-scoped commerce constants for the Metro Cebu Scheduled catalog. */
+/** Seed identifiers remain fixtures, not pricing or routing fallbacks. */
 export const MARKET_METRO_CEBU = "market-metro-cebu";
 export const LAUNCH_LOCATION_ID = "location-cebu-central";
 
@@ -166,23 +166,23 @@ function sqlPlaceholders(count: number): string {
  * positive Metro Cebu STANDARD price. Scheduled visibility never reads
  * physical inventory balances — the Admin availability flag decides display.
  */
-function eligibleSkuSubquery(nowMs: number): string {
+function eligibleSkuSubquery(): string {
   return `
     EXISTS (
       SELECT 1
       FROM sku candidate_sku
       JOIN sku_location_availability sla
         ON sla.sku_id = candidate_sku.id
-       AND sla.location_id = '${LAUNCH_LOCATION_ID}'
+       AND sla.location_id = ?
        AND sla.availability_status = 'AVAILABLE'
       JOIN price_version pv
         ON pv.sku_id = candidate_sku.id
-       AND pv.market_id = '${MARKET_METRO_CEBU}'
-       AND (pv.location_id = '${LAUNCH_LOCATION_ID}' OR pv.location_id IS NULL)
+       AND pv.market_id = ?
+       AND pv.location_id = ?
        AND pv.price_type = 'STANDARD'
        AND pv.amount_minor > 0
-       AND pv.valid_from <= ${nowMs}
-       AND (pv.valid_to IS NULL OR pv.valid_to > ${nowMs})
+       AND pv.valid_from <= ?
+       AND (pv.valid_to IS NULL OR pv.valid_to > ?)
       WHERE candidate_sku.product_id = p.id
         AND candidate_sku.status = 'active'
     )`;
@@ -216,6 +216,7 @@ async function selectProductRows(
   options: {
     nowMs: number;
     requireSellable?: boolean;
+    commerceContext?: { locationId: string; marketId: string };
     categorySlug?: string;
     query?: string;
     cursor?: string;
@@ -239,7 +240,16 @@ async function selectProductRows(
     const pattern = `%${options.query.trim().replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
     parameters.push(pattern, pattern);
   }
-  if (options.requireSellable) conditions.push(eligibleSkuSubquery(options.nowMs));
+  if (options.requireSellable && options.commerceContext) {
+    conditions.push(eligibleSkuSubquery());
+    parameters.push(
+      options.commerceContext.locationId,
+      options.commerceContext.marketId,
+      options.commerceContext.locationId,
+      options.nowMs,
+      options.nowMs,
+    );
+  }
 
   let fetchedLimit = options.limit ?? DEFAULT_PAGE_LIMIT;
   fetchedLimit = Math.max(1, Math.min(Math.floor(fetchedLimit), MAX_PAGE_LIMIT));
@@ -291,11 +301,28 @@ type SkuRow = {
 
 type PriceRow = { sku_id: string; amount_minor: number; currency: string; version: number };
 
+type CommerceContext = { locationId: string; marketId: string };
+
+async function resolveCommerceContext(
+  database: Database,
+  locationId: string | undefined,
+): Promise<CommerceContext | null> {
+  if (!locationId) return null;
+  const row = await database
+    .prepare(
+      "SELECT id locationId,market_id marketId FROM fulfillment_location WHERE id=? AND status='active'",
+    )
+    .bind(locationId)
+    .first<CommerceContext>();
+  if (!row) throw new CatalogValidationError("Unknown active delivery location");
+  return row;
+}
+
 /** Expand page rows into full products through five batched queries. */
 async function hydrateProducts(
   database: Database,
   rows: ReadonlyArray<ProductListRow>,
-  locationId: string,
+  context: CommerceContext | null,
   nowMs: number,
 ): Promise<Map<string, CatalogProduct>> {
   const hydrated = new Map<string, CatalogProduct>();
@@ -305,60 +332,84 @@ async function hydrateProducts(
   const idList = sqlPlaceholders(ids.length);
   const skuIdList = `(SELECT id FROM sku WHERE product_id IN (${idList}))`;
 
-  const [skuRows, priceRows, availabilityRows, productDetailRows, skuDetailRows] =
-    await Promise.all([
-      rawAll<SkuRow>(
-        database,
-        `SELECT s.id, s.product_id, s.code, s.name, u.symbol AS symbol, u.code AS unit_code,
+  const [
+    skuRows,
+    priceRows,
+    availabilityRows,
+    inventoryRows,
+    modeRow,
+    productDetailRows,
+    skuDetailRows,
+  ] = await Promise.all([
+    rawAll<SkuRow>(
+      database,
+      `SELECT s.id, s.product_id, s.code, s.name, u.symbol AS symbol, u.code AS unit_code,
                 s.merchandising_label, s.sell_quantity, s.consumption_base_quantity
          FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
          WHERE s.status = 'active' AND s.product_id IN (${idList})
          ORDER BY s.product_id ASC, s.sort_order ASC, s.id ASC`,
-        ids,
-      ),
-      rawAll<PriceRow>(
-        database,
-        `WITH ranked_prices AS (
+      ids,
+    ),
+    context
+      ? rawAll<PriceRow>(
+          database,
+          `WITH ranked_prices AS (
            SELECT pv.sku_id, pv.amount_minor, pv.currency, pv.version,
                   ROW_NUMBER() OVER (
                     PARTITION BY pv.sku_id
-                    ORDER BY CASE WHEN pv.location_id = ? THEN 0 ELSE 1 END,
-                             pv.valid_from DESC, pv.version DESC, pv.id DESC
+                    ORDER BY pv.valid_from DESC, pv.version DESC, pv.id DESC
                   ) AS winner_rank
            FROM price_version pv
            WHERE pv.sku_id IN ${skuIdList}
-             AND pv.market_id = '${MARKET_METRO_CEBU}' AND pv.price_type = 'STANDARD'
-             AND (pv.location_id = ? OR pv.location_id IS NULL)
+             AND pv.market_id = ? AND pv.price_type = 'STANDARD'
+             AND pv.location_id = ?
              AND pv.amount_minor > 0
              AND pv.valid_from <= ${nowMs}
              AND (pv.valid_to IS NULL OR pv.valid_to > ${nowMs})
          )
          SELECT sku_id, amount_minor, currency, version
          FROM ranked_prices WHERE winner_rank = 1`,
-        [locationId, ...ids, locationId],
-      ),
-      rawAll<{ sku_id: string }>(
-        database,
-        `SELECT DISTINCT sku_id FROM sku_location_availability
-         WHERE location_id = '${locationId}' AND availability_status = 'AVAILABLE'
+          [...ids, context.marketId, context.locationId],
+        )
+      : Promise.resolve([]),
+    context
+      ? rawAll<{ sku_id: string }>(
+          database,
+          `SELECT DISTINCT sku_id FROM sku_location_availability
+         WHERE location_id = ? AND availability_status = 'AVAILABLE'
            AND sku_id IN ${skuIdList}`,
-        ids,
-      ),
-      rawAll<{ product_id: string; label: string; value: string; sortOrder: number }>(
-        database,
-        `SELECT product_id, label, value, sort_order AS sortOrder
+          [context.locationId, ...ids],
+        )
+      : Promise.resolve([]),
+    context
+      ? rawAll<{ product_id: string; available_base: number }>(
+          database,
+          `SELECT p.id product_id,COALESCE(b.on_hand-b.reserved,0) available_base
+         FROM product p LEFT JOIN inventory_balance b
+           ON b.inventory_pool_id=p.inventory_pool_id AND b.location_id=?
+         WHERE p.id IN (${idList})`,
+          [context.locationId, ...ids],
+        )
+      : Promise.resolve([]),
+    database
+      .prepare("SELECT active_mode activeMode FROM global_fulfillment_mode WHERE id='global'")
+      .bind()
+      .first<{ activeMode: "INSTANT" | "SCHEDULED" }>(),
+    rawAll<{ product_id: string; label: string; value: string; sortOrder: number }>(
+      database,
+      `SELECT product_id, label, value, sort_order AS sortOrder
          FROM product_detail WHERE product_id IN (${idList})
          ORDER BY sort_order ASC, label ASC`,
-        ids,
-      ),
-      rawAll<{ sku_id: string; label: string; value: string }>(
-        database,
-        `SELECT sku_id, label, value FROM sku_detail
+      ids,
+    ),
+    rawAll<{ sku_id: string; label: string; value: string }>(
+      database,
+      `SELECT sku_id, label, value FROM sku_detail
          WHERE audience = 'CUSTOMER' AND sku_id IN ${skuIdList}
          ORDER BY sort_order ASC, label ASC`,
-        ids,
-      ),
-    ]);
+      ids,
+    ),
+  ]);
 
   const skusByProduct = new Map<string, SkuRow[]>();
   for (const sku of skuRows) {
@@ -367,6 +418,10 @@ async function hydrateProducts(
     skusByProduct.set(sku.product_id, bucket);
   }
   const availableSkuIds = new Set(availabilityRows.map((row) => row.sku_id));
+  const inventoryByProduct = new Map(
+    inventoryRows.map((row) => [row.product_id, row.available_base]),
+  );
+  const activeMode = modeRow?.activeMode ?? "SCHEDULED";
   const detailsByProduct = new Map<string, CatalogDetail[]>();
   for (const detail of productDetailRows) {
     const bucket = detailsByProduct.get(detail.product_id) ?? [];
@@ -385,27 +440,36 @@ async function hydrateProducts(
 
   for (const row of rows) {
     const media = parseProduceMedia(row.imageMetadataJson);
-    const variants: CatalogVariant[] = (skusByProduct.get(row.productId) ?? []).map((sku) => {
-      const price = pricesBySku.get(sku.id) ?? null;
-      return {
-        id: sku.id,
-        code: sku.code,
-        name: sku.name,
-        merchandisingLabel: sku.merchandising_label ?? null,
-        sellQuantity: sku.sell_quantity,
-        sellUnitCode: sellUnitCodeFor(sku.unit_code),
-        unit: sku.symbol,
-        consumptionBaseQuantity: sku.consumption_base_quantity,
-        contentsNote:
-          sku.merchandising_label !== null ? (customerNotesBySku.get(sku.id) ?? null) : null,
-        priceMinor: price?.amount_minor ?? null,
-        currency: price?.currency ?? null,
-        priceVersion: price?.version ?? null,
-      };
-    });
-    const anySellableVariant = variants.some(
-      (variant) => variant.priceMinor !== null && availableSkuIds.has(variant.id),
-    );
+    const variants: CatalogVariant[] = (skusByProduct.get(row.productId) ?? [])
+      .filter((sku) => !context || availableSkuIds.has(sku.id))
+      .map((sku) => {
+        const price = pricesBySku.get(sku.id) ?? null;
+        const availability: CatalogVariant["availability"] = !context
+          ? "LOCATION_REQUIRED"
+          : !price
+            ? "PRICE_UNAVAILABLE"
+            : activeMode === "INSTANT" &&
+                (inventoryByProduct.get(row.productId) ?? 0) < sku.consumption_base_quantity
+              ? "OUT_OF_STOCK"
+              : "AVAILABLE";
+        return {
+          id: sku.id,
+          code: sku.code,
+          name: sku.name,
+          merchandisingLabel: sku.merchandising_label ?? null,
+          sellQuantity: sku.sell_quantity,
+          sellUnitCode: sellUnitCodeFor(sku.unit_code),
+          unit: sku.symbol,
+          consumptionBaseQuantity: sku.consumption_base_quantity,
+          contentsNote:
+            sku.merchandising_label !== null ? (customerNotesBySku.get(sku.id) ?? null) : null,
+          priceMinor: price?.amount_minor ?? null,
+          currency: price?.currency ?? null,
+          priceVersion: price?.version ?? null,
+          availability,
+        };
+      });
+    const anySellableVariant = variants.some((variant) => variant.availability === "AVAILABLE");
     hydrated.set(row.productId, {
       id: row.productId,
       slug: row.slug,
@@ -467,12 +531,14 @@ export async function searchCatalog(
   },
 ): Promise<CatalogSearchPage> {
   const nowMs = Date.now();
+  const context = await resolveCommerceContext(database, input.locationId ?? LAUNCH_LOCATION_ID);
   if (input.cursor !== undefined) decodeCatalogCursor(input.cursor); // fail fast
 
   const requestedLimit = Math.min(Math.max(1, input.limit ?? DEFAULT_PAGE_LIMIT), MAX_PAGE_LIMIT);
   const rows = await selectProductRows(database, {
     nowMs,
-    requireSellable: true,
+    requireSellable: Boolean(context),
+    commerceContext: context ?? undefined,
     query: input.query,
     categorySlug: input.categorySlug,
     cursor: input.cursor,
@@ -481,12 +547,7 @@ export async function searchCatalog(
 
   const hasNextPage = rows.length > requestedLimit;
   const pageRows = hasNextPage ? rows.slice(0, -1) : rows;
-  const hydrated = await hydrateProducts(
-    database,
-    pageRows,
-    input.locationId ?? LAUNCH_LOCATION_ID,
-    nowMs,
-  );
+  const hydrated = await hydrateProducts(database, pageRows, context, nowMs);
   const items = pageRows
     .map((row) => hydrated.get(row.productId))
     .filter((product): product is CatalogProduct => Boolean(product));
@@ -511,12 +572,13 @@ export async function getProduct(
   locationId?: string,
 ): Promise<MarketplaceProductView | null> {
   const nowMs = Date.now();
+  const context = await resolveCommerceContext(database, locationId ?? LAUNCH_LOCATION_ID);
   // Detail lookup is not availability-filtered: unknown or inactive slugs are
   // NOT_FOUND, but currently unavailabile products still render honestly.
   const rows = await selectProductRows(database, { nowMs, slug, limit: 1 });
   const row = rows[0];
   if (!row || row.slug !== slug) return null;
-  const hydrated = await hydrateProducts(database, [row], locationId ?? LAUNCH_LOCATION_ID, nowMs);
+  const hydrated = await hydrateProducts(database, [row], context, nowMs);
   const product = hydrated.get(row.productId);
   if (!product) return null;
   return { product, deliveryContext: { locationAware: Boolean(locationId) } };
@@ -533,6 +595,7 @@ export async function getMarketplaceHome(
   input: { locationId?: string; itemsPerRail?: number },
 ): Promise<MarketplaceHomeView> {
   const nowMs = Date.now();
+  const context = await resolveCommerceContext(database, input.locationId ?? LAUNCH_LOCATION_ID);
   const itemsPerRail = Math.min(
     Math.max(1, Math.floor(input.itemsPerRail ?? DEFAULT_ITEMS_PER_RAIL)),
     MAX_ITEMS_PER_RAIL,
@@ -549,20 +612,17 @@ export async function getMarketplaceHome(
        FROM product p
        JOIN category c ON c.id = p.category_id
        WHERE p.status = 'active' AND c.status = 'active'
-         AND ${eligibleSkuSubquery(nowMs)}
+         ${context ? `AND ${eligibleSkuSubquery()}` : ""}
      )
      WHERE rn <= ?
      ORDER BY categorySortOrder ASC, productName ASC, productId ASC`,
-    [itemsPerRail],
+    context
+      ? [context.locationId, context.marketId, context.locationId, nowMs, nowMs, itemsPerRail]
+      : [itemsPerRail],
   );
   if (rows.length === 0) return { categories: categories.categories, rails: [] };
 
-  const hydrated = await hydrateProducts(
-    database,
-    rows,
-    input.locationId ?? LAUNCH_LOCATION_ID,
-    nowMs,
-  );
+  const hydrated = await hydrateProducts(database, rows, context, nowMs);
 
   const rails: Array<{
     code: string;

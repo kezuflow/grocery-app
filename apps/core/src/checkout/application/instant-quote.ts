@@ -18,6 +18,7 @@ import {
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
 import { resolveServiceFee } from "./resolve-service-fee";
+import { closestLocation } from "../../geography/geometry";
 
 export type QuoteItem = {
   sku_id: string;
@@ -29,7 +30,6 @@ export type QuoteItem = {
   product_name: string;
   category_id: string;
   inventory_pool_id: string;
-  sourcing_mode: "STOCKED" | "PLANNED" | "ON_DEMAND" | "MIXED";
 };
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
@@ -37,9 +37,9 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
 }
 
 /**
- * The Instant quote path: the routed location's active INSTANT configuration
- * supplies promise and capacity; only STOCKED sourcing participates; expiring
- * holds reserve usable stock until commitment or scheduler-driven expiry.
+ * The Instant quote path derives stock behavior from the global mode. The
+ * closest operational location supplies readiness; expiring holds reserve
+ * usable stock until commitment or scheduler-driven expiry.
  */
 export async function createInstantQuote(
   database: D1Database,
@@ -53,31 +53,27 @@ export async function createInstantQuote(
   },
   dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
-  const unstocked = items.find((item) => item.sourcing_mode !== "STOCKED");
-  if (unstocked)
-    return failure(
-      "UNAVAILABLE_ITEM",
-      `${unstocked.product_name} is not stocked for instant delivery`,
-      command.requestId,
-    );
-
-  // Route to an eligible location whose active mode is a complete INSTANT
-  // configuration (promise + capacity); incomplete configs fail closed.
-  const routing = await database
+  const routingRows = await database
     .prepare(
-      `SELECT dz.id AS zone_id, sa.market_id, ls.location_id, fl.name AS location_name,
-              m.promise_minutes, m.max_concurrent_instant_orders,
-              fl.latitude, fl.longitude
+      `SELECT fl.id, dz.id AS zone_id, sa.market_id, ls.location_id,
+              fl.name AS location_name, readiness.instant_promise_minutes AS promise_minutes,
+              readiness.max_concurrent_instant_orders, fl.latitude, fl.longitude
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-       JOIN fulfillment_location_mode m ON m.location_id=fl.id
-       WHERE dz.code=? AND dz.status='active' AND m.active_mode='INSTANT'
-         AND m.promise_minutes IS NOT NULL AND m.max_concurrent_instant_orders IS NOT NULL
-       ORDER BY ls.priority LIMIT 1`,
+       JOIN global_fulfillment_mode mode ON mode.id='global' AND mode.active_mode='INSTANT'
+       JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
+       WHERE dz.code=? AND dz.status='active' AND readiness.dispatch_ready=1
+         AND readiness.instant_promise_minutes IS NOT NULL
+         AND readiness.max_concurrent_instant_orders IS NOT NULL
+         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
+         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
+         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='DISPATCH' AND c.enabled=1)
+       ORDER BY fl.id`,
     )
     .bind(address.delivery_zone_code ?? "")
-    .first<{
+    .all<{
+      id: string;
       zone_id: string;
       market_id: string;
       location_id: string;
@@ -87,6 +83,7 @@ export async function createInstantQuote(
       latitude: number;
       longitude: number;
     }>();
+  const routing = closestLocation(address, routingRows.results);
   if (!routing)
     return failure(
       "INSTANT_MODE_UNAVAILABLE",
@@ -134,7 +131,7 @@ export async function createInstantQuote(
       );
   }
 
-  // Location-aware pricing with fallback to market price. Missing price fails.
+  // Exact-location pricing. Missing price fails; no Market fallback exists.
   const lines: QuoteLine[] = [];
   let subtotalMinor = 0;
   for (const item of items) {
@@ -142,9 +139,9 @@ export async function createInstantQuote(
       .prepare(
         `SELECT amount_minor FROM price_version pv
          WHERE pv.sku_id=? AND pv.market_id=? AND pv.currency=(SELECT currency FROM market WHERE id=?)
-           AND pv.price_type='STANDARD' AND (pv.location_id IS NULL OR pv.location_id=?)
+           AND pv.price_type='STANDARD' AND pv.location_id=?
            AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
-         ORDER BY (pv.location_id IS NOT NULL) DESC, pv.version DESC LIMIT 1`,
+         ORDER BY pv.version DESC LIMIT 1`,
       )
       .bind(item.sku_id, routing.market_id, routing.market_id, routing.location_id, now, now)
       .first<{ amount_minor: number }>();
@@ -156,11 +153,11 @@ export async function createInstantQuote(
       );
     const availability = await database
       .prepare(
-        "SELECT availability_status FROM location_product_availability WHERE location_id=? AND product_id=?",
+        "SELECT availability_status FROM sku_location_availability WHERE location_id=? AND sku_id=?",
       )
-      .bind(routing.location_id, item.product_id)
+      .bind(routing.location_id, item.sku_id)
       .first<{ availability_status: string }>();
-    if (availability && availability.availability_status !== "AVAILABLE")
+    if (!availability || availability.availability_status !== "AVAILABLE")
       return failure(
         "UNAVAILABLE_ITEM",
         `${item.product_name} is unavailable at this location`,
@@ -178,7 +175,6 @@ export async function createInstantQuote(
       baseQuantity: item.quantity * item.consumption_base_quantity,
       unitPriceMinor: price.amount_minor,
       lineTotalMinor: lineTotal,
-      sourcingMode: item.sourcing_mode,
     });
   }
 
@@ -254,7 +250,6 @@ export async function createInstantQuote(
         fulfillmentOptionId: command.fulfillmentOptionId ?? null,
         fulfillmentMode: "INSTANT" as const,
         promisedAt: new Date(now + routing.promise_minutes * 60_000).toISOString(),
-        sourcingModes: [...new Set(lines.map((line) => line.sourcingMode))],
         poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
       },
       deliveryFeeSnapshot: deliveryFee.snapshot,

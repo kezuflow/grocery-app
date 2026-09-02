@@ -34,18 +34,11 @@ async function cloneSku(options: { available: boolean; priced: boolean; location
   )
     .bind(skuId, options.available ? "AVAILABLE" : "UNAVAILABLE")
     .run();
-  if (options.priced) {
+  if (options.priced || options.locationPrice !== undefined) {
     await env.DB.prepare(
-      "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, market_id, location_id, price_type, version, created_at) VALUES (?, ?, 'PHP', 11100, ?, 'market-metro-cebu', NULL, 'STANDARD', 1, ?)",
+      "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, market_id, location_id, price_type, version, created_at) VALUES (?, ?, 'PHP', ?, ?, 'market-metro-cebu', 'location-cebu-central', 'STANDARD', 1, ?)",
     )
-      .bind(`price-generic-${suffix}`, skuId, now - 1000, now)
-      .run();
-  }
-  if (options.locationPrice !== undefined) {
-    await env.DB.prepare(
-      "INSERT INTO price_version (id, sku_id, currency, amount_minor, valid_from, market_id, location_id, price_type, version, created_at) VALUES (?, ?, 'PHP', ?, ?, 'market-metro-cebu', 'location-cebu-central', 'STANDARD', 2, ?)",
-    )
-      .bind(`price-location-${suffix}`, skuId, options.locationPrice, now - 1000, now)
+      .bind(`price-location-${suffix}`, skuId, options.locationPrice ?? 11100, now - 1000, now)
       .run();
   }
   return skuId;
@@ -127,7 +120,7 @@ describe("cart aggregate", () => {
     expect(unpriced).toMatchObject({ ok: false, error: { code: "PRICE_UNAVAILABLE" } });
   });
 
-  it("prefers a current location price over the market price", async () => {
+  it("uses the exact current location price", async () => {
     const principal = await customer();
     const initial = await getCart(env.DB, principal);
     if (!initial.ok) throw new Error("cart setup failed");
