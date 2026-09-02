@@ -30,7 +30,9 @@ describe("Web security headers", () => {
     expect(policy).toContain("form-action 'self'");
     expect(policy).toContain("worker-src 'self' blob:");
     expect(policy).toContain("img-src 'self' data: blob:");
-    expect(policy).toContain("connect-src 'self' https://api.mapbox.com https://events.mapbox.com");
+    expect(policy).toContain(
+      "connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://api.paymongo.com",
+    );
   });
 
   it.each(["development", "test", "preview", "staging", "production"] as const)(

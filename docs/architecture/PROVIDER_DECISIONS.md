@@ -1,22 +1,38 @@
 # Provider Decisions
 
-Status: OWNER-APPROVED RECONCILIATION (2026-08-27).
+Status: PAYMONGO ADAPTER IMPLEMENTED; LIVE ACCOUNT ACCEPTANCE PENDING (2026-09-03).
 
 Provider-specific code remains infrastructure behind Core-owned ports. Domain contracts use
 canonical payment, route-calculation, and notification vocabulary only.
 
 ## Payments
 
-The deterministic `mock` provider is the only approved and registered payment provider. Selection
-is explicit through `PAYMENT_PROVIDER=mock`; registry insertion order is never a selection rule.
-The provider supports deterministic success, failure, expiry, signed event/reaction,
-reconciliation, authorization, and refund simulations for automated tests. It is allowed only in
-explicit `development` and `test` environments and fails closed everywhere else.
+PayMongo Scheduled Subscriptions is the owner-approved recurring-membership direction. A PayMongo
+scheduled Plan must exactly match the FreshMarkets Membership price-version amount, PHP currency,
+monthly interval, and interval count. Ordinary price changes create a new Plan for new enrollments;
+existing paid Subscriptions retain their agreed Plan unless a separately authorized migration is
+performed. PayMongo owns invoice generation and charge retries. FreshMarkets never runs a parallel
+dunning or renewal-payment retry schedule.
 
-No production grocery or recurring payment provider is selected. Production recurring mandates,
-automatic renewal charging, retry ownership, and provider-specific automatic refunds are not
-implemented or approved. Membership state machines, authorization records, and scheduling seams
-remain provider-neutral testable foundations; they are not production-operational claims.
+Core registers the production PayMongo adapter when `PAYMENT_PROVIDER=paymongo` and both
+`PAYMONGO_SECRET_KEY` and `PAYMONGO_WEBHOOK_SECRET` are present. Test keys are required outside
+production and a live key is required in production. The adapter creates Payment Intents, refunds,
+Customers, immutable scheduled monthly Plans, and Subscriptions; verifies PayMongo's `te`/`li`
+HMAC over the exact raw body; maps payment, refund, subscription, and invoice events; and retrieves
+provider subscription truth every fifteen minutes to recover missed delivery. Cloudflare stores
+the keys as Worker secrets. Web receives only the matching browser-safe `PAYMONGO_PUBLIC_KEY`;
+card data is tokenized directly against PayMongo and never crosses Core or Web server code.
+
+The deterministic `mock` provider remains restricted to explicit `development` and `test`
+environments. Production deployment remains fail-closed until the PayMongo account's Subscriptions
+and card capabilities are enabled, live credentials and the public webhook endpoint are configured,
+and live-mode initial payment, renewal, recovery, exhausted-retry, cancellation, refund, webhook
+replay, and reconciliation acceptance has passed.
+
+Every signature-verified webhook is retained exactly once with its bounded raw body, payload hash,
+provider event identity/type, signature-verification time, processing attempts, final status, and
+reconciliation evidence. Invalid-signature requests are not trusted provider events. Secret keys,
+authorization headers, and raw payloads are forbidden from diagnostic logs and ordinary Admin DTOs.
 
 A successful canonical payment observation is durable even if downstream order commitment fails.
 Core retries the same idempotent commitment, cannot create a second payment or order, and escalates

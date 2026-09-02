@@ -143,7 +143,7 @@ export async function getMembershipExperience(database: D1Database, request: Cus
       : "REQUIRED";
   const isOpen =
     subscription !== null &&
-    ["PENDING", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"].includes(subscription.status);
+    ["PENDING", "TRIALING", "ACTIVE", "PAST_DUE", "UNPAID"].includes(subscription.status);
   const trialStatus = redemption ? "REDEEMED" : isOpen ? "OPEN_SUBSCRIPTION" : "AVAILABLE";
   const state = subscription?.status ?? null;
   const terminalOrMissing = state === null || state === "CANCELED" || state === "EXPIRED";
@@ -166,16 +166,8 @@ export async function getMembershipExperience(database: D1Database, request: Cus
         terminalOrMissing,
         isOpen ? "OPEN_SUBSCRIPTION_EXISTS" : "MEMBERSHIP_UNAVAILABLE",
       ),
-      pause: availability(
-        state === "ACTIVE" || state === "PAST_DUE",
-        state === null ? "SUBSCRIPTION_REQUIRED" : "SUBSCRIPTION_NOT_PAUSABLE",
-      ),
-      resume: availability(
-        state === "PAUSED",
-        state === null ? "SUBSCRIPTION_REQUIRED" : "SUBSCRIPTION_NOT_PAUSED",
-      ),
       cancelImmediately: availability(
-        state !== null && ["PENDING", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"].includes(state),
+        state !== null && ["PENDING", "TRIALING", "ACTIVE", "PAST_DUE", "UNPAID"].includes(state),
         state === null ? "SUBSCRIPTION_REQUIRED" : "SUBSCRIPTION_NOT_CANCELABLE",
       ),
       cancelAtPeriodEnd: availability(

@@ -78,8 +78,6 @@ describe("customer Membership experience", () => {
         introductoryTrial: { eligible: false, status: "REDEEMED" },
         recurringAuthorization: { ready: true, status: "READY" },
         actions: {
-          pause: { available: true, disabledReason: null },
-          resume: { available: false, disabledReason: "SUBSCRIPTION_NOT_PAUSED" },
           cancelImmediately: { available: true, disabledReason: null },
           cancelAtPeriodEnd: { available: true, disabledReason: null },
         },

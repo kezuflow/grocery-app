@@ -5,10 +5,8 @@ import { beginPaidEnrollment } from "./get-membership-experience";
 import {
   cancelSubscription,
   pauseSubscription,
-  resumeSubscription,
   type CancelSubscriptionCommand,
   type PauseSubscriptionCommand,
-  type ResumeSubscriptionCommand,
 } from "./change-subscription";
 
 let customerCounter = 0;
@@ -72,14 +70,6 @@ function pauseCommand(subscriptionId: string): PauseSubscriptionCommand {
     requestId: crypto.randomUUID(),
   };
 }
-function resumeCommand(subscriptionId: string): ResumeSubscriptionCommand {
-  return {
-    subscriptionId,
-    idempotencyKey: `resume-${crypto.randomUUID()}`,
-    expectedVersion: 1,
-    requestId: crypto.randomUUID(),
-  };
-}
 function cancelCommand(
   subscriptionId: string,
   timing: "IMMEDIATE" | "PERIOD_END",
@@ -94,30 +84,16 @@ function cancelCommand(
 }
 
 describe("versioned subscription lifecycle", () => {
-  it("pauses and resumes an active subscription", async () => {
-    const { customerId, subscriptionId } = await activePaidSubscription();
+  it("rejects application-owned pause for an active provider subscription", async () => {
+    const { subscriptionId } = await activePaidSubscription();
     const current = await env.DB.prepare("SELECT version FROM subscription WHERE id=?")
       .bind(subscriptionId)
       .first<{ version: number }>();
-    void customerId;
     const paused = await pauseSubscription(env.DB, {
       ...pauseCommand(subscriptionId),
       expectedVersion: current!.version,
     });
-    expect(paused).toMatchObject({ ok: true, value: { state: "PAUSED" } });
-    // Canonical resume returns the subscription to ACTIVE and clears intent.
-    const resume = resumeCommand(subscriptionId);
-    const resumeWithVersion: ResumeSubscriptionCommand = {
-      ...resume,
-      expectedVersion: paused.ok ? paused.value.version : 1,
-    };
-    const resumedFirst = await resumeSubscription(env.DB, resumeWithVersion);
-    expect(resumedFirst).toMatchObject({
-      ok: true,
-      value: { state: "ACTIVE", cancelAtPeriodEnd: false },
-    });
-    const replayedResume = await resumeSubscription(env.DB, resumeWithVersion);
-    expect(replayedResume).toEqual(resumedFirst);
+    expect(paused).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
   });
 
   it("keeps period-end intent non-terminal until the effective instant", async () => {

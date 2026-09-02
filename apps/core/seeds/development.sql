@@ -2,6 +2,26 @@
 -- Re-runnable: stable seed identities use INSERT OR IGNORE.
 -- Deliberately excludes product_media rows and all R2 objects.
 
+-- Synthetic staff actor used by audit, issue-assignment, and inventory fixtures. It has no
+-- credential or session and therefore cannot authenticate.
+INSERT OR IGNORE INTO user
+  (id, name, email, email_verified, image, created_at, updated_at)
+VALUES
+  ('seed-user-local-admin', 'Local Admin', 'local.admin@example.com', 1, NULL,
+   1786000000000, 1786000000000);
+
+INSERT OR IGNORE INTO staff_identity
+  (id, auth_user_id, display_name, status, created_at, updated_at, version)
+VALUES
+  ('staff_local_admin', 'seed-user-local-admin', 'Local Admin', 'active',
+   1786000000000, 1786000000000, 1);
+
+INSERT OR IGNORE INTO staff_role (staff_id, role_id)
+VALUES ('staff_local_admin', 'role_operations_admin');
+
+INSERT OR IGNORE INTO staff_scope (id, staff_id, scope_kind, market_id, location_id)
+VALUES ('seed-scope-local-admin-global', 'staff_local_admin', 'global', NULL, NULL);
+
 -- Commercial configuration used by seeded Instant and delivery snapshots.
 INSERT OR IGNORE INTO service_fee_configuration
   (id, fee_type, flat_minor, percentage_basis_points, currency, effective_from, effective_to,
@@ -114,7 +134,7 @@ VALUES
   ('seed-sub-ana', 'seed-customer-ana', 'offer-membership-monthly', 'ACTIVE', 1786000000000, NULL, NULL, 1786000000000, 1788304500000, 2, 1786000000000, 1788220800000, 1790899200000, NULL, NULL, 0, NULL, NULL, NULL, 'seed-auth-ana', NULL, 2, 'membership-price-version-1', 29900, 'PHP'),
   ('seed-sub-miguel', 'seed-customer-miguel', 'offer-membership-monthly', 'TRIALING', 1788221400000, NULL, 1790899200000, 1788221400000, 1788221400000, 1, 1790899200000, 1788221400000, 1790899200000, NULL, NULL, 0, NULL, NULL, NULL, 'seed-auth-miguel', NULL, 1, 'membership-price-version-1', 29900, 'PHP'),
   ('seed-sub-carla', 'seed-customer-carla', 'offer-membership-monthly', 'PAST_DUE', 1786000002000, NULL, NULL, 1786000002000, 1788304500000, 4, 1786000002000, 1787535000000, 1788220800000, NULL, NULL, 0, NULL, NULL, NULL, 'seed-auth-carla', 1788825600000, 24, 'membership-price-version-1', 29900, 'PHP'),
-  ('seed-sub-ramon', 'seed-customer-ramon', 'offer-membership-monthly', 'PAUSED', 1786000003000, NULL, NULL, 1786000003000, 1788165900000, 3, 1786000003000, 1787535000000, 1790208000000, 1788165900000, NULL, 0, NULL, NULL, NULL, 'seed-auth-ramon', NULL, 24, 'membership-price-version-1', 29900, 'PHP'),
+  ('seed-sub-ramon', 'seed-customer-ramon', 'offer-membership-monthly', 'UNPAID', 1786000003000, NULL, NULL, 1786000003000, 1788165900000, 3, 1786000003000, 1787535000000, 1790208000000, NULL, NULL, 0, NULL, NULL, NULL, 'seed-auth-ramon', NULL, 24, 'membership-price-version-1', 29900, 'PHP'),
   ('seed-sub-jose', 'seed-customer-jose', 'offer-membership-monthly', 'CANCELED', 1786000005000, 1788165900000, NULL, 1786000005000, 1788165900000, 3, 1786000005000, 1786000005000, 1788165900000, NULL, NULL, 0, 1787968800000, NULL, 1788165900000, 'seed-auth-jose', NULL, 20, 'membership-price-version-1', 29900, 'PHP'),
   ('seed-sub-maria', 'seed-customer-maria', 'offer-membership-monthly', 'ACTIVE', 1786000006000, NULL, NULL, 1786000006000, 1788304500000, 2, 1786000006000, 1788220800000, 1790899200000, NULL, NULL, 1, 1788304500000, 1790899200000, NULL, 'seed-auth-maria', NULL, 2, 'membership-price-version-1', 29900, 'PHP');
 
@@ -405,7 +425,7 @@ VALUES
   ('seed-sub-event-ana','seed-sub-ana','ACTIVATED','seed-pi-membership-ana',NULL,'SYSTEM','{}',1786000000000,1786000000000),
   ('seed-sub-event-miguel','seed-sub-miguel','TRIAL_STARTED',NULL,NULL,'SYSTEM','{}',1788221400000,1788221400000),
   ('seed-sub-event-carla','seed-sub-carla','RENEWAL_FAILED','seed-pi-renewal-carla',NULL,'SYSTEM','{}',1788237000000,1788237000000),
-  ('seed-sub-event-ramon','seed-sub-ramon','PAUSED',NULL,NULL,'STAFF','{"reason":"Customer requested a temporary pause"}',1788165900000,1788165900000),
+  ('seed-sub-event-ramon','seed-sub-ramon','PROVIDER_SUBSCRIPTION_UNPAID',NULL,NULL,'SYSTEM','{"provider":"mock","reason":"PROVIDER_RETRIES_EXHAUSTED"}',1788165900000,1788165900000),
   ('seed-sub-event-jose','seed-sub-jose','CANCELED',NULL,NULL,'CUSTOMER','{}',1788165900000,1788165900000),
   ('seed-sub-event-maria','seed-sub-maria','CANCELLATION_SCHEDULED',NULL,NULL,'CUSTOMER','{}',1788304500000,1788304500000);
 

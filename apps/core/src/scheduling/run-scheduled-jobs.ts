@@ -68,14 +68,13 @@ export async function runRegisteredJobs(
     ENVIRONMENT: "development",
     PAYMENT_PROVIDER: "disabled",
   }),
-  renewalInitiationEnabled = false,
   emailDelivery: EmailDeliveryPort = disabledEmailDeliveryPort,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
     let outcome: ScheduledJobOutcome;
     try {
-      outcome = await job.run({ database, now, registry, renewalInitiationEnabled, emailDelivery });
+      outcome = await job.run({ database, now, registry, emailDelivery });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
     }
@@ -98,7 +97,6 @@ export async function runScheduledJobs(
     now,
     undefined,
     buildProviderRegistry(runtime),
-    runtime.renewals.initiationEnabled,
     createCloudflareEmailDeliveryPort(env),
   );
 }

@@ -110,7 +110,6 @@ export type CoreReadinessResponse = {
         | "PAYMENT_LOOKUP"
         | "REFUND_REQUEST"
       )[];
-      renewalInitiationEnabled: boolean;
     };
   };
   timestamp: string;

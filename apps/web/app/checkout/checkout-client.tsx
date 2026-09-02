@@ -291,6 +291,12 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       if (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) {
         setStatus("Payment is ready. Redirecting to the secure payment page…");
         window.location.assign(paymentResult.value.redirectUrl);
+      } else if (paymentResult.value.actionType === "SDK" && paymentResult.value.clientToken) {
+        sessionStorage.setItem(
+          "freshmarkets.checkoutPaymentAction",
+          JSON.stringify(paymentResult.value),
+        );
+        window.location.assign("/checkout/payment");
       } else {
         setStatus("Payment started. Keep this page open while the provider confirms it.");
       }

@@ -78,10 +78,22 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const context = webRequestContext(request);
+  const runtimeEnv = env as typeof env & {
+    ENVIRONMENT?: string;
+    PAYMONGO_PUBLIC_KEY?: string;
+  };
+  const candidate = runtimeEnv.PAYMONGO_PUBLIC_KEY?.trim() || null;
+  const environment = String(runtimeEnv.ENVIRONMENT ?? "development");
+  const requiredPrefix = environment === "production" ? "pk_live_" : "pk_test_";
+  const publicKey = candidate?.startsWith(requiredPrefix) ? candidate : null;
   return jsonWithRequestId(
     {
       ok: true,
-      value: { providerConfigured: false },
+      value: {
+        providerConfigured: publicKey !== null,
+        providerCode: publicKey ? "paymongo" : null,
+        publicKey,
+      },
       requestId: context.requestId,
     },
     context.requestId,

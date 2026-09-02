@@ -15,7 +15,15 @@ export type StartPromotionalTrialCommand = {
 
 export type SubscriptionSummary = {
   subscriptionId: string;
-  state: "PENDING" | "TRIALING" | "ACTIVE" | "PAST_DUE" | "PAUSED" | "CANCELED" | "EXPIRED";
+  state:
+    | "PENDING"
+    | "TRIALING"
+    | "ACTIVE"
+    | "PAST_DUE"
+    | "UNPAID"
+    | "PAUSED"
+    | "CANCELED"
+    | "EXPIRED";
   cancelAtPeriodEnd: boolean;
   scheduledCancellationAt: string | null;
   trialStartsAt: string | null;
@@ -246,6 +254,7 @@ function toState(status: string): SubscriptionSummary["state"] {
     case "TRIALING":
     case "ACTIVE":
     case "PAST_DUE":
+    case "UNPAID":
     case "PAUSED":
     case "CANCELED":
     case "EXPIRED":

@@ -172,28 +172,32 @@ export async function createPayment(
     );
   }
 
-  const providerCustomerRef =
-    (await repository.findProviderCustomer(command.customerId, provider.code)) ??
-    `${provider.code}_cust_${command.customerId}`;
-  try {
-    await repository.upsertProviderCustomer({
-      customerId: command.customerId,
-      provider: provider.code,
-      providerCustomerRef: providerCustomerRef,
-      now: Date.now(),
-    });
-  } catch {
-    await database
-      .prepare(
-        "UPDATE payment_intent SET status='FAILED', version=version+1, updated_at=? WHERE id=? AND status='INITIATED'",
-      )
-      .bind(Date.now(), intentId)
-      .run();
-    return failure(
-      "CONFIGURATION_ERROR",
-      "Customer payment identity belongs to a different provider",
-      command.requestId,
-    );
+  let providerCustomerRef = await repository.findProviderCustomer(
+    command.customerId,
+    provider.code,
+  );
+  if (!providerCustomerRef && !provider.ensureCustomer) {
+    providerCustomerRef = `${provider.code}_cust_${command.customerId}`;
+    try {
+      await repository.upsertProviderCustomer({
+        customerId: command.customerId,
+        provider: provider.code,
+        providerCustomerRef,
+        now: Date.now(),
+      });
+    } catch {
+      await database
+        .prepare(
+          "UPDATE payment_intent SET status='FAILED', version=version+1, updated_at=? WHERE id=? AND status='INITIATED'",
+        )
+        .bind(Date.now(), intentId)
+        .run();
+      return failure(
+        "CONFIGURATION_ERROR",
+        "Customer payment identity belongs to a different provider",
+        command.requestId,
+      );
+    }
   }
 
   let providerResult;

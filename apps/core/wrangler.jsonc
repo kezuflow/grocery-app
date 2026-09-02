@@ -31,16 +31,18 @@
     // Production sets TRUSTED_ORIGINS through environment configuration,
     // never a source default.
     "TRUSTED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,https://core.example.invalid",
-    // Deterministic mock payments are local-only. Production must not inherit
-    // this variable and fails closed until an approved provider exists.
+    // Deterministic mock payments are local-only. Deployed environments set
+    // PAYMENT_PROVIDER=paymongo and bind the PayMongo secrets below.
     "PAYMENT_PROVIDER": "mock",
-    // Renewal initiation has a single explicit owner and stays fail-closed
-    // until a production payment provider and deployment rollout are approved.
-    "MEMBERSHIP_RENEWAL_INITIATION_ENABLED": "false",
     "ROUTE_DISTANCE_PROVIDER": "mapbox",
   },
   "secrets": {
-    "required": ["MAPBOX_ACCESS_TOKEN"],
+    "required": [
+      "MAPBOX_ACCESS_TOKEN",
+      "LOCAL_PAYMENT_PROVIDER",
+      "PAYMONGO_SECRET_KEY",
+      "PAYMONGO_WEBHOOK_SECRET",
+    ],
   },
   // Cloudflare Email Service supplies transactional auth delivery without an
   // API token. AUTH_EMAIL_FROM is deployment configuration and intentionally
@@ -61,4 +63,41 @@
       "migrations_dir": "migrations",
     },
   ],
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "BETTER_AUTH_URL": "https://freshmarkets-web-staging.ilyreggie.workers.dev",
+        "TRUSTED_ORIGINS": "https://freshmarkets-web-staging.ilyreggie.workers.dev",
+        "PAYMENT_PROVIDER": "paymongo",
+        "ROUTE_DISTANCE_PROVIDER": "mapbox",
+      },
+      "secrets": {
+        "required": [
+          "BETTER_AUTH_SECRET",
+          "GOOGLE_CLIENT_ID",
+          "GOOGLE_CLIENT_SECRET",
+          "MAPBOX_ACCESS_TOKEN",
+          "PAYMONGO_SECRET_KEY",
+          "PAYMONGO_WEBHOOK_SECRET",
+        ],
+      },
+      "send_email": [{ "name": "EMAIL" }],
+      "r2_buckets": [
+        {
+          "binding": "PRODUCT_MEDIA",
+          "bucket_name": "freshmarkets-product-media-staging",
+        },
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "freshmarkets-core-staging",
+          "database_id": "989a3663-0d73-4f58-a58d-012ab02843a5",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+  },
 }

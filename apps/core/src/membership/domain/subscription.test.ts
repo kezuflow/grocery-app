@@ -15,13 +15,16 @@ describe("canonical subscription lifecycle", () => {
       ["TRIALING", "CANCELED"],
       ["TRIALING", "EXPIRED"],
       ["ACTIVE", "PAST_DUE"],
-      ["ACTIVE", "PAUSED"],
+      ["ACTIVE", "UNPAID"],
       ["ACTIVE", "CANCELED"],
       ["ACTIVE", "EXPIRED"],
       ["PAST_DUE", "ACTIVE"],
-      ["PAST_DUE", "PAUSED"],
+      ["PAST_DUE", "UNPAID"],
       ["PAST_DUE", "CANCELED"],
       ["PAST_DUE", "EXPIRED"],
+      ["UNPAID", "ACTIVE"],
+      ["UNPAID", "CANCELED"],
+      ["UNPAID", "EXPIRED"],
       ["PAUSED", "ACTIVE"],
       ["PAUSED", "CANCELED"],
       ["PAUSED", "EXPIRED"],
@@ -39,6 +42,7 @@ describe("canonical subscription lifecycle", () => {
       ["PAUSED", "PAST_DUE"],
       ["PAUSED", "TRIALING"],
       ["ACTIVE", "TRIALING"],
+      ["UNPAID", "TRIALING"],
       ["PENDING", "PAST_DUE"],
     ];
     for (const [from, to] of illegal) {
@@ -55,6 +59,7 @@ describe("canonical subscription lifecycle", () => {
         "TRIALING",
         "ACTIVE",
         "PAST_DUE",
+        "UNPAID",
         "PAUSED",
         "CANCELED",
         "EXPIRED",
@@ -70,6 +75,6 @@ describe("canonical subscription lifecycle", () => {
   it("finds catch-up paths only where a legal route exists", () => {
     expect(findSubscriptionTransitionPath("TRIALING", "SUCCEEDED" as never)).toBeNull();
     expect(findSubscriptionTransitionPath("ACTIVE", "ACTIVE")).toEqual([]);
-    expect(findSubscriptionTransitionPath("ACTIVE", "PAUSED")).toEqual(["ACTIVE", "PAUSED"]);
+    expect(findSubscriptionTransitionPath("ACTIVE", "UNPAID")).toEqual(["ACTIVE", "UNPAID"]);
   });
 });

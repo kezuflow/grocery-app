@@ -82,8 +82,25 @@ async function inboxCount(providerEventId: string) {
   return row?.count ?? 0;
 }
 
+async function receiptCount(rawBody?: string) {
+  const row = rawBody
+    ? await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM payment_provider_webhook_receipt WHERE raw_payload=?",
+      )
+        .bind(rawBody)
+        .first<{ count: number }>()
+    : await env.DB.prepare("SELECT COUNT(*) AS count FROM payment_provider_webhook_receipt").first<{
+        count: number;
+      }>();
+  return row?.count ?? 0;
+}
+
 describe("provider event ingestion", () => {
   it("rejects invalid signatures before trusting any identifier", async () => {
+    const before = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_provider_event_inbox",
+    ).first<{ count: number }>();
+    const receiptsBefore = await receiptCount();
     const forged = new Headers({
       "x-mock-signature": "nope",
       "x-mock-timestamp": String(Date.now()),
@@ -93,6 +110,61 @@ describe("provider event ingestion", () => {
       ok: false,
       error: { code: "WEBHOOK_VERIFICATION_FAILED" },
     });
+    const after = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_provider_event_inbox",
+    ).first<{ count: number }>();
+    expect(after?.count).toBe(before?.count);
+    expect(await receiptCount()).toBe(receiptsBefore);
+  });
+
+  it("records a verified delivery even when its payload cannot be normalized", async () => {
+    const rawBody = "{}";
+    const headers = new Headers({
+      "x-mock-signature": await mockSignatureFor(rawBody),
+      "x-mock-timestamp": String(Date.now()),
+    });
+    const outcome = await ingestProviderEvent(env.DB, testRegistry(), "mock", headers, rawBody);
+    expect(outcome).toMatchObject({
+      ok: false,
+      error: { code: "WEBHOOK_VERIFICATION_FAILED" },
+    });
+    const receipt = await env.DB.prepare(
+      "SELECT parse_status, provider_event_id FROM payment_provider_webhook_receipt WHERE raw_payload=? ORDER BY received_at DESC LIMIT 1",
+    )
+      .bind(rawBody)
+      .first<{ parse_status: string; provider_event_id: string | null }>();
+    expect(receipt).toEqual({
+      parse_status: "REJECTED_AFTER_VERIFICATION",
+      provider_event_id: null,
+    });
+  });
+
+  it("retains the exact body of every verified webhook once", async () => {
+    const event = eventFor(`missing-${crypto.randomUUID()}`);
+    const signed = await signedEvent(event);
+    const outcome = await ingestProviderEvent(
+      env.DB,
+      testRegistry(),
+      "mock",
+      signed.headers,
+      signed.rawBody,
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { processingStatus: "RECONCILIATION_REQUIRED" },
+    });
+
+    const stored = await env.DB.prepare(
+      "SELECT raw_payload, signature_verified_at FROM payment_provider_event_inbox WHERE provider='mock' AND provider_event_id=?",
+    )
+      .bind(event.eventId)
+      .first<{ raw_payload: string; signature_verified_at: number }>();
+    expect(stored?.raw_payload).toBe(signed.rawBody);
+    expect(stored?.signature_verified_at).toBeGreaterThan(0);
+
+    await ingestProviderEvent(env.DB, testRegistry(), "mock", signed.headers, signed.rawBody);
+    expect(await inboxCount(event.eventId)).toBe(1);
+    expect(await receiptCount(signed.rawBody)).toBe(2);
   });
 
   it("rejects events for unconfigured providers", async () => {

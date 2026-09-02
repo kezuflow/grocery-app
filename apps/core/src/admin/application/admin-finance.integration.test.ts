@@ -686,7 +686,7 @@ describe("finance administration", () => {
     expect(again).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
-  it("lists memberships and pauses/resumes through canonical commands", async () => {
+  it("lists searchable memberships and cancels through the canonical command", async () => {
     const manager = await seedManager();
     const principal = await signUp();
     const now = Date.now();
@@ -715,29 +715,53 @@ describe("finance administration", () => {
     if (!page.ok) return;
     expect(page.value.items.some((item) => item.subscriptionId === subscriptionId)).toBe(true);
 
-    const paused = await core.pauseAdminMembership({
+    const customerEmail = await env.DB.prepare("SELECT email FROM user WHERE id = ?")
+      .bind(principal.userId)
+      .first<{ email: string }>();
+    const byEmail = await core.listAdminMemberships({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: customerEmail!.email,
+    });
+    expect(byEmail.ok).toBe(true);
+    if (!byEmail.ok) return;
+    expect(byEmail.value.items.map((item) => item.subscriptionId)).toContain(subscriptionId);
+
+    const byId = await core.listAdminMemberships({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: subscriptionId,
+    });
+    expect(byId.ok).toBe(true);
+    if (!byId.ok) return;
+    expect(byId.value.items.map((item) => item.subscriptionId)).toContain(subscriptionId);
+
+    const noMatch = await core.listAdminMemberships({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: "no-such-membership@example.invalid",
+    });
+    expect(noMatch).toMatchObject({ ok: true, value: { items: [] } });
+
+    const tooLong = await core.listAdminMemberships({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      query: "x".repeat(101),
+    });
+    expect(tooLong).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+
+    const canceled = await core.cancelAdminMembership({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       subscriptionId,
       reason: "customer request",
+      timing: "IMMEDIATE",
       expectedVersion: 1,
       idempotencyKey: `mem-${crypto.randomUUID()}`,
     });
-    expect(paused.ok).toBe(true);
-    if (!paused.ok) return;
-    expect(paused.value.state).toBe("PAUSED");
-
-    const resumed = await core.resumeAdminMembership({
-      requestId: crypto.randomUUID(),
-      headers: { cookie: manager.cookie },
-      subscriptionId,
-      reason: "customer returned",
-      expectedVersion: paused.value.version,
-      idempotencyKey: `mem-${crypto.randomUUID()}`,
-    });
-    expect(resumed.ok).toBe(true);
-    if (!resumed.ok) return;
-    expect(resumed.value.state).toBe("ACTIVE");
+    expect(canceled.ok).toBe(true);
+    if (!canceled.ok) return;
+    expect(canceled.value.state).toBe("CANCELED");
   });
 
   it("rolls back an Admin membership change when required audit evidence fails", async () => {
@@ -765,49 +789,6 @@ describe("finance administration", () => {
        WHEN NEW.action IN ('MEMBERSHIP.PAUSED', 'MEMBERSHIP.RESUMED', 'MEMBERSHIP.CANCELED')
        BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END`,
     ).run();
-
-    try {
-      await core.pauseAdminMembership({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: manager.cookie },
-        subscriptionId,
-        reason: "atomic pause",
-        expectedVersion: 1,
-        idempotencyKey: `mem-${crypto.randomUUID()}`,
-      });
-    } catch {
-      // The observable invariant is rollback, independent of RPC error transport.
-    }
-
-    const row = await env.DB.prepare("SELECT status, version FROM subscription WHERE id=?")
-      .bind(subscriptionId)
-      .first<{ status: string; version: number }>();
-    expect(row).toEqual({ status: "ACTIVE", version: 1 });
-
-    await env.DB.prepare("UPDATE subscription SET status='PAUSED', paused_at=? WHERE id=?")
-      .bind(now, subscriptionId)
-      .run();
-
-    try {
-      await core.resumeAdminMembership({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: manager.cookie },
-        subscriptionId,
-        reason: "atomic resume",
-        expectedVersion: 1,
-        idempotencyKey: `mem-${crypto.randomUUID()}`,
-      });
-    } catch {
-      // The observable invariant is rollback, independent of RPC error transport.
-    }
-    const resumedRow = await env.DB.prepare("SELECT status, version FROM subscription WHERE id=?")
-      .bind(subscriptionId)
-      .first<{ status: string; version: number }>();
-    expect(resumedRow).toEqual({ status: "PAUSED", version: 1 });
-
-    await env.DB.prepare("UPDATE subscription SET status='ACTIVE', paused_at=NULL WHERE id=?")
-      .bind(subscriptionId)
-      .run();
 
     try {
       await core.cancelAdminMembership({

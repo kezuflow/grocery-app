@@ -177,6 +177,7 @@ export function createMockPaymentProvider(): PaymentProvider {
         return {
           ok: false,
           reason: "UNPARSEABLE_PAYLOAD",
+          signatureVerified: true,
         } satisfies ProviderEventVerificationFailure;
       }
       const canonicalState =
@@ -207,6 +208,7 @@ export function createMockPaymentProvider(): PaymentProvider {
           return {
             ok: false,
             reason: "UNKNOWN_EVENT_TYPE",
+            signatureVerified: true,
           } satisfies ProviderEventVerificationFailure;
         }
         settlement = {
@@ -228,6 +230,7 @@ export function createMockPaymentProvider(): PaymentProvider {
         return {
           ok: false,
           reason: "UNKNOWN_EVENT_TYPE",
+          signatureVerified: true,
         } satisfies ProviderEventVerificationFailure;
       }
       return {
@@ -235,6 +238,7 @@ export function createMockPaymentProvider(): PaymentProvider {
         event: {
           provider: "mock",
           providerEventId: parsed.eventId,
+          eventType: parsed.kind === "refund" ? "refund.updated" : "payment.updated",
           providerReference: parsed.reference ?? parsed.refundReference!,
           observedAt: timestamp,
           canonicalState,

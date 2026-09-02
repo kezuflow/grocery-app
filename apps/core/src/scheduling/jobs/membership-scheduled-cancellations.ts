@@ -6,8 +6,8 @@ const BATCH_LIMIT = 50;
 /** Applies due period-end membership cancellations at their effective instant. */
 export const membershipScheduledCancellationsJob: ScheduledJob = {
   name: "membership.scheduled-cancellations",
-  async run({ database, now }) {
-    const outcomes = await applyScheduledCancellations(database, now, BATCH_LIMIT);
+  async run({ database, now, registry }) {
+    const outcomes = await applyScheduledCancellations(database, now, BATCH_LIMIT, registry);
     const applied = outcomes.filter((outcome) => outcome.applied).length;
     return {
       status: "SUCCEEDED",

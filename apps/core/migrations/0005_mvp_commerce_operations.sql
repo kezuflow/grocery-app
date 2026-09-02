@@ -41,12 +41,12 @@ CREATE INDEX IF NOT EXISTS procurement_requirement_cycle_idx ON procurement_requ
 CREATE TRIGGER IF NOT EXISTS inventory_reservation_guard
 BEFORE INSERT ON inventory_reservation
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT (CASE WHEN NOT EXISTS (
     SELECT 1 FROM inventory_balance
     WHERE location_id = NEW.location_id
       AND inventory_pool_id = NEW.inventory_pool_id
       AND on_hand - reserved >= NEW.quantity
-  ) THEN RAISE(ABORT, 'INSUFFICIENT_STOCK') END;
+  ) THEN RAISE(ABORT, 'INSUFFICIENT_STOCK') END);
 END;
 CREATE TRIGGER IF NOT EXISTS inventory_reservation_increment
 AFTER INSERT ON inventory_reservation
@@ -57,13 +57,13 @@ END;
 CREATE TRIGGER IF NOT EXISTS grocery_order_capacity_guard
 BEFORE INSERT ON grocery_order
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT (CASE WHEN NOT EXISTS (
     SELECT 1 FROM delivery_cycle
     WHERE id = NEW.cycle_id
       AND status = 'OPEN'
       AND cutoff_at > unixepoch('now') * 1000
       AND allocated < capacity
-  ) THEN RAISE(ABORT, 'DELIVERY_CYCLE_UNAVAILABLE') END;
+  ) THEN RAISE(ABORT, 'DELIVERY_CYCLE_UNAVAILABLE') END);
 END;
 CREATE TRIGGER IF NOT EXISTS grocery_order_allocate_capacity
 AFTER INSERT ON grocery_order

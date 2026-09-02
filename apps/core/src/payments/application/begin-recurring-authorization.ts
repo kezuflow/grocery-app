@@ -121,22 +121,26 @@ export async function beginRecurringAuthorization(
   }
 
   const repository = createPaymentRepository(database);
-  const providerCustomerRef =
-    (await repository.findProviderCustomer(command.customerId, provider.code)) ??
-    `${provider.code}_cust_${command.customerId}`;
-  try {
-    await repository.upsertProviderCustomer({
-      customerId: command.customerId,
-      provider: provider.code,
-      providerCustomerRef,
-      now: Date.now(),
-    });
-  } catch {
-    return failure(
-      "CONFIGURATION_ERROR",
-      "Customer payment identity belongs to a different provider",
-      command.requestId,
-    );
+  let providerCustomerRef = await repository.findProviderCustomer(
+    command.customerId,
+    provider.code,
+  );
+  if (!providerCustomerRef && !provider.ensureCustomer) {
+    providerCustomerRef = `${provider.code}_cust_${command.customerId}`;
+    try {
+      await repository.upsertProviderCustomer({
+        customerId: command.customerId,
+        provider: provider.code,
+        providerCustomerRef,
+        now: Date.now(),
+      });
+    } catch {
+      return failure(
+        "CONFIGURATION_ERROR",
+        "Customer payment identity belongs to a different provider",
+        command.requestId,
+      );
+    }
   }
 
   const authorizationId = crypto.randomUUID();

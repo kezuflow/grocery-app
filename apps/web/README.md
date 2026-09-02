@@ -16,7 +16,7 @@ The Web Worker has no D1 binding. Its `CORE` Service Binding targets `freshmarke
 Local Vite development loads Core as an auxiliary Worker so RPC bindings survive vinext reloads;
 the deployed architecture remains two independently deployed Workers.
 
-`MAPBOX_PUBLIC_ACCESS_TOKEN` is the only Mapbox token exposed to browser map components. It
+`MAPBOX_BROWSER_TOKEN` is the only Mapbox token exposed to browser map components. It
 must be a read-only public token restricted in Mapbox to the exact local, preview, and production
 Web origins. The server-side `MAPBOX_ACCESS_TOKEN` remains a Core secret and must never be copied
 into Web configuration, client bundles, logs, or rendered error content.

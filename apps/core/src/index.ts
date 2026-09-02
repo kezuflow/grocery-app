@@ -927,6 +927,7 @@ const reconciliationResolveSchema = authenticatedRequestSchema.extend({
 });
 
 const membershipListSchema = authenticatedRequestSchema.extend({
+  query: validationSchema.string().trim().min(1).max(100).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
@@ -1089,7 +1090,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       database: response.checks.database,
       paymentProvider: response.checks.paymentProvider.status,
       paymentProviderCode: response.checks.paymentProvider.code ?? "none",
-      renewalInitiationEnabled: response.checks.paymentProvider.renewalInitiationEnabled,
     });
     return response;
   }
@@ -2123,30 +2123,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
-  async pauseAdminMembership(
-    input: import("@freshmarkets/contracts").AdminMembershipLifecycleRequest,
-  ) {
-    const validation = membershipLifecycleSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return changeAdminMembershipCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-      "PAUSE",
-    );
-  }
-  async resumeAdminMembership(
-    input: import("@freshmarkets/contracts").AdminMembershipLifecycleRequest,
-  ) {
-    const validation = membershipLifecycleSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return changeAdminMembershipCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-      "RESUME",
-    );
-  }
   async cancelAdminMembership(
     input: import("@freshmarkets/contracts").AdminMembershipLifecycleRequest,
   ) {
@@ -2156,7 +2132,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return changeAdminMembershipCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
-      "CANCEL",
     );
   }
   async listAdminOrderIssues(input: import("@freshmarkets/contracts").AdminOrderIssueListRequest) {
@@ -2325,12 +2300,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
   async beginPaidEnrollment(input: import("@freshmarkets/contracts").BeginPaidEnrollmentRequest) {
     return this.membershipRpc.beginPaidEnrollment(input);
-  }
-  async pauseSubscription(input: import("@freshmarkets/contracts").PauseSubscriptionRequest) {
-    return this.membershipRpc.pauseSubscription(input);
-  }
-  async resumeSubscription(input: import("@freshmarkets/contracts").ResumeSubscriptionRequest) {
-    return this.membershipRpc.resumeSubscription(input);
   }
   async cancelSubscription(input: import("@freshmarkets/contracts").CancelSubscriptionRequest) {
     return this.membershipRpc.cancelSubscription(input);

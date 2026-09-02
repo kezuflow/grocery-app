@@ -1088,10 +1088,31 @@ export async function listAdminMemberships(
     }
   }
 
-  const clause = cursor ? "WHERE (s.created_at < ? OR (s.created_at = ? AND s.id < ?))" : "";
-  const binds = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : [];
+  const query = request.query?.trim() ?? "";
+  if (query.length > 100) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "query is too long",
+        requestId: request.requestId,
+      },
+    };
+  }
+
+  const clauses: string[] = [];
+  const binds: unknown[] = [];
+  if (cursor) {
+    clauses.push("(s.created_at < ? OR (s.created_at = ? AND s.id < ?))");
+    binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+  if (query !== "") {
+    clauses.push("(u.email LIKE ? OR s.id LIKE ?)");
+    binds.push(`%${query}%`, `%${query}%`);
+  }
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
-    .prepare(`${MEMBERSHIP_SELECT} ${clause} ORDER BY s.created_at DESC, s.id DESC LIMIT ?`)
+    .prepare(`${MEMBERSHIP_SELECT} ${where} ORDER BY s.created_at DESC, s.id DESC LIMIT ?`)
     .bind(...binds, limit + 1)
     .all<{
       subscriptionId: string;
@@ -1102,9 +1123,9 @@ export async function listAdminMemberships(
       version: number;
       created_at: number;
     }>();
-  void 0;
   const hasMore = rows.results.length > limit;
-  const items: AdminMembershipSummary[] = rows.results.slice(0, limit).map((row) => ({
+  const pageRows = rows.results.slice(0, limit);
+  const items: AdminMembershipSummary[] = pageRows.map((row) => ({
     subscriptionId: row.subscriptionId,
     customerEmail: row.customerEmail,
     state: row.state,
@@ -1113,7 +1134,7 @@ export async function listAdminMemberships(
       row.currentPeriodEndsAt === null ? null : new Date(row.currentPeriodEndsAt).toISOString(),
     version: row.version,
   }));
-  const last = rows.results[rows.results.length - 1];
+  const last = pageRows[pageRows.length - 1];
   const nextCursor =
     hasMore && last
       ? encodeStaffCursor({ createdAt: last.created_at, id: last.subscriptionId })

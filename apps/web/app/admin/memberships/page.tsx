@@ -5,15 +5,7 @@ import type {
   AdminMembershipSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import {
-  Clipboard,
-  EllipsisVertical,
-  Eye,
-  Pause,
-  Play,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
+import { Clipboard, EllipsisVertical, Eye, XCircle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -27,6 +19,7 @@ import { MembershipStatusBadge } from "../../../components/admin/customer-status
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +36,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 
-type MembershipAction = "pause" | "resume" | "cancel";
+type MembershipAction = "cancel";
 
 type LoadState =
   | { phase: "loading" }
@@ -67,20 +60,6 @@ const actionPresentation: Readonly<
     }
   >
 > = {
-  pause: {
-    label: "Pause membership",
-    title: "Pause this membership?",
-    consequence: "Pauses the membership through its canonical lifecycle and records the reason.",
-    icon: Pause,
-    destructive: false,
-  },
-  resume: {
-    label: "Resume membership",
-    title: "Resume this membership?",
-    consequence: "Resumes the paused membership through its canonical lifecycle.",
-    icon: Play,
-    destructive: false,
-  },
   cancel: {
     label: "Cancel membership",
     title: "Cancel this membership immediately?",
@@ -91,8 +70,6 @@ const actionPresentation: Readonly<
 };
 
 function allowedActions(state: string): ReadonlyArray<MembershipAction> {
-  if (state === "ACTIVE") return ["pause", "cancel"];
-  if (state === "PAUSED") return ["resume", "cancel"];
   if (["CANCELED", "EXPIRED"].includes(state)) return [];
   return ["cancel"];
 }
@@ -112,16 +89,19 @@ export default function MembershipsPage() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
   const commandIntent = useAdminCommandIntent();
-  const pagination = useAdminPagination();
+  const pagination = useAdminPagination(appliedQuery);
 
-  const load = useCallback(async (cursor: string | null) => {
+  const load = useCallback(async (search: string, cursor: string | null) => {
     setState({ phase: "loading" });
     try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (search.trim()) params.set("query", search.trim());
+      if (cursor) params.set("cursor", cursor);
       const payload = (await (
-        await fetch(
-          `/api/admin/memberships?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-        )
+        await fetch(`/api/admin/memberships?${params}`)
       ).json()) as RpcResult<AdminMembershipPage>;
       if (!payload.ok) {
         setState({
@@ -139,8 +119,8 @@ export default function MembershipsPage() {
   }, []);
 
   useEffect(() => {
-    void load(pagination.cursor);
-  }, [load, pagination.cursor]);
+    void load(appliedQuery, pagination.cursor);
+  }, [appliedQuery, load, pagination.cursor]);
 
   async function applyAction(reason: string) {
     if (!pendingAction) return;
@@ -167,7 +147,7 @@ export default function MembershipsPage() {
       }
       setNotice(`${actionPresentation[action].label} completed.`);
       setPendingAction(null);
-      await load(pagination.cursor);
+      await load(appliedQuery, pagination.cursor);
     } catch {
       setNotice("Connection lost. Retry the lifecycle action safely.");
     }
@@ -191,6 +171,39 @@ export default function MembershipsPage() {
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Membership list</h2>
+        <form
+          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setAppliedQuery(query.trim());
+            pagination.reset();
+          }}
+        >
+          <Input
+            aria-label="Search memberships"
+            placeholder="Search by email or membership ID"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-9 sm:w-80"
+          />
+          <Button type="submit" size="sm" variant="outline">
+            Search
+          </Button>
+          {query || appliedQuery ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setQuery("");
+                setAppliedQuery("");
+                pagination.reset();
+              }}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </form>
         {copiedId ? (
           <p className="sr-only" role="status">
             Membership ID copied.
@@ -208,13 +221,16 @@ export default function MembershipsPage() {
               title="Memberships could not be loaded"
               message={state.message}
               requestId={state.requestId}
-              onRetry={() => void load(pagination.cursor)}
+              onRetry={() => void load(appliedQuery, pagination.cursor)}
             />
           </div>
         ) : null}
         {state.phase === "ready" && memberships.length === 0 ? (
           <div className="p-4">
-            <AdminPageState state="empty" message="No memberships are available." />
+            <AdminPageState
+              state={appliedQuery ? "filtered-empty" : "empty"}
+              message="No memberships are visible in this view."
+            />
           </div>
         ) : null}
         {state.phase === "ready" && memberships.length > 0 ? (

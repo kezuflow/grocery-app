@@ -126,7 +126,7 @@ export type DeliveryInstructions = {
 - [ ] Write component tests for initialization after mount, cleanup, token error, map-load error, pin movement, reduced motion, and the fake adapter.
 - [ ] Run the component test; expect failure because the map component does not exist.
 - [ ] Add exact dependency `mapbox-gl@3.29.0` using pnpm.
-- [ ] Add `MAPBOX_PUBLIC_ACCESS_TOKEN` as a Web variable and expose only that public value to the client; document URL restrictions.
+- [ ] Add `MAPBOX_BROWSER_TOKEN` as a Web secret binding and expose only that public value to the client; document URL restrictions.
 - [ ] Implement Mapbox lifecycle in `useEffect`, import its CSS once, and add required CSP `worker-src`, `img-src`, and `connect-src` entries.
 - [ ] Re-run component tests, `pnpm --filter @freshmarkets/web check:vinext`, typecheck, and build; expect exit 0.
 - [ ] Commit with `git commit -m "feat(web): add reusable mapbox foundation"`.

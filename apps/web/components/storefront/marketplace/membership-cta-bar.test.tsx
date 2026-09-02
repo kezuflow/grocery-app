@@ -38,8 +38,6 @@ const experience = {
   actions: {
     startTrial: { available: true, disabledReason: null },
     beginPaidEnrollment: { available: true, disabledReason: null },
-    pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-    resume: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
     cancelImmediately: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
     cancelAtPeriodEnd: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
   },

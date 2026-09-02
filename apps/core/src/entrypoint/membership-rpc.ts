@@ -2,8 +2,6 @@ import type {
   BeginPaidEnrollmentRequest,
   CancelSubscriptionRequest,
   GetSubscriptionRequest,
-  PauseSubscriptionRequest,
-  ResumeSubscriptionRequest,
   StartTrialRequest,
   SubscriptionEligibilityRequest,
 } from "@freshmarkets/contracts";
@@ -23,14 +21,12 @@ import {
   getMembershipOffer,
   getSubscriptionSummaryForCustomer,
 } from "../membership/application/get-membership-experience";
-import {
-  cancelSubscription,
-  pauseSubscription,
-  resumeSubscription,
-} from "../membership/application/change-subscription";
+import { cancelSubscription } from "../membership/application/change-subscription";
 import { authenticatedRequestSchema } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
+import { provisionPaidMembership } from "../payments/application/provision-paid-membership";
+import { cancelProviderSubscription } from "../payments/application/cancel-provider-subscription";
 
 export function createMembershipRpc(context: CoreRpcContext) {
   async function customerFor(input: GetSubscriptionRequest) {
@@ -97,71 +93,29 @@ export function createMembershipRpc(context: CoreRpcContext) {
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
-      return beginPaidEnrollment(context.env.DB, {
+      const enrollment = await beginPaidEnrollment(context.env.DB, {
         customerId: customer.value.customerId,
         offerId: validation.data.offerId,
         idempotencyKey: validation.data.idempotencyKey,
         requestId: input.requestId,
       });
-    },
-
-    async pauseSubscription(input: PauseSubscriptionRequest) {
-      const validation = authenticatedRequestSchema
-        .extend({
-          reason: reasonSchema.optional(),
-          idempotencyKey: idempotencyKeySchema,
-          expectedVersion: expectedVersionSchema,
-        })
-        .safeParse(input);
-      if (!validation.success) return validationFailure(input.requestId, validation.error);
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
-      if (!customer.ok) return customer;
-      const subscriptionId = await findSubscriptionIdForCustomer(
-        context.env.DB,
-        customer.value.customerId,
-      );
-      if (!subscriptionId)
-        return {
-          ok: false as const,
-          error: {
-            code: "NOT_FOUND" as const,
-            message: "Subscription not found",
-            requestId: input.requestId,
-          },
-        };
-      return pauseSubscription(context.env.DB, {
-        subscriptionId,
-        reason: validation.data.reason,
-        idempotencyKey: validation.data.idempotencyKey,
-        expectedVersion: validation.data.expectedVersion,
+      if (!enrollment.ok) return enrollment;
+      const providerCode = context.paymentProviderCode();
+      if (providerCode !== "paymongo") return enrollment;
+      const offer = await getMembershipOffer(context.env.DB, {
+        customerId: customer.value.customerId,
         requestId: input.requestId,
       });
-    },
-
-    async resumeSubscription(input: ResumeSubscriptionRequest) {
-      const validation = authenticatedRequestSchema
-        .extend({ idempotencyKey: idempotencyKeySchema, expectedVersion: expectedVersionSchema })
-        .safeParse(input);
-      if (!validation.success) return validationFailure(input.requestId, validation.error);
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
-      if (!customer.ok) return customer;
-      const subscriptionId = await findSubscriptionIdForCustomer(
-        context.env.DB,
-        customer.value.customerId,
-      );
-      if (!subscriptionId)
-        return {
-          ok: false as const,
-          error: {
-            code: "NOT_FOUND" as const,
-            message: "Subscription not found",
-            requestId: input.requestId,
-          },
-        };
-      return resumeSubscription(context.env.DB, {
-        subscriptionId,
+      if (!offer.ok) return offer;
+      return provisionPaidMembership(context.env.DB, context.paymentProviders(), {
+        providerCode,
+        subscription: enrollment.value,
+        customerId: customer.value.customerId,
+        offerName: offer.value.name,
+        priceVersionId: offer.value.priceVersionId,
+        amountMinor: offer.value.amountMinor,
+        currency: offer.value.currency,
         idempotencyKey: validation.data.idempotencyKey,
-        expectedVersion: validation.data.expectedVersion,
         requestId: input.requestId,
       });
     },
@@ -191,6 +145,22 @@ export function createMembershipRpc(context: CoreRpcContext) {
             requestId: input.requestId,
           },
         };
+      if (validation.data.timing === "IMMEDIATE") {
+        const providerCancellation = await cancelProviderSubscription(
+          context.env.DB,
+          context.paymentProviders(),
+          subscriptionId,
+        );
+        if (!providerCancellation.ok)
+          return {
+            ok: false as const,
+            error: {
+              code: "PROVIDER_LOOKUP_FAILED" as const,
+              message: `PayMongo cancellation could not be confirmed: ${providerCancellation.errorCode}`,
+              requestId: input.requestId,
+            },
+          };
+      }
       return cancelSubscription(context.env.DB, {
         subscriptionId,
         timing: validation.data.timing,

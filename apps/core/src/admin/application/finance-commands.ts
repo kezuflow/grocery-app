@@ -14,11 +14,7 @@ import type {
 import { allowedOrderIssueActions } from "./order-issue-policy";
 import { cancelOrder } from "../../orders/application/cancel-order";
 import { requestRefund } from "../../payments/application/request-refund";
-import {
-  cancelSubscription,
-  pauseSubscription,
-  resumeSubscription,
-} from "../../membership/application/change-subscription";
+import { cancelSubscription } from "../../membership/application/change-subscription";
 import { claimCommandIdempotency } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { log } from "../../observability";
@@ -441,17 +437,13 @@ export async function resolveAdminReconciliationCase(
   };
 }
 
-type LifecycleAction = "PAUSE" | "RESUME" | "CANCEL";
-
 /**
- * Membership lifecycle through the canonical pause/resume/cancel commands,
- * wrapped with staff authorization and audit. Recover is deferred until a
- * provider-confirmed canonical outcome source exists.
+ * Membership cancellation wrapped with staff authorization and audit.
+ * Provider billing state changes arrive only through verified observations.
  */
 export async function changeAdminMembership(
   deps: FinanceAdministrationDeps,
   request: AdminMembershipLifecycleRequest,
-  action: LifecycleAction,
 ): Promise<RpcResult<AdminMembershipSummary>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "memberships.manage");
   if (!access.ok) return access;
@@ -463,12 +455,7 @@ export async function changeAdminMembership(
   // Canonical membership commands own the lifecycle idempotency record. On a
   // successful replay, return the current projection without appending a
   // second admin audit event.
-  const lifecycleScope =
-    action === "PAUSE"
-      ? "membership.pause"
-      : action === "RESUME"
-        ? "membership.resume"
-        : "membership.cancel";
+  const lifecycleScope = "membership.cancel";
   const replay = await deps.db
     .prepare(
       "SELECT status, result_reference FROM idempotency_records WHERE scope=? AND idempotency_key=?",
@@ -519,12 +506,6 @@ export async function changeAdminMembership(
     expectedVersion: request.expectedVersion,
     requestId: request.requestId,
   };
-  const membershipAuditAction =
-    action === "PAUSE"
-      ? "MEMBERSHIP.PAUSED"
-      : action === "RESUME"
-        ? "MEMBERSHIP.RESUMED"
-        : "MEMBERSHIP.CANCELED";
   const transitionOptions = {
     actorType: "ADMIN" as const,
     evidence: (guard: { clause: string; binds: ReadonlyArray<unknown> }) => [
@@ -532,13 +513,11 @@ export async function changeAdminMembership(
         deps.db,
         {
           actorUserId: access.value.authUserId,
-          action: membershipAuditAction,
+          action: "MEMBERSHIP.CANCELED",
           resourceType: "subscription",
           resourceId: request.subscriptionId,
           reason,
-          after: {
-            state: action === "PAUSE" ? "PAUSED" : action === "RESUME" ? "ACTIVE" : "CANCELED",
-          },
+          after: { state: "CANCELED" },
           correlationId: request.requestId,
           occurredAt: Date.now(),
         },
@@ -546,19 +525,14 @@ export async function changeAdminMembership(
       ),
     ],
   };
-  const result =
-    action === "PAUSE"
-      ? await pauseSubscription(deps.db, command, transitionOptions)
-      : action === "RESUME"
-        ? await resumeSubscription(deps.db, command, transitionOptions)
-        : await cancelSubscription(
-            deps.db,
-            {
-              ...command,
-              timing: request.timing ?? "IMMEDIATE",
-            },
-            transitionOptions,
-          );
+  const result = await cancelSubscription(
+    deps.db,
+    {
+      ...command,
+      timing: request.timing ?? "IMMEDIATE",
+    },
+    transitionOptions,
+  );
   if (!result.ok) {
     const allowed: ReadonlyArray<AppErrorCode> = [
       "NOT_FOUND",

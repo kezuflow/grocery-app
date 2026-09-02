@@ -357,6 +357,8 @@ export type InboxRow = {
   payloadHash: string;
   processingStatus: string;
   normalizedObservationJson: string | null;
+  rawPayload: string | null;
+  signatureVerifiedAt: number | null;
   attempts: number;
   receivedAt: number;
   availableAt: number | null;
@@ -368,6 +370,35 @@ export function extendPaymentRepository(database: D1Database) {
   const base = createPaymentRepository(database);
   return {
     ...base,
+    insertWebhookReceipt(input: {
+      provider: string;
+      requestId: string;
+      providerEventId: string | null;
+      eventType: string | null;
+      payloadHash: string;
+      rawPayload: string;
+      parseStatus: "PARSED" | "REJECTED_AFTER_VERIFICATION";
+      now: number;
+    }): Promise<void> {
+      return database
+        .prepare(
+          "INSERT INTO payment_provider_webhook_receipt (id, provider, request_id, provider_event_id, event_type, payload_hash, raw_payload, parse_status, signature_verified_at, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(
+          crypto.randomUUID(),
+          input.provider,
+          input.requestId,
+          input.providerEventId,
+          input.eventType,
+          input.payloadHash,
+          input.rawPayload,
+          input.parseStatus,
+          input.now,
+          input.now,
+        )
+        .run()
+        .then(() => undefined);
+    },
     async findIntentByProviderReference(
       provider: string,
       providerReference: string,
@@ -405,7 +436,7 @@ export function extendPaymentRepository(database: D1Database) {
     async findInboxEntry(provider: string, providerEventId: string): Promise<InboxRow | null> {
       const row = await database
         .prepare(
-          "SELECT id, provider, provider_event_id, payload_hash, processing_status, normalized_observation_json, attempts, received_at, available_at, lease_owner, lease_expires_at FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
+          "SELECT id, provider, provider_event_id, payload_hash, processing_status, normalized_observation_json, raw_payload, signature_verified_at, attempts, received_at, available_at, lease_owner, lease_expires_at FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
         )
         .bind(provider, providerEventId)
         .first<{
@@ -415,6 +446,8 @@ export function extendPaymentRepository(database: D1Database) {
           payload_hash: string;
           processing_status: string;
           normalized_observation_json: string | null;
+          raw_payload: string | null;
+          signature_verified_at: number | null;
           attempts: number;
           received_at: number;
           available_at: number | null;
@@ -429,6 +462,8 @@ export function extendPaymentRepository(database: D1Database) {
             payloadHash: row.payload_hash,
             processingStatus: row.processing_status,
             normalizedObservationJson: row.normalized_observation_json,
+            rawPayload: row.raw_payload,
+            signatureVerifiedAt: row.signature_verified_at,
             attempts: row.attempts,
             receivedAt: row.received_at,
             availableAt: row.available_at,
@@ -444,11 +479,13 @@ export function extendPaymentRepository(database: D1Database) {
       providerReference: string;
       eventType: string;
       normalizedObservationJson: string;
+      rawPayload: string;
+      signatureVerifiedAt: number;
       now: number;
     }): Promise<number> {
       return database
         .prepare(
-          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, provider_reference, event_type, normalized_observation_json, processing_status, attempts, received_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'RECEIVED', 0, ?, ?, ?)",
+          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, provider_reference, event_type, normalized_observation_json, raw_payload, signature_verified_at, processing_status, attempts, received_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', 0, ?, ?, ?)",
         )
         .bind(
           crypto.randomUUID(),
@@ -458,6 +495,8 @@ export function extendPaymentRepository(database: D1Database) {
           input.providerReference,
           input.eventType,
           input.normalizedObservationJson,
+          input.rawPayload,
+          input.signatureVerifiedAt,
           input.now,
           input.now,
           input.now,
@@ -525,7 +564,8 @@ export function extendPaymentRepository(database: D1Database) {
       const rows = await database
         .prepare(
           `SELECT id, provider, provider_event_id, payload_hash, processing_status,
-                  normalized_observation_json, attempts, received_at, available_at,
+                  normalized_observation_json, raw_payload, signature_verified_at,
+                  attempts, received_at, available_at,
                   lease_owner, lease_expires_at
            FROM payment_provider_event_inbox
            WHERE processing_status IN ('RECEIVED','RETRY_REQUIRED')
@@ -542,6 +582,8 @@ export function extendPaymentRepository(database: D1Database) {
           payload_hash: string;
           processing_status: string;
           normalized_observation_json: string | null;
+          raw_payload: string | null;
+          signature_verified_at: number | null;
           attempts: number;
           received_at: number;
           available_at: number | null;
@@ -555,6 +597,8 @@ export function extendPaymentRepository(database: D1Database) {
         payloadHash: row.payload_hash,
         processingStatus: row.processing_status,
         normalizedObservationJson: row.normalized_observation_json,
+        rawPayload: row.raw_payload,
+        signatureVerifiedAt: row.signature_verified_at,
         attempts: row.attempts,
         receivedAt: row.received_at,
         availableAt: row.available_at,

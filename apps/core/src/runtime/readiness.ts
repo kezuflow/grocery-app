@@ -30,7 +30,6 @@ export async function buildReadinessResponse(env: Env): Promise<CoreReadinessRes
     status: "not_ready",
     code: null,
     capabilities: [],
-    renewalInitiationEnabled: false,
   };
   try {
     const runtime = coreRuntimeConfiguration(env);
@@ -50,7 +49,6 @@ export async function buildReadinessResponse(env: Env): Promise<CoreReadinessRes
             "REFUND_REQUEST",
           ]
         : [],
-      renewalInitiationEnabled: runtime.renewals.initiationEnabled,
     };
   } catch {
     // Readiness is a safe deployment signal. Configuration details stay in

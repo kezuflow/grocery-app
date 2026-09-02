@@ -1,7 +1,10 @@
+import type { PaymentProviderRegistry } from "../../payments/ports/provider-registry";
+import { cancelProviderSubscription } from "../../payments/application/cancel-provider-subscription";
+
 export type ScheduledCancellationOutcome = {
   subscriptionId: string;
   applied: boolean;
-  reason?: "NOT_DUE_YET" | "NO_INTENT" | "STALE_VERSION" | "APPLIED";
+  reason?: "NOT_DUE_YET" | "NO_INTENT" | "STALE_VERSION" | "PROVIDER_RETRY_REQUIRED" | "APPLIED";
 };
 
 /**
@@ -13,6 +16,7 @@ export async function applyScheduledCancellations(
   database: D1Database,
   now: number,
   limit = 50,
+  registry?: PaymentProviderRegistry,
 ): Promise<ScheduledCancellationOutcome[]> {
   const due = await database
     .prepare(
@@ -44,6 +48,23 @@ export async function applyScheduledCancellations(
     if (!claimed) {
       outcomes.push({ subscriptionId: row.id, applied: false, reason: "NOT_DUE_YET" });
       continue;
+    }
+    if (registry) {
+      const providerCancellation = await cancelProviderSubscription(database, registry, row.id);
+      if (!providerCancellation.ok) {
+        await database
+          .prepare(
+            "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope='membership.applyCancel' AND idempotency_key=?",
+          )
+          .bind(now, idempotencyKey)
+          .run();
+        outcomes.push({
+          subscriptionId: row.id,
+          applied: false,
+          reason: "PROVIDER_RETRY_REQUIRED",
+        });
+        continue;
+      }
     }
     const applied = await database
       .prepare(

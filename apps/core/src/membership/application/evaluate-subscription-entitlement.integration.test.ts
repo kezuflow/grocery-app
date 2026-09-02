@@ -123,33 +123,31 @@ describe("canonical subscription entitlement", () => {
     });
   });
 
-  it("treats PAST_DUE as entitled only strictly before grace end", async () => {
-    const beforeCustomer = await seedCustomer();
-    await seedSubscription(beforeCustomer, { status: "PAST_DUE", graceEndsAt: AT + 1 });
-    const exactCustomer = await seedCustomer();
-    await seedSubscription(exactCustomer, { status: "PAST_DUE", graceEndsAt: AT });
-
-    await expect(
-      evaluateSubscriptionEntitlement(env.DB, { customerId: beforeCustomer, at: AT }),
-    ).resolves.toMatchObject({ eligible: true, reason: "ENTITLED", effectiveUntil: AT + 1 });
-    await expect(
-      evaluateSubscriptionEntitlement(env.DB, { customerId: exactCustomer, at: AT }),
-    ).resolves.toMatchObject({ eligible: false, reason: "GRACE_ENDED", effectiveUntil: AT });
-  });
-
-  it.each(["PENDING", "PAUSED", "CANCELED", "EXPIRED"])("keeps %s ineligible", async (status) => {
+  it("keeps PAST_DUE entitled until a verified provider state removes access", async () => {
     const customerId = await seedCustomer();
-    await seedSubscription(customerId, { status });
+    await seedSubscription(customerId, { status: "PAST_DUE", graceEndsAt: AT });
 
     await expect(
       evaluateSubscriptionEntitlement(env.DB, { customerId, at: AT }),
-    ).resolves.toMatchObject({
-      eligible: false,
-      state: status,
-      effectiveUntil: null,
-      reason: "STATE_NOT_ENTITLED",
-    });
+    ).resolves.toMatchObject({ eligible: true, reason: "ENTITLED", effectiveUntil: null });
   });
+
+  it.each(["PENDING", "UNPAID", "PAUSED", "CANCELED", "EXPIRED"])(
+    "keeps %s ineligible",
+    async (status) => {
+      const customerId = await seedCustomer();
+      await seedSubscription(customerId, { status });
+
+      await expect(
+        evaluateSubscriptionEntitlement(env.DB, { customerId, at: AT }),
+      ).resolves.toMatchObject({
+        eligible: false,
+        state: status,
+        effectiveUntil: null,
+        reason: "STATE_NOT_ENTITLED",
+      });
+    },
+  );
 
   it("selects the latest lifecycle aggregate deterministically", async () => {
     const customerId = await seedCustomer();

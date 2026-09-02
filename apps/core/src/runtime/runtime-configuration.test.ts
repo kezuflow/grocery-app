@@ -101,6 +101,51 @@ describe("parseCoreRuntimeConfiguration", () => {
     ).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
   });
 
+  it("requires mode-matched PayMongo secrets", () => {
+    expect(() =>
+      parseCoreRuntimeConfiguration({
+        ENVIRONMENT: "test",
+        PAYMENT_PROVIDER: "paymongo",
+      }),
+    ).toThrow("PAYMONGO_SECRET_KEY_REQUIRED");
+    expect(() =>
+      parseCoreRuntimeConfiguration({
+        ENVIRONMENT: "test",
+        PAYMENT_PROVIDER: "paymongo",
+        PAYMONGO_SECRET_KEY: "sk_live_wrong_mode",
+        PAYMONGO_WEBHOOK_SECRET: "whsk_test_value",
+      }),
+    ).toThrow("PAYMONGO_SECRET_KEY_ENVIRONMENT_MISMATCH");
+    const configuration = parseCoreRuntimeConfiguration({
+      ENVIRONMENT: "test",
+      PAYMENT_PROVIDER: "paymongo",
+      PAYMONGO_SECRET_KEY: "sk_test_value",
+      PAYMONGO_WEBHOOK_SECRET: "whsk_test_value",
+    });
+    expect(configuration.payments.providerCode).toBe("paymongo");
+    expect(configuration.readiness.payments).toBe(true);
+  });
+
+  it("allows a local provider override without allowing it in deployments", () => {
+    const local = parseCoreRuntimeConfiguration({
+      ENVIRONMENT: "development",
+      PAYMENT_PROVIDER: "mock",
+      LOCAL_PAYMENT_PROVIDER: "paymongo",
+      PAYMONGO_SECRET_KEY: "sk_test_value",
+      PAYMONGO_WEBHOOK_SECRET: "whsk_test_value",
+    });
+    expect(local.payments.providerCode).toBe("paymongo");
+
+    expect(() =>
+      parseCoreRuntimeConfiguration({
+        ENVIRONMENT: "production",
+        BETTER_AUTH_SECRET: strongSecret,
+        BETTER_AUTH_URL: "https://freshmarkets.ph",
+        LOCAL_PAYMENT_PROVIDER: "paymongo",
+      }),
+    ).toThrow("LOCAL_PAYMENT_PROVIDER_FORBIDDEN");
+  });
+
   it("reports optional provider and OAuth readiness without secret values", () => {
     const config = parseCoreRuntimeConfiguration({
       ENVIRONMENT: "production",
@@ -109,24 +154,5 @@ describe("parseCoreRuntimeConfiguration", () => {
     });
     expect(config.readiness).toEqual({ auth: true, googleOauth: false, payments: false });
     expect(JSON.stringify(config.readiness)).not.toContain(strongSecret);
-  });
-
-  it("defaults renewal initiation off and requires an explicit configured owner", () => {
-    expect(
-      parseCoreRuntimeConfiguration({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }).renewals,
-    ).toEqual({ initiationEnabled: false });
-    expect(
-      parseCoreRuntimeConfiguration({
-        ENVIRONMENT: "test",
-        PAYMENT_PROVIDER: "mock",
-        MEMBERSHIP_RENEWAL_INITIATION_ENABLED: "true",
-      }).renewals,
-    ).toEqual({ initiationEnabled: true });
-    expect(() =>
-      parseCoreRuntimeConfiguration({
-        ENVIRONMENT: "test",
-        MEMBERSHIP_RENEWAL_INITIATION_ENABLED: "true",
-      }),
-    ).toThrow("MEMBERSHIP_RENEWAL_INITIATION_REQUIRES_PAYMENT_PROVIDER");
   });
 });

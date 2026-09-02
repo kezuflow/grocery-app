@@ -6,7 +6,7 @@ describe("MembershipExperienceView", () => {
     expectTypeOf<MembershipExperienceView>().toMatchTypeOf<{
       offer: { amountMinor: number; currency: string; billingInterval: "CALENDAR_MONTH" };
       recurringAuthorization: { ready: boolean; status: "READY" | "PENDING" | "REQUIRED" };
-      actions: { pause: { available: boolean; disabledReason: string | null } };
+      actions: { cancelImmediately: { available: boolean; disabledReason: string | null } };
     }>();
     expectTypeOf<keyof MembershipExperienceView>().not.toEqualTypeOf<"provider">();
   });

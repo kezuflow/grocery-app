@@ -35,8 +35,6 @@ describe("account Membership experience", () => {
           actions: {
             startTrial: { available: true, disabledReason: null },
             beginPaidEnrollment: { available: true, disabledReason: null },
-            pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-            resume: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
             cancelImmediately: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
             cancelAtPeriodEnd: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
           },
@@ -71,8 +69,6 @@ describe("account Membership experience", () => {
           actions: {
             startTrial: { available: true, disabledReason: null },
             beginPaidEnrollment: { available: true, disabledReason: null },
-            pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-            resume: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
             cancelImmediately: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
             cancelAtPeriodEnd: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
           },
@@ -80,7 +76,7 @@ describe("account Membership experience", () => {
       />,
     );
     expect(html).toContain("Start introductory trial");
-    expect(html).toContain("Set up paid membership payment");
-    expect(html).not.toContain("Begin paid membership");
+    expect(html).not.toContain("Set up paid membership payment");
+    expect(html).toContain("Begin paid membership");
   });
 });

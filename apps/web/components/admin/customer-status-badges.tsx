@@ -5,6 +5,7 @@ const membershipTones: Readonly<Record<string, AdminStatusTone>> = {
   TRIALING: "info",
   ACTIVE: "success",
   PAST_DUE: "danger",
+  UNPAID: "danger",
   PAUSED: "warning",
   CANCELED: "danger",
   EXPIRED: "neutral",

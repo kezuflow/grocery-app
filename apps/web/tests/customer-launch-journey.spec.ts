@@ -42,8 +42,6 @@ test("presents membership and safe post-commit customer actions as one bounded j
         actions: {
           startTrial: { available: false, disabledReason: "OPEN_SUBSCRIPTION" },
           beginPaidEnrollment: { available: false, disabledReason: "OPEN_SUBSCRIPTION" },
-          pause: { available: false, disabledReason: "TRIALING" },
-          resume: { available: false, disabledReason: "NOT_PAUSED" },
           cancelImmediately: { available: false, disabledReason: "POLICY_UNAVAILABLE" },
           cancelAtPeriodEnd: { available: false, disabledReason: "POLICY_UNAVAILABLE" },
         },

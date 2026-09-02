@@ -10,15 +10,19 @@ export type ProviderSettlementObservation = {
   observedAt: number;
 };
 
-export type VerifiedProviderEvent = {
+type VerifiedProviderEventBase = {
   provider: string;
   providerEventId: string;
+  eventType?: string;
   providerReference: string;
   observedAt: number;
+  payloadHash: string;
+};
+
+export type VerifiedFinancialProviderEvent = VerifiedProviderEventBase & {
   canonicalState: PaymentDomainState;
   amountMinor: number;
   currency: string;
-  payloadHash: string;
   kind: "payment" | "refund";
   /** Present when kind === "refund": the provider-side refund identity. */
   refundReference: string | null;
@@ -26,9 +30,45 @@ export type VerifiedProviderEvent = {
   settlement?: ProviderSettlementObservation;
 };
 
+export type ProviderSubscriptionStatus =
+  | "INCOMPLETE"
+  | "INCOMPLETE_CANCELED"
+  | "ACTIVE"
+  | "PAST_DUE"
+  | "UNPAID"
+  | "CANCELED";
+
+export type VerifiedSubscriptionProviderEvent = VerifiedProviderEventBase & {
+  kind: "subscription";
+  providerStatus: ProviderSubscriptionStatus;
+  providerCustomerReference: string;
+  providerPlanReference: string;
+  providerPaymentMethodReference: string | null;
+  latestInvoiceReference: string | null;
+  nextBillingAt: number | null;
+};
+
+export type VerifiedSubscriptionInvoiceProviderEvent = VerifiedProviderEventBase & {
+  kind: "subscription_invoice";
+  providerSubscriptionReference: string;
+  providerPaymentReference: string | null;
+  providerStatus: "DRAFT" | "OPEN" | "PAID" | "VOID";
+  amountMinor: number;
+  currency: string;
+  dueAt: number | null;
+  paidAt: number | null;
+};
+
+export type VerifiedProviderEvent =
+  | VerifiedFinancialProviderEvent
+  | VerifiedSubscriptionProviderEvent
+  | VerifiedSubscriptionInvoiceProviderEvent;
+
 export type ProviderEventVerificationFailure = {
   ok: false;
   reason: "INVALID_SIGNATURE" | "INVALID_TIMESTAMP" | "UNPARSEABLE_PAYLOAD" | "UNKNOWN_EVENT_TYPE";
+  /** True only when authenticity passed and a later parsing/mapping check failed. */
+  signatureVerified?: boolean;
 };
 
 export type ProviderEventVerificationSuccess = { ok: true; event: VerifiedProviderEvent };
@@ -53,6 +93,25 @@ export type ProviderAuthorizationView = {
   recurringCapable: boolean;
   providerMethodRef: string | null;
   status: "PENDING" | "ACTIVE" | "REVOKED";
+};
+
+export type ProviderCustomerProfile = {
+  customerId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+};
+
+export type ProviderSubscriptionView = {
+  providerSubscriptionReference: string;
+  providerPlanReference: string;
+  providerCustomerReference: string;
+  providerStatus: ProviderSubscriptionStatus;
+  latestInvoiceReference: string | null;
+  providerPaymentReference: string | null;
+  clientToken: string | null;
+  nextBillingAt: number | null;
 };
 
 /**
@@ -113,6 +172,46 @@ export interface PaymentProvider {
     amountMinor: number;
     currency: string;
   }): Promise<{ ok: true; providerRefundReference: string } | { ok: false; errorCode: string }>;
+
+  /** Ensure one provider customer identity for an application customer. */
+  ensureCustomer?(input: {
+    profile: ProviderCustomerProfile;
+    existingProviderCustomerReference: string | null;
+    idempotencyKey: string;
+  }): Promise<{ ok: true; providerCustomerReference: string } | { ok: false; errorCode: string }>;
+
+  /** Ensure the immutable scheduled plan for one agreed membership price version. */
+  ensureSubscriptionPlan?(input: {
+    priceVersionId: string;
+    name: string;
+    description: string;
+    amountMinor: number;
+    currency: string;
+    existingProviderPlanReference: string | null;
+    idempotencyKey: string;
+  }): Promise<{ ok: true; providerPlanReference: string } | { ok: false; errorCode: string }>;
+
+  /** Create a provider-owned scheduled subscription and its first invoice. */
+  createSubscription?(input: {
+    providerCustomerReference: string;
+    providerPlanReference: string;
+    idempotencyKey: string;
+  }): Promise<
+    { ok: true; subscription: ProviderSubscriptionView } | { ok: false; errorCode: string }
+  >;
+
+  getSubscription?(
+    providerSubscriptionReference: string,
+  ): Promise<
+    { ok: true; subscription: ProviderSubscriptionView } | { ok: false; errorCode: string }
+  >;
+
+  cancelSubscription?(input: {
+    providerSubscriptionReference: string;
+    reason: "too_expensive" | "missing_features" | "switched_service" | "unused" | "other";
+  }): Promise<
+    { ok: true; subscription: ProviderSubscriptionView } | { ok: false; errorCode: string }
+  >;
 
   /** Non-production adapter hook that still emits a normally signed raw event. */
   createTestEvent?(input: {

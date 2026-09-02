@@ -26,6 +26,7 @@ export default defineConfig({
           TEST_MIGRATIONS: JSON.stringify(migrations),
           PRODUCE_ASSET_KEYS: JSON.stringify(produceAssetKeys),
           ENVIRONMENT: "test",
+          PAYMENT_PROVIDER: "mock",
           ROUTE_DISTANCE_PROVIDER: "mock",
           MAPBOX_ACCESS_TOKEN: "test-placeholder",
         },

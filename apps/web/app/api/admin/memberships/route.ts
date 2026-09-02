@@ -32,6 +32,7 @@ async function GETHandler(request: Request) {
   const result = await coreClient(env.CORE).listAdminMemberships({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
+    query: params.get("query") ?? undefined,
     cursor: params.get("cursor") ?? undefined,
     limit,
   });

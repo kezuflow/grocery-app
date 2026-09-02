@@ -7,6 +7,10 @@ import { applyObservationToIntents } from "./apply-observation";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { recordFinancialEvent } from "./financial-observability";
 import { advanceOrderCancellation } from "../../orders/application/advance-order-cancellation";
+import {
+  applySubscriptionInvoiceProviderEvent,
+  applySubscriptionProviderEvent,
+} from "./apply-subscription-provider-event";
 
 export type ProviderEventProcessingStatus =
   | "APPLIED"
@@ -42,19 +46,7 @@ function result(
 }
 
 export function normalizedProviderObservation(event: VerifiedProviderEvent): string {
-  return JSON.stringify({
-    provider: event.provider,
-    providerEventId: event.providerEventId,
-    providerReference: event.providerReference,
-    observedAt: event.observedAt,
-    canonicalState: event.canonicalState,
-    amountMinor: event.amountMinor,
-    currency: event.currency,
-    payloadHash: event.payloadHash,
-    kind: event.kind,
-    refundReference: event.refundReference,
-    settlement: event.settlement ?? null,
-  });
+  return JSON.stringify(event);
 }
 
 /** Apply an already verified, provider-neutral observation under an inbox lease. */
@@ -74,6 +66,36 @@ export async function applyVerifiedProviderEvent(
       now,
       leaseOwner,
     });
+
+  if (event.kind === "subscription" || event.kind === "subscription_invoice") {
+    const application =
+      event.kind === "subscription"
+        ? await applySubscriptionProviderEvent(database, event, now)
+        : await applySubscriptionInvoiceProviderEvent(database, event, now);
+    if (
+      application.processingStatus === "RETRY_REQUIRED" ||
+      application.processingStatus === "RECONCILIATION_REQUIRED"
+    ) {
+      await repository.recordReconciliationCase({
+        intentId: null,
+        category:
+          application.processingStatus === "RETRY_REQUIRED"
+            ? "AMBIGUOUS_OUTCOME"
+            : "UNMAPPED_PROVIDER_REFERENCE",
+        detailsJson: JSON.stringify({
+          provider: event.provider,
+          providerEventId: event.providerEventId,
+          eventType: event.eventType ?? event.kind,
+          errorCode: application.errorCode,
+        }),
+        now,
+      });
+      await finish(application.processingStatus, application.errorCode);
+      return result(event, application.processingStatus, application.subscriptionId);
+    }
+    await finish(application.processingStatus === "DUPLICATE" ? "DUPLICATE" : "APPLIED");
+    return result(event, application.processingStatus, application.subscriptionId);
+  }
 
   if (event.kind === "refund" && event.refundReference) {
     const refunds = extendPaymentRepositoryForRefunds(database);
@@ -268,7 +290,21 @@ export async function ingestProviderEvent(
     };
   }
   const verification = await provider.verifyAndParseEvent(headers, rawBody);
-  if (!verification.ok)
+  const repository = extendPaymentRepository(database);
+  const now = Date.now();
+  if (!verification.ok) {
+    if (verification.signatureVerified) {
+      await repository.insertWebhookReceipt({
+        provider: providerCode,
+        requestId,
+        providerEventId: null,
+        eventType: null,
+        payloadHash: await sha256(rawBody),
+        rawPayload: rawBody,
+        parseStatus: "REJECTED_AFTER_VERIFICATION",
+        now,
+      });
+    }
     return {
       ok: false,
       error: {
@@ -277,18 +313,29 @@ export async function ingestProviderEvent(
         requestId,
       },
     };
+  }
 
   const event = verification.event;
-  const repository = extendPaymentRepository(database);
-  const now = Date.now();
+  await repository.insertWebhookReceipt({
+    provider: event.provider,
+    requestId,
+    providerEventId: event.providerEventId,
+    eventType: event.eventType ?? event.kind,
+    payloadHash: event.payloadHash,
+    rawPayload: rawBody,
+    parseStatus: "PARSED",
+    now,
+  });
   const observation = normalizedProviderObservation(event);
   const claimedInsert = await repository.insertInbox({
     provider: event.provider,
     providerEventId: event.providerEventId,
     providerReference: event.providerReference,
-    eventType: event.kind,
+    eventType: event.eventType ?? event.kind,
     payloadHash: event.payloadHash,
     normalizedObservationJson: observation,
+    rawPayload: rawBody,
+    signatureVerifiedAt: now,
     now,
   });
   const inbox = await repository.findInboxEntry(event.provider, event.providerEventId);
@@ -333,4 +380,10 @@ export async function ingestProviderEvent(
   });
   if (claimedLease !== 1) return result(event, "RETRY_REQUIRED");
   return applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now);
+}
+
+async function sha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

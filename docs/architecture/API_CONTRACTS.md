@@ -75,7 +75,7 @@ and exposes only those methods plus the Worker lifecycle.
 
 `paymentProvider` includes `status`, configured `code`, the closed capabilities
 `PAYMENT_CREATE`, `RECURRING_AUTHORIZATION`, `WEBHOOK_VERIFICATION`, `PAYMENT_LOOKUP`, and
-`REFUND_REQUEST` when implemented, plus `renewalInitiationEnabled`. Missing critical capability is
+`REFUND_REQUEST` when implemented. Missing critical capability is
 `not_ready`; neither environment names nor browser state infer provider readiness. The HTTP
 `/ready` adapter returns 503 for `not_ready` and preserves the request reference.
 
@@ -175,14 +175,12 @@ is never treated as proof of serviceability.
 - `subscriptions.getMine() -> SubscriptionSummary`
 - `subscriptions.getOffer() -> MembershipOfferView`
 - `subscriptions.startTrial({ idempotencyKey }) -> SubscriptionSummary`
-- `subscriptions.beginPaidEnrollment({ offerId, idempotencyKey }) -> SubscriptionSummary`
-- `subscriptions.pause({ reason?, idempotencyKey, expectedVersion }) -> SubscriptionSummary`
-- `subscriptions.resume({ idempotencyKey, expectedVersion }) -> SubscriptionSummary`
+- `subscriptions.beginPaidEnrollment({ offerId, idempotencyKey }) -> SubscriptionSummary` with an optional bounded `paymentAction` while PayMongo's first invoice requires browser tokenization or 3DS
 - `subscriptions.cancel({ timing: "IMMEDIATE" | "PERIOD_END", reason?, idempotencyKey, expectedVersion }) -> SubscriptionSummary`
 
 - `checkout.getSubscriptionEligibility() -> { eligible, state, reasonCode?, effectiveUntil? }`
 
-`MembershipOfferView` describes the single paid calendar-month offer and its current global effective-dated `priceVersionId`, `priceVersion`, `amountMinor`, and `currency`; it contains no trial-entitlement field. `SubscriptionSummary` uses only `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`, and exposes `cancelAtPeriodEnd`, `scheduledCancellationAt`, exact UTC `trialStartsAt`/`trialEndsAt`, and aggregate `version`. Paid enrollment snapshots the current price on its new Subscription, and renewal uses that agreed amount/currency rather than the then-current offer price. A free-trial Subscription has no agreed paid-price snapshot.
+`MembershipOfferView` describes the single paid calendar-month offer and its current global effective-dated `priceVersionId`, `priceVersion`, `amountMinor`, and `currency`; it contains no trial-entitlement field. `SubscriptionSummary` uses only `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `UNPAID`, `CANCELED`, and `EXPIRED`, and exposes `cancelAtPeriodEnd`, `scheduledCancellationAt`, exact UTC `trialStartsAt`/`trialEndsAt`, and aggregate `version`. Paid enrollment snapshots the current price on its new Subscription. Payments maps that price version to an immutable PayMongo scheduled Plan amount/currency; ordinary price changes create a new Plan for later enrollments and never silently reprice existing provider subscriptions. A free-trial Subscription has no agreed paid-price snapshot or PayMongo subscription.
 
 Capability-protected global commerce configuration uses these Core methods:
 
@@ -193,14 +191,14 @@ Capability-protected global commerce configuration uses these Core methods:
 
 Membership price reads/commands require `memberships.read`/`memberships.manage`; Service Fee reads/commands require `payments.read`/`payments.manage`; all four require global scope. Updates close the prior effective range and insert a new audited version atomically. They do not expose or imply an Admin Web surface.
 
-`startTrial` resolves the current paid offer and introductory promotion server-side, then succeeds only after Promotions authorizes and atomically consumes the one-calendar-month grant/redemption. Calendar arithmetic follows `DOMAIN_MODEL.md`; an offer field such as `trial_days` is never accepted as authority. It requires no payment authorization, creates no Payment, and expires without automatic conversion. `beginPaidEnrollment` is the customer's separate explicit paid choice; after a trial expires it creates a new `PENDING` Subscription, snapshots the then-current paid price, and cannot create `ACTIVE`. Payment-method collection and provider interaction use Payments contracts. These contracts never imply grocery merchandise or delivery is free during a membership trial.
+`startTrial` resolves the current paid offer and introductory promotion server-side, then succeeds only after Promotions authorizes and atomically consumes the one-calendar-month grant/redemption. Calendar arithmetic follows `DOMAIN_MODEL.md`; an offer field such as `trial_days` is never accepted as authority. It requires no payment authorization, creates no Payment, and expires without automatic conversion. `beginPaidEnrollment` is the customer's separate explicit paid choice; after a trial expires it creates a new `PENDING` Subscription, snapshots the then-current paid price, provisions the matching PayMongo Customer, Plan, and Subscription idempotently, and returns only the safe first-invoice continuation required for direct browser tokenization. Only a signed or reconciled provider `active` observation can create `ACTIVE`. These contracts never imply grocery merchandise or delivery is free during a membership trial.
 
 ## Recurring Authorization (Payments-owned)
 
 - `payments.beginRecurringAuthorization({ providerCode?, returnUrl, idempotencyKey }) -> { authorizationId, actionType: "REDIRECT" | "SDK" | "NONE", redirectUrl?, clientToken?, expiresAt? }` where Core selects only its explicitly configured provider and an optional `providerCode` is an equality assertion, never a registry-order fallback.
 - `payments.completeRecurringAuthorization({ authorizationId }) -> { authorizationId }`
 
-Establishing a mandate is paid-membership instrument collection, never payment success. A free trial neither calls these methods nor requires a mandate. Only a provider-confirmed recurring-capable authorization with a stable method identity becomes `ACTIVE` for subsequent paid enrollment/renewal use where the approved provider flow requires it. Providers without the required paid recurring capability fail closed. These DTOs are provider-neutral seams; no production mandate or automatic renewal charging is currently approved.
+Establishing a mandate is paid-membership instrument collection, never payment success. A free trial neither calls these methods nor requires a mandate. For PayMongo Scheduled Subscriptions, the initial subscription flow owns instrument setup and the provider-confirmed first invoice; it must not be followed by a separate FreshMarkets renewal charge. These provider-neutral authorization DTOs are deprecated compatibility seams and are not used by Web's PayMongo enrollment flow. Production remains fail-closed until account capability activation and live end-to-end provider acceptance are complete.
 
 ## Membership Payments
 
@@ -243,7 +241,8 @@ Core receives payment provider webhooks through a signed public webhook handler 
 - verify signature and timestamp;
 - preserve one validated UUID request ID through verification, ingestion logs, and the HTTP response;
 - insert `(provider, providerEventId)` into the durable Payments inbox exactly once;
-- persist only the bounded provider-neutral observation plus payload hash, never the raw webhook body;
+- after successful signature verification, persist the exact bounded raw body, payload hash, provider event identity/type and verification time alongside the provider-neutral observation and processing history; never persist secret keys or authorization headers, and never expose raw payloads through ordinary Admin DTOs or logs;
+- append one immutable webhook-receipt row for every verified delivery, including duplicates and verified payloads rejected during normalization, while the separate event inbox deduplicates business processing by `(provider, providerEventId)`;
 - conditionally lease due `RECEIVED`/`RETRY_REQUIRED` rows so redelivery and scheduled redrive share one application path;
 - translate the vendor state into canonical Payments state under the configured payment commitment policy;
 - update Payments using handler-side legal-transition and compare-and-swap protection, safely retrying/reconciling concurrent aggregate changes;
@@ -266,12 +265,13 @@ Payment server-side, derives its amount, currency, Customer, event identity, and
 settlement, creates a signed mock-provider event, and sends it through the normal inbox and reaction
 path. The client may choose only `SUCCEEDED`, `FAILED`, or `EXPIRED`; it cannot submit financial or
 identity fields. The matching Web page and route are `404` in preview, staging, and production, and
-the mock provider is never registered there. PayMongo integration, payload mapping, credentials,
-production mandates, and actual processing-cost behavior remain deferred until provider approval.
+the mock provider is never registered there. The PayMongo adapter is selected only by closed runtime
+configuration; live processing remains unavailable until account capability activation, Worker
+secrets, the browser-safe public key, webhook registration, and live acceptance are supplied.
 
 Retry availability uses bounded backoff. Expired leases are reclaimable; competing Workers cannot both own an observation. Retry age/attempt exhaustion transitions the inbox row to `RECONCILIATION_REQUIRED` and creates one operationally visible case, so recovery does not depend on the provider sending the event again.
 
-The registered scheduler reclaims provider-inbox work every fifteen minutes and expires due provider redirect/SDK actions every minute. Renewal initiation remains disabled unless the closed runtime configuration explicitly assigns application ownership and a configured provider exists; confirmed payment outcomes, dunning, and grace expiry continue independently of that initiation gate.
+The registered scheduler reclaims provider-inbox work and retrieves current provider Subscription truth every fifteen minutes, expires due provider redirect/SDK actions every minute, applies provider cancellation at a requested period end, and expires FreshMarkets-owned introductory trials. PayMongo owns scheduled-subscription invoice creation and payment retries. FreshMarkets redrives only technical event processing and provider-state reconciliation; it never schedules a renewal charge retry.
 
 Immediately before a new payment creation, Core recalculates current catalog prices, discounts, stock/hold, serviceability, route-based delivery fee, mode-specific membership entitlement, the active `INSTANT` Service Fee configuration/calculation, and fulfillment eligibility without persisting or superseding another Quote. The accepted quote aggregate version, price-acceptance version, currency, `expectedTotalMinor`, every explicit component, and the internal Service Fee evidence must equal the accepted Quote; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must request/present a replacement quote for explicit acceptance. Identical payment replay retains the original accepted version and `checkout_quote/<accepted quote id>` as its subject even after the one guarded commitment transition consumes that Quote; a replay with changed accepted components is an idempotency conflict.
 
@@ -480,10 +480,8 @@ Unit and SKU commands accept integer quantities only and validate dimension comp
 
 ## Admin Memberships and Customer Issues
 
-- `admin.memberships.list(filters, page) -> AdminMembershipPage`
+- `admin.memberships.list({ query?, cursor?, limit? }) -> AdminMembershipPage`; `query` is a bounded case-insensitive partial match over customer email or membership/subscription ID.
 - `admin.memberships.get({ subscriptionId }) -> AdminMembershipDetail`
-- `admin.memberships.pause({ subscriptionId, reason, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
-- `admin.memberships.resume({ subscriptionId, reason?, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
 - `admin.memberships.cancel({ subscriptionId, timing: "IMMEDIATE" | "PERIOD_END", reason, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
 - `admin.memberships.recover({ subscriptionId, idempotencyKey }) -> AdminMembershipDetail`
 - `admin.memberships.listExceptions(filters, page) -> MembershipExceptionPage`

@@ -59,7 +59,7 @@ export function createMembershipRepository(database: D1Database) {
     async findOpenSubscriptionByCustomer(customerId: string): Promise<SubscriptionRow | null> {
       const row = await database
         .prepare(
-          `SELECT ${SUBSCRIPTION_COLUMNS} FROM subscription WHERE customer_id=? AND status IN ('PENDING','TRIALING','ACTIVE','PAST_DUE','PAUSED') ORDER BY updated_at DESC LIMIT 1`,
+          `SELECT ${SUBSCRIPTION_COLUMNS} FROM subscription WHERE customer_id=? AND status IN ('PENDING','TRIALING','ACTIVE','PAST_DUE','UNPAID') ORDER BY updated_at DESC LIMIT 1`,
         )
         .bind(customerId)
         .first<SubscriptionDbRow>();

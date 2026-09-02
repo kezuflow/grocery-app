@@ -13,23 +13,23 @@ A provider-confirmed canonical Payments outcome sufficient under the configured 
 ```text
 PENDING -> TRIALING / ACTIVE / CANCELED / EXPIRED
 TRIALING -> CANCELED / EXPIRED
-ACTIVE -> PAST_DUE / PAUSED / CANCELED / EXPIRED
-PAST_DUE -> ACTIVE / PAUSED / CANCELED / EXPIRED
-PAUSED -> ACTIVE / CANCELED / EXPIRED
+ACTIVE -> PAST_DUE / UNPAID / CANCELED / EXPIRED
+PAST_DUE -> ACTIVE / UNPAID / CANCELED / EXPIRED
+UNPAID -> ACTIVE / CANCELED / EXPIRED
 
 CANCELED (terminal)
 EXPIRED (terminal)
 ```
 
-Commands include `BeginMembershipEnrollment`, `StartPromotionalTrial`, `ActivateSubscriptionFromPayment`, `InitiateMembershipRenewal` (only where the application, not the provider, owns renewal attempts), `RecordMembershipPaymentFailure`, `RecoverSubscriptionFromPayment`, `PauseSubscription`, `ResumeSubscription`, `RequestSubscriptionCancellation`, `ApplyScheduledSubscriptionCancellation`, and `ExpireSubscription` (for a completed trial and for grace exhaustion from `PAST_DUE`).
+Commands include `BeginMembershipEnrollment`, `StartPromotionalTrial`, `ApplyProviderSubscriptionObservation`, `RequestSubscriptionCancellation`, `ApplyScheduledSubscriptionCancellation`, and `ExpireSubscription` for a completed introductory trial. PayMongo creates paid invoices and owns renewal attempts; FreshMarkets has no command that retries a subscription charge.
 
 Rules:
 
 - `PENDING` is not eligible. A trial may enter `TRIALING` only when Promotions supplies a valid introductory-trial grant/redemption. A separately and explicitly enrolled paid Subscription may enter `ACTIVE` only after a provider-confirmed canonical Payments outcome satisfies the payment commitment policy.
 - Entering `TRIALING` requires no payment authorization and creates no Payment or scheduled charge. At `trialEndsAt`, `ExpireSubscription` performs `TRIALING -> EXPIRED`; the trial does not convert in place. A customer who later chooses paid membership creates a new `PENDING` Subscription, which snapshots the then-current paid price and requires provider-confirmed initial payment before activation.
-- Only `TRIALING`, `ACTIVE`, and `PAST_DUE` inside its grace window satisfy `SCHEDULED` checkout membership eligibility. Eligibility also considers exact effective timestamps, not just a stored enum. `INSTANT` checkout is authenticated pay-as-you-go and does not consult Subscription state.
-- Paid renewal charges the Subscription's agreed amount and currency and requires a provider-confirmed canonical Payments `SUCCEEDED` outcome. A failed renewal at a due boundary transitions `ACTIVE -> PAST_DUE`. `PAST_DUE` carries a 7-calendar-day grace window during which membership entitlement, including Scheduled checkout eligibility, persists. `RecoverSubscriptionFromPayment` returns `PAST_DUE -> ACTIVE` only on verified provider-confirmed success. Grace exhaustion without verified success applies `ExpireSubscription` (`PAST_DUE -> EXPIRED`). Immediate intentional cancellation during `PAST_DUE` transitions directly to terminal `CANCELED` and terminates all further renewal attempts for that subscription.
-- No production automatic renewal initiation or retry owner is currently approved. The scheduler therefore fails closed behind an explicit renewal-initiation ownership gate while continuing to apply confirmed outcomes and grace expiry. A future provider integration must choose exactly one retry owner and must not layer application attempts on provider-managed retries. The provider-neutral lifecycle may consume explicit canonical success/failure outcomes in tests, while production initiation cadence and retry timing remain an owner decision. Calendar-month billing semantics and the nominal billing anchor are preserved across short-month clamping.
+- Only `TRIALING`, `ACTIVE`, and `PAST_DUE` satisfy `SCHEDULED` checkout membership eligibility. `TRIALING` still observes its exact end instant. `PAST_DUE` remains eligible only while PayMongo's provider-owned retry lifecycle remains in that state; a verified `UNPAID` or `CANCELED` observation removes entitlement. `INSTANT` checkout is authenticated pay-as-you-go and does not consult Subscription state.
+- PayMongo Scheduled Subscriptions own invoice generation, charge initiation, and payment retry timing. Provider `active`, `past_due`, `unpaid`, and `cancelled` observations map to `ACTIVE`, `PAST_DUE`, `UNPAID`, and `CANCELED` through Payments-owned mapping and a guarded Membership command. FreshMarkets retries only technical event processing, idempotent uncertain API calls, and provider-state reconciliation; it never layers another charge attempt on PayMongo's retry behavior.
+- `PAUSED` is not a canonical state because PayMongo Scheduled Subscriptions do not expose it. Historical `PAUSED` rows are migrated to intentional terminal `CANCELED` history. Customer and Admin surfaces expose cancellation rather than pause/resume.
 - The introductory trial lasts exactly one calendar billing month as calculated in the Market's configured business timezone under `DOMAIN_MODEL.md`; persisted start/end values are UTC instants.
 - Immediate intentional termination transitions an allowed nonterminal state to `CANCELED`.
 - Cancel-at-period-end records `cancelAtPeriodEnd` and `scheduledCancellationAt`/`endsAt` without changing `TRIALING` or `ACTIVE`. At the effective instant, `ApplyScheduledSubscriptionCancellation` performs the guarded transition to `CANCELED`.

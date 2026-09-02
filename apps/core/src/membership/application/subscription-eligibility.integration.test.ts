@@ -74,7 +74,7 @@ describe("subscription checkout eligibility with grace", () => {
     expect(result.value).toMatchObject({ eligible: true, state: "ACTIVE" });
   });
 
-  it("keeps PAST_DUE eligible inside its grace window", async () => {
+  it("keeps PAST_DUE eligible while the provider retry cycle is active", async () => {
     const customerId = await seedCustomerWithSubscription("PAST_DUE", {
       graceEndsAt: Date.now() + 3_600_000,
     });
@@ -82,18 +82,16 @@ describe("subscription checkout eligibility with grace", () => {
     expect(result.value).toMatchObject({ eligible: true, state: "PAST_DUE" });
   });
 
-  it("loses eligibility the instant grace is exhausted", async () => {
-    const customerId = await seedCustomerWithSubscription("PAST_DUE", {
-      graceEndsAt: Date.now() - 1_000,
-    });
+  it("does not use a historical local grace timestamp as billing authority", async () => {
+    const customerId = await seedCustomerWithSubscription("PAST_DUE", { graceEndsAt: 0 });
     const result = await getSubscriptionEligibility(env.DB, query(customerId));
-    expect(result.value).toMatchObject({ eligible: false, state: "PAST_DUE" });
+    expect(result.value).toMatchObject({ eligible: true, state: "PAST_DUE" });
   });
 
-  it("never treats PAST_DUE without a grace window as eligible", async () => {
-    const customerId = await seedCustomerWithSubscription("PAST_DUE", {});
+  it("removes eligibility when PayMongo exhausts retries", async () => {
+    const customerId = await seedCustomerWithSubscription("UNPAID", {});
     const result = await getSubscriptionEligibility(env.DB, query(customerId));
-    expect(result.value).toMatchObject({ eligible: false, state: "PAST_DUE" });
+    expect(result.value).toMatchObject({ eligible: false, state: "UNPAID" });
   });
 
   it("keeps terminal and pending states ineligible", async () => {

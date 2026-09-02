@@ -12,8 +12,6 @@ const coreMocks = vi.hoisted(() => ({
   resolveAdminReconciliationCase: vi.fn(),
   listAdminMemberships: vi.fn(),
   getAdminMembership: vi.fn(),
-  pauseAdminMembership: vi.fn(),
-  resumeAdminMembership: vi.fn(),
   cancelAdminMembership: vi.fn(),
   listAdminOrderIssues: vi.fn(),
   applyAdminOrderIssueAction: vi.fn(),
@@ -36,6 +34,7 @@ import { GET as listCases } from "@/app/api/admin/payments/reconciliation/route"
 import { POST as resolveCase } from "@/app/api/admin/payments/reconciliation/[case-id]/resolve/route";
 import { GET as listIssues } from "@/app/api/admin/order-issues/route";
 import { POST as issueAction } from "@/app/api/admin/order-issues/[issue-id]/actions/route";
+import { GET as listMemberships } from "@/app/api/admin/memberships/route";
 import {
   GET as membershipPrice,
   POST as updateMembershipPrice,
@@ -149,6 +148,25 @@ describe("finance BFF routes", () => {
     expect(coreMocks.applyAdminOrderIssueAction.mock.calls[0][0]).toMatchObject({
       issueId: "i1",
       action: "CLAIM",
+    });
+  });
+
+  it("delegates membership search to Core", async () => {
+    coreMocks.listAdminMemberships.mockResolvedValue({
+      ok: true,
+      value: { items: [], nextCursor: null },
+      requestId: "r",
+    });
+
+    await listMemberships(
+      new Request("https://x/memberships?query=ana%40example.com&limit=25", {
+        headers: COOKIE,
+      }),
+    );
+
+    expect(coreMocks.listAdminMemberships.mock.calls[0][0]).toMatchObject({
+      query: "ana@example.com",
+      limit: 25,
     });
   });
 

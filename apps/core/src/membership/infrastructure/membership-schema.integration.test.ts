@@ -158,7 +158,7 @@ describe("membership and promotions persistence", () => {
       // ...unless a partial unique index is unsupported by this driver; then
       // the preflight duplicate query below must detect it.
       const duplicates = await env.DB.prepare(
-        "SELECT customer_id, COUNT(*) AS count FROM subscription WHERE status IN ('PENDING','TRIALING','ACTIVE','PAST_DUE','PAUSED') GROUP BY customer_id HAVING COUNT(*) > 1",
+        "SELECT customer_id, COUNT(*) AS count FROM subscription WHERE status IN ('PENDING','TRIALING','ACTIVE','PAST_DUE','UNPAID') GROUP BY customer_id HAVING COUNT(*) > 1",
       ).all<{ customer_id: string; count: number }>();
       expect(duplicates.results.length).toBe(0);
       throw new Error("PREFLIGHT: duplicate open subscriptions were not rejected");

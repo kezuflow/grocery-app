@@ -21,9 +21,14 @@
     // PUBLIC_APP_ORIGIN through environment configuration, never a source default.
     "PUBLIC_APP_ORIGIN": "http://localhost:3000",
     "ENVIRONMENT": "development",
-    // Browser-safe, read-only Mapbox token. Restrict it in Mapbox to the exact
-    // local, preview, and production Web origins; never put MAPBOX_ACCESS_TOKEN here.
-    "MAPBOX_PUBLIC_ACCESS_TOKEN": "",
+    // Browser-safe PayMongo public key. Deployed environments set the matching
+    // pk_test_ or pk_live_ value; the secret key exists only in Core.
+    "PAYMONGO_PUBLIC_KEY": "pk_test_4H9rTzNx2r6AQdxaz4LpGKJf",
+  },
+  "secrets": {
+    // Browser-delivered but kept out of source control so GitHub push protection
+    // and origin restrictions remain the only token-distribution authorities.
+    "required": ["MAPBOX_BROWSER_TOKEN"],
   },
   "observability": {
     "enabled": true,
@@ -35,6 +40,26 @@
     "traces": {
       "enabled": true,
       "head_sampling_rate": 0.05,
+    },
+  },
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "services": [
+        {
+          "binding": "CORE",
+          "service": "freshmarkets-core-staging",
+          "entrypoint": "CoreEntrypoint",
+        },
+      ],
+      "vars": {
+        "PUBLIC_APP_ORIGIN": "https://freshmarkets-web-staging.ilyreggie.workers.dev",
+        "ENVIRONMENT": "staging",
+        "PAYMONGO_PUBLIC_KEY": "pk_test_4H9rTzNx2r6AQdxaz4LpGKJf",
+      },
+      "secrets": {
+        "required": ["MAPBOX_BROWSER_TOKEN"],
+      },
     },
   },
 }

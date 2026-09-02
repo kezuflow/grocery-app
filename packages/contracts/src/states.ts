@@ -7,6 +7,8 @@ export const subscriptionStates = [
   "TRIALING",
   "ACTIVE",
   "PAST_DUE",
+  "UNPAID",
+  /** Legacy rolling-deployment value; new Core behavior never creates it. */
   "PAUSED",
   "CANCELED",
   "EXPIRED",

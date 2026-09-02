@@ -1,15 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const core = vi.hoisted(() => ({
-  pauseSubscription: vi.fn(),
-  resumeSubscription: vi.fn(),
   cancelSubscription: vi.fn(),
   beginPaidEnrollment: vi.fn(),
 }));
 vi.mock("cloudflare:workers", () => ({ env: { CORE: core } }));
 
-import { POST as pause } from "@/app/api/membership/pause/route";
-import { POST as resume } from "@/app/api/membership/resume/route";
 import { POST as cancel } from "@/app/api/membership/cancel/route";
 import { POST as enroll } from "@/app/api/membership/enroll/route";
 
@@ -31,18 +27,8 @@ function request(path: string, body: unknown) {
 }
 
 describe("customer membership lifecycle routes", () => {
-  it("forwards expected version and stable idempotency for lifecycle actions", async () => {
-    await pause(
-      request("/api/membership/pause", { expectedVersion: 4, reason: "Customer request" }),
-    );
-    await resume(request("/api/membership/resume", { expectedVersion: 5 }));
+  it("forwards expected version and stable idempotency for cancellation", async () => {
     await cancel(request("/api/membership/cancel", { expectedVersion: 6, timing: "PERIOD_END" }));
-    expect(core.pauseSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({ expectedVersion: 4, idempotencyKey: "membership-action-123" }),
-    );
-    expect(core.resumeSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({ expectedVersion: 5, idempotencyKey: "membership-action-123" }),
-    );
     expect(core.cancelSubscription).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedVersion: 6,

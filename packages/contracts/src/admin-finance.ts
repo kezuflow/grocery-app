@@ -342,6 +342,7 @@ export type AdminMembershipPage = {
 };
 
 export type AdminMembershipListRequest = AuthenticatedRequest & {
+  query?: string;
   cursor?: string;
   limit?: number;
 };
@@ -434,12 +435,6 @@ export type AdminMembershipsService = {
   ): Promise<RpcResult<AdminMembershipPage>>;
   getAdminMembership(
     request: AdminMembershipDetailRequest,
-  ): Promise<RpcResult<AdminMembershipSummary>>;
-  pauseAdminMembership(
-    request: AdminMembershipLifecycleRequest,
-  ): Promise<RpcResult<AdminMembershipSummary>>;
-  resumeAdminMembership(
-    request: AdminMembershipLifecycleRequest,
   ): Promise<RpcResult<AdminMembershipSummary>>;
   cancelAdminMembership(
     request: AdminMembershipLifecycleRequest,

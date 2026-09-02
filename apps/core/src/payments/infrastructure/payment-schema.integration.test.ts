@@ -31,6 +31,8 @@ describe("payments context persistence", () => {
         "provider",
         "provider_event_id",
         "payload_hash",
+        "raw_payload",
+        "signature_verified_at",
         "processing_status",
       ]),
     );
@@ -60,6 +62,29 @@ describe("payments context persistence", () => {
         "adjustment_minor",
         "net_minor",
       ]),
+    );
+    expect(await tableColumns("payment_provider_membership_plan")).toEqual(
+      expect.arrayContaining(["membership_price_version_id", "provider_plan_reference"]),
+    );
+    expect(await tableColumns("payment_provider_webhook_receipt")).toEqual(
+      expect.arrayContaining([
+        "request_id",
+        "provider_event_id",
+        "payload_hash",
+        "raw_payload",
+        "parse_status",
+        "signature_verified_at",
+      ]),
+    );
+    expect(await tableColumns("payment_provider_subscription")).toEqual(
+      expect.arrayContaining([
+        "subscription_id",
+        "provider_subscription_reference",
+        "provider_status",
+      ]),
+    );
+    expect(await tableColumns("payment_provider_subscription_invoice")).toEqual(
+      expect.arrayContaining(["provider_invoice_reference", "provider_subscription_reference"]),
     );
   });
 

@@ -33,6 +33,15 @@ export type SubscriptionSummary = {
   trialStartsAt: string | null;
   trialEndsAt: string | null;
   version: number;
+  /** Present while the provider's first paid invoice still needs customer action. */
+  paymentAction?: {
+    providerCode: string;
+    providerReference: string;
+    actionType: "SDK" | "REDIRECT";
+    clientToken: string | null;
+    redirectUrl: string | null;
+    expiresAt: string;
+  };
 };
 
 export type MembershipActionAvailability = {
@@ -60,8 +69,6 @@ export type MembershipExperienceView = {
   actions: {
     startTrial: MembershipActionAvailability;
     beginPaidEnrollment: MembershipActionAvailability;
-    pause: MembershipActionAvailability;
-    resume: MembershipActionAvailability;
     cancelImmediately: MembershipActionAvailability;
     cancelAtPeriodEnd: MembershipActionAvailability;
   };
@@ -72,15 +79,6 @@ export type StartPromotionalTrialRequest = AuthenticatedRequest & { idempotencyK
 export type BeginPaidEnrollmentRequest = AuthenticatedRequest & {
   offerId: string;
   idempotencyKey: string;
-};
-export type PauseSubscriptionRequest = AuthenticatedRequest & {
-  reason?: string;
-  idempotencyKey: string;
-  expectedVersion: number;
-};
-export type ResumeSubscriptionRequest = AuthenticatedRequest & {
-  idempotencyKey: string;
-  expectedVersion: number;
 };
 export type CancelSubscriptionRequest = AuthenticatedRequest & {
   timing: "IMMEDIATE" | "PERIOD_END";
@@ -105,7 +103,5 @@ export type MembershipService = {
   getOffer(request: AuthenticatedRequest): Promise<RpcResult<MembershipOfferView>>;
   startTrial(request: StartPromotionalTrialRequest): Promise<RpcResult<SubscriptionSummary>>;
   beginPaidEnrollment(request: BeginPaidEnrollmentRequest): Promise<RpcResult<SubscriptionSummary>>;
-  pauseSubscription(request: PauseSubscriptionRequest): Promise<RpcResult<SubscriptionSummary>>;
-  resumeSubscription(request: ResumeSubscriptionRequest): Promise<RpcResult<SubscriptionSummary>>;
   cancelSubscription(request: CancelSubscriptionRequest): Promise<RpcResult<SubscriptionSummary>>;
 };

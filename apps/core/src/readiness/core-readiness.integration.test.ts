@@ -22,7 +22,6 @@ describe("Core readiness", () => {
             "PAYMENT_LOOKUP",
             "REFUND_REQUEST",
           ],
-          renewalInitiationEnabled: false,
         },
       },
     });

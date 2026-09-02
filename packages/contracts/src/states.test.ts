@@ -20,6 +20,7 @@ describe("closed lifecycle vocabularies", () => {
       "TRIALING",
       "ACTIVE",
       "PAST_DUE",
+      "UNPAID",
       "PAUSED",
       "CANCELED",
       "EXPIRED",

@@ -2,46 +2,18 @@ import { processMembershipRenewals } from "../../membership/application/process-
 import type { ScheduledJob, ScheduledJobOutcome } from "../types";
 
 /**
- * Program 3 membership time sweep: expire ended free trials, initiate due paid
- * renewal charges (single attempt per period; retries stay with the provider),
- * apply provider-confirmed failure outcomes, and expire exhausted grace windows.
+ * Membership-owned time sweep. Paid billing and dunning are provider-owned;
+ * this job only expires no-payment introductory trials.
  */
 export const membershipRenewalsJob: ScheduledJob = {
-  name: "membership-renewals",
+  name: "membership-trial-expiry",
   async run(context): Promise<ScheduledJobOutcome> {
-    const outcome = await processMembershipRenewals(
-      context.database,
-      context.registry,
-      context.now,
-      { initiationEnabled: context.renewalInitiationEnabled },
-    );
-    const affected =
-      outcome.trialsExpired +
-      outcome.initiated +
-      outcome.failureOutcomesApplied +
-      outcome.graceExpired;
-    if (outcome.initiationFailures > 0) {
-      return {
-        status: "FAILED",
-        affected,
-        errorCode: "RENEWAL_INITIATION_FAILED",
-        detail: `${outcome.trialsExpired} trials expired, ${outcome.initiated} initiated, ${outcome.initiationFailures} initiation failures, ${outcome.failureOutcomesApplied} failure outcomes applied, ${outcome.graceExpired} grace expiries`,
-      };
-    }
-    if (outcome.initiationSkipped && affected === 0)
-      return {
-        status: "SKIPPED",
-        affected: 0,
-        errorCode: "RENEWAL_INITIATION_DISABLED",
-        detail: "Renewal initiation ownership is disabled; reconciliation found no due effects",
-      };
+    const outcome = await processMembershipRenewals(context.database, context.now);
+    const affected = outcome.trialsExpired;
     return {
       status: "SUCCEEDED",
       affected,
-      detail:
-        affected > 0
-          ? `${outcome.trialsExpired} trials expired, ${outcome.initiated} initiated, ${outcome.failureOutcomesApplied} failure outcomes applied, ${outcome.graceExpired} grace expiries`
-          : undefined,
+      detail: affected > 0 ? `${outcome.trialsExpired} introductory trials expired` : undefined,
     };
   },
 };

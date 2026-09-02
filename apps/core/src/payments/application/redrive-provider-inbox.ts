@@ -17,23 +17,41 @@ const canonicalStates = new Set<PaymentDomainState>([
 
 function observation(value: string): VerifiedProviderEvent | null {
   try {
-    const parsed = JSON.parse(value) as Partial<VerifiedProviderEvent>;
+    const parsed = JSON.parse(value) as Record<string, unknown>;
     if (
       typeof parsed.provider !== "string" ||
       typeof parsed.providerEventId !== "string" ||
       typeof parsed.providerReference !== "string" ||
       typeof parsed.observedAt !== "number" ||
-      typeof parsed.canonicalState !== "string" ||
-      !canonicalStates.has(parsed.canonicalState as PaymentDomainState) ||
-      typeof parsed.amountMinor !== "number" ||
-      typeof parsed.currency !== "string" ||
       typeof parsed.payloadHash !== "string" ||
-      (parsed.kind !== "payment" && parsed.kind !== "refund") ||
-      !(typeof parsed.refundReference === "string" || parsed.refundReference === null)
+      !["payment", "refund", "subscription", "subscription_invoice"].includes(String(parsed.kind))
+    )
+      return null;
+    if (parsed.kind === "payment" || parsed.kind === "refund") {
+      if (
+        typeof parsed.canonicalState !== "string" ||
+        !canonicalStates.has(parsed.canonicalState as PaymentDomainState) ||
+        typeof parsed.amountMinor !== "number" ||
+        typeof parsed.currency !== "string" ||
+        !(typeof parsed.refundReference === "string" || parsed.refundReference === null)
+      )
+        return null;
+    } else if (parsed.kind === "subscription") {
+      if (
+        typeof parsed.providerStatus !== "string" ||
+        typeof parsed.providerCustomerReference !== "string" ||
+        typeof parsed.providerPlanReference !== "string"
+      )
+        return null;
+    } else if (
+      typeof parsed.providerSubscriptionReference !== "string" ||
+      typeof parsed.providerStatus !== "string" ||
+      typeof parsed.amountMinor !== "number" ||
+      typeof parsed.currency !== "string"
     )
       return null;
     if (parsed.settlement !== undefined && parsed.settlement !== null) {
-      const settlement = parsed.settlement;
+      const settlement = parsed.settlement as Record<string, unknown>;
       if (
         typeof settlement !== "object" ||
         typeof settlement.grossMinor !== "number" ||
@@ -43,7 +61,7 @@ function observation(value: string): VerifiedProviderEvent | null {
         typeof settlement.netMinor !== "number" ||
         typeof settlement.currency !== "string" ||
         typeof settlement.observedAt !== "number" ||
-        !validateSettlement(settlement)
+        !validateSettlement(settlement as never)
       )
         return null;
     }

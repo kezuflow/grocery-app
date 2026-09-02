@@ -44,24 +44,24 @@ export default function MembershipDetailPage({
       void load(subscriptionId);
     });
   }, [params]);
-  async function change(action: "pause" | "resume" | "cancel") {
+  async function cancelMembership() {
     if (!membership || !reason.trim()) {
       setNotice("A reason is required.");
       return;
     }
     const payload = await commandIntent.submit(async (idempotencyKey) => {
-      const response = await fetch(`/api/admin/memberships/${encodeURIComponent(id)}/${action}`, {
+      const response = await fetch(`/api/admin/memberships/${encodeURIComponent(id)}/cancel`, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
         body: JSON.stringify({
           reason: reason.trim(),
           expectedVersion: membership.version,
-          ...(action === "cancel" ? { timing: "IMMEDIATE" } : {}),
+          timing: "IMMEDIATE",
         }),
       });
       return (await response.json()) as RpcResult<AdminMembershipSummary>;
     });
-    setNotice(payload.ok ? `Membership ${action} submitted.` : payload.error.message);
+    setNotice(payload.ok ? "Membership cancellation submitted." : payload.error.message);
     if (payload.ok) {
       setReason("");
       await load(id);
@@ -115,18 +115,8 @@ export default function MembershipDetailPage({
                 onChange={(event) => setReason(event.target.value)}
               />
               <div className="flex gap-2">
-                {membership.state === "ACTIVE" ? (
-                  <Button variant="outline" onClick={() => void change("pause")}>
-                    Pause
-                  </Button>
-                ) : null}
-                {membership.state === "PAUSED" ? (
-                  <Button variant="outline" onClick={() => void change("resume")}>
-                    Resume
-                  </Button>
-                ) : null}
                 {!["CANCELED", "EXPIRED"].includes(membership.state) ? (
-                  <Button variant="destructive" onClick={() => void change("cancel")}>
+                  <Button variant="destructive" onClick={() => void cancelMembership()}>
                     Cancel
                   </Button>
                 ) : null}

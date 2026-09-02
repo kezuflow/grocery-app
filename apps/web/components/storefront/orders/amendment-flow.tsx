@@ -75,6 +75,11 @@ export function AmendmentFlow({
       window.location.assign(result.value.redirectUrl);
       return;
     }
+    if (result.value.actionType === "SDK" && result.value.clientToken) {
+      sessionStorage.setItem("freshmarkets.checkoutPaymentAction", JSON.stringify(result.value));
+      window.location.assign("/checkout/payment");
+      return;
+    }
     setMessage(
       result.value.state === "PROCESSING"
         ? "Payment is processing. The addition is not committed yet."

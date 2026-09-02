@@ -14,8 +14,6 @@ export interface ScheduledJobContext {
   readonly database: D1Database;
   /** Configured provider adapters for jobs that must observe provider truth. */
   readonly registry: PaymentProviderRegistry;
-  /** Explicit ownership gate; false still permits confirmed-outcome/grace reconciliation. */
-  readonly renewalInitiationEnabled: boolean;
   readonly emailDelivery: EmailDeliveryPort;
   readonly now: number;
 }

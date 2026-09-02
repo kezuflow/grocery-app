@@ -31,8 +31,9 @@ export function transitionToResult(
 export const subscriptionTransitions: StateMap = {
   PENDING: ["TRIALING", "ACTIVE", "CANCELED", "EXPIRED"],
   TRIALING: ["CANCELED", "EXPIRED"],
-  ACTIVE: ["PAST_DUE", "PAUSED", "CANCELED", "EXPIRED"],
-  PAST_DUE: ["ACTIVE", "PAUSED", "CANCELED", "EXPIRED"],
+  ACTIVE: ["PAST_DUE", "UNPAID", "CANCELED", "EXPIRED"],
+  PAST_DUE: ["ACTIVE", "UNPAID", "CANCELED", "EXPIRED"],
+  UNPAID: ["ACTIVE", "CANCELED", "EXPIRED"],
   PAUSED: ["ACTIVE", "CANCELED", "EXPIRED"],
   CANCELED: [],
   EXPIRED: [],

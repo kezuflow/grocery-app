@@ -8,7 +8,9 @@ export type CoreRuntimeEnvironment = {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   PAYMENT_PROVIDER?: string;
-  MEMBERSHIP_RENEWAL_INITIATION_ENABLED?: string;
+  LOCAL_PAYMENT_PROVIDER?: string;
+  PAYMONGO_SECRET_KEY?: string;
+  PAYMONGO_WEBHOOK_SECRET?: string;
 };
 
 export type CoreRuntimeConfiguration = {
@@ -22,10 +24,8 @@ export type CoreRuntimeConfiguration = {
     google: { clientId: string; clientSecret: string } | null;
   };
   payments: {
-    providerCode: "mock" | null;
-  };
-  renewals: {
-    initiationEnabled: boolean;
+    providerCode: "mock" | "paymongo" | null;
+    paymongo: { secretKey: string; webhookSecret: string } | null;
   };
   readiness: {
     auth: boolean;
@@ -123,23 +123,30 @@ export function parseCoreRuntimeConfiguration(
       ? { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! }
       : null;
 
-  let providerCode: "mock" | null = null;
-  if (env.PAYMENT_PROVIDER === "mock") {
+  if (deployed && env.LOCAL_PAYMENT_PROVIDER) throw new Error("LOCAL_PAYMENT_PROVIDER_FORBIDDEN");
+  const configuredPaymentProvider =
+    environment === "development" && env.LOCAL_PAYMENT_PROVIDER
+      ? env.LOCAL_PAYMENT_PROVIDER
+      : env.PAYMENT_PROVIDER;
+  let providerCode: "mock" | "paymongo" | null = null;
+  let paymongo: CoreRuntimeConfiguration["payments"]["paymongo"] = null;
+  if (configuredPaymentProvider === "mock") {
     if (deployed) throw new Error("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
     providerCode = "mock";
-  } else if (env.PAYMENT_PROVIDER && env.PAYMENT_PROVIDER !== "disabled") {
+  } else if (configuredPaymentProvider === "paymongo") {
+    if (!env.PAYMONGO_SECRET_KEY) throw new Error("PAYMONGO_SECRET_KEY_REQUIRED");
+    if (!env.PAYMONGO_WEBHOOK_SECRET) throw new Error("PAYMONGO_WEBHOOK_SECRET_REQUIRED");
+    const expectedPrefix = environment === "production" ? "sk_live_" : "sk_test_";
+    if (!env.PAYMONGO_SECRET_KEY.startsWith(expectedPrefix))
+      throw new Error("PAYMONGO_SECRET_KEY_ENVIRONMENT_MISMATCH");
+    providerCode = "paymongo";
+    paymongo = {
+      secretKey: env.PAYMONGO_SECRET_KEY,
+      webhookSecret: env.PAYMONGO_WEBHOOK_SECRET,
+    };
+  } else if (configuredPaymentProvider && configuredPaymentProvider !== "disabled") {
     throw new Error("PAYMENT_PROVIDER_INVALID");
   }
-
-  if (
-    env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED !== undefined &&
-    env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED !== "true" &&
-    env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED !== "false"
-  )
-    throw new Error("MEMBERSHIP_RENEWAL_INITIATION_ENABLED_INVALID");
-  const renewalInitiationEnabled = env.MEMBERSHIP_RENEWAL_INITIATION_ENABLED === "true";
-  if (renewalInitiationEnabled && providerCode === null)
-    throw new Error("MEMBERSHIP_RENEWAL_INITIATION_REQUIRES_PAYMENT_PROVIDER");
 
   return {
     environment,
@@ -151,8 +158,7 @@ export function parseCoreRuntimeConfiguration(
       secureCookies: deployed,
       google,
     },
-    payments: { providerCode },
-    renewals: { initiationEnabled: renewalInitiationEnabled },
+    payments: { providerCode, paymongo },
     readiness: {
       auth: true,
       googleOauth: google !== null,

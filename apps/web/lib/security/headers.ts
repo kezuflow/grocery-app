@@ -5,7 +5,7 @@ export type WebSecurityHeader = Readonly<{ key: string; value: string }>;
 const MAPBOX_CONTENT_SECURITY_DIRECTIVES = [
   "worker-src 'self' blob:",
   "img-src 'self' data: blob:",
-  "connect-src 'self' https://api.mapbox.com https://events.mapbox.com",
+  "connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://api.paymongo.com",
 ] as const;
 
 const DEPLOYED_ENVIRONMENTS = new Set<WebRuntimeEnvironment>(["preview", "staging", "production"]);

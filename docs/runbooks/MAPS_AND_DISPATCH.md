@@ -10,7 +10,7 @@ This runbook does not authorize a public Core REST API, route optimization, live
 
 ### Browser public token
 
-`MAPBOX_PUBLIC_ACCESS_TOKEN` is the only Mapbox token allowed in Web configuration, rendered props, and browser bundles.
+`MAPBOX_BROWSER_TOKEN` is the only Mapbox token allowed in Web configuration, rendered props, and browser bundles.
 
 1. Create a dedicated non-default public token for each environment. Grant only the public read scopes needed by Mapbox GL JS. Do not grant secret or write scopes.
 2. Add URL restrictions for the exact Web origins. Production must name the exact HTTPS production hostname. Preview must name each approved exact HTTPS preview hostname. Local development uses a separate token whose allowlist explicitly includes `http://localhost:3000` (and `http://127.0.0.1:3000` only when that origin is actually used).
@@ -139,7 +139,7 @@ During an incident, aggregate only by fixed operation, result, stable error code
 
 ## Manual Customer smoke test
 
-1. Open serviceability/address entry on desktop and mobile at an approved origin; confirm the browser receives only `MAPBOX_PUBLIC_ACCESS_TOKEN` behavior and no Core token.
+1. Open serviceability/address entry on desktop and mobile at an approved origin; confirm the browser receives only `MAPBOX_BROWSER_TOKEN` behavior and no Core token.
 2. Search a Cebu address, choose a candidate, move the pin to the entrance, enter structured fields/contact/instructions, and confirm Core returns service area, zone, polygon resolution version, and serviceable state.
 3. Save, reload, and edit the address as its owner. Confirm a second customer cannot list, read, or update it.
 4. Test a known outside coordinate and confirm it may display unavailable but checkout rejects it.

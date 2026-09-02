@@ -5,18 +5,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 
-const PENDING_AUTHORIZATION_KEY = "freshmarkets.pendingAuthorization";
-
 type RpcResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } };
 
 type MembershipAction =
-  | "AUTHORIZE"
   | "START_TRIAL"
   | "BEGIN_PAID_ENROLLMENT"
-  | "PAUSE"
-  | "RESUME"
   | "CANCEL_IMMEDIATELY"
   | "CANCEL_AT_PERIOD_END";
 
@@ -60,14 +55,6 @@ export function MembershipExperiencePanel({
             {experience.introductoryTrial.status.replaceAll("_", " ")}
           </dd>
         </div>
-        <div>
-          <dt className="text-slate-500">Paid membership payment setup</dt>
-          <dd className="font-medium">
-            {experience.subscription?.state === "TRIALING"
-              ? "Not needed during free trial"
-              : experience.recurringAuthorization.status}
-          </dd>
-        </div>
         {experience.subscription?.trialEndsAt ? (
           <div>
             <dt className="text-slate-500">Trial ends</dt>
@@ -89,16 +76,6 @@ export function MembershipExperiencePanel({
       </dl>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        {!experience.recurringAuthorization.ready && action.beginPaidEnrollment.available ? (
-          <button
-            type="button"
-            onClick={() => onAction("AUTHORIZE")}
-            disabled={busy}
-            className="rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            Set up paid membership payment
-          </button>
-        ) : null}
         {action.startTrial.available ? (
           <button
             type="button"
@@ -109,7 +86,7 @@ export function MembershipExperiencePanel({
             Start introductory trial
           </button>
         ) : null}
-        {action.beginPaidEnrollment.available && experience.recurringAuthorization.ready ? (
+        {action.beginPaidEnrollment.available ? (
           <button
             type="button"
             onClick={() => onAction("BEGIN_PAID_ENROLLMENT")}
@@ -117,26 +94,6 @@ export function MembershipExperiencePanel({
             className="rounded border px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             Begin paid membership
-          </button>
-        ) : null}
-        {action.pause.available ? (
-          <button
-            type="button"
-            onClick={() => onAction("PAUSE")}
-            disabled={busy}
-            className="rounded border px-4 py-2 text-sm"
-          >
-            Pause
-          </button>
-        ) : null}
-        {action.resume.available ? (
-          <button
-            type="button"
-            onClick={() => onAction("RESUME")}
-            disabled={busy}
-            className="rounded border px-4 py-2 text-sm"
-          >
-            Resume
           </button>
         ) : null}
         {action.cancelAtPeriodEnd.available ? (
@@ -194,44 +151,8 @@ export default function AccountPage() {
     setLoading(false);
   }, []);
 
-  const startAuthorization = useCallback(async () => {
-    const begun = (await fetch("/api/membership/authorization", {
-      method: "POST",
-      headers: { "idempotency-key": keyFor("AUTHORIZE") },
-    }).then((response) => response.json())) as RpcResult<{
-      authorizationId: string;
-      actionType: "REDIRECT" | "SDK" | "NONE";
-      redirectUrl: string | null;
-    }>;
-    if (!begun.ok) throw new Error(begun.error.message);
-    if (begun.value.actionType === "REDIRECT" && begun.value.redirectUrl) {
-      sessionStorage.setItem(PENDING_AUTHORIZATION_KEY, begun.value.authorizationId);
-      window.location.assign(begun.value.redirectUrl);
-      return;
-    }
-    throw new Error("Recurring authorization is temporarily unavailable");
-  }, []);
-
   useEffect(() => {
-    const pending = sessionStorage.getItem(PENDING_AUTHORIZATION_KEY);
-    if (!pending) {
-      void loadExperience();
-      return;
-    }
-    sessionStorage.removeItem(PENDING_AUTHORIZATION_KEY);
-    setBusy(true);
-    void (async () => {
-      const completed = (await fetch("/api/membership/authorization/complete", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ authorizationId: pending }),
-      }).then((response) => response.json())) as RpcResult<{ authorizationId: string }>;
-      if (!completed.ok) throw new Error(completed.error.message);
-      await loadExperience();
-      setMessage("Paid membership payment setup is ready. Subscribe whenever you choose.");
-    })()
-      .catch((error) => setMessage((error as Error).message))
-      .finally(() => setBusy(false));
+    void loadExperience();
   }, [loadExperience]);
 
   async function runAction(action: MembershipAction) {
@@ -239,10 +160,6 @@ export default function AccountPage() {
     setBusy(true);
     setMessage("");
     try {
-      if (action === "AUTHORIZE") {
-        await startAuthorization();
-        return;
-      }
       const headers = {
         "content-type": "application/json",
         "idempotency-key": keyFor(action),
@@ -256,21 +173,29 @@ export default function AccountPage() {
                 headers,
                 body: JSON.stringify({ offerId: experience.offer.offerId }),
               })
-            : fetch(
-                `/api/membership/${action === "PAUSE" ? "pause" : action === "RESUME" ? "resume" : "cancel"}`,
-                {
-                  method: "POST",
-                  headers,
-                  body: JSON.stringify({
-                    expectedVersion: experience.subscription?.version,
-                    ...(action.startsWith("CANCEL")
-                      ? { timing: action === "CANCEL_IMMEDIATELY" ? "IMMEDIATE" : "PERIOD_END" }
-                      : {}),
-                  }),
-                },
-              );
+            : fetch("/api/membership/cancel", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                  expectedVersion: experience.subscription?.version,
+                  ...(action.startsWith("CANCEL")
+                    ? { timing: action === "CANCEL_IMMEDIATELY" ? "IMMEDIATE" : "PERIOD_END" }
+                    : {}),
+                }),
+              });
       const result = (await request.then((response) => response.json())) as RpcResult<unknown>;
       if (!result.ok) throw new Error(result.error.message);
+      if (action === "BEGIN_PAID_ENROLLMENT") {
+        const paymentAction = (result.value as { paymentAction?: unknown }).paymentAction;
+        if (paymentAction) {
+          sessionStorage.setItem(
+            "freshmarkets.membershipPaymentAction",
+            JSON.stringify(paymentAction),
+          );
+          window.location.assign("/account/membership/payment");
+          return;
+        }
+      }
       actionKeys.current.delete(action);
       await loadExperience();
       setMessage("Membership updated.");

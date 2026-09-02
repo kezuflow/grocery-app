@@ -22,6 +22,20 @@ describe("runtime payment provider selection", () => {
     }
   });
 
+  it("registers PayMongo only with both server secrets", () => {
+    const configuration = {
+      ENVIRONMENT: "test",
+      PAYMENT_PROVIDER: "paymongo",
+      PAYMONGO_SECRET_KEY: "sk_test_value",
+      PAYMONGO_WEBHOOK_SECRET: "whsk_test_value",
+    };
+    expect(selectedPaymentProviderCode(configuration)).toBe("paymongo");
+    expect(buildProviderRegistry(configuration).require("paymongo").code).toBe("paymongo");
+    expect(() =>
+      buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "paymongo" }),
+    ).toThrow("PAYMONGO_SECRET_KEY_REQUIRED");
+  });
+
   it("rejects unknown selections, mock leakage, and an omitted environment", () => {
     expect(() =>
       selectedPaymentProviderCode({ ENVIRONMENT: "development", PAYMENT_PROVIDER: "unapproved" }),

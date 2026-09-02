@@ -1,12 +1,12 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-08-31. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-09-02. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
 ## Architecture and security hardening (2026-08-30)
 
-- Shared contracts are decomposed by bounded context and paired with an exhaustive 136-method
-  runtime manifest. Core conformance tests prove the implemented Service Binding surface exactly;
+- Shared contracts are decomposed by bounded context and paired with an exhaustive runtime method
+  manifest. Core conformance tests prove the implemented Service Binding surface exactly;
   Web's sole opaque generated-binding cast is localized and tested.
 - The TypeScript-scanner architecture gate rejects forbidden Web/Core, contract/infrastructure,
   layer-direction, provider, entrypoint-SQL, and row-contract dependencies. Non-Admin/non-Maps RPC
@@ -23,7 +23,7 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
   `script-src` inline/eval wildcards. The approved Mapbox worker/image/connect directives are
   unchanged, and live auth, Admin, and serviceability hydration passes under the nonce policy.
 - Core liveness is dependency-free; readiness safely probes runtime configuration, D1, payment
-  provider code/capabilities, and renewal initiation. Structured telemetry redacts sensitive
+  provider code/capabilities. Structured telemetry redacts sensitive
   fields, a static security gate blocks unsafe log calls, and both Workers explicitly retain all
   logs while sampling five percent of traces.
 - Wrangler 4.125.0 regenerated and verified both Worker binding declarations. Architecture,
@@ -139,8 +139,9 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - The populated `0020 -> 0021 -> current` migration path now preserves commerce history and foreign-key integrity; the verifier exercises that real pre-`0021` boundary as well as fresh, Analytics, and cart/inbox upgrade paths. Retired inventory triggers remain absent.
 - Core and Web parse one closed typed runtime configuration. Unknown deployed environments, insecure origins, weak/missing auth secrets, incomplete OAuth pairs, unapproved payment adapters, and renewal ownership without a provider fail closed.
 - Migration `0046` deterministically reconciles duplicate active carts, enforces one active cart per customer, and adds provider-inbox normalized observations, retry availability, and conditional leases. Cart mutation is idempotent and version guarded; missing SKU/price is explicit and never displayed as zero.
-- Provider events persist no raw webhook body. Webhook delivery and scheduled redrive share one normalized, leased application path; expired leases are reclaimable, bounded exhaustion creates one reconciliation case, and resumable provider actions have an every-minute expiry sweep.
-- Renewal initiation is disabled by default behind the explicit runtime ownership gate. Confirmed outcome application, dunning, and grace expiry continue while initiation is disabled.
+- Migration `0054_paymongo_subscription_webhook_audit.sql` retains every signature-verified bounded raw webhook body with its hash and verification time, adds Payments-owned PayMongo plan/subscription/invoice mappings, and migrates historical `PAUSED` memberships to intentional `CANCELED` history. Raw provider bodies remain absent from logs and ordinary Admin DTOs.
+- The Membership scheduler now expires only FreshMarkets-owned introductory trials. It cannot initiate or retry a paid renewal, run local dunning, or expire a local grace timer; PayMongo Scheduled Subscriptions is the approved paid billing/retry owner.
+- The production PayMongo adapter now implements Payment Intents, direct browser card tokenization, refunds, provider Customers, immutable scheduled monthly Plans, paid Subscription provisioning, immediate/effective-period cancellation, exact raw-body HMAC webhook verification, payment/refund/subscription/invoice mappings, verified-delivery audit, inbox redrive, and fifteen-minute provider-state reconciliation. `UNPAID` is applied only from verified or retrieved provider truth. Live account capability activation, secrets, webhook registration, and live-money acceptance remain deployment evidence rather than repository claims.
 - Catalog generation is owned by its pre-`0025` schema boundary and reproduces the committed migration byte-for-byte. Storefront card assertions cover identity/price while quick view owns fixed-variant assertions. A parent-scoped pnpm override replaces the vulnerable legacy esbuild with `0.25.12`; `pnpm audit` reports no advisories.
 
 ## Admin and Platform Readiness Slice 9 (2026-08-29)
@@ -336,10 +337,10 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
   insert across REQUESTED/APPROVED/PROCESSING/ESCALATED/SUCCEEDED states. Provider availability is
   resolved before a new claim, orphaned REQUESTED replays escalate visibly, and successive partial
   successes recompute the payment aggregate through `REFUNDED`.
-- PayMongo or another production grocery payment provider, production recurring mandates, automatic
-  renewal charging, and real-provider retry ownership are not selected or implemented. Existing
-  membership renewal and authorization code is a provider-neutral mock-tested seam, not a production
-  billing capability; no guessed PayMongo payload, credential, or processing-cost behavior exists.
+- PayMongo Scheduled Subscriptions is the owner-approved recurring-membership direction and owns
+  invoice generation and retries. Production is still fail-closed because account capability
+  activation, credentials, the live adapter, signed fixtures, and end-to-end provider acceptance are
+  not yet implemented. The deterministic mock remains development/test-only.
 
 ### Checkout and delivery pricing
 

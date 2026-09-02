@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({
   env: {
-    MAPBOX_PUBLIC_ACCESS_TOKEN: "pk.browser-public",
+    MAPBOX_BROWSER_TOKEN: "pk.browser-public",
     MAPBOX_ACCESS_TOKEN: "sk.core-server-secret",
   },
 }));

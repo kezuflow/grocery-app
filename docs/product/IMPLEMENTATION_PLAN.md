@@ -268,7 +268,7 @@ Phases 1–3.
 - Subscription aggregate, canonical lifecycle/eligibility policy, scheduled-cancellation metadata, and guarded lifecycle commands.
 - Promotions-owned one-per-customer introductory grant/redemption that permits `TRIALING` for exactly one calendar billing month. Calculate in the Market business timezone, clamp to the target month's final valid day when necessary, and persist UTC instants.
 - The free trial requires no payment authorization or Payment, expires to terminal `EXPIRED` at its exact end, and never converts in place. A later paid choice creates a separate `PENDING` Subscription at the then-current price before provider-confirmed activation.
-- Membership reaction ports for canonical Payments outcomes; no payment-provider payload or vendor state enters Membership.
+- Payments-owned PayMongo plan/subscription/invoice mappings and a guarded provider-observation port; raw provider vocabulary and payloads never enter Membership DTOs.
 
 ### D1/data changes
 
@@ -391,7 +391,7 @@ Phase 6; provider integration port from Phase 0.
 
 ### D1/data changes
 
-- Checkout/order/order-item/amendment/payment-intent/payment-attempt/provider-mapping/provider-event-inbox/refund/idempotency tables. Provider references remain Payments-owned rather than Subscription fields.
+- Checkout/order/order-item/amendment/payment-intent/payment-attempt/provider-mapping/provider-event-inbox/refund/idempotency tables. Provider references remain Payments-owned rather than Subscription fields. The verified-event inbox retains the exact bounded signed body, hash, verification time, processing state, attempts, and reconciliation result; secrets and unverified requests are never stored as provider events.
 
 ### RPC/contracts
 
@@ -412,7 +412,7 @@ Phase 6; provider integration port from Phase 0.
 
 ### Not in this phase
 
-Procurement execution, packing, rider operations, or production recurring billing. This phase is not accepted for production until an owner-approved provider is selected and the configured commitment policy is proven with signed provider events and reconciliation. Mock evidence is local acceptance only.
+Procurement execution, packing, or rider operations. The PayMongo adapter, signed ingress, plan synchronization, provider-state reconciliation, and browser tokenization path are implemented. Production acceptance still requires account Subscriptions/card capability activation, live credentials, public-key and webhook configuration, and live end-to-end initial/renewal/failure/recovery/unpaid/cancellation/refund proof. Mock and fake-fetch evidence is local acceptance only.
 
 ## Phase 8 — Location Inventory, Reservations, and Committed Demand
 

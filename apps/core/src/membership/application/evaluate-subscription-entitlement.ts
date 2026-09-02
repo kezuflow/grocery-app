@@ -4,14 +4,13 @@ export type EntitlementDecision = {
   eligible: boolean;
   state: SubscriptionState | null;
   effectiveUntil: number | null;
-  reason: "ENTITLED" | "NO_SUBSCRIPTION" | "TRIAL_ENDED" | "GRACE_ENDED" | "STATE_NOT_ENTITLED";
+  reason: "ENTITLED" | "NO_SUBSCRIPTION" | "TRIAL_ENDED" | "STATE_NOT_ENTITLED";
 };
 
 type SubscriptionEntitlementRow = {
   status: SubscriptionState;
   trial_ends_at: number | null;
   current_period_ends_at: number | null;
-  grace_ends_at: number | null;
 };
 
 /**
@@ -25,7 +24,7 @@ export async function evaluateSubscriptionEntitlement(
 ): Promise<EntitlementDecision> {
   const subscription = await database
     .prepare(
-      `SELECT status, trial_ends_at, current_period_ends_at, grace_ends_at
+      `SELECT status, trial_ends_at, current_period_ends_at
        FROM subscription
        WHERE customer_id=?
        ORDER BY updated_at DESC, id DESC
@@ -67,15 +66,9 @@ export async function evaluateSubscriptionEntitlement(
   }
 
   if (subscription.status === "PAST_DUE") {
-    const effectiveUntil = subscription.grace_ends_at;
-    return effectiveUntil !== null && effectiveUntil > input.at
-      ? { eligible: true, state: subscription.status, effectiveUntil, reason: "ENTITLED" }
-      : {
-          eligible: false,
-          state: subscription.status,
-          effectiveUntil,
-          reason: "GRACE_ENDED",
-        };
+    // PayMongo owns the retry window. Entitlement remains until a verified
+    // provider observation changes the state to UNPAID or CANCELED.
+    return { eligible: true, state: subscription.status, effectiveUntil: null, reason: "ENTITLED" };
   }
 
   return {
