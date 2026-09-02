@@ -13,6 +13,7 @@
     "migration:check": "node scripts/verify-migrations.mjs",
     "catalog:generate": "node apps/core/scripts/generate-produce-catalog.ts",
     "catalog:check": "node apps/core/scripts/generate-produce-catalog.ts --check",
+    "seed:development": "pnpm --filter @freshmarkets/core seed:development",
     "commit:check": "node scripts/verify-commit-message.mjs",
     "hooks:install": "git config core.hooksPath .githooks",
     "format": "oxfmt --write package.json pnpm-workspace.yaml apps packages scripts",

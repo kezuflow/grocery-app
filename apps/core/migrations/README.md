@@ -49,6 +49,8 @@ Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tab
 
 For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.
 
+After migrations, `pnpm seed:development` loads the repeatable local-only dataset in `apps/core/seeds/development.sql`. It populates linked Customer, Membership, Checkout, Order, Payment, Refund, Fulfillment, Delivery, issue, supply, notification, and Audit examples with stable `seed-*` identities. The seed uses `INSERT OR IGNORE`, does not replace an existing login or business row, and deliberately creates neither `product_media` rows nor R2 objects.
+
 Email verification and password-reset delivery use the Core auth-email port and Cloudflare Email Service `EMAIL` binding. Local tests inject fakes; bearer URLs and recipients are never logged. Production fails closed until `AUTH_EMAIL_FROM` and an onboarded sender are configured outside source.
 
 `0026_admin_foundation.sql` seeds the closed canonical dot-form admin capability vocabulary with stable `perm_<domain>_<action>_v1` identifiers, maps historical colon-form assignments to canonical equivalents additively (legacy rows and assignments are preserved as compatibility data), grants `role_operations_admin` canonical operational read/manage capabilities and `role_operations_viewer` only canonical operational read capabilities, and adds nullable `market_id`, `location_id`, `reason`, `before_json`, `after_json`, and `correlation_id` Audit query columns plus their list indexes. `details_json` is retained for compatibility.
@@ -62,6 +64,10 @@ Email verification and password-reset delivery use the Core auth-email port and 
 `0030_order_issues.sql` adds the `order_issue` intake queue: closed category vocabulary (missing item, wrong item, damaged, quality, quantity, delivery, other), the `SUBMITTED|CLAIMED|INVESTIGATING|RESOLVED|ESCALATED` lifecycle, staff assignment, resolution recording, and unique idempotency keys. Issue actions are operational records only and never authorize refunds.
 
 `0036_admin_catalog_canonicalization.sql` adds versioned, dimension-safe catalog conversion configuration and a canonical sourcing-mode compatibility seam. `0037_price_version_guards.sql` adds product versions, deterministic non-overlapping market/location price windows, and database command guards. `0038_promotion_grant_uniqueness.sql` reconciles historical duplicate targeted grants and enforces one grant per promotion code and customer while leaving system membership grants unaffected.
+
+`0052_global_fulfillment_location_commerce.sql` replaces per-location customer-mode authority with one global mode plus location readiness, backfills legacy market prices to exact active locations without overwriting exact price history, and enforces exact-location prices. Runtime sourcing configuration is removed; the local-availability and inventory-pool legacy sourcing columns remain compatibility-only while historical Order snapshots stay untouched.
+
+`0053_catalog_volume_units.sql` completes the controlled unit registry with canonical `MILLILITER` inventory and exact `LITER`-to-milliliter conversion rows. It changes no existing Product or inventory quantity.
 
 `0035_category_navigation_icons.sql` adds optional, validated bare SVG asset keys to Catalog categories and configures the seven launch taxonomy icons. Core resolves these keys into safe purpose-built category navigation paths; the version-controlled SVG binaries remain Web-owned public assets.
 
