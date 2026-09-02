@@ -27,6 +27,11 @@ export const addressSearchRequestSchema = z.object({
   proximity: z.object({ latitude: coordinateSchema, longitude: coordinateSchema }).optional(),
 });
 
+export const addressReverseRequestSchema = z.object({
+  requestId: identifierSchema,
+  coordinate: z.object({ latitude: coordinateSchema, longitude: coordinateSchema }),
+});
+
 const catalogSlugSchema = z
   .string()
   .trim()

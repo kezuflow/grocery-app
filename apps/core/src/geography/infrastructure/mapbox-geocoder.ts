@@ -104,36 +104,52 @@ export class MapboxGeocoder implements GeocoderPort {
       "MAPBOX_GEOCODER_REVERSE_PERMANENT",
       this.telemetry,
       async () => {
-        this.requireConfigured();
-        validateCoordinate(input.coordinate);
+        const mapped = await this.reverse(input.coordinate, true);
+        return {
+          provider: "MAPBOX",
+          providerReference: mapped.providerReference,
+          displayAddress: mapped.displayAddress,
+          coordinate: mapped.coordinate,
+          components: mapped.components,
+          accuracy: mapped.accuracy,
+        };
+      },
+    );
+  }
 
-        const url = new URL(`${MAPBOX_GEOCODING_BASE_URL}/reverse`);
-        url.searchParams.set("longitude", String(input.coordinate.longitude));
-        url.searchParams.set("latitude", String(input.coordinate.latitude));
-        url.searchParams.set("country", "PH");
-        url.searchParams.set("permanent", "true");
-        url.searchParams.set("access_token", this.accessToken);
-
-        const features = await this.requestFeatures(url);
-        for (const feature of features) {
-          const mapped = mapFeature(feature);
-          if (mapped)
-            return {
-              provider: "MAPBOX",
-              providerReference: mapped.providerReference,
-              displayAddress: mapped.displayAddress,
-              coordinate: mapped.coordinate,
-              components: mapped.components,
-              accuracy: mapped.accuracy,
-            };
-        }
-        throw new GeocoderError("GEOCODER_NO_RESULTS");
+  async reverseTemporary(input: { coordinate: Coordinate }): Promise<AddressSearchCandidate> {
+    return observeProviderOperation(
+      "MAPBOX_GEOCODER_REVERSE_TEMPORARY",
+      this.telemetry,
+      async () => {
+        const mapped = await this.reverse(input.coordinate, false);
+        const { providerReference: _providerReference, ...candidate } = mapped;
+        return candidate;
       },
     );
   }
 
   private requireConfigured(): void {
     if (!this.accessToken) throw new GeocoderError("GEOCODER_UNCONFIGURED");
+  }
+
+  private async reverse(coordinate: Coordinate, permanent: boolean): Promise<MappedFeature> {
+    this.requireConfigured();
+    validateCoordinate(coordinate);
+
+    const url = new URL(`${MAPBOX_GEOCODING_BASE_URL}/reverse`);
+    url.searchParams.set("longitude", String(coordinate.longitude));
+    url.searchParams.set("latitude", String(coordinate.latitude));
+    url.searchParams.set("country", "PH");
+    if (permanent) url.searchParams.set("permanent", "true");
+    url.searchParams.set("access_token", this.accessToken);
+
+    const features = await this.requestFeatures(url);
+    for (const feature of features) {
+      const mapped = mapFeature(feature);
+      if (mapped) return mapped;
+    }
+    throw new GeocoderError("GEOCODER_NO_RESULTS");
   }
 
   private async requestFeatures(url: URL): Promise<ReadonlyArray<MapboxFeature>> {

@@ -144,6 +144,13 @@ async function selectCandidate(container: HTMLElement, fetchImpl: ReturnType<typ
   expect(fetchImpl).toHaveBeenCalled();
 }
 
+function currentPinPosition(adapter: FakeMapAdapter) {
+  return (
+    adapter.controllers.at(-1)?.sceneUpdates.at(-1)?.draggablePin?.position ??
+    adapter.initializations.at(-1)?.scene.draggablePin?.position
+  );
+}
+
 describe("AddressEditor", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -160,6 +167,18 @@ describe("AddressEditor", () => {
     vi.useRealTimers();
     document.body.replaceChildren();
     vi.restoreAllMocks();
+  });
+
+  it("starts with a centered draggable Cebu pin without treating it as confirmed", async () => {
+    const adapter = new FakeMapAdapter();
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const { container, root } = mount({ fetchImpl, mapAdapter: adapter });
+    await flush();
+
+    expect(currentPinPosition(adapter)).toEqual({ latitude: 10.3157, longitude: 123.8854 });
+    expect(container.textContent).not.toContain("Selected address:");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    act(() => root.unmount());
   });
 
   it("debounces search and aborts the stale request when the query changes", async () => {
@@ -219,6 +238,10 @@ describe("AddressEditor", () => {
       const path = String(url);
       if (path.startsWith("/api/commerce/address-search"))
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+      if (path === "/api/commerce/address-reverse")
+        return Promise.resolve(
+          response({ ok: true, value: { ...candidate, coordinate: moved }, requestId: "reverse" }),
+        );
       if (path === "/api/serviceability")
         return Promise.resolve(
           response({ ok: true, value: { ...serviceable, coordinate: moved }, requestId: "svc" }),
@@ -235,12 +258,15 @@ describe("AddressEditor", () => {
     const { container, root } = mount({ fetchImpl, mapAdapter: adapter });
 
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
-    expect(adapter.initializations.at(-1)?.scene.draggablePin?.position).toEqual(
-      candidate.coordinate,
-    );
+    expect(currentPinPosition(adapter)).toEqual(candidate.coordinate);
 
     act(() => adapter.emitPinMove({ longitude: moved.longitude, latitude: moved.latitude }));
     await flush();
+    const reverseCall = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([url]) => String(url) === "/api/commerce/address-reverse",
+    );
+    expect(JSON.parse(String(reverseCall?.[1]?.body))).toEqual({ coordinate: moved });
+    expect(container.textContent).toContain("Pin location updated and address details filled");
     const serviceabilityCall = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls
       .filter(([url]) => String(url) === "/api/serviceability")
       .at(-1);
@@ -393,9 +419,11 @@ describe("AddressEditor", () => {
         success({ coords: { latitude: 10.31, longitude: 123.89 } } as GeolocationPosition),
       ),
     } as unknown as Geolocation;
-    const fetchImpl = vi.fn(() =>
-      Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" })),
-    ) as unknown as typeof fetch;
+    const fetchImpl = vi.fn((url: string | URL | Request) => {
+      if (String(url) === "/api/commerce/address-reverse")
+        return Promise.resolve(response({ ok: true, value: candidate, requestId: "reverse" }));
+      return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
+    }) as unknown as typeof fetch;
     const { container, root } = mount({ fetchImpl, geolocation });
     const locate = Array.from(container.querySelectorAll("button")).find((button) =>
       button.textContent?.includes("Use current location"),
@@ -461,9 +489,7 @@ describe("AddressEditor", () => {
     expect(container.textContent).toContain(`Selected address: ${candidate.displayAddress}`);
     expect(container.textContent).not.toContain("Current location selected");
     expect(container.textContent).not.toContain("Location permission was not granted");
-    expect(adapter.initializations.at(-1)?.scene.draggablePin?.position).toEqual(
-      candidate.coordinate,
-    );
+    expect(currentPinPosition(adapter)).toEqual(candidate.coordinate);
     act(() => root.unmount());
   });
 

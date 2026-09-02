@@ -2,6 +2,7 @@ import { log } from "../../observability";
 
 export type ProviderOperation =
   | "MAPBOX_GEOCODER_SEARCH"
+  | "MAPBOX_GEOCODER_REVERSE_TEMPORARY"
   | "MAPBOX_GEOCODER_REVERSE_PERMANENT"
   | "MAPBOX_ROUTE_DISTANCE"
   | "MAPBOX_ROUTE_PREVIEW";

@@ -254,6 +254,18 @@ describe("MapboxMap", () => {
     act(() => root.unmount());
   });
 
+  it("forwards map clicks using provider-neutral coordinates", async () => {
+    const adapter = new FakeMapAdapter();
+    const onMapClick = vi.fn();
+    const { root } = mountMap({ adapter, onMapClick });
+    await flushEffects();
+
+    adapter.emitMapClick({ longitude: 123.902, latitude: 10.321 });
+
+    expect(onMapClick).toHaveBeenCalledWith({ longitude: 123.902, latitude: 10.321 });
+    act(() => root.unmount());
+  });
+
   it("honors the browser reduced-motion preference during initialization", async () => {
     vi.mocked(window.matchMedia).mockReturnValue({
       matches: true,
@@ -482,6 +494,7 @@ describe("FakeMapAdapter", () => {
       scene,
       reducedMotion: false,
       onPinMove,
+      onMapClick: vi.fn(),
       onPointActivate: vi.fn(),
       onAreaSelect: vi.fn(),
       onAreaSelectionCancel: vi.fn(),
@@ -510,6 +523,7 @@ describe("FakeMapAdapter", () => {
       scene: { areaSelectionActive: true },
       reducedMotion: false,
       onPinMove: vi.fn(),
+      onMapClick: vi.fn(),
       onPointActivate,
       onAreaSelect,
       onAreaSelectionCancel,

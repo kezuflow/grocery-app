@@ -107,12 +107,13 @@ Address flow:
 ```text
 enter structured address
  -> geocode
- -> show/allow map-coordinate confirmation
+ -> show a centered draggable pin and allow map-coordinate confirmation
+ -> reverse-geocode a moved pin to fill the editable structured address
  -> resolve Cebu service area and zone
  -> show serviceable/unserviceable state
 ```
 
-Use recipient, phone, barangay, city, notes, and landmark/instructions fields. Explain that the map pin determines serviceability. If outside the active polygon, do not permit checkout and provide a useful correction path. Core revalidates coordinates at checkout even if the frontend has already resolved them.
+Use recipient, phone, barangay, city, notes, and landmark/instructions fields. Selecting a search result recenters the map; clicking or dragging the pin keeps the chosen coordinate and refreshes the structured address without overwriting recipient or delivery-instruction fields. Explain that the map pin determines serviceability. If outside the active polygon, do not permit checkout and provide a useful correction path. Core revalidates coordinates at checkout even if the frontend has already resolved them.
 
 ## Fulfillment Selection
 

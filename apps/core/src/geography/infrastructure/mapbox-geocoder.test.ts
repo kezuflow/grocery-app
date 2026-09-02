@@ -148,6 +148,27 @@ describe("Mapbox geocoder adapter", () => {
     });
   });
 
+  it("uses temporary reverse geocoding for editor pin autofill", async () => {
+    let requested: Request | undefined;
+    const adapter = new MapboxGeocoder("test-token", async (input, init) => {
+      requested = new Request(input, init);
+      return Response.json({ type: "FeatureCollection", features: [CEBU_ADDRESS_FEATURE] });
+    });
+
+    const candidate = await adapter.reverseTemporary({
+      coordinate: { latitude: 10.3157, longitude: 123.8854 },
+    });
+
+    const url = requested ? new URL(requested.url) : undefined;
+    expect(url?.pathname).toBe("/search/geocode/v6/reverse");
+    expect(url?.searchParams.has("permanent")).toBe(false);
+    expect(candidate).toMatchObject({
+      candidateKey: "address.cebu-test",
+      displayAddress: "1 V. Rama Avenue, Guadalupe, Cebu City, Cebu 6000, Philippines",
+      components: { addressLine1: "1 V. Rama Avenue", city: "Cebu City" },
+    });
+  });
+
   it.each([
     [401, "GEOCODER_UNAUTHORIZED"],
     [403, "GEOCODER_UNAUTHORIZED"],

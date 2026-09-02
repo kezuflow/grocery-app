@@ -1,5 +1,9 @@
 import type { RpcResult } from "./common";
-import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
+import type {
+  AddressReverseRequest,
+  AddressSearchCandidate,
+  AddressSearchRequest,
+} from "./geography";
 import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
@@ -97,6 +101,10 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   searchAddressCandidates(
     request: AddressSearchRequest,
   ): Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>;
+  /** Temporary reverse-geocoded address details for a pin in the active editor session. */
+  reverseAddressCandidate(
+    request: AddressReverseRequest,
+  ): Promise<RpcResult<AddressSearchCandidate>>;
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
   listFulfillmentOptions(
@@ -245,6 +253,7 @@ export const coreServiceMethodNames = [
   "applyAdminOrderIssueAction",
   "resolveServiceability",
   "searchAddressCandidates",
+  "reverseAddressCandidate",
   "searchCatalog",
   "getMarketplaceHome",
   "getCatalogProduct",

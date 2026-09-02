@@ -121,12 +121,15 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 ## Serviceability
 
 - `geography.searchAddressCandidates({ requestId, query, proximity? }) -> AddressSearchCandidate[]`
+- `geography.reverseAddressCandidate({ requestId, coordinate }) -> AddressSearchCandidate`
 - `serviceability.resolveCoordinates({ latitude, longitude, addressComponents? }) -> ServiceabilityResult`
 
 `AddressSearchCandidate` is provider-neutral and contains an opaque session candidate key,
 display address, coordinate, structured address components, and nullable accuracy. Search
 results exist only for the active interaction and may not be persisted, cached across sessions,
-or logged. Candidate selection is not serviceability proof. Core finalizes provider-derived
+or logged. Temporary reverse geocoding uses the same candidate shape to fill the editor after a
+customer moves the pin or selects device location; it keeps the exact customer-selected coordinate
+and does not itself save the provider result. Candidate selection is not serviceability proof. Core finalizes provider-derived
 coordinates under the provider's permanent-storage rules before any saved-address write.
 
 `ServiceabilityResult` includes `serviceable`, stable failure reason, market/area/zone display context, active polygon versions, resolution-change detection, and a mode-aware fulfillment-eligibility summary. Internal polygon GeoJSON, location codes, mode configuration IDs, and ranking rules are never exposed. Customers do not select a location; Core filters operational candidates whose geofences contain the coordinate, selects the nearest dispatch origin by exact Haversine distance with stable location-ID tie-break, and always re-resolves at checkout. Product stock cannot select or replace the owning location.

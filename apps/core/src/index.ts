@@ -20,6 +20,7 @@ import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
   addressRequestSchema,
+  addressReverseRequestSchema,
   addressSearchRequestSchema,
   addressUpdateRequestSchema,
   authenticatedRequestSchema,
@@ -2217,6 +2218,32 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         errorCode: error.code,
       });
       return fail(error.code, "Address search is temporarily unavailable", input.requestId);
+    }
+  }
+  async reverseAddressCandidate(input: import("@freshmarkets/contracts").AddressReverseRequest) {
+    const validation = addressReverseRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const startedAt = Date.now();
+    try {
+      const candidate = await buildGeocoderPort(this.env).reverseTemporary(validation.data);
+      log("info", "geocoder.reverse", {
+        requestId: input.requestId,
+        operation: "temporary_reverse",
+        durationMs: Date.now() - startedAt,
+        resultCategory: "success",
+      });
+      return { ok: true as const, value: candidate, requestId: input.requestId };
+    } catch (error) {
+      if (!(error instanceof GeocoderError)) throw error;
+      log("warn", "geocoder.reverse", {
+        requestId: input.requestId,
+        operation: "temporary_reverse",
+        durationMs: Date.now() - startedAt,
+        resultCategory: "failure",
+        errorCode: error.code,
+      });
+      return fail(error.code, "Address details are temporarily unavailable", input.requestId);
     }
   }
   async searchCatalog(input: import("@freshmarkets/contracts").CatalogSearchRequest) {

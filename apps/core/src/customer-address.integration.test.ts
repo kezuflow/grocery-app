@@ -93,6 +93,9 @@ function geocoder(overrides: Partial<GeocoderPort> = {}): GeocoderPort {
     async search() {
       return [];
     },
+    async reverseTemporary() {
+      throw new Error("Unexpected temporary reverse geocode");
+    },
     async reversePermanent() {
       throw new Error("Unexpected permanent reverse geocode");
     },

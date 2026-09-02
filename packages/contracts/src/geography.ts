@@ -25,6 +25,10 @@ export type AddressSearchRequest = RequestMeta & {
   proximity?: Coordinate;
 };
 
+export type AddressReverseRequest = RequestMeta & {
+  coordinate: Coordinate;
+};
+
 export type AddressSearchCandidate = {
   candidateKey: string;
   displayAddress: string;

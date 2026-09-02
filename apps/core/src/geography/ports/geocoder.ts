@@ -20,5 +20,6 @@ export type PermanentGeocode = {
 
 export interface GeocoderPort {
   search(input: GeocoderSearchInput): Promise<ReadonlyArray<AddressSearchCandidate>>;
+  reverseTemporary(input: { coordinate: Coordinate }): Promise<AddressSearchCandidate>;
   reversePermanent(input: { coordinate: Coordinate }): Promise<PermanentGeocode>;
 }

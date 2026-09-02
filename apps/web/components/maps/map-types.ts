@@ -47,6 +47,7 @@ export type MapAdapterInitialization = Readonly<{
   scene: MapScene;
   reducedMotion: boolean;
   onPinMove: (position: MapCoordinate) => void;
+  onMapClick: (position: MapCoordinate) => void;
   onPointActivate: (pointId: string) => void;
   onAreaSelect: (firstCorner: MapCoordinate, secondCorner: MapCoordinate) => void;
   onAreaSelectionCancel: () => void;

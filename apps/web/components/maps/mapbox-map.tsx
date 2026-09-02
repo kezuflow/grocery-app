@@ -198,6 +198,7 @@ function createMapboxAdapter(): MapAdapter {
 
       let scene = options.scene;
       let marker: MapboxMarker | undefined;
+      let lastPinPosition: MapCoordinate | undefined;
       let loaded = false;
       let areaCleanup: (() => void) | undefined;
 
@@ -277,20 +278,32 @@ function createMapboxAdapter(): MapAdapter {
         if (!scene.draggablePin) {
           marker?.remove();
           marker = undefined;
+          lastPinPosition = undefined;
           return;
         }
+        const pinPosition = scene.draggablePin.position;
+        const pinChanged =
+          !lastPinPosition ||
+          lastPinPosition.longitude !== pinPosition.longitude ||
+          lastPinPosition.latitude !== pinPosition.latitude;
         if (!marker) {
           marker = new mapbox.default.Marker({ draggable: true })
-            .setLngLat(coordinate(scene.draggablePin.position))
+            .setLngLat(coordinate(pinPosition))
             .addTo(map);
           marker.on("dragend", () => {
             const position = marker?.getLngLat();
             if (position) options.onPinMove({ longitude: position.lng, latitude: position.lat });
           });
         } else {
-          marker.setLngLat(coordinate(scene.draggablePin.position));
+          marker.setLngLat(coordinate(pinPosition));
         }
         marker.getElement().setAttribute("aria-label", scene.draggablePin.label ?? "Map pin");
+        if (pinChanged)
+          map.easeTo({
+            center: coordinate(pinPosition),
+            duration: options.reducedMotion ? 0 : 500,
+          });
+        lastPinPosition = pinPosition;
       };
 
       map.on("load", () => {
@@ -306,6 +319,10 @@ function createMapboxAdapter(): MapAdapter {
         const pointId = (feature as { properties?: Record<string, unknown> } | undefined)
           ?.properties?.id;
         if (typeof pointId === "string") options.onPointActivate(pointId);
+      });
+      map.on("click", (event) => {
+        if (scene.areaSelectionActive || !scene.draggablePin) return;
+        options.onMapClick({ longitude: event.lngLat.lng, latitude: event.lngLat.lat });
       });
 
       return {
@@ -342,6 +359,7 @@ export type MapboxMapProps = Readonly<{
   className?: string;
   fallback?: ReactNode;
   onPinMove?: (position: MapCoordinate) => void;
+  onMapClick?: (position: MapCoordinate) => void;
   onPointActivate?: (pointId: string) => void;
   onAreaSelect?: (firstCorner: MapCoordinate, secondCorner: MapCoordinate) => void;
   onAreaSelectionCancel?: () => void;
@@ -356,6 +374,7 @@ export function MapboxMap({
   className,
   fallback,
   onPinMove,
+  onMapClick,
   onPointActivate,
   onAreaSelect,
   onAreaSelectionCancel,
@@ -365,12 +384,14 @@ export function MapboxMap({
   const generationRef = useRef(0);
   const sceneRef = useRef(scene);
   const pinMoveRef = useRef(onPinMove);
+  const mapClickRef = useRef(onMapClick);
   const pointActivateRef = useRef(onPointActivate);
   const areaSelectRef = useRef(onAreaSelect);
   const areaCancelRef = useRef(onAreaSelectionCancel);
   const [error, setError] = useState<"configuration" | "load" | null>(null);
   sceneRef.current = scene;
   pinMoveRef.current = onPinMove;
+  mapClickRef.current = onMapClick;
   pointActivateRef.current = onPointActivate;
   areaSelectRef.current = onAreaSelect;
   areaCancelRef.current = onAreaSelectionCancel;
@@ -398,6 +419,7 @@ export function MapboxMap({
         scene: initialScene,
         reducedMotion,
         onPinMove: (position) => pinMoveRef.current?.(position),
+        onMapClick: (position) => mapClickRef.current?.(position),
         onPointActivate: (pointId) => pointActivateRef.current?.(pointId),
         onAreaSelect: (firstCorner, secondCorner) =>
           areaSelectRef.current?.(firstCorner, secondCorner),

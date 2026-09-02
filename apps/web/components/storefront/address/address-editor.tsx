@@ -198,8 +198,10 @@ export function AddressEditor({
   const [locationError, setLocationError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const serviceabilityAbortRef = useRef<AbortController | null>(null);
+  const reverseAbortRef = useRef<AbortController | null>(null);
   const serviceabilityGenerationRef = useRef(0);
   const coordinateActionGenerationRef = useRef(0);
+  const initialMapCenterRef = useRef<Coordinate>(coordinate ?? CEBU_CENTER);
   const providerResolvedComponents = confirmationSource === "GEOCODER";
 
   useEffect(() => {
@@ -258,6 +260,7 @@ export function AddressEditor({
     () => () => {
       coordinateActionGenerationRef.current += 1;
       serviceabilityGenerationRef.current += 1;
+      reverseAbortRef.current?.abort();
       serviceabilityAbortRef.current?.abort();
     },
     [],
@@ -304,6 +307,7 @@ export function AddressEditor({
 
   function chooseCandidate(candidate: AddressSearchCandidate): void {
     coordinateActionGenerationRef.current += 1;
+    reverseAbortRef.current?.abort();
     setLocationError("");
     setComponents(candidate.components);
     setComponentsSource("TEMPORARY_GEOCODER");
@@ -315,13 +319,73 @@ export function AddressEditor({
     void resolveCoordinate(candidate.coordinate, candidate.components);
   }
 
-  function movePin(nextCoordinate: Coordinate): void {
-    coordinateActionGenerationRef.current += 1;
+  async function confirmCoordinate(
+    nextCoordinate: Coordinate,
+    source: "USER_PIN" | "DEVICE_LOCATION",
+    generation: number,
+  ): Promise<void> {
+    reverseAbortRef.current?.abort();
+    const controller = new AbortController();
+    reverseAbortRef.current = controller;
     setLocationError("");
     setCoordinate(nextCoordinate);
-    setConfirmationSource("USER_PIN");
-    setCoordinateAnnouncement("Pin location updated.");
-    void resolveCoordinate(nextCoordinate, components);
+    setConfirmationSource(source);
+    setCoordinateAnnouncement(
+      source === "DEVICE_LOCATION"
+        ? "Current location selected. Finding the address…"
+        : "Pin location updated. Finding the address…",
+    );
+    try {
+      const response = await fetchImpl("/api/commerce/address-reverse", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ coordinate: nextCoordinate }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const result = (await response.json()) as RpcResult<AddressSearchCandidate>;
+      if (
+        controller.signal.aborted ||
+        generation !== coordinateActionGenerationRef.current ||
+        reverseAbortRef.current !== controller
+      )
+        return;
+      if (!response.ok || !result.ok) {
+        setLocationError(
+          "The pin is selected, but its address details could not be filled automatically. Enter them below or try another point.",
+        );
+        setCoordinateAnnouncement("Pin location updated.");
+        void resolveCoordinate(nextCoordinate, components);
+        return;
+      }
+      setComponents(result.value.components);
+      setComponentsSource("TEMPORARY_GEOCODER");
+      setSelectedDisplayAddress(result.value.displayAddress);
+      setCoordinateAnnouncement(
+        source === "DEVICE_LOCATION"
+          ? "Current location selected and address details filled. Review them before saving."
+          : "Pin location updated and address details filled. Review them before saving.",
+      );
+      void resolveCoordinate(nextCoordinate, result.value.components);
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        generation !== coordinateActionGenerationRef.current ||
+        (error instanceof DOMException && error.name === "AbortError")
+      )
+        return;
+      setLocationError(
+        "The pin is selected, but its address details could not be filled automatically. Enter them below or try another point.",
+      );
+      setCoordinateAnnouncement("Pin location updated.");
+      void resolveCoordinate(nextCoordinate, components);
+    }
+  }
+
+  function movePin(nextCoordinate: Coordinate): void {
+    const generation = ++coordinateActionGenerationRef.current;
+    void confirmCoordinate(nextCoordinate, "USER_PIN", generation);
   }
 
   function useCurrentLocation(): void {
@@ -340,13 +404,7 @@ export function AddressEditor({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         };
-        setCoordinate(nextCoordinate);
-        setConfirmationSource("DEVICE_LOCATION");
-        setSelectedDisplayAddress("Current device location");
-        setCoordinateAnnouncement(
-          "Current location selected. Review the address details before saving.",
-        );
-        void resolveCoordinate(nextCoordinate, components);
+        void confirmCoordinate(nextCoordinate, "DEVICE_LOCATION", generation);
       },
       () => {
         if (generation !== coordinateActionGenerationRef.current) return;
@@ -499,13 +557,15 @@ export function AddressEditor({
         <MapboxMap
           publicAccessToken={publicAccessToken}
           adapter={mapAdapter}
-          initialView={{ center: coordinate ?? CEBU_CENTER, zoom: 14 }}
+          initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
           scene={{
-            draggablePin: coordinate
-              ? { position: coordinate, label: "Confirmed delivery entrance" }
-              : undefined,
+            draggablePin: {
+              position: coordinate ?? CEBU_CENTER,
+              label: coordinate ? "Confirmed delivery entrance" : "Move pin to delivery entrance",
+            },
           }}
           onPinMove={movePin}
+          onMapClick={movePin}
           ariaLabel="Delivery address pin confirmation map"
           className="min-h-72 rounded-xl border"
           fallback={
