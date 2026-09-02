@@ -9,6 +9,7 @@ import type {
   AdminOrderIssueDetail,
   AdminOrderIssueDetailRequest,
   AdminOrderIssueListRequest,
+  AdminOrderIssueSummary,
   AdminOrderIssueView,
   AdminOrderListRequest,
   AdminOrderPage,
@@ -36,10 +37,52 @@ import {
   resolveFinanceAdministrationAccess,
   type FinanceAdministrationDeps,
 } from "./finance-administration-access";
+import { allowedOrderIssueActions } from "./order-issue-policy";
+
+function parseRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function toOrderCustomer(addressSnapshotJson: string, email: string): AdminOrderDetail["customer"] {
+  const snapshot = parseRecord(addressSnapshotJson);
+  const address = parseRecord(snapshot.address_json ?? snapshot.components);
+  const addressLines = [
+    nonEmptyString(address.addressLine1 ?? snapshot.addressLine1),
+    nonEmptyString(address.addressLine2 ?? snapshot.addressLine2),
+    nonEmptyString(address.barangay ?? snapshot.barangay),
+    nonEmptyString(address.city ?? snapshot.city),
+    nonEmptyString(address.region ?? snapshot.region),
+    nonEmptyString(address.postalCode ?? snapshot.postalCode),
+  ].filter((part): part is string => part !== null);
+  return {
+    name: nonEmptyString(snapshot.recipient),
+    email,
+    phone: nonEmptyString(snapshot.phone),
+    addressLines,
+  };
+}
 
 const ORDER_SELECT = `
-  SELECT o.id AS orderId, u.email AS customerEmail, o.status, o.total_minor AS totalMinor,
-         o.currency, o.created_at AS committedAt, o.version,
+  SELECT o.id AS orderId, o.order_number AS orderNumber,
+         o.address_snapshot_json AS addressSnapshotJson,
+         u.email AS customerEmail, o.fulfillment_mode AS fulfillmentMode,
+         o.status, o.total_minor AS totalMinor,
+         o.currency, COALESCE(o.committed_at, o.created_at) AS committedAt, o.version,
          (SELECT pi.status FROM order_payment_reaction opr
           JOIN payment_intent pi ON pi.id = opr.payment_intent_id
           WHERE opr.order_id = o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
@@ -51,7 +94,10 @@ const ORDER_SELECT = `
 
 function toOrderSummary(row: {
   orderId: string;
+  orderNumber: string | null;
+  addressSnapshotJson: string;
   customerEmail: string;
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
   totalMinor: number;
   currency: string;
@@ -63,7 +109,10 @@ function toOrderSummary(row: {
 }): AdminOrderSummary {
   return {
     orderId: row.orderId,
+    orderNumber: row.orderNumber,
+    customerName: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).name,
     customerEmail: row.customerEmail,
+    fulfillmentMode: row.fulfillmentMode,
     status: row.status,
     totalMinor: row.totalMinor,
     currency: row.currency,
@@ -125,7 +174,10 @@ export async function listAdminOrders(
     .bind(...binds, limit + 1)
     .all<{
       orderId: string;
+      orderNumber: string | null;
+      addressSnapshotJson: string;
       customerEmail: string;
+      fulfillmentMode: "INSTANT" | "SCHEDULED";
       status: string;
       totalMinor: number;
       currency: string;
@@ -155,7 +207,10 @@ export async function getAdminOrder(
 
   const row = await deps.db.prepare(`${ORDER_SELECT} WHERE o.id = ?`).bind(request.orderId).first<{
     orderId: string;
+    orderNumber: string | null;
+    addressSnapshotJson: string;
     customerEmail: string;
+    fulfillmentMode: "INSTANT" | "SCHEDULED";
     status: string;
     totalMinor: number;
     currency: string;
@@ -195,7 +250,9 @@ export async function getAdminOrder(
   const quote = await deps.db
     .prepare(
       `SELECT q.subtotal_minor AS subtotalMinor, q.discount_minor AS discountMinor,
-              q.delivery_fee_minor AS deliveryFeeMinor, q.total_minor AS totalMinor, q.currency
+              q.delivery_fee_minor AS deliveryFeeMinor,
+              q.service_fee_minor AS serviceFeeMinor, q.tax_minor AS taxMinor,
+              q.total_minor AS totalMinor, q.currency
        FROM order_payment_reaction opr
        JOIN payment_intent pi ON pi.id=opr.payment_intent_id
        JOIN checkout_quote q ON pi.subject_type='checkout_quote' AND q.id=pi.subject_id
@@ -206,6 +263,8 @@ export async function getAdminOrder(
       subtotalMinor: number;
       discountMinor: number;
       deliveryFeeMinor: number;
+      serviceFeeMinor: number;
+      taxMinor: number;
       totalMinor: number;
       currency: string;
     }>();
@@ -368,12 +427,15 @@ export async function getAdminOrder(
     allowedActions: access.value.capabilities.includes("orders.manage")
       ? allowedOrderActions(row, Date.now())
       : [],
+    customer: toOrderCustomer(row.addressSnapshotJson, row.customerEmail),
     financial: quote
       ? { ...quote, source: "CHECKOUT_QUOTE" }
       : {
           subtotalMinor: null,
           discountMinor: null,
           deliveryFeeMinor: null,
+          serviceFeeMinor: null,
+          taxMinor: null,
           totalMinor: row.totalMinor,
           currency: row.currency,
           source: "ORDER_TOTAL_ONLY",
@@ -1120,45 +1182,64 @@ export async function listAdminOrderIssues(
   const clauses: string[] = [];
   const binds: unknown[] = [];
   if (request.status !== undefined) {
-    clauses.push("status = ?");
+    clauses.push("issue.status = ?");
     binds.push(request.status);
   }
   if (cursor) {
-    clauses.push("(created_at < ? OR (created_at = ? AND id < ?))");
+    clauses.push("(issue.created_at < ? OR (issue.created_at = ? AND issue.id < ?))");
     binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
     .prepare(
-      `SELECT id, order_id AS orderId, category, status, details,
-              assigned_staff_id AS assignedStaffId, resolution, version, created_at AS createdAt
-       FROM order_issue ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,
+      `SELECT issue.id, issue.order_id AS orderId, orders.order_number AS orderNumber,
+              orders.address_snapshot_json AS addressSnapshotJson, customer_user.email AS customerEmail,
+              issue.category, issue.status, issue.details,
+              issue.assigned_staff_id AS assignedStaffId, assigned_staff.display_name AS assignedStaffName,
+              issue.resolution, issue.version, issue.created_at AS createdAt
+       FROM order_issue issue
+       JOIN grocery_order orders ON orders.id = issue.order_id
+       JOIN customer customer_profile ON customer_profile.id = issue.customer_id
+       JOIN user customer_user ON customer_user.id = customer_profile.auth_user_id
+       LEFT JOIN staff_identity assigned_staff ON assigned_staff.id = issue.assigned_staff_id
+       ${where} ORDER BY issue.created_at DESC, issue.id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)
     .all<{
       id: string;
       orderId: string;
+      orderNumber: string | null;
+      addressSnapshotJson: string;
+      customerEmail: string;
       category: AdminOrderIssueView["category"];
       status: AdminOrderIssueView["status"];
       details: string | null;
       assignedStaffId: string | null;
+      assignedStaffName: string | null;
       resolution: string | null;
       version: number;
       createdAt: number;
     }>();
   const hasMore = rows.results.length > limit;
-  const items: AdminOrderIssueView[] = rows.results.slice(0, limit).map((row) => ({
+  const items: AdminOrderIssueSummary[] = rows.results.slice(0, limit).map((row) => ({
     issueId: row.id,
     orderId: row.orderId,
+    orderNumber: row.orderNumber,
+    customerName: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).name,
+    customerEmail: row.customerEmail,
     category: row.category,
     status: row.status,
     details: row.details,
     assignedStaffId: row.assignedStaffId,
+    assignedStaffName: row.assignedStaffName,
     resolution: row.resolution,
+    allowedActions: access.value.capabilities.includes("orders.manage")
+      ? allowedOrderIssueActions(row.status)
+      : [],
     version: row.version,
     createdAt: new Date(row.createdAt).toISOString(),
   }));
-  const last = rows.results[rows.results.length - 1];
+  const last = rows.results[Math.min(rows.results.length, limit) - 1];
   const nextCursor =
     hasMore && last ? encodeStaffCursor({ createdAt: last.createdAt, id: last.id }) : null;
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
@@ -1173,18 +1254,30 @@ export async function getAdminOrderIssue(
   if (!access.ok) return access;
   const row = await deps.db
     .prepare(
-      `SELECT id, order_id AS orderId, category, status, details,
-              assigned_staff_id AS assignedStaffId, resolution, version, created_at AS createdAt
-       FROM order_issue WHERE id = ?`,
+      `SELECT issue.id, issue.order_id AS orderId, orders.order_number AS orderNumber,
+              orders.address_snapshot_json AS addressSnapshotJson, customer_user.email AS customerEmail,
+              issue.category, issue.status, issue.details,
+              issue.assigned_staff_id AS assignedStaffId, assigned_staff.display_name AS assignedStaffName,
+              issue.resolution, issue.version, issue.created_at AS createdAt
+       FROM order_issue issue
+       JOIN grocery_order orders ON orders.id = issue.order_id
+       JOIN customer customer_profile ON customer_profile.id = issue.customer_id
+       JOIN user customer_user ON customer_user.id = customer_profile.auth_user_id
+       LEFT JOIN staff_identity assigned_staff ON assigned_staff.id = issue.assigned_staff_id
+       WHERE issue.id = ?`,
     )
     .bind(request.issueId)
     .first<{
       id: string;
       orderId: string;
+      orderNumber: string | null;
+      addressSnapshotJson: string;
+      customerEmail: string;
       category: AdminOrderIssueDetail["category"];
       status: AdminOrderIssueDetail["status"];
       details: string | null;
       assignedStaffId: string | null;
+      assignedStaffName: string | null;
       resolution: string | null;
       version: number;
       createdAt: number;
@@ -1200,11 +1293,18 @@ export async function getAdminOrderIssue(
     value: {
       issueId: row.id,
       orderId: row.orderId,
+      orderNumber: row.orderNumber,
+      customerName: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).name,
+      customerEmail: row.customerEmail,
       category: row.category,
       status: row.status,
       details: row.details,
       assignedStaffId: row.assignedStaffId,
+      assignedStaffName: row.assignedStaffName,
       resolution: row.resolution,
+      allowedActions: access.value.capabilities.includes("orders.manage")
+        ? allowedOrderIssueActions(row.status)
+        : [],
       version: row.version,
       createdAt: new Date(row.createdAt).toISOString(),
     },

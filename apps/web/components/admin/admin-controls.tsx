@@ -96,6 +96,7 @@ export function AdminConfirmationDialog({
   consequence,
   initialReason = "",
   reasonRequired = true,
+  destructive = true,
   confirmLabel = "Confirm",
   cancelLabel = "Keep unchanged",
   restoreFocusRef,
@@ -110,6 +111,7 @@ export function AdminConfirmationDialog({
   consequence: string;
   initialReason?: string;
   reasonRequired?: boolean;
+  destructive?: boolean;
   confirmLabel?: string;
   cancelLabel?: string;
   restoreFocusRef?: RefObject<HTMLElement | null>;
@@ -138,7 +140,9 @@ export function AdminConfirmationDialog({
           <dt className="font-medium">Scope</dt>
           <dd>{scope}</dd>
         </dl>
-        <AlertDialogDescription className="text-[var(--fm-destructive)]">
+        <AlertDialogDescription
+          className={destructive ? "text-[var(--fm-destructive)]" : undefined}
+        >
           {consequence}
         </AlertDialogDescription>
         {reasonRequired ? (
@@ -160,7 +164,7 @@ export function AdminConfirmationDialog({
           </AlertDialogCancel>
           <Button
             type="button"
-            variant="destructive"
+            variant={destructive ? "destructive" : "default"}
             disabled={pending || (reasonRequired && reason.trim() === "")}
             onClick={() => onConfirm(reason.trim())}
           >

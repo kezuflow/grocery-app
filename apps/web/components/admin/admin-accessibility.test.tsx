@@ -61,8 +61,11 @@ const locationOnlyPages = [
   "../../app/admin/receiving/page.tsx",
   "../../app/admin/fulfillment/page.tsx",
   "../../app/admin/issues/operational-exceptions/page.tsx",
-  "../../app/admin/settings/fulfillment-mode/page.tsx",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+const globalFulfillmentModePage = readFileSync(
+  new URL("../../app/admin/settings/fulfillment-mode/page.tsx", import.meta.url),
+  "utf8",
+);
 const dynamicAdminPages = [
   "../../app/admin/promotions/[promotion-id]/page.tsx",
   "../../app/admin/customers/[customer-id]/page.tsx",
@@ -81,6 +84,9 @@ describe("shared Admin accessibility contract", () => {
     expect(shell).toMatch(/aria-current=/);
     expect(shell).toMatch(/focus-visible:ring-2/);
     expect(shell).toMatch(/onCloseAutoFocus/);
+    expect(shell).toContain('"/admin/catalog/products/new"');
+    expect(shell).toContain('"/admin/catalog/categories"');
+    expect(shell).toContain('"/admin/catalog/categories/new"');
     expect(shell).not.toMatch(/Mobile admin navigation/);
     expect(shell).toMatch(/fm-admin-sidebar-collapsed/);
   });
@@ -239,17 +245,22 @@ describe("shared Admin accessibility contract", () => {
   it("keeps permanent route context singular and hides unavailable queue actions", () => {
     expect(auditPage).not.toContain("<Breadcrumb>");
     expect(newProductPage).not.toContain("<nav");
+    expect(newProductPage).not.toContain("StepIndicator");
+    expect(newProductPage).not.toContain("CommandBanner");
+    expect(newProductPage).not.toContain("Creation sequence");
+    expect(newProductPage).toContain("form={CREATE_PRODUCT_FORM_ID}");
     expect(newCategoryPage).not.toContain("<nav");
     for (const page of dynamicAdminPages) {
       expect(page).not.toContain("<Breadcrumb>");
       expect(page).not.toContain("<nav");
     }
-    expect(issuesPage).toContain("page.items.length > 0");
+    expect(issuesPage).toContain("issues.length > 0");
     expect(privacyPage).toContain("state.page.items.length > 0");
     for (const page of locationOnlyPages) {
       expect(page).toContain('state="permission-empty"');
       expect(page).toContain("Select a permitted location");
     }
+    expect(globalFulfillmentModePage).toContain("Switch to Global scope");
   });
 
   it("names the mobile dialog close action", () => {
@@ -322,6 +333,8 @@ describe("shared Admin accessibility contract", () => {
     expect(pagination).toContain("Page 2");
     expect(alertDialog).toContain("@radix-ui/react-dialog");
     expect(alertDialog).toContain("AlertDialogPrimitive.Content");
+    expect(alertDialog).toContain("bg-[var(--fm-background)]");
+    expect(alertDialog).not.toContain("bg-white");
     expect(controls).toContain('role="alertdialog"');
     expect(controls).toContain('aria-label="Confirmation reason"');
     expect(controls).toContain("reasonRequired && reason.trim()");

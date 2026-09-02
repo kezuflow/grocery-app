@@ -30,8 +30,9 @@ export function AlertDialogContent({
     <AlertDialogPortal>
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
+        data-slot="alert-dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-xl focus:outline-none",
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-background)] p-5 text-[var(--fm-text)] shadow-xl focus:outline-none",
           className,
         )}
         {...props}

@@ -11,6 +11,7 @@ import type {
   AppErrorCode,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { allowedOrderIssueActions } from "./order-issue-policy";
 import { cancelOrder } from "../../orders/application/cancel-order";
 import { requestRefund } from "../../payments/application/request-refund";
 import {
@@ -689,6 +690,7 @@ export async function applyAdminOrderIssueAction(
             details: existing.details as string | null,
             assignedStaffId: existing.assigned_staff_id as string | null,
             resolution: existing.resolution as string | null,
+            allowedActions: allowedOrderIssueActions(existing.status as OrderIssueStatus),
             version: existing.version as number,
             createdAt: new Date(existing.created_at as number).toISOString(),
           },
@@ -783,11 +785,12 @@ export async function applyAdminOrderIssueAction(
       "SELECT id, order_id AS orderId, category, status, details, assigned_staff_id AS assignedStaffId, resolution, version, created_at AS createdAt FROM order_issue WHERE id = ?",
     )
     .bind(request.issueId)
-    .first<AdminOrderIssueView & { createdAt: number }>();
+    .first<Omit<AdminOrderIssueView, "allowedActions" | "createdAt"> & { createdAt: number }>();
   if (!updated)
     return failure("INTERNAL_ERROR", "The issue could not be read back", request.requestId);
   const view: AdminOrderIssueView = {
     ...updated,
+    allowedActions: allowedOrderIssueActions(updated.status),
     createdAt: new Date(updated.createdAt).toISOString(),
   };
   return { ok: true, value: view, requestId: request.requestId };

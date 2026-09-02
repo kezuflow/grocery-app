@@ -35,7 +35,11 @@ export type ReconciliationCaseCategory = (typeof reconciliationCaseCategories)[n
 
 export type AdminOrderSummary = {
   orderId: string;
+  orderNumber: string | null;
+  /** Recipient from the immutable Order address snapshot, not the auth profile. */
+  customerName: string | null;
   customerEmail: string;
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
   totalMinor: number;
   currency: string;
@@ -65,9 +69,18 @@ export type AdminOrderFinancialView = {
   subtotalMinor: number | null;
   discountMinor: number | null;
   deliveryFeeMinor: number | null;
+  serviceFeeMinor: number | null;
+  taxMinor: number | null;
   totalMinor: number;
   currency: string;
   source: "CHECKOUT_QUOTE" | "ORDER_TOTAL_ONLY";
+};
+
+export type AdminOrderCustomerView = {
+  name: string | null;
+  email: string;
+  phone: string | null;
+  addressLines: ReadonlyArray<string>;
 };
 
 export type AdminOrderPaymentView = {
@@ -136,6 +149,7 @@ export type AdminTimelineEntry = {
 
 export type AdminOrderDetail = AdminOrderSummary & {
   allowedActions: ReadonlyArray<"CANCEL">;
+  customer: AdminOrderCustomerView;
   financial: AdminOrderFinancialView;
   items: ReadonlyArray<AdminOrderItemView>;
   payments: ReadonlyArray<AdminOrderPaymentView>;
@@ -352,14 +366,25 @@ export type AdminOrderIssueView = {
   details: string | null;
   assignedStaffId: string | null;
   resolution: string | null;
+  allowedActions: ReadonlyArray<OrderIssueAction>;
   version: number;
   createdAt: string;
 };
 
-export type AdminOrderIssueDetail = AdminOrderIssueView;
+export type AdminOrderIssueContext = {
+  orderNumber: string | null;
+  /** Recipient from the immutable Order address snapshot, not the auth profile. */
+  customerName: string | null;
+  customerEmail: string;
+  assignedStaffName: string | null;
+};
+
+export type AdminOrderIssueDetail = AdminOrderIssueView & AdminOrderIssueContext;
+
+export type AdminOrderIssueSummary = AdminOrderIssueView & AdminOrderIssueContext;
 
 export type AdminOrderIssuePage = {
-  items: ReadonlyArray<AdminOrderIssueView>;
+  items: ReadonlyArray<AdminOrderIssueSummary>;
   nextCursor: string | null;
 };
 

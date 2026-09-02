@@ -83,6 +83,17 @@ export function AdminShell({
         { label: activeItem.label },
       ]
     : [{ label: "Admin" }];
+  const showBreadcrumbs =
+    ![
+      "/admin/catalog/products",
+      "/admin/catalog/products/new",
+      "/admin/catalog/categories",
+      "/admin/catalog/categories/new",
+      "/admin/orders",
+      "/admin/issues",
+    ].includes(pathname) &&
+    !pathname.startsWith("/admin/orders/") &&
+    !pathname.startsWith("/admin/issues/");
 
   useEffect(() => {
     const savedPreference = window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
@@ -117,7 +128,7 @@ export function AdminShell({
           className="min-w-0 flex-1 bg-[var(--fm-admin-content)] px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8"
         >
           <div className="mx-auto w-full max-w-[var(--fm-container-admin)] space-y-4">
-            <AdminBreadcrumbs items={breadcrumbs} />
+            {showBreadcrumbs ? <AdminBreadcrumbs items={breadcrumbs} /> : null}
             {children}
           </div>
         </main>

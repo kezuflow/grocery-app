@@ -11,6 +11,7 @@ import {
   type AdminPaymentSummary,
   type AdminMembershipSummary,
   type AdminOrderIssueView,
+  type AdminOrderIssueSummary,
 } from "./admin-finance";
 
 describe("finance contracts", () => {
@@ -45,7 +46,10 @@ describe("finance contracts", () => {
   it("keeps finance payloads as purpose-built DTOs", () => {
     void ({
       orderId: "ord-1",
+      orderNumber: "FM-2026-000001",
+      customerName: "Ana Santos",
       customerEmail: "c@example.com",
+      fulfillmentMode: "SCHEDULED",
       status: "COMMITTED",
       totalMinor: 50000,
       currency: "PHP",
@@ -81,15 +85,35 @@ describe("finance contracts", () => {
       details: "one onion missing",
       assignedStaffId: null,
       resolution: null,
+      allowedActions: ["CLAIM"],
       version: 1,
       createdAt: "2026-08-27T00:00:00.000Z",
     } satisfies AdminOrderIssueView);
+    void ({
+      issueId: "iss-1",
+      orderId: "ord-1",
+      orderNumber: "FM-2026-000001",
+      customerName: "Ana Santos",
+      customerEmail: "c@example.com",
+      category: "MISSING_ITEM",
+      status: "SUBMITTED",
+      details: "one onion missing",
+      assignedStaffId: null,
+      assignedStaffName: null,
+      resolution: null,
+      allowedActions: ["CLAIM"],
+      version: 1,
+      createdAt: "2026-08-27T00:00:00.000Z",
+    } satisfies AdminOrderIssueSummary);
   });
 
   it("publishes complete order and payment workspace projections without raw provider data", () => {
     const order = {
       orderId: "ord-1",
+      orderNumber: "FM-2026-000001",
+      customerName: "Ana Santos",
       customerEmail: "c@example.com",
+      fulfillmentMode: "SCHEDULED",
       status: "COMMITTED",
       totalMinor: 50_000,
       currency: "PHP",
@@ -99,10 +123,18 @@ describe("finance contracts", () => {
       committedAt: "2026-08-20T00:00:00.000Z",
       version: 2,
       allowedActions: ["CANCEL"],
+      customer: {
+        name: "Ana Santos",
+        email: "c@example.com",
+        phone: "+639171234567",
+        addressLines: ["Cebu City", "6000"],
+      },
       financial: {
         subtotalMinor: 48_000,
         discountMinor: 1_000,
         deliveryFeeMinor: 3_000,
+        serviceFeeMinor: 0,
+        taxMinor: 0,
         totalMinor: 50_000,
         currency: "PHP",
         source: "CHECKOUT_QUOTE",

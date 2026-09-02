@@ -123,8 +123,27 @@ async function seedOrderWithPayment(options: { status?: string } = {}): Promise<
       "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 50000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
     ).bind(paymentAttemptId, customerId, `pa-${crypto.randomUUID()}`, now, now),
     env.DB.prepare(
-      "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, (SELECT id FROM delivery_cycle LIMIT 1), '{}', ?, 50000, 'PHP', ?, ?, 1)",
-    ).bind(orderId, customerId, options.status ?? "COMMITTED", paymentAttemptId, now),
+      "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at, order_number, committed_at, version) VALUES (?, ?, (SELECT id FROM delivery_cycle LIMIT 1), 'SCHEDULED', ?, ?, 50000, 'PHP', ?, ?, ?, ?, 1)",
+    ).bind(
+      orderId,
+      customerId,
+      JSON.stringify({
+        recipient: "Ana Santos",
+        phone: "+639171234567",
+        address_json: JSON.stringify({
+          addressLine1: "Ayala Center Cebu",
+          barangay: "Luz",
+          city: "Cebu City",
+          region: "Central Visayas",
+          postalCode: "6000",
+        }),
+      }),
+      options.status ?? "COMMITTED",
+      paymentAttemptId,
+      now,
+      `FM-2026-${orderId.slice(0, 8).toUpperCase()}`,
+      now,
+    ),
     env.DB.prepare(
       "INSERT INTO order_payment_reaction (id, payment_intent_id, reaction_id, order_id, applied_at) VALUES (?, ?, ?, ?, ?)",
     ).bind(crypto.randomUUID(), paymentIntentId, `react-${crypto.randomUUID()}`, orderId, now),
@@ -159,6 +178,10 @@ describe("finance administration", () => {
     const order = page.value.items.find((item) => item.orderId === orderId);
     expect(order).toBeDefined();
     expect(order).toMatchObject({
+      orderNumber: expect.stringMatching(/^FM-2026-/),
+      customerName: "Ana Santos",
+      customerEmail: expect.stringContaining("@"),
+      fulfillmentMode: "SCHEDULED",
       status: "COMMITTED",
       totalMinor: 50000,
       paymentStatus: "SUCCEEDED",
@@ -172,6 +195,12 @@ describe("finance administration", () => {
     expect(detail.ok).toBe(true);
     if (!detail.ok) return;
     expect(detail.value.orderId).toBe(orderId);
+    expect(detail.value.customer).toEqual({
+      name: "Ana Santos",
+      email: expect.stringContaining("@"),
+      phone: "+639171234567",
+      addressLines: ["Ayala Center Cebu", "Luz", "Cebu City", "Central Visayas", "6000"],
+    });
     expect(detail.value.allowedActions).toEqual(["CANCEL"]);
 
     await env.DB.prepare("UPDATE grocery_order SET status='DELIVERED' WHERE id=?")
@@ -840,11 +869,14 @@ describe("finance administration", () => {
 
     const claimed = await act("CLAIM", 1);
     expect(claimed.status).toBe("CLAIMED");
+    expect(claimed.allowedActions).toEqual(["BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"]);
     const investigating = await act("BEGIN_INVESTIGATION", claimed.version);
     expect(investigating.status).toBe("INVESTIGATING");
+    expect(investigating.allowedActions).toEqual(["RESOLVE", "ESCALATE"]);
     const resolved = await act("RESOLVE", investigating.version);
     expect(resolved.status).toBe("RESOLVED");
     expect(resolved.resolution).toContain("RESOLVE");
+    expect(resolved.allowedActions).toEqual([]);
 
     const reopen = await core.applyAdminOrderIssueAction({
       requestId: crypto.randomUUID(),
@@ -864,6 +896,10 @@ describe("finance administration", () => {
     });
     expect(queue.ok).toBe(true);
     if (!queue.ok) return;
-    expect(queue.value.items.some((item) => item.issueId === issueId)).toBe(true);
+    expect(queue.value.items.find((item) => item.issueId === issueId)).toMatchObject({
+      customerEmail: expect.any(String),
+      status: "RESOLVED",
+      allowedActions: [],
+    });
   });
 });

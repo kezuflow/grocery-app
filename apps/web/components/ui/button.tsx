@@ -8,7 +8,8 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-[var(--fm-primary-dark)] text-white hover:bg-[#294f30]",
-        outline: "border border-[var(--fm-border)] bg-white hover:bg-[var(--fm-hover)]",
+        outline:
+          "border border-[var(--fm-border)] bg-[var(--fm-background)] hover:bg-[var(--fm-hover)]",
         destructive: "bg-[var(--fm-destructive)] text-white hover:bg-[#b42318]",
         ghost: "bg-transparent hover:bg-[var(--fm-hover)]",
         secondary: "bg-[var(--fm-surface-muted)] text-[var(--fm-text)] hover:bg-[var(--fm-hover)]",

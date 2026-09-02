@@ -137,7 +137,10 @@ async function installDeterministicReads(page: Page) {
           items: [
             {
               orderId: "order-1042",
+              orderNumber: "FM-2026-001042",
+              customerName: "Maria Santos",
               customerEmail: "maria@example.com",
+              fulfillmentMode: "SCHEDULED",
               status: "COMMITTED",
               totalMinor: 245_500,
               currency: "PHP",
@@ -149,7 +152,10 @@ async function installDeterministicReads(page: Page) {
             },
             {
               orderId: "order-1041",
+              orderNumber: "FM-2026-001041",
+              customerName: "Jose Reyes",
               customerEmail: "jose@example.com",
+              fulfillmentMode: "INSTANT",
               status: "FULFILLMENT_PENDING",
               totalMinor: 189_000,
               currency: "PHP",
@@ -194,9 +200,12 @@ async function installDeterministicReads(page: Page) {
             missingPrices: 0,
             unavailableSkus: 0,
           },
-          pricingContext: {
+          scope: {
+            kind: "LOCATION",
             marketId: "market-metro-cebu",
+            marketName: "Metro Cebu",
             locationId: "location-cebu-central",
+            locationName: "Central Cebu",
             currency: "PHP",
           },
           nextCursor: null,
