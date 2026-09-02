@@ -61,8 +61,12 @@ export function MembershipExperiencePanel({
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">Recurring authorization</dt>
-          <dd className="font-medium">{experience.recurringAuthorization.status}</dd>
+          <dt className="text-slate-500">Paid membership payment setup</dt>
+          <dd className="font-medium">
+            {experience.subscription?.state === "TRIALING"
+              ? "Not needed during free trial"
+              : experience.recurringAuthorization.status}
+          </dd>
         </div>
         {experience.subscription?.trialEndsAt ? (
           <div>
@@ -85,14 +89,14 @@ export function MembershipExperiencePanel({
       </dl>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        {!experience.recurringAuthorization.ready && !experience.subscription ? (
+        {!experience.recurringAuthorization.ready && action.beginPaidEnrollment.available ? (
           <button
             type="button"
             onClick={() => onAction("AUTHORIZE")}
             disabled={busy}
             className="rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            Authorize recurring payment
+            Set up paid membership payment
           </button>
         ) : null}
         {action.startTrial.available ? (
@@ -105,7 +109,7 @@ export function MembershipExperiencePanel({
             Start introductory trial
           </button>
         ) : null}
-        {action.beginPaidEnrollment.available ? (
+        {action.beginPaidEnrollment.available && experience.recurringAuthorization.ready ? (
           <button
             type="button"
             onClick={() => onAction("BEGIN_PAID_ENROLLMENT")}
@@ -224,7 +228,7 @@ export default function AccountPage() {
       }).then((response) => response.json())) as RpcResult<{ authorizationId: string }>;
       if (!completed.ok) throw new Error(completed.error.message);
       await loadExperience();
-      setMessage("Recurring authorization is ready. Review the available membership actions.");
+      setMessage("Paid membership payment setup is ready. Subscribe whenever you choose.");
     })()
       .catch((error) => setMessage((error as Error).message))
       .finally(() => setBusy(false));

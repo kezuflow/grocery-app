@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { applyMembershipPaymentReaction } from "./apply-payment-reaction";
 import { startPromotionalTrial } from "./start-promotional-trial";
+import { beginPaidEnrollment } from "./get-membership-experience";
 
 let customerCounter = 0;
-async function trialingWithPendingReaction(): Promise<{
+async function subscriptionWithPendingReaction(state: "PENDING" | "TRIALING" = "PENDING"): Promise<{
   customerId: string;
   subscriptionId: string;
   reactionId: string;
@@ -16,34 +17,28 @@ async function trialingWithPendingReaction(): Promise<{
   )
     .bind(customerId, `auth-${customerId}`, Date.now(), Date.now())
     .run();
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
-  )
-    .bind(
-      `authz-${customerId}`,
-      customerId,
-      `mock_auth_${customerId}`,
-      `mock_method_${customerId}`,
-      now,
-      now,
-      now,
-    )
-    .run();
-  const trial = await startPromotionalTrial(env.DB, {
-    customerId,
-    idempotencyKey: `trial-${crypto.randomUUID()}`,
-    requestId: crypto.randomUUID(),
-  });
-  expect(trial.ok).toBe(true);
-  if (!trial.ok) throw new Error("fixture failed");
+  const subscription =
+    state === "TRIALING"
+      ? await startPromotionalTrial(env.DB, {
+          customerId,
+          idempotencyKey: `trial-${crypto.randomUUID()}`,
+          requestId: crypto.randomUUID(),
+        })
+      : await beginPaidEnrollment(env.DB, {
+          customerId,
+          offerId: "offer-membership-monthly",
+          idempotencyKey: `paid-enrollment-${crypto.randomUUID()}`,
+          requestId: crypto.randomUUID(),
+        });
+  expect(subscription.ok).toBe(true);
+  if (!subscription.ok) throw new Error("fixture failed");
   const intentId = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'MEMBERSHIP_ENROLLMENT', 'subscription', ?, ?, 29900, 'PHP', 'PROCESSING', ?, 1, ?, ?)",
   )
     .bind(
       intentId,
-      trial.value.subscriptionId,
+      subscription.value.subscriptionId,
       customerId,
       `pi-${intentId}`,
       Date.now(),
@@ -57,7 +52,7 @@ async function trialingWithPendingReaction(): Promise<{
     .bind(
       reactionId,
       intentId,
-      trial.value.subscriptionId,
+      subscription.value.subscriptionId,
       `reaction:${intentId}`,
       Date.now(),
       Date.now(),
@@ -65,7 +60,7 @@ async function trialingWithPendingReaction(): Promise<{
     .run();
   return {
     customerId,
-    subscriptionId: trial.value.subscriptionId,
+    subscriptionId: subscription.value.subscriptionId,
     reactionId,
     paymentIntentId: intentId,
   };
@@ -73,7 +68,7 @@ async function trialingWithPendingReaction(): Promise<{
 
 describe("membership payment reaction", () => {
   it("ignores insufficient canonical states", async () => {
-    const fixture = await trialingWithPendingReaction();
+    const fixture = await subscriptionWithPendingReaction();
     const outcome = await applyMembershipPaymentReaction(env.DB, {
       ...fixture,
       canonicalPaymentState: "PROCESSING",
@@ -82,11 +77,11 @@ describe("membership payment reaction", () => {
     const row = await env.DB.prepare("SELECT status FROM subscription WHERE id=?")
       .bind(fixture.subscriptionId)
       .first<{ status: string }>();
-    expect(row?.status).toBe("TRIALING");
+    expect(row?.status).toBe("PENDING");
   });
 
   it("activates exactly once from SUCCEEDED and records application evidence", async () => {
-    const fixture = await trialingWithPendingReaction();
+    const fixture = await subscriptionWithPendingReaction();
     const outcome = await applyMembershipPaymentReaction(env.DB, {
       ...fixture,
       canonicalPaymentState: "SUCCEEDED",
@@ -127,7 +122,7 @@ describe("membership payment reaction", () => {
   });
 
   it("leaves the reaction retryable when a concurrent lifecycle command wins", async () => {
-    const fixture = await trialingWithPendingReaction();
+    const fixture = await subscriptionWithPendingReaction();
     // Concurrent command mutates the stored state/version after load:
     // simulate by cancelling immediately before the reaction applies.
     await env.DB.prepare(
@@ -151,8 +146,8 @@ describe("membership payment reaction", () => {
     expect(reactionRow?.status).not.toBe("SUCCEEDED");
   });
 
-  it("installs the first paid period on conversion with the nominal anchor", async () => {
-    const fixture = await trialingWithPendingReaction();
+  it("installs the first paid period on explicit paid enrollment", async () => {
+    const fixture = await subscriptionWithPendingReaction();
     const outcome = await applyMembershipPaymentReaction(env.DB, {
       ...fixture,
       canonicalPaymentState: "SUCCEEDED",
@@ -171,10 +166,10 @@ describe("membership payment reaction", () => {
         billing_starts_at: number | null;
       }>();
     expect(row?.status).toBe("ACTIVE");
-    // The paid period begins exactly where the trial ended.
-    expect(row?.current_period_starts_at).toBe(row?.trial_ends_at);
+    expect(row?.trial_ends_at).toBeNull();
+    expect(row?.current_period_starts_at).not.toBeNull();
     expect(row?.current_period_ends_at).toBeGreaterThan(row?.current_period_starts_at ?? 0);
-    // One nominal calendar month, anchored on the trial start day.
+    // One nominal calendar month, anchored on paid activation.
     const days =
       ((row?.current_period_ends_at ?? 0) - (row?.current_period_starts_at ?? 0)) / 86_400_000;
     expect(days).toBeGreaterThanOrEqual(28);
@@ -184,7 +179,7 @@ describe("membership payment reaction", () => {
   });
 
   it("advances the period on renewal success while ACTIVE", async () => {
-    const fixture = await trialingWithPendingReaction();
+    const fixture = await subscriptionWithPendingReaction();
     const before = Date.now();
     // Anchor-aligned paid history: the boundary sits on the anchor day, as it
     // does organically once conversion installed the first anchored period.
@@ -221,7 +216,7 @@ describe("membership payment reaction", () => {
   });
 
   it("recovers PAST_DUE to ACTIVE and clears the grace window", async () => {
-    const fixture = await trialingWithPendingReaction();
+    const fixture = await subscriptionWithPendingReaction();
     await env.DB.prepare(
       "UPDATE subscription SET status='PAST_DUE', grace_ends_at=?, current_period_starts_at=?, current_period_ends_at=?, version=version+1 WHERE id=?",
     )
@@ -250,7 +245,7 @@ describe("membership payment reaction", () => {
   });
 
   it("escalates money received against a terminal subscription", async () => {
-    const fixture = await trialingWithPendingReaction();
+    const fixture = await subscriptionWithPendingReaction();
     await env.DB.prepare(
       "UPDATE subscription SET status='EXPIRED', ended_at=?, version=version+1 WHERE id=?",
     )
@@ -276,5 +271,27 @@ describe("membership payment reaction", () => {
       .bind(fixture.paymentIntentId)
       .first<{ count: number }>();
     expect(cases?.count).toBe(1);
+  });
+
+  it("escalates rather than converting a free trial in place", async () => {
+    const fixture = await subscriptionWithPendingReaction("TRIALING");
+    const outcome = await applyMembershipPaymentReaction(env.DB, {
+      ...fixture,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    expect(outcome).toMatchObject({ applied: false, reason: "ESCALATED" });
+    const subscription = await env.DB.prepare("SELECT status FROM subscription WHERE id=?")
+      .bind(fixture.subscriptionId)
+      .first<{ status: string }>();
+    expect(subscription?.status).toBe("TRIALING");
+    const reaction = await env.DB.prepare(
+      "SELECT status, last_error_code FROM payment_reaction WHERE id=?",
+    )
+      .bind(fixture.reactionId)
+      .first<{ status: string; last_error_code: string | null }>();
+    expect(reaction).toMatchObject({
+      status: "ESCALATED",
+      last_error_code: "TRIAL_SUBSCRIPTION_WITH_PAYMENT",
+    });
   });
 });

@@ -44,7 +44,12 @@ export type MembershipExperienceView = {
   offer: MembershipOfferView;
   subscription: SubscriptionSummary | null;
   introductoryTrial: {
-    status: "AVAILABLE" | "AUTHORIZATION_REQUIRED" | "REDEEMED" | "OPEN_SUBSCRIPTION";
+    status:
+      | "AVAILABLE"
+      | "REDEEMED"
+      | "OPEN_SUBSCRIPTION"
+      /** Compatibility value accepted during rolling deployment; new Core never emits it. */
+      | "AUTHORIZATION_REQUIRED";
     eligible: boolean;
     duration: "CALENDAR_MONTH";
   };

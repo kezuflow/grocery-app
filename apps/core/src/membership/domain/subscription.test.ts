@@ -12,7 +12,6 @@ describe("canonical subscription lifecycle", () => {
       ["PENDING", "ACTIVE"],
       ["PENDING", "CANCELED"],
       ["PENDING", "EXPIRED"],
-      ["TRIALING", "ACTIVE"],
       ["TRIALING", "CANCELED"],
       ["TRIALING", "EXPIRED"],
       ["ACTIVE", "PAST_DUE"],
@@ -35,6 +34,7 @@ describe("canonical subscription lifecycle", () => {
     const illegal: Array<[string, string]> = [
       ["TRIALING", "PAST_DUE"],
       ["TRIALING", "PAUSED"],
+      ["TRIALING", "ACTIVE"],
       ["PAST_DUE", "TRIALING"],
       ["PAUSED", "PAST_DUE"],
       ["PAUSED", "TRIALING"],

@@ -13,7 +13,7 @@ async function customer(): Promise<string> {
 }
 
 describe("customer Membership experience", () => {
-  it("loads the canonical offer and requires recurring authorization before trial", async () => {
+  it("loads the canonical offer and makes the free trial available without authorization", async () => {
     const result = await getMembershipExperience(env.DB, {
       customerId: await customer(),
       requestId: crypto.randomUUID(),
@@ -31,13 +31,13 @@ describe("customer Membership experience", () => {
         },
         subscription: null,
         introductoryTrial: {
-          eligible: false,
-          status: "AUTHORIZATION_REQUIRED",
+          eligible: true,
+          status: "AVAILABLE",
           duration: "CALENDAR_MONTH",
         },
         recurringAuthorization: { ready: false, status: "REQUIRED" },
         actions: {
-          startTrial: { available: false, disabledReason: "RECURRING_AUTHORIZATION_REQUIRED" },
+          startTrial: { available: true, disabledReason: null },
           beginPaidEnrollment: { available: true, disabledReason: null },
         },
       },

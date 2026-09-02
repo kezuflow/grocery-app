@@ -267,6 +267,7 @@ Phases 1–3.
 - One paid calendar-month membership offer with a global effective-dated price/currency and per-Subscription agreed-price snapshot. Ordinary price changes apply only to new Subscriptions.
 - Subscription aggregate, canonical lifecycle/eligibility policy, scheduled-cancellation metadata, and guarded lifecycle commands.
 - Promotions-owned one-per-customer introductory grant/redemption that permits `TRIALING` for exactly one calendar billing month. Calculate in the Market business timezone, clamp to the target month's final valid day when necessary, and persist UTC instants.
+- The free trial requires no payment authorization or Payment, expires to terminal `EXPIRED` at its exact end, and never converts in place. A later paid choice creates a separate `PENDING` Subscription at the then-current price before provider-confirmed activation.
 - Membership reaction ports for canonical Payments outcomes; no payment-provider payload or vendor state enters Membership.
 
 ### D1/data changes
@@ -289,7 +290,7 @@ Phases 1–3.
 
 ### Tests and acceptance
 
-- Exact calendar-month trial boundary cases, grant/redemption replay, one-trial eligibility, terminal `CANCELED`/`EXPIRED` behavior, scheduled cancellation that preserves the current entitled state until its effective instant, eligible/ineligible states, address edits, and secure session/authorization integration.
+- Exact calendar-month trial boundary cases, grant/redemption replay, one-trial eligibility without payment setup, automatic expiry without charging, separate explicit paid enrollment after expiry, terminal `CANCELED`/`EXPIRED` behavior, scheduled cancellation that preserves the current entitled state until its effective instant, eligible/ineligible states, address edits, and secure session/authorization integration.
 - Domain tests prove that only a valid promotion redemption enters `TRIALING` and only a canonical sufficient Payments outcome can enter/recover `ACTIVE`; no provider integration is implemented in this phase.
 
 ### Not in this phase

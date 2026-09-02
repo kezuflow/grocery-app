@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { startPromotionalTrial } from "./start-promotional-trial";
+import { beginPaidEnrollment } from "./get-membership-experience";
 import {
   cancelSubscription,
   pauseSubscription,
@@ -42,6 +43,27 @@ async function trialingSubscription(): Promise<{ customerId: string; subscriptio
   return { customerId, subscriptionId: result.value.subscriptionId };
 }
 
+async function activePaidSubscription(): Promise<{ customerId: string; subscriptionId: string }> {
+  const customerId = `cust-paid-life-${++customerCounter}-${crypto.randomUUID().slice(0, 8)}`;
+  const now = Date.now();
+  await env.DB.prepare(
+    "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+  )
+    .bind(customerId, `auth-${customerId}`, now, now)
+    .run();
+  const enrollment = await beginPaidEnrollment(env.DB, {
+    customerId,
+    offerId: "offer-membership-monthly",
+    idempotencyKey: crypto.randomUUID(),
+    requestId: crypto.randomUUID(),
+  });
+  if (!enrollment.ok) throw new Error("paid fixture failed");
+  await env.DB.prepare("UPDATE subscription SET status='ACTIVE' WHERE id=?")
+    .bind(enrollment.value.subscriptionId)
+    .run();
+  return { customerId, subscriptionId: enrollment.value.subscriptionId };
+}
+
 function pauseCommand(subscriptionId: string): PauseSubscriptionCommand {
   return {
     subscriptionId,
@@ -73,11 +95,7 @@ function cancelCommand(
 
 describe("versioned subscription lifecycle", () => {
   it("pauses and resumes an active subscription", async () => {
-    const { customerId, subscriptionId } = await trialingSubscription();
-    // Paid activation moves TRIALING to ACTIVE before lifecycle changes.
-    await env.DB.prepare("UPDATE subscription SET status='ACTIVE', version=version+1 WHERE id=?")
-      .bind(subscriptionId)
-      .run();
+    const { customerId, subscriptionId } = await activePaidSubscription();
     const current = await env.DB.prepare("SELECT version FROM subscription WHERE id=?")
       .bind(subscriptionId)
       .first<{ version: number }>();

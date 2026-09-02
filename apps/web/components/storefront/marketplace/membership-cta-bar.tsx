@@ -61,7 +61,7 @@ export function MembershipCtaBar({
         <p className="min-w-0 flex-1 text-[11px] leading-4 font-semibold sm:text-sm sm:leading-5">
           <span className="sm:hidden">
             {trialAvailable ? (
-              <>Introductory trial available, then {offer}/month.</>
+              <>Free trial available. Subscribe later for {offer}/month.</>
             ) : (
               <>
                 {experience.offer.name} is {offer}/month.
@@ -70,7 +70,7 @@ export function MembershipCtaBar({
           </span>
           <span className="hidden sm:inline">
             {trialAvailable
-              ? `Start the available introductory trial, then ${offer}/month.`
+              ? `Start the free trial now. Paid membership is ${offer}/month when you choose to subscribe.`
               : `${experience.offer.name} is ${offer}/month.`}
           </span>
         </p>

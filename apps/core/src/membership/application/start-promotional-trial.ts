@@ -1,4 +1,4 @@
-import { calculateCalendarMonthEnd, calendarDayOfMonth } from "../domain/billing-calendar";
+import { calculateCalendarMonthEnd } from "../domain/billing-calendar";
 import { createMembershipRepository } from "../infrastructure/d1/membership-repository";
 import {
   claimIntroductoryTrialRedemption,
@@ -110,46 +110,14 @@ export async function startPromotionalTrial(
   }
   const trialEndsAtMs = Date.parse(trialEndsAtIso);
 
-  // D2: entering TRIALING requires an existing recurring-capable payment
-  // authorization. Establishing it is never payment success, and no
-  // zero-value payment is synthesized for the trial.
-  const authorization = await database
-    .prepare(
-      "SELECT id, provider, provider_method_ref FROM payment_authorization WHERE customer_id=? AND status='ACTIVE' AND recurring_capable=1 ORDER BY established_at DESC, updated_at DESC LIMIT 1",
-    )
-    .bind(command.customerId)
-    .first<{ id: string; provider: string; provider_method_ref: string | null }>();
-  if (!authorization)
-    return failure(
-      "RECURRING_AUTHORIZATION_REQUIRED",
-      "A recurring-capable payment authorization is required before starting the trial",
-      command.requestId,
-    );
-
-  // D3: one introductory trial per payment-instrument identity, wherever the
-  // provider exposes a stable mandate identity.
-  if (authorization.provider_method_ref) {
-    const identityReused = await database
-      .prepare(
-        "SELECT 1 FROM subscription s JOIN payment_authorization a ON a.id = s.payment_authorization_id WHERE a.provider=? AND a.provider_method_ref=? AND s.trial_ends_at IS NOT NULL LIMIT 1",
-      )
-      .bind(authorization.provider, authorization.provider_method_ref)
-      .first();
-    if (identityReused)
-      return failure(
-        "PROMOTION_INELIGIBLE",
-        "The introductory trial was already used with this payment instrument",
-        command.requestId,
-      );
-  }
-
-  const nominalBillingDay = calendarDayOfMonth(trialStartsAtIso, timeZone);
-
-  // The active global paid price is copied into the trial subscription so a
-  // later configuration change cannot silently reprice its first renewal.
+  // The trial has no payment authorization, Payment, billing anchor, or
+  // automatic conversion. The active priced offer is validated only as the
+  // commercial membership context for the Promotions-owned fee waiver; the
+  // trial does not snapshot agreed paid terms. A later explicit paid enrollment
+  // creates a new Subscription and snapshots its then-current price.
   const offer = await database
     .prepare(
-      `SELECT o.id, p.id AS price_version_id, p.amount_minor, p.currency
+      `SELECT o.id
        FROM subscription_offer o
        JOIN membership_price_version p ON p.offer_id=o.id
        WHERE o.code='MEMBERSHIP_MONTHLY' AND o.status='active'
@@ -157,12 +125,7 @@ export async function startPromotionalTrial(
        ORDER BY p.effective_from DESC, p.version DESC LIMIT 1`,
     )
     .bind(now, now)
-    .first<{
-      id: string;
-      price_version_id: string;
-      amount_minor: number;
-      currency: string;
-    }>();
+    .first<{ id: string }>();
   if (!offer)
     return failure(
       "CONFIGURATION_ERROR",
@@ -191,25 +154,10 @@ export async function startPromotionalTrial(
         .prepare(
           `INSERT INTO subscription
              (id, customer_id, offer_id, status, starts_at, trial_ends_at,
-              cancel_at_period_end, payment_authorization_id, nominal_billing_day,
-              agreed_price_version_id, agreed_amount_minor, agreed_currency,
-              version, created_at, updated_at)
-           VALUES (?, ?, ?, 'TRIALING', ?, ?, 0, ?, ?, ?, ?, ?, 1, ?, ?)`,
+              cancel_at_period_end, version, created_at, updated_at)
+           VALUES (?, ?, ?, 'TRIALING', ?, ?, 0, 1, ?, ?)`,
         )
-        .bind(
-          subscriptionId,
-          command.customerId,
-          offer.id,
-          now,
-          trialEndsAtMs,
-          authorization.id,
-          nominalBillingDay,
-          offer.price_version_id,
-          offer.amount_minor,
-          offer.currency,
-          now2,
-          now2,
-        ),
+        .bind(subscriptionId, command.customerId, offer.id, now, trialEndsAtMs, now2, now2),
       database
         .prepare(
           "INSERT INTO subscription_event (id, subscription_id, event_type, promotion_redemption_id, actor_type, details_json, occurred_at, created_at) VALUES (?, ?, 'TRIAL_STARTED', ?, 'CUSTOMER', ?, ?, ?)",

@@ -84,6 +84,19 @@ export async function applyMembershipPaymentReaction(
     );
     return { applied: false, reason: "ESCALATED" };
   }
+  if (subscription.status === "TRIALING") {
+    // Free trials never accept a payment or convert in place. A paid
+    // membership must begin as a separate PENDING Subscription after explicit
+    // customer enrollment.
+    await escalateReaction(
+      database,
+      input.reactionId,
+      "TRIAL_SUBSCRIPTION_WITH_PAYMENT",
+      input.paymentIntentId,
+      now,
+    );
+    return { applied: false, reason: "ESCALATED" };
+  }
   if (subscription.status === "ACTIVE") {
     // A repeated success on an already-active membership only advances the
     // period when the paid boundary moved; replaying the same reaction is a
@@ -96,7 +109,7 @@ export async function applyMembershipPaymentReaction(
   const timeZone = await repository.marketTimezone();
 
   const recovering = subscription.status === "PAST_DUE";
-  const conversion = subscription.status === "PENDING" || subscription.status === "TRIALING";
+  const conversion = subscription.status === "PENDING";
   const periodStartInstant =
     subscription.current_period_ends_at ?? subscription.trial_ends_at ?? now;
   const anchorSourceInstant = subscription.starts_at ?? periodStartInstant;

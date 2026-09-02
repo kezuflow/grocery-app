@@ -23,8 +23,8 @@ describe("membership account surface", () => {
       },
       subscription: null,
       introductoryTrial: {
-        eligible: false,
-        status: "AUTHORIZATION_REQUIRED",
+        eligible: true,
+        status: "AVAILABLE",
         duration: "CALENDAR_MONTH",
       },
       recurringAuthorization: { ready: false, status: "REQUIRED" },

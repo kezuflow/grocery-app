@@ -65,7 +65,7 @@ describe("subscription checkout eligibility with grace", () => {
     expect(result.value).toMatchObject({ eligible: false, state: "TRIALING" });
   });
 
-  it("keeps ACTIVE eligible after conversion even when its historical trial end passed", async () => {
+  it("keeps a paid ACTIVE subscription eligible even with legacy trial timestamps", async () => {
     const customerId = await seedCustomerWithSubscription("ACTIVE", {
       trialEndsAt: Date.now() - 86_400_000,
       currentPeriodEndsAt: Date.now() + 86_400_000,

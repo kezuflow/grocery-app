@@ -12,26 +12,15 @@ function requestId() {
   return crypto.randomUUID();
 }
 
-/** Program 3: the trial gate requires a recurring-capable authorization. */
-async function seedMembershipAuthorization(authUserId: string) {
+/** Ensure the authenticated identity has its application Customer record. */
+async function seedCustomerProfile(authUserId: string) {
   const customerId = crypto.randomUUID();
   const now = Date.now();
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT OR IGNORE INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
-    ).bind(customerId, authUserId, now, now),
-    env.DB.prepare(
-      "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
-    ).bind(
-      `authz-${customerId}`,
-      customerId,
-      `mock_auth_${customerId}`,
-      `mock_method_${customerId}`,
-      now,
-      now,
-      now,
-    ),
-  ]);
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
+  )
+    .bind(customerId, authUserId, now, now)
+    .run();
 }
 
 function cookieHeader(response: Response): string {
@@ -51,7 +40,7 @@ async function authenticatedCookie() {
   const body = (await signUp.json()) as { user?: { id?: string } };
   if (body.user?.id) {
     await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(body.user.id).run();
-    await seedMembershipAuthorization(body.user.id);
+    await seedCustomerProfile(body.user.id);
   }
   const cookie = cookieHeader(signUp);
   if (cookie) return cookie;

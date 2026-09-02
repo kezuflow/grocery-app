@@ -16,18 +16,6 @@ async function seedCustomer(): Promise<string> {
   return id;
 }
 
-let authorizationCounter = 0;
-async function seedAuthorization(customerId: string, methodRef?: string): Promise<string> {
-  const id = `authz-${++authorizationCounter}-${crypto.randomUUID().slice(0, 8)}`;
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
-  )
-    .bind(id, customerId, `mock_auth_${id}`, methodRef ?? `mock_method_${id}`, now, now, now)
-    .run();
-  return id;
-}
-
 function command(customerId: string): StartPromotionalTrialCommand {
   return {
     customerId,
@@ -39,7 +27,6 @@ function command(customerId: string): StartPromotionalTrialCommand {
 describe("promotions-owned introductory trial", () => {
   it("creates a trialing subscription with an exact calendar-month end", async () => {
     const customerId = await seedCustomer();
-    await seedAuthorization(customerId);
     const before = Date.now();
     const result = await startPromotionalTrial(env.DB, command(customerId));
     expect(result.ok).toBe(true);
@@ -69,62 +56,38 @@ describe("promotions-owned introductory trial", () => {
     expect(redemptions?.count).toBe(1);
   });
 
-  it("requires a recurring-capable authorization before granting the trial", async () => {
+  it("starts without payment authorization", async () => {
     const customerId = await seedCustomer();
     const result = await startPromotionalTrial(env.DB, command(customerId));
-    expect(result).toMatchObject({
-      ok: false,
-      error: { code: "RECURRING_AUTHORIZATION_REQUIRED" },
-    });
-    const subscriptions = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM subscription WHERE customer_id=?",
+    expect(result).toMatchObject({ ok: true, value: { state: "TRIALING" } });
+    const subscription = await env.DB.prepare(
+      "SELECT payment_authorization_id, nominal_billing_day FROM subscription WHERE customer_id=?",
+    )
+      .bind(customerId)
+      .first<{ payment_authorization_id: string | null; nominal_billing_day: number | null }>();
+    expect(subscription).toEqual({ payment_authorization_id: null, nominal_billing_day: null });
+  });
+
+  it("does not create payment or authorization artifacts", async () => {
+    const customerId = await seedCustomer();
+    const result = await startPromotionalTrial(env.DB, command(customerId));
+    expect(result.ok).toBe(true);
+    const authorizations = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_authorization WHERE customer_id=?",
     )
       .bind(customerId)
       .first<{ count: number }>();
-    expect(subscriptions?.count).toBe(0);
-  });
-
-  it("links the authorization and persists the nominal billing anchor", async () => {
-    const customerId = await seedCustomer();
-    const authorizationId = await seedAuthorization(customerId);
-    const result = await startPromotionalTrial(env.DB, command(customerId));
-    expect(result.ok).toBe(true);
-    const row = await env.DB.prepare(
-      "SELECT payment_authorization_id, nominal_billing_day, status FROM subscription WHERE customer_id=?",
+    const payments = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM payment_intent WHERE customer_id=?",
     )
       .bind(customerId)
-      .first<{ payment_authorization_id: string; nominal_billing_day: number; status: string }>();
-    expect(row).toMatchObject({ payment_authorization_id: authorizationId, status: "TRIALING" });
-    expect(row?.nominal_billing_day).toBeGreaterThanOrEqual(1);
-    expect(row?.nominal_billing_day).toBeLessThanOrEqual(31);
-  });
-
-  it("refuses a trial on an instrument identity that already consumed one", async () => {
-    const firstCustomer = await seedCustomer();
-    const sharedMethod = `mock_method_shared_${crypto.randomUUID().slice(0, 8)}`;
-    const firstAuthorization = await seedAuthorization(firstCustomer, sharedMethod);
-    const first = await startPromotionalTrial(env.DB, command(firstCustomer));
-    expect(first.ok).toBe(true);
-    // The instrument is later released for re-authorization elsewhere; its
-    // trial history must still follow the mandate identity.
-    await env.DB.prepare(
-      "UPDATE payment_authorization SET status='REVOKED', revoked_at=? WHERE id=?",
-    )
-      .bind(Date.now(), firstAuthorization)
-      .run();
-
-    const secondCustomer = await seedCustomer();
-    await seedAuthorization(secondCustomer, sharedMethod);
-    const second = await startPromotionalTrial(env.DB, command(secondCustomer));
-    expect(second).toMatchObject({
-      ok: false,
-      error: { code: "PROMOTION_INELIGIBLE", message: expect.stringContaining("instrument") },
-    });
+      .first<{ count: number }>();
+    expect(authorizations?.count).toBe(0);
+    expect(payments?.count).toBe(0);
   });
 
   it("rejects a second introductory trial and a second open subscription", async () => {
     const customerId = await seedCustomer();
-    await seedAuthorization(customerId);
     await startPromotionalTrial(env.DB, command(customerId));
     const secondTrial = await startPromotionalTrial(env.DB, command(customerId));
     expect(secondTrial).toMatchObject({ ok: false, error: { code: "PROMOTION_INELIGIBLE" } });
@@ -132,9 +95,8 @@ describe("promotions-owned introductory trial", () => {
 
   it("rejects when an open subscription already exists", async () => {
     const customerId = await seedCustomer();
-    await seedAuthorization(customerId);
     await startPromotionalTrial(env.DB, command(customerId));
-    // Simulate paid activation replacing TRIALING with ACTIVE; still open.
+    // Simulate another open membership state to isolate the open-subscription guard.
     const row = await env.DB.prepare("SELECT id FROM subscription WHERE customer_id=?")
       .bind(customerId)
       .first<{ id: string }>();
@@ -152,14 +114,12 @@ describe("promotions-owned introductory trial", () => {
 
   it("replays the same result for the same key and conflicts on different payloads", async () => {
     const customerId = await seedCustomer();
-    await seedAuthorization(customerId);
     const attempt = command(customerId);
     const first = await startPromotionalTrial(env.DB, attempt);
     expect(first.ok).toBe(true);
     const replay = await startPromotionalTrial(env.DB, attempt);
     expect(replay).toEqual(first);
     const otherCustomer = await seedCustomer();
-    await seedAuthorization(otherCustomer);
     const conflict = await startPromotionalTrial(env.DB, {
       ...attempt,
       customerId: otherCustomer,
@@ -169,7 +129,6 @@ describe("promotions-owned introductory trial", () => {
 
   it("allows exactly one winner among concurrent two-key attempts", async () => {
     const customerId = await seedCustomer();
-    await seedAuthorization(customerId);
     const [a, b] = [command(customerId), command(customerId)];
     const outcomes = await Promise.all([
       startPromotionalTrial(env.DB, a),

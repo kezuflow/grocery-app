@@ -50,7 +50,9 @@ describe("MembershipCtaBar", () => {
     const html = renderToStaticMarkup(<MembershipCtaBar experience={experience} />);
 
     expect(html).toContain('aria-label="FreshMarkets membership offer"');
-    expect(html).toContain("Start the available introductory trial, then ₱412/month.");
+    expect(html).toContain(
+      "Start the free trial now. Paid membership is ₱412/month when you choose to subscribe.",
+    );
     expect(html).toContain('href="/account"');
     expect(html).toContain("Review introductory trial");
     expect(html).toContain('src="/illustrations/produce-box-cta.webp"');

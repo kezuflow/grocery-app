@@ -29,10 +29,13 @@ export function transitionToResult(
 }
 
 export const subscriptionTransitions: StateMap = {
-  PENDING: ["TRIALING", "ACTIVE", "CANCELED"],
-  TRIALING: ["ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"],
-  ACTIVE: ["PAST_DUE", "CANCELED"],
-  PAST_DUE: ["ACTIVE", "CANCELED"],
+  PENDING: ["TRIALING", "ACTIVE", "CANCELED", "EXPIRED"],
+  TRIALING: ["CANCELED", "EXPIRED"],
+  ACTIVE: ["PAST_DUE", "PAUSED", "CANCELED", "EXPIRED"],
+  PAST_DUE: ["ACTIVE", "PAUSED", "CANCELED", "EXPIRED"],
+  PAUSED: ["ACTIVE", "CANCELED", "EXPIRED"],
+  CANCELED: [],
+  EXPIRED: [],
 };
 export const orderTransitions: StateMap = {
   COMMITTED: ["CANCELED", "REFUNDED", "IN_FULFILLMENT"],

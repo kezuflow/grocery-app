@@ -11,7 +11,7 @@ export type SubscriptionEligibility = {
  * Latest-subscription checkout eligibility. Only entitled states with valid
  * effective timestamps are eligible: TRIALING before its exact trial-end,
  * ACTIVE during its paid period, and PAST_DUE inside its 7-calendar-day grace
- * window. Historical trial timestamps never shorten a converted ACTIVE period.
+ * window. Historical trial timestamps never shorten an ACTIVE paid period.
  */
 export async function getSubscriptionEligibility(
   database: D1Database,

@@ -87,7 +87,7 @@ describe("canonical subscription entitlement", () => {
     });
   });
 
-  it("keeps ACTIVE entitled after trial conversion despite a historical trial end", async () => {
+  it("keeps a paid ACTIVE subscription entitled even with legacy trial timestamps", async () => {
     const customerId = await seedCustomer();
     await seedSubscription(customerId, {
       status: "ACTIVE",

@@ -144,13 +144,7 @@ export async function getMembershipExperience(database: D1Database, request: Cus
   const isOpen =
     subscription !== null &&
     ["PENDING", "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED"].includes(subscription.status);
-  const trialStatus = redemption
-    ? "REDEEMED"
-    : isOpen
-      ? "OPEN_SUBSCRIPTION"
-      : authorizationReady
-        ? "AVAILABLE"
-        : "AUTHORIZATION_REQUIRED";
+  const trialStatus = redemption ? "REDEEMED" : isOpen ? "OPEN_SUBSCRIPTION" : "AVAILABLE";
   const state = subscription?.status ?? null;
   const terminalOrMissing = state === null || state === "CANCELED" || state === "EXPIRED";
 
@@ -166,11 +160,7 @@ export async function getMembershipExperience(database: D1Database, request: Cus
     actions: {
       startTrial: availability(
         trialStatus === "AVAILABLE",
-        redemption
-          ? "INTRODUCTORY_TRIAL_ALREADY_USED"
-          : isOpen
-            ? "OPEN_SUBSCRIPTION_EXISTS"
-            : "RECURRING_AUTHORIZATION_REQUIRED",
+        redemption ? "INTRODUCTORY_TRIAL_ALREADY_USED" : "OPEN_SUBSCRIPTION_EXISTS",
       ),
       beginPaidEnrollment: availability(
         terminalOrMissing,

@@ -4,10 +4,10 @@ import { addCalendarDays } from "../domain/billing-calendar";
 import { createMembershipRepository } from "../infrastructure/d1/membership-repository";
 
 /**
- * Application-owned renewal machinery (single attempt per period; retries stay
- * with the provider per PROVIDER_DECISIONS.md). Three guarded steps driven by
- * the scheduler: initiate due renewal charges, apply provider-confirmed
- * failure outcomes, and expire exhausted grace windows.
+ * Application-owned membership time processing. The scheduler first expires
+ * free trials without initiating payment, then performs paid-subscription
+ * renewal/dunning work. Renewal retries stay with the configured provider per
+ * PROVIDER_DECISIONS.md.
  */
 
 const RENEWAL_RETURN_URL = "urn:freshmarkets:membership:renewal";
@@ -25,10 +25,11 @@ type DueRenewalRow = {
 };
 
 function dueBoundary(row: DueRenewalRow): number | null {
-  return row.status === "TRIALING" ? row.trial_ends_at : row.current_period_ends_at;
+  return row.current_period_ends_at;
 }
 
 export type RenewalStepOutcome = {
+  trialsExpired: number;
   initiated: number;
   initiationFailures: number;
   initiationSkipped: boolean;
@@ -43,17 +44,56 @@ export async function processMembershipRenewals(
   options: { initiationEnabled: boolean },
   limit = 25,
 ): Promise<RenewalStepOutcome> {
+  const trialsExpired = await expireEndedTrials(database, now, limit);
   const initiation = options.initiationEnabled
     ? await initiateDueMembershipRenewals(database, registry, now, limit)
     : { initiated: 0, initiationFailures: 0 };
   const failureOutcomesApplied = await applyConfirmedRenewalFailures(database, now, limit);
   const graceExpired = await expireExhaustedGrace(database, now, limit);
   return {
+    trialsExpired,
     ...initiation,
     initiationSkipped: !options.initiationEnabled,
     failureOutcomesApplied,
     graceExpired,
   };
+}
+
+async function expireEndedTrials(
+  database: D1Database,
+  now: number,
+  limit: number,
+): Promise<number> {
+  const rows = await database
+    .prepare(
+      `SELECT id, trial_ends_at, version FROM subscription
+       WHERE status='TRIALING' AND cancel_at_period_end=0
+         AND trial_ends_at IS NOT NULL AND trial_ends_at <= ?
+       ORDER BY trial_ends_at ASC, id ASC LIMIT ?`,
+    )
+    .bind(now, limit)
+    .all<{ id: string; trial_ends_at: number; version: number }>();
+
+  let expired = 0;
+  for (const row of rows.results ?? []) {
+    const updated = await database
+      .prepare(
+        "UPDATE subscription SET status='EXPIRED', ended_at=?, version=version+1, updated_at=? WHERE id=? AND status='TRIALING' AND trial_ends_at=? AND version=?",
+      )
+      .bind(row.trial_ends_at, now, row.id, row.trial_ends_at, row.version)
+      .run()
+      .then((result) => (result.meta?.changes ?? 0) === 1);
+    if (!updated) continue;
+    await recordRenewalEvent(
+      database,
+      row.id,
+      "TRIAL_EXPIRED",
+      { trialEndedAt: new Date(row.trial_ends_at).toISOString() },
+      now,
+    );
+    expired += 1;
+  }
+  return expired;
 }
 
 async function initiateDueMembershipRenewals(
@@ -69,14 +109,13 @@ async function initiateDueMembershipRenewals(
               s.agreed_amount_minor, s.agreed_currency
        FROM subscription s
        LEFT JOIN payment_authorization a ON a.id = s.payment_authorization_id
-       WHERE ((s.status='TRIALING' AND s.trial_ends_at IS NOT NULL AND s.trial_ends_at <= ?)
-           OR (s.status='ACTIVE' AND s.current_period_ends_at IS NOT NULL AND s.current_period_ends_at <= ?))
+       WHERE s.status='ACTIVE' AND s.current_period_ends_at IS NOT NULL AND s.current_period_ends_at <= ?
          AND (s.renewal_initiated_through IS NULL OR s.renewal_initiated_through <
-              CASE WHEN s.status='TRIALING' THEN s.trial_ends_at ELSE s.current_period_ends_at END)
+              s.current_period_ends_at)
          AND s.agreed_amount_minor IS NOT NULL AND s.agreed_currency IS NOT NULL
        LIMIT ?`,
     )
-    .bind(now, now, limit)
+    .bind(now, limit)
     .all<DueRenewalRow>();
 
   let initiated = 0;
@@ -149,7 +188,7 @@ async function applyConfirmedRenewalFailures(
        FROM payment_intent i
        WHERE i.purpose='MEMBERSHIP_RENEWAL' AND i.status='FAILED'
          AND EXISTS (SELECT 1 FROM payment_attempt pa WHERE pa.payment_intent_id = i.id)
-         AND EXISTS (SELECT 1 FROM subscription s WHERE s.id = i.subject_id AND s.status IN ('TRIALING','ACTIVE'))
+         AND EXISTS (SELECT 1 FROM subscription s WHERE s.id = i.subject_id AND s.status='ACTIVE')
          AND NOT EXISTS (SELECT 1 FROM subscription_event e WHERE e.payment_intent_id = i.id AND e.event_type='RENEWAL_FAILED')
        LIMIT ?`,
     )
@@ -162,33 +201,7 @@ async function applyConfirmedRenewalFailures(
       .prepare("SELECT id, status, version FROM subscription WHERE id=?")
       .bind(row.subscription_id)
       .first<{ id: string; status: string; version: number }>();
-    if (!subscription || !["TRIALING", "ACTIVE"].includes(subscription.status)) continue;
-
-    if (subscription.status === "TRIALING") {
-      // A failed first conversion is an uncontinued trial: terminal EXPIRED
-      // without a grace window (STATE_MACHINES.md).
-      const updated = await database
-        .prepare(
-          "UPDATE subscription SET status='EXPIRED', ended_at=?, version=version+1, updated_at=? WHERE id=? AND status='TRIALING' AND version=?",
-        )
-        .bind(now, now, subscription.id, subscription.version)
-        .run()
-        .then((result) => (result.meta?.changes ?? 0) === 1);
-      if (!updated) continue;
-      await recordRenewalEvent(
-        database,
-        subscription.id,
-        "RENEWAL_FAILED",
-        {
-          outcome: "TRIAL_UNCONTINUED",
-          paymentIntentId: row.intent_id,
-        },
-        now,
-        row.intent_id,
-      );
-      applied += 1;
-      continue;
-    }
+    if (!subscription || subscription.status !== "ACTIVE") continue;
 
     const repository = createMembershipRepository(database);
     const timeZone = await repository.marketTimezone();

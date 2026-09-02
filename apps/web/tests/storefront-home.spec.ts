@@ -54,15 +54,15 @@ test("the membership offer returns after a full page refresh", async ({ page }) 
           },
           subscription: null,
           introductoryTrial: {
-            status: "AUTHORIZATION_REQUIRED",
-            eligible: false,
+            status: "AVAILABLE",
+            eligible: true,
             duration: "CALENDAR_MONTH",
           },
           recurringAuthorization: { status: "REQUIRED", ready: false },
           actions: {
             startTrial: {
-              available: false,
-              disabledReason: "RECURRING_AUTHORIZATION_REQUIRED",
+              available: true,
+              disabledReason: null,
             },
             beginPaidEnrollment: { available: true, disabledReason: null },
             pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },

@@ -179,7 +179,7 @@ is never treated as proof of serviceability.
 
 - `checkout.getSubscriptionEligibility() -> { eligible, state, reasonCode?, effectiveUntil? }`
 
-`MembershipOfferView` describes the single paid calendar-month offer and its current global effective-dated `priceVersionId`, `priceVersion`, `amountMinor`, and `currency`; it contains no trial-entitlement field. `SubscriptionSummary` uses only `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`, and exposes `cancelAtPeriodEnd`, `scheduledCancellationAt`, exact UTC `trialStartsAt`/`trialEndsAt`, and aggregate `version`. Enrollment snapshots the current price on the Subscription, and renewal uses that agreed amount/currency rather than the then-current offer price.
+`MembershipOfferView` describes the single paid calendar-month offer and its current global effective-dated `priceVersionId`, `priceVersion`, `amountMinor`, and `currency`; it contains no trial-entitlement field. `SubscriptionSummary` uses only `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `PAUSED`, `CANCELED`, and `EXPIRED`, and exposes `cancelAtPeriodEnd`, `scheduledCancellationAt`, exact UTC `trialStartsAt`/`trialEndsAt`, and aggregate `version`. Paid enrollment snapshots the current price on its new Subscription, and renewal uses that agreed amount/currency rather than the then-current offer price. A free-trial Subscription has no agreed paid-price snapshot.
 
 Capability-protected global commerce configuration uses these Core methods:
 
@@ -190,14 +190,14 @@ Capability-protected global commerce configuration uses these Core methods:
 
 Membership price reads/commands require `memberships.read`/`memberships.manage`; Service Fee reads/commands require `payments.read`/`payments.manage`; all four require global scope. Updates close the prior effective range and insert a new audited version atomically. They do not expose or imply an Admin Web surface.
 
-`startTrial` resolves the current paid offer and introductory promotion server-side, then succeeds only after Promotions authorizes and atomically consumes the one-calendar-month grant/redemption. Calendar arithmetic follows `DOMAIN_MODEL.md`; an offer field such as `trial_days` is never accepted as authority. `beginPaidEnrollment` may create `PENDING` but cannot create `ACTIVE`; payment-method collection and provider interaction use Payments contracts. These contracts never imply grocery merchandise or delivery is free during a membership trial.
+`startTrial` resolves the current paid offer and introductory promotion server-side, then succeeds only after Promotions authorizes and atomically consumes the one-calendar-month grant/redemption. Calendar arithmetic follows `DOMAIN_MODEL.md`; an offer field such as `trial_days` is never accepted as authority. It requires no payment authorization, creates no Payment, and expires without automatic conversion. `beginPaidEnrollment` is the customer's separate explicit paid choice; after a trial expires it creates a new `PENDING` Subscription, snapshots the then-current paid price, and cannot create `ACTIVE`. Payment-method collection and provider interaction use Payments contracts. These contracts never imply grocery merchandise or delivery is free during a membership trial.
 
 ## Recurring Authorization (Payments-owned)
 
 - `payments.beginRecurringAuthorization({ providerCode?, returnUrl, idempotencyKey }) -> { authorizationId, actionType: "REDIRECT" | "SDK" | "NONE", redirectUrl?, clientToken?, expiresAt? }` where Core selects only its explicitly configured provider and an optional `providerCode` is an equality assertion, never a registry-order fallback.
 - `payments.completeRecurringAuthorization({ authorizationId }) -> { authorizationId }`
 
-Establishing a mandate is instrument collection, never payment success; only a provider-confirmed recurring-capable authorization with a stable method identity becomes `ACTIVE`, and entering `TRIALING` requires one. Providers without recurring capability fail closed. These DTOs are provider-neutral seams; no production mandate or automatic renewal charging is currently approved.
+Establishing a mandate is paid-membership instrument collection, never payment success. A free trial neither calls these methods nor requires a mandate. Only a provider-confirmed recurring-capable authorization with a stable method identity becomes `ACTIVE` for subsequent paid enrollment/renewal use where the approved provider flow requires it. Providers without the required paid recurring capability fail closed. These DTOs are provider-neutral seams; no production mandate or automatic renewal charging is currently approved.
 
 ## Membership Payments
 

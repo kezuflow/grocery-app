@@ -17,7 +17,7 @@ const transitions: Readonly<
   Record<SubscriptionLifecycleState, readonly SubscriptionLifecycleState[]>
 > = {
   PENDING: ["TRIALING", "ACTIVE", "CANCELED", "EXPIRED"],
-  TRIALING: ["ACTIVE", "CANCELED", "EXPIRED"],
+  TRIALING: ["CANCELED", "EXPIRED"],
   ACTIVE: ["PAST_DUE", "PAUSED", "CANCELED", "EXPIRED"],
   PAST_DUE: ["ACTIVE", "PAUSED", "CANCELED", "EXPIRED"],
   PAUSED: ["ACTIVE", "CANCELED", "EXPIRED"],

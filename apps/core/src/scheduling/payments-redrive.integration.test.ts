@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { startPromotionalTrial } from "../membership/application/start-promotional-trial";
+import { beginPaidEnrollment } from "../membership/application/get-membership-experience";
 import { redrivePaymentReactions } from "../payments/application/redrive-payment-reactions";
 import { reconcileStuckPayments } from "../payments/application/reconcile-stuck-payments";
 import { ProviderRegistry } from "../payments/infrastructure/providers/provider-registry";
@@ -10,33 +10,21 @@ const MINUTE = 60_000;
 
 let fixtureCounter = 0;
 
-async function seedTrialingSubscription(): Promise<string> {
+async function seedPendingPaidSubscription(): Promise<string> {
   const customerId = `cust-redrive-${++fixtureCounter}-${crypto.randomUUID().slice(0, 8)}`;
   await env.DB.prepare(
     "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
   )
     .bind(customerId, `auth-${customerId}`, NOW, NOW)
     .run();
-  await env.DB.prepare(
-    "INSERT INTO payment_authorization (id, customer_id, provider, provider_authorization_ref, provider_method_ref, recurring_capable, status, established_at, created_at, updated_at) VALUES (?, ?, 'mock', ?, ?, 1, 'ACTIVE', ?, ?, ?)",
-  )
-    .bind(
-      `authz-${customerId}`,
-      customerId,
-      `mock_auth_${customerId}`,
-      `mock_method_${customerId}`,
-      NOW,
-      NOW,
-      NOW,
-    )
-    .run();
-  const trial = await startPromotionalTrial(env.DB, {
+  const enrollment = await beginPaidEnrollment(env.DB, {
     customerId,
-    idempotencyKey: `trial-${crypto.randomUUID()}`,
+    offerId: "offer-membership-monthly",
+    idempotencyKey: `paid-enrollment-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
   });
-  if (!trial.ok) throw new Error(`fixture failed: ${trial.error.message}`);
-  return trial.value.subscriptionId;
+  if (!enrollment.ok) throw new Error(`fixture failed: ${enrollment.error.message}`);
+  return enrollment.value.subscriptionId;
 }
 
 type ReactionType =
@@ -83,7 +71,7 @@ const registry = new ProviderRegistry("development");
 
 describe("redrivePaymentReactions", () => {
   it("applies a due membership activation and marks the reaction succeeded", async () => {
-    const subscriptionId = await seedTrialingSubscription();
+    const subscriptionId = await seedPendingPaidSubscription();
     const { reactionId } = await seedReaction({
       intentStatus: "SUCCEEDED",
       reactionType: "ACTIVATE_MEMBERSHIP",

@@ -48,4 +48,39 @@ describe("account Membership experience", () => {
     expect(html).toContain("Start introductory trial");
     expect(html).not.toContain("₱299");
   });
+
+  it("does not make paid payment setup a prerequisite for starting the free trial", () => {
+    const html = renderToStaticMarkup(
+      <MembershipExperiencePanel
+        busy={false}
+        onAction={() => undefined}
+        experience={{
+          offer: {
+            offerId: "offer",
+            priceVersionId: "membership-price-version-1",
+            priceVersion: 1,
+            code: "MEMBERSHIP_MONTHLY",
+            name: "Market Plus",
+            amountMinor: 41200,
+            currency: "PHP",
+            billingInterval: "CALENDAR_MONTH",
+          },
+          subscription: null,
+          introductoryTrial: { eligible: true, status: "AVAILABLE", duration: "CALENDAR_MONTH" },
+          recurringAuthorization: { ready: false, status: "REQUIRED" },
+          actions: {
+            startTrial: { available: true, disabledReason: null },
+            beginPaidEnrollment: { available: true, disabledReason: null },
+            pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+            resume: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+            cancelImmediately: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+            cancelAtPeriodEnd: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
+          },
+        }}
+      />,
+    );
+    expect(html).toContain("Start introductory trial");
+    expect(html).toContain("Set up paid membership payment");
+    expect(html).not.toContain("Begin paid membership");
+  });
 });

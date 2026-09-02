@@ -321,6 +321,10 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - Provider-customer mappings are executed before provider calls. Recurring authorization claims its
   idempotency key before the external call. Thrown/locally ambiguous payment and authorization
   outcomes remain processing with reconciliation rather than being mislabeled failed.
+- Introductory trials now start from the Promotions redemption without a payment authorization,
+  create no Payment or paid-price agreement, and expire at their exact calendar-month boundary.
+  They never convert in place. A customer-selected paid enrollment creates a separate `PENDING`
+  Subscription at the then-current price, and only provider-confirmed payment activates it.
 - Migration `0049_payment_settlement_observations.sql` records immutable provider-neutral gross,
   processing-cost, withholding, adjustment, and net observations only after verified exact
   arithmetic and Payment/Refund amount/currency agreement. Actual provider processing cost remains
@@ -341,9 +345,10 @@ Status date: 2026-08-31. This file is descriptive evidence only. The canonical d
 - Instant checkout is authenticated pay-as-you-go and no longer requires membership. Scheduled quote,
   payment revalidation, and commitment retain the exact-instant Membership entitlement gate.
 - Migration `0048_membership_and_service_fee.sql` adds one global effective-dated Membership price
-  stream, agreed price snapshots on Subscriptions, and one global effective-dated Instant-only
-  FreshMarkets Service Fee configuration. Existing Subscriptions retain their agreed amount and
-  currency; ordinary price changes affect only new enrollment.
+  stream, agreed price snapshots on paid Subscriptions, and one global effective-dated Instant-only
+  FreshMarkets Service Fee configuration. Existing paid Subscriptions retain their agreed amount
+  and currency; ordinary price changes affect only new paid enrollment. Trial Subscriptions carry
+  no agreed paid-price snapshot.
 - The Service Fee supports `FLAT`, `PERCENTAGE`, and `MIXED`; the percentage basis is the complete
   payable amount before the Service Fee and uses exact integer ceiling arithmetic. Quotes and Orders
   snapshot its configuration and calculation. Payment-time revalidation returns `PRICE_CHANGED`
