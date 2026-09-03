@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronDown, MapPin, Search, ShoppingCart, UserRound } from "lucide-react";
+import { Search, ShoppingCart, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { CartIndicator } from "./marketplace/cart-indicator";
@@ -7,6 +7,7 @@ import { CartDrawer } from "./marketplace/cart-drawer";
 import { MembershipCtaBar } from "./marketplace/membership-cta-bar";
 import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront-navigation";
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
+import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
 
 export { CategoryStrip } from "./marketplace/category-strip";
 export { storefrontNavigation } from "./marketplace/storefront-navigation";
@@ -55,19 +56,7 @@ export function StorefrontHeader() {
             />
           </div>
         </form>
-        <Link
-          href="/serviceability"
-          className="hidden items-center gap-2 rounded-[var(--fm-radius-control)] px-2 py-2 text-left text-xs hover:bg-[var(--fm-hover)] lg:flex"
-          aria-label="Choose delivery address"
-        >
-          <MapPin className="size-4 text-[var(--fm-primary-dark)]" aria-hidden="true" />
-          <span>
-            <span className="block text-[10px] text-[var(--fm-text-muted)]">Deliver to</span>
-            <span className="flex items-center gap-1 font-semibold">
-              Cebu City <ChevronDown className="size-3" aria-hidden="true" />
-            </span>
-          </span>
-        </Link>
+        <DeliveryAddressDialog />
         <Link
           href="/account"
           className="hidden rounded-[var(--fm-radius-control)] p-2 hover:bg-[var(--fm-hover)] sm:inline-flex"

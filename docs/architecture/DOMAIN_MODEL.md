@@ -366,6 +366,22 @@ job mutation.
 
 Route execution is not encoded by mutating raw order rows. Delivery events advance the delivery state machine and may cause order projections to change.
 
+### DeliveryProviderDispatch
+
+A `DeliveryProviderDispatch` is Delivery-owned evidence for one attempt to hand one immutable
+`DeliveryJob` to an external courier. It snapshots the provider-neutral request assembled from the
+committed Order destination/contact, exact confirmed coordinate, fulfillment-location sender
+profile, and the physical package measured at packing. The snapshot intentionally contains the
+customer name, reachable phone, address, coordinate, and delivery instructions because the courier
+needs them to perform delivery. Access, retention, audit, and diagnostic-log policy protect that
+data; it is not removed from the provider request.
+
+The provider adapter converts the normalized `+63...` phone to the provider's E.164-without-`+`
+wire representation and sends exact coordinates, so FreshMarkets does not own a Grab city/barangay
+dictionary. Provider status remains observation on the dispatch. It never directly mutates an
+Order or skips a legal DeliveryJob transition. A booking whose outcome is uncertain is reconciled
+or escalated and is never blindly created again.
+
 Current-release proof is delivered timestamp, rider, and delivery event. Photo, recipient identity, and signature are future metadata.
 
 ## Admin and Analytics Read Side

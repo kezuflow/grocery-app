@@ -102,6 +102,11 @@ Cart is editable and does not lock price or permanently reserve stock/capacity. 
 
 ## Address and Serviceability
 
+The storefront `Deliver to` control opens this flow in a modal without discarding the current
+browsing context. A serviceable confirmed location may become the session browsing location and
+update the header label, but it remains non-authoritative until selected from a saved customer
+address and revalidated by Core during checkout.
+
 Address flow:
 
 ```text

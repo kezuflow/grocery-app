@@ -647,6 +647,46 @@ authorization or sequencing authority.
 
 Core verifies that the rider is assigned to the job. Client-supplied timestamps are recorded as reported metadata where useful; Core records authoritative receipt time. Web may build a keyless Google Maps universal URL only for the current delivery's immutable coordinate. It supplies no origin or waypoints, and navigation itself causes no FreshMarkets state transition.
 
+## External Delivery Provider Boundary
+
+The Delivery application depends on a provider-neutral `DeliveryProvider` port with `quote`,
+`create`, `get`, and `cancel` operations. This is an internal Core boundary, not a Web RPC and not a
+public general-purpose HTTP API. Its request carries:
+
+- a stable FreshMarkets merchant-order reference and provider service assertion;
+- sender and recipient names plus at least one reachable email or normalized E.164 phone;
+- complete human-readable origin/destination addresses and exact confirmed coordinates;
+- structured building/unit, landmark, access, delivery-note, and recipient guidance;
+- the packed package name, description, integer quantity, centimeter dimensions, gram weight, and
+  optional declared value in explicit currency minor units; and
+- an optional RFC 3339 pickup window created only within the provider-supported horizon.
+
+The GrabExpress adapter sends recipient identity/contact and delivery data rather than removing it.
+It strips only the leading `+` required by Grab's phone wire format, maps building/unit to
+`keywords`, forwards combined instructions within the provider limit, sends coordinates, and omits
+`cityCode`; therefore no Grab city/barangay dictionary is an application dependency. Scheduled
+FreshMarkets Orders are booked near dispatch, not at checkout, because provider pickup scheduling
+is limited to the near-term horizon.
+
+`requestProviderDelivery` persists an immutable request snapshot/hash and compare-and-swap claim
+before the create call. Exact replay returns the existing provider dispatch; changed replay is
+`IDEMPOTENCY_CONFLICT`. A create outcome that might have reached Grab is
+`DELIVERY_RECONCILIATION_REQUIRED` and cannot be blindly retried. Provider tokens, bodies, customer
+data, tracking URLs, and pickup PINs never enter diagnostic logs. Production activation remains
+fail-closed until Cebu/city access, sender profile, packed dimensions/weight, webhook authentication,
+instruction visibility, credentials, and sandbox acceptance are confirmed.
+
+GrabExpress callbacks enter only through `POST /webhooks/delivery/grab-express`. Core compares both
+configured authorization headers in constant time before reading a bounded 64 KiB JSON body,
+validates the provider references and status, derives a deterministic event identity, and stores
+each authenticated event once in the protected provider-event inbox. Duplicate delivery is an
+acknowledged no-op. Unknown dispatches, compare-and-swap collisions, and ambiguous observations are
+retained for reconciliation; older observations are retained without regressing current state.
+Webhook processing updates the external provider dispatch only. It does not directly fabricate a
+canonical DeliveryJob, DeliveryStop, arrival, or proof-of-delivery transition. Diagnostic events
+contain only request/provider/result/status identifiers, never credentials, raw bodies, contact
+data, tracking URLs, or pickup PINs.
+
 ## Analytics Queries
 
 - `admin.analytics.listMetricDefinitions({ category?, status? }) -> MetricDefinitionView[]`

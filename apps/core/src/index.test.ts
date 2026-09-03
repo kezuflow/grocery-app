@@ -12,6 +12,7 @@ describe("Core Worker foundation", () => {
       BETTER_AUTH_URL: "http://localhost:3000",
       TRUSTED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,https://core.example.invalid",
       PAYMENT_PROVIDER: "mock",
+      DELIVERY_PROVIDER: "disabled",
       ROUTE_DISTANCE_PROVIDER: "mapbox",
       MAPBOX_ACCESS_TOKEN: "test-placeholder",
       LOCAL_PAYMENT_PROVIDER: "mock",

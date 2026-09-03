@@ -222,6 +222,29 @@ Failure reasons include customer unavailable, invalid address, no response, refu
 
 current release delivery proof records delivered timestamp, rider, and event/status. Later photo, recipient identity, and signature metadata attach without changing the transition model.
 
+## External Delivery Provider Dispatch
+
+```text
+PENDING -> CREATING -> ACTIVE -> COMPLETED
+                    -> FAILED
+                    -> OUTCOME_UNKNOWN -> RECONCILIATION_REQUIRED
+PENDING / RETRY_REQUIRED -> CREATING
+ACTIVE -> CANCELED / RETURNED / FAILED
+```
+
+`RETRY_REQUIRED` is allowed only when Core knows the create request did not reach the provider,
+such as failure to acquire an access token. A network interruption, retryable provider response,
+or local persistence failure after create may mean the courier accepted the booking; those paths
+enter `OUTCOME_UNKNOWN`/`RECONCILIATION_REQUIRED` and cannot issue another create automatically.
+An exact application replay returns the existing dispatch. A changed request for the same
+DeliveryJob is `IDEMPOTENCY_CONFLICT`.
+
+Grab observations such as `ALLOCATING`, `PENDING_PICKUP`, `PICKING_UP`, `PENDING_DROP_OFF`,
+`IN_DELIVERY`, `IN_RETURN`, `COMPLETED`, `CANCELED`, `RETURNED`, and `FAILED` are retained as
+provider status. Mapping any of them into the canonical Delivery Job/Stop state machine requires an
+explicit Delivery application command and legal transition; the adapter does not fabricate
+`ARRIVED` or any other missing FreshMarkets event.
+
 ## Cancellation Effects by Stage
 
 | Stage                                                                | Normal authority                   | Inventory/demand effect                                                                   | Financial effect                                                                                                                                                    |

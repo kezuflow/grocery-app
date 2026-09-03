@@ -9,6 +9,7 @@ import {
   reasonSchema,
   z,
 } from "@freshmarkets/validation";
+import { normalizePhilippineMobile } from "./customer/domain/customer-phone";
 
 export { authenticatedRequestSchema };
 
@@ -60,10 +61,25 @@ export const catalogProductRequestSchema = z.object({
   locationId: identifierSchema.optional(),
 });
 
+const customerPhoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .transform((value, context) => {
+    const normalized = normalizePhilippineMobile(value);
+    if (normalized) return normalized;
+    context.addIssue({
+      code: "custom",
+      message: "expected a Philippine mobile number",
+    });
+    return z.NEVER;
+  });
+
 const addressBaseSchema = headersRequest.extend({
   label: reasonSchema,
   recipient: reasonSchema,
-  phone: reasonSchema,
+  phone: customerPhoneSchema,
   latitude: coordinateSchema,
   longitude: coordinateSchema,
   notes: z.string().max(1000).nullable().optional(),
@@ -115,7 +131,7 @@ export const addressUpdateRequestSchema = headersRequest
     expectedVersion: z.number().int().safe().nonnegative(),
     label: reasonSchema.optional(),
     recipient: reasonSchema.optional(),
-    phone: reasonSchema.optional(),
+    phone: customerPhoneSchema.optional(),
     components: addressComponentsSchema.optional(),
     componentsSource: componentsSourceSchema.optional(),
     confirmationSource: confirmationSourceSchema.optional(),

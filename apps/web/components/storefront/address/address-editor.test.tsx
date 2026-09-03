@@ -632,7 +632,7 @@ describe("AddressEditor", () => {
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
 
     expect(container.textContent).toContain("Delivery is available");
-    expect(container.textContent).toContain("This coverage check is not saved");
+    expect(container.textContent).toContain("not a saved checkout address");
     expect(container.textContent).not.toContain("Recipient name");
     expect(container.textContent).not.toContain("Save confirmed address");
     expect(fetchImpl).not.toHaveBeenCalledWith("/api/commerce/address", expect.anything());

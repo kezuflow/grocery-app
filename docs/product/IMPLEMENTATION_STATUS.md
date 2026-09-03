@@ -1,7 +1,36 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-09-02. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-09-03. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
+
+## GrabExpress provider-dispatch foundation (2026-09-03)
+
+- The saved-address boundary now normalizes accepted Philippine mobile formats to one `+63...`
+  E.164 value in Core. The address editor explains that the number is shared with the delivery
+  rider and submits the normalized value while exact pin/serviceability ownership remains
+  provider-neutral.
+- The storefront `Deliver to` control now opens the DoorDash-inspired address search, exact-pin,
+  and serviceability flow in a responsive modal. A confirmed serviceable location updates the
+  header for the browser session while checkout continues to require an authoritative saved
+  address and Core revalidation.
+- Delivery now has a provider-neutral quote/create/get/cancel port and a bounded GrabExpress OAuth
+  adapter. It maps the recipient's full name, phone, complete destination, exact coordinate,
+  building/access/delivery guidance, and measured parcel data to the Grab request; it does not
+  depend on a Grab city/barangay dictionary. Grab exponent-based money is converted to integer
+  minor units at the boundary.
+- Migration `0055_delivery_provider_dispatch.sql` and the guarded
+  `requestProviderDelivery` application service persist one immutable outbound snapshot/hash per
+  DeliveryJob. Exact replay returns the existing booking; a changed replay conflicts; and any
+  possibly accepted create is quarantined for reconciliation instead of being created twice.
+- The authenticated GrabExpress webhook boundary durably deduplicates provider observations,
+  retains verified payloads as protected reconciliation evidence, prevents delayed events from
+  regressing the current provider observation, and deliberately stops short of inventing canonical
+  delivery milestones from provider vocabulary.
+- Focused Core and Web tests prove delivery payload mapping, safe diagnostic event shape, contact
+  normalization, request replay/conflict/unknown-outcome behavior, address persistence, and editor
+  behavior. Production booking and canonical webhook lifecycle mapping remain fail-closed pending Grab
+  Cebu enablement, a configured sender profile, measured packed parcels, authenticated webhook
+  acceptance, and confirmation of which recipient instruction fields appear to the driver.
 
 ## Architecture and security hardening (2026-08-30)
 

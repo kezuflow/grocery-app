@@ -11,6 +11,7 @@ import type { AppErrorCode } from "@freshmarkets/contracts";
 import { drizzle } from "drizzle-orm/d1";
 import type { GeocoderPort, PermanentGeocode } from "../geography/ports/geocoder";
 import { resolveServiceability } from "../geography/serviceability";
+import { normalizePhilippineMobile } from "./domain/customer-phone";
 
 type CustomerAddressRow = {
   id: string;
@@ -81,6 +82,13 @@ export async function createCustomerAddress(
   | { ok: true; value: ReturnType<typeof customerAddressView>; requestId: string }
   | ReturnType<typeof failure>
 > {
+  const phone = normalizePhilippineMobile(command.phone);
+  if (!phone)
+    return failure(
+      "VALIDATION_FAILED",
+      "A valid Philippine mobile number is required",
+      command.requestId,
+    );
   const geo = await resolveServiceability(drizzle(database), command);
   if (!geo.ok) return { ok: false as const, error: geo.error };
   const id = crypto.randomUUID();
@@ -115,7 +123,7 @@ export async function createCustomerAddress(
       command.customerId,
       command.label,
       command.recipient,
-      command.phone,
+      phone,
       addressJson,
       confirmation ? JSON.stringify(confirmation.components) : null,
       confirmation?.components.barangay ?? null,
@@ -185,6 +193,14 @@ export async function updateCustomerAddress(
     .bind(command.addressId, command.customerId)
     .first<CustomerAddressRow>();
   if (!current) return failure("NOT_FOUND", "Customer address not found", command.requestId);
+  const phone =
+    command.phone === undefined ? current.phone : normalizePhilippineMobile(command.phone);
+  if (!phone)
+    return failure(
+      "VALIDATION_FAILED",
+      "A valid Philippine mobile number is required",
+      command.requestId,
+    );
 
   const hasLatitude = command.latitude !== undefined;
   const hasLongitude = command.longitude !== undefined;
@@ -346,7 +362,7 @@ export async function updateCustomerAddress(
     .bind(
       command.label ?? current.label,
       command.recipient ?? current.recipient,
-      command.phone ?? current.phone,
+      phone,
       addressJson,
       canonicalFieldsPresent ? JSON.stringify(components) : null,
       canonicalFieldsPresent ? components.barangay : null,

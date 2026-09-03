@@ -49,6 +49,7 @@ type FieldErrors = Partial<
 
 export type AddressEditorProps = Readonly<{
   onConfirmed?: (addressId: string) => void;
+  onServiceabilityConfirmed?: (selection: ServiceabilitySelection) => void;
   purpose?: "save" | "serviceability";
   initialAddress?: CustomerAddressView;
   publicAccessToken?: string;
@@ -57,9 +58,26 @@ export type AddressEditorProps = Readonly<{
   geolocation?: Geolocation;
 }>;
 
+export type ServiceabilitySelection = Readonly<{
+  displayAddress: string;
+  coordinate: Coordinate;
+  components: AddressComponents;
+  serviceability: ServiceabilityResult;
+}>;
+
 function nullable(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizePhilippineMobile(value: string): string | null {
+  const compact = value.trim().replace(/[\s().-]/g, "");
+  const normalized = compact.startsWith("09")
+    ? `+63${compact.slice(1)}`
+    : compact.startsWith("639")
+      ? `+${compact}`
+      : compact;
+  return /^\+639\d{9}$/.test(normalized) ? normalized : null;
 }
 
 function safeSearchMessage(code?: string): string {
@@ -155,6 +173,7 @@ function TextAreaField({
 
 export function AddressEditor({
   onConfirmed,
+  onServiceabilityConfirmed,
   purpose = "save",
   initialAddress,
   publicAccessToken,
@@ -420,7 +439,8 @@ export function AddressEditor({
     const errors: FieldErrors = {};
     if (!label.trim()) errors.label = "Enter a label for this address.";
     if (!recipient.trim()) errors.recipient = "Enter the delivery recipient.";
-    if (!phone.trim()) errors.phone = "Enter a contact phone number.";
+    if (!normalizePhilippineMobile(phone))
+      errors.phone = "Enter a Philippine mobile number, such as 0917 123 4567.";
     if (!components.addressLine1.trim()) errors.addressLine1 = "Enter the street or building.";
     if (!components.city.trim()) errors.city = "Enter the city.";
     return errors;
@@ -456,7 +476,7 @@ export function AddressEditor({
         : {}),
       label: label.trim(),
       recipient: recipient.trim(),
-      phone: phone.trim(),
+      phone: normalizePhilippineMobile(phone)!,
       components,
       componentsSource,
       ...coordinate,
@@ -619,10 +639,31 @@ export function AddressEditor({
       </section>
 
       {purpose === "serviceability" ? (
-        <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          This coverage check is not saved. Sign in and use your address book when you are ready to
-          keep a delivery address.
-        </p>
+        <div className="grid gap-3">
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            This browsing location is not a saved checkout address. Core will confirm it again when
+            you check out.
+          </p>
+          {onServiceabilityConfirmed &&
+          serviceability?.serviceable &&
+          coordinate &&
+          selectedDisplayAddress ? (
+            <button
+              type="button"
+              onClick={() =>
+                onServiceabilityConfirmed({
+                  displayAddress: selectedDisplayAddress,
+                  coordinate,
+                  components,
+                  serviceability,
+                })
+              }
+              className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+            >
+              Deliver here
+            </button>
+          ) : null}
+        </div>
       ) : (
         <>
           <section aria-labelledby="address-details-heading" className="grid gap-4">
@@ -656,8 +697,10 @@ export function AddressEditor({
                 id="address-phone"
                 label="Phone number"
                 type="tel"
+                inputMode="tel"
                 autoComplete="tel"
-                description="Used only to coordinate this delivery."
+                placeholder="0917 123 4567"
+                description="Shared with the delivery rider so they can reach the recipient."
                 value={phone}
                 error={fieldErrors.phone}
                 onChange={(event) => setPhone(event.currentTarget.value)}

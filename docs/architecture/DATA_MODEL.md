@@ -246,8 +246,24 @@ Indexes: run/cycle/location/status, requirements/status, POs/supplier/status, re
 - `delivery_stops(id PK, delivery_job_id FK UNIQUE, delivery_batch_id FK NULL, sequence NULL, latitude, longitude, address_snapshot_json, contact_snapshot_json, instructions_snapshot, status, arrived_at NULL, delivered_at NULL, failure_reason_code NULL, failure_notes NULL, version, created_at, updated_at)`
 - `delivery_events(id PK, delivery_job_id FK, stop_id FK NULL, event_type, rider_id FK NULL, occurred_at, recorded_at, metadata_json, idempotency_key UNIQUE NULL)`
 - `delivery_proofs(id PK, delivery_stop_id FK, rider_id FK, delivered_at, r2_key NULL, recipient_name NULL, signature_r2_key NULL, metadata_json)`
+- `delivery_provider_dispatches(id PK, delivery_job_id FK UNIQUE, provider, merchant_order_id UNIQUE, provider_delivery_id UNIQUE NULL, request_hash, request_snapshot_json, status PENDING|CREATING|RETRY_REQUIRED|ACTIVE|COMPLETED|CANCELED|RETURNED|FAILED|OUTCOME_UNKNOWN|RECONCILIATION_REQUIRED, provider_status NULL, provider_observed_at NULL, provider_status_rank NULL, tracking_url NULL, pickup_pin NULL, quote_amount_minor NULL, quote_currency NULL, attempt_count, last_error_code NULL, version, created_at, updated_at)`
+- `delivery_provider_event_inbox(id PK, provider, provider_event_id, dispatch_id FK NULL, provider_delivery_id, merchant_order_id, observed_at, provider_status, payload_hash, raw_payload, processing_status RECEIVED|APPLIED|RECONCILIATION_REQUIRED, last_error_code NULL, received_at, processed_at NULL, UNIQUE(provider, provider_event_id))`
 
 Indexes support cycle/location/status work queues, rider/current batches, and open delivery exceptions. Delivery status does not replace order/fulfillment state.
+
+`delivery_provider_dispatches.request_snapshot_json` is the immutable outbound provider-neutral
+snapshot required for idempotency/reconciliation and contains protected delivery data. It is not
+an ordinary Admin read model or log payload. `request_hash` detects a changed replay without
+comparing or logging that protected snapshot. The separate `provider_status` records external
+observation without making provider vocabulary the canonical DeliveryJob state. Migration
+`0055_delivery_provider_dispatch.sql` introduces this boundary.
+
+GrabExpress supplies static webhook credentials but no provider event identifier. Core therefore
+derives `provider_event_id` from the authenticated delivery reference, merchant reference,
+observation time, status, and failure reason. The verified raw payload is retained as protected
+reconciliation evidence and is never copied to diagnostic logs or ordinary Admin read models.
+`provider_observed_at` plus a stable status rank prevents a delayed webhook from regressing the
+latest external dispatch observation.
 
 Delivery map reads retain every authorized open `delivery_job` in its exact
 location/mode/cycle context. A null `delivery_stop.latitude`/`longitude` pair is

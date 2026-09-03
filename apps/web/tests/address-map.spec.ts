@@ -278,6 +278,34 @@ test("public serviceability checks a confirmed search result without saving or s
   expect(saveCalls).toBe(0);
 });
 
+test("storefront delivery control opens the address flow and keeps the confirmed browsing location", async ({
+  page,
+}) => {
+  await page.route("**/api/commerce/address-search", (route) =>
+    json(route, { ok: true, value: [candidate], requestId: "header-search" }),
+  );
+  await page.route("**/api/serviceability", (route) =>
+    json(route, { ok: true, value: serviceability, requestId: "header-serviceability" }),
+  );
+
+  await page.goto("/");
+  const deliveryControl = page.getByRole("button", { name: "Choose delivery address" });
+  await deliveryControl.click();
+  const dialog = page.getByRole("dialog", { name: "Choose delivery address" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Search for an address").fill("Ayala Cebu");
+  await dialog.getByRole("button", { name: candidate.displayAddress }).click();
+  await expect(dialog.getByText("Delivery is available", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Deliver here" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(deliveryControl).toContainText("Ayala Center Cebu");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Choose delivery address" })).toContainText(
+    "Ayala Center Cebu",
+  );
+});
+
 test("anonymous serviceability reaches Core through the real Web Service Binding", async ({
   request,
 }) => {

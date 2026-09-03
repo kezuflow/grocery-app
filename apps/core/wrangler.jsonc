@@ -34,6 +34,9 @@
     // Deterministic mock payments are local-only. Deployed environments set
     // PAYMENT_PROVIDER=paymongo and bind the PayMongo secrets below.
     "PAYMENT_PROVIDER": "mock",
+    // External courier booking stays fail-closed until Grab enables Cebu and
+    // deployment supplies sender/package/webhook acceptance evidence.
+    "DELIVERY_PROVIDER": "disabled",
     "ROUTE_DISTANCE_PROVIDER": "mapbox",
   },
   "secrets": {
@@ -71,6 +74,7 @@
         "BETTER_AUTH_URL": "https://freshmarkets.ph",
         "TRUSTED_ORIGINS": "https://freshmarkets.ph,https://freshmarkets-web-staging.ilyreggie.workers.dev",
         "PAYMENT_PROVIDER": "paymongo",
+        "DELIVERY_PROVIDER": "disabled",
         "ROUTE_DISTANCE_PROVIDER": "mapbox",
       },
       "secrets": {

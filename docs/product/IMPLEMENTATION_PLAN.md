@@ -541,10 +541,14 @@ Phase 10 and Phase 1 staff/rider identity.
 ### Domain/application work
 
 - Delivery batch/job/stop state, rider assignments, stop sequencing, failure/retry/reschedule/escalation, proof metadata.
+- Provider-neutral quote/create/get/cancel boundary, GrabExpress adapter, immutable outbound
+  booking orchestration, and fail-closed uncertain-outcome reconciliation.
 
 ### D1/data changes
 
 - Delivery/batch/rider/event/proof tables.
+- One provider-dispatch record per DeliveryJob with request hash/snapshot, provider references,
+  observed provider status, attempt/error evidence, and optimistic version.
 
 ### RPC/contracts
 
@@ -561,6 +565,9 @@ Phase 10 and Phase 1 staff/rider identity.
 ### Tests and acceptance
 
 - Assignment scope, duplicate rider events, failed-delivery reasons, retry/reschedule, proof metadata, and order/delivery projection consistency.
+- Exact delivery payload mapping (recipient name/phone, full address, coordinates, instructions,
+  and parcel measurements), integer money conversion, exact replay, changed-request conflict,
+  unknown-create quarantine, and payload-free diagnostic telemetry.
 
 ### Not in this phase
 
