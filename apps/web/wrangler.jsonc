@@ -45,6 +45,12 @@
   "env": {
     "staging": {
       "workers_dev": true,
+      "routes": [
+        {
+          "pattern": "freshmarkets.ph",
+          "custom_domain": true,
+        },
+      ],
       "services": [
         {
           "binding": "CORE",
@@ -53,7 +59,7 @@
         },
       ],
       "vars": {
-        "PUBLIC_APP_ORIGIN": "https://freshmarkets-web-staging.ilyreggie.workers.dev",
+        "PUBLIC_APP_ORIGIN": "https://freshmarkets.ph",
         "ENVIRONMENT": "staging",
         "PAYMONGO_PUBLIC_KEY": "pk_test_4H9rTzNx2r6AQdxaz4LpGKJf",
       },

@@ -28,9 +28,10 @@ and can then be exposed through a temporary HTTPS tunnel.
 
 The repository also defines isolated `staging` Worker environments. Staging deploys Web and Core
 as `freshmarkets-web-staging` and `freshmarkets-core-staging`; Web binds to Core and Core owns the
-staging D1 database, product-media bucket, scheduled jobs, and PayMongo webhook. Use the resulting
-Core `workers.dev` URL for the PayMongo test webhook. Do not reuse unrelated Workers, Pages
-projects, databases, buckets, tunnels, or custom domains from the account.
+staging D1 database, product-media bucket, scheduled jobs, and PayMongo webhook. Web is served from
+the `freshmarkets.ph` Custom Domain while the Core `workers.dev` URL remains the PayMongo test
+webhook endpoint. Do not reuse unrelated Workers, Pages projects, databases, buckets, tunnels, or
+custom domains from the account.
 
 Set `PAYMENT_PROVIDER=paymongo` in the deployed Core environment. Add the server credentials
 interactively as Cloudflare Worker secrets from `apps/core`; never put their values in source,

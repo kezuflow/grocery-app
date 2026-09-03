@@ -71,9 +71,25 @@ because Wrangler 4.125.0's checked schema does not expose that option.
 
 ## Deployment and rollback
 
-1. Review the generated Worker configuration under `apps/web/dist/server`
-   after the Web build; do not edit generated output.
-2. Deploy Core with `pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc`.
+The current staging Web Worker uses `https://freshmarkets.ph` as its canonical
+public origin and keeps its `workers.dev` hostname enabled as a diagnostic
+fallback. The checked-in staging Custom Domain route is the DNS and certificate
+source of truth. Core remains behind Web's Service Binding; only Core's
+signature-verified PayMongo webhook stays public on its staging `workers.dev`
+hostname.
+
+Before changing the staging public origin, update the same release's
+`PUBLIC_APP_ORIGIN`, `BETTER_AUTH_URL`, and `TRUSTED_ORIGINS` values together.
+Register `https://freshmarkets.ph/api/auth/callback/google` as an authorized
+Google OAuth redirect URI and allow `https://freshmarkets.ph/*` in any Mapbox
+public-token URL restrictions before accepting traffic.
+
+1. Build Web with `CLOUDFLARE_ENV=staging`, then review the generated Worker
+   configuration under `apps/web/dist/server`; do not edit generated output.
+   The vinext-generated file is already resolved to
+   `freshmarkets-web-staging` and intentionally has no nested environment
+   section.
+2. Deploy Core with `pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env staging`.
 3. Deploy Web using the generated configuration with
    `pnpm --filter @freshmarkets/web exec wrangler deploy --config dist/server/wrangler.json`.
 4. Verify Core `/health`, Core `/ready`, and Web `/api/core-health`; promote

@@ -6,6 +6,9 @@
 - Configure the Core `EMAIL` binding and deployment-only `AUTH_EMAIL_FROM`.
 - Configure `BETTER_AUTH_URL` and `TRUSTED_ORIGINS` for the actual Web origin;
   production must not inherit loopback development origins.
+- Whenever the canonical Web hostname changes, register its exact
+  `/api/auth/callback/google` URL with Google before traffic moves. The current
+  staging callback is `https://freshmarkets.ph/api/auth/callback/google`.
 - Ensure the Web proxy preserves cookies, callback URLs, origin, and CSRF
   protections when forwarding `/api/auth` to Core.
 

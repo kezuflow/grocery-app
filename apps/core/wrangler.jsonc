@@ -68,8 +68,8 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
-        "BETTER_AUTH_URL": "https://freshmarkets-web-staging.ilyreggie.workers.dev",
-        "TRUSTED_ORIGINS": "https://freshmarkets-web-staging.ilyreggie.workers.dev",
+        "BETTER_AUTH_URL": "https://freshmarkets.ph",
+        "TRUSTED_ORIGINS": "https://freshmarkets.ph,https://freshmarkets-web-staging.ilyreggie.workers.dev",
         "PAYMENT_PROVIDER": "paymongo",
         "ROUTE_DISTANCE_PROVIDER": "mapbox",
       },
