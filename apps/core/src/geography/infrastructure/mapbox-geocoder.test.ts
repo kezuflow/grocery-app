@@ -110,7 +110,7 @@ describe("Mapbox geocoder adapter", () => {
     expect(requestedUrl?.searchParams.get("limit")).toBe("5");
   });
 
-  it("uses permanent Philippines reverse geocoding for finalization", async () => {
+  it("uses temporary Philippines reverse geocoding for finalization", async () => {
     let requested: Request | undefined;
     const adapter = new MapboxGeocoder("test-token", async (input, init) => {
       requested = new Request(input, init);
@@ -127,7 +127,7 @@ describe("Mapbox geocoder adapter", () => {
       longitude: "123.8854",
       latitude: "10.3157",
       country: "PH",
-      permanent: "true",
+      permanent: "false",
       access_token: "test-token",
     });
     expect(finalized).toEqual({
@@ -161,7 +161,7 @@ describe("Mapbox geocoder adapter", () => {
 
     const url = requested ? new URL(requested.url) : undefined;
     expect(url?.pathname).toBe("/search/geocode/v6/reverse");
-    expect(url?.searchParams.has("permanent")).toBe(false);
+    expect(url?.searchParams.get("permanent")).toBe("false");
     expect(candidate).toMatchObject({
       candidateKey: "address.cebu-test",
       displayAddress: "1 V. Rama Avenue, Guadalupe, Cebu City, Cebu 6000, Philippines",
