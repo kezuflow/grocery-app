@@ -1,7 +1,23 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-09-03. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-09-05. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
+
+## Commerce and external-delivery realignment — Phase 2 persistence (2026-09-05)
+
+- Forward migrations `0056`-`0059` establish the separate versioned global selling state and
+  fulfillment mode, capacity-free Scheduled cycle eligibility, immutable provider quotation and
+  delivery-finance evidence, exact paid-line Scheduled demand/procurement fields, refund
+  processing/reconciliation metadata, Cloudflare Queue outbox publication/lease/dead-letter
+  evidence, and deterministic missing historical Order numbers.
+- Exact location/SKU prices remain the only retail-price authority. Historical Service Fee
+  configurations and snapshots remain readable but are explicitly inactive for new commerce.
+  Legacy capacity/allocation, Rider/fleet, old refund, and mock-payment rows are preserved for
+  compatibility while later phases remove their active callers.
+- The migration verifier covers both a fresh database and a populated `0055` upgrade, validates
+  exact-demand and courier-variance guards, and proves compatibility rows survive unchanged.
+  Runtime commands and customer/Admin surfaces still require their separately authorized later
+  phases before the new persistence becomes active application behavior.
 
 ## GrabExpress provider-dispatch foundation (2026-09-03)
 

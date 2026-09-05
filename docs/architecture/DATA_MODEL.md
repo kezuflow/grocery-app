@@ -164,12 +164,12 @@ Core provisions first-touch carts through the partial unique active-cart index, 
   base-unit and resolved shipping-weight snapshots.
 - `order_promotion_applications(id PK, order_id FK, amendment_id FK NULL, promotion_id FK, redemption_id FK, price_component MERCHANDISE|DELIVERY, benefit_type, amount_minor, benefit_snapshot_json, UNIQUE(order_id, amendment_id, price_component))`
 
-The physical Orders table persists nullable compatibility columns for the unique
-human-readable `order_number` and `committed_at`. New paid commitments populate
-both atomically with the Order; historical rows retain null and customer reads
-use the immutable Order ID as their explicit legacy display identity rather than
-inventing a number. Delivery map detail may continue to expose null for those
-historical rows.
+The physical Orders table persists the unique human-readable `order_number` and a nullable
+compatibility `committed_at`. New paid commitments populate both atomically with the Order.
+Forward migration `0059_refund_outbox_and_order_number_reliability.sql` deterministically backfills
+missing historical numbers from the complete immutable Order ID; it never changes an existing
+public number. Historical rows whose true commitment instant is unavailable retain null rather
+than treating creation time as invented commitment evidence.
 
 Indexes: customer/committed time, unique payment intent/attempt commitment, optional cycle/status, fulfillment mode/location/status. Order fulfillment, accepted provider quotation, SKU conversion/shipping weight, Promotion, and financial-component snapshots are immutable after commitment; corrections use amendments, adjustment records, and events. Changing provider capability, final courier payable, cadence, units, SKU size, exact-location price, or Promotion later does not rewrite history.
 
@@ -277,14 +277,14 @@ Lalamove v3 supplies a signed `eventId`; Core uses it directly as `(provider, pr
 identity after verifying the HMAC over the documented `data` object and exact configured webhook
 path. Status events apply monotonically. Authenticated non-status events, including replacement or
 edited-order events that require additional operational interpretation, are retained as protected
-reconciliation evidence instead of fabricating a canonical delivery transition. Migration
-`0056_lalamove_delivery_provider.sql` expands the closed provider constraint without weakening the
-existing dispatch/inbox checks.
+reconciliation evidence instead of fabricating a canonical delivery transition. A later
+provider-adapter migration expands the closed provider constraint without weakening the existing
+dispatch/inbox checks.
 
-`0060_location_delivery_profiles.sql` adds the one-to-one store sender/pickup profile without
-duplicating `fulfillment_location.latitude/longitude`, and retains the client command idempotency
-key on an external dispatch. No placeholder sender identity is backfilled: each store must be
-configured with factual operational data before provider booking becomes available.
+The one-to-one store sender/pickup profile does not duplicate
+`fulfillment_location.latitude/longitude`; external dispatches retain the client command
+idempotency key. No placeholder sender identity is backfilled: each store must be configured with
+factual operational data before provider booking becomes available.
 
 ### Historical internal-dispatch compatibility record
 
@@ -386,7 +386,7 @@ Use conditional updates against expected state/version and verify affected-row c
 
 ## Customer launch Completion Migration
 
-Migration `0047_customer_mvp_completion.sql` is historical implementation evidence. It added controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness`. Forward-only realignment adds Queue publication/lease/dead-letter evidence and replaces the historical per-location mode seam with separate singleton selling-state and fulfillment-mode authority; committed snapshots remain unchanged.
+Migration `0047_customer_mvp_completion.sql` is historical implementation evidence. It added controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness`. Forward migrations `0056`-`0059` add separate singleton selling-state/mode authority, provider quotation and courier-cost evidence, exact Scheduled demand/procurement fields, refund reconciliation fields, Queue publication/lease/dead-letter evidence, and deterministic missing historical Order numbers. Existing committed snapshots and compatibility fleet/mock rows remain intact.
 
 Promotion claims are uncommitted Quote evidence until atomic Order commitment creates redemption/application history. `notification_outbox.idempotency_key` uniquely identifies one business notification intent, and due work is indexed by status/availability/schedule. `order_invoice_readiness` is one-to-one with Order and provider-confirmed Payment intent; its financial components must be nonnegative and reconcile exactly to the committed total before persistence.
 

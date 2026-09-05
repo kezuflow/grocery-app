@@ -10,7 +10,7 @@
     "readiness:check": "node scripts/verify-readiness-security.mjs",
     "naming:check": "node scripts/verify-naming.mjs",
     "terminology:check": "node scripts/verify-product-terminology.mjs",
-    "migration:check": "node scripts/verify-migrations.mjs",
+    "migration:check": "node scripts/verify-migrations.mjs && node scripts/verify-commerce-realignment-migrations.mjs",
     "catalog:generate": "node apps/core/scripts/generate-produce-catalog.ts",
     "catalog:check": "node apps/core/scripts/generate-produce-catalog.ts --check",
     "seed:development": "pnpm --filter @freshmarkets/core seed:development",

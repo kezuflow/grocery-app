@@ -78,3 +78,21 @@ Email verification and password-reset delivery use the Core auth-email port and 
 `0041_admin_catalog_authoring.sql` adds the guarded Category hierarchy and optimistic version, creates hierarchy/status indexes, and introduces the canonical Product media attachment metadata with one active primary image per Product. Media bytes remain Core-owned in R2; this table is the authoritative attachment record.
 
 `0051_central_cebu_admin_scope.sql` renames the current launch fulfillment location to the user-facing `Central Cebu` label. Stable location and market identifiers remain unchanged; Admin hides the internal market layer from its scope selector while Core retains the multi-market geography model.
+
+`0056_commerce_configuration_and_legacy_authority.sql` adds the versioned singleton
+`OPEN|PAUSED` selling state beside the global fulfillment mode, creates capacity-free Scheduled
+cycle/location eligibility, and marks every historical Service Fee configuration inactive for new
+commerce without deleting compatibility rows.
+
+`0057_provider_quotation_and_delivery_finance.sql` adds immutable provider quotation evidence to
+Checkout and Order snapshots and separates the committed customer delivery charge from final
+courier payable and variance evidence.
+
+`0058_scheduled_exact_demand_and_procurement.sql` adds the line-level sold quantity, canonical base
+quantity, shipping grams, and exact-demand procurement fields required for Scheduled preorder
+commerce. Historical pool-level demand and procurement rows remain explicit compatibility records.
+
+`0059_refund_outbox_and_order_number_reliability.sql` adds refund processing/reconciliation fields,
+Cloudflare Queue publication/lease/dead-letter evidence to the notification outbox, and a
+deterministic collision-safe public number for historical Orders that lacked one. Historical
+Rider/fleet/mock-payment rows remain untouched.
