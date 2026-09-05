@@ -19,7 +19,7 @@ DoorDash is a usability reference for:
 Adaptation requirements:
 
 - grocery products, variants, units, and replenishment instead of restaurants/menus;
-- explicit mode-specific commitments — an Instant promise or Scheduled delivery cycles/windows with cutoff messaging — instead of generic instant ETA assumptions;
+- explicit mode-specific commitments — an Instant external-courier choice/promise or Scheduled delivery window with cutoff messaging — instead of generic instant ETA assumptions;
 - subscription membership gate without making merchandise free;
 - serviceability by coordinates and zones;
 - internal fulfillment assignment hidden from customer hub choice;
@@ -51,7 +51,7 @@ When evaluating an external reference, ask:
 - Establish a clear primary action and preserve context while browsing.
 - Use explicit labels for variant, price, delivery date/window, and eligibility.
 - Use skeletons and stable layout to avoid content jumping.
-- Design empty, unavailable, error, pending payment, cutoff, and full-capacity states as first-class screens.
+- Design empty, selling-paused, unavailable, provider-quotation failure/expiry, error, pending payment, and cutoff states as first-class screens.
 - Ensure all reference-derived patterns meet WCAG-oriented keyboard, focus, contrast, semantics, and reduced-motion expectations.
 
 ## Brand Boundary

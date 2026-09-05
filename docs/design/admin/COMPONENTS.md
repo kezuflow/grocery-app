@@ -20,7 +20,7 @@ Build these only once they appear across multiple workspaces:
 - `AdminDashboardGrid`: responsive reference-aligned grid for operational cards, charts, queues, and recent activity.
 - `StatusBadge` / domain status components: stable label, tone, icon, accessible text.
 - `ProductScopeProjection`: renders catalog-definition fields in Global and exact price/local-active/shared-stock fields at a Location; it never fills absent local data from Market/global fallback.
-- `GlobalFulfillmentModeControl`: a versioned Global-only `SCHEDULED`/`INSTANT` switch with readiness blockers and explicit committed-order preservation copy.
+- `GlobalCommerceControl`: separate versioned Global-only `OPEN`/`PAUSED` selling and `SCHEDULED`/`INSTANT` mode controls with pause/switch/readiness/reopen guidance and committed-Order preservation copy.
 - `MetricCard` only for decision-relevant metrics; never as default dashboard filler.
 - `AdminChartCard`: accessible Recharts composition with an explicit title, definition/freshness context, non-visual summary, and unavailable state.
 - `Timeline`: ordered domain/audit/delivery events.
@@ -38,12 +38,12 @@ Build these only once they appear across multiple workspaces:
 - `PaymentStatus`, `PaymentAttemptList`, `RefundDialog`, `ReconciliationBanner`.
 - `ProcurementRequirement`, `ReceivingDiscrepancy`, `SupplyExceptionResolution`.
 - `InventoryAvailability`, `InventoryLedger`, `InventoryAdjustmentDialog`.
-- `DeliveryCycleSummary`, `CapacityBar`, `DeliveryBatchBoard`, `RiderAssignment`, `FailedDeliveryResolution`.
+- `DeliveryCycleSummary`, `ExternalDeliveryQueue`, `ProviderQuotationSummary`, `ExternalDeliveryBooking`, `ProviderReconciliation`, and `FailedDeliveryResolution`.
 - `FulfillmentWorkQueue`, `ShortageResolution`, `PackedSummary`.
 - `StaffScopeEditor`, `CapabilityMatrix`, `AuditEventList`.
 - `ProductListTable`, `ProductEditor`, `ProductMediaManager`, `SkuVariantEditor`, `SkuPricePanel`, and `SkuAvailabilityPanel`.
 - `CategoryListTable`, `CategoryEditor`, `CategoryTree`, and `CategoryProductList`.
-- `CommerceConfigurationTabs`, `MembershipPriceEditor`, and `ServiceFeeEditor`.
+- `CommerceConfigurationTabs`, `MembershipPriceEditor`, and `GlobalCommerceControl`.
 
 Domain compositions must consume purpose-built DTOs and call explicit Core commands. They must not infer legal transitions from arbitrary strings or modify data locally as if the mutation succeeded.
 
@@ -102,4 +102,4 @@ Do not turn exception resolution into an arbitrary edit form.
 
 ## Testing Expectations
 
-Component tests cover loading/empty/error/permission/disabled/conflict states and command success/failure. Playwright tests cover representative admin flows: order cancellation/refund, inventory adjustment, receiving discrepancy, packing, batch assignment, rider delivery failure, role scope enforcement, and audit visibility.
+Component tests cover loading/empty/error/permission/disabled/conflict states and command success/failure. Playwright tests cover representative Admin flows: pause/switch/reopen, Order cancellation/refund, inventory adjustment, exact Scheduled purchasing, receiving discrepancy, packing, external-provider quotation/booking/reconciliation, provider delivery failure, role scope enforcement, and audit visibility.

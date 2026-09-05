@@ -1,10 +1,33 @@
 # FreshMarkets Dependency-Aware Implementation Plan
 
-## 2026-09-01 Approved Commerce Realignment
+## 2026-09-05 Approved Commerce and External Delivery Realignment
+
+The coordinated implementation in
+`docs/superpowers/plans/2026-09-05/COMMERCE_AND_EXTERNAL_DELIVERY_REALIGNMENT.md` is the current
+authorized correction to the commerce loop. It separates the global `OPEN|PAUSED` selling gate
+from the global `INSTANT|SCHEDULED` mode; makes final customer retail price an exact manually
+managed store/SKU value; removes the FreshMarkets Service Fee and absorbs PayMongo processing
+cost; makes Scheduled a no-stock, no-capacity exact-demand preorder model; removes internal fleet
+delivery; and uses external-provider quotations and dispatch, with Lalamove first.
+
+This realignment supersedes conflicting future-work descriptions in the older phases and dated
+plans below. Phase 1 aligns the complete canonical set. The sections beginning with the 2026-09-01
+plan and the legacy numbered phases are preserved historical implementation records only; even when
+written in imperative or future tense, they do not authorize new Service Fee, Scheduled-capacity,
+Scheduled inventory-netting, internal Rider/fleet, internal customer-delivery-pricing, or runtime
+mock-payment work. Execution now follows Phases 1–12 of the 2026-09-05 plan exclusively.
+
+The active sequence starts with canonical alignment, then forward-only persistence, selling/mode
+control, exact retail pricing and Scheduled availability, verified provider capabilities/Lalamove,
+provider-priced Checkout, exact Scheduled commitment/purchasing, external-only dispatch, financial
+and Promotions cleanup, Cloudflare Queues notifications, compatibility removal, and full activation
+verification. Each completed phase is independently validated and committed before the next begins.
+
+## Historical Plan Record — 2026-09-01 Commerce Realignment
 
 The coordinated implementation in `docs/superpowers/plans/2026-09-01/LOCATION_SCOPED_COMMERCE_IMPLEMENTATION.md` is an authorized cross-phase correction. It replaces per-location mode authority with one global mode, removes configurable sourcing modes, requires exact-location Variant prices, separates Global catalog administration from Location commerce facts, and assigns overlapping serviceable locations by Haversine distance. Persistence, contracts, Core, Admin, marketplace behavior, tests, and canonical documentation must land together; historical committed snapshots remain immutable.
 
-## Planning Rules
+## Historical Planning Rules (superseded by the 2026-09-05 plan where conflicting)
 
 Implement vertical/domain foundations in dependency order, not page order. Each phase must preserve the architecture and must not silently change locked business decisions. A phase is complete only when its domain behavior, Core contracts, persistence, Web surface, tests, and operational acceptance criteria are complete enough for the next dependent phase.
 
@@ -223,7 +246,7 @@ Phase 2 location model.
 
 ### Domain/application work
 
-- Products/categories, fixed SKU variants, unit definitions, inventory pools, location availability, price versions, customer display projections.
+- Products/categories, fixed SKU variants, unit definitions, inventory pools, location availability, price versions, customer display projections. Current authoring enables mass and count units only; packaged liquids are count-based, while historical volume definitions remain inactive compatibility data.
 
 ### D1/data changes
 
@@ -541,8 +564,12 @@ Phase 10 and Phase 1 staff/rider identity.
 ### Domain/application work
 
 - Delivery batch/job/stop state, rider assignments, stop sequencing, failure/retry/reschedule/escalation, proof metadata.
-- Provider-neutral quote/create/get/cancel boundary, GrabExpress adapter, immutable outbound
-  booking orchestration, and fail-closed uncertain-outcome reconciliation.
+- Provider-neutral quote/create/get/cancel boundary, Lalamove v3 and GrabExpress adapters, immutable
+  outbound booking orchestration, and fail-closed uncertain-outcome reconciliation. Instant binds
+  the customer's enabled external-partner option; Scheduled store operations choose internal fleet
+  or an enabled external provider near dispatch and choose immediate or provider-scheduled pickup
+  without changing the customer's committed delivery window. Delivery packaging derives one bag
+  below 10 kg or one box from 10 kg using immutable line shipping-weight snapshots.
 
 ### D1/data changes
 
@@ -566,7 +593,8 @@ Phase 10 and Phase 1 staff/rider identity.
 
 - Assignment scope, duplicate rider events, failed-delivery reasons, retry/reschedule, proof metadata, and order/delivery projection consistency.
 - Exact delivery payload mapping (recipient name/phone, full address, coordinates, instructions,
-  and parcel measurements), integer money conversion, exact replay, changed-request conflict,
+  and provider-supported parcel information), integer money conversion, HMAC/signature fixtures,
+  signed webhook deduplication/out-of-order behavior, exact replay, changed-request conflict,
   unknown-create quarantine, and payload-free diagnostic telemetry.
 
 ### Not in this phase
@@ -690,7 +718,12 @@ Stable current release operations and observability.
 - Controlled grocery Order/Delivery Promotion rules, deterministic two-component stacking, Quote claims, and commit-time redemptions.
 - Customer Membership experience, immutable Order detail/timeline, current-state reorder, typed issue intake, pre-commit abandonment, and Scheduled-before-cutoff paid additive amendments.
 - D1 notification outbox/attempt processing and invoice-readiness evidence. Production sender and official accounting/tax issuance remain owner-gated.
-- Opaque Core-routed Instant/Scheduled fulfillment options bound to confirmed address/cart versions.
+- Opaque Core-routed fulfillment options bound to confirmed address/cart versions: Instant includes
+  an enabled customer-selected external partner/service; Scheduled includes only its cycle/window
+  and leaves delivery execution to scoped store operations.
+- Location-owned courier pickup profiles and a scoped dispatch workspace: Instant books the
+  customer-selected external partner; Scheduled operators choose the existing internal Rider/batch
+  flow or immediate/future Lalamove pickup within the committed window.
 - Versioned Analytics definitions and read-side projections/events.
 
 ### Remaining candidate work

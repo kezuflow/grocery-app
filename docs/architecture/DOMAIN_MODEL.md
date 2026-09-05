@@ -20,23 +20,25 @@ An internal physical or operational site. It has independent capabilities such a
 
 Invariant: customers never select a location. The application assigns one from eligible candidates.
 
-FreshMarkets has exactly one effective global `FulfillmentMode` configuration for all new commerce:
+FreshMarkets has two separate versioned global commerce controls: `SellingState` (`OPEN` or `PAUSED`) and `FulfillmentMode` (`INSTANT` or `SCHEDULED`). `PAUSED` blocks new fulfillment-option discovery, Quotes, and payment initiation while allowing reconciliation and exactly-once commitment of already-started payments, committed-Order reads and operations, refunds, and external delivery work.
+
+The fulfillment mode means:
 
 - `INSTANT` — current location inventory and an expiring checkout hold back the customer promise; normal replenishment procurement is outside the checkout path.
-- `SCHEDULED` — a configured offering/window and optional cadence drive capacity, cutoff, planned demand, procurement, receiving, and scheduled delivery. Current-release Scheduled cadence is `WEEKLY`.
+- `SCHEDULED` — a configured offering/window and optional cadence drive cutoff, exact paid purchase demand, procurement, packing, and scheduled external delivery. It does not consult or mutate physical stock and has no order/cycle capacity. Current-release Scheduled cadence is `WEEKLY`.
 
-`WEEKLY` is a cadence/configuration value, never a fundamental fulfillment mode. The global configuration is versioned so an explicit business-wide switch can change new commerce without mutating the fulfillment decision snapshotted on committed Orders. Locations do not select modes independently. A switch invalidates or revalidates uncommitted carts/Quotes; `SCHEDULED -> INSTANT` fails closed until outstanding Scheduled demand is protected and active locations meet Instant readiness.
+`WEEKLY` is a cadence/configuration value, never a fundamental fulfillment mode. Operators pause selling, resolve committed work, activate the new mode with an expected version, verify mode-specific location readiness, and reopen selling. Locations do not select modes independently. A switch invalidates uncommitted commerce and never mutates committed Order mode, promise, price, or delivery evidence.
 
 ### ServiceArea and DeliveryZone
 
-A `ServiceArea` is a versioned geographic polygon that establishes whether coordinates are serviceable. A `DeliveryZone` is a polygon/subdivision within a service area used for fees, capacity, batching, and operational assignment.
+A `ServiceArea` is a versioned geographic polygon that establishes whether coordinates are serviceable. A `DeliveryZone` is a polygon/subdivision within a service area used for serviceability, delivery-window presentation, and operational grouping; it is not customer-delivery pricing or capacity authority.
 
 Serviceability and assignment are separate:
 
 1. Coordinates must fall in an active service area.
 2. Coordinates resolve to an active zone.
 3. The system evaluates locations capable of serving that zone.
-4. Assignment filters locations by current-mode operational readiness/capacity and selects the closest dispatch origin by exact Haversine distance, then stable ascending location ID.
+4. Assignment filters locations by current-mode operational readiness and selects the closest dispatch origin by exact Haversine distance, then stable ascending location ID.
 
 Eligible geofences may overlap. Individual Product or Variant stock never affects assignment and never routes a basket to a farther location. Route-driving-time providers are not called to choose the owner. One cart/Order has one resolved location and is never split; changing the address re-resolves, reprices, and revalidates the entire cart.
 
@@ -46,9 +48,7 @@ Coordinates used for a saved address must come from a provider candidate, a user
 
 ### DeliveryCycle
 
-A configurable `SCHEDULED` operational schedule containing cadence, order-open, cutoff, procurement, receiving, packing, dispatch, delivery date/window, zone/location participation, capacity, and lifecycle state. Weekend and `WEEKLY` behavior are configuration, not code. `INSTANT` fulfillment does not require or fabricate a DeliveryCycle.
-
-Capacity is conceptually `DeliveryCycle x DeliveryZone`, with location context. The current release may initially configure the same capacity across zones but cannot collapse the model permanently to cycle-only capacity.
+A configurable `SCHEDULED` operational schedule containing cadence, order-open, cutoff, procurement, packing, dispatch, delivery date/window, zone/location participation, and lifecycle state. Weekend and `WEEKLY` behavior are configuration, not code. It contains no customer-count, order-count, zone, seat, or cycle capacity. `INSTANT` fulfillment does not require or fabricate a DeliveryCycle.
 
 ## Identity and Access
 
@@ -93,9 +93,9 @@ An application-owned staff principal linked to a Better Auth user ID. Staff capa
 
 Roles group closed application capabilities such as `customers.read`, `customers.manage`, `orders.read`, `orders.manage`, `catalog.read`, `catalog.manage`, `inventory.read`, `inventory.adjust`, `promotions.read`, `promotions.manage`, `memberships.read`, `memberships.manage`, `payments.read`, `refunds.manage`, `fulfillment.read`, `fulfillment.manage`, `delivery.read`, `delivery.manage`, `procurement.read`, `procurement.manage`, `analytics.read`, `staff.read`, and `staff.manage`. Assignments may be global, market-wide, or restricted to selected locations. Roles are configurable collections of capabilities; names such as `SUPER_ADMIN`, `OPERATIONS`, `CUSTOMER_SUPPORT`, `MARKETING`, and `FINANCE` are examples, not hard-coded authorization logic. Authorization evaluates capability plus resource scope and never a single `isAdmin` flag.
 
-### Rider
+### Historical Rider identity
 
-A task-focused operational identity, normally also linked to an authenticated user. A rider may have a preferred/home location but may be assigned across locations. Rider permissions are constrained to assigned jobs and legal delivery transitions.
+Rider identities may remain readable only for historical delivery evidence and migration safety. FreshMarkets has no active internal customer-delivery fleet, Rider assignment, or Rider application authority.
 
 ## Membership
 
@@ -144,6 +144,9 @@ A database-configurable fixed purchasable variant such as 250 g, 1 kg, 6 pieces,
 - product and stable SKU identity;
 - display/packaging label, integer sell quantity, and controlled sell unit;
 - authoritative integer quantity consumed from the Product's base inventory pool;
+- required positive estimated shipping weight in grams for one sold unit on newly created SKUs
+  when the Product's canonical inventory base unit is not `GRAM`; historical rows may remain null
+  until operators configure an honest estimate;
 - active/inactive state and sort/display order;
 - global active state; exact-location selling activation and prices are separate location configuration.
 
@@ -151,29 +154,39 @@ Invariant: variants do not create independent physical inventories. Red Onion 25
 
 ### BaseInventoryUnit
 
-The canonical integer unit used for physical stock and demand accounting for a Product/inventory pool. Current-release base units are `GRAM` (`MASS`), `MILLILITER` (`VOLUME`), and `PIECE` (`COUNT`). Authoritative balances never use floating-point quantities.
+The canonical integer unit used for active physical stock and demand accounting for a Product/inventory pool. Current-release active base units are `GRAM` (`MASS`) and `PIECE` (`COUNT`). Historical `MILLILITER`/`VOLUME` data remains inactive compatibility history. Authoritative balances never use floating-point quantities.
 
 Catalog owns a controlled, data-driven unit registry. A unit has identifier, code, display name, dimension, exact conversion to its dimension's canonical base unit, and active status. Initial controlled sell-unit codes include `G`, `KG`, `ML`, `L`, and `PC`. Conversions use exact integer/rational factors and may occur only within the same dimension; kilograms convert to grams, liters to milliliters, and pieces remain count-based.
 
 For controlled standard units, Admin derives exact base consumption from integer sell quantity and the unit's rational conversion; Core verifies the same derivation. Packaging words such as pack, bunch, tray, head, or bottle are SKU-specific merchandising labels, not global units with universal conversion. A 12-piece egg tray records `12 PIECE` consumption on that SKU; another Product's pack may consume a different Product-specific base quantity. The persisted SKU conversion is the authority used by Cart, Inventory, Quote, and Order snapshots.
 
-The current release supports fixed variants only. Variable-weight settlement, post-pick repricing, capture adjustment, and weight-driven supplemental charge/refund flows are explicitly out of scope.
+The current release supports fixed variants only. Active catalog authoring is limited to `MASS` and
+`COUNT`: bottled or otherwise packaged liquids are sold by piece. Historical `VOLUME`,
+`MILLILITER`, and `LITER` definitions remain inactive compatibility data and cannot be selected for
+new Products or SellableVariants. Variable-weight settlement, post-pick repricing, capture
+adjustment, and weight-driven supplemental charge/refund flows are explicitly out of scope.
+
+Delivery weight is separate from inventory conversion. A gram-based line uses its exact total base
+consumption as shipping weight. A `PIECE`- or `MILLILITER`-based SKU uses its configured estimated
+shipping grams per sold unit multiplied by the ordered quantity; pieces and milliliters are never
+summed as grams. Quote, committed Order, and paid-addition lines snapshot the resolved canonical
+base-unit code and shipping grams. Historical lines with no honest estimate remain nullable.
 
 ### LocationAvailability
 
-The relationship that declares whether a global SKU is locally offered. It contains a versioned local active flag and no sourcing mode. In `INSTANT`, a globally active and locally active Variant with an exact positive location price remains visible but is sellable only when the shared Product balance covers its exact base-unit consumption. In `SCHEDULED`, the same active and priced Variant is sellable when an open cycle is before cutoff and has capacity; physical stock is not required.
+The relationship that declares whether a global SKU is locally offered. It contains a versioned local active flag and no sourcing mode. In `INSTANT`, a globally active and locally active Variant with an exact positive location price remains visible but is sellable only when the shared Product balance covers its exact base-unit consumption. In `SCHEDULED`, the same active and priced Variant is sellable when an eligible delivery window is open before cutoff; no stock or capacity query is made.
 
 Admin labels this configured relationship **Selling status**. It is distinct from **Stock status**, which is derived from the location's shared Product inventory position and the Variant's exact base consumption. A Variant may be configured to sell while temporarily lacking stock, or be stopped from selling while physical stock remains.
 
 ### Price
 
-Authoritative selling price belongs to the sellable SKU at one exact fulfillment location, never merely to Product or Market. There is no global or market fallback. A missing, overlapping, invalid-currency, or nonpositive exact-location price makes the SKU unquoteable; price never silently becomes zero. Procurement cost, selling price, promotional adjustment, and historical Order price are distinct. Quotes and Orders snapshot all financial values; catalog price changes never rewrite history.
+Authoritative selling price is the manually entered final retail price for one sellable SKU at one exact fulfillment location, never merely Product or Market. There is no global/Market fallback and no global markup engine. A missing, overlapping, invalid-currency, or nonpositive exact-location price makes the SKU unquoteable; price never silently becomes zero. Procurement cost, retail price, promotional adjustment, provider courier cost, PayMongo processing cost, and historical Order price are distinct. Quotes and Orders snapshot all customer financial values; catalog price changes never rewrite history.
 
 ## Cart, Checkout, and Commerce Commitment
 
 ### Cart
 
-An editable pre-commit basket associated with a customer/market. A customer has at most one `ACTIVE` cart; concurrent first-touch creation resolves to that same cart. Mutations are explicit, idempotent, and expected-version guarded. Cart contents and displayed prices are advisory only: they do not lock price or reserve physical inventory or delivery capacity. SKU or authoritative-price loss is an explicit unavailable state that blocks checkout but still permits decrement/removal; it is never represented as a zero price. Catalog prices are manually managed through authorized admin commands; customer UI has no time-boxed price guarantee or countdown.
+An editable pre-commit basket associated with a customer/market. A customer has at most one `ACTIVE` cart; concurrent first-touch creation resolves to that same cart. Mutations are explicit, idempotent, and expected-version guarded. Cart contents and displayed prices are advisory only: they do not lock price or reserve physical inventory. SKU or authoritative-price loss is an explicit unavailable state that blocks checkout but still permits decrement/removal; it is never represented as a zero price. Catalog prices are manually managed for each exact store/SKU through authorized Admin commands; customer UI has no time-boxed price guarantee or countdown.
 
 ### Checkout
 
@@ -184,19 +197,16 @@ An application orchestration, not a database entity exposed to UI. The authorita
 - cart and current SKU availability;
 - current pricing and minimum merchandise amount;
 - address coordinates and active service area/zone;
-- the closest eligible fulfillment location, the single global `INSTANT`/`SCHEDULED` mode, and a mode-specific delivery promise;
+- selling `OPEN`, the closest eligible fulfillment location, the single global `INSTANT`/`SCHEDULED` mode, and a mode-specific delivery promise;
 - for `INSTANT`, current exact base-unit availability and an expiring checkout inventory hold;
-- for `SCHEDULED`, an eligible cycle/window, cutoff, concurrency-safe capacity, and demand/procurement policy;
+- for `SCHEDULED`, an eligible cycle/window and cutoff, with exact paid demand and no stock/capacity evaluation;
 - promotion eligibility/stacking;
-- current provider-neutral road-route distance and the effective versioned market/location delivery-fee configuration;
-- for `INSTANT`, the one effective global FreshMarkets Service Fee configuration for the quote currency;
+- a current external-provider quotation: all eligible providers for `INSTANT`, or the Lalamove future quotation for `SCHEDULED`;
 - payment readiness.
 
-A quote is time/version-bound and must be recalculated before payment from current prices, discounts, stock, serviceability, route distance, delivery-fee configuration, mode-specific membership eligibility, and the active `INSTANT` Service Fee configuration where applicable. If the current total or fee evidence differs from the customer-accepted quote, payment is not created and the customer must explicitly accept the replacement quote. Its financial breakdown keeps merchandise subtotal, item discount, order discount, delivery fee, delivery discount, Service Fee where applicable, tax where applicable, pre-Service-Fee total, and final total as distinct integer-minor-unit components.
+A quote is time/version-bound and must be recalculated before payment from current exact store/SKU prices, discounts, Instant stock/hold where applicable, serviceability, provider quotation, mode-specific membership eligibility, and selling state. If the current total or quotation evidence differs from the customer-accepted quote, payment is not created and the customer must explicitly accept the replacement quote. Its active financial breakdown keeps merchandise subtotal, merchandise discount, quoted delivery fee, delivery discount, approved tax where applicable, and final total as distinct integer-minor-unit components. New commerce has no FreshMarkets Service Fee or customer-facing PayMongo processing fee. Legacy Service Fee columns/snapshots remain historical evidence only.
 
-The FreshMarkets Service Fee is an application charge, not a payment-provider processing fee. One global effective-dated configuration supports `FLAT`, `PERCENTAGE`, and `MIXED`. It applies only to `INSTANT`; `SCHEDULED` has no Service Fee because membership governs that model. The percentage basis is the complete payable amount before the Service Fee: merchandise subtotal minus item and order discounts, plus delivery subtotal minus delivery discount, plus tax. Percentage uses integer basis points and rounds upward to the next minor unit when fractional; `MIXED` adds the flat component. Quote and Order snapshots preserve the configuration ID/version, inputs, base, and exact result.
-
-Delivery pricing is versioned per market/fulfillment location and stores a minimum fee and per-kilometer rate in integer minor units. Core computes `ceil(routeDistanceMeters * perKilometerRateMinor / 1000)` and applies the configured minimum. Route failure or missing configuration fails checkout closed. Domain snapshots store distance meters, rates, calculated fee, configuration version, and provider-neutral road-route/driving metadata; they never store adapter-specific vocabulary.
+Delivery pricing comes from a verified external-provider quotation. Instant presents one opaque option per enabled quoteable partner; Scheduled presents only the delivery window while Lalamove supplies the checkout quotation using a supported `scheduleAt`. The accepted checkout quotation and final courier payable are separate immutable facts. Before provider booking, Core re-quotes; FreshMarkets absorbs increases and retains decreases without charging the customer again.
 
 ### Order
 
@@ -218,11 +228,11 @@ Payments is a bounded context separate from Membership and Orders. `PaymentInten
 
 A provider adapter translates provider states into canonical Payments states. The configured payment commitment policy decides which canonical outcome is sufficient for a paid commitment; The current release treats canonical `SUCCEEDED` as captured commercial success. Membership and Orders react to that outcome through explicit idempotent application commands rather than sharing or mutating Payments state. If an Order reaction fails after success is observed, Payments preserves that observation and Core retries the same idempotent commitment. Bounded failure creates a reconciliation exception; no second payment/order or automatic refund is inferred.
 
-Scheduled checkout entitlement is one executable Membership policy evaluated at an exact instant. `TRIALING` requires an unexpired `trialEndsAt`; `ACTIVE` is entitled; `PAST_DUE` remains entitled while PayMongo owns an active retry cycle; `UNPAID` is not entitled. Scheduled quote, payment revalidation, and commitment share this policy; Instant skips it. The market minimum applies to pre-discount merchandise subtotal only: delivery, Service Fees, and tax never satisfy it.
+Scheduled checkout entitlement is one executable Membership policy evaluated at an exact instant. `TRIALING` requires an unexpired `trialEndsAt`; `ACTIVE` is entitled; `PAST_DUE` remains entitled while PayMongo owns an active retry cycle; `UNPAID` is not entitled. Scheduled Quote, payment revalidation, and commitment share this policy; Instant skips it. The market minimum applies to pre-discount merchandise subtotal only: delivery and tax never satisfy it.
 
 Provider-side payment and recurring-authorization creation are resumable commands. Core claims application idempotency before an external side effect, durably stores any unexpired redirect/SDK continuation, and returns that same continuation on identical replay. A thrown provider call or a provider-accepted result whose local persistence is uncertain remains `INITIATED`/`PROCESSING` with reconciliation evidence; it is never converted to definitive `FAILED` without authoritative evidence.
 
-Refundable value is reserved atomically when a refund identity enters `REQUESTED`. `REQUESTED`, `APPROVED`, `PROCESSING`, `ESCALATED`, and `SUCCEEDED` consume the captured refund budget; only `REJECTED` and definitively `FAILED` release it. Aggregate payment refund state is derived from canonical `SUCCEEDED` refund totals only.
+Refundable value is reserved atomically when a refund identity enters `REQUESTED`. `REQUESTED`, `PROCESSING`, `ESCALATED`, and `SUCCEEDED` consume the captured refund budget; only a definitive `FAILED` releases it. Aggregate payment refund state is derived from canonical `SUCCEEDED` refund totals only.
 
 A `Refund` is an explicit financial adjustment with amount, reason, state, provider identity, and links to affected order/payment/lines where applicable. Refunds never erase the original transaction.
 
@@ -236,13 +246,14 @@ Current-release benefit types are:
 - `ORDER_PERCENT_DISCOUNT`;
 - `ORDER_FIXED_DISCOUNT`;
 - `DELIVERY_FEE_WAIVER`;
-- `DELIVERY_FEE_DISCOUNT`.
+- `DELIVERY_PERCENT_DISCOUNT`;
+- `DELIVERY_FIXED_DISCOUNT`.
 
-Controlled eligibility rule types include `FIRST_ORDER`, `NEW_CUSTOMER`, `MEMBER`, `NON_MEMBER`, `MINIMUM_SUBTOTAL`, `CUSTOMER_SEGMENT`, and `SPECIFIC_CUSTOMERS`. Parameters may configure code, status, effective window, amount/percentage, minimum subtotal, maximum discount, customer target/segment, global limit, and per-customer limit. Core validates each benefit/rule parameter schema; unknown types fail closed.
+Controlled eligibility rule types include `FIRST_ORDER`, `NEW_CUSTOMER`, `MEMBER`, `NON_MEMBER`, `MINIMUM_SUBTOTAL`, `CUSTOMER_SEGMENT`, and `SPECIFIC_CUSTOMERS`. Parameters may configure code, status, effective window, amount/percentage, minimum subtotal, maximum discount, customer target/segment, and optional positive-integer global/per-customer usage limits. Core validates each benefit/rule parameter schema; unknown types fail closed.
 
 For an Order, at most one merchandise/order benefit and one delivery benefit may apply. A valid explicitly selected code/campaign wins its price component over automatically selected candidates; otherwise the highest-value eligible benefit for that component wins, with stable promotion ID as the final deterministic tie-breaker. Two merchandise/order discounts or two delivery discounts never stack. Membership-fee benefits are evaluated separately from Order/delivery stacking.
 
-Order percentage/fixed benefits apply only to the approved merchandise subtotal basis. Delivery waiver/discount benefits modify only delivery fee. No benefit silently discounts delivery, service fee, or tax unless its controlled type explicitly owns that component.
+Order percentage/fixed benefits apply only to the approved merchandise subtotal basis. Delivery waiver/percentage/fixed benefits modify only delivery fee. No benefit silently discounts delivery or tax unless its controlled type explicitly owns that component.
 
 `FIRST_MONTH_FREE` is a `MEMBERSHIP_FEE_WAIVER` for one `CALENDAR_MONTH`. A valid grant/redemption remains the sole authority that allows Membership to enter `TRIALING`; generalized Promotions does not change Membership states, fee, timing, or Payments ownership.
 
@@ -250,7 +261,7 @@ Order percentage/fixed benefits apply only to the approved merchandise subtotal 
 
 ### Mode-Derived Supply
 
-Supply behavior is derived and is not configurable catalog state. `INSTANT` uses current exact-location Product inventory plus holds/reservations. `SCHEDULED` uses committed base-unit demand, cycles, cutoff, capacity, and procurement planning. No `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED` selector exists in active contracts or Admin. Historical snapshots may preserve former values only as compatibility evidence.
+Supply behavior is derived and is not configurable catalog state. `INSTANT` uses current exact-location Product inventory plus holds/reservations. `SCHEDULED` records each paid line as exact purchase demand and uses only cycle/window/cutoff timing; it performs no stock check, reservation, deduction, incoming-stock calculation, safety-buffer calculation, forecast, or capacity allocation. No `STOCKED`, `PLANNED`, `ON_DEMAND`, or `MIXED` selector exists in active contracts or Admin. Historical snapshots may preserve former values only as compatibility evidence.
 
 ### LocationInventory
 
@@ -268,21 +279,17 @@ A short-lived claim created for an `INSTANT` checkout attempt before Quote/payme
 
 ### CommittedProcurementDemand
 
-Paid planned demand expressed in base units for a cycle, location, SKU/inventory pool, order, and line. It is not physical inventory and not an inventory reservation. Cancellation treatment depends on cutoff and procurement state.
+Paid Scheduled purchase demand expressed in exact sold-unit quantity, canonical base-unit quantity, and shipping grams for a cycle, location, SKU, Order, and line. It is not physical inventory, not an inventory reservation, and is never netted against physical stock. Cancellation treatment depends on cutoff and procurement state.
 
 ### Procurement
 
-A cycle/destination operational aggregate that converts committed demand into procurement requirements:
+A cycle/destination operational aggregate that converts paid Scheduled Order lines into the exact purchase list:
 
 ```text
-committed demand
-+ safety buffer
-- usable physical inventory
-- confirmed incoming inventory
-= procurement requirement
+sum(committed sold units and their exact base consumption) = procurement requirement
 ```
 
-The model supports central or local procurement and destination locations without requiring both in the current release.
+There is no safety buffer, usable-stock subtraction, confirmed-incoming subtraction, forecast, or hybrid sourcing formula in Scheduled commerce. The model supports central or local procurement and destination locations without requiring both in the current release.
 
 ### Receiving
 
@@ -294,7 +301,7 @@ A shortage, partial supplier fill, quality rejection, receiving discrepancy, une
 
 ### OrderCancellation
 
-An Orders-owned aggregate that coordinates operational cancellation with a fixed set of Payments-owned refunds. Customer Instant cancellation is legal only before `FULFILLMENT_PENDING` and retains the committed FreshMarkets Service Fee. Customer Scheduled cancellation is legal only before both cutoff and fulfillment start, and includes the original payment plus all committed paid additions; additions have no independent cancellation authority. FreshMarkets-caused cancellation retains no Service Fee. The Order becomes `CANCELED` only after every required refund member is canonically `SUCCEEDED`; rejection or ambiguity is an exception, not implied success. A separately audited global `refunds.manage` exception refund may occur after lock without reopening the customer command.
+An Orders-owned aggregate that coordinates operational cancellation with a fixed set of Payments-owned refunds. Customer Instant cancellation is legal only before `FULFILLMENT_PENDING`. Customer Scheduled cancellation is legal only before both cutoff and fulfillment start and includes the original payment plus all committed paid additions; additions have no independent cancellation authority. New commerce retains no FreshMarkets fee. A customer-caused cancellation may retain only an actual documented non-refundable external-courier cost allowed at that stage; FreshMarkets-caused cancellation refunds the remaining paid amount in full. The Order becomes `CANCELED` only after every required refund member is canonically `SUCCEEDED`; ambiguity is an exception, not implied success. A separately audited global `refunds.manage` exception refund may occur after lock without reopening the customer command.
 
 ### ProvisionalTransactionSummary
 
@@ -308,81 +315,61 @@ The current release does not include a customer-directed substitution engine.
 
 The location-scoped process that turns a committed order into picked, packed, ready goods. It owns picking/packing state and fulfillment exceptions, not financial truth.
 
-### DeliveryJob, DeliveryBatch, and DeliveryStop
+### DeliveryJob
 
-- `DeliveryJob` represents the delivery work created for an order.
-- `DeliveryStop` snapshots the destination, coordinate, contact, instructions,
-  manual sequence, events, and result.
-- `DeliveryBatch` groups jobs/stops for dispatch and rider assignment. One batch
-  belongs to one fulfillment location and one compatible fulfillment-mode/cycle
-  context; `INSTANT` batches have no fabricated cycle.
+`DeliveryJob` represents the customer delivery work created for an Order and snapshots the destination, coordinate, required phone, optional provider email, customer instructions, committed window/promise, normalized progress, provider-dispatch identity, events, and result. It is executed only through an enabled external provider. Legacy DeliveryBatch, DeliveryStop, assignment, sequence, Rider, and route data remains readable solely for historical compatibility.
 
-The Admin delivery map is a Delivery-owned, location-scoped read projection. It
-shows all open jobs in the selected mode/cycle context, including already
-assigned jobs, while Core derives which jobs are selectable and why. Protected
-recipient/contact/instruction detail is a separate authorized projection. Raw
-Order/address/contact/instruction snapshots, serviceability polygons,
-fulfillment-ranking rules, provider responses, and Better Auth rows are never
-map DTOs.
+The Admin delivery workspace is a Delivery-owned, location-scoped queue/detail projection. It shows normalized status, committed window/promise, provider quotation/booking state, exceptions, and legal reconciliation/cancel/refresh actions. It is not a custom live-driver map and never exposes raw Order/address/contact snapshots, provider payloads, serviceability polygons, fulfillment-ranking rules, or Better Auth rows.
 
-Selection fails closed unless the canonical stop exists and reciprocally agrees
-with its job on status, batch, and manual sequence evidence. Map and Rider
-candidate reads are bounded keyset pages with explicit continuation/completeness
-evidence over immutable canonical IDs. Core binds continuations to an
-authoritative digest and total count of the complete filtered delivery or
-eligible Rider/workload projection; a cross-page revision change requires a
-typed refresh. Rider workload calculation uses set-based grouped batch and
-delivery aggregates joined by canonical Rider ID. The thin Web adapter uses
-fixed call/page/item ceilings, rejects oversized physical page arrays before
-entry traversal, strictly validates monotonic unique entities and freshness
-evidence, and retrieves the full selected operational context before presenting
-queue and Rider counts as complete. Mutable Rider display names affect
-presentation only after complete ID traversal.
+External-delivery queue/detail reads use bounded, revision-aware pagination and keep protected contact/address/instruction data out of list DTOs. Missing required coordinates, phone, store pickup profile, shipping weight, provider capability, or quotation evidence is an explicit non-bookable reason rather than synthesized data.
 
-Order still owns a persisted human-readable global order number as part of the
-canonical commitment. Until the current physical Orders implementation lands
-that field, Delivery map detail returns a nullable order-number projection and
-never presents the Order UUID as an order number.
-
-An authorized open job remains in the projection when its immutable stop has
-no authoritative coordinate. Its coordinate is null, it has no map marker, and
-Core marks it non-selectable with `MISSING_COORDINATE`; protected detail remains
-available without a batch-assignment action. Assignment still requires a
-non-null authoritative coordinate.
-
-Dispatch manually orders one to 24 selectable jobs. Route preview starts at the
-authoritative fulfillment location, loads immutable stop coordinates inside
-Core, follows the submitted order without optimization, and is informational:
-preview failure does not block assignment and preview success does not authorize
-it. Preview first enforces the same scoped open/selectable and reciprocal
-job/stop policy as assignment and calls no provider for rejected work. The
-reviewed `CreateAndAssignDeliveryBatch` command takes canonical Rider and
-job identities plus expected job versions and one stable idempotency key. Core
-atomically validates location/mode/cycle compatibility, active Rider and scope,
-coordinates, legal states, versions, and conflicting assignments; it then
-creates the batch/stops/events, advances the legal batch and job transitions,
-and assigns the Rider. Any failed guard leaves no batch, stop, event, Rider, or
-job mutation.
+Dispatch never manually groups jobs into internal routes or assigns Riders. Instant books only the provider/service snapshotted from the customer's opaque option. Scheduled lets a scoped store operator choose an enabled external provider and immediate or provider-supported scheduled pickup within the committed delivery window.
 
 Route execution is not encoded by mutating raw order rows. Delivery events advance the delivery state machine and may cause order projections to change.
 
 ### DeliveryProviderDispatch
 
+A delivery execution choice is mode-specific. For `INSTANT`, after Core resolves the confirmed
+address and operational location, the customer selects one enabled external-partner offer. The
+opaque fulfillment option—not a client-supplied provider code—is selection authority, and the
+Quote/Order fulfillment snapshot retains the selected provider code, provider service type, and
+customer display name. Core does not silently fall back to another partner if that choice becomes
+unavailable; checkout or dispatch enters an explicit unavailable/exception path.
+
+For `SCHEDULED`, the customer selects only the delivery cycle/window. Lalamove supplies the checkout delivery quotation. Near dispatch, location operations choose any enabled external provider and either immediate or supported scheduled pickup. This operational choice does not change the committed Scheduled window or customer charge.
+
+Each fulfillment/store location owns one courier pickup profile containing its sender name,
+normalized E.164 phone, optional email, structured pickup address, and optional pickup instructions.
+The location's existing latitude/longitude remain the single coordinate authority and are not
+duplicated in the profile. Missing profile data makes external dispatch unavailable for that
+location; Core never borrows a sender profile or coordinates from another store.
+
 A `DeliveryProviderDispatch` is Delivery-owned evidence for one attempt to hand one immutable
 `DeliveryJob` to an external courier. It snapshots the provider-neutral request assembled from the
 committed Order destination/contact, exact confirmed coordinate, fulfillment-location sender
-profile, and the physical package measured at packing. The snapshot intentionally contains the
+profile, and one derived delivery package. FreshMarkets sums the original committed lines plus
+committed paid additions, then classifies the complete snapshotted Order weight as one `BAG` below
+10,000 grams or one `BOX` at and above 10,000 grams. The snapshot intentionally contains the
 customer name, reachable phone, address, coordinate, and delivery instructions because the courier
 needs them to perform delivery. Access, retention, audit, and diagnostic-log policy protect that
 data; it is not removed from the provider request.
 
-The provider adapter converts the normalized `+63...` phone to the provider's E.164-without-`+`
-wire representation and sends exact coordinates, so FreshMarkets does not own a Grab city/barangay
-dictionary. Provider status remains observation on the dispatch. It never directly mutates an
+The provider adapter maps the required normalized `+63...` phone to each provider's documented wire representation and sends exact coordinates, so FreshMarkets does not own provider city/barangay dictionaries. Provider email is optional unless a verified capability requires it. Phone/address wire rules remain adapter-owned and must be reverified against official provider documentation during implementation.
+FreshMarkets remains merchant of record for the customer's Order and delivery-fee payment. An
+external courier quotation/charge is a separate FreshMarkets payable and never authorizes courier
+COD, purchase-service collection, or a provider-side customer payment. The current Lalamove PH
+mapping deliberately omits the optional provider `item` object and does not send perishable,
+temperature-sensitive, keep-dry, thermal-bag, parcel-dimension, or internal `BAG`/`BOX` metadata.
+Customer destination instructions may be combined into labeled recipient remarks when no separate
+supported field exists. Store pickup instructions never enter recipient remarks and remain internal
+unless an official pickup-instruction field is verified.
+Provider status remains observation on the dispatch. It never directly mutates an
 Order or skips a legal DeliveryJob transition. A booking whose outcome is uncertain is reconciled
 or escalated and is never blindly created again.
 
-Current-release proof is delivered timestamp, rider, and delivery event. Photo, recipient identity, and signature are future metadata.
+Switching provider after external creation begins is an explicit exception/recovery operation, not an automatic or concurrent fallback.
+
+Current-release proof is the provider-confirmed delivered timestamp and delivery event. Photo, recipient identity, and signature are future metadata.
 
 ## Admin and Analytics Read Side
 
@@ -396,13 +383,9 @@ Promotion administration manages draft creation, versioned definition changes, a
 
 `AdminCustomerSummary` composes the Customer-owned profile fields permitted for staff with location, committed-order count, last order, lifetime spend, average order value, Membership/trial state, and creation date. `AdminCustomerDetail` may compose addresses, Orders, Membership, Promotion grants/redemptions, Payments summaries, delivery history, support-visible events, and audit history. These are read models over their authoritative contexts; Admin and Analytics never become Customer owners, and Better Auth rows are never used as the Customer database.
 
-Operational read models answer immediate-action questions such as orders waiting/picking/packing/out for delivery, late orders, failed payments, refund attention, shortages, receiving exceptions, rider assignments, and fulfillment exceptions. They expose legal `allowedActions` derived in Core, not arbitrary status setters.
+Operational read models answer immediate-action questions such as orders waiting/picking/packing/out for delivery, late orders, failed payments, refund attention, shortages, receiving exceptions, external-provider dispatch exceptions, and fulfillment exceptions. They expose legal `allowedActions` derived in Core, not arbitrary status setters.
 
-The map dispatch workspace follows the same ownership rule: `delivery.read` plus
-location scope controls map/detail access, while the atomic create-and-assign
-command requires `delivery.manage` plus location scope. Rider candidates are
-canonical active Rider records with Core-derived open workload, never Better
-Auth user identities supplied by Web.
+The external-delivery workspace follows the same ownership rule: `delivery.read` plus location scope controls queue/detail access, while quotation, booking, cancel, refresh, and reconciliation commands require `delivery.manage` plus location scope. No Rider candidate, internal batch, or route-planning authority is exposed.
 
 ### Analytics and MetricDefinition
 
@@ -448,19 +431,20 @@ Audit logging is not event sourcing and is distinct from application diagnostics
 
 1. Core is authoritative for all business transitions and eligibility.
 2. Authentication identity never directly grants business permissions or checkout rights.
-3. Customer identity, catalog, and the active fulfillment mode are global; serviceability, local Variant activation, exact SKU price, inventory, capacity, fulfillment, and staff scope are location/market-aware.
+3. Customer identity and catalog are global. Selling state and fulfillment mode are separate global authorities; serviceability, local Variant activation, exact SKU retail price, Instant inventory, store pickup profile, fulfillment, and staff scope are location/market-aware.
 4. Customers provide an address and delivery choice, not a hub selection.
 5. A committed order has one immutable commercial history even when later adjustments/amendments occur.
 6. A canonical Payments outcome sufficient under the configured payment commitment policy and cycle cutoff are separate commitment boundaries.
-7. Fulfillment mode (`INSTANT`/`SCHEDULED`) is one global authority and directly determines whether new commerce uses stock/holds or cycle demand/procurement; there is no independent sourcing-mode field.
-8. A temporary Instant checkout hold, committed physical reservation, and planned procurement demand cannot be represented by the same state/quantity.
-9. All quantities used for stock and demand are exact integer `GRAM`, `MILLILITER`, or `PIECE` base units; SKU-specific consumption is immutable in committed snapshots.
+7. Selling state (`OPEN`/`PAUSED`) and fulfillment mode (`INSTANT`/`SCHEDULED`) are separate global authorities. Mode determines whether new commerce uses Instant stock/holds or Scheduled exact purchase demand; there is no independent sourcing-mode field.
+8. A temporary Instant checkout hold, committed Instant reservation, and Scheduled exact purchase demand cannot be represented by the same state/quantity.
+9. Active quantities used for stock and demand are exact integer `GRAM` or `PIECE` base units; SKU-specific consumption and shipping grams are immutable in committed snapshots. Volume rows are historical compatibility only.
 10. All money uses integer minor units, explicit currency, and auditable component breakdowns.
 11. Operational state changes require explicit commands, legal transitions, authorization, idempotency where replayable, and audit where material.
 12. Client/application/admin lifecycle commands use stable idempotency and expected aggregate versions where concurrent mutation is possible; provider events use unique provider-event identity and handler-side conditional updates instead of supplied versions.
 13. Admin and Analytics are read/application surfaces; neither owns or directly mutates source-context state.
-14. A customer chooses an opaque Core-provided fulfillment option; fulfillment location and Scheduled cycle routing remain internal evidence and are revalidated at Quote creation.
+14. A customer chooses an opaque Core-provided fulfillment option; Instant options bind a quoted external partner/service, while Scheduled options bind only a cycle/window plus the internal Lalamove checkout quote and leave final external-provider/pickup-timing choice to scoped location operations. Fulfillment location and provider routing remain internal evidence and are revalidated at Quote creation.
 15. A customer Order Issue is typed intake and status projection only. It never authorizes a refund, cancellation, replacement, credit, or inventory movement.
 16. Reorder copies eligible historical SKU quantities into the current active cart under current catalog, price, and availability rules; it never restores historical commercial or fulfillment state.
 17. A paid Order amendment is additive, Scheduled-before-cutoff only, independently priced and paid, and committed only from a canonical successful amendment Payment reaction. It never edits original Order lines or financial snapshots.
-18. Notification and invoice-readiness records are consequences of authoritative transitions. Neither may decide or retroactively change Membership, Payment, Order, Promotion, Inventory, Fulfillment, or Delivery state.
+18. Notification and invoice-readiness records are consequences of authoritative transitions. Notification Queue delivery is at-least-once and idempotent; neither notification nor invoice processing may decide or retroactively change Membership, Payment, Order, Promotion, Inventory, Fulfillment, or Delivery state.
+19. Active customer delivery is external-provider only and surfaces normalized progress without a custom live-driver map. Legacy Rider, batch, stop-sequence, route, Service Fee, capacity, mock-payment, and volume-unit records remain compatibility history, not active authority.

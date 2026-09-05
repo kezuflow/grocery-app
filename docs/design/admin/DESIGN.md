@@ -18,7 +18,7 @@ The reproduction is clean-room: public rendered pages may be inspected for geome
 
 Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/storefront tokens. Admin supports an explicit persisted light/dark appearance toggle in the header, uses a neutral operational canvas with orange as the controlled accent in both modes, and exposes a fixed five-step orange data-visualization palette through admin-scoped design tokens. This is a bounded appearance preference, not a runtime font, radius, or arbitrary theme customizer. Semantic success, warning, danger, information, and status colors retain their meanings and are not replaced with orange.
 
-Product administration uses two deliberately different projections. Global shows catalog identity, Category, media, and Variant definitions only. A selected operational location shows exact local prices, local Variant activation, and shared Product inventory. Global must not show resolved price, pricing context, local readiness, stock, or catalog-reference labels; location views must not show a sourcing-mode selector. The fulfillment-mode control is a Global setting because exactly one business-wide mode governs new commerce.
+Product administration uses two deliberately different projections. Global shows catalog identity, Category, media, and Variant definitions only. A selected operational location shows manually managed exact local retail prices, local Variant activation, and shared Product inventory. Global must not show resolved price, pricing context, local readiness, stock, or catalog-reference labels; location views must not show a sourcing-mode selector. Separate selling-state and fulfillment-mode controls are Global settings.
 
 ## Information Architecture
 
@@ -26,13 +26,13 @@ Primary navigation is organized around operational ownership:
 
 - Overview: Overview.
 - Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Memberships), and Promotions. Categories are catalog organization within Products, and Memberships is customer lifecycle administration within Customers; neither is a separate top-level workspace. Privacy/account-closure handling has no standalone Admin destination in the current release.
-- Operations: Inventory, Delivery, and Operational Exceptions. Inventory is the primary stock workspace and presents explicit Add stock and Remove stock actions with dated immutable activity. Procurement, Receiving, and Fulfillment remain distinct Core-owned workflows and purpose-built compatibility routes, but are reached contextually from Orders or exceptions rather than occupying primary navigation.
+- Operations: Inventory, External Delivery, and Operational Exceptions. Inventory is the primary Instant stock workspace and presents explicit Add stock and Remove stock actions with dated immutable activity. Exact Scheduled purchasing, Receiving, and Fulfillment remain distinct Core-owned workflows reached contextually from Orders or exceptions.
 - Finance: Payments (Overview, Transactions, Reconciliation) and Analytics.
-- Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Fulfillment Mode).
+- Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Selling State and Fulfillment Mode).
 
 Resource-specific detail and edit screens are contextual destinations, not permanent navigation items. Product, category, order, customer, membership, promotion, payment, staff, role, issue, and audit detail routes open from their owning list and preserve breadcrumbs back to the filtered list. A stable create route may appear as a nested shortcut; a route requiring a resource ID may not.
 
-Navigation items and actions are capability-aware and selected-scope aware. Core supplies both the authorized entries and their supported scope kinds; Web only narrows that set. The Admin selector exposes Global and reachable operational locations; it deliberately hides the internal market hierarchy. Global selection shows global administration and supported aggregate read sides, but not physical Inventory. Location selection (Central Cebu for the current release) shows Overview, Orders, Products, Inventory, Delivery, Analytics, Audit, and location Settings when authorized. Its Products workspace is an operational projection of the global catalog focused on local price, selling status, sourcing, and the shared Product inventory position; it does not transfer Product identity or Category ownership to the location. Customers, Memberships, Promotions, Payments/Pricing, Staff administration, and other global-only surfaces remain hidden. Unauthorized actions remain unavailable in Core regardless of visibility.
+Navigation items and actions are capability-aware and selected-scope aware. Core supplies both the authorized entries and their supported scope kinds; Web only narrows that set. The Admin selector exposes Global and reachable operational locations; it deliberately hides the internal market hierarchy. Global selection shows global administration and supported aggregate read sides, but not physical Inventory. Location selection (Central Cebu for the current release) shows Overview, Orders, Products, Inventory, External Delivery, Analytics, Audit, and location Settings when authorized. Its Products workspace is an operational projection of the global catalog focused on exact local retail price, selling status, and the shared Product inventory position; it does not transfer Product identity or Category ownership to the location. Customers, Memberships, Promotions, Payments/Pricing, Staff administration, and other global-only surfaces remain hidden. Unauthorized actions remain unavailable in Core regardless of visibility.
 
 ## Global Shell
 
@@ -49,28 +49,28 @@ The main canvas uses a broad neutral background, 24px desktop page gutters, thin
 
 The overview is a prioritized operational briefing, not four generic statistic cards. It combines:
 
-- current-cycle order and GMV/AOV context;
+- current-window Order context and only metrics with approved definitions;
 - failed payments and unresolved payment webhooks;
 - procurement requirements, shortages, and receiving discrepancies;
 - fulfillment workload and aging;
-- delivery workload, capacity, and failed deliveries;
+- external-delivery workload, provider exceptions, and failed deliveries;
 - subscription billing failures;
 - attention/exceptions queue;
 - recent material operations.
 
-Visual choices follow the question: KPI trend, queue count, capacity bar, aging table, timeline, or exception list. Every summary links to the filtered workspace that can resolve it.
+Visual choices follow the question: KPI trend, queue count, aging table, timeline, or exception list. Every summary links to the filtered workspace that can resolve it.
 
 The overview consumes one purpose-built, scope-aware Admin overview read model. A section the caller cannot read is represented as denied rather than zero. A supported section whose authority is not implemented is explicitly unavailable. Generated time and source freshness are visible so operators can distinguish current truth from stale or partial data.
 
-## Pricing And Fees
+## Commerce Configuration
 
-`/admin/commerce-configuration` is a global-scope workspace with separate Membership Price and Instant Service Fee tabs. Each tab independently enforces its existing read/manage capabilities, shows current and next effective configuration, explains customer impact and invariants, and submits only an effective-dated replacement with reason, confirmation, idempotency, and expected version. It never exposes generic history editing or rewrites existing Subscription, Quote, or Order snapshots.
+`/admin/commerce-configuration` is a global-scope workspace for Membership Price and the separate selling-state/fulfillment-mode controls. It explains pause/switch/readiness/reopen behavior and requires reason, confirmation, idempotency, and expected version for material changes. It exposes no Service Fee editor, internal delivery-fee formula, generic history editing, or committed-snapshot mutation.
 
 ## Page Archetypes
 
 ### Required screen inventory
 
-- Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category. Product workspaces cover identity, categorization, customer-facing details, primary/ordered media, persisted SKU variants, exact base-unit consumption, prices, location availability/sourcing, status, and audit history. Category workspaces cover parent hierarchy, name/slug/code, icon, sort order, status, contained products, and audit history.
+- Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category. Product workspaces cover identity, categorization, customer-facing details, primary/ordered media, persisted SKU variants, exact base-unit consumption/shipping grams, exact-location retail prices, local selling status, and audit history. Category workspaces cover parent hierarchy, name/slug/code, icon, sort order, status, contained products, and audit history.
 - Orders: Order List, Order Detail, and Order Issues. Detail composes items, immutable financial snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit history.
 - Customers, Memberships, and Promotions: list/detail workspaces and the approved explicit commands for each domain. The privacy/account-closure lifecycle remains a Core capability and audit seam, but is intentionally omitted from the current Admin navigation and page inventory until an owner-approved intake and retention procedure exists.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation. Refund and retry/reconcile actions are contextual commands from detail or exception states, not generic row edits.
@@ -101,7 +101,7 @@ Products and categories referenced by committed or historical records are deacti
 
 - Use shadcn form primitives with explicit labels, helper text, validation, and unsaved-change handling.
 - Group fields by business concept, not table columns.
-- Show effective dates, scope, and impact preview for prices, cycles, fees, promotions, and permissions.
+- Show effective dates, scope, and impact preview for exact prices, cycles/windows, Promotions, and permissions.
 - Require reason fields for material operational adjustments.
 
 ### Exception queue
@@ -145,7 +145,7 @@ Every workspace designs:
 - stale/conflict state with refresh/retry;
 - pending asynchronous state;
 - terminal success/failure state;
-- cutoff/capacity/availability warnings;
+- cutoff/provider/availability warnings;
 - destructive-action confirmation with consequence and reason.
 
 ## Responsive Behavior
@@ -153,7 +153,7 @@ Every workspace designs:
 - Desktop supports dense multi-column operational work.
 - Tablet collapses secondary columns and keeps filters/actions accessible.
 - Mobile prioritizes queue scanning, detail, and single-resource commands; large tables become stacked rows/cards or horizontal scroll with preserved headers.
-- Rider UI is optimized for mobile touch targets, offline-tolerant pending states, and one next task at a time; it is not a miniature admin table.
+- External-delivery actions remain touch-friendly but do not create an internal Rider application.
 
 ## Accessibility and Safety
 
@@ -170,7 +170,7 @@ Every workspace designs:
 - Inventory: inspect location balances and record simple stock additions/removals with server-dated immutable activity.
 - Procurement and Receiving: preserve committed-demand and receiving correctness behind contextual advanced workflows; do not make them the default stock-entry vocabulary.
 - Fulfillment: preserve paid-order picking/packing transitions behind Orders and exception handling; do not represent fulfillment as a generic inventory edit.
-- Delivery: manage capacity, batches, riders, stops, and failed delivery.
+- Delivery: quote/book enabled external providers, inspect normalized status, and reconcile/cancel/resolve failed delivery without an internal fleet or custom driver map.
 - Customers: support identity-linked customer context without editing auth records.
 - Subscriptions: manage membership state and billing failures, not grocery orders.
 - Payments: reconcile provider truth, attempts, refunds, and exceptions.

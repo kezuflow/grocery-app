@@ -2,16 +2,16 @@
 
 ## Product Position
 
-The marketplace is a grocery commerce experience with scheduled, serviceable delivery and subscription-gated purchase. It uses mature DoorDash-inspired discovery and checkout patterns as a usability reference, but it is not a DoorDash clone and must not import restaurant assumptions or branding.
+The marketplace is a grocery commerce experience with serviceable external delivery: authenticated pay-as-you-go Instant commerce and membership-gated Scheduled preorder commerce. It uses mature DoorDash-inspired discovery and checkout patterns as a usability reference, but it is not a DoorDash clone and must not import restaurant assumptions or branding.
 
 ## Core Principles
 
-- Browsing is public where appropriate; purchasing requires an authenticated customer with an active/trialing subscription.
-- The customer chooses products, quantities, address, and delivery option—not a fulfillment hub.
+- Browsing is public where appropriate; purchasing requires authentication. Only Scheduled requires an eligible active/trialing/past-due-within-policy membership.
+- The customer chooses products, quantities, address, and the allowed mode-specific delivery option—not a fulfillment hub or Scheduled execution method.
 - Grocery hierarchy is explicit: product -> fixed sellable variant -> base inventory consumption.
 - Availability messaging is honest but does not expose internal inventory/procurement complexity unnecessarily.
-- Delivery serviceability and cycle selection happen before payment commitment.
-- Every final price, fee, promotion, and eligibility decision comes from Core at checkout.
+- Delivery serviceability, provider quotation, and any Scheduled window selection happen before payment commitment.
+- Every final exact-location retail price, delivery quotation, Promotion, and eligibility decision comes from Core at checkout. New commerce shows no FreshMarkets Service Fee or PayMongo processing fee.
 - The customer sees a clear commitment moment: payment succeeds, order becomes locked, and the next editable/additive window is explained.
 
 ## Information Architecture
@@ -94,11 +94,11 @@ Cart shows:
 - current displayed price/subtotal;
 - availability warnings;
 - merchandise minimum progress;
-- subscription status prompt;
+- mode-specific membership status prompt;
 - address/cycle context when selected;
-- delivery-fee/promotion preview only when enough context exists.
+- provider-quoted delivery-fee/Promotion preview only when enough context exists.
 
-Cart is editable and does not lock price or permanently reserve stock/capacity. Prices are current admin-managed values, not a time-boxed guarantee; do not show a countdown. Stale price/availability responses link to refresh/review actions.
+Cart is editable and does not lock price or permanently reserve stock. Prices are current exact-store Admin-managed values, not a time-boxed guarantee; do not show a countdown. Stale price/availability/quotation responses link to refresh/review actions.
 
 ## Address and Serviceability
 
@@ -122,7 +122,7 @@ Use recipient, phone, barangay, city, notes, and landmark/instructions fields. S
 
 ## Fulfillment Selection
 
-Present the one global active mode in customer language: an explicit Instant promise/ETA with its fee, or the Scheduled delivery date/window with any zone fee/capacity messaging. Do not expose internal hub names as choices. The confirmed delivery coordinate resolves the closest operational location by straight-line distance; stock never sends the customer to another hub. If a Scheduled cycle is full, offer available valid alternatives rather than accepting and silently shifting the order. Instant presentation follows the dedicated Instant-mode design specification and must not promise times the current rider supply cannot keep.
+Present the one global active mode in customer language. For Instant, after address/serviceability and before payment, show one card per enabled quoteable external delivery partner with display name, service label, provider-quoted delivery fee, and supported promise/ETA. The customer selects one opaque option; do not expose quotation/order IDs or silently replace the partner. For Scheduled, show only the delivery date/window and Lalamove-priced delivery amount; do not show the eventual provider choice. Explain that store operations later choose an enabled external courier and pickup timing. Do not show capacity, internal fleet, Rider, batch, hub, or route-planning concepts. If selling is paused or a provider/window is unavailable, show an explicit recovery state.
 
 At/after a Scheduled cutoff, show that ordinary procurement-affecting changes are closed. If an additive amendment is available before cutoff, show it as a separate add-on action rather than “edit paid order.”
 
@@ -130,15 +130,15 @@ At/after a Scheduled cutoff, show that ordinary procurement-affecting changes ar
 
 Checkout should make the commitment legible:
 
-1. Subscription eligibility.
+1. Authentication plus mode-specific membership eligibility.
 2. Delivery address and serviceability.
-3. Fulfillment commitment — Instant promise or Scheduled cycle/window — and fee.
+3. Fulfillment commitment — Instant delivery-partner choice and promise, or Scheduled cycle/window with store-assigned delivery — and fee.
 4. Items, fixed variants, price snapshots, discounts, minimum order.
 5. Payment method/provider handoff.
 6. Terms/commitment notice.
 7. Pending/recovery/success state.
 
-Core recalculates current price, discount, stock, serviceability, and route-based delivery fee immediately before payment. If the total changed, the browser presents the replacement quote and requires a distinct acceptance action before creating payment. The browser must also handle payment pending, return failure, duplicate submission, lost response, cycle-full race, route-fee failure, and recoverable retry states.
+Core revalidates selling state, exact store/SKU price, discount, Instant stock/hold or Scheduled window/cutoff, serviceability, and provider quotation immediately before payment. If the total changed, the browser presents the replacement Quote and requires distinct acceptance. The browser handles payment pending, return failure, duplicate submission, lost response, quotation expiry/unavailability, and recoverable retry states. PayMongo sandbox is the development flow; no application mock-payment UI is shown.
 
 ## Order History and Status
 
@@ -148,7 +148,7 @@ Order detail prioritizes:
 - delivery date/window and destination snapshot;
 - item/variant/price snapshot;
 - payment/total summary;
-- fulfillment/delivery timeline;
+- normalized fulfillment/external-delivery timeline without a custom live-driver map;
 - next valid customer action (amend where eligible, retry payment, report an issue, buy again, contact support).
 
 Do not rewrite historical details after catalog/address changes. Show amendments as separate financial additions in one understandable timeline.
