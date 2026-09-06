@@ -44,6 +44,7 @@ type PreviewRow = {
   batch_cycle_id: string | null;
   batch_location_id: string | null;
   batch_context_resolution_status: "RESOLVED" | "LEGACY_UNRESOLVED" | null;
+  provider_dispatch_id: string | null;
 };
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
@@ -188,10 +189,13 @@ export async function previewDeliveryBatchRoute(
               batch.status AS batch_status,
               batch.fulfillment_mode AS batch_fulfillment_mode,
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,
-              batch.context_resolution_status AS batch_context_resolution_status
+              batch.context_resolution_status AS batch_context_resolution_status,
+              provider_dispatch.id AS provider_dispatch_id
        FROM delivery_job job
        LEFT JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        LEFT JOIN delivery_batch batch ON batch.id=job.batch_id
+       LEFT JOIN delivery_provider_dispatch provider_dispatch
+         ON provider_dispatch.delivery_job_id=job.id
        WHERE job.id IN (${ids.map(() => "?").join(",")})`,
     )
     .bind(...ids)

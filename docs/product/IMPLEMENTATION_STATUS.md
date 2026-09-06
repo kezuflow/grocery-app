@@ -556,6 +556,18 @@ Status date: 2026-09-06. This file is descriptive evidence only. The canonical d
   Memberships, Promotions, Payments/Pricing, and Staff administration are removed from both the
   desktop sidebar and mobile navigation.
 
+### Location delivery execution
+
+- Each active fulfillment/store location can own a versioned sender and structured courier pickup
+  profile; its authoritative coordinates remain on the location itself.
+- The active Delivery workspace is an external-courier queue with immediate/future Lalamove booking,
+  manual provider refresh/cancel, and tracking links. Rider assignment, delivery batches, route
+  planning, and live-driver maps are absent from active Admin delivery UI. Instant external booking
+  is checked against the provider selected by the customer at checkout.
+- Core assembles the provider request from committed Order/stop snapshots and total shipping grams,
+  persists client idempotency and immutable dispatch evidence, and atomically prevents the same job
+  from being concurrently claimed by compatibility internal-assignment data.
+
 ## Maturity by area
 
 | Area                       | Current evidence                                                                                                                                                                                    | Not established                                           |

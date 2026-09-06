@@ -239,12 +239,14 @@ describe("Lalamove delivery adapter", () => {
       market: "PH",
       language: "en_PH",
       environment: "sandbox",
-      fetcher: vi.fn<typeof fetch>().mockResolvedValueOnce(
-        Response.json(
-          { errors: [{ id: "ERR_RATE_LIMIT" }] },
-          { status: 429, headers: { "Retry-After": "3", "Request-ID": "rate-limit-1" } },
+      fetcher: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          Response.json(
+            { errors: [{ id: "ERR_RATE_LIMIT" }] },
+            { status: 429, headers: { "Retry-After": "3", "Request-ID": "rate-limit-1" } },
+          ),
         ),
-      ),
       now: () => 1_725_318_000_000,
       telemetry: { clock: () => 0, sink: () => undefined },
     });

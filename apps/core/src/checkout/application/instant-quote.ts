@@ -20,10 +20,7 @@ import {
   resolveLineShippingWeightGrams,
   type CanonicalBaseUnitCode,
 } from "../../fulfillment/domain/delivery-package";
-import {
-  quoteProviderDelivery,
-  type ProviderCheckoutAddress,
-} from "./quote-provider-delivery";
+import { quoteProviderDelivery, type ProviderCheckoutAddress } from "./quote-provider-delivery";
 
 export type QuoteItem = {
   sku_id: string;
@@ -184,7 +181,11 @@ export async function createInstantQuote(
       command.requestId,
     );
   if (!command.deliveryPartner)
-    return failure("CONFIGURATION_ERROR", "Select an available delivery partner", command.requestId);
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Select an available delivery partner",
+      command.requestId,
+    );
   const provider = dependencies.deliveryProviders?.get(command.deliveryPartner.code);
   if (!provider)
     return failure("CONFIGURATION_ERROR", "Delivery partner is unavailable", command.requestId);

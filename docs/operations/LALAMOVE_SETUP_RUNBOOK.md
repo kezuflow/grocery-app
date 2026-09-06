@@ -122,3 +122,23 @@ pnpm exec wrangler secret put LALAMOVE_API_SECRET --config wrangler.jsonc --env 
 Use the actual deployment environment name. Enable `lalamove` in that environment's ordered
 `DELIVERY_PROVIDERS` only after all acceptance evidence above passes. Production and sandbox keys
 must never be mixed.
+
+## 7. Dispatch and incident recovery
+
+Admin Delivery is an external-courier queue. It creates one provider delivery per customer Order;
+there is no active Rider, batch, route-planning, or live-driver-map path. Instant must retain the
+customer-selected provider/service snapshot. Scheduled permits an immediate pickup or a supported
+future pickup within the committed delivery boundary.
+
+- On a definite provider rejection, preserve the failed dispatch and use a new reviewed operator
+  intent only after the cause is corrected.
+- On `OUTCOME_UNKNOWN` or `RECONCILIATION_REQUIRED`, never blindly create again. Use the provider
+  order identity/merchant reference to reconcile, then refresh the existing dispatch.
+- Webhook duplicates and older observations are acknowledged no-ops. Invalid signatures are 401;
+  do not disable verification during an incident.
+- A manual refresh calls provider GET and applies only that dispatch version. A stale result means
+  another event won; reload before acting.
+- Cancellation is accepted only when the provider confirms it. A transport timeout is not proof of
+  cancellation and must be reconciled.
+- Provider status is projected only to supported FreshMarkets states. Do not fabricate an Arrived
+  state or driver location when Lalamove did not provide that fact.

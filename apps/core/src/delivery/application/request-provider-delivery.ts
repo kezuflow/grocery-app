@@ -103,6 +103,9 @@ export async function requestProviderDelivery(
   command: Readonly<{
     requestId: string;
     deliveryJobId: string;
+    /** Optional atomic eligibility claim used by operator dispatch commands. */
+    expectedDeliveryJobVersion?: number;
+    clientIdempotencyKey?: string;
     request: CreateDeliveryRequest;
   }>,
 ): Promise<RequestProviderDeliveryResult> {
@@ -115,8 +118,16 @@ export async function requestProviderDelivery(
     .prepare(
       `INSERT OR IGNORE INTO delivery_provider_dispatch
        (id, delivery_job_id, provider, merchant_order_id, request_hash,
-        request_snapshot_json, status, attempt_count, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, 1, ?, ?)`,
+        request_snapshot_json, status, attempt_count, version, created_at, updated_at,
+        client_idempotency_key)
+       SELECT ?, ?, ?, ?, ?, ?, 'PENDING', 0, 1, ?, ?, ?
+       FROM delivery_job job
+       WHERE job.id=? AND (
+         ? IS NULL OR (
+           job.version=? AND job.status IN ('UNASSIGNED','RETRY_SCHEDULED')
+           AND job.batch_id IS NULL AND job.rider_id IS NULL
+         )
+       )`,
     )
     .bind(
       dispatchId,
@@ -127,6 +138,10 @@ export async function requestProviderDelivery(
       requestSnapshot,
       now,
       now,
+      command.clientIdempotencyKey ?? null,
+      command.deliveryJobId,
+      command.expectedDeliveryJobVersion ?? null,
+      command.expectedDeliveryJobVersion ?? null,
     )
     .run();
 
@@ -237,6 +252,32 @@ export async function requestProviderDelivery(
       "The provider accepted the booking but its local record needs reconciliation",
       command.requestId,
     );
+
+  if (command.expectedDeliveryJobVersion !== undefined) {
+    const assigned = await database
+      .prepare(
+        `UPDATE delivery_job SET status='ASSIGNED',version=version+1,updated_at=?
+         WHERE id=? AND version=? AND status IN ('UNASSIGNED','RETRY_SCHEDULED')
+           AND batch_id IS NULL AND rider_id IS NULL`,
+      )
+      .bind(Date.now(), command.deliveryJobId, command.expectedDeliveryJobVersion)
+      .run();
+    if ((assigned.meta?.changes ?? 0) !== 1) {
+      await database
+        .prepare(
+          `UPDATE delivery_provider_dispatch
+           SET status='RECONCILIATION_REQUIRED',last_error_code='LOCAL_JOB_CLAIM_FAILED',
+               version=version+1,updated_at=? WHERE id=? AND status='ACTIVE'`,
+        )
+        .bind(Date.now(), dispatchId)
+        .run();
+      return failure(
+        "DELIVERY_RECONCILIATION_REQUIRED",
+        "The provider accepted the booking but the delivery job claim needs reconciliation",
+        command.requestId,
+      );
+    }
+  }
 
   const completed = await readDispatch(database, dispatchId);
   return completed

@@ -41,6 +41,7 @@ type DetailRow = {
   batch_location_id: string | null;
   batch_status: string | null;
   batch_context_resolution_status: "RESOLVED" | "LEGACY_UNRESOLVED" | null;
+  provider_dispatch_id: string | null;
 };
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
@@ -157,10 +158,13 @@ export async function getDeliveryMapDetail(
               batch.fulfillment_mode AS batch_fulfillment_mode,
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,
               batch.status AS batch_status,
-              batch.context_resolution_status AS batch_context_resolution_status
+              batch.context_resolution_status AS batch_context_resolution_status,
+              provider_dispatch.id AS provider_dispatch_id
        FROM delivery_job job
        JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        LEFT JOIN delivery_batch batch ON batch.id=job.batch_id
+       LEFT JOIN delivery_provider_dispatch provider_dispatch
+         ON provider_dispatch.delivery_job_id=job.id
        WHERE job.id=? AND job.location_id=? AND job.fulfillment_mode=?
          AND ${request.fulfillmentMode === "INSTANT" ? "job.cycle_id IS NULL" : "job.cycle_id=?"}
          AND job.status NOT IN ('DELIVERED','CANCELED')`,

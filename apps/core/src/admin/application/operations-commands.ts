@@ -598,7 +598,7 @@ export async function advanceAdminDelivery(
     };
   const row = await deps.db
     .prepare(
-      "SELECT d.id, d.status, d.version, d.rider_user_id, d.delivered_at, d.cycle_id, f.location_id FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE d.order_id=?",
+      "SELECT d.id,d.status,d.version,d.rider_user_id,d.delivered_at,d.cycle_id,d.fulfillment_mode,f.location_id FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE d.order_id=?",
     )
     .bind(request.orderId)
     .first<{
@@ -608,6 +608,7 @@ export async function advanceAdminDelivery(
       rider_user_id: string | null;
       delivered_at: number | null;
       cycle_id: string | null;
+      fulfillment_mode: "INSTANT" | "SCHEDULED";
       location_id: string;
     }>();
   if (!row || row.location_id !== request.locationId)
@@ -629,8 +630,10 @@ export async function advanceAdminDelivery(
       orderId: request.orderId,
       cycleId: row.cycle_id,
       locationId: row.location_id,
+      fulfillmentMode: row.fulfillment_mode,
       status: row.status,
       riderAssigned: row.rider_user_id !== null,
+      externalDispatch: null,
       deliveredAtIso: row.delivered_at === null ? null : new Date(row.delivered_at).toISOString(),
       version: row.version,
       allowedActions: allowedDeliveryActions(row.status, row.rider_user_id !== null),

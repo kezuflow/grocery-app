@@ -175,6 +175,43 @@ function statusRank(status: ProviderDeliveryStatus): number {
   }
 }
 
+function deliveryJobStatus(status: ProviderDeliveryStatus): string | null {
+  switch (status) {
+    case "ALLOCATING":
+    case "PENDING_PICKUP":
+    case "PICKING_UP":
+    case "PENDING_DROP_OFF":
+      return "ASSIGNED";
+    case "IN_DELIVERY":
+      return "EN_ROUTE";
+    case "COMPLETED":
+      return "DELIVERED";
+    case "CANCELED":
+      return "CANCELED";
+    case "FAILED":
+    case "IN_RETURN":
+    case "RETURNED":
+      return "FAILED";
+    default:
+      return null;
+  }
+}
+
+function projectedOrderStatus(jobStatus: string): string | null {
+  switch (jobStatus) {
+    case "EN_ROUTE":
+      return "OUT_FOR_DELIVERY";
+    case "DELIVERED":
+      return "DELIVERED";
+    case "FAILED":
+      return "EXCEPTION";
+    case "CANCELED":
+      return "CANCELED";
+    default:
+      return null;
+  }
+}
+
 function json(requestId: string, status: number, body: unknown): Response {
   return Response.json(body, { status, headers: { "x-request-id": requestId } });
 }
@@ -224,11 +261,7 @@ export async function handleLalamoveWebhook(
   const root = object(payload);
   if (
     !root ||
-    !(await validSignature(
-      root,
-      environment.LALAMOVE_API_KEY,
-      environment.LALAMOVE_API_SECRET,
-    ))
+    !(await validSignature(root, environment.LALAMOVE_API_KEY, environment.LALAMOVE_API_SECRET))
   )
     return json(requestId, 401, {
       error: { code: "WEBHOOK_AUTHENTICATION_FAILED", message: "Unauthorized", requestId },
@@ -366,13 +399,57 @@ export async function handleLalamoveWebhook(
       requestId,
     });
   }
-  await database
-    .prepare(
-      `UPDATE delivery_provider_event_inbox
-       SET processing_status='APPLIED', processed_at=?, last_error_code=NULL WHERE id=?`,
-    )
-    .bind(Date.now(), inboxId)
-    .run();
+  const normalizedStatus = deliveryJobStatus(parsed.status);
+  const orderStatus = normalizedStatus ? projectedOrderStatus(normalizedStatus) : null;
+  const appliedAt = Date.now();
+  const statements: D1PreparedStatement[] = [
+    database
+      .prepare(
+        `UPDATE delivery_provider_event_inbox
+         SET processing_status='APPLIED', processed_at=?, last_error_code=NULL WHERE id=?`,
+      )
+      .bind(appliedAt, inboxId),
+  ];
+  if (normalizedStatus) {
+    statements.push(
+      database
+        .prepare(
+          `UPDATE delivery_job SET status=?,delivered_at=?,version=version+1,updated_at=?
+           WHERE id=(SELECT delivery_job_id FROM delivery_provider_dispatch WHERE id=?)
+             AND status NOT IN ('DELIVERED','CANCELED','ESCALATED')`,
+        )
+        .bind(
+          normalizedStatus,
+          normalizedStatus === "DELIVERED" ? appliedAt : null,
+          appliedAt,
+          dispatch.id,
+        ),
+      database
+        .prepare(
+          `UPDATE delivery_stop SET status=?,delivered_at=?,version=version+1,updated_at=?
+           WHERE delivery_job_id=(SELECT delivery_job_id FROM delivery_provider_dispatch WHERE id=?)
+             AND status NOT IN ('DELIVERED','CANCELED','ESCALATED')`,
+        )
+        .bind(
+          normalizedStatus,
+          normalizedStatus === "DELIVERED" ? appliedAt : null,
+          appliedAt,
+          dispatch.id,
+        ),
+    );
+  }
+  if (orderStatus) {
+    statements.push(
+      database
+        .prepare(
+          `UPDATE grocery_order SET status=?,version=version+1
+           WHERE id=(SELECT merchant_order_id FROM delivery_provider_dispatch WHERE id=?)
+             AND status NOT IN ('DELIVERED','CANCELED','EXPIRED')`,
+        )
+        .bind(orderStatus, dispatch.id),
+    );
+  }
+  await database.batch(statements);
   log("info", "delivery_provider_webhook", {
     requestId,
     provider: "lalamove",

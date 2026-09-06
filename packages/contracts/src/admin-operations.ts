@@ -112,11 +112,88 @@ export type AdminDeliveryOperationView = {
   orderId: string;
   cycleId: string | null;
   locationId: string;
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
   riderAssigned: boolean;
+  externalDispatch: {
+    dispatchId: string;
+    provider: "lalamove" | "grab-express";
+    status: string;
+    trackingUrl: string | null;
+    version: number;
+  } | null;
   deliveredAtIso: string | null;
   version: number;
   allowedActions: ReadonlyArray<DeliveryAction>;
+};
+
+export type LocationDeliveryProfileView = {
+  locationId: string;
+  locationName: string;
+  coordinate: { latitude: number; longitude: number };
+  profile: {
+    senderName: string;
+    phoneE164: string;
+    email: string | null;
+    formattedAddress: string;
+    addressLine1: string;
+    addressLine2: string | null;
+    barangay: string | null;
+    city: string;
+    region: string | null;
+    postalCode: string | null;
+    countryCode: string;
+    pickupInstructions: string | null;
+    version: number;
+  } | null;
+};
+
+export type UpsertLocationDeliveryProfileRequest = AdminOperationsLocationRequest & {
+  senderName: string;
+  phoneE164: string;
+  email?: string | null;
+  formattedAddress: string;
+  addressLine1: string;
+  addressLine2?: string | null;
+  barangay?: string | null;
+  city: string;
+  region?: string | null;
+  postalCode?: string | null;
+  countryCode: string;
+  pickupInstructions?: string | null;
+  /** Zero creates the first profile; positive values update it with CAS. */
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type RequestExternalDeliveryRequest = AdminOperationsLocationRequest & {
+  jobId: string;
+  expectedVersion: number;
+  providerCode: "lalamove";
+  pickup: { kind: "IMMEDIATE" } | { kind: "SCHEDULED"; pickupAt: string };
+  idempotencyKey: string;
+};
+
+export type ExternalDeliveryMutationRequest = AdminOperationsLocationRequest & {
+  dispatchId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type ExternalDeliveryDispatchView = {
+  dispatchId: string;
+  deliveryJobId: string;
+  provider: "lalamove" | "grab-express";
+  providerDeliveryId: string | null;
+  status: string;
+  providerStatus: string | null;
+  trackingUrl: string | null;
+  pickupPin: string | null;
+  quoteAmountMinor: number | null;
+  quoteCurrency: string | null;
+  attemptCount: number;
+  lastErrorCode: string | null;
+  version: number;
 };
 
 export type OperationalExceptionPage = {
@@ -290,6 +367,21 @@ export type AdminOperationsService = {
   listDeliveryOperations(
     request: AdminDeliveryOperationsRequest,
   ): Promise<RpcResult<DeliveryOperationsSummary>>;
+  getLocationDeliveryProfile(
+    request: AdminOperationsLocationRequest,
+  ): Promise<RpcResult<LocationDeliveryProfileView>>;
+  upsertLocationDeliveryProfile(
+    request: UpsertLocationDeliveryProfileRequest,
+  ): Promise<RpcResult<LocationDeliveryProfileView>>;
+  requestExternalDelivery(
+    request: RequestExternalDeliveryRequest,
+  ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
+  refreshExternalDelivery(
+    request: ExternalDeliveryMutationRequest,
+  ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
+  cancelExternalDelivery(
+    request: ExternalDeliveryMutationRequest,
+  ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
   listOperationalExceptions(
     request: AdminOperationalExceptionsRequest,
   ): Promise<RpcResult<OperationalExceptionPage>>;

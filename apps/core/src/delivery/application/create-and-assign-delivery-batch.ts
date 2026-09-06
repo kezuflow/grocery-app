@@ -121,6 +121,8 @@ function candidateFailure(
     candidate.stopStatus !== candidate.jobStatus
   )
     return { code: "ILLEGAL_TRANSITION", message: "Delivery job is not assignable" };
+  if (candidate.providerDispatchId !== null)
+    return { code: "CONFLICT", message: "Delivery already has an external provider dispatch" };
   if (
     candidate.jobBatchId !== candidate.stopBatchId ||
     candidate.jobSequence !== candidate.stopSequence ||

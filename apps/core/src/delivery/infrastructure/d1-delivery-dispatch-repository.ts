@@ -27,6 +27,7 @@ export type DeliveryAssignmentCandidate = {
   batchLocationId: string | null;
   batchZoneId: string | null;
   batchResolutionStatus: string | null;
+  providerDispatchId: string | null;
 };
 
 type CandidateRow = {
@@ -54,6 +55,7 @@ type CandidateRow = {
   batch_location_id: string | null;
   batch_zone_id: string | null;
   batch_resolution_status: string | null;
+  provider_dispatch_id: string | null;
 };
 
 export async function loadDeliveryAssignmentCandidates(
@@ -73,10 +75,13 @@ export async function loadDeliveryAssignmentCandidates(
               batch.fulfillment_mode AS batch_mode,
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,
               batch.zone_id AS batch_zone_id,
-              batch.context_resolution_status AS batch_resolution_status
+              batch.context_resolution_status AS batch_resolution_status,
+              provider_dispatch.id AS provider_dispatch_id
        FROM delivery_job job
        LEFT JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        LEFT JOIN delivery_batch batch ON batch.id=job.batch_id
+       LEFT JOIN delivery_provider_dispatch provider_dispatch
+         ON provider_dispatch.delivery_job_id=job.id
        WHERE job.id IN (${jobIds.map(() => "?").join(",")})`,
     )
     .bind(...jobIds)
@@ -109,6 +114,7 @@ export async function loadDeliveryAssignmentCandidates(
         batchLocationId: row.batch_location_id,
         batchZoneId: row.batch_zone_id,
         batchResolutionStatus: row.batch_resolution_status,
+        providerDispatchId: row.provider_dispatch_id,
       },
     ]),
   );
@@ -217,6 +223,10 @@ export async function commitDeliveryBatch(
                  SELECT 1 FROM rider_identity
                  WHERE id=? AND status='ACTIVE' AND version=?
                )
+            OR EXISTS (
+                 SELECT 1 FROM delivery_provider_dispatch
+                 WHERE delivery_job_id IN (${input.candidates.map(() => "?").join(",")})
+               )
             OR (?='SCHEDULED' AND NOT EXISTS (
                  SELECT 1 FROM delivery_cycle cycle
                  WHERE cycle.id=? AND cycle.market_id=? AND cycle.status=? AND cycle.version=?
@@ -237,6 +247,7 @@ export async function commitDeliveryBatch(
         input.marketId,
         input.riderId,
         input.riderVersion,
+        ...input.candidates.map((candidate) => candidate.jobId),
         input.fulfillmentMode,
         input.cycleId,
         input.marketId,

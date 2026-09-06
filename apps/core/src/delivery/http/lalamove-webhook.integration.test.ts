@@ -126,6 +126,11 @@ describe("Lalamove tracking webhook", () => {
       processing_status: "APPLIED",
     });
     expect(inbox?.raw_payload).toContain("Ana Private Customer");
+    await expect(
+      env.DB.prepare(
+        "SELECT status,version FROM delivery_job WHERE id='job-lalamove-webhook-1'",
+      ).first(),
+    ).resolves.toEqual({ status: "EN_ROUTE", version: 2 });
   });
 
   it("rejects a payload whose signed data was changed", async () => {

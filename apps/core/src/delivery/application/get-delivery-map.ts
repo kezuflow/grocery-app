@@ -54,6 +54,9 @@ type DeliveryMapRow = {
   batch_status: string | null;
   batch_context_resolution_status: "RESOLVED" | "LEGACY_UNRESOLVED" | null;
   batch_updated_at: number | null;
+  provider_dispatch_id: string | null;
+  provider_dispatch_status: string | null;
+  provider_dispatch_updated_at: number | null;
 };
 
 const DELIVERY_MAP_ROW_SELECT = `SELECT job.id AS job_id, job.order_id, job.batch_id,
@@ -69,11 +72,16 @@ const DELIVERY_MAP_ROW_SELECT = `SELECT job.id AS job_id, job.order_id, job.batc
               batch.cycle_id AS batch_cycle_id, batch.location_id AS batch_location_id,
               batch.status AS batch_status,
               batch.context_resolution_status AS batch_context_resolution_status,
-              batch.updated_at AS batch_updated_at
+              batch.updated_at AS batch_updated_at,
+              provider_dispatch.id AS provider_dispatch_id,
+              provider_dispatch.status AS provider_dispatch_status,
+              provider_dispatch.updated_at AS provider_dispatch_updated_at
        FROM delivery_job job
        LEFT JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        LEFT JOIN rider_identity rider ON rider.id=job.rider_id
-       LEFT JOIN delivery_batch batch ON batch.id=job.batch_id`;
+       LEFT JOIN delivery_batch batch ON batch.id=job.batch_id
+       LEFT JOIN delivery_provider_dispatch provider_dispatch
+         ON provider_dispatch.delivery_job_id=job.id`;
 
 async function readProjectionRevision(
   db: D1Database,
@@ -99,6 +107,7 @@ async function readProjectionRevision(
       row.stop_updated_at ?? 0,
       row.rider_updated_at ?? 0,
       row.batch_updated_at ?? 0,
+      row.provider_dispatch_updated_at ?? 0,
     );
   }
   return {
@@ -212,7 +221,7 @@ export function deriveDeliverySelection(
     | "batch_context_resolution_status"
     | "latitude"
     | "longitude"
-  >,
+  > & { provider_dispatch_id?: string | null },
   context: ResolvedDeliveryReadContext,
 ): DeliveryMapPin["selection"] {
   if (row.context_resolution_status !== "RESOLVED")
@@ -241,6 +250,8 @@ export function deriveDeliverySelection(
   }
   if (row.latitude === null || row.longitude === null)
     return { selectable: false, reason: "MISSING_COORDINATE" };
+  if (row.provider_dispatch_id !== null)
+    return { selectable: false, reason: "EXTERNAL_PROVIDER_DISPATCH_EXISTS" };
   if (row.status !== "UNASSIGNED" && row.status !== "RETRY_SCHEDULED")
     return { selectable: false, reason: "STATUS_NOT_ASSIGNABLE" };
   if (row.batch_id !== null && !["COMPLETED", "CANCELED"].includes(row.batch_status ?? ""))

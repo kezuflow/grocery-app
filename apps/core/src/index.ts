@@ -15,6 +15,7 @@ import {
 } from "@freshmarkets/contracts";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
+import { configuredInstantDeliveryPartners } from "./delivery/infrastructure/runtime-delivery-provider";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
 import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
 import { systemClock } from "@freshmarkets/domain-shared";
@@ -84,6 +85,13 @@ import {
   openAdminSelling,
   pauseAdminSelling,
 } from "./admin/application/operations-commands";
+import {
+  cancelExternalDelivery as cancelExternalDeliveryCommand,
+  getLocationDeliveryProfile as getLocationDeliveryProfileQuery,
+  refreshExternalDelivery as refreshExternalDeliveryCommand,
+  requestExternalDelivery as requestExternalDeliveryCommand,
+  upsertLocationDeliveryProfile as upsertLocationDeliveryProfileCommand,
+} from "./admin/application/delivery-provider-operations";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
 import { getAdminBootstrap as getAdminBootstrapQuery } from "./admin/application/admin-bootstrap";
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
@@ -794,6 +802,43 @@ const adminOperationsCycleSchema = adminOperationsLocationSchema.extend({
   cycleId: validationSchema.string().trim().min(1).max(200).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
+});
+const locationDeliveryProfileSchema = adminOperationsLocationSchema.extend({
+  senderName: validationSchema.string().trim().min(1).max(120),
+  phoneE164: validationSchema
+    .string()
+    .trim()
+    .regex(/^\+[1-9]\d{7,14}$/),
+  email: validationSchema.string().trim().email().max(254).nullable().optional(),
+  formattedAddress: validationSchema.string().trim().min(1).max(500),
+  addressLine1: validationSchema.string().trim().min(1).max(200),
+  addressLine2: validationSchema.string().trim().max(200).nullable().optional(),
+  barangay: validationSchema.string().trim().max(120).nullable().optional(),
+  city: validationSchema.string().trim().min(1).max(120),
+  region: validationSchema.string().trim().max(120).nullable().optional(),
+  postalCode: validationSchema.string().trim().max(20).nullable().optional(),
+  countryCode: validationSchema.string().trim().length(2),
+  pickupInstructions: validationSchema.string().trim().max(1000).nullable().optional(),
+  expectedVersion: validationSchema.number().int().min(0),
+  idempotencyKey: idempotencyKeySchema,
+});
+const requestExternalDeliverySchema = adminOperationsLocationSchema.extend({
+  jobId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().min(1),
+  providerCode: validationSchema.literal("lalamove"),
+  pickup: validationSchema.discriminatedUnion("kind", [
+    validationSchema.object({ kind: validationSchema.literal("IMMEDIATE") }),
+    validationSchema.object({
+      kind: validationSchema.literal("SCHEDULED"),
+      pickupAt: validationSchema.string().datetime({ offset: true }),
+    }),
+  ]),
+  idempotencyKey: idempotencyKeySchema,
+});
+const externalDeliveryMutationSchema = adminOperationsLocationSchema.extend({
+  dispatchId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().min(1),
+  idempotencyKey: idempotencyKeySchema,
 });
 const adminOperationalExceptionsSchema = adminOperationsLocationSchema.extend({
   cursor: validationSchema.string().min(1).max(512).optional(),
@@ -1965,6 +2010,106 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+  }
+  async getLocationDeliveryProfile(
+    input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
+  ) {
+    const validation = adminOperationsLocationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getLocationDeliveryProfileQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async upsertLocationDeliveryProfile(
+    input: import("@freshmarkets/contracts").UpsertLocationDeliveryProfileRequest,
+  ) {
+    const validation = locationDeliveryProfileSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return upsertLocationDeliveryProfileCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async requestExternalDelivery(
+    input: import("@freshmarkets/contracts").RequestExternalDeliveryRequest,
+  ) {
+    const validation = requestExternalDeliverySchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    let providers: ReturnType<typeof this.rpcContext.deliveryProviders>;
+    let configuredServiceType: string | undefined;
+    try {
+      providers = this.rpcContext.deliveryProviders();
+      configuredServiceType = configuredInstantDeliveryPartners(this.env).find(
+        (partner) => partner.providerCode === validation.data.providerCode,
+      )?.serviceType;
+    } catch {
+      return fail(
+        "CONFIGURATION_ERROR",
+        "External delivery providers are not configured",
+        input.requestId,
+      );
+    }
+    const provider = providers.get(validation.data.providerCode);
+    if (!provider || !configuredServiceType)
+      return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
+    return requestExternalDeliveryCommand(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        provider,
+        configuredServiceType,
+        now: () => this.context.now(),
+      },
+      validation.data,
+    );
+  }
+  async refreshExternalDelivery(
+    input: import("@freshmarkets/contracts").ExternalDeliveryMutationRequest,
+  ) {
+    const validation = externalDeliveryMutationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    try {
+      const provider = this.rpcContext.deliveryProviders().get("lalamove");
+      if (!provider) throw new Error("unavailable");
+      return refreshExternalDeliveryCommand(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          provider,
+          now: () => this.context.now(),
+        },
+        validation.data,
+      );
+    } catch {
+      return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
+    }
+  }
+  async cancelExternalDelivery(
+    input: import("@freshmarkets/contracts").ExternalDeliveryMutationRequest,
+  ) {
+    const validation = externalDeliveryMutationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    try {
+      const provider = this.rpcContext.deliveryProviders().get("lalamove");
+      if (!provider) throw new Error("unavailable");
+      return cancelExternalDeliveryCommand(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          provider,
+          now: () => this.context.now(),
+        },
+        validation.data,
+      );
+    } catch {
+      return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
+    }
   }
   async getDeliveryMap(input: import("@freshmarkets/contracts").DeliveryMapRequest) {
     return getDeliveryMapQuery(

@@ -21,10 +21,7 @@ import {
 import { closestLocation } from "../../geography/geometry";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
-import {
-  quoteProviderDelivery,
-  type ProviderCheckoutAddress,
-} from "./quote-provider-delivery";
+import { quoteProviderDelivery, type ProviderCheckoutAddress } from "./quote-provider-delivery";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -338,7 +335,11 @@ async function createScheduledQuote(
     ? dependencies.deliveryProviders?.get(scheduledPartner.providerCode)
     : null;
   if (!scheduledPartner || !scheduledProvider)
-    return failure("CONFIGURATION_ERROR", "Scheduled delivery pricing is unavailable", command.requestId);
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Scheduled delivery pricing is unavailable",
+      command.requestId,
+    );
   const deliveryFee = await quoteProviderDelivery(database, scheduledProvider, {
     providerCode: scheduledPartner.providerCode,
     serviceType: scheduledPartner.serviceType,
@@ -350,13 +351,14 @@ async function createScheduledQuote(
     now: now2,
   });
   if (!deliveryFee)
-    return failure("CONFIGURATION_ERROR", "Scheduled delivery quotation is unavailable", command.requestId);
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Scheduled delivery quotation is unavailable",
+      command.requestId,
+    );
 
   const quoteId = crypto.randomUUID();
-  const expiresAt = Math.min(
-    Date.now() + QUOTE_TTL_MS,
-    Date.parse(deliveryFee.snapshot.expiresAt),
-  );
+  const expiresAt = Math.min(Date.now() + QUOTE_TTL_MS, Date.parse(deliveryFee.snapshot.expiresAt));
   const requestedPromotionCodes = (command.promotionCodes ?? []).map((code) =>
     code.trim().toUpperCase(),
   );

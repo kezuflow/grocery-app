@@ -81,12 +81,7 @@ export async function createProcurementRequirement(
       FROM committed_demand
       WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND sku_id=?
         AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`)
-    .bind(
-      command.deliveryCycleId,
-      command.locationId,
-      command.inventoryPoolId,
-      command.skuId,
-    )
+    .bind(command.deliveryCycleId, command.locationId, command.inventoryPoolId, command.skuId)
     .first<{
       demand_version: number;
       sellable_quantity: number;

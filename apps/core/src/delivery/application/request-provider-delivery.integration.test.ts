@@ -207,4 +207,38 @@ describe("requestProviderDelivery", () => {
     });
     expect(changed).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
   });
+
+  it("atomically refuses the provider claim after the delivery job version or assignment changes", async () => {
+    const id = `job-provider-stale-${crypto.randomUUID()}`;
+    await deliveryJob(id);
+    await env.DB.prepare(
+      "UPDATE delivery_job SET status='ASSIGNED',version=2,updated_at=2 WHERE id=?",
+    )
+      .bind(id)
+      .run();
+    const grab = provider({
+      ok: false,
+      error: { code: "SHOULD_NOT_RUN", retryable: false, outcomeUnknown: false },
+    });
+    const result = await requestProviderDelivery(env.DB, grab, {
+      requestId: crypto.randomUUID(),
+      deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
+      clientIdempotencyKey: crypto.randomUUID(),
+      request: request(`merchant-${id}`),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "DELIVERY_DISPATCH_UNAVAILABLE" },
+    });
+    expect(grab.create).not.toHaveBeenCalled();
+    await expect(
+      env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(id)
+        .first(),
+    ).resolves.toEqual({ count: 0 });
+  });
 });

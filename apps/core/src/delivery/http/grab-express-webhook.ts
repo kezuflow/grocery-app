@@ -7,9 +7,18 @@ const MAXIMUM_BODY_BYTES = 64 * 1024;
 
 type GrabWebhookEnvironment = Readonly<{
   DELIVERY_PROVIDER?: string;
+  DELIVERY_PROVIDERS?: string;
   GRAB_EXPRESS_WEBHOOK_CLIENT_ID?: string;
   GRAB_EXPRESS_WEBHOOK_SECRET?: string;
 }>;
+
+function grabExpressEnabled(environment: GrabWebhookEnvironment): boolean {
+  const configured = environment.DELIVERY_PROVIDERS ?? environment.DELIVERY_PROVIDER ?? "";
+  return configured
+    .split(",")
+    .map((value) => value.trim())
+    .includes("grab-express");
+}
 
 type JsonObject = Record<string, unknown>;
 
@@ -170,7 +179,7 @@ export async function handleGrabExpressWebhook(
       error: { code: "NOT_FOUND", message: "Unknown webhook route", requestId },
     });
   if (
-    environment.DELIVERY_PROVIDER !== "grab-express" ||
+    !grabExpressEnabled(environment) ||
     !environment.GRAB_EXPRESS_WEBHOOK_CLIENT_ID ||
     !environment.GRAB_EXPRESS_WEBHOOK_SECRET
   )

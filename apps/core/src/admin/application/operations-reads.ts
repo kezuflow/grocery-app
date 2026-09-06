@@ -253,8 +253,19 @@ export async function listAdminDeliveryOperations(
     orderId: row.orderId,
     cycleId: row.cycleId,
     locationId: request.locationId,
+    fulfillmentMode: row.fulfillmentMode,
     status: row.status,
     riderAssigned: row.riderAuthUserId !== null,
+    externalDispatch:
+      row.externalDispatchId && row.externalProvider && row.externalStatus && row.externalVersion
+        ? {
+            dispatchId: row.externalDispatchId,
+            provider: row.externalProvider,
+            status: row.externalStatus,
+            trackingUrl: row.externalTrackingUrl,
+            version: row.externalVersion,
+          }
+        : null,
     deliveredAtIso: row.deliveredAtIso,
     version: row.version,
     allowedActions: allowedDeliveryActions(row.status, row.riderAuthUserId !== null),
@@ -267,7 +278,12 @@ export async function listAdminDeliveryOperations(
   }
   const totals = await deps.db
     .prepare(
-      `SELECT COUNT(*) AS totalOpenJobs, SUM(CASE WHEN d.rider_user_id IS NOT NULL THEN 1 ELSE 0 END) AS assignedJobs FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id LEFT JOIN grocery_order o ON o.id=d.order_id WHERE ${clauses.join(" AND ")}`,
+      `SELECT COUNT(*) AS totalOpenJobs,
+              SUM(CASE WHEN dispatch.id IS NOT NULL THEN 1 ELSE 0 END) AS assignedJobs
+       FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
+       LEFT JOIN grocery_order o ON o.id=d.order_id
+       LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.delivery_job_id=d.id
+       WHERE ${clauses.join(" AND ")}`,
     )
     .bind(...binds)
     .first<{ totalOpenJobs: number; assignedJobs: number | null }>();
