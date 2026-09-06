@@ -10,6 +10,7 @@ const request: CreateDeliveryRequest = {
   currencyExponent: 2,
   packages: [
     {
+      kind: "BAG",
       name: "Fresh produce order",
       description: "Packed grocery tote",
       quantity: 1,
@@ -143,9 +144,11 @@ describe("GrabExpress delivery adapter", () => {
         trackingUrl: "https://grab.example/track/PH-DELIVERY-1",
         pickupPin: "2354",
         quote: {
+          providerQuotationId: null,
           serviceType: "INSTANT",
           amountMinor: 14_950,
           currency: "PHP",
+          expiresAt: null,
           estimatedPickupAt: "2026-09-03T02:00:00Z",
           estimatedDropoffAt: "2026-09-03T02:45:00Z",
           distanceMeters: 8_200,

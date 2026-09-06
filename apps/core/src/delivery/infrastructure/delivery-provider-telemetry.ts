@@ -4,7 +4,11 @@ export type DeliveryProviderOperation =
   | "GRAB_EXPRESS_QUOTE"
   | "GRAB_EXPRESS_CREATE"
   | "GRAB_EXPRESS_GET"
-  | "GRAB_EXPRESS_CANCEL";
+  | "GRAB_EXPRESS_CANCEL"
+  | "LALAMOVE_QUOTE"
+  | "LALAMOVE_CREATE"
+  | "LALAMOVE_GET"
+  | "LALAMOVE_CANCEL";
 
 export type DeliveryProviderTelemetryEvent = Readonly<{
   operation: DeliveryProviderOperation;

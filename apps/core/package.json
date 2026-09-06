@@ -8,6 +8,8 @@
     "build": "wrangler deploy --config wrangler.jsonc --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
+    "lalamove:cities": "node scripts/lalamove-sandbox-cities.mjs",
+    "lalamove:smoke": "node scripts/lalamove-sandbox-cities.mjs --quote",
     "seed:development": "wrangler d1 execute freshmarkets-core-dev --local --persist-to .wrangler/state --file seeds/development.sql",
     "types": "wrangler types ./src/worker-configuration.d.ts"
   },

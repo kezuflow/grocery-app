@@ -208,6 +208,7 @@ import { listAnalyticsMetricDefinitions } from "./analytics/application/list-met
 import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
 import { getMetricSeries } from "./analytics/application/get-metric-series";
 import { handleGrabExpressWebhook } from "./delivery/http/grab-express-webhook";
+import { handleLalamoveWebhook } from "./delivery/http/lalamove-webhook";
 
 function fail(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -1081,6 +1082,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       );
     if (path === "/webhooks/delivery/grab-express")
       return handleGrabExpressWebhook(this.env.DB, this.env, request, id);
+    if (path === "/webhooks/delivery/lalamove")
+      return handleLalamoveWebhook(this.env.DB, this.env, request, id);
     if (path.startsWith("/api/auth"))
       return createAuth(this.env as Env & AuthEnvironment).handler(request);
     return Response.json(

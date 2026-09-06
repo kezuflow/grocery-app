@@ -96,3 +96,10 @@ commerce. Historical pool-level demand and procurement rows remain explicit comp
 Cloudflare Queue publication/lease/dead-letter evidence to the notification outbox, and a
 deterministic collision-safe public number for historical Orders that lacked one. Historical
 Rider/fleet/mock-payment rows remain untouched.
+
+`0060_retire_volume_catalog_units.sql` deactivates the historical `MILLILITER` and `LITER` unit
+rows. They remain available for historical compatibility, but new catalog products use mass or
+count; bottled and packaged liquids are sold as pieces.
+
+`0061_lalamove_delivery_provider.sql` expands the closed external-delivery provider vocabulary to
+Lalamove while preserving existing GrabExpress dispatch and webhook evidence.

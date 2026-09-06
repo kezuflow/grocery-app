@@ -73,6 +73,14 @@ function assertFinalSchema(database) {
     "estimated_shipping_weight_grams",
   ])
     assert.ok(skuColumns.includes(column), `missing sku column ${column}`);
+  for (const table of ["order_item", "paid_order_amendment_line"]) {
+    const columns = database
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((column) => column.name);
+    for (const column of ["base_unit_code_snapshot", "shipping_weight_grams"])
+      assert.ok(columns.includes(column), `missing ${table} column ${column}`);
+  }
   // Every active SKU of a product with product-level Cebu availability was
   // backfilled into SKU-level availability.
   const missingBackfill = database
@@ -592,6 +600,70 @@ for (const table of [
 assert.deepEqual(customerMvpUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
 customerMvpUpgrade.close();
 
+// Lalamove expands the closed provider vocabulary through a table rebuild
+// after the forward commerce-persistence realignment. Prove populated
+// GrabExpress dispatch/inbox evidence survives that boundary.
+const deliveryProviderUpgrade = database();
+apply(
+  deliveryProviderUpgrade,
+  migrations.filter((migration) => migration.name <= "0055_delivery_provider_dispatch.sql"),
+);
+deliveryProviderUpgrade.exec(`
+  INSERT INTO delivery_job
+    (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status,
+     context_resolution_status, address_snapshot_json, version, created_at, updated_at)
+  VALUES
+    ('migration-provider-job', 'migration-provider-order', NULL, 'INSTANT',
+     'location-cebu-central', 'zone-cebu-city-core', 'UNASSIGNED', 'RESOLVED', '{}', 1, 1, 1);
+  INSERT INTO delivery_provider_dispatch
+    (id, delivery_job_id, provider, merchant_order_id, provider_delivery_id,
+     request_hash, request_snapshot_json, status, provider_status,
+     attempt_count, version, created_at, updated_at)
+  VALUES
+    ('migration-grab-dispatch', 'migration-provider-job', 'grab-express',
+     'FM-MIGRATION-ORDER', 'GRAB-MIGRATION-ORDER', 'hash', '{}', 'ACTIVE',
+     'ALLOCATING', 1, 1, 1, 1);
+  INSERT INTO delivery_provider_event_inbox
+    (id, provider, provider_event_id, dispatch_id, provider_delivery_id,
+     merchant_order_id, observed_at, provider_status, payload_hash, raw_payload,
+     processing_status, received_at)
+  VALUES
+    ('migration-grab-event', 'grab-express', 'migration-grab-event-1',
+     'migration-grab-dispatch', 'GRAB-MIGRATION-ORDER', 'FM-MIGRATION-ORDER',
+     1, 'ALLOCATING', 'payload-hash', '{}', 'APPLIED', 1);
+`);
+apply(
+  deliveryProviderUpgrade,
+  migrations.filter(
+    (migration) =>
+      migration.name > "0055_delivery_provider_dispatch.sql" &&
+      migration.name <= "0061_lalamove_delivery_provider.sql",
+  ),
+);
+assert.equal(
+  deliveryProviderUpgrade
+    .prepare("SELECT provider FROM delivery_provider_dispatch WHERE id='migration-grab-dispatch'")
+    .get().provider,
+  "grab-express",
+);
+assert.equal(
+  deliveryProviderUpgrade
+    .prepare(
+      "SELECT processing_status FROM delivery_provider_event_inbox WHERE id='migration-grab-event'",
+    )
+    .get().processing_status,
+  "APPLIED",
+);
+assert.equal(
+  deliveryProviderUpgrade
+    .prepare("PRAGMA table_info(order_fulfillment_snapshot)")
+    .all()
+    .some((column) => column.name === "delivery_execution_snapshot_json"),
+  true,
+);
+assert.deepEqual(deliveryProviderUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
+deliveryProviderUpgrade.close();
+
 console.log(
-  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, and 0046 -> 0047 customer launch upgrades are valid.",
+  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, 0046 -> 0047 customer launch, and 0055 -> current delivery-provider upgrades are valid.",
 );

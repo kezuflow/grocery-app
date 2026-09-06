@@ -106,9 +106,11 @@ function quote(payload: unknown): DeliveryQuote | null {
   const amount = amountMinor(value?.amount, currency?.exponent);
   if (!serviceType || !currencyCode || amount === null) return null;
   return {
+    providerQuotationId: nonemptyString(value?.quoteID) ?? nonemptyString(value?.quoteId),
     serviceType,
     amountMinor: amount,
     currency: currencyCode,
+    expiresAt: nonemptyString(value?.expiresAt),
     estimatedPickupAt: nonemptyString(timeline?.pickup),
     estimatedDropoffAt: nonemptyString(timeline?.dropoff),
     distanceMeters: integer(value?.distance),
@@ -183,6 +185,17 @@ function grabPackage(item: DeliveryPackage, currencyExponent: number) {
       weight: item.weightGrams,
     },
   };
+}
+
+function hasGrabDimensions(item: DeliveryPackage): item is DeliveryPackage &
+  Readonly<{
+    heightCentimeters: number;
+    widthCentimeters: number;
+    depthCentimeters: number;
+  }> {
+  return [item.heightCentimeters, item.widthCentimeters, item.depthCentimeters].every(
+    (value) => Number.isSafeInteger(value) && (value ?? 0) > 0,
+  );
 }
 
 function requestBody(request: DeliveryProviderRequest) {
@@ -336,18 +349,15 @@ function validRequest(request: DeliveryProviderRequest): boolean {
     return false;
   return request.packages.every(
     (item) =>
+      hasGrabDimensions(item) &&
       item.name.trim().length > 0 &&
       item.description.trim().length > 0 &&
       Number.isSafeInteger(item.quantity) &&
       item.quantity > 0 &&
       (item.priceMinor === null ||
         (Number.isSafeInteger(item.priceMinor) && item.priceMinor >= 0)) &&
-      [
-        item.heightCentimeters,
-        item.widthCentimeters,
-        item.depthCentimeters,
-        item.weightGrams,
-      ].every((value) => Number.isSafeInteger(value) && value > 0),
+      Number.isSafeInteger(item.weightGrams) &&
+      item.weightGrams > 0,
   );
 }
 
@@ -494,6 +504,15 @@ export function createGrabExpressProvider(
 
   return {
     code: "grab-express",
+    capabilities: {
+      immediateQuotation: true,
+      scheduledQuotation: { supported: false, maximumAdvanceMilliseconds: null },
+      createDelivery: true,
+      retrieveDelivery: true,
+      cancelDelivery: true,
+      signedStatusWebhooks: false,
+      requiresPackageDimensions: true,
+    },
     quote(request) {
       return observed("GRAB_EXPRESS_QUOTE", async () => {
         if (!validRequest(request)) return resultError("GRAB_INVALID_REQUEST");

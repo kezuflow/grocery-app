@@ -36,6 +36,7 @@ function request(merchantOrderId: string): CreateDeliveryRequest {
     currencyExponent: 2,
     packages: [
       {
+        kind: "BAG",
         name: "Grocery tote",
         description: "Packed FreshMarkets grocery order",
         quantity: 1,
@@ -81,6 +82,15 @@ function provider(
 ): DeliveryProvider & { create: ReturnType<typeof vi.fn<DeliveryProvider["create"]>> } {
   return {
     code: "grab-express",
+    capabilities: {
+      immediateQuotation: true,
+      scheduledQuotation: { supported: false, maximumAdvanceMilliseconds: null },
+      createDelivery: true,
+      retrieveDelivery: true,
+      cancelDelivery: true,
+      signedStatusWebhooks: false,
+      requiresPackageDimensions: true,
+    },
     quote: vi.fn(),
     create: vi.fn(async () => result),
     get: vi.fn(),
@@ -102,9 +112,11 @@ describe("requestProviderDelivery", () => {
         trackingUrl: "https://grab.example/tracking/1",
         pickupPin: "1234",
         quote: {
+          providerQuotationId: null,
           serviceType: "INSTANT",
           amountMinor: 15_000,
           currency: "PHP",
+          expiresAt: null,
           estimatedPickupAt: null,
           estimatedDropoffAt: null,
           distanceMeters: 5_000,

@@ -15,12 +15,15 @@ export type DeliveryProviderAddress = Readonly<{
 }>;
 
 export type DeliveryPackage = Readonly<{
+  /** FreshMarkets packing class: one BAG below 10 kg, otherwise one BOX. */
+  kind: "BAG" | "BOX";
   name: string;
   description: string;
   quantity: number;
-  heightCentimeters: number;
-  widthCentimeters: number;
-  depthCentimeters: number;
+  /** Optional because Lalamove PH does not receive parcel dimensions. */
+  heightCentimeters?: number;
+  widthCentimeters?: number;
+  depthCentimeters?: number;
   weightGrams: number;
   priceMinor: number | null;
 }>;
@@ -50,6 +53,8 @@ export type CreateDeliveryRequest = DeliveryProviderRequest &
 export type DeliveryProviderError = Readonly<{
   code: string;
   retryable: boolean;
+  /** Provider-declared backoff for rate limiting, when available. */
+  retryAfterMilliseconds?: number;
   /**
    * True when the provider may have accepted a mutating request even though no
    * authoritative response reached Core. Callers must reconcile instead of
@@ -63,12 +68,28 @@ export type DeliveryProviderResult<T> =
   | Readonly<{ ok: false; error: DeliveryProviderError; providerRequestId?: string }>;
 
 export type DeliveryQuote = Readonly<{
+  /** Opaque provider evidence; never accepted from a browser as authoritative. */
+  providerQuotationId: string | null;
   serviceType: string;
   amountMinor: number;
   currency: string;
+  expiresAt: string | null;
   estimatedPickupAt: string | null;
   estimatedDropoffAt: string | null;
   distanceMeters: number | null;
+}>;
+
+export type DeliveryProviderCapabilities = Readonly<{
+  immediateQuotation: boolean;
+  scheduledQuotation: Readonly<{
+    supported: boolean;
+    maximumAdvanceMilliseconds: number | null;
+  }>;
+  createDelivery: boolean;
+  retrieveDelivery: boolean;
+  cancelDelivery: boolean;
+  signedStatusWebhooks: boolean;
+  requiresPackageDimensions: boolean;
 }>;
 
 export type ProviderDeliveryStatus =
@@ -86,7 +107,12 @@ export type ProviderDeliveryStatus =
 
 export type ProviderDelivery = Readonly<{
   providerDeliveryId: string;
-  merchantOrderId: string;
+  /**
+   * Present when the provider echoes FreshMarkets metadata. Some provider GET
+   * responses expose only their own order identifier, so reconciliation must
+   * retain the merchant reference from the local dispatch record.
+   */
+  merchantOrderId: string | null;
   status: ProviderDeliveryStatus;
   trackingUrl: string | null;
   pickupPin: string | null;
@@ -96,6 +122,7 @@ export type ProviderDelivery = Readonly<{
 /** Provider-specific vocabulary stops at this boundary. */
 export interface DeliveryProvider {
   readonly code: string;
+  readonly capabilities: DeliveryProviderCapabilities;
   quote(
     request: DeliveryProviderRequest,
   ): Promise<DeliveryProviderResult<readonly DeliveryQuote[]>>;
