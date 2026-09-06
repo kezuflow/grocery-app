@@ -235,6 +235,7 @@ export const procurementCommandSchema = headersRequest.extend({
   deliveryCycleId: identifierSchema,
   locationId: identifierSchema,
   inventoryPoolId: identifierSchema,
+  skuId: identifierSchema,
   idempotencyKey: idempotencyKeySchema,
   expectedVersion: expectedVersionSchema,
 });

@@ -5,6 +5,7 @@ import { applyAmendmentPaymentReaction } from "./apply-amendment-payment-reactio
 import { createAmendmentPaymentIntent } from "../../payments/application/create-amendment-payment-intent";
 import { createMockPaymentProvider } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
+import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
 
 let counter = 0;
 async function committedOrder() {
@@ -121,6 +122,12 @@ describe("paid-order amendments", () => {
     if (!result.ok) return;
     expect(result.value.status).toBe("PENDING_PAYMENT");
     expect(result.value.financial.totalMinor).toBe(16000); // 2 x 500g x 80.00
+    const logistics = await env.DB.prepare(
+      "SELECT base_unit_code_snapshot AS baseUnitCode, shipping_weight_grams AS shippingWeightGrams FROM paid_order_amendment_line WHERE amendment_id=?",
+    )
+      .bind(result.value.amendmentId)
+      .first<{ baseUnitCode: string | null; shippingWeightGrams: number | null }>();
+    expect(logistics).toEqual({ baseUnitCode: "GRAM", shippingWeightGrams: 1_000 });
 
     // Original commercial history unchanged.
     const after = await env.DB.prepare("SELECT total_minor FROM grocery_order WHERE id=?")
@@ -182,11 +189,30 @@ describe("paid-order amendments", () => {
     expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
     // Additive delta lands on the same order's operational records.
     const demand = await env.DB.prepare(
-      "SELECT COALESCE(SUM(quantity),0) AS total FROM committed_demand WHERE order_id=?",
+      `SELECT COALESCE(SUM(quantity),0) AS total,MIN(demand_basis) AS basis,
+       MIN(sku_id) AS skuId,MIN(quantity_sellable) AS sellable,
+       MIN(shipping_weight_grams) AS shippingWeight
+       FROM committed_demand WHERE order_id=?`,
     )
       .bind(fixture.orderId)
-      .first<{ total: number }>();
-    expect(demand?.total).toBe(1000);
+      .first<{
+        total: number;
+        basis: string;
+        skuId: string;
+        sellable: number;
+        shippingWeight: number;
+      }>();
+    expect(demand).toMatchObject({
+      total: 1000,
+      basis: "EXACT_PAID_LINE",
+      skuId: fixture.skuId,
+      sellable: 2,
+      shippingWeight: 1000,
+    });
+    await expect(resolveOrderDeliveryPackage(env.DB, fixture.orderId)).resolves.toEqual({
+      ok: true,
+      value: { kind: "BAG", quantity: 1, weightGrams: 1_000 },
+    });
   });
 
   it("rejects unpaid or final orders and stale versions", async () => {

@@ -6,6 +6,10 @@ import type {
 } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
 import { amendmentEligibility } from "../domain/amendment";
+import {
+  resolveLineShippingWeightGrams,
+  type CanonicalBaseUnitCode,
+} from "../../fulfillment/domain/delivery-package";
 
 export type CreateOrderAmendmentCommand = {
   customerId: string;
@@ -168,18 +172,34 @@ export async function createOrderAmendment(
     return failure("CONFLICT", "Complete or cancel the active amendment first", command.requestId);
 
   const now = Date.now();
-  const lines: Array<CustomerOrderLineSnapshot & { id: string }> = [];
+  const lines: Array<
+    CustomerOrderLineSnapshot & {
+      id: string;
+      baseUnitCode: CanonicalBaseUnitCode;
+      shippingWeightGrams: number | null;
+    }
+  > = [];
   for (const addition of additions) {
     const sku = await database
       .prepare(
         `SELECT s.name variantName,s.sellable_unit_id unit,s.consumption_base_quantity consumption,
-                p.name productName
+                s.estimated_shipping_weight_grams estimatedShippingWeightGrams,
+                bu.canonical_base_code baseUnitCode, p.name productName
          FROM sku s JOIN product p ON p.id=s.product_id
+         JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+         JOIN unit bu ON bu.id=ip.base_unit_id
          JOIN sku_location_availability sla ON sla.sku_id=s.id AND sla.location_id=?
          WHERE s.id=? AND s.status='active' AND p.status='active' AND sla.availability_status='AVAILABLE'`,
       )
       .bind(order.location_id, addition.skuId)
-      .first<{ variantName: string; unit: string; consumption: number; productName: string }>();
+      .first<{
+        variantName: string;
+        unit: string;
+        consumption: number;
+        estimatedShippingWeightGrams: number | null;
+        baseUnitCode: CanonicalBaseUnitCode;
+        productName: string;
+      }>();
     if (!sku)
       return failure("UNAVAILABLE_ITEM", `SKU ${addition.skuId} is unavailable`, command.requestId);
     const price = await database
@@ -198,6 +218,7 @@ export async function createOrderAmendment(
         `Price unavailable for ${addition.skuId}`,
         command.requestId,
       );
+    const baseQuantity = addition.quantity * sku.consumption;
     lines.push({
       id: crypto.randomUUID(),
       orderItemId: "",
@@ -206,7 +227,14 @@ export async function createOrderAmendment(
       variantName: sku.variantName,
       unit: sku.unit,
       quantity: addition.quantity,
-      baseQuantity: addition.quantity * sku.consumption,
+      baseQuantity,
+      baseUnitCode: sku.baseUnitCode,
+      shippingWeightGrams: resolveLineShippingWeightGrams({
+        baseUnitCode: sku.baseUnitCode,
+        quantity: addition.quantity,
+        baseQuantity,
+        estimatedShippingWeightGrams: sku.estimatedShippingWeightGrams,
+      }),
       unitPriceMinor: price.amount_minor,
       lineTotalMinor: addition.quantity * price.amount_minor,
     });
@@ -246,7 +274,8 @@ export async function createOrderAmendment(
           .prepare(
             `INSERT INTO paid_order_amendment_line
              (id,amendment_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,
-              base_quantity,unit_price_minor,line_total_minor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+              base_quantity,base_unit_code_snapshot,shipping_weight_grams,
+              unit_price_minor,line_total_minor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           )
           .bind(
             line.id,
@@ -257,6 +286,8 @@ export async function createOrderAmendment(
             line.unit,
             line.quantity,
             line.baseQuantity,
+            line.baseUnitCode,
+            line.shippingWeightGrams,
             line.unitPriceMinor,
             line.lineTotalMinor,
             now,

@@ -31,6 +31,7 @@ export type ProcurementCommandRequest = AuthenticatedRequest & {
   deliveryCycleId: string;
   locationId: string;
   inventoryPoolId: string;
+  skuId: string;
   idempotencyKey: string;
   expectedVersion: number;
 };
@@ -124,6 +125,7 @@ export type ProcurementQueueItem = {
   requirementId: string;
   locationId: string;
   inventoryPoolId: string;
+  skuId: string | null;
   requiredQuantityBase: number;
   acceptedBase: number;
   rejectedBase: number;

@@ -817,6 +817,7 @@ const activateGlobalModeSchema = commerceTransitionSchema.extend({
 const adminProcurementAggregateSchema = adminOperationsLocationSchema.extend({
   cycleId: validationSchema.string().trim().min(1).max(200),
   inventoryPoolId: validationSchema.string().trim().min(1).max(200),
+  skuId: validationSchema.string().trim().min(1).max(200),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
   reason: validationSchema.string().trim().min(1).max(500).optional(),

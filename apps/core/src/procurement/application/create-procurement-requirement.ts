@@ -13,9 +13,9 @@ export type CreateProcurementRequirementResult =
 const SCOPE = "procurement.createRequirement";
 
 /**
- * Create an AGGREGATED procurement requirement with its NOT_STARTED receiving record in
- * one atomic batch under a stable idempotency key. Replays return the
- * original requirement; a hash mismatch or in-flight original is rejected.
+ * Aggregate one SKU's exact paid Scheduled demand without consulting physical
+ * inventory, incoming stock, buffers, forecasts, or capacity. The requirement
+ * and its NOT_STARTED receiving record share a stable idempotency boundary.
  */
 export async function createProcurementRequirement(
   database: D1Database,
@@ -30,6 +30,7 @@ export async function createProcurementRequirement(
       deliveryCycleId: command.deliveryCycleId,
       locationId: command.locationId,
       inventoryPoolId: command.inventoryPoolId,
+      skuId: command.skuId,
       expectedVersion: command.expectedVersion,
     },
   );
@@ -73,17 +74,26 @@ export async function createProcurementRequirement(
       .run();
   const totals = await database
     .prepare(`SELECT
-      COALESCE((SELECT SUM(quantity) FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND status='OPEN'), 0) AS demand,
-      COALESCE((SELECT on_hand-reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?), 0) AS available`)
+      COUNT(*) AS demand_version,
+      COALESCE(SUM(quantity_sellable), 0) AS sellable_quantity,
+      COALESCE(SUM(quantity_base_total), 0) AS demand_base,
+      COALESCE(SUM(shipping_weight_grams), 0) AS shipping_weight
+      FROM committed_demand
+      WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND sku_id=?
+        AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`)
     .bind(
       command.deliveryCycleId,
       command.locationId,
       command.inventoryPoolId,
-      command.locationId,
-      command.inventoryPoolId,
+      command.skuId,
     )
-    .first<{ demand: number; available: number }>();
-  const quantity = Math.max(0, (totals?.demand ?? 0) - (totals?.available ?? 0));
+    .first<{
+      demand_version: number;
+      sellable_quantity: number;
+      demand_base: number;
+      shipping_weight: number;
+    }>();
+  const quantity = totals?.demand_base ?? 0;
   if (quantity === 0) {
     await markFailed();
     return failure(
@@ -93,11 +103,66 @@ export async function createProcurementRequirement(
     );
   }
 
+  const sku = await database
+    .prepare(
+      `SELECT 1 AS found FROM sku s JOIN product p ON p.id=s.product_id
+       WHERE s.id=? AND p.inventory_pool_id=?`,
+    )
+    .bind(command.skuId, command.inventoryPoolId)
+    .first();
+  if (!sku) {
+    await markFailed();
+    return failure(
+      "VALIDATION_FAILED",
+      "SKU does not belong to the supplied inventory pool",
+      command.requestId,
+    );
+  }
+
+  let run = await database
+    .prepare(
+      "SELECT id,status FROM procurement_run WHERE delivery_cycle_id=? AND destination_location_id=?",
+    )
+    .bind(command.deliveryCycleId, command.locationId)
+    .first<{ id: string; status: string }>();
+  if (!run) {
+    const runId = crypto.randomUUID();
+    await database
+      .prepare(
+        `INSERT OR IGNORE INTO procurement_run
+         (id,delivery_cycle_id,destination_location_id,status,demand_version,version,created_at,updated_at)
+         VALUES (?,?,?,'AGGREGATED',?,1,?,?)`,
+      )
+      .bind(
+        runId,
+        command.deliveryCycleId,
+        command.locationId,
+        totals?.demand_version ?? 1,
+        now,
+        now,
+      )
+      .run();
+    run = await database
+      .prepare(
+        "SELECT id,status FROM procurement_run WHERE delivery_cycle_id=? AND destination_location_id=?",
+      )
+      .bind(command.deliveryCycleId, command.locationId)
+      .first<{ id: string; status: string }>();
+  }
+  if (!run || !["DRAFT", "AGGREGATED"].includes(run.status)) {
+    await markFailed();
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Approved procurement cannot be recalculated",
+      command.requestId,
+    );
+  }
+
   const active = await database
     .prepare(
-      "SELECT id, status, version FROM procurement_requirement WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND status!='CLOSED' LIMIT 1",
+      "SELECT id, status, version FROM procurement_requirement WHERE procurement_run_id=? AND sku_id=? AND status!='CLOSED' LIMIT 1",
     )
-    .bind(command.deliveryCycleId, command.locationId, command.inventoryPoolId)
+    .bind(run.id, command.skuId)
     .first<{ id: string; status: string; version: number }>();
   if (active) {
     if (active.version !== command.expectedVersion) {
@@ -120,9 +185,21 @@ export async function createProcurementRequirement(
       await database.batch([
         database
           .prepare(
-            "UPDATE procurement_requirement SET required_quantity=?, updated_at=?, version=version+1 WHERE id=? AND status='AGGREGATED' AND version=?",
+            `UPDATE procurement_requirement SET required_quantity=?,required_base=?,
+             committed_quantity_sellable=?,committed_demand_base=?,shipping_weight_grams=?,
+             updated_at=?,version=version+1
+             WHERE id=? AND status='AGGREGATED' AND version=?`,
           )
-          .bind(quantity, now, active.id, command.expectedVersion),
+          .bind(
+            quantity,
+            quantity,
+            totals?.sellable_quantity ?? 0,
+            quantity,
+            totals?.shipping_weight ?? 0,
+            now,
+            active.id,
+            command.expectedVersion,
+          ),
         database
           .prepare(
             "INSERT INTO admin_command_abort(id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM procurement_requirement WHERE id=? AND status='AGGREGATED' AND version=?)",
@@ -138,6 +215,11 @@ export async function createProcurementRequirement(
             "INSERT INTO admin_command_abort(id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM receiving_record WHERE procurement_requirement_id=? AND status='NOT_STARTED' AND expected_quantity=?)",
           )
           .bind(active.id, quantity),
+        database
+          .prepare(
+            "UPDATE procurement_run SET demand_version=?,updated_at=?,version=version+1 WHERE id=? AND status IN ('DRAFT','AGGREGATED')",
+          )
+          .bind(totals?.demand_version ?? 1, now, run.id),
         database
           .prepare(
             "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
@@ -172,7 +254,11 @@ export async function createProcurementRequirement(
     await database.batch([
       database
         .prepare(
-          "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'AGGREGATED', 1, ?, ?)",
+          `INSERT INTO procurement_requirement
+           (id,delivery_cycle_id,location_id,inventory_pool_id,required_quantity,status,version,created_at,updated_at,
+            procurement_run_id,sku_id,calculation_basis,committed_quantity_sellable,
+            committed_demand_base,shipping_weight_grams,required_base)
+           VALUES (?,?,?,?,?,'AGGREGATED',1,?,?,?,?,'EXACT_PAID_DEMAND',?,?,?,?)`,
         )
         .bind(
           id,
@@ -182,12 +268,23 @@ export async function createProcurementRequirement(
           quantity,
           now,
           now,
+          run.id,
+          command.skuId,
+          totals?.sellable_quantity ?? 0,
+          quantity,
+          totals?.shipping_weight ?? 0,
+          quantity,
         ),
       database
         .prepare(
           "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 'NOT_STARTED', 1, ?, ?)",
         )
         .bind(crypto.randomUUID(), id, quantity, now, now),
+      database
+        .prepare(
+          "UPDATE procurement_run SET status='AGGREGATED',demand_version=?,updated_at=?,version=version+1 WHERE id=? AND status IN ('DRAFT','AGGREGATED')",
+        )
+        .bind(totals?.demand_version ?? 1, now, run.id),
       database
         .prepare(
           "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
@@ -198,7 +295,7 @@ export async function createProcurementRequirement(
     await markFailed();
     const message = error instanceof Error ? error.message : String(error);
     if (
-      message.includes("procurement_requirement_active_context_unique") ||
+      message.includes("procurement_requirement_active_run_sku_unique") ||
       message.includes("UNIQUE")
     )
       return failure(

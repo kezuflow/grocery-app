@@ -10,6 +10,7 @@ const schema = z.object({
   locationId: z.string().trim().min(1),
   cycleId: z.string().trim().min(1),
   inventoryPoolId: z.string().trim().min(1),
+  skuId: z.string().trim().min(1),
   expectedVersion: z.number().int().nonnegative(),
   reason: z.string().trim().min(1).optional(),
   idempotencyKey: z.string().trim().min(1).optional(),
@@ -19,7 +20,7 @@ async function POSTHandler(request: Request) {
   if (!parsed.success)
     return invalid(
       request,
-      "locationId, cycleId, inventoryPoolId, and current expectedVersion are required",
+      "locationId, cycleId, inventoryPoolId, skuId, and current expectedVersion are required",
     );
   try {
     const meta = commandMeta(request, parsed.data);

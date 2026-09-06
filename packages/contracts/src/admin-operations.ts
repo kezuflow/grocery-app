@@ -50,6 +50,9 @@ export type ProcurementRequirementView = {
   cycleId: string;
   locationId: string;
   inventoryPoolId: string;
+  skuId: string | null;
+  committedQuantitySellable: number | null;
+  shippingWeightGrams: number | null;
   requiredQuantityBase: number;
   acceptedBase: number;
   rejectedBase: number;
@@ -184,6 +187,7 @@ export type OpenSellingRequest = AuthenticatedRequest & {
 export type AggregateAdminProcurementDemandRequest = AdminOperationsLocationRequest & {
   cycleId: string;
   inventoryPoolId: string;
+  skuId: string;
   expectedVersion: number;
   idempotencyKey: string;
   reason?: string;

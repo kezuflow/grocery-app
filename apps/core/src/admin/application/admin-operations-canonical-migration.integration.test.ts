@@ -16,7 +16,7 @@ describe("admin operations canonical-state migration", () => {
     }>();
     expect(indexes.results).toContainEqual(
       expect.objectContaining({
-        name: "procurement_requirement_active_context_unique",
+        name: "procurement_requirement_active_run_sku_unique",
         unique: 1,
         partial: 1,
       }),

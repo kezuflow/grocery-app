@@ -261,13 +261,18 @@ export async function aggregateAdminProcurementDemand(
   if (replay?.status === "SUCCEEDED" && replay.result_reference) {
     const prior = await deps.db
       .prepare(
-        "SELECT delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version FROM procurement_requirement WHERE id=?",
+        `SELECT delivery_cycle_id,location_id,inventory_pool_id,sku_id,
+         committed_quantity_sellable,shipping_weight_grams,required_quantity,status,version
+         FROM procurement_requirement WHERE id=?`,
       )
       .bind(replay.result_reference)
       .first<{
         delivery_cycle_id: string;
         location_id: string;
         inventory_pool_id: string;
+        sku_id: string | null;
+        committed_quantity_sellable: number | null;
+        shipping_weight_grams: number | null;
         required_quantity: number;
         status: string;
         version: number;
@@ -276,7 +281,8 @@ export async function aggregateAdminProcurementDemand(
       if (
         prior.delivery_cycle_id !== request.cycleId ||
         prior.location_id !== request.locationId ||
-        prior.inventory_pool_id !== request.inventoryPoolId
+        prior.inventory_pool_id !== request.inventoryPoolId ||
+        prior.sku_id !== request.skuId
       )
         return {
           ok: false,
@@ -293,6 +299,9 @@ export async function aggregateAdminProcurementDemand(
           cycleId: request.cycleId,
           locationId: request.locationId,
           inventoryPoolId: request.inventoryPoolId,
+          skuId: prior.sku_id,
+          committedQuantitySellable: prior.committed_quantity_sellable,
+          shippingWeightGrams: prior.shipping_weight_grams,
           requiredQuantityBase: prior.required_quantity,
           acceptedBase: 0,
           rejectedBase: 0,
@@ -309,6 +318,7 @@ export async function aggregateAdminProcurementDemand(
     deliveryCycleId: request.cycleId,
     locationId: request.locationId,
     inventoryPoolId: request.inventoryPoolId,
+    skuId: request.skuId,
     expectedVersion: request.expectedVersion,
     idempotencyKey: request.idempotencyKey,
   });
@@ -322,9 +332,19 @@ export async function aggregateAdminProcurementDemand(
       },
     };
   const row = await deps.db
-    .prepare("SELECT required_quantity, status, version FROM procurement_requirement WHERE id=?")
+    .prepare(
+      `SELECT required_quantity,status,version,sku_id,committed_quantity_sellable,shipping_weight_grams
+       FROM procurement_requirement WHERE id=?`,
+    )
     .bind(result.value.id)
-    .first<{ required_quantity: number; status: string; version: number }>();
+    .first<{
+      required_quantity: number;
+      status: string;
+      version: number;
+      sku_id: string | null;
+      committed_quantity_sellable: number | null;
+      shipping_weight_grams: number | null;
+    }>();
   if (!row) return failed("NOT_FOUND", "Procurement requirement not found", request.requestId);
   await audit(
     deps,
@@ -343,6 +363,9 @@ export async function aggregateAdminProcurementDemand(
       cycleId: request.cycleId,
       locationId: request.locationId,
       inventoryPoolId: request.inventoryPoolId,
+      skuId: row.sku_id,
+      committedQuantitySellable: row.committed_quantity_sellable,
+      shippingWeightGrams: row.shipping_weight_grams,
       requiredQuantityBase: row.required_quantity,
       acceptedBase: 0,
       rejectedBase: 0,

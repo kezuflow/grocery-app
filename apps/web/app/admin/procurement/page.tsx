@@ -29,6 +29,7 @@ export default function ProcurementPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [cycleId, setCycleId] = useState("");
   const [inventoryPoolId, setInventoryPoolId] = useState("");
+  const [skuId, setSkuId] = useState("");
   const [version, setVersion] = useState("");
   const aggregateIntent = useAdminCommandIntent();
   const pagination = useAdminPagination();
@@ -67,10 +68,11 @@ export default function ProcurementPage() {
     if (
       !cycleId.trim() ||
       !inventoryPoolId.trim() ||
+      !skuId.trim() ||
       !Number.isInteger(expectedVersion) ||
       expectedVersion < 0
     ) {
-      setNotice("Cycle, inventory pool, and current version are required.");
+      setNotice("Cycle, inventory pool, SKU, and current version are required.");
       return;
     }
     if (!locationId) return;
@@ -84,6 +86,7 @@ export default function ProcurementPage() {
             locationId,
             cycleId: cycleId.trim(),
             inventoryPoolId: inventoryPoolId.trim(),
+            skuId: skuId.trim(),
             expectedVersion,
           }),
         });
@@ -138,7 +141,7 @@ export default function ProcurementPage() {
             title="Aggregate demand"
             description="Use the current aggregate version; Core preserves idempotency and scope."
           >
-            <div className="grid gap-2 p-4 sm:grid-cols-4">
+            <div className="grid gap-2 p-4 sm:grid-cols-5">
               <Input
                 aria-label="Cycle ID"
                 placeholder="cycle id"
@@ -150,6 +153,12 @@ export default function ProcurementPage() {
                 placeholder="inventory pool id"
                 value={inventoryPoolId}
                 onChange={(event) => setInventoryPoolId(event.target.value)}
+              />
+              <Input
+                aria-label="SKU ID"
+                placeholder="sku id"
+                value={skuId}
+                onChange={(event) => setSkuId(event.target.value)}
               />
               <Input
                 aria-label="Current requirement version"
@@ -186,6 +195,7 @@ export default function ProcurementPage() {
                     <TableRow>
                       <TableHead>Requirement</TableHead>
                       <TableHead>Cycle</TableHead>
+                      <TableHead>SKU</TableHead>
                       <TableHead>Required</TableHead>
                       <TableHead>Accepted / Rejected</TableHead>
                       <TableHead>Status</TableHead>
@@ -196,6 +206,7 @@ export default function ProcurementPage() {
                       <TableRow key={item.requirementId}>
                         <TableCell className="font-mono text-xs">{item.requirementId}</TableCell>
                         <TableCell>{item.cycleId}</TableCell>
+                        <TableCell>{item.skuId ?? "Legacy pool aggregate"}</TableCell>
                         <TableCell>{item.requiredQuantityBase}</TableCell>
                         <TableCell>
                           {item.acceptedBase} / {item.rejectedBase}

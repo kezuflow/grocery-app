@@ -8,6 +8,9 @@ export type ProcurementWorkbenchItem = {
   cycleId: string;
   locationId: string;
   inventoryPoolId: string;
+  skuId: string | null;
+  committedQuantitySellable: number | null;
+  shippingWeightGrams: number | null;
   requiredQuantityBase: number;
   acceptedBase: number;
   rejectedBase: number;
@@ -42,7 +45,13 @@ export async function listProcurementQueue(
   if (query.receivingOnly) clauses.push("rr.id IS NOT NULL");
   const rows = await database
     .prepare(
-      `SELECT pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id, pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version, rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity, rr.status AS receiving_status, rr.version AS receiving_version FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id WHERE ${clauses.join(" AND ")} ORDER BY pr.id DESC LIMIT ?`,
+      `SELECT pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id,
+       pr.sku_id,pr.committed_quantity_sellable,pr.shipping_weight_grams,
+       pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version,
+       rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity,
+       rr.status AS receiving_status, rr.version AS receiving_version
+       FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id
+       WHERE ${clauses.join(" AND ")} ORDER BY pr.id DESC LIMIT ?`,
     )
     .bind(...binds, limit)
     .all<{
@@ -50,6 +59,9 @@ export async function listProcurementQueue(
       delivery_cycle_id: string;
       location_id: string;
       inventory_pool_id: string;
+      sku_id: string | null;
+      committed_quantity_sellable: number | null;
+      shipping_weight_grams: number | null;
       required_quantity: number;
       requirement_status: string;
       requirement_version: number;
@@ -64,6 +76,9 @@ export async function listProcurementQueue(
     cycleId: r.delivery_cycle_id,
     locationId: r.location_id,
     inventoryPoolId: r.inventory_pool_id,
+    skuId: r.sku_id,
+    committedQuantitySellable: r.committed_quantity_sellable,
+    shippingWeightGrams: r.shipping_weight_grams,
     requiredQuantityBase: r.required_quantity,
     acceptedBase: r.accepted_quantity ?? 0,
     rejectedBase: r.rejected_quantity ?? 0,

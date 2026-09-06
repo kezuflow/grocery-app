@@ -77,6 +77,7 @@ describe("admin operations commands", () => {
         locationId: "location-cebu-central",
         cycleId: "cycle",
         inventoryPoolId: "pool-red-onion",
+        skuId: "sku-red-onion-500g",
         expectedVersion: 0,
         idempotencyKey: "aggregate-none",
       }),
@@ -130,7 +131,7 @@ describe("admin operations commands", () => {
     expect(audit?.count).toBe(1);
   });
 
-  it("derives procurement from committed demand and replays without a second audit", async () => {
+  it("derives exact SKU procurement without inventory netting and replays safely", async () => {
     const principal = await manager(["procurement.manage"]);
     const { cookie } = principal;
     const customerPrincipal = await env.DB.prepare(
@@ -147,12 +148,13 @@ describe("admin operations commands", () => {
       .bind(customer.id, principal.userId, customerPrincipal.id, Date.now(), Date.now())
       .run();
     const orderId = crypto.randomUUID(),
+      orderItemId = crypto.randomUUID(),
       paymentId = crypto.randomUUID(),
       cycleId = "cycle-next-cebu",
       key = `aggregate-${crypto.randomUUID()}`;
     await env.DB.batch([
       env.DB.prepare(
-        "UPDATE inventory_balance SET on_hand=0, reserved=0 WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
+        "UPDATE inventory_balance SET on_hand=10000, reserved=0 WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
       ),
       env.DB.prepare(
         "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 1, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
@@ -161,8 +163,19 @@ describe("admin operations commands", () => {
         "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, ?, '{}', 'COMMITTED', 1, 'PHP', ?, ?, 1)",
       ).bind(orderId, customer.id, cycleId, paymentId, Date.now()),
       env.DB.prepare(
-        "INSERT INTO committed_demand (id, order_id, delivery_cycle_id, location_id, inventory_pool_id, quantity, status, version) VALUES (?, ?, ?, 'location-cebu-central', 'pool-red-onion', 9, 'OPEN', 1)",
-      ).bind(crypto.randomUUID(), orderId, cycleId),
+        `INSERT INTO order_item
+         (id,order_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,
+          unit_price_minor,line_total_minor,base_quantity,base_unit_code_snapshot,shipping_weight_grams)
+         VALUES (?,?,'sku-red-onion-500g','Red onion','500 g','GRAM',1,1,1,9,'GRAM',9)`,
+      ).bind(orderItemId, orderId),
+      env.DB.prepare(
+        `INSERT INTO committed_demand
+         (id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,version,
+          demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,
+          shipping_weight_grams,committed_at)
+         VALUES (?,?,?,'location-cebu-central','pool-red-onion',9,'OPEN',1,
+          'EXACT_PAID_LINE',?,'sku-red-onion-500g',1,9,'GRAM',9,?)`,
+      ).bind(crypto.randomUUID(), orderId, cycleId, orderItemId, Date.now()),
     ]);
     const input = {
       requestId: crypto.randomUUID(),
@@ -170,12 +183,25 @@ describe("admin operations commands", () => {
       locationId: "location-cebu-central",
       cycleId,
       inventoryPoolId: "pool-red-onion",
+      skuId: "sku-red-onion-500g",
       expectedVersion: 0,
       idempotencyKey: key,
       reason: "cutoff",
     };
     const first = await core.aggregateAdminProcurementDemand(input);
     expect(first).toMatchObject({ ok: true, value: { requiredQuantityBase: 9 } });
+    const exact = await env.DB.prepare(
+      `SELECT calculation_basis,sku_id,committed_demand_base,required_base
+       FROM procurement_requirement WHERE id=?`,
+    )
+      .bind(first.ok ? first.value.requirementId : "")
+      .first();
+    expect(exact).toMatchObject({
+      calculation_basis: "EXACT_PAID_DEMAND",
+      sku_id: "sku-red-onion-500g",
+      committed_demand_base: 9,
+      required_base: 9,
+    });
     const competing = await core.aggregateAdminProcurementDemand({
       ...input,
       requestId: crypto.randomUUID(),

@@ -27,6 +27,8 @@ describe("orders snapshot integrity schema", () => {
         "unit_price_minor",
         "line_total_minor",
         "base_quantity",
+        "base_unit_code_snapshot",
+        "shipping_weight_grams",
       ]),
     );
   });

@@ -28,8 +28,8 @@ export type OrderCommittedOutcome = {
  * Orders side of the canonical Payments reaction contract. Only a
  * provider-confirmed state sufficient under the commitment policy may create
  * the paid order. Reaction identity is the unique claim; quote consumption,
- * order and snapshots, capacity, and stocked-reservation vs planned-demand
- * effects commit in one D1 batch so duplicates can never double-commit and a
+ * order and snapshots, Instant reservation conversion, or exact Scheduled
+ * paid-line demand commit in one D1 batch so duplicates cannot double-commit and a
  * lost race leaves durable retry/reconciliation state instead of partials.
  */
 export async function applyCheckoutPaymentReaction(
@@ -128,6 +128,11 @@ export async function applyCheckoutPaymentReaction(
     requestedBase: number;
   };
   const pools = new Map<string, PoolPlan>();
+  const committedLines: Array<{
+    orderItemId: string;
+    poolId: string;
+    line: (typeof quote.lines)[number];
+  }> = [];
   for (const line of quote.lines) {
     const skuPool = await database
       .prepare(
@@ -135,7 +140,9 @@ export async function applyCheckoutPaymentReaction(
       )
       .bind(line.skuId)
       .first<{ pool_id: string }>();
-    if (!skuPool) continue;
+    if (!skuPool)
+      return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
+    committedLines.push({ orderItemId: crypto.randomUUID(), poolId: skuPool.pool_id, line });
     const plan =
       pools.get(skuPool.pool_id) ??
       ({
@@ -299,13 +306,13 @@ export async function applyCheckoutPaymentReaction(
     // `changes()` is scoped to the immediately preceding statement. A lost
     // quote CAS aborts the whole batch before any dependent order survives.
     database.prepare("INSERT INTO commitment_abort (id) SELECT -3 WHERE changes()=0"),
-    ...quote.lines.map((line) =>
+    ...committedLines.map(({ line, orderItemId }) =>
       database
         .prepare(
           "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity, base_unit_code_snapshot, shipping_weight_grams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
-          crypto.randomUUID(),
+          orderItemId,
           orderId,
           line.skuId,
           line.productName,
@@ -428,18 +435,6 @@ export async function applyCheckoutPaymentReaction(
     );
   }
 
-  if (!instant) {
-    statements.push(
-      database
-        .prepare(
-          "UPDATE cycle_zone_capacity SET allocated=allocated+1, version=version+1 WHERE cycle_id=? AND zone_id=? AND location_id=? AND allocated < capacity",
-        )
-        .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId),
-      // Missing/full capacity is a zero-row update, not a successful no-op.
-      database.prepare("INSERT INTO commitment_abort (id) SELECT -4 WHERE changes()=0"),
-    );
-  }
-
   // Instant commitments convert their expiring holds and respect the
   // location's concurrent-order capacity instead of cycle capacity.
   let maxConcurrentInstantOrders: number | null = null;
@@ -466,7 +461,6 @@ export async function applyCheckoutPaymentReaction(
 
   for (const plan of pools.values()) {
     const reservedBase = instant ? plan.requestedBase : 0;
-    const plannedBase = instant ? 0 : plan.requestedBase;
     if (reservedBase > 0) {
       statements.push(
         database
@@ -494,19 +488,35 @@ export async function applyCheckoutPaymentReaction(
           ),
       );
     }
-    if (plannedBase > 0) {
+  }
+
+  if (!instant) {
+    for (const { line, orderItemId, poolId } of committedLines) {
+      if (!line.shippingWeightGrams)
+        return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
       statements.push(
         database
           .prepare(
-            "INSERT INTO committed_demand (id, order_id, delivery_cycle_id, location_id, inventory_pool_id, quantity, status) VALUES (?, ?, ?, ?, ?, ?, 'OPEN')",
+            `INSERT INTO committed_demand
+             (id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,
+              demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,
+              base_unit_code,shipping_weight_grams,committed_at)
+             VALUES (?,?,?,?,?,?,'OPEN','EXACT_PAID_LINE',?,?,?,?,?,?,?)`,
           )
           .bind(
             crypto.randomUUID(),
             orderId,
             quote.deliveryCycleId,
             cycleSnapshot.locationId,
-            plan.poolId,
-            plannedBase,
+            poolId,
+            line.baseQuantity,
+            orderItemId,
+            line.skuId,
+            line.quantity,
+            line.baseQuantity,
+            line.baseUnitCode,
+            line.shippingWeightGrams,
+            now,
           ),
       );
     }
@@ -594,32 +604,20 @@ export async function applyCheckoutPaymentReaction(
     if (
       message.includes("CHECK constraint failed") ||
       message.includes("on_hand-reserved") ||
-      message.includes("capacity")
+      message.includes("INVALID_EXACT_SCHEDULED_DEMAND")
     ) {
-      const capacity = instant
-        ? null
-        : await database
-            .prepare(
-              "SELECT allocated, capacity FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
-            )
-            .bind(quote.deliveryCycleId, cycleSnapshot.zoneId, cycleSnapshot.locationId)
-            .first<{ allocated: number; capacity: number }>();
-      const capacityUnavailable =
-        !instant && (!capacity || capacity.allocated >= capacity.capacity);
       await recordFinanceExceptionRow(
         database,
         input,
-        capacityUnavailable ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT" : "STOCK_UNAVAILABLE",
-        capacityUnavailable ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT" : message,
+        instant ? "STOCK_UNAVAILABLE" : "SCHEDULED_DEMAND_INVALID",
+        message,
         now,
       );
       recordFinancialEvent({
         event: "paid_commitment_conflict",
         scope: "orders.commit",
         aggregateId: input.paymentIntentId,
-        outcomeCode: capacityUnavailable
-          ? "CAPACITY_UNAVAILABLE_AFTER_PAYMENT"
-          : "STOCK_UNAVAILABLE",
+        outcomeCode: instant ? "STOCK_UNAVAILABLE" : "SCHEDULED_DEMAND_INVALID",
       });
       return { applied: false, reason: "CAS_CONFLICT" };
     }

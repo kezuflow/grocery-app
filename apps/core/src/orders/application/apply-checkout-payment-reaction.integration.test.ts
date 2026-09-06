@@ -591,7 +591,7 @@ describe("order commitment from canonical payment reactions", () => {
     expect(exceptions?.count).toBe(1);
   });
 
-  it("rolls back a paid commitment when the final Scheduled capacity unit is gone", async () => {
+  it("commits exact Scheduled demand without consulting or mutating legacy capacity", async () => {
     const fixture = await seededCheckout();
     const quote = await createQuote(fixture);
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
@@ -627,23 +627,36 @@ describe("order commitment from canonical payment reactions", () => {
         canonicalPaymentState: "SUCCEEDED",
       });
 
-      expect(outcome).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+      expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
       const orderCount = await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM order_payment_reaction WHERE checkout_quote_id=?",
       )
         .bind(quote.value.quoteId)
         .first<{ count: number }>();
-      expect(orderCount?.count).toBe(0);
+      expect(orderCount?.count).toBe(1);
       const storedStatus = await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
         .bind(quote.value.quoteId)
         .first<{ status: string }>();
-      expect(storedStatus?.status).toBe("ACTIVE");
-      const exception = await env.DB.prepare(
-        "SELECT kind FROM finance_exception WHERE payment_intent_id=? AND status='OPEN'",
+      expect(storedStatus?.status).toBe("CONSUMED");
+      const exactDemand = await env.DB.prepare(
+        `SELECT demand_basis,sku_id,quantity_sellable,quantity_base_total,shipping_weight_grams
+         FROM committed_demand WHERE order_id=?`,
       )
-        .bind(intentId)
-        .first<{ kind: string }>();
-      expect(exception?.kind).toBe("CAPACITY_UNAVAILABLE_AFTER_PAYMENT");
+        .bind(outcome.orderId)
+        .first();
+      expect(exactDemand).toMatchObject({
+        demand_basis: "EXACT_PAID_LINE",
+        sku_id: fixture.skuId,
+        quantity_sellable: 4,
+        quantity_base_total: 2_000,
+        shipping_weight_grams: 2_000,
+      });
+      const unchangedCapacity = await env.DB.prepare(
+        "SELECT allocated FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
+      )
+        .bind(storedQuote!.delivery_cycle_id, route.zoneId, route.locationId)
+        .first<{ allocated: number }>();
+      expect(unchangedCapacity?.allocated).toBe(original!.capacity);
     } finally {
       await env.DB.prepare(
         "UPDATE cycle_zone_capacity SET capacity=?, allocated=? WHERE cycle_id=? AND zone_id=? AND location_id=?",

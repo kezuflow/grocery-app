@@ -15,8 +15,8 @@ export type AmendmentReactionOutcome = {
 
 /**
  * Commit an additive amendment once its own payment intent reaches a
- * sufficient canonical state. Only amendment-scoped capacity/inventory deltas
- * are written; the original paid order's commercial history is untouched.
+ * sufficient canonical state. Only amendment-scoped inventory or exact-demand
+ * deltas are written; the original paid order's commercial history is untouched.
  */
 export async function applyAmendmentPaymentReaction(
   database: D1Database,
@@ -72,16 +72,20 @@ export async function applyAmendmentPaymentReaction(
 
   const lines = await database
     .prepare(
-      `SELECT l.sku_id, l.quantity, l.base_quantity, p.inventory_pool_id AS pool_id
+      `SELECT l.id,l.sku_id,l.quantity,l.base_quantity,l.base_unit_code_snapshot,
+              l.shipping_weight_grams,p.inventory_pool_id AS pool_id
        FROM paid_order_amendment_line l JOIN sku s ON s.id=l.sku_id
        JOIN product p ON p.id=s.product_id
        WHERE l.amendment_id=?`,
     )
     .bind(input.amendmentId)
     .all<{
+      id: string;
       sku_id: string;
       quantity: number;
       base_quantity: number;
+      base_unit_code_snapshot: string | null;
+      shipping_weight_grams: number | null;
       pool_id: string;
     }>()
     .then((result) => result.results);
@@ -100,7 +104,6 @@ export async function applyAmendmentPaymentReaction(
   }
   for (const [poolId, requested] of perPool) {
     const reserved = amendment.fulfillment_mode === "INSTANT" ? requested : 0;
-    const planned = amendment.fulfillment_mode === "SCHEDULED" ? requested : 0;
     if (reserved > 0) {
       statements.push(
         database
@@ -121,19 +124,38 @@ export async function applyAmendmentPaymentReaction(
           ),
       );
     }
-    if (planned > 0) {
+  }
+  if (amendment.fulfillment_mode === "SCHEDULED") {
+    if (
+      !amendment.cycle_id ||
+      !amendment.location_id ||
+      lines.some((line) => !line.base_unit_code_snapshot || !line.shipping_weight_grams)
+    )
+      return { applied: false, reason: "CAS_CONFLICT" };
+    for (const line of lines) {
       statements.push(
         database
           .prepare(
-            "INSERT INTO committed_demand (id, order_id, delivery_cycle_id, location_id, inventory_pool_id, quantity, status) VALUES (?, ?, ?, ?, ?, ?, 'OPEN')",
+            `INSERT INTO committed_demand
+             (id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,
+              demand_basis,amendment_line_id,sku_id,quantity_sellable,quantity_base_total,
+              base_unit_code,shipping_weight_grams,committed_at)
+             VALUES (?,?,?,?,?,?,'OPEN','EXACT_PAID_LINE',?,?,?,?,?,?,?)`,
           )
           .bind(
             crypto.randomUUID(),
-            `${amendment.order_id}`,
-            amendment.cycle_id ?? "",
-            amendment.location_id ?? "",
-            poolId,
-            planned,
+            amendment.order_id,
+            amendment.cycle_id,
+            amendment.location_id,
+            line.pool_id,
+            line.base_quantity,
+            line.id,
+            line.sku_id,
+            line.quantity,
+            line.base_quantity,
+            line.base_unit_code_snapshot,
+            line.shipping_weight_grams,
+            now,
           ),
       );
     }
