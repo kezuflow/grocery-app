@@ -116,6 +116,13 @@ export type FulfillmentOptionView = {
     | "DELIVERY_PARTNER_UNAVAILABLE"
     | "DELIVERY_WEIGHT_UNAVAILABLE"
     | null;
+  /** Present only for Instant. The opaque optionId remains selection authority. */
+  deliveryPartner?: {
+    code: "lalamove" | "grab-express";
+    displayName: string;
+    serviceType: string;
+    serviceLabel: string;
+  } | null;
   promisedAt: string | null;
   deliveryWindow: { startsAt: string; endsAt: string } | null;
   feePreview: {

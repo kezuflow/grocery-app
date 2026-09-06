@@ -62,6 +62,31 @@ export const fulfillmentLocation = sqliteTable(
   }),
 );
 
+/** Delivery-owned courier pickup profile keyed by the authoritative location. */
+export const fulfillmentLocationDeliveryProfile = sqliteTable(
+  "fulfillment_location_delivery_profile",
+  {
+    locationId: text("location_id")
+      .primaryKey()
+      .references(() => fulfillmentLocation.id, { onDelete: "restrict" }),
+    senderName: text("sender_name").notNull(),
+    phoneE164: text("phone_e164").notNull(),
+    email: text("email"),
+    formattedAddress: text("formatted_address").notNull(),
+    addressLine1: text("address_line1").notNull(),
+    addressLine2: text("address_line2"),
+    barangay: text("barangay"),
+    city: text("city").notNull(),
+    region: text("region"),
+    postalCode: text("postal_code"),
+    countryCode: text("country_code").notNull(),
+    pickupInstructions: text("pickup_instructions"),
+    version: integer("version").notNull().default(1),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+);
+
 export const locationCapability = sqliteTable(
   "location_capability",
   {
@@ -161,6 +186,7 @@ export const geographySchema = {
   organization,
   market,
   fulfillmentLocation,
+  fulfillmentLocationDeliveryProfile,
   locationCapability,
   serviceArea,
   deliveryZone,

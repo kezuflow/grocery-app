@@ -739,6 +739,7 @@ const catalogSkuCreateSchema = authenticatedRequestSchema.extend({
   sellableUnitId: validationSchema.string().trim().min(1).max(200),
   sellQuantity: validationSchema.number().int().min(1),
   consumptionBaseQuantity: validationSchema.number().int().min(1),
+  estimatedShippingWeightGrams: validationSchema.number().int().min(1).optional(),
   merchandisingLabel: validationSchema.string().trim().max(60).nullable().optional(),
   sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
   idempotencyKey: idempotencyKeySchema,
@@ -750,6 +751,7 @@ const catalogSkuUpdateSchema = authenticatedRequestSchema.extend({
   merchandisingLabel: validationSchema.string().trim().max(60).nullable().optional(),
   status: validationSchema.enum(["active", "inactive"]).optional(),
   sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
+  estimatedShippingWeightGrams: validationSchema.number().int().min(1).optional(),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
 });

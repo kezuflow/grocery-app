@@ -37,6 +37,16 @@ VALUES
   ('seed-delivery-fee-v1', 'market-metro-cebu', 'location-cebu-central', 'PHP', 5000,
    1500, 'ACTIVE', 1, 1787184000000, NULL, 1787184000000, 1787184000000);
 
+INSERT OR IGNORE INTO fulfillment_location_delivery_profile
+  (location_id, sender_name, phone_e164, email, formatted_address, address_line1,
+   address_line2, barangay, city, region, postal_code, country_code, pickup_instructions,
+   version, created_at, updated_at)
+VALUES
+  ('location-cebu-central', 'FreshMarkets Central Cebu', '+639171110000',
+   'dispatch@example.com', 'FreshMarkets Central Cebu, Cebu City, Philippines',
+   'FreshMarkets Central Cebu', NULL, NULL, 'Cebu City', 'Central Visayas', '6000', 'PH',
+   'Use the dispatch entrance', 1, 1787184000000, 1787184000000);
+
 -- Customers are application profiles linked to Better Auth identities. No credentials or sessions
 -- are seeded, so these display identities cannot authenticate.
 INSERT OR IGNORE INTO user

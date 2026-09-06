@@ -1,9 +1,10 @@
 import type { FulfillmentOptionView, RpcResult } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
-import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { sortLocationsByDistance } from "../../geography/geometry";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
+import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
+import { quoteProviderDelivery } from "./quote-provider-delivery";
 
 type Query = {
   customerId: string;
@@ -13,6 +14,14 @@ type Query = {
   cartVersion: number;
   requestId: string;
 };
+
+type InstantDeliveryPartner = Readonly<{
+  providerCode: "lalamove" | "grab-express";
+  displayName: string;
+  serviceType: string;
+  serviceLabel: string;
+  provider: DeliveryProvider;
+}>;
 type Candidate = {
   id: string;
   locationId: string;
@@ -37,12 +46,19 @@ export async function listFulfillmentOptions(
   database: D1Database,
   routeDistance: RouteDistancePort,
   query: Query,
+  dependencies: Readonly<{
+    instantDeliveryPartners?: readonly InstantDeliveryPartner[];
+    scheduledDeliveryPartner?: InstantDeliveryPartner;
+  }> = {},
 ): Promise<RpcResult<readonly FulfillmentOptionView[]>> {
+  void routeDistance;
   const selling = await requireSellingOpen(database, query.requestId);
   if (!selling.ok) return selling;
   const address = await database
     .prepare(
-      `SELECT latitude,longitude,version,delivery_zone_code,user_confirmed_at,serviceable,status
+      `SELECT recipient,phone,address_json,address_components_json,delivery_instructions_json,
+              barangay,city,postal_code,latitude,longitude,version,delivery_zone_code,
+              user_confirmed_at,serviceable,status
      FROM customer_address WHERE id=? AND customer_id=?`,
     )
     .bind(query.addressId, query.customerId)
@@ -54,6 +70,14 @@ export async function listFulfillmentOptions(
       user_confirmed_at: number | null;
       serviceable: number | null;
       status: string;
+      recipient: string;
+      phone: string;
+      address_json: string;
+      address_components_json: string | null;
+      delivery_instructions_json: string | null;
+      barangay: string | null;
+      city: string | null;
+      postal_code: string | null;
     }>();
   const cart = await database
     .prepare("SELECT version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'")
@@ -128,7 +152,6 @@ export async function listFulfillmentOptions(
   for (const mode of candidate ? [candidate.mode] : (["SCHEDULED"] as const)) {
     let reason: FulfillmentOptionView["unavailableReason"] = candidate ? null : "MODE_UNAVAILABLE";
     let cycle: { id: string; cutoff: number; delivery: number; version: number } | null = null;
-    let fee: FulfillmentOptionView["feePreview"] = null;
     if (candidate && mode === "INSTANT") {
       const unavailable = await database
         .prepare(
@@ -214,48 +237,80 @@ export async function listFulfillmentOptions(
         .first();
       if (unavailableCatalogItem) reason = "CATALOG_UNAVAILABLE";
     }
-    if (candidate && reason === null) {
-      try {
-        const quoted = await quoteDeliveryFee(database, routeDistance, {
+    const partners =
+      mode === "INSTANT"
+        ? dependencies.instantDeliveryPartners?.length
+          ? dependencies.instantDeliveryPartners
+          : [null]
+        : [dependencies.scheduledDeliveryPartner ?? null];
+    for (const partner of partners) {
+      let optionReason: FulfillmentOptionView["unavailableReason"] =
+        !partner && reason === null
+          ? mode === "INSTANT"
+            ? "DELIVERY_PARTNER_UNAVAILABLE"
+            : "FEE_UNAVAILABLE"
+          : reason;
+      let fee: FulfillmentOptionView["feePreview"] = null;
+      if (candidate && partner && optionReason === null) {
+        const now = Date.now();
+        const quoted = await quoteProviderDelivery(database, partner.provider, {
+          providerCode: partner.providerCode,
+          serviceType: partner.serviceType,
           marketId: candidate.marketId,
           locationId: candidate.locationId,
-          origin: { latitude: candidate.latitude, longitude: candidate.longitude },
-          destination: { latitude: address.latitude, longitude: address.longitude },
-          now: Date.now(),
+          cartId: query.cartId,
+          address,
+          scheduleAt: mode === "SCHEDULED" && cycle ? new Date(cycle.delivery).toISOString() : null,
+          now,
         });
-        fee = {
-          subtotalMinor: quoted.feeMinor,
-          discountMinor: 0,
-          totalMinor: quoted.feeMinor,
-          currency: quoted.snapshot.currency,
-        };
-      } catch {
-        reason = "FEE_UNAVAILABLE";
+        if (!quoted) optionReason = "FEE_UNAVAILABLE";
+        else
+          fee = {
+            subtotalMinor: quoted.feeMinor,
+            discountMinor: 0,
+            totalMinor: quoted.feeMinor,
+            currency: quoted.snapshot.currency,
+          };
       }
-    }
-    const evidence = candidate
-      ? { locationId: candidate.locationId, modeVersion: candidate.modeVersion, cycle }
-      : { unavailable: true };
-    options.push({
-      optionId: await optionId(currentQuery, mode, evidence),
-      mode,
-      eligible: reason === null,
-      unavailableReason: reason,
-      promisedAt:
-        mode === "INSTANT" && candidate?.promiseMinutes
-          ? new Date(Date.now() + candidate.promiseMinutes * 60_000).toISOString()
-          : null,
-      deliveryWindow: cycle
+      const evidence = candidate
         ? {
-            startsAt: new Date(cycle.delivery).toISOString(),
-            endsAt: new Date(cycle.delivery + 24 * 60 * 60_000).toISOString(),
+            locationId: candidate.locationId,
+            modeVersion: candidate.modeVersion,
+            cycle,
+            ...(partner
+              ? { providerCode: partner.providerCode, providerServiceType: partner.serviceType }
+              : {}),
           }
-        : null,
-      feePreview: fee,
-      cycleId: cycle?.id ?? null,
-      cutoffAt: cycle ? new Date(cycle.cutoff).toISOString() : null,
-      provisional: true,
-    });
+        : { unavailable: true };
+      options.push({
+        optionId: await optionId(currentQuery, mode, evidence),
+        mode,
+        eligible: optionReason === null,
+        unavailableReason: optionReason,
+        deliveryPartner: mode === "INSTANT" && partner
+          ? {
+              code: partner.providerCode,
+              displayName: partner.displayName,
+              serviceType: partner.serviceType,
+              serviceLabel: partner.serviceLabel,
+            }
+          : null,
+        promisedAt:
+          mode === "INSTANT" && candidate?.promiseMinutes
+            ? new Date(Date.now() + candidate.promiseMinutes * 60_000).toISOString()
+            : null,
+        deliveryWindow: cycle
+          ? {
+              startsAt: new Date(cycle.delivery).toISOString(),
+              endsAt: new Date(cycle.delivery + 24 * 60 * 60_000).toISOString(),
+            }
+          : null,
+        feePreview: fee,
+        cycleId: cycle?.id ?? null,
+        cutoffAt: cycle ? new Date(cycle.cutoff).toISOString() : null,
+        provisional: true,
+      });
+    }
   }
   return { ok: true, value: options, requestId: query.requestId };
 }

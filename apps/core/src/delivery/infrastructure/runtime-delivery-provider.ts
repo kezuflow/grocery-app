@@ -1,6 +1,7 @@
 import { parseRuntimeEnvironment } from "../../runtime/runtime-configuration";
 import type { DeliveryProvider } from "../ports/delivery-provider";
 import { createLalamoveProvider } from "./lalamove/lalamove-provider";
+import { createMockDeliveryProvider } from "./mock-delivery-provider";
 
 export type DeliveryProviderCode = "lalamove" | "grab-express";
 
@@ -25,6 +26,7 @@ export type RuntimeDeliveryProviderEnvironment = Readonly<{
   LALAMOVE_MARKET?: string;
   LALAMOVE_LANGUAGE?: string;
   LALAMOVE_SERVICE_TYPE?: string;
+  LOCAL_DELIVERY_PROVIDER?: string;
 }>;
 
 const providerNames: Record<DeliveryProviderCode, string> = {
@@ -83,13 +85,23 @@ export function buildDeliveryProviderRegistry(
   const runtime = parseRuntimeEnvironment(environment.ENVIRONMENT);
   const providers = new Map<DeliveryProviderCode, DeliveryProvider>();
   for (const code of providerCodes(environment)) {
-    const provider = createLalamoveProvider({
+    if (runtime !== "test" && environment.LOCAL_DELIVERY_PROVIDER)
+      throw new Error("LOCAL_DELIVERY_PROVIDER_FORBIDDEN");
+    if (
+      environment.LOCAL_DELIVERY_PROVIDER &&
+      environment.LOCAL_DELIVERY_PROVIDER !== "mock"
+    )
+      throw new Error("LOCAL_DELIVERY_PROVIDER_INVALID");
+    const provider =
+      runtime === "test" && environment.LOCAL_DELIVERY_PROVIDER === "mock"
+        ? createMockDeliveryProvider()
+        : createLalamoveProvider({
       apiKey: required(environment.LALAMOVE_API_KEY, "LALAMOVE_API_KEY_REQUIRED"),
       apiSecret: required(environment.LALAMOVE_API_SECRET, "LALAMOVE_API_SECRET_REQUIRED"),
       market: required(environment.LALAMOVE_MARKET, "LALAMOVE_MARKET_REQUIRED"),
       language: required(environment.LALAMOVE_LANGUAGE, "LALAMOVE_LANGUAGE_REQUIRED"),
       environment: runtime === "production" ? "production" : "sandbox",
-    });
+          });
     providers.set(code, provider);
   }
   return providers;

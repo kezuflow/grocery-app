@@ -94,6 +94,7 @@ describe("checkout/orders schema", () => {
         "cutoff_at",
         "fulfillment_mode",
         "sourcing_modes_json",
+        "delivery_execution_snapshot_json",
       ]),
     );
     expect(await cols("paid_order_amendment")).toEqual(
@@ -105,9 +106,12 @@ describe("checkout/orders schema", () => {
         "sku_id",
         "quantity",
         "base_quantity",
+        "base_unit_code_snapshot",
+        "shipping_weight_grams",
         "unit_price_minor",
       ]),
     );
+    expect(await cols("sku")).toContain("estimated_shipping_weight_grams");
   });
 
   it("creates durable finance exceptions with reconciliation metadata", async () => {

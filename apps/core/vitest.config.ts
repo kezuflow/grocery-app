@@ -28,6 +28,7 @@ export default defineConfig({
           ENVIRONMENT: "test",
           PAYMENT_PROVIDER: "mock",
           DELIVERY_PROVIDERS: "lalamove",
+          LOCAL_DELIVERY_PROVIDER: "mock",
           LALAMOVE_MARKET: "PH",
           LALAMOVE_LANGUAGE: "en_PH",
           LALAMOVE_SERVICE_TYPE: "MOTORCYCLE",

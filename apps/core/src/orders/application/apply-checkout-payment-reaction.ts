@@ -162,7 +162,15 @@ export async function applyCheckoutPaymentReaction(
     phone: typeof addressSnapshot.phone === "string" ? addressSnapshot.phone : null,
   });
   const instructionsSnapshot = deliveryInstructionsSnapshot(addressSnapshot);
-  const fulfillmentSnapshot = quote.fulfillmentSnapshot as { promisedAt?: string } | null;
+  const fulfillmentSnapshot = quote.fulfillmentSnapshot as {
+    promisedAt?: string;
+    deliveryExecution?: unknown;
+  } | null;
+  const deliveryExecutionSnapshotJson =
+    fulfillmentSnapshot?.deliveryExecution === undefined ||
+    fulfillmentSnapshot.deliveryExecution === null
+      ? null
+      : JSON.stringify(fulfillmentSnapshot.deliveryExecution);
   const promisedAt = instant
     ? Date.parse(fulfillmentSnapshot?.promisedAt ?? new Date(now).toISOString())
     : null;
@@ -216,7 +224,7 @@ export async function applyCheckoutPaymentReaction(
     instant
       ? database
           .prepare(
-            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, delivery_fee_snapshot_json, created_at) VALUES (?, ?, NULL, ?, NULL, NULL, ?, 'INSTANT', ?, ?, ?)",
+            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, delivery_fee_snapshot_json, delivery_execution_snapshot_json, created_at) VALUES (?, ?, NULL, ?, NULL, NULL, ?, 'INSTANT', ?, ?, ?, ?)",
           )
           .bind(
             orderId,
@@ -225,11 +233,12 @@ export async function applyCheckoutPaymentReaction(
             promisedAt,
             "[]",
             JSON.stringify(quote.deliveryFeeSnapshot),
+            deliveryExecutionSnapshotJson,
             now,
           )
       : database
           .prepare(
-            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, delivery_fee_snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'SCHEDULED', ?, ?, ?)",
+            "INSERT INTO order_fulfillment_snapshot (order_id, location_id, cycle_id, zone_id, cutoff_at, delivery_date, promised_at, fulfillment_mode, sourcing_modes_json, delivery_fee_snapshot_json, delivery_execution_snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'SCHEDULED', ?, ?, ?, ?)",
           )
           .bind(
             orderId,
@@ -240,6 +249,7 @@ export async function applyCheckoutPaymentReaction(
             Date.parse(cycleSnapshot.deliveryDate),
             "[]",
             JSON.stringify(quote.deliveryFeeSnapshot),
+            deliveryExecutionSnapshotJson,
             now,
           ),
     // Operational lifecycle records begin here: fulfillment is queued for
@@ -292,7 +302,7 @@ export async function applyCheckoutPaymentReaction(
     ...quote.lines.map((line) =>
       database
         .prepare(
-          "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity, base_unit_code_snapshot, shipping_weight_grams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
           crypto.randomUUID(),
@@ -305,6 +315,8 @@ export async function applyCheckoutPaymentReaction(
           line.unitPriceMinor,
           line.lineTotalMinor,
           line.baseQuantity,
+          line.baseUnitCode,
+          line.shippingWeightGrams,
         ),
     ),
   ];

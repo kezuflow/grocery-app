@@ -4,6 +4,7 @@ import {
   type QuoteLine,
 } from "../domain/quote";
 import type { DeliveryFeeSnapshot } from "../../geography/application/quote-delivery-fee";
+import type { ProviderDeliveryFeeSnapshot } from "../application/quote-provider-delivery";
 import type {
   CheckoutPromotionApplicationView,
   PromotionCodeFeedback,
@@ -31,7 +32,7 @@ export type CheckoutQuoteRow = {
   addressSnapshot: unknown;
   cycleSnapshot: unknown;
   fulfillmentSnapshot: unknown;
-  deliveryFeeSnapshot: DeliveryFeeSnapshot | null;
+  deliveryFeeSnapshot: DeliveryFeeSnapshot | ProviderDeliveryFeeSnapshot | null;
   status: "ACTIVE" | "CONSUMED" | "EXPIRED" | "SUPERSEDED";
   version: number;
   expiresAt: number;
@@ -118,7 +119,9 @@ function map(row: RawRow): CheckoutQuoteRow {
       ? JSON.parse(row.fulfillment_snapshot_json)
       : null,
     deliveryFeeSnapshot: row.delivery_fee_snapshot_json
-      ? (JSON.parse(row.delivery_fee_snapshot_json) as DeliveryFeeSnapshot)
+      ? (JSON.parse(row.delivery_fee_snapshot_json) as
+          | DeliveryFeeSnapshot
+          | ProviderDeliveryFeeSnapshot)
       : null,
     status: row.status,
     version: row.version,

@@ -3,12 +3,22 @@ import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
+import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 
+const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
   routeDistance: buildRouteDistancePort({
     ENVIRONMENT: "test",
     ROUTE_DISTANCE_PROVIDER: "mock",
   }),
+  deliveryProviders: new Map([["lalamove", deliveryProvider]]),
+  scheduledDeliveryPartner: { providerCode: "lalamove", serviceType: "MOTORCYCLE" },
+  defaultInstantDeliveryPartner: {
+    code: "lalamove" as const,
+    displayName: "Lalamove",
+    serviceType: "MOTORCYCLE",
+    serviceLabel: "Motorcycle",
+  },
 };
 
 let counter = 0;
@@ -53,7 +63,7 @@ async function seededCheckout(
     .run();
   const addressId = `addr-co-${n}`;
   await env.DB.prepare(
-    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, delivery_zone_code, delivery_instructions_json, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'R', '09', '{}', 10.3, 123.9, 'CEBU_CITY_CORE', ?, 'Legacy note must not win', 'active', 1, ?, ?)",
+    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, delivery_zone_code, delivery_instructions_json, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'R', '+639171234567', '{}', 10.3, 123.9, 'CEBU_CITY_CORE', ?, 'Legacy note must not win', 'active', 1, ?, ?)",
   )
     .bind(addressId, customerId, '{"gateGuard":"Ask guard"}', now, now)
     .run();
@@ -446,6 +456,12 @@ describe("order commitment from canonical payment reactions", () => {
       .bind(outcome.orderId)
       .first<{ count: number }>();
     expect(items?.count).toBe(1);
+    const logisticsSnapshot = await env.DB.prepare(
+      "SELECT base_unit_code_snapshot AS baseUnitCode, shipping_weight_grams AS shippingWeightGrams FROM order_item WHERE order_id=?",
+    )
+      .bind(outcome.orderId)
+      .first<{ baseUnitCode: string | null; shippingWeightGrams: number | null }>();
+    expect(logisticsSnapshot).toEqual({ baseUnitCode: "GRAM", shippingWeightGrams: 2_000 });
     const reservations = await env.DB.prepare(
       "SELECT COALESCE(SUM(quantity),0) AS total FROM inventory_reservation WHERE order_id=? AND inventory_pool_id=?",
     )
@@ -476,7 +492,7 @@ describe("order commitment from canonical payment reactions", () => {
       zone_id: "zone-cebu-city-core",
       latitude: 10.3,
       longitude: 123.9,
-      contact_snapshot_json: '{"recipient":"R","phone":"09"}',
+      contact_snapshot_json: '{"recipient":"R","phone":"+639171234567"}',
       instructions_snapshot: '{"gateGuard":"Ask guard"}',
       status: "UNASSIGNED",
     });
@@ -484,7 +500,7 @@ describe("order commitment from canonical payment reactions", () => {
     expect(delivery?.stop_id).toBeTypeOf("string");
     expect(JSON.parse(String(delivery?.address_snapshot_json))).toMatchObject({
       recipient: "R",
-      phone: "09",
+      phone: "+639171234567",
       latitude: 10.3,
       longitude: 123.9,
     });

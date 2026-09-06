@@ -106,6 +106,7 @@ export function createPaymentsRpc(context: CoreRpcContext) {
         providerCode,
         context.routeDistance(),
         { ...input, customerId: customer.value.customerId },
+        context.deliveryProviders(),
       );
     },
 

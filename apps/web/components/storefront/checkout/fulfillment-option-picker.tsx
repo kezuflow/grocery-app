@@ -28,17 +28,35 @@ export function FulfillmentOptionPicker({
           disabled={disabled || !option.eligible}
           className="flex min-h-16 items-center justify-between gap-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] p-4 text-left disabled:opacity-50"
         >
-          <span>
-            <strong>{option.mode === "INSTANT" ? "Instant delivery" : "Scheduled delivery"}</strong>
-            <small className="mt-1 block text-xs text-[var(--fm-text-muted)]">
-              {option.eligible
-                ? option.promisedAt
-                  ? `Expected ${new Date(option.promisedAt).toLocaleString()}`
-                  : option.deliveryWindow
-                    ? `${new Date(option.deliveryWindow.startsAt).toLocaleDateString()} delivery window`
-                    : "Available"
-                : (option.unavailableReason ?? "Unavailable").toLowerCase().replaceAll("_", " ")}
-            </small>
+          <span className="flex min-w-0 items-center gap-3">
+            {option.deliveryPartner ? (
+              <span
+                aria-hidden="true"
+                className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--fm-surface-muted)] text-xs font-bold text-[var(--fm-text)]"
+              >
+                {option.deliveryPartner.displayName.slice(0, 2).toUpperCase()}
+              </span>
+            ) : null}
+            <span>
+              <strong>
+                {option.mode === "INSTANT"
+                  ? (option.deliveryPartner?.displayName ?? "Instant delivery")
+                  : "Scheduled delivery"}
+              </strong>
+              <small className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                {option.eligible
+                  ? option.mode === "SCHEDULED"
+                    ? option.deliveryWindow
+                      ? `${new Date(option.deliveryWindow.startsAt).toLocaleDateString()} delivery window · Delivery assigned by store`
+                      : "Delivery assigned by store"
+                    : option.promisedAt
+                      ? `${option.deliveryPartner?.serviceLabel ?? "Instant"} · Expected ${new Date(option.promisedAt).toLocaleString()}`
+                      : option.deliveryWindow
+                        ? `${new Date(option.deliveryWindow.startsAt).toLocaleDateString()} delivery window`
+                        : "Available"
+                  : (option.unavailableReason ?? "Unavailable").toLowerCase().replaceAll("_", " ")}
+              </small>
+            </span>
           </span>
           <span className="text-sm font-bold">{money(option)}</span>
         </button>

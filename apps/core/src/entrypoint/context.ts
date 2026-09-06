@@ -14,6 +14,7 @@ import {
   selectedPaymentProviderCode,
 } from "../payments/infrastructure/providers/runtime-providers";
 import { buildRouteDistancePort } from "../geography/infrastructure/runtime-route-distance";
+import { buildDeliveryProviderRegistry } from "../delivery/infrastructure/runtime-delivery-provider";
 import {
   activeFulfillmentLocationId,
   activeMarketCode,
@@ -153,6 +154,7 @@ export type CoreRpcContext = Readonly<{
   runtimeConfiguration: () => CoreRuntimeConfiguration;
   paymentProviders: () => ReturnType<typeof buildProviderRegistry>;
   paymentProviderCode: () => string | null;
+  deliveryProviders: () => ReturnType<typeof buildDeliveryProviderRegistry>;
   routeDistance: () => ReturnType<typeof buildRouteDistancePort>;
 }>;
 
@@ -162,6 +164,7 @@ export function createCoreRpcContext(
 ): CoreRpcContext {
   let cachedRuntime: CoreRuntimeConfiguration | undefined;
   let cachedProviders: ReturnType<typeof buildProviderRegistry> | undefined;
+  let cachedDeliveryProviders: ReturnType<typeof buildDeliveryProviderRegistry> | undefined;
   let cachedRouteDistance: ReturnType<typeof buildRouteDistancePort> | undefined;
   const runtimeConfiguration = () => (cachedRuntime ??= coreRuntimeConfiguration(env));
   return {
@@ -172,6 +175,7 @@ export function createCoreRpcContext(
     runtimeConfiguration,
     paymentProviders: () => (cachedProviders ??= buildProviderRegistry(runtimeConfiguration())),
     paymentProviderCode: () => selectedPaymentProviderCode(runtimeConfiguration()),
+    deliveryProviders: () => (cachedDeliveryProviders ??= buildDeliveryProviderRegistry(env)),
     routeDistance: () => (cachedRouteDistance ??= buildRouteDistancePort(env)),
   };
 }

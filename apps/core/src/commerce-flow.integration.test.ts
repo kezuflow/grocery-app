@@ -361,16 +361,12 @@ describe("customer checkout flow", () => {
     )
       .bind(payment.value.paymentIntentId)
       .first<{ delivery_fee_snapshot_json: string }>();
-    expect(JSON.parse(feeSnapshot!.delivery_fee_snapshot_json)).toEqual({
-      marketId: "market-metro-cebu",
-      locationId: "location-cebu-central",
+    expect(JSON.parse(feeSnapshot!.delivery_fee_snapshot_json)).toMatchObject({
+      source: "EXTERNAL_PROVIDER",
+      providerCode: "lalamove",
+      serviceType: "MOTORCYCLE",
       currency: "PHP",
-      distanceMeters: 2_000,
-      minimumDeliveryFeeMinor: 5_000,
-      perKilometerRateMinor: 2_500,
-      calculatedFeeMinor: 5_000,
-      configurationVersion: 1,
-      calculation: { method: "ROAD_ROUTE", profile: "DRIVING" },
+      amountMinor: 5_000,
     });
 
     // A lost browser response can be replayed after commitment consumed the

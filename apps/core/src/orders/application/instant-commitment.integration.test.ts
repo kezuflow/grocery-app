@@ -4,13 +4,23 @@ import { createCheckoutQuote } from "../../checkout/application/create-checkout-
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { startPromotionalTrial } from "../../membership/application/start-promotional-trial";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
+import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 
 const LOCATION = "location-cebu-central";
+const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
   routeDistance: buildRouteDistancePort({
     ENVIRONMENT: "test",
     ROUTE_DISTANCE_PROVIDER: "mock",
   }),
+  deliveryProviders: new Map([["lalamove", deliveryProvider]]),
+  scheduledDeliveryPartner: { providerCode: "lalamove", serviceType: "MOTORCYCLE" },
+  defaultInstantDeliveryPartner: {
+    code: "lalamove" as const,
+    displayName: "Lalamove",
+    serviceType: "MOTORCYCLE",
+    serviceLabel: "Motorcycle",
+  },
 };
 const ZONE_CODE = "CEBU_CITY_CORE";
 let counter = 0;
@@ -66,7 +76,7 @@ async function seededInstantQuote(member = true): Promise<{ quoteId: string; cus
   }
   const addressId = `addr-${customerId}`;
   await env.DB.prepare(
-    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'C', '09', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'Call on arrival', 'active', 1, ?, ?)",
+    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, notes, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'C', '+639171234567', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'Call on arrival', 'active', 1, ?, ?)",
   )
     .bind(addressId, customerId, ZONE_CODE, now, now)
     .run();
@@ -97,6 +107,13 @@ async function seededInstantQuote(member = true): Promise<{ quoteId: string; cus
       cartVersion: 1,
       addressId,
       deliveryCycleId: null,
+      fulfillmentOptionId: "opaque-lalamove-option",
+      deliveryPartner: {
+        code: "lalamove",
+        displayName: "Lalamove",
+        serviceType: "MOTORCYCLE",
+        serviceLabel: "Motorcycle",
+      },
       idempotencyKey: `quote-${crypto.randomUUID()}`,
       requestId: crypto.randomUUID(),
     },
@@ -149,27 +166,34 @@ describe("instant order commitment", () => {
         fulfillment_mode: string;
         pre_service_fee_total_minor: number;
         service_fee_minor: number;
-        service_fee_configuration_id: string;
-        service_fee_snapshot_json: string;
+        service_fee_configuration_id: string | null;
+        service_fee_snapshot_json: string | null;
       }>();
     expect(order).toMatchObject({
       cycle_id: null,
       fulfillment_mode: "INSTANT",
-      service_fee_configuration_id: "instant-commit-fee-v1",
+      service_fee_configuration_id: null,
     });
-    expect(order?.service_fee_minor).toBeGreaterThan(0);
-    expect(JSON.parse(order!.service_fee_snapshot_json)).toMatchObject({
-      configurationId: "instant-commit-fee-v1",
-      baseMinor: order?.pre_service_fee_total_minor,
-      feeMinor: order?.service_fee_minor,
-    });
+    expect(order?.service_fee_minor).toBe(0);
+    expect(order?.service_fee_snapshot_json).toBeNull();
     const snapshot = await env.DB.prepare(
-      "SELECT promised_at, cycle_id FROM order_fulfillment_snapshot WHERE order_id=?",
+      "SELECT promised_at, cycle_id, delivery_execution_snapshot_json FROM order_fulfillment_snapshot WHERE order_id=?",
     )
       .bind(orderId)
-      .first<{ promised_at: number | null; cycle_id: string | null }>();
+      .first<{
+        promised_at: number | null;
+        cycle_id: string | null;
+        delivery_execution_snapshot_json: string | null;
+      }>();
     expect(snapshot?.cycle_id).toBeNull();
     expect(snapshot?.promised_at).toBeGreaterThan(Date.now());
+    expect(JSON.parse(snapshot!.delivery_execution_snapshot_json!)).toEqual({
+      selectedBy: "CUSTOMER",
+      method: "EXTERNAL_PROVIDER",
+      providerCode: "lalamove",
+      providerServiceType: "MOTORCYCLE",
+      providerDisplayName: "Lalamove",
+    });
     const job = await env.DB.prepare(
       "SELECT fulfillment_mode, cycle_id, location_id, zone_id, promised_at, status, rider_user_id FROM delivery_job WHERE order_id=?",
     )
@@ -202,13 +226,13 @@ describe("instant order commitment", () => {
       sequence: null,
       latitude: 10.32,
       longitude: 123.9,
-      contact_snapshot_json: '{"recipient":"C","phone":"09"}',
+      contact_snapshot_json: '{"recipient":"C","phone":"+639171234567"}',
       instructions_snapshot: '{"deliveryNote":"Call on arrival"}',
       status: "UNASSIGNED",
     });
     expect(JSON.parse(String(stop?.address_snapshot_json))).toMatchObject({
       recipient: "C",
-      phone: "09",
+      phone: "+639171234567",
       latitude: 10.32,
       longitude: 123.9,
     });

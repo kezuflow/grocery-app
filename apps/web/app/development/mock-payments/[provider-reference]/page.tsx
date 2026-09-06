@@ -13,7 +13,8 @@ export default async function MockPaymentPage({
   params: Promise<{ "provider-reference": string }>;
   searchParams: Promise<{ returnTo?: string }>;
 }) {
-  if (env.ENVIRONMENT !== "development" && env.ENVIRONMENT !== "test") notFound();
+  const environment = String(env.ENVIRONMENT);
+  if (environment !== "development" && environment !== "test") notFound();
   const [{ "provider-reference": providerReference }, query] = await Promise.all([
     params,
     searchParams,

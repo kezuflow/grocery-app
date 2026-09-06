@@ -2,14 +2,12 @@ import {
   createCheckoutRepository,
   type CheckoutQuoteRow,
 } from "../infrastructure/d1-checkout-repository";
-import type { AppErrorCode } from "@freshmarkets/contracts";
+import type { AppErrorCode, FulfillmentOptionView } from "@freshmarkets/contracts";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
 import { resolveLineShippingWeightGrams } from "../../fulfillment/domain/delivery-package";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
-import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
-import { deliveryFeeFailure } from "./delivery-fee-failure";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import type {
@@ -22,6 +20,11 @@ import {
 } from "../../promotions/application/evaluate-checkout-promotions";
 import { closestLocation } from "../../geography/geometry";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
+import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
+import {
+  quoteProviderDelivery,
+  type ProviderCheckoutAddress,
+} from "./quote-provider-delivery";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -32,12 +35,20 @@ export type CreateCheckoutQuoteCommand = {
   deliveryCycleId: string | null;
   /** Opaque customer selection resolved by the RPC adapter. */
   fulfillmentOptionId?: string;
+  /** Server-resolved Instant partner metadata; never accepted as client authority. */
+  deliveryPartner?: FulfillmentOptionView["deliveryPartner"];
   promotionCodes?: readonly string[];
   idempotencyKey: string;
   requestId: string;
 };
 
-export type CheckoutQuoteDependencies = { routeDistance: RouteDistancePort };
+export type CheckoutQuoteDependencies = {
+  /** Retained until route-distance compatibility callers are retired. */
+  routeDistance: RouteDistancePort;
+  deliveryProviders?: ReadonlyMap<string, DeliveryProvider>;
+  scheduledDeliveryPartner?: Readonly<{ providerCode: string; serviceType: string }>;
+  defaultInstantDeliveryPartner?: NonNullable<FulfillmentOptionView["deliveryPartner"]>;
+};
 
 export type CheckoutQuoteView = {
   quoteId: string;
@@ -153,13 +164,7 @@ export async function createCheckoutQuote(
   const address = await database
     .prepare("SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'")
     .bind(command.addressId, command.customerId)
-    .first<
-      Record<string, unknown> & {
-        delivery_zone_code: string | null;
-        latitude: number;
-        longitude: number;
-      }
-    >();
+    .first<ProviderCheckoutAddress & { delivery_zone_code: string | null }>();
   if (!address) return failure("NOT_FOUND", "Customer address not found", command.requestId);
 
   const globalMode = selling.configuration.fulfillment_mode;
@@ -177,7 +182,17 @@ export async function createCheckoutQuote(
     );
   const modeItems: QuoteItem[] = cartItems.results;
   if (globalMode === "INSTANT")
-    return createInstantQuote(database, repository, command, modeItems, address, dependencies);
+    return createInstantQuote(
+      database,
+      repository,
+      {
+        ...command,
+        deliveryPartner: command.deliveryPartner ?? dependencies.defaultInstantDeliveryPartner,
+      },
+      modeItems,
+      address,
+      dependencies,
+    );
   return createScheduledQuote(
     database,
     repository,
@@ -194,11 +209,7 @@ async function createScheduledQuote(
   repository: ReturnType<typeof createCheckoutRepository>,
   command: CreateCheckoutQuoteCommand & { deliveryCycleId: string },
   items: readonly QuoteItem[],
-  address: Record<string, unknown> & {
-    delivery_zone_code: string | null;
-    latitude: number;
-    longitude: number;
-  },
+  address: ProviderCheckoutAddress & { delivery_zone_code: string | null },
   dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
   const membership = await evaluateSubscriptionEntitlement(database, {
@@ -322,21 +333,30 @@ async function createScheduledQuote(
     });
   }
 
-  let deliveryFee;
-  try {
-    deliveryFee = await quoteDeliveryFee(database, dependencies.routeDistance, {
-      marketId: cycle.market_id,
-      locationId: routing.location_id,
-      origin: { latitude: routing.latitude, longitude: routing.longitude },
-      destination: { latitude: address.latitude, longitude: address.longitude },
-      now: now2,
-    });
-  } catch (error) {
-    return deliveryFeeFailure(error, command.requestId);
-  }
+  const scheduledPartner = dependencies.scheduledDeliveryPartner;
+  const scheduledProvider = scheduledPartner
+    ? dependencies.deliveryProviders?.get(scheduledPartner.providerCode)
+    : null;
+  if (!scheduledPartner || !scheduledProvider)
+    return failure("CONFIGURATION_ERROR", "Scheduled delivery pricing is unavailable", command.requestId);
+  const deliveryFee = await quoteProviderDelivery(database, scheduledProvider, {
+    providerCode: scheduledPartner.providerCode,
+    serviceType: scheduledPartner.serviceType,
+    marketId: cycle.market_id,
+    locationId: routing.location_id,
+    cartId: command.cartId,
+    address,
+    scheduleAt: new Date(cycle.delivery_date).toISOString(),
+    now: now2,
+  });
+  if (!deliveryFee)
+    return failure("CONFIGURATION_ERROR", "Scheduled delivery quotation is unavailable", command.requestId);
 
   const quoteId = crypto.randomUUID();
-  const expiresAt = Date.now() + QUOTE_TTL_MS;
+  const expiresAt = Math.min(
+    Date.now() + QUOTE_TTL_MS,
+    Date.parse(deliveryFee.snapshot.expiresAt),
+  );
   const requestedPromotionCodes = (command.promotionCodes ?? []).map((code) =>
     code.trim().toUpperCase(),
   );
@@ -401,6 +421,12 @@ async function createScheduledQuote(
       fulfillmentSnapshot: {
         fulfillmentOptionId: command.fulfillmentOptionId ?? null,
         fulfillmentMode: "SCHEDULED" as const,
+        deliveryExecution: {
+          selectedBy: "OPERATIONS" as const,
+          method: null,
+          providerCode: null,
+          providerServiceType: null,
+        },
         poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
       },
       deliveryFeeSnapshot: deliveryFee.snapshot,

@@ -30,6 +30,32 @@ import {
 } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
+import {
+  configuredInstantDeliveryPartners,
+  type RuntimeDeliveryProviderEnvironment,
+} from "../delivery/infrastructure/runtime-delivery-provider";
+
+function instantDeliveryPartners(context: CoreRpcContext) {
+  const configured = configuredInstantDeliveryPartners(
+    context.env as unknown as RuntimeDeliveryProviderEnvironment,
+  );
+  const availableProviders = context.deliveryProviders();
+  return configured.flatMap((partner) => {
+    const provider = availableProviders.get(partner.providerCode);
+    return provider ? [{ ...partner, provider }] : [];
+  });
+}
+
+function checkoutDeliveryDependencies(context: CoreRpcContext) {
+  const partners = instantDeliveryPartners(context);
+  const scheduled = partners.find((partner) => partner.providerCode === "lalamove");
+  return {
+    routeDistance: context.routeDistance(),
+    deliveryProviders: context.deliveryProviders(),
+    scheduledDeliveryPartner: scheduled,
+    instantDeliveryPartners: partners,
+  };
+}
 
 export function createCheckoutRpc(context: CoreRpcContext) {
   return {
@@ -90,16 +116,21 @@ export function createCheckoutRpc(context: CoreRpcContext) {
             idempotencyKey: input.idempotencyKey,
             requestId: input.requestId,
           },
-          { routeDistance: context.routeDistance() },
+          checkoutDeliveryDependencies(context),
         );
       }
-      const options = await listFulfillmentOptions(context.env.DB, context.routeDistance(), {
-        customerId: customer.value.customerId,
-        addressId: input.addressId,
-        cartId: input.cartId,
-        cartVersion: input.cartVersion,
-        requestId: input.requestId,
-      });
+      const options = await listFulfillmentOptions(
+        context.env.DB,
+        context.routeDistance(),
+        {
+          customerId: customer.value.customerId,
+          addressId: input.addressId,
+          cartId: input.cartId,
+          cartVersion: input.cartVersion,
+          requestId: input.requestId,
+        },
+        checkoutDeliveryDependencies(context),
+      );
       if (!options.ok) return options;
       const selected = options.value.find(
         (option) => option.optionId === input.fulfillmentOptionId,
@@ -122,11 +153,12 @@ export function createCheckoutRpc(context: CoreRpcContext) {
           addressId: input.addressId,
           deliveryCycleId: selected.mode === "SCHEDULED" ? selected.cycleId : null,
           fulfillmentOptionId: input.fulfillmentOptionId,
+          deliveryPartner: selected.deliveryPartner,
           promotionCodes: input.promotionCodes,
           idempotencyKey: input.idempotencyKey,
           requestId: input.requestId,
         },
-        { routeDistance: context.routeDistance() },
+        checkoutDeliveryDependencies(context),
       );
     },
 
@@ -142,10 +174,15 @@ export function createCheckoutRpc(context: CoreRpcContext) {
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
-      return listFulfillmentOptions(context.env.DB, context.routeDistance(), {
-        ...validation.data,
-        customerId: customer.value.customerId,
-      });
+      return listFulfillmentOptions(
+        context.env.DB,
+        context.routeDistance(),
+        {
+          ...validation.data,
+          customerId: customer.value.customerId,
+        },
+        checkoutDeliveryDependencies(context),
+      );
     },
 
     async refreshCheckoutQuote(input: CheckoutQuoteRefreshRequest) {

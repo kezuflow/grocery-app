@@ -15,7 +15,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ "provider-reference": string }> },
 ) {
-  if (env.ENVIRONMENT !== "development" && env.ENVIRONMENT !== "test")
+  const environment = String(env.ENVIRONMENT);
+  if (environment !== "development" && environment !== "test")
     return new Response("Not Found", { status: 404 });
 
   const meta = webRequestContext(request);

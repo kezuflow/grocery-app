@@ -1,11 +1,15 @@
 import type { CheckoutQuoteRow } from "../infrastructure/d1-checkout-repository";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
-import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
-import { resolveServiceFee } from "./resolve-service-fee";
+import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
+import {
+  quoteProviderDelivery,
+  type ProviderCheckoutAddress,
+  type ProviderDeliveryFeeSnapshot,
+} from "./quote-provider-delivery";
 
 type RevalidationFailure = {
   ok: false;
@@ -26,6 +30,8 @@ type LiveCartItem = {
   category_id: string;
   inventory_pool_id: string;
   consumption_base_quantity: number;
+  estimated_shipping_weight_grams: number | null;
+  base_unit_code: "GRAM" | "PIECE" | "MILLILITER";
 };
 
 function rejected(code: AppErrorCode, message: string): RevalidationFailure {
@@ -44,7 +50,9 @@ export async function revalidateCheckoutQuote(
   quote: CheckoutQuoteRow,
   routeDistance: RouteDistancePort,
   now = Date.now(),
+  deliveryProviders?: ReadonlyMap<string, DeliveryProvider>,
 ): Promise<{ ok: true } | RevalidationFailure> {
+  void routeDistance;
   const globalMode = await database
     .prepare(
       "SELECT selling_state,fulfillment_mode FROM global_commerce_configuration WHERE id='global'",
@@ -73,17 +81,22 @@ export async function revalidateCheckoutQuote(
       .first<{ id: string }>(),
     database
       .prepare(
-        "SELECT latitude, longitude, delivery_zone_code FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
+        `SELECT recipient,phone,address_json,address_components_json,delivery_instructions_json,
+                barangay,city,postal_code,latitude,longitude,delivery_zone_code
+         FROM customer_address WHERE id=? AND customer_id=? AND status='active'`,
       )
       .bind(quote.addressId, quote.customerId)
-      .first<{ latitude: number; longitude: number; delivery_zone_code: string | null }>(),
+      .first<ProviderCheckoutAddress & { delivery_zone_code: string | null }>(),
     database
       .prepare(
         `SELECT ci.sku_id, ci.quantity, p.id AS product_id, p.category_id, p.inventory_pool_id,
-                s.consumption_base_quantity
+                s.consumption_base_quantity,s.estimated_shipping_weight_grams,
+                unit.canonical_base_code AS base_unit_code
          FROM cart_item ci
          JOIN sku s ON s.id=ci.sku_id
          JOIN product p ON p.id=s.product_id
+         JOIN inventory_pool pool ON pool.id=p.inventory_pool_id
+         JOIN unit ON unit.id=pool.base_unit_id
          WHERE ci.cart_id=? AND s.status='active' AND p.status='active' ORDER BY ci.sku_id`,
       )
       .bind(quote.cartId)
@@ -110,7 +123,6 @@ export async function revalidateCheckoutQuote(
     return rejected("CONFIGURATION_ERROR", "Quote routing evidence is incomplete");
 
   let marketId: string;
-  let origin: { latitude: number; longitude: number };
   if (quote.fulfillmentMode === "INSTANT") {
     const routing = await database
       .prepare(
@@ -131,7 +143,6 @@ export async function revalidateCheckoutQuote(
     if (!routing)
       return rejected("INSTANT_MODE_UNAVAILABLE", "Instant checkout is no longer available");
     marketId = routing.market_id;
-    origin = { latitude: routing.latitude, longitude: routing.longitude };
 
     for (const item of liveItems.results) {
       const held = await database
@@ -167,7 +178,6 @@ export async function revalidateCheckoutQuote(
       .first<{ eligible: number }>();
     if (!routed) return rejected("ADDRESS_UNSERVICEABLE", "Address is no longer serviceable");
     marketId = cycle.market_id;
-    origin = { latitude: cycle.latitude, longitude: cycle.longitude };
   }
 
   let subtotalMinor = 0;
@@ -201,18 +211,23 @@ export async function revalidateCheckoutQuote(
     subtotalMinor += price.amount_minor * item.quantity;
   }
 
-  let deliveryFee;
-  try {
-    deliveryFee = await quoteDeliveryFee(database, routeDistance, {
-      marketId,
-      locationId: snapshot.locationId,
-      origin,
-      destination: { latitude: address.latitude, longitude: address.longitude },
-      now,
-    });
-  } catch {
-    return rejected("CONFIGURATION_ERROR", "Delivery fee configuration is unavailable");
-  }
+  const acceptedDelivery = quote.deliveryFeeSnapshot as ProviderDeliveryFeeSnapshot | null;
+  if (!acceptedDelivery || acceptedDelivery.source !== "EXTERNAL_PROVIDER")
+    return rejected("PRICE_CHANGED", "Provider quotation evidence is unavailable");
+  const provider = deliveryProviders?.get(acceptedDelivery.providerCode);
+  if (!provider) return rejected("CONFIGURATION_ERROR", "Delivery provider is unavailable");
+  const deliveryFee = await quoteProviderDelivery(database, provider, {
+    providerCode: acceptedDelivery.providerCode,
+    serviceType: acceptedDelivery.serviceType,
+    marketId,
+    locationId: snapshot.locationId,
+    cartId: quote.cartId,
+    address,
+    scheduleAt: acceptedDelivery.scheduleAt,
+    now,
+  });
+  if (!deliveryFee)
+    return rejected("PRICE_CHANGED", "Delivery quotation changed; accept a new quote");
   const promotions = await evaluateCheckoutPromotions(database, {
     customerId: quote.customerId,
     marketId,
@@ -254,31 +269,21 @@ export async function revalidateCheckoutQuote(
     deliveryFee.feeMinor -
     deliveryDiscount +
     quote.financial.taxMinor;
-  let serviceFeeMinor = 0;
-  if (quote.fulfillmentMode === "INSTANT") {
-    const serviceFee = await resolveServiceFee(database, {
-      currency: deliveryFee.snapshot.currency,
-      baseMinor: preServiceFeeTotalMinor,
-      at: now,
-    });
-    if (!serviceFee.ok)
-      return rejected("PRICE_CHANGED", "FreshMarkets Service Fee changed; accept a new quote");
-    if (
-      quote.preServiceFeeTotalMinor !== preServiceFeeTotalMinor ||
-      quote.serviceFeeConfigurationId !== serviceFee.value.configurationId ||
-      JSON.stringify(quote.serviceFeeSnapshot) !== JSON.stringify(serviceFee.value)
-    )
-      return rejected("PRICE_CHANGED", "FreshMarkets Service Fee changed; accept a new quote");
-    serviceFeeMinor = serviceFee.value.feeMinor;
-  }
+  if (
+    quote.preServiceFeeTotalMinor !== preServiceFeeTotalMinor ||
+    quote.serviceFeeConfigurationId !== null ||
+    quote.serviceFeeSnapshot !== null ||
+    quote.financial.serviceFeeMinor !== 0
+  )
+    return rejected("PRICE_CHANGED", "Legacy Service Fee evidence is not valid for new commerce");
   const currentFinancial = {
     ...quote.financial,
     merchandiseSubtotalMinor: subtotalMinor,
     orderDiscountMinor: merchandiseDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
-    serviceFeeMinor,
-    totalMinor: preServiceFeeTotalMinor + serviceFeeMinor,
+    serviceFeeMinor: 0,
+    totalMinor: preServiceFeeTotalMinor,
     currency: deliveryFee.snapshot.currency,
   };
   const decision = await resolveCheckoutDecision(database, {

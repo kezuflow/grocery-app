@@ -11,6 +11,7 @@ import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { revalidateCheckoutQuote } from "../../checkout/application/revalidate-checkout-quote";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
+import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -51,6 +52,7 @@ export async function createCheckoutPaymentIntent(
   providerCode: string,
   routeDistance: RouteDistancePort,
   command: PaymentIntentCommandRequest & { customerId: string },
+  deliveryProviders?: ReadonlyMap<string, DeliveryProvider>,
 ): Promise<RpcResult<PaymentActionView>> {
   const paymentRepository = createPaymentRepository(database);
   const existing = await paymentRepository.findIntentByIdempotencyKey(command.idempotencyKey);
@@ -102,7 +104,13 @@ export async function createCheckoutPaymentIntent(
       "Order total changed; review and accept the current total",
       command.requestId,
     );
-  const current = await revalidateCheckoutQuote(database, quote, routeDistance);
+  const current = await revalidateCheckoutQuote(
+    database,
+    quote,
+    routeDistance,
+    Date.now(),
+    deliveryProviders,
+  );
   if (!current.ok) return failure(current.code, current.message, command.requestId);
   return createPayment(database, registry, {
     purpose: "GROCERY_CHECKOUT",

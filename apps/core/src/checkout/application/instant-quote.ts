@@ -9,20 +9,21 @@ import {
   type CreateCheckoutQuoteCommand,
   type CheckoutQuoteView,
 } from "./create-checkout-quote";
-import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
-import { deliveryFeeFailure } from "./delivery-fee-failure";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import {
   evaluateCheckoutPromotions,
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
-import { resolveServiceFee } from "./resolve-service-fee";
 import { closestLocation } from "../../geography/geometry";
 import {
   resolveLineShippingWeightGrams,
   type CanonicalBaseUnitCode,
 } from "../../fulfillment/domain/delivery-package";
+import {
+  quoteProviderDelivery,
+  type ProviderCheckoutAddress,
+} from "./quote-provider-delivery";
 
 export type QuoteItem = {
   sku_id: string;
@@ -52,11 +53,7 @@ export async function createInstantQuote(
   repository: ReturnType<typeof createCheckoutRepository>,
   command: CreateCheckoutQuoteCommand,
   items: readonly QuoteItem[],
-  address: Record<string, unknown> & {
-    delivery_zone_code: string | null;
-    latitude: number;
-    longitude: number;
-  },
+  address: ProviderCheckoutAddress & { delivery_zone_code: string | null },
   dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
   const routingRows = await database
@@ -99,19 +96,6 @@ export async function createInstantQuote(
     );
 
   const now = Date.now();
-
-  let deliveryFee;
-  try {
-    deliveryFee = await quoteDeliveryFee(database, dependencies.routeDistance, {
-      marketId: routing.market_id,
-      locationId: routing.location_id,
-      origin: { latitude: routing.latitude, longitude: routing.longitude },
-      destination: { latitude: address.latitude, longitude: address.longitude },
-      now,
-    });
-  } catch (error) {
-    return deliveryFeeFailure(error, command.requestId);
-  }
 
   // Usable stocked availability per pool: on_hand minus reserved and held.
   const demandByPool = new Map<string, number>();
@@ -193,8 +177,32 @@ export async function createInstantQuote(
     });
   }
 
+  if (command.deliveryPartner && lines.some((line) => line.shippingWeightGrams === null))
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Delivery weight is unavailable for one or more items",
+      command.requestId,
+    );
+  if (!command.deliveryPartner)
+    return failure("CONFIGURATION_ERROR", "Select an available delivery partner", command.requestId);
+  const provider = dependencies.deliveryProviders?.get(command.deliveryPartner.code);
+  if (!provider)
+    return failure("CONFIGURATION_ERROR", "Delivery partner is unavailable", command.requestId);
+  const deliveryFee = await quoteProviderDelivery(database, provider, {
+    providerCode: command.deliveryPartner.code,
+    serviceType: command.deliveryPartner.serviceType,
+    marketId: routing.market_id,
+    locationId: routing.location_id,
+    cartId: command.cartId,
+    address,
+    scheduleAt: null,
+    now,
+  });
+  if (!deliveryFee)
+    return failure("CONFIGURATION_ERROR", "Delivery quotation is unavailable", command.requestId);
+
   const quoteId = crypto.randomUUID();
-  const expiresAt = Date.now() + QUOTE_TTL_MS;
+  const expiresAt = Math.min(Date.now() + QUOTE_TTL_MS, Date.parse(deliveryFee.snapshot.expiresAt));
   const requestedPromotionCodes = (command.promotionCodes ?? []).map((code) =>
     code.trim().toUpperCase(),
   );
@@ -232,22 +240,15 @@ export async function createInstantQuote(
   }));
   const preServiceFeeTotalMinor =
     subtotalMinor - merchandiseDiscount + deliveryFee.feeMinor - deliveryDiscount;
-  const serviceFee = await resolveServiceFee(database, {
-    currency: deliveryFee.snapshot.currency,
-    baseMinor: preServiceFeeTotalMinor,
-    at: now,
-  });
-  if (!serviceFee.ok)
-    return failure(serviceFee.error.code, serviceFee.error.message, command.requestId);
   const financial = {
     merchandiseSubtotalMinor: subtotalMinor,
     itemDiscountMinor: 0,
     orderDiscountMinor: merchandiseDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
-    serviceFeeMinor: serviceFee.value.feeMinor,
+    serviceFeeMinor: 0,
     taxMinor: 0,
-    totalMinor: preServiceFeeTotalMinor + serviceFee.value.feeMinor,
+    totalMinor: preServiceFeeTotalMinor,
     currency: deliveryFee.snapshot.currency,
   };
   const decision = await resolveCheckoutDecision(database, {
@@ -264,6 +265,15 @@ export async function createInstantQuote(
       fulfillmentSnapshot: {
         fulfillmentOptionId: command.fulfillmentOptionId ?? null,
         fulfillmentMode: "INSTANT" as const,
+        deliveryExecution: command.deliveryPartner
+          ? {
+              selectedBy: "CUSTOMER" as const,
+              method: "EXTERNAL_PROVIDER" as const,
+              providerCode: command.deliveryPartner.code,
+              providerServiceType: command.deliveryPartner.serviceType,
+              providerDisplayName: command.deliveryPartner.displayName,
+            }
+          : null,
         promisedAt: new Date(now + routing.promise_minutes * 60_000).toISOString(),
         poolIds: [...new Set(items.map((item) => item.inventory_pool_id))],
       },
@@ -320,8 +330,8 @@ export async function createInstantQuote(
           currency: decision.currency,
           financial,
           preServiceFeeTotalMinor,
-          serviceFeeConfigurationId: serviceFee.value.configurationId,
-          serviceFeeSnapshot: serviceFee.value,
+          serviceFeeConfigurationId: null,
+          serviceFeeSnapshot: null,
           subtotalMinor,
           discountMinor: merchandiseDiscount,
           deliveryFeeMinor: deliveryFee.feeMinor,

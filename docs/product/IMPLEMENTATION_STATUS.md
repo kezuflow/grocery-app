@@ -48,6 +48,44 @@ Status date: 2026-09-06. This file is descriptive evidence only. The canonical d
   Runtime commands and customer/Admin surfaces still require their separately authorized later
   phases before the new persistence becomes active application behavior.
 
+## Provider-priced checkout and Lalamove capability layer (2026-09-06)
+
+- Core now composes an ordered, closed external-delivery provider registry. Instant fulfillment
+  options expose only public-safe partner/service metadata and keep the opaque option ID as
+  authority; the selected partner is retained in the Quote fulfillment snapshot. Scheduled
+  checkout exposes only its cycle/window while Lalamove supplies the internal future quotation;
+  location operations later select the external provider used for dispatch.
+- The Lalamove v3 Worker-native adapter implements exact HMAC-SHA256 request signing, bounded
+  responses, quotation-to-order creation within the short quote lifetime, returned stop-ID contact
+  mapping, E.164 phone and labeled instruction forwarding, one generic bag/box remark,
+  proof-of-delivery requests, exact decimal-string-to-minor-unit conversion, get/cancel, provider
+  status translation, safe telemetry, and uncertain mutation quarantine. It sends no Lalamove
+  thermal-bag, COD/autodeduct, or purchase-service option; FreshMarkets owns the customer payment
+  and separately pays the courier.
+- SKU logistics data now supports an estimated shipping weight per sold unit for non-gram products.
+  Gram-based Quote lines use their exact base consumption; all new paid Order and paid-addition
+  lines snapshot canonical base-unit code and resolved shipping grams. The packing rule is one bag
+  below 10 kg and one box from 10 kg. Lalamove receives no `item`, dimensions, or grocery handling
+  flags. Instant and Scheduled provider-priced options fail closed when any cart line lacks a
+  resolvable weight.
+- Liter and milliliter units are retired from active catalog authoring. Existing rows remain inactive
+  for historical compatibility; packaged liquids are configured and sold as piece-based SKUs.
+- `POST /webhooks/delivery/lalamove` verifies the documented payload-level `apiKey`, `timestamp`,
+  and `signature` over the signed `data` object and exact callback path, deduplicates Lalamove
+  `eventId`, applies ordered status observations, and retains
+  authenticated non-status events for reconciliation. Migration
+  `0061_lalamove_delivery_provider.sql` adds Lalamove to the closed dispatch/inbox vocabulary while
+  preserving existing GrabExpress records and constraints.
+- Runtime selection exposes only Lalamove; GrabExpress remains disabled until Cebu access, pricing,
+  authentication, webhook, and sandbox gates are verified. An authenticated city lookup and signed
+  PH/MOTORCYCLE sandbox quotation with two synthetic Cebu stops succeeded on 2026-09-06, returning
+  PHP 40.00, request/expiry evidence, and no special requests. Live booking still requires secrets outside source
+  control plus wallet/account readiness, webhook registration, sender/location profiles, and the
+  operator dispatch command. Active checkout no longer reads legacy distance-rate delivery fees or
+  FreshMarkets Service Fee configuration: the provider amount is snapshotted in integer minor units,
+  quote expiry caps Checkout expiry, and payment readiness re-quotes before creating a payment.
+  Move It is not advertised because no public developer API contract has been verified.
+
 ## GrabExpress provider-dispatch foundation (2026-09-03)
 
 - The saved-address boundary now normalizes accepted Philippine mobile formats to one `+63...`

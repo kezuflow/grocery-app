@@ -13,6 +13,12 @@ describe("FulfillmentOptionPicker", () => {
             mode: "INSTANT",
             eligible: true,
             unavailableReason: null,
+            deliveryPartner: {
+              code: "lalamove",
+              displayName: "Lalamove",
+              serviceType: "MOTORCYCLE",
+              serviceLabel: "Motorcycle",
+            },
             promisedAt: "2026-09-01T00:00:00Z",
             deliveryWindow: null,
             feePreview: {
@@ -40,7 +46,8 @@ describe("FulfillmentOptionPicker", () => {
         ]}
       />,
     );
-    expect(html).toContain("Instant delivery");
+    expect(html).toContain("Lalamove");
+    expect(html).toContain("Motorcycle");
     expect(html).toContain("Scheduled delivery");
     expect(html).toContain("capacity unavailable");
     expect(html).not.toMatch(/hub|location-cebu/i);

@@ -5,14 +5,24 @@ import { startPromotionalTrial } from ".././../membership/application/start-prom
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { createCheckoutRepository } from "../infrastructure/d1-checkout-repository";
 import { revalidateCheckoutQuote } from "./revalidate-checkout-quote";
+import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 
 const LOCATION = "location-cebu-central";
+const deliveryProvider = createMockDeliveryProvider();
 const ZONE_CODE = "CEBU_CITY_CORE";
 const quoteDependencies = {
   routeDistance: buildRouteDistancePort({
     ENVIRONMENT: "test",
     ROUTE_DISTANCE_PROVIDER: "mock",
   }),
+  deliveryProviders: new Map([["lalamove", deliveryProvider]]),
+  scheduledDeliveryPartner: { providerCode: "lalamove", serviceType: "MOTORCYCLE" },
+  defaultInstantDeliveryPartner: {
+    code: "lalamove" as const,
+    displayName: "Lalamove",
+    serviceType: "MOTORCYCLE",
+    serviceLabel: "Motorcycle",
+  },
 };
 
 let customerCounter = 0;
@@ -52,7 +62,7 @@ async function seedBasket(options: {
   }
   const addressId = `addr-${customerId}`;
   await env.DB.prepare(
-    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'Inst Test', '09000000000', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'active', 1, ?, ?)",
+    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'Inst Test', '+639171234567', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'active', 1, ?, ?)",
   )
     .bind(addressId, customerId, ZONE_CODE, now, now)
     .run();
@@ -150,11 +160,17 @@ describe("instant checkout quotes", () => {
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
     ).run();
     const basket = await seedBasket({ onHand: 100_000 });
-    const result = await createCheckoutQuote(
-      env.DB,
-      command(basket.customerId, basket.cartId, basket.addressId),
-      quoteDependencies,
-    );
+    const quoteCommand = {
+      ...command(basket.customerId, basket.cartId, basket.addressId),
+      fulfillmentOptionId: "opaque-lalamove-option",
+      deliveryPartner: {
+        code: "lalamove" as const,
+        displayName: "Lalamove",
+        serviceType: "MOTORCYCLE",
+        serviceLabel: "Motorcycle",
+      },
+    };
+    const result = await createCheckoutQuote(env.DB, quoteCommand, quoteDependencies);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -162,7 +178,7 @@ describe("instant checkout quotes", () => {
       `SELECT delivery_cycle_id, fulfillment_mode, total_minor, subtotal_minor,
               delivery_fee_minor, pre_service_fee_total_minor, service_fee_minor,
               service_fee_configuration_id, service_fee_snapshot_json,
-              fulfillment_snapshot_json
+              fulfillment_snapshot_json, lines_json
        FROM checkout_quote WHERE id=?`,
     )
       .bind(result.value.quoteId)
@@ -174,24 +190,40 @@ describe("instant checkout quotes", () => {
         delivery_fee_minor: number;
         pre_service_fee_total_minor: number;
         service_fee_minor: number;
-        service_fee_configuration_id: string;
-        service_fee_snapshot_json: string;
+        service_fee_configuration_id: string | null;
+        service_fee_snapshot_json: string | null;
         fulfillment_snapshot_json: string;
+        lines_json: string;
       }>();
     expect(row).toMatchObject({ delivery_cycle_id: null, fulfillment_mode: "INSTANT" });
-    expect(row?.service_fee_configuration_id).toBe("instant-fee-v1");
-    expect(row?.service_fee_minor).toBeGreaterThan(500);
-    expect(row?.total_minor).toBe(
-      (row?.pre_service_fee_total_minor ?? 0) + (row?.service_fee_minor ?? 0),
-    );
-    expect(JSON.parse(row!.service_fee_snapshot_json)).toMatchObject({
-      configurationId: "instant-fee-v1",
-      baseMinor: row?.pre_service_fee_total_minor,
-      feeMinor: row?.service_fee_minor,
-    });
-    const snapshot = JSON.parse(row!.fulfillment_snapshot_json) as { promisedAt: string };
+    expect(row?.service_fee_configuration_id).toBeNull();
+    expect(row?.service_fee_minor).toBe(0);
+    expect(row?.total_minor).toBe(row?.pre_service_fee_total_minor);
+    expect(row?.service_fee_snapshot_json).toBeNull();
+    const snapshot = JSON.parse(row!.fulfillment_snapshot_json) as {
+      promisedAt: string;
+      deliveryExecution: Record<string, unknown>;
+    };
     expect(Date.parse(snapshot.promisedAt)).toBeGreaterThan(Date.now() + 60 * 60_000);
     expect(Date.parse(snapshot.promisedAt)).toBeLessThan(Date.now() + 120 * 60_000);
+    expect(snapshot.deliveryExecution).toEqual({
+      selectedBy: "CUSTOMER",
+      method: "EXTERNAL_PROVIDER",
+      providerCode: "lalamove",
+      providerServiceType: "MOTORCYCLE",
+      providerDisplayName: "Lalamove",
+    });
+    expect(JSON.parse(row!.lines_json)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skuId: "sku-red-onion-500g",
+          quantity: 5,
+          baseQuantity: 2_500,
+          baseUnitCode: "GRAM",
+          shippingWeightGrams: 2_500,
+        }),
+      ]),
+    );
     const holds = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
     )
@@ -200,15 +232,39 @@ describe("instant checkout quotes", () => {
     expect(holds?.count).toBe(1);
 
     // Idempotent replay returns the same immutable quote.
-    const replay = await createCheckoutQuote(
-      env.DB,
-      command(basket.customerId, basket.cartId, basket.addressId),
-      quoteDependencies,
-    );
+    const replay = await createCheckoutQuote(env.DB, quoteCommand, quoteDependencies);
     void replay;
   });
 
-  it("allows Instant checkout without membership and applies the active Service Fee", async () => {
+  it("rejects an external-provider quote when a non-gram line has no shipping estimate", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED',base_unit_id='unit-piece' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 100_000 });
+
+    const result = await createCheckoutQuote(
+      env.DB,
+      {
+        ...command(basket.customerId, basket.cartId, basket.addressId),
+        fulfillmentOptionId: "opaque-lalamove-option",
+        deliveryPartner: {
+          code: "lalamove",
+          displayName: "Lalamove",
+          serviceType: "MOTORCYCLE",
+          serviceLabel: "Motorcycle",
+        },
+      },
+      quoteDependencies,
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFIGURATION_ERROR" } });
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET base_unit_id='unit-gram' WHERE id='pool-red-onion'",
+    ).run();
+  });
+
+  it("allows Instant checkout without membership and ignores legacy Service Fee configuration", async () => {
     await configureInstant();
     await env.DB.prepare(
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
@@ -222,9 +278,8 @@ describe("instant checkout quotes", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      value: { serviceFeeMinor: expect.any(Number) },
+      value: { serviceFeeMinor: 0 },
     });
-    if (result.ok) expect(result.value.serviceFeeMinor).toBeGreaterThan(0);
   });
 
   it("rejects Scheduled checkout without eligible membership", async () => {
@@ -328,7 +383,7 @@ describe("instant checkout quotes", () => {
     ]);
   });
 
-  it("requires a replacement quote when the effective Service Fee changes", async () => {
+  it("ignores changes to legacy Service Fee configuration", async () => {
     await configureInstant();
     await env.DB.prepare(
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
@@ -357,7 +412,56 @@ describe("instant checkout quotes", () => {
     const quote = await createCheckoutRepository(env.DB).findQuoteById(created.value.quoteId);
     expect(quote).not.toBeNull();
     expect(
-      await revalidateCheckoutQuote(env.DB, quote!, quoteDependencies.routeDistance, now + 1),
+      await revalidateCheckoutQuote(
+        env.DB,
+        quote!,
+        quoteDependencies.routeDistance,
+        now + 1,
+        quoteDependencies.deliveryProviders,
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("requires explicit replacement acceptance when the provider delivery amount changes", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    let amountMinor = 5_000;
+    const changingProvider = {
+      ...deliveryProvider,
+      quote: async (request: Parameters<typeof deliveryProvider.quote>[0]) => {
+        const result = await deliveryProvider.quote(request);
+        return result.ok
+          ? {
+              ...result,
+              value: result.value.map((quote) => ({ ...quote, amountMinor })),
+            }
+          : result;
+      },
+    };
+    const dependencies = {
+      ...quoteDependencies,
+      deliveryProviders: new Map([["lalamove", changingProvider]]),
+    };
+    const created = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      dependencies,
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    amountMinor = 6_500;
+    const quote = await createCheckoutRepository(env.DB).findQuoteById(created.value.quoteId);
+    expect(
+      await revalidateCheckoutQuote(
+        env.DB,
+        quote!,
+        dependencies.routeDistance,
+        Date.now(),
+        dependencies.deliveryProviders,
+      ),
     ).toMatchObject({ ok: false, code: "PRICE_CHANGED" });
   });
 

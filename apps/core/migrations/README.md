@@ -103,3 +103,7 @@ count; bottled and packaged liquids are sold as pieces.
 
 `0061_lalamove_delivery_provider.sql` expands the closed external-delivery provider vocabulary to
 Lalamove while preserving existing GrabExpress dispatch and webhook evidence.
+
+`0062_location_delivery_profiles.sql` gives every fulfillment/store location its own courier
+pickup profile while retaining authoritative coordinates on `fulfillment_location`. Provider-priced
+checkout fails closed until the selected store has a complete profile.
