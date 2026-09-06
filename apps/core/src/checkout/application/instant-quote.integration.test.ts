@@ -152,7 +152,7 @@ describe("instant checkout quotes", () => {
     expect(holds?.count).toBe(0);
   });
 
-  it("creates a no-cycle instant quote with fee, promise, and expiring holds", async () => {
+  it("creates a provider-priced no-fee Instant quote with promise and expiring holds", async () => {
     await seedBasket({ onHand: 100_000 });
     await configureInstant();
     // Restore STOCKED sourcing so the instant path accepts the item.

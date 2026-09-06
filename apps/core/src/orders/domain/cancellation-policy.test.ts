@@ -15,7 +15,7 @@ const base = {
 };
 
 describe("order cancellation policy", () => {
-  it("retains only the Instant Service Fee for a customer before fulfillment", () => {
+  it("preserves historical Instant fee cancellation arithmetic while new zero-fee orders fully refund", () => {
     expect(decideOrderCancellation(base)).toEqual({
       allowed: true,
       retainedServiceFeeMinor: 2_500,

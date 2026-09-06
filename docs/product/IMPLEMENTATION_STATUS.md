@@ -568,6 +568,18 @@ Status date: 2026-09-06. This file is descriptive evidence only. The canonical d
   persists client idempotency and immutable dispatch evidence, and atomically prevents the same job
   from being concurrently claimed by compatibility internal-assignment data.
 
+### Financial and promotion safety
+
+- New Instant and Scheduled checkout totals contain merchandise, controlled discounts, provider-
+  priced delivery, delivery discounts, and tax only; Service Fee and provider processing cost are
+  not customer charges. Historical committed fee snapshots remain renderable.
+- Provider-confirmed refund state drives coordinated Order cancellation across the original payment
+  and every committed paid addition. PayMongo processing cost remains internal settlement evidence
+  with exact integer reconciliation.
+- Promotion commitment revalidates definition/version and applies at most one merchandise benefit
+  plus one delivery benefit. D1 write guards enforce global, per-customer, and grant usage limits at
+  the concurrency boundary.
+
 ## Maturity by area
 
 | Area                       | Current evidence                                                                                                                                                                                    | Not established                                           |
