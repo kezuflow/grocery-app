@@ -63,6 +63,7 @@ import {
 import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
 import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import {
+  getAdminGlobalCommerceConfiguration,
   getAdminFulfillmentMode,
   listAdminDeliveryOperations,
   listAdminFulfillmentQueue,
@@ -71,6 +72,7 @@ import {
   listAdminReceivingSessions,
 } from "./admin/application/operations-reads";
 import {
+  activateAdminGlobalMode,
   activateAdminFulfillmentMode,
   aggregateAdminProcurementDemand,
   startAdminReceiving,
@@ -79,6 +81,8 @@ import {
   advanceAdminFulfillment,
   advanceAdminDelivery,
   resolveAdminOperationalException,
+  openAdminSelling,
+  pauseAdminSelling,
 } from "./admin/application/operations-commands";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
 import { getAdminBootstrap as getAdminBootstrapQuery } from "./admin/application/admin-bootstrap";
@@ -797,6 +801,15 @@ const activateFulfillmentModeSchema = authenticatedRequestSchema.extend({
   cadence: validationSchema.enum(["WEEKLY"]).nullable().optional(),
   expectedVersion: validationSchema.number().int().min(1),
   idempotencyKey: idempotencyKeySchema,
+});
+const commerceTransitionSchema = authenticatedRequestSchema.extend({
+  expectedVersion: validationSchema.number().int().min(1),
+  idempotencyKey: idempotencyKeySchema,
+  reason: validationSchema.string().trim().min(1).max(500),
+});
+const activateGlobalModeSchema = commerceTransitionSchema.extend({
+  fulfillmentMode: validationSchema.enum(["INSTANT", "SCHEDULED"]),
+  cadence: validationSchema.enum(["WEEKLY"]).nullable().optional(),
 });
 const adminProcurementAggregateSchema = adminOperationsLocationSchema.extend({
   cycleId: validationSchema.string().trim().min(1).max(200),
@@ -1775,6 +1788,46 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminFulfillmentMode(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getGlobalCommerceConfiguration(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminGlobalCommerceConfiguration(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async pauseSelling(input: import("@freshmarkets/contracts").PauseSellingRequest) {
+    const validation = commerceTransitionSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return pauseAdminSelling(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async activateGlobalMode(
+    input: import("@freshmarkets/contracts").ActivateGlobalFulfillmentModeRequest,
+  ) {
+    const validation = activateGlobalModeSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return activateAdminGlobalMode(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async openSelling(input: import("@freshmarkets/contracts").OpenSellingRequest) {
+    const validation = commerceTransitionSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return openAdminSelling(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

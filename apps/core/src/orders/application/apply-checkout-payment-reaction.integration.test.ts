@@ -27,7 +27,7 @@ async function seededCheckout(
   const fulfillmentMode = options.fulfillmentMode ?? "SCHEDULED";
   await env.DB.batch([
     env.DB.prepare(
-      "UPDATE global_fulfillment_mode SET active_mode=?,cadence=?,version=version+1,updated_at=? WHERE id='global'",
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode=?,cadence=?,version=version+1,updated_at=? WHERE id='global'",
     ).bind(fulfillmentMode, fulfillmentMode === "SCHEDULED" ? "WEEKLY" : null, now),
     env.DB.prepare(
       "UPDATE fulfillment_location_readiness SET instant_promise_minutes=30,max_concurrent_instant_orders=20,dispatch_ready=1,updated_at=? WHERE location_id='location-cebu-central'",
@@ -121,7 +121,7 @@ async function createQuote(
   ).all<{ id: string }>();
   expect(cycles.results.length).toBeGreaterThan(0);
   const mode = await env.DB.prepare(
-    "SELECT active_mode mode FROM global_fulfillment_mode WHERE id='global'",
+    "SELECT fulfillment_mode mode FROM global_commerce_configuration WHERE id='global'",
   ).first<{ mode: "INSTANT" | "SCHEDULED" }>();
   return createCheckoutQuote(
     env.DB,

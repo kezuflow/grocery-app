@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "./create-checkout-quote";
-import {
-  setFulfillmentLocationMode,
-  getLocationMode,
-} from "../../fulfillment/application/location-mode";
 import { startPromotionalTrial } from ".././../membership/application/start-promotional-trial";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { createCheckoutRepository } from "../infrastructure/d1-checkout-repository";
@@ -95,34 +91,14 @@ async function configureInstant(): Promise<void> {
   )
     .bind(now - 1_000, now)
     .run();
-  const current = await getLocationMode(env.DB, {
-    locationId: LOCATION,
-    requestId: crypto.randomUUID(),
-  });
-  if (!current.ok) throw new Error("default location was not found");
-  const result = await setFulfillmentLocationMode(
-    env.DB,
-    current.value.version === 0
-      ? {
-          locationId: LOCATION,
-          activeMode: "INSTANT",
-          promiseMinutes: 90,
-          maxConcurrentInstantOrders: 25,
-          expectedVersion: null,
-          idempotencyKey: `mode-inst-${crypto.randomUUID()}`,
-          requestId: crypto.randomUUID(),
-        }
-      : {
-          locationId: LOCATION,
-          activeMode: "INSTANT",
-          promiseMinutes: 90,
-          maxConcurrentInstantOrders: 25,
-          expectedVersion: current.value.version,
-          idempotencyKey: `mode-inst-${crypto.randomUUID()}`,
-          requestId: crypto.randomUUID(),
-        },
-  );
-  if (!result.ok) throw new Error(`mode config failed: ${result.error.message}`);
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE fulfillment_location_readiness SET instant_promise_minutes=90,max_concurrent_instant_orders=25,dispatch_ready=1,version=version+1,updated_at=? WHERE location_id=?",
+    ).bind(now, LOCATION),
+    env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='INSTANT',cadence=NULL,version=version+1,updated_at=? WHERE id='global'",
+    ).bind(now),
+  ]);
 }
 
 function command(customerId: string, cartId: string, addressId: string) {
@@ -252,19 +228,11 @@ describe("instant checkout quotes", () => {
   });
 
   it("rejects Scheduled checkout without eligible membership", async () => {
-    const current = await getLocationMode(env.DB, {
-      locationId: LOCATION,
-      requestId: crypto.randomUUID(),
-    });
-    if (!current.ok) throw new Error("global mode missing");
-    await setFulfillmentLocationMode(env.DB, {
-      locationId: LOCATION,
-      activeMode: "SCHEDULED",
-      cadence: "WEEKLY",
-      expectedVersion: current.value.version,
-      idempotencyKey: `mode-sched-${crypto.randomUUID()}`,
-      requestId: crypto.randomUUID(),
-    });
+    await env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+    )
+      .bind(Date.now())
+      .run();
     const basket = await seedBasket({ onHand: 100_000, member: false });
     const result = await createCheckoutQuote(
       env.DB,

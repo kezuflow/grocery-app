@@ -10,7 +10,11 @@ import type {
   StartAdminReceivingRequest,
   ActivateFulfillmentModeRequest,
   AdminDeliveryOperationView,
+  ActivateGlobalFulfillmentModeRequest,
   FulfillmentModeConfigurationView,
+  GlobalCommerceConfigurationView,
+  OpenSellingRequest,
+  PauseSellingRequest,
   FulfillmentQueueView,
   ProcurementRequirementView,
   ReceivingSessionView,
@@ -25,6 +29,11 @@ import { completeReceiving } from "../../procurement/application/complete-receiv
 import { allowedFulfillmentActions } from "../../fulfillment/application/list-fulfillment-queue";
 import { allowedDeliveryActions } from "../../delivery/application/list-delivery-dispatch";
 import { setGlobalFulfillmentMode } from "../../fulfillment/application/location-mode";
+import {
+  activateGlobalFulfillmentMode,
+  openSelling,
+  pauseSelling,
+} from "../../commerce/application/global-commerce-configuration";
 import {
   resolveGlobalFulfillmentAdministrationAccess,
   resolveOperationsAdministrationAccess,
@@ -125,6 +134,74 @@ async function loadReceiving(database: D1Database, id: string) {
       status: string;
       version: number;
     }>();
+}
+
+async function runCommerceConfigurationCommand(
+  deps: OperationsAdministrationDeps,
+  request: PauseSellingRequest | OpenSellingRequest | ActivateGlobalFulfillmentModeRequest,
+  action: string,
+  command: () => Promise<
+    | { ok: true; value: GlobalCommerceConfigurationView; requestId: string }
+    | {
+        ok: false;
+        error: {
+          code: import("@freshmarkets/contracts").AppErrorCode;
+          message: string;
+          requestId: string;
+        };
+      }
+  >,
+): Promise<RpcResult<GlobalCommerceConfigurationView>> {
+  const permitted = await resolveGlobalFulfillmentAdministrationAccess(
+    deps,
+    request,
+    "fulfillment.manage",
+  );
+  if (!permitted.ok) return permitted;
+  const result = await command();
+  if (!result.ok) return result;
+  await audit(
+    deps,
+    request,
+    permitted.value.authUserId,
+    action,
+    "global_commerce_configuration",
+    "global",
+    "global",
+    {
+      sellingState: result.value.sellingState,
+      fulfillmentMode: result.value.fulfillmentMode,
+      version: result.value.version,
+    },
+  );
+  return result;
+}
+
+export function pauseAdminSelling(
+  deps: OperationsAdministrationDeps,
+  request: PauseSellingRequest,
+): Promise<RpcResult<GlobalCommerceConfigurationView>> {
+  return runCommerceConfigurationCommand(deps, request, "COMMERCE.SELLING_PAUSED", () =>
+    pauseSelling(deps.db, request),
+  );
+}
+
+export function activateAdminGlobalMode(
+  deps: OperationsAdministrationDeps,
+  request: ActivateGlobalFulfillmentModeRequest,
+): Promise<RpcResult<GlobalCommerceConfigurationView>> {
+  return runCommerceConfigurationCommand(deps, request, "COMMERCE.FULFILLMENT_MODE_ACTIVATED", () =>
+    activateGlobalFulfillmentMode(deps.db, request),
+  );
+}
+
+export function openAdminSelling(
+  deps: OperationsAdministrationDeps,
+  request: OpenSellingRequest,
+): Promise<RpcResult<GlobalCommerceConfigurationView>> {
+  return runCommerceConfigurationCommand(deps, request, "COMMERCE.SELLING_OPENED", () =>
+    openSelling(deps.db, request),
+  );
 }
 
 export async function activateAdminFulfillmentMode(

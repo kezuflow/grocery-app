@@ -116,7 +116,7 @@ async function setFulfillmentMode(mode: "INSTANT" | "SCHEDULED") {
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare(
-      "UPDATE global_fulfillment_mode SET active_mode=?,cadence=?,version=version+1,updated_at=? WHERE id='global'",
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode=?,cadence=?,version=version+1,updated_at=? WHERE id='global'",
     ).bind(mode, mode === "SCHEDULED" ? "WEEKLY" : null, now),
     env.DB.prepare(
       "UPDATE fulfillment_location_readiness SET instant_promise_minutes=30,max_concurrent_instant_orders=20,dispatch_ready=1,updated_at=? WHERE location_id=?",

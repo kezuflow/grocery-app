@@ -1,7 +1,22 @@
 # FreshMarkets Implementation Status
 
-Status date: 2026-09-05. This file is descriptive evidence only. The canonical documents named in
+Status date: 2026-09-06. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
+
+## Commerce and external-delivery realignment — Phase 3 selling gate (2026-09-06)
+
+- Core now owns one `GlobalCommerceConfiguration` query plus explicit audited
+  `PauseSelling`, `ActivateGlobalFulfillmentMode`, and `OpenSelling` commands. Each mutation is
+  expected-version guarded and stores its exact successful result for idempotent replay; changed
+  key reuse conflicts and concurrent writers cannot both advance the singleton.
+- Mode activation fails while selling is open. A paused mode change supersedes only active Quotes
+  for which payment has never started, preserves started-payment and committed-Order evidence, and
+  leaves provider-event reconciliation/commitment runnable. Reopening evaluates controlled
+  mode-specific location/capability/window readiness blockers.
+- New fulfillment-option, Quote, and checkout-payment initiation paths fail closed while selling is
+  paused. Exact Quote and payment-command replay is still resolved before the mutable selling gate.
+  Active Core callers now read `global_commerce_configuration`; the older mode table remains
+  historical compatibility data until the cleanup phase.
 
 ## Commerce and external-delivery realignment — Phase 2 persistence (2026-09-05)
 

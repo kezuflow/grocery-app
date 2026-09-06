@@ -10,6 +10,7 @@ import { createCheckoutRepository } from "../../checkout/infrastructure/d1-check
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { createPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { revalidateCheckoutQuote } from "../../checkout/application/revalidate-checkout-quote";
+import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -84,6 +85,9 @@ export async function createCheckoutPaymentIntent(
       requestId: command.requestId,
     });
   }
+
+  const selling = await requireSellingOpen(database, command.requestId);
+  if (!selling.ok) return selling;
 
   if (
     !quote ||

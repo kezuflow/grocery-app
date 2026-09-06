@@ -435,9 +435,8 @@ export async function applyCheckoutPaymentReaction(
     const mode = await database
       .prepare(
         `SELECT readiness.max_concurrent_instant_orders
-           FROM global_fulfillment_mode mode
-           JOIN fulfillment_location_readiness readiness ON readiness.location_id=?
-          WHERE mode.id='global' AND mode.active_mode='INSTANT' AND readiness.dispatch_ready=1`,
+           FROM fulfillment_location_readiness readiness
+          WHERE readiness.location_id=? AND readiness.dispatch_ready=1`,
       )
       .bind(cycleSnapshot.locationId)
       .first<{ max_concurrent_instant_orders: number | null }>();

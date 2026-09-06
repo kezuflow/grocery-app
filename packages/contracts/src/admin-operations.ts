@@ -21,9 +21,23 @@ export const adminOperationsReadCapabilities = [
   "fulfillment.manage",
 ] as const;
 
+export type CommerceReadinessBlockerView = {
+  code: string;
+  message: string;
+};
+
+export type GlobalCommerceConfigurationView = {
+  sellingState: "OPEN" | "PAUSED";
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
+  /** `WEEKLY` is a Scheduled configuration value, never a fulfillment mode. */
+  cadence: "WEEKLY" | null;
+  version: number;
+  readinessBlockers: readonly CommerceReadinessBlockerView[];
+};
+
+/** @deprecated Compatibility shape removed after active callers migrate. */
 export type GlobalFulfillmentModeConfigurationView = {
   activeMode: "INSTANT" | "SCHEDULED";
-  /** `WEEKLY` is a Scheduled configuration value, never a fulfillment mode. */
   cadence: "WEEKLY" | null;
   version: number;
 };
@@ -147,6 +161,26 @@ export type ActivateFulfillmentModeRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type PauseSellingRequest = AuthenticatedRequest & {
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+};
+
+export type ActivateGlobalFulfillmentModeRequest = AuthenticatedRequest & {
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
+  cadence?: "WEEKLY" | null;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+};
+
+export type OpenSellingRequest = AuthenticatedRequest & {
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+};
+
 export type AggregateAdminProcurementDemandRequest = AdminOperationsLocationRequest & {
   cycleId: string;
   inventoryPoolId: string;
@@ -205,6 +239,14 @@ export type ResolveAdminOperationalExceptionRequest = AdminOperationsLocationReq
 
 /** Scoped operational administration read and configuration surface. */
 export type AdminOperationsService = {
+  getGlobalCommerceConfiguration(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<GlobalCommerceConfigurationView>>;
+  pauseSelling(request: PauseSellingRequest): Promise<RpcResult<GlobalCommerceConfigurationView>>;
+  activateGlobalMode(
+    request: ActivateGlobalFulfillmentModeRequest,
+  ): Promise<RpcResult<GlobalCommerceConfigurationView>>;
+  openSelling(request: OpenSellingRequest): Promise<RpcResult<GlobalCommerceConfigurationView>>;
   getFulfillmentMode(
     request: AuthenticatedRequest,
   ): Promise<RpcResult<FulfillmentModeConfigurationView>>;

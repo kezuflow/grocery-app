@@ -61,7 +61,8 @@ export async function createInstantQuote(
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-       JOIN global_fulfillment_mode mode ON mode.id='global' AND mode.active_mode='INSTANT'
+       JOIN global_commerce_configuration mode ON mode.id='global'
+        AND mode.selling_state='OPEN' AND mode.fulfillment_mode='INSTANT'
        JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
        WHERE dz.code=? AND dz.status='active' AND readiness.dispatch_ready=1
          AND readiness.instant_promise_minutes IS NOT NULL

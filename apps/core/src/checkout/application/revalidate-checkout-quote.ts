@@ -46,9 +46,15 @@ export async function revalidateCheckoutQuote(
   now = Date.now(),
 ): Promise<{ ok: true } | RevalidationFailure> {
   const globalMode = await database
-    .prepare("SELECT active_mode FROM global_fulfillment_mode WHERE id='global'")
-    .first<{ active_mode: "INSTANT" | "SCHEDULED" }>();
-  if (!globalMode || globalMode.active_mode !== quote.fulfillmentMode)
+    .prepare(
+      "SELECT selling_state,fulfillment_mode FROM global_commerce_configuration WHERE id='global'",
+    )
+    .first<{ selling_state: "OPEN" | "PAUSED"; fulfillment_mode: "INSTANT" | "SCHEDULED" }>();
+  if (
+    !globalMode ||
+    globalMode.selling_state !== "OPEN" ||
+    globalMode.fulfillment_mode !== quote.fulfillmentMode
+  )
     return rejected("PRICE_CHANGED", "Fulfillment mode changed; accept a new quote");
 
   if (quote.fulfillmentMode !== "INSTANT") {
@@ -112,10 +118,11 @@ export async function revalidateCheckoutQuote(
          FROM delivery_zone dz
          JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
          JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-         JOIN global_fulfillment_mode m ON m.id='global'
+         JOIN global_commerce_configuration m ON m.id='global'
          JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
          WHERE dz.code=? AND dz.id=? AND fl.id=? AND dz.status='active'
-           AND m.active_mode='INSTANT' AND readiness.dispatch_ready=1
+           AND m.selling_state='OPEN' AND m.fulfillment_mode='INSTANT'
+           AND readiness.dispatch_ready=1
            AND readiness.instant_promise_minutes IS NOT NULL
            AND readiness.max_concurrent_instant_orders IS NOT NULL`,
       )

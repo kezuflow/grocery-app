@@ -392,7 +392,9 @@ async function hydrateProducts(
         )
       : Promise.resolve([]),
     database
-      .prepare("SELECT active_mode activeMode FROM global_fulfillment_mode WHERE id='global'")
+      .prepare(
+        "SELECT fulfillment_mode activeMode FROM global_commerce_configuration WHERE id='global'",
+      )
       .bind()
       .first<{ activeMode: "INSTANT" | "SCHEDULED" }>(),
     rawAll<{ product_id: string; label: string; value: string; sortOrder: number }>(

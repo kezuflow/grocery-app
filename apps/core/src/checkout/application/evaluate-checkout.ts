@@ -66,7 +66,8 @@ export async function evaluateCheckout(
              JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active'
              JOIN cycle_zone_capacity czc ON czc.cycle_id=dc.id AND czc.zone_id=dz.id
                AND czc.location_id=fl.id AND czc.allocated<czc.capacity
-             JOIN global_fulfillment_mode mode ON mode.id='global' AND mode.active_mode='SCHEDULED'
+             JOIN global_commerce_configuration mode ON mode.id='global'
+              AND mode.selling_state='OPEN' AND mode.fulfillment_mode='SCHEDULED'
             WHERE dz.code=? AND dz.status='active' AND dc.id=?
             ORDER BY fl.id`,
         )

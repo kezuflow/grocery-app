@@ -138,7 +138,7 @@ describe("customer checkout flow", () => {
     const cartNow = await core.getCart(request());
     if (!cartNow.ok) throw new Error("cart unavailable");
     await env.DB.prepare(
-      "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
     )
       .bind(Date.now())
       .run();
@@ -182,7 +182,7 @@ describe("customer checkout flow", () => {
     if (!quoteReplay.ok) return;
     expect(quoteReplay.value.quoteId).toBe(quote.value.quoteId);
     await env.DB.prepare(
-      "UPDATE global_fulfillment_mode SET active_mode='INSTANT',cadence=NULL,version=version+1 WHERE id='global'",
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='INSTANT',cadence=NULL,version=version+1 WHERE id='global'",
     ).run();
     const replayAfterRoutingChanged = await core.createCheckoutQuote({
       headers,
@@ -211,7 +211,7 @@ describe("customer checkout flow", () => {
       error: { code: "IDEMPOTENCY_CONFLICT" },
     });
     await env.DB.prepare(
-      "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY',version=version+1 WHERE id='global'",
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1 WHERE id='global'",
     ).run();
     await env.DB.prepare(
       "UPDATE price_version SET amount_minor=amount_minor+100 WHERE sku_id='sku-red-onion-500g' AND valid_to IS NULL",

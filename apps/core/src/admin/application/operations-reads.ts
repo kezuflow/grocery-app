@@ -7,6 +7,7 @@ import type {
   AdminReceivingSessionsRequest,
   DeliveryOperationsSummary,
   FulfillmentModeConfigurationView,
+  GlobalCommerceConfigurationView,
   FulfillmentQueuePage,
   OperationalExceptionPage,
   ProcurementRequirementPage,
@@ -23,6 +24,7 @@ import {
   listFulfillmentQueue as listFulfillmentRows,
 } from "../../fulfillment/application/list-fulfillment-queue";
 import { getGlobalMode, type GlobalModeView } from "../../fulfillment/application/location-mode";
+import { getGlobalCommerceConfiguration } from "../../commerce/application/global-commerce-configuration";
 import { listProcurementQueue } from "../../procurement/application/list-procurement-queue";
 import {
   resolveGlobalFulfillmentAdministrationAccess,
@@ -90,6 +92,19 @@ export async function getAdminFulfillmentMode(
   const mode = await getGlobalMode(deps.db, request);
   if (!mode.ok) return mode;
   return { ok: true, value: modeView(mode.value), requestId: request.requestId };
+}
+
+export async function getAdminGlobalCommerceConfiguration(
+  deps: OperationsAdministrationDeps,
+  request: AuthenticatedRequest,
+): Promise<RpcResult<GlobalCommerceConfigurationView>> {
+  const access = await resolveGlobalFulfillmentAdministrationAccess(
+    deps,
+    request,
+    "fulfillment.read",
+  );
+  if (!access.ok) return access;
+  return getGlobalCommerceConfiguration(deps.db, request);
 }
 
 export async function listAdminProcurementRequirements(

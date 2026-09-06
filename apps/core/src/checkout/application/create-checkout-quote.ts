@@ -20,6 +20,7 @@ import {
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
 import { closestLocation } from "../../geography/geometry";
+import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -103,6 +104,9 @@ export async function createCheckoutQuote(
     return { ok: true, value: viewFrom(existing), requestId: command.requestId };
   }
 
+  const selling = await requireSellingOpen(database, command.requestId);
+  if (!selling.ok) return selling;
+
   // Cart identity and version.
   const cart = await database
     .prepare("SELECT id, customer_id, version FROM cart WHERE id=? AND status='ACTIVE'")
@@ -151,29 +155,21 @@ export async function createCheckoutQuote(
     >();
   if (!address) return failure("NOT_FOUND", "Customer address not found", command.requestId);
 
-  const globalMode = await database
-    .prepare("SELECT active_mode FROM global_fulfillment_mode WHERE id='global'")
-    .first<{ active_mode: "INSTANT" | "SCHEDULED" }>();
-  if (!globalMode)
-    return failure(
-      "CONFIGURATION_ERROR",
-      "Global fulfillment mode is not configured",
-      command.requestId,
-    );
-  if (globalMode.active_mode === "INSTANT" && command.deliveryCycleId !== null)
+  const globalMode = selling.configuration.fulfillment_mode;
+  if (globalMode === "INSTANT" && command.deliveryCycleId !== null)
     return failure(
       "INSTANT_MODE_UNAVAILABLE",
       "FreshMarkets is currently in Instant mode",
       command.requestId,
     );
-  if (globalMode.active_mode === "SCHEDULED" && command.deliveryCycleId === null)
+  if (globalMode === "SCHEDULED" && command.deliveryCycleId === null)
     return failure(
       "CYCLE_CLOSED",
       "FreshMarkets is currently in Scheduled mode",
       command.requestId,
     );
   const modeItems: QuoteItem[] = cartItems.results;
-  if (globalMode.active_mode === "INSTANT")
+  if (globalMode === "INSTANT")
     return createInstantQuote(database, repository, command, modeItems, address, dependencies);
   return createScheduledQuote(
     database,
@@ -235,7 +231,8 @@ async function createScheduledQuote(
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-       JOIN global_fulfillment_mode mode ON mode.id='global' AND mode.active_mode='SCHEDULED'
+       JOIN global_commerce_configuration mode ON mode.id='global'
+        AND mode.selling_state='OPEN' AND mode.fulfillment_mode='SCHEDULED'
        JOIN cycle_zone_capacity capacity ON capacity.cycle_id=? AND capacity.zone_id=dz.id
          AND capacity.location_id=fl.id AND capacity.allocated<capacity.capacity
        WHERE dz.code=? AND dz.status='active' AND sa.market_id=?

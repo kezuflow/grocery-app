@@ -2,10 +2,6 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
-import {
-  setFulfillmentLocationMode,
-  getLocationMode,
-} from "../../fulfillment/application/location-mode";
 import { startPromotionalTrial } from "../../membership/application/start-promotional-trial";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
 
@@ -29,21 +25,14 @@ async function configureInstant(maxOrders = 25): Promise<void> {
   )
     .bind(now - 1_000, now)
     .run();
-  const current = await getLocationMode(env.DB, {
-    locationId: LOCATION,
-    requestId: crypto.randomUUID(),
-  });
-  if (!current.ok) throw new Error("default location was not found");
-  const result = await setFulfillmentLocationMode(env.DB, {
-    locationId: LOCATION,
-    activeMode: "INSTANT",
-    promiseMinutes: 60,
-    maxConcurrentInstantOrders: maxOrders,
-    expectedVersion: current.value.version || null,
-    idempotencyKey: `mode-${crypto.randomUUID()}`,
-    requestId: crypto.randomUUID(),
-  });
-  if (!result.ok) throw new Error(`mode config failed: ${result.error.message}`);
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE fulfillment_location_readiness SET instant_promise_minutes=60,max_concurrent_instant_orders=?,dispatch_ready=1,version=version+1,updated_at=? WHERE location_id=?",
+    ).bind(maxOrders, now, LOCATION),
+    env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='INSTANT',cadence=NULL,version=version+1,updated_at=? WHERE id='global'",
+    ).bind(now),
+  ]);
 }
 
 async function seededInstantQuote(member = true): Promise<{ quoteId: string; customerId: string }> {

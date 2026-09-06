@@ -32,9 +32,11 @@ beforeEach(async () => {
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare(
-      "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY',version=1,updated_at=? WHERE id='global'",
+      "UPDATE global_commerce_configuration SET selling_state='PAUSED',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=1,updated_at=? WHERE id='global'",
     ).bind(now),
-    env.DB.prepare("DELETE FROM idempotency_records WHERE scope='fulfillment.setGlobalMode'"),
+    env.DB.prepare(
+      "DELETE FROM idempotency_records WHERE scope='commerce.activateGlobalFulfillmentMode'",
+    ),
     env.DB.prepare(
       `INSERT INTO fulfillment_location_readiness
          (location_id,instant_promise_minutes,max_concurrent_instant_orders,dispatch_ready,version,created_at,updated_at)
@@ -89,17 +91,17 @@ describe("global fulfillment mode configuration", () => {
     ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
   });
 
-  it("blocks INSTANT when any active location is not dispatch-ready", async () => {
+  it("reports INSTANT location readiness when resolving checkout", async () => {
     const locationId = await seedReadyLocation();
     await env.DB.prepare(
       "UPDATE fulfillment_location_readiness SET dispatch_ready=0 WHERE location_id=?",
     )
       .bind(locationId)
       .run();
-    expect(await setGlobalFulfillmentMode(env.DB, command())).toMatchObject({
-      ok: false,
-      error: { code: "CONFIGURATION_ERROR" },
-    });
+    expect(await setGlobalFulfillmentMode(env.DB, command())).toMatchObject({ ok: true });
+    await expect(resolveCheckoutMode(env.DB, locationId)).rejects.toThrow(
+      "INSTANT_LOCATION_NOT_READY",
+    );
   });
 
   it("rejects invalid cadence combinations", async () => {

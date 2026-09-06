@@ -291,17 +291,26 @@ describe("admin operations reads", () => {
 
   it("returns the persisted Scheduled cadence from mode activation", async () => {
     const manager = await seedStaff("fulfillment.manage", "global");
-    const result = await core.activateFulfillmentMode({
+    const paused = await core.pauseSelling({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager },
+      expectedVersion: 1,
+      reason: "Prepare the global mode",
+      idempotencyKey: `pause-${crypto.randomUUID()}`,
+    });
+    expect(paused.ok).toBe(true);
+    const result = await core.activateGlobalMode({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager },
       fulfillmentMode: "SCHEDULED",
       cadence: "WEEKLY",
-      expectedVersion: 1,
+      expectedVersion: 2,
+      reason: "Confirm the Scheduled cadence",
       idempotencyKey: `mode-${crypto.randomUUID()}`,
     });
     expect(result).toMatchObject({
       ok: true,
-      value: { activeMode: "SCHEDULED", cadence: "WEEKLY" },
+      value: { fulfillmentMode: "SCHEDULED", cadence: "WEEKLY" },
     });
   });
 });

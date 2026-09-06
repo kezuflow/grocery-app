@@ -3,6 +3,7 @@ import { requestHash } from "../../idempotency";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { sortLocationsByDistance } from "../../geography/geometry";
+import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 
 type Query = {
   customerId: string;
@@ -37,6 +38,8 @@ export async function listFulfillmentOptions(
   routeDistance: RouteDistancePort,
   query: Query,
 ): Promise<RpcResult<readonly FulfillmentOptionView[]>> {
+  const selling = await requireSellingOpen(database, query.requestId);
+  if (!selling.ok) return selling;
   const address = await database
     .prepare(
       `SELECT latitude,longitude,version,delivery_zone_code,user_confirmed_at,serviceable,status
@@ -100,14 +103,14 @@ export async function listFulfillmentOptions(
   const candidateRows = await database
     .prepare(
       `SELECT fl.id id,fl.id locationId,fl.latitude,fl.longitude,fl.market_id marketId,
-            mode.active_mode mode,readiness.instant_promise_minutes promiseMinutes,
+            mode.fulfillment_mode mode,readiness.instant_promise_minutes promiseMinutes,
             mode.version modeVersion,dz.id zoneId
      FROM delivery_zone dz JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
      JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
-     JOIN global_fulfillment_mode mode ON mode.id='global'
+     JOIN global_commerce_configuration mode ON mode.id='global' AND mode.selling_state='OPEN'
      LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
      WHERE dz.code=? AND dz.status='active'
-       AND (mode.active_mode='SCHEDULED' OR (
+       AND (mode.fulfillment_mode='SCHEDULED' OR (
          readiness.dispatch_ready=1 AND readiness.instant_promise_minutes IS NOT NULL
          AND readiness.max_concurrent_instant_orders IS NOT NULL
        ))

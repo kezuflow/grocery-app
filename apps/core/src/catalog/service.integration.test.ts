@@ -221,7 +221,7 @@ describe("catalog read models (integration)", () => {
       .run();
     try {
       await env.DB.prepare(
-        "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY' WHERE id='global'",
+        "UPDATE global_commerce_configuration SET fulfillment_mode='SCHEDULED',cadence='WEEKLY' WHERE id='global'",
       ).run();
       const scheduled = await getProduct(db(), "red-onion", LOCATION_ID);
       expect(scheduled?.product.available).toBe(true);
@@ -230,7 +230,7 @@ describe("catalog read models (integration)", () => {
       ).toBe(true);
 
       await env.DB.prepare(
-        "UPDATE global_fulfillment_mode SET active_mode='INSTANT',cadence=NULL WHERE id='global'",
+        "UPDATE global_commerce_configuration SET fulfillment_mode='INSTANT',cadence=NULL WHERE id='global'",
       ).run();
       const instant = await getProduct(db(), "red-onion", LOCATION_ID);
       expect(instant?.product.available).toBe(false);
@@ -241,7 +241,7 @@ describe("catalog read models (integration)", () => {
       expect(listed.items.map((product) => product.slug)).toContain("red-onion");
     } finally {
       await env.DB.prepare(
-        "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY' WHERE id='global'",
+        "UPDATE global_commerce_configuration SET fulfillment_mode='SCHEDULED',cadence='WEEKLY' WHERE id='global'",
       ).run();
       await env.DB.prepare(
         "UPDATE inventory_balance SET on_hand=?,reserved=? WHERE location_id=? AND inventory_pool_id='pool-red-onion'",

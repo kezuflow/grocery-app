@@ -12,7 +12,7 @@ describe("listFulfillmentOptions", () => {
     const now = Date.now();
     await env.DB.batch([
       env.DB.prepare(
-        "UPDATE global_fulfillment_mode SET active_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+        "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
       ).bind(now),
       env.DB.prepare(
         "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
