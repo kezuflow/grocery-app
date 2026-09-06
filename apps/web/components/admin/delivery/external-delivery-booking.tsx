@@ -1,10 +1,6 @@
 "use client";
 
-import type {
-  ExternalDeliveryDispatchView,
-  FulfillmentMode,
-  RpcResult,
-} from "@freshmarkets/contracts";
+import type { ExternalDeliveryDispatchView, RpcResult } from "@freshmarkets/contracts";
 import { useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -19,6 +15,7 @@ import { Label } from "../../ui/label";
 import type { OrderedDeliveryItem } from "./delivery-order-list";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type FulfillmentMode = "INSTANT" | "SCHEDULED";
 
 async function readResult<T>(response: Response): Promise<RpcResult<T>> {
   return (await response.json()) as RpcResult<T>;

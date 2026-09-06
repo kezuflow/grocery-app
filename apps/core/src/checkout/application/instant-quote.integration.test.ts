@@ -278,7 +278,7 @@ describe("instant checkout quotes", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      value: { serviceFeeMinor: 0 },
+      value: { totalMinor: expect.any(Number) },
     });
   });
 

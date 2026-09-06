@@ -24,7 +24,6 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
     orderDiscountMinor: 3_000,
     deliverySubtotalMinor: 2_000,
     deliveryDiscountMinor: 2_000,
-    serviceFeeMinor: 0,
     taxMinor: 0,
     subtotalMinor: 30_000,
     discountMinor: 5_000,
@@ -195,7 +194,6 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
       expectedDeliverySubtotalMinor: quote.deliverySubtotalMinor,
       expectedDeliveryFeeMinor: quote.deliveryFeeMinor,
       expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
-      expectedServiceFeeMinor: quote.serviceFeeMinor,
       expectedTaxMinor: quote.taxMinor,
       expectedTotalMinor: quote.totalMinor,
     });

@@ -24,7 +24,6 @@ describe("checkout contracts", () => {
           | "deliverySubtotalMinor"
           | "deliveryFeeMinor"
           | "deliveryDiscountMinor"
-          | "serviceFeeMinor"
           | "taxMinor"
           | "totalMinor"
         >,
@@ -35,7 +34,6 @@ describe("checkout contracts", () => {
           deliverySubtotalMinor: number;
           deliveryFeeMinor: number;
           deliveryDiscountMinor: number;
-          serviceFeeMinor: number;
           taxMinor: number;
           totalMinor: number;
         }
@@ -86,7 +84,6 @@ describe("checkout contracts", () => {
       expectedDeliverySubtotalMinor: 500,
       expectedDeliveryFeeMinor: 0,
       expectedDeliveryDiscountMinor: 500,
-      expectedServiceFeeMinor: 0,
       expectedTaxMinor: 0,
       expectedTotalMinor: 19_000,
       returnUrl: "https://freshmarkets.ph/orders",
@@ -109,7 +106,6 @@ describe("checkout contracts", () => {
       outcome: "ABANDONED",
       quoteStatus: "SUPERSEDED",
       releasedInventoryHolds: 1,
-      releasedCapacityAllocations: 0,
     } satisfies AbandonCheckoutResult;
     expect(result.outcome).toBe("ABANDONED");
     expect(result).not.toHaveProperty("orderStatus");

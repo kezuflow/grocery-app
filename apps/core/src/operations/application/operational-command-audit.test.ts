@@ -188,7 +188,7 @@ describe("operational command authorization and integrity matrix", () => {
     }
   });
 
-  it("keeps fulfillment and delivery commands capability-gated", async () => {
+  it("keeps fulfillment commands capability-gated", async () => {
     const cookie = await staffCookie({ permissionCode: "rbac:read" });
     const orderId = `order-${crypto.randomUUID()}`;
     const now = Date.now();
@@ -203,12 +203,6 @@ describe("operational command authorization and integrity matrix", () => {
     )
       .bind(crypto.randomUUID(), orderId, now)
       .run();
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO delivery_job (id, order_id, cycle_id, location_id, zone_id, status, address_snapshot_json, version) SELECT ?, ?, (SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1), 'location-cebu-central', 'zone-cebu-city-core', 'UNASSIGNED', '{}', 1",
-    )
-      .bind(crypto.randomUUID(), orderId)
-      .run();
-
     const fulfillmentDenied = await core.advanceFulfillment({
       requestId: crypto.randomUUID(),
       headers: { cookie },
@@ -218,16 +212,6 @@ describe("operational command authorization and integrity matrix", () => {
       expectedVersion: 1,
     });
     expect(fulfillmentDenied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-
-    const deliveryDenied = await core.advanceDelivery({
-      requestId: crypto.randomUUID(),
-      headers: { cookie },
-      orderId,
-      action: "MARK_EN_ROUTE",
-      idempotencyKey: `deliver-${crypto.randomUUID()}`,
-      expectedVersion: 1,
-    });
-    expect(deliveryDenied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 
   it("rejects paid-order refund/cancel through the generic path", async () => {

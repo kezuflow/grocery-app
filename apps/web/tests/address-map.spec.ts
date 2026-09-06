@@ -226,7 +226,6 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
         orderDiscountMinor: 0,
         deliverySubtotalMinor: 2_000,
         deliveryDiscountMinor: 0,
-        serviceFeeMinor: 0,
         taxMinor: 0,
         subtotalMinor: 30_000,
         discountMinor: 0,

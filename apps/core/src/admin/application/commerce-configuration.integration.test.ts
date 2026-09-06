@@ -79,45 +79,4 @@ describe("commerce pricing configuration", () => {
     });
     expect(result).toMatchObject({ ok: true, value: { amountMinor: 29_900, version: 1 } });
   });
-
-  it("requires payments.manage and writes an audited idempotent Service Fee version", async () => {
-    const reader = await seedStaff("payments.read");
-    const denied = await core.updateServiceFeeConfiguration({
-      requestId: crypto.randomUUID(),
-      headers: { cookie: reader.cookie },
-      expectedVersion: 0,
-      feeType: "MIXED",
-      flatMinor: 1_500,
-      percentageBasisPoints: 300,
-      currency: "PHP",
-      effectiveFrom: new Date(Date.now() + 60_000).toISOString(),
-      reason: "Initial Instant fee",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    expect(denied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-
-    const manager = await seedStaff("payments.manage");
-    const idempotencyKey = crypto.randomUUID();
-    const request = {
-      requestId: crypto.randomUUID(),
-      headers: { cookie: manager.cookie },
-      expectedVersion: 0,
-      feeType: "MIXED" as const,
-      flatMinor: 1_500,
-      percentageBasisPoints: 300,
-      currency: "PHP",
-      effectiveFrom: new Date(Date.now() + 120_000).toISOString(),
-      reason: "Initial Instant fee",
-      idempotencyKey,
-    };
-    const first = await core.updateServiceFeeConfiguration(request);
-    expect(first).toMatchObject({ ok: true, value: { version: 1, feeType: "MIXED" } });
-    expect(await core.updateServiceFeeConfiguration(request)).toEqual(first);
-    const audit = await env.DB.prepare(
-      "SELECT reason FROM audit_event WHERE action='SERVICE_FEE_CONFIGURATION.UPDATED' AND idempotency_key=?",
-    )
-      .bind(idempotencyKey)
-      .first<{ reason: string }>();
-    expect(audit?.reason).toBe("Initial Instant fee");
-  });
 });

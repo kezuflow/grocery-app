@@ -115,13 +115,13 @@ async function staffCookieWithOrderManage() {
 describe("financial safety containment", () => {
   it("no longer exposes any mock commitment surface", () => {
     expect("commitMockOrder" in CoreEntrypoint.prototype).toBe(false);
-    expect(typeof entrypointWith("development", "mock").createPaymentIntent).toBe("function");
+    expect(typeof entrypointWith("development", "disabled").createPaymentIntent).toBe("function");
   });
 
   it("fails closed on canonical payment intents outside the test environment", async () => {
     const before = await writeGuardCounts();
-    expect(() => entrypointWith("production", "mock")).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
-    expect(() => entrypointWith("preview", "mock")).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+    expect(() => entrypointWith("production", "mock")).toThrow("PAYMENT_PROVIDER_INVALID");
+    expect(() => entrypointWith("preview", "mock")).toThrow("PAYMENT_PROVIDER_INVALID");
     expect(await writeGuardCounts()).toEqual(before);
   });
 

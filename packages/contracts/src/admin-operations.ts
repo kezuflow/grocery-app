@@ -1,7 +1,7 @@
 import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./auth";
 import type { OperationalExceptionItem } from "./operations";
-import type { DeliveryAction, FulfillmentAction } from "./states";
+import type { FulfillmentAction } from "./states";
 export {
   deliveryActions,
   deliveryJobStates as deliveryStatuses,
@@ -101,7 +101,7 @@ export type DeliveryOperationsSummary = {
   cycleId: string | null;
   status: "OPEN" | "EMPTY";
   totalOpenJobs: number;
-  assignedJobs: number;
+  bookedJobs: number;
   items: ReadonlyArray<AdminDeliveryOperationView>;
   nextCursor: string | null;
 };
@@ -114,7 +114,6 @@ export type AdminDeliveryOperationView = {
   locationId: string;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
-  riderAssigned: boolean;
   externalDispatch: {
     dispatchId: string;
     provider: "lalamove" | "grab-express";
@@ -124,7 +123,6 @@ export type AdminDeliveryOperationView = {
   } | null;
   deliveredAtIso: string | null;
   version: number;
-  allowedActions: ReadonlyArray<DeliveryAction>;
 };
 
 export type LocationDeliveryProfileView = {
@@ -301,17 +299,9 @@ export type AdvanceAdminFulfillmentRequest = AdminOperationsLocationRequest & {
   reason?: string;
 };
 
-export type AdvanceAdminDeliveryRequest = AdminOperationsLocationRequest & {
-  orderId: string;
-  action: DeliveryAction;
-  expectedVersion: number;
-  idempotencyKey: string;
-  reason?: string;
-};
-
 export type ResolveAdminOperationalExceptionRequest = AdminOperationsLocationRequest & {
-  kind: "FULFILLMENT_SHORTAGE" | "DELIVERY_FAILED";
-  action: "RETRY_FULFILLMENT" | "RETRY_DELIVERY";
+  kind: "FULFILLMENT_SHORTAGE";
+  action: "RETRY_FULFILLMENT";
   orderId: string;
   expectedVersion: number;
   idempotencyKey: string;
@@ -349,12 +339,9 @@ export type AdminOperationsService = {
   advanceAdminFulfillment(
     request: AdvanceAdminFulfillmentRequest,
   ): Promise<RpcResult<FulfillmentQueueView>>;
-  advanceAdminDelivery(
-    request: AdvanceAdminDeliveryRequest,
-  ): Promise<RpcResult<AdminDeliveryOperationView>>;
   resolveAdminOperationalException(
     request: ResolveAdminOperationalExceptionRequest,
-  ): Promise<RpcResult<FulfillmentQueueView | AdminDeliveryOperationView>>;
+  ): Promise<RpcResult<FulfillmentQueueView>>;
   listProcurementRequirements(
     request: AdminProcurementRequirementsRequest,
   ): Promise<RpcResult<ProcurementRequirementPage>>;

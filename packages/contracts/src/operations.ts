@@ -1,11 +1,6 @@
 import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./auth";
-import type {
-  DeliveryAction,
-  FulfillmentAction,
-  OperationsCommandState,
-  ReceivingRecordState,
-} from "./states";
+import type { FulfillmentAction, OperationsCommandState, ReceivingRecordState } from "./states";
 
 export type AdminCommandResult = { id: string; status: OperationsCommandState };
 
@@ -61,13 +56,6 @@ export type FulfillmentCommandRequest = AuthenticatedRequest & {
   expectedVersion: number;
 };
 
-export type DeliveryCommandRequest = AuthenticatedRequest & {
-  orderId: string;
-  action: DeliveryAction;
-  idempotencyKey: string;
-  expectedVersion: number;
-};
-
 export type OperationsCommandResult = { id: string; status: OperationsCommandState };
 
 /**
@@ -86,7 +74,6 @@ export type OperationsService = {
   advanceFulfillment(
     request: FulfillmentCommandRequest,
   ): Promise<RpcResult<OperationsCommandResult>>;
-  advanceDelivery(request: DeliveryCommandRequest): Promise<RpcResult<OperationsCommandResult>>;
 };
 
 /**
@@ -96,29 +83,12 @@ export type OperationsService = {
  * derive from canonical transition policy — the UI never invents
  * authorization.
  */
-export type OperationsReadSection = "fulfillment" | "delivery" | "procurement";
-
-export type AdminOperationsBoardRequest = AuthenticatedRequest & {
-  /** Defaults to the market's active default fulfillment location. */
-  locationId?: string | null;
-};
-
 export type FulfillmentQueueItem = {
   orderId: string;
   status: string;
   locationId: string;
   version: number;
   allowedActions: ReadonlyArray<FulfillmentAction>;
-};
-
-export type DeliveryDispatchItem = {
-  jobId: string;
-  orderId: string;
-  status: string;
-  riderAuthUserId: string | null;
-  deliveredAtIso: string | null;
-  version: number;
-  allowedActions: ReadonlyArray<DeliveryAction>;
 };
 
 export type ProcurementQueueItem = {
@@ -163,35 +133,6 @@ export type OperationalExceptionItem = {
   detail: string;
 };
 
-export type AdminOperationsBoardValue = {
-  locationId: string;
-  fulfillment: ReadonlyArray<FulfillmentQueueItem>;
-  delivery: ReadonlyArray<DeliveryDispatchItem>;
-  procurement: ReadonlyArray<ProcurementQueueItem>;
-  exceptions: ReadonlyArray<OperationalExceptionItem>;
-  sectionsDenied: ReadonlyArray<OperationsReadSection>;
-};
-
-export type AssignRiderRequest = AuthenticatedRequest & {
-  orderId: string;
-  riderAuthUserId: string;
-  expectedVersion: number;
-  idempotencyKey: string;
-};
-
-export type AssignRiderValue = { orderId: string; riderAuthUserId: string; status: string };
-
-export type RiderJobsValue = {
-  jobs: ReadonlyArray<{
-    jobId: string;
-    orderId: string;
-    status: string;
-    addressSnapshotJson: string;
-    version: number;
-    allowedActions: ReadonlyArray<DeliveryAction>;
-  }>;
-};
-
 /**
  * Observation record of one finished scheduled-job attempt. Purpose-built
  * operational telemetry: no raw scheduler internals are exposed.
@@ -216,11 +157,6 @@ export type AdminScheduledJobRunsRequest = AuthenticatedRequest & {
 export type AdminScheduledJobRunsValue = { runs: ReadonlyArray<ScheduledJobRunView> };
 
 export type OperationsReadService = {
-  adminOperationsBoard(
-    request: AdminOperationsBoardRequest,
-  ): Promise<RpcResult<AdminOperationsBoardValue>>;
-  assignRider(request: AssignRiderRequest): Promise<RpcResult<AssignRiderValue>>;
-  riderJobs(request: AuthenticatedRequest): Promise<RpcResult<RiderJobsValue>>;
   adminScheduledJobRuns(
     request: AdminScheduledJobRunsRequest,
   ): Promise<RpcResult<AdminScheduledJobRunsValue>>;

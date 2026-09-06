@@ -35,7 +35,6 @@ function acceptedPriceMatches(
     command.expectedDeliverySubtotalMinor === quote.financial.deliverySubtotalMinor &&
     command.expectedDeliveryFeeMinor === quote.deliveryFeeMinor &&
     command.expectedDeliveryDiscountMinor === quote.financial.deliveryDiscountMinor &&
-    command.expectedServiceFeeMinor === quote.financial.serviceFeeMinor &&
     command.expectedTaxMinor === quote.financial.taxMinor &&
     command.expectedTotalMinor === quote.financial.totalMinor
   );

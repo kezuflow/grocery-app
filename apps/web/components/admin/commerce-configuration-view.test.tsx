@@ -4,73 +4,42 @@ vi.mock("next/link", () => ({ default: ({ children }: { children: unknown }) => 
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/commerce-configuration" }));
 import { CommerceConfigurationView } from "./commerce-configuration-view";
 
+const membership = {
+  priceVersionId: "price-v7",
+  offerId: "membership-global",
+  amountMinor: 29_900,
+  currency: "PHP",
+  effectiveFrom: "2026-08-01T00:00:00.000Z",
+  effectiveTo: null,
+  version: 7,
+};
+
 describe("CommerceConfigurationView", () => {
-  it("renders exact current configuration and replacement-only controls", () => {
+  it("renders membership pricing without a customer service-fee surface", () => {
     const html = renderToStaticMarkup(
       <CommerceConfigurationView
-        activeTab="membership"
         canManageMembership
-        canManageServiceFee
-        membership={{
-          priceVersionId: "price-v7",
-          offerId: "membership-global",
-          amountMinor: 29_900,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 7,
-        }}
-        serviceFee={{
-          configurationId: "fee-v4",
-          feeType: "MIXED",
-          flatMinor: 1_500,
-          percentageBasisPoints: 250,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 4,
-          reason: "Approved fee review",
-        }}
+        membership={membership}
         onMembershipSubmit={vi.fn()}
-        onServiceFeeSubmit={vi.fn()}
       />,
     );
-
-    expect(html).toContain("Membership Price");
+    expect(html).toContain("Membership price");
     expect(html).toContain("Version 7");
     expect(html).toContain("price-v7");
-    expect(html).toContain("Existing subscriptions retain their snapshotted price");
+    expect(html).toContain("Existing paid subscriptions retain their snapshotted price");
     expect(html).toContain("Replacement effective from");
-    expect(html).toContain("Reason for change");
-    expect(html).toContain("I confirm this creates a new effective-dated version");
-    expect(html).toContain("immutable audit event");
-    expect(html).not.toContain("Edit history");
+    expect(html).not.toContain("Service Fee");
   });
 
-  it("keeps a readable configuration read-only without the manage capability", () => {
+  it("keeps membership pricing read-only without manage permission", () => {
     const html = renderToStaticMarkup(
       <CommerceConfigurationView
-        activeTab="service-fee"
         canManageMembership={false}
-        canManageServiceFee={false}
-        membership={null}
-        serviceFee={{
-          configurationId: "fee-v4",
-          feeType: "FLAT",
-          flatMinor: 1_500,
-          percentageBasisPoints: 0,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 4,
-          reason: "Approved fee review",
-        }}
+        membership={membership}
         onMembershipSubmit={vi.fn()}
-        onServiceFeeSubmit={vi.fn()}
       />,
     );
-    expect(html).toContain("Read-only access");
-    expect(html).toContain("Instant orders only");
-    expect(html).not.toContain("Replace Service Fee");
+    expect(html).toContain("Membership management permission is required");
+    expect(html).not.toContain("Create replacement version");
   });
 });

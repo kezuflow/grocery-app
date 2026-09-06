@@ -25,7 +25,6 @@ function terminalResult(quoteId: string, status: "SUPERSEDED" | "EXPIRED") {
     outcome: "ALREADY_TERMINAL" as const,
     quoteStatus: status,
     releasedInventoryHolds: 0,
-    releasedCapacityAllocations: 0,
   };
 }
 
@@ -133,26 +132,17 @@ export async function abandonCheckoutAttempt(
     return failure("CONFLICT", "Abandonment is already processing", command.requestId);
   }
 
-  const [holds, allocations] = await Promise.all([
-    database
-      .prepare(
-        "SELECT COUNT(*) AS count FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
-      )
-      .bind(command.quoteId)
-      .first<{ count: number }>(),
-    database
-      .prepare(
-        "SELECT COUNT(*) AS count FROM capacity_allocations WHERE checkout_attempt_id=? AND status='HELD'",
-      )
-      .bind(command.quoteId)
-      .first<{ count: number }>(),
-  ]);
+  const holds = await database
+    .prepare(
+      "SELECT COUNT(*) AS count FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+    )
+    .bind(command.quoteId)
+    .first<{ count: number }>();
   const result: AbandonCheckoutResult = {
     quoteId: command.quoteId,
     outcome: "ABANDONED",
     quoteStatus: "SUPERSEDED",
     releasedInventoryHolds: holds?.count ?? 0,
-    releasedCapacityAllocations: allocations?.count ?? 0,
   };
   const now = Date.now();
   try {

@@ -254,7 +254,6 @@ describe("global commerce configuration", () => {
         expectedDeliverySubtotalMinor: 0,
         expectedDeliveryFeeMinor: 0,
         expectedDeliveryDiscountMinor: 0,
-        expectedServiceFeeMinor: 0,
         expectedTaxMinor: 0,
         expectedTotalMinor: 100,
         returnUrl: "https://example.test/return",

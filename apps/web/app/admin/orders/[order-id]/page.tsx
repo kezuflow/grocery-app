@@ -405,10 +405,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                       label="Delivery"
                       value={money(order.financial.deliveryFeeMinor, order.currency)}
                     />
-                    <SummaryRow
-                      label="Service fee"
-                      value={money(order.financial.serviceFeeMinor, order.currency)}
-                    />
+                    {order.financial.serviceFeeMinor && order.financial.serviceFeeMinor > 0 ? (
+                      <SummaryRow
+                        label="Historical FreshMarkets fee"
+                        value={money(order.financial.serviceFeeMinor, order.currency)}
+                      />
+                    ) : null}
                     <SummaryRow
                       label="Tax"
                       value={money(order.financial.taxMinor, order.currency)}
@@ -540,7 +542,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                       value={order.fulfillment?.locationId ?? "Unavailable"}
                     />
                     <SummaryRow label="Delivery" value={order.delivery?.status ?? "Not started"} />
-                    <SummaryRow label="Rider" value={order.delivery?.riderUserId ?? "Unassigned"} />
+                    {order.delivery?.riderUserId ? (
+                      <SummaryRow
+                        label="Historical internal-delivery reference"
+                        value={order.delivery.riderUserId}
+                      />
+                    ) : null}
                   </dl>
                 </CardContent>
               </Card>

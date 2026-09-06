@@ -35,7 +35,7 @@ describe("FulfillmentOptionPicker", () => {
             optionId: "opaque-2",
             mode: "SCHEDULED",
             eligible: false,
-            unavailableReason: "CAPACITY_UNAVAILABLE",
+            unavailableReason: "CYCLE_UNAVAILABLE",
             promisedAt: null,
             deliveryWindow: null,
             feePreview: null,
@@ -49,7 +49,7 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).toContain("Lalamove");
     expect(html).toContain("Motorcycle");
     expect(html).toContain("Scheduled delivery");
-    expect(html).toContain("capacity unavailable");
+    expect(html).toContain("cycle unavailable");
     expect(html).not.toMatch(/hub|location-cebu/i);
   });
 });

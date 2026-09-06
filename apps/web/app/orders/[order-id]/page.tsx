@@ -50,7 +50,11 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
     ["Delivery subtotal", order.financial.deliverySubtotalMinor],
     ["Delivery promotion", order.financial.deliveryDiscountMinor],
     ["Delivery fee", order.financial.deliveryFeeMinor],
-    ["Service fee", order.financial.serviceFeeMinor],
+    ...(order.financial.serviceFeeMinor && order.financial.serviceFeeMinor > 0
+      ? ([["Historical FreshMarkets fee", order.financial.serviceFeeMinor]] as Array<
+          [string, number]
+        >)
+      : []),
     ["Tax", order.financial.taxMinor],
   ];
 

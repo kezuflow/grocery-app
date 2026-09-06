@@ -17,8 +17,6 @@ const coreMocks = vi.hoisted(() => ({
   applyAdminOrderIssueAction: vi.fn(),
   getMembershipPriceConfiguration: vi.fn(),
   updateMembershipPriceConfiguration: vi.fn(),
-  getServiceFeeConfiguration: vi.fn(),
-  updateServiceFeeConfiguration: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({
@@ -39,10 +37,6 @@ import {
   GET as membershipPrice,
   POST as updateMembershipPrice,
 } from "@/app/api/admin/commerce-configuration/membership-price/route";
-import {
-  GET as serviceFee,
-  POST as updateServiceFee,
-} from "@/app/api/admin/commerce-configuration/service-fee/route";
 
 beforeEach(() => {
   for (const mock of Object.values(coreMocks)) mock.mockReset();
@@ -193,12 +187,6 @@ describe("finance BFF routes", () => {
       value: {},
       requestId: "r",
     });
-    coreMocks.getServiceFeeConfiguration.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-    coreMocks.updateServiceFeeConfiguration.mockResolvedValue({
-      ok: true,
-      value: {},
-      requestId: "r",
-    });
 
     await membershipPrice(new Request("https://x/membership-price", { headers: COOKIE }));
     await updateMembershipPrice(
@@ -210,26 +198,8 @@ describe("finance BFF routes", () => {
         reason: "Approved annual review",
       }),
     );
-    await serviceFee(new Request("https://x/service-fee", { headers: COOKIE }));
-    await updateServiceFee(
-      jsonRequest("https://x/service-fee", {
-        expectedVersion: 4,
-        feeType: "MIXED",
-        flatMinor: 1_500,
-        percentageBasisPoints: 250,
-        currency: "PHP",
-        effectiveFrom: "2026-09-01T00:00:00.000Z",
-        reason: "Approved fee review",
-      }),
-    );
-
     expect(coreMocks.updateMembershipPriceConfiguration.mock.calls[0][0]).toMatchObject({
       expectedVersion: 3,
-      idempotencyKey: "idem-1",
-    });
-    expect(coreMocks.updateServiceFeeConfiguration.mock.calls[0][0]).toMatchObject({
-      expectedVersion: 4,
-      feeType: "MIXED",
       idempotencyKey: "idem-1",
     });
   });

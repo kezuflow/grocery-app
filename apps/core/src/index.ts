@@ -30,7 +30,6 @@ import {
   addressSearchRequestSchema,
   addressUpdateRequestSchema,
   authenticatedRequestSchema,
-  deliveryCommandSchema,
   serviceabilityRequestSchema,
   validationMessage,
 } from "./validation";
@@ -46,28 +45,6 @@ import {
   listCustomerAddresses,
   updateCustomerAddress,
 } from "./customer/addresses";
-import { advanceDelivery as advanceDeliveryCommand } from "./operations/application/advance-delivery";
-import {
-  listFulfillmentQueue,
-  allowedFulfillmentActions,
-} from "./fulfillment/application/list-fulfillment-queue";
-import {
-  listDeliveryDispatch,
-  allowedDeliveryActions,
-} from "./delivery/application/list-delivery-dispatch";
-import { listRiderJobs } from "./delivery/application/list-rider-jobs";
-import { getRiderBatches as getRiderBatchesQuery } from "./delivery/application/get-rider-batches";
-import { assignRider as assignRiderCommand } from "./delivery/application/assign-rider";
-import { getDeliveryMap as getDeliveryMapQuery } from "./delivery/application/get-delivery-map";
-import { getDeliveryMapDetail as getDeliveryMapDetailQuery } from "./delivery/application/get-delivery-map-detail";
-import { getEligibleRiders as getEligibleRidersQuery } from "./delivery/application/get-eligible-riders";
-import { previewDeliveryBatchRoute as previewDeliveryBatchRouteQuery } from "./delivery/application/preview-delivery-batch-route";
-import {
-  createAndAssignDeliveryBatch as createAndAssignDeliveryBatchCommand,
-  isExactCreateAndAssignRequest,
-} from "./delivery/application/create-and-assign-delivery-batch";
-import { listProcurementQueue } from "./procurement/application/list-procurement-queue";
-import { listOperationalExceptions } from "./audit/application/list-operational-exceptions";
 import {
   getAdminGlobalCommerceConfiguration,
   getAdminFulfillmentMode,
@@ -85,7 +62,6 @@ import {
   recordAdminReceivedLine,
   completeAdminReceiving,
   advanceAdminFulfillment,
-  advanceAdminDelivery,
   resolveAdminOperationalException,
   openAdminSelling,
   pauseAdminSelling,
@@ -203,8 +179,6 @@ import {
 import {
   getMembershipPriceConfiguration as getMembershipPriceConfigurationQuery,
   updateMembershipPriceConfiguration as updateMembershipPriceConfigurationCommand,
-  getServiceFeeConfiguration as getServiceFeeConfigurationQuery,
-  updateServiceFeeConfiguration as updateServiceFeeConfigurationCommand,
 } from "./admin/application/commerce-configuration";
 import { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 import { createCoreRpcContext } from "./entrypoint/context";
@@ -216,7 +190,6 @@ import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
 import { createPaymentsRpc } from "./entrypoint/payments-rpc";
 import { createOrdersRpc } from "./entrypoint/orders-rpc";
 import { createOperationsRpc } from "./entrypoint/operations-rpc";
-import { buildRoutePreviewPort } from "./geography/infrastructure/runtime-route-preview";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
 import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
 import { getMetricSeries } from "./analytics/application/get-metric-series";
@@ -911,24 +884,9 @@ const adminFulfillmentAdvanceSchema = adminOperationsLocationSchema.extend({
   idempotencyKey: idempotencyKeySchema,
   reason: validationSchema.string().trim().min(1).max(500).optional(),
 });
-const adminDeliveryAdvanceSchema = adminOperationsLocationSchema.extend({
-  orderId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum([
-    "MARK_EN_ROUTE",
-    "MARK_ARRIVED",
-    "MARK_DELIVERED",
-    "MARK_FAILED",
-    "SCHEDULE_RETRY",
-    "ESCALATE",
-    "CANCEL",
-  ]),
-  expectedVersion: validationSchema.number().int().min(0),
-  idempotencyKey: idempotencyKeySchema,
-  reason: validationSchema.string().trim().min(1).max(500).optional(),
-});
 const adminOperationalExceptionResolveSchema = adminOperationsLocationSchema.extend({
-  kind: validationSchema.enum(["FULFILLMENT_SHORTAGE", "DELIVERY_FAILED"]),
-  action: validationSchema.enum(["RETRY_FULFILLMENT", "RETRY_DELIVERY"]),
+  kind: validationSchema.literal("FULFILLMENT_SHORTAGE"),
+  action: validationSchema.literal("RETRY_FULFILLMENT"),
   orderId: validationSchema.string().trim().min(1).max(200),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,
@@ -1015,20 +973,6 @@ const membershipLifecycleSchema = authenticatedRequestSchema.extend({
 const membershipPriceConfigurationSchema = authenticatedRequestSchema.extend({
   expectedVersion: validationSchema.number().int().min(1),
   amountMinor: validationSchema.number().int().min(1),
-  currency: validationSchema
-    .string()
-    .trim()
-    .regex(/^[A-Z]{3}$/),
-  effectiveFrom: validationSchema.string().datetime(),
-  reason: validationSchema.string().trim().min(1).max(500),
-  idempotencyKey: idempotencyKeySchema,
-});
-
-const serviceFeeConfigurationSchema = authenticatedRequestSchema.extend({
-  expectedVersion: validationSchema.number().int().min(0),
-  feeType: validationSchema.enum(["FLAT", "PERCENTAGE", "MIXED"]),
-  flatMinor: validationSchema.number().int().min(0),
-  percentageBasisPoints: validationSchema.number().int().min(0).max(10_000),
   currency: validationSchema
     .string()
     .trim()
@@ -1952,15 +1896,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
-  async advanceAdminDelivery(input: import("@freshmarkets/contracts").AdvanceAdminDeliveryRequest) {
-    const validation = adminDeliveryAdvanceSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return advanceAdminDelivery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
-  }
   async resolveAdminOperationalException(
     input: import("@freshmarkets/contracts").ResolveAdminOperationalExceptionRequest,
   ) {
@@ -2116,67 +2051,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
     }
   }
-  async getDeliveryMap(input: import("@freshmarkets/contracts").DeliveryMapRequest) {
-    return getDeliveryMapQuery(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        now: () => this.context.now(),
-      },
-      input,
-    );
-  }
-  async getDeliveryMapDetail(input: import("@freshmarkets/contracts").DeliveryMapDetailRequest) {
-    return getDeliveryMapDetailQuery(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        now: () => this.context.now(),
-      },
-      input,
-    );
-  }
-  async getEligibleRiders(input: import("@freshmarkets/contracts").EligibleRidersRequest) {
-    return getEligibleRidersQuery(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        now: () => this.context.now(),
-      },
-      input,
-    );
-  }
-  async previewDeliveryBatchRoute(
-    input: import("@freshmarkets/contracts").PreviewDeliveryBatchRouteRequest,
-  ) {
-    return previewDeliveryBatchRouteQuery(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        now: () => this.context.now(),
-        routePreview: buildRoutePreviewPort(this.env),
-      },
-      input,
-    );
-  }
-  async createAndAssignDeliveryBatch(
-    input: import("@freshmarkets/contracts").CreateAndAssignDeliveryBatchRequest,
-  ) {
-    const requestId =
-      input !== null && typeof input === "object" && typeof input.requestId === "string"
-        ? input.requestId
-        : "unknown";
-    if (!isExactCreateAndAssignRequest(input))
-      return fail("VALIDATION_FAILED", "Create-and-assign request is invalid", requestId);
-    return createAndAssignDeliveryBatchCommand(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        now: () => this.context.now(),
-      },
-      input,
-    );
-  }
   async listOperationalExceptions(
     input: import("@freshmarkets/contracts").AdminOperationalExceptionsRequest,
   ) {
@@ -2293,26 +2167,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return updateMembershipPriceConfigurationCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
-  }
-  async getServiceFeeConfiguration(input: AuthenticatedRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return getServiceFeeConfigurationQuery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
-  }
-  async updateServiceFeeConfiguration(
-    input: import("@freshmarkets/contracts").UpdateServiceFeeConfigurationRequest,
-  ) {
-    const validation = serviceFeeConfigurationSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return updateServiceFeeConfigurationCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
@@ -2526,11 +2380,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   ) {
     return this.paymentsRpc.completeRecurringAuthorization(input);
   }
-  async simulateMockProviderEvent(
-    input: import("@freshmarkets/contracts").SimulateMockPaymentRequest,
-  ) {
-    return this.paymentsRpc.simulateMockProviderEvent(input);
-  }
   async getSubscriptionEligibility(
     input: import("@freshmarkets/contracts").SubscriptionEligibilityRequest,
   ) {
@@ -2632,147 +2481,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async advanceFulfillment(input: import("@freshmarkets/contracts").FulfillmentCommandRequest) {
     return this.operationsRpc.advanceFulfillment(input);
   }
-  async advanceDelivery(input: import("@freshmarkets/contracts").DeliveryCommandRequest) {
-    const validation = deliveryCommandSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return advanceDeliveryCommand(this.env.DB, input, {
-      authorize: (job) => this.context.authorizeDeliveryJob(input, job),
-    });
-  }
-
-  /**
-   * Purpose-built operational board: one location-scoped decision surface
-   * composed from the fulfillment, delivery, procurement, and exception read
-   * models. Sections the actor holds no capability for are reported as
-   * denied instead of leaking rows; a requester with no authorized section
-   * at all is rejected.
-   */
-  async adminOperationsBoard(input: import("@freshmarkets/contracts").AdminOperationsBoardRequest) {
-    const session = await this.context.session(input);
-    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    const locationId = await this.context.resolveBoardLocation(input.locationId);
-    if (!locationId)
-      return fail(
-        "CONFIGURATION_ERROR",
-        "No active fulfillment location is configured",
-        input.requestId,
-      );
-    const sections: Array<{
-      name: import("@freshmarkets/contracts").OperationsReadSection;
-      capability: import("@freshmarkets/contracts").Capability;
-      load: () => Promise<
-        | { items: import("@freshmarkets/contracts").AdminOperationsBoardValue["fulfillment"] }
-        | { items: import("@freshmarkets/contracts").AdminOperationsBoardValue["delivery"] }
-        | { items: import("@freshmarkets/contracts").AdminOperationsBoardValue["procurement"] }
-      >;
-    }> = [
-      {
-        name: "fulfillment",
-        capability: "fulfillment.manage",
-        load: async () => ({
-          items: (await listFulfillmentQueue(this.env.DB, { locationId })).map((item) => ({
-            ...item,
-            allowedActions: allowedFulfillmentActions(item.status),
-          })),
-        }),
-      },
-      {
-        name: "delivery",
-        capability: "delivery.manage",
-        load: async () => ({
-          items: (await listDeliveryDispatch(this.env.DB, { locationId })).map(
-            ({ addressSnapshotJson, ...item }) => {
-              void addressSnapshotJson;
-              return {
-                ...item,
-                allowedActions: allowedDeliveryActions(item.status, item.riderAuthUserId !== null),
-              };
-            },
-          ),
-        }),
-      },
-      {
-        name: "procurement",
-        capability: "procurement.manage",
-        load: async () => ({ items: await listProcurementQueue(this.env.DB, { locationId }) }),
-      },
-    ];
-    const value: {
-      locationId: string;
-      fulfillment: import("@freshmarkets/contracts").AdminOperationsBoardValue["fulfillment"];
-      delivery: import("@freshmarkets/contracts").AdminOperationsBoardValue["delivery"];
-      procurement: import("@freshmarkets/contracts").AdminOperationsBoardValue["procurement"];
-      exceptions: import("@freshmarkets/contracts").AdminOperationsBoardValue["exceptions"];
-      sectionsDenied: import("@freshmarkets/contracts").OperationsReadSection[];
-    } = {
-      locationId,
-      fulfillment: [],
-      delivery: [],
-      procurement: [],
-      exceptions: [],
-      sectionsDenied: [],
-    };
-    let authorizedSections = 0;
-    for (const section of sections) {
-      if (!(await this.context.requireOperationalAccess(input, section.capability, locationId))) {
-        value.sectionsDenied.push(section.name);
-        continue;
-      }
-      authorizedSections += 1;
-      const loaded = (await section.load()) as { items: unknown[] };
-      (value[section.name] as unknown[]) = loaded.items;
-    }
-    if (authorizedSections === 0)
-      return fail("FORBIDDEN", "No operational capability for this location", input.requestId);
-    if (value.sectionsDenied.length < 3 || authorizedSections > 0)
-      value.exceptions = await listOperationalExceptions(this.env.DB, { locationId });
-    return { ok: true as const, value, requestId: input.requestId };
-  }
-
-  /** Assign an open delivery job to an active staff rider. */
-  async assignRider(input: import("@freshmarkets/contracts").AssignRiderRequest) {
-    const session = await this.context.session(input);
-    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    return assignRiderCommand(
-      this.env.DB,
-      {
-        requestId: input.requestId,
-        orderId: input.orderId,
-        riderAuthUserId: input.riderAuthUserId,
-        expectedVersion: input.expectedVersion,
-        idempotencyKey: input.idempotencyKey,
-      },
-      {
-        authorize: (locationId) =>
-          locationId
-            ? this.context.requireOperationalAccess(input, "delivery.manage", locationId)
-            : Promise.resolve(false),
-      },
-    );
-  }
-
-  /** The requesting rider's own open delivery jobs. */
-  async riderJobs(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
-    const session = await this.context.session(input);
-    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    return {
-      ok: true as const,
-      value: { jobs: await listRiderJobs(this.env.DB, { riderAuthUserId: session.id }) },
-      requestId: input.requestId,
-    };
-  }
-
-  /** Assigned operational batches for the authenticated active canonical Rider. */
-  async getRiderBatches(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
-    const session = await this.context.session(input);
-    if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
-    return getRiderBatchesQuery(this.env.DB, {
-      riderAuthUserId: session.id,
-      requestId: input.requestId,
-    });
-  }
-
   /**
    * Time-driven dispatch only: resolves the fired cron expression through the
    * scheduling registry to idempotent bounded-context commands. No business

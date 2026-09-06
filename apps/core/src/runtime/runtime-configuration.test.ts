@@ -90,7 +90,7 @@ describe("parseCoreRuntimeConfiguration", () => {
     ).toThrow("GOOGLE_OAUTH_CONFIGURATION_PARTIAL");
   });
 
-  it("blocks the mock provider in deployed environments", () => {
+  it("blocks the mock provider outside the test harness", () => {
     expect(() =>
       parseCoreRuntimeConfiguration({
         ENVIRONMENT: "production",
@@ -98,7 +98,13 @@ describe("parseCoreRuntimeConfiguration", () => {
         BETTER_AUTH_URL: "https://freshmarkets.ph",
         PAYMENT_PROVIDER: "mock",
       }),
-    ).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+    ).toThrow("PAYMENT_PROVIDER_INVALID");
+    expect(() =>
+      parseCoreRuntimeConfiguration({
+        ENVIRONMENT: "development",
+        PAYMENT_PROVIDER: "mock",
+      }),
+    ).toThrow("PAYMENT_PROVIDER_INVALID");
   });
 
   it("requires mode-matched PayMongo secrets", () => {
@@ -126,24 +132,14 @@ describe("parseCoreRuntimeConfiguration", () => {
     expect(configuration.readiness.payments).toBe(true);
   });
 
-  it("allows a local provider override without allowing it in deployments", () => {
+  it("supports PayMongo sandbox directly in development", () => {
     const local = parseCoreRuntimeConfiguration({
       ENVIRONMENT: "development",
-      PAYMENT_PROVIDER: "mock",
-      LOCAL_PAYMENT_PROVIDER: "paymongo",
+      PAYMENT_PROVIDER: "paymongo",
       PAYMONGO_SECRET_KEY: "sk_test_value",
       PAYMONGO_WEBHOOK_SECRET: "whsk_test_value",
     });
     expect(local.payments.providerCode).toBe("paymongo");
-
-    expect(() =>
-      parseCoreRuntimeConfiguration({
-        ENVIRONMENT: "production",
-        BETTER_AUTH_SECRET: strongSecret,
-        BETTER_AUTH_URL: "https://freshmarkets.ph",
-        LOCAL_PAYMENT_PROVIDER: "paymongo",
-      }),
-    ).toThrow("LOCAL_PAYMENT_PROVIDER_FORBIDDEN");
   });
 
   it("reports optional provider and OAuth readiness without secret values", () => {

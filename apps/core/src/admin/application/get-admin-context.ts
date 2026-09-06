@@ -211,7 +211,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "commerce-configuration",
-    label: "Pricing & fees",
+    label: "Membership pricing",
     href: "/admin/commerce-configuration",
     section: "finance",
     parentCode: null,

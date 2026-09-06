@@ -136,7 +136,6 @@ test("selects opaque Core fulfillment options and invalidates the quote after ad
         orderDiscountMinor: 0,
         deliverySubtotalMinor: 3_000,
         deliveryDiscountMinor: 0,
-        serviceFeeMinor: 0,
         taxMinor: 0,
         subtotalMinor: 30_000,
         discountMinor: 0,
@@ -158,7 +157,6 @@ test("selects opaque Core fulfillment options and invalidates the quote after ad
         outcome: "ABANDONED",
         quoteStatus: "SUPERSEDED",
         releasedInventoryHolds: 1,
-        releasedCapacityAllocations: 0,
       },
     });
   });

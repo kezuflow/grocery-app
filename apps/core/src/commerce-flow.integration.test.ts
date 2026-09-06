@@ -3,7 +3,8 @@ import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CheckoutQuoteView, CoreServiceBinding } from "@freshmarkets/contracts";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
-import { simulateMockProviderEvent } from "./payments/application/simulate-mock-provider-event";
+import { ingestProviderEvent } from "./payments/application/ingest-provider-event";
+import { applyCheckoutPaymentReaction } from "./orders/application/apply-checkout-payment-reaction";
 
 const core = exports.default as unknown as CoreServiceBinding;
 const password = "correct-horse-battery-staple";
@@ -23,7 +24,6 @@ function acceptedPrice(quote: CheckoutQuoteView) {
     expectedDeliverySubtotalMinor: quote.deliverySubtotalMinor,
     expectedDeliveryFeeMinor: quote.deliveryFeeMinor,
     expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
-    expectedServiceFeeMinor: quote.serviceFeeMinor,
     expectedTaxMinor: quote.taxMinor,
     expectedTotalMinor: quote.totalMinor,
   };
@@ -320,29 +320,48 @@ describe("customer checkout flow", () => {
     )
       .bind(payment.value.paymentIntentId)
       .first<{ provider_reference: string }>();
-    const simulationCommand = {
-      environment: "test" as const,
-      customerId: paymentSubject!.customer_id,
+    const providerEventId = `flow-provider-${crypto.randomUUID()}`;
+    const registry = buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" });
+    const provider = registry.require("mock");
+    const event = await provider.createTestEvent!({
+      providerEventId,
       providerReference: paymentAttempt!.provider_reference,
       outcome: "SUCCEEDED" as const,
-      idempotencyKey: `flow-simulator-${crypto.randomUUID()}`,
-      requestId: crypto.randomUUID(),
-    };
-    const firstSimulation = await simulateMockProviderEvent(
+      amountMinor: acceptedQuote.value.totalMinor,
+      currency: acceptedQuote.value.currency,
+      observedAt: Date.now(),
+    });
+    const firstSimulation = await ingestProviderEvent(
       env.DB,
-      buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }),
-      simulationCommand,
+      registry,
+      "mock",
+      event.headers,
+      event.rawBody,
     );
     expect(firstSimulation).toMatchObject({
       ok: true,
-      value: { committedOrderId: expect.any(String) },
+      value: { processingStatus: "APPLIED" },
     });
-    const replaySimulation = await simulateMockProviderEvent(
+    const pendingReaction = await env.DB.prepare(
+      "SELECT id, subject_id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER' AND status='PENDING' LIMIT 1",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ id: string; subject_id: string }>();
+    expect(pendingReaction).toBeTruthy();
+    await applyCheckoutPaymentReaction(env.DB, {
+      reactionId: pendingReaction!.id,
+      paymentIntentId: payment.value.paymentIntentId,
+      checkoutAttemptId: pendingReaction!.subject_id,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    const replaySimulation = await ingestProviderEvent(
       env.DB,
-      buildProviderRegistry({ ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" }),
-      simulationCommand,
+      registry,
+      "mock",
+      event.headers,
+      event.rawBody,
     );
-    expect(replaySimulation).toEqual(firstSimulation);
+    expect(replaySimulation).toMatchObject({ ok: true, value: { processingStatus: "DUPLICATE" } });
 
     const counts = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM payment_intent WHERE id=?) AS payments, (SELECT COUNT(*) FROM grocery_order WHERE customer_id=(SELECT customer_id FROM payment_intent WHERE id=?)) AS orders",

@@ -110,7 +110,6 @@ export type FulfillmentOptionView = {
     | "ADDRESS_UNSERVICEABLE"
     | "INVENTORY_UNAVAILABLE"
     | "CYCLE_UNAVAILABLE"
-    | "CAPACITY_UNAVAILABLE"
     | "CATALOG_UNAVAILABLE"
     | "FEE_UNAVAILABLE"
     | "DELIVERY_PARTNER_UNAVAILABLE"
@@ -167,8 +166,6 @@ export type CheckoutQuoteView = {
   orderDiscountMinor: number;
   deliverySubtotalMinor: number;
   deliveryDiscountMinor: number;
-  serviceFeeMinor: number;
-  preServiceFeeTotalMinor: number;
   taxMinor: number;
   subtotalMinor: number;
   discountMinor: number;
@@ -196,7 +193,6 @@ export type AbandonCheckoutResult = {
   outcome: "ABANDONED" | "ALREADY_TERMINAL";
   quoteStatus: "SUPERSEDED" | "EXPIRED";
   releasedInventoryHolds: number;
-  releasedCapacityAllocations: number;
 };
 
 export type CartView = {

@@ -183,7 +183,6 @@ export default function AnalyticsPage() {
               >
                 <option value="">All</option>
                 <option value="GRAM">Gram</option>
-                <option value="MILLILITER">Milliliter</option>
                 <option value="PIECE">Piece</option>
               </select>
             </label>

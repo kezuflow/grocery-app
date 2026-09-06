@@ -167,9 +167,6 @@ describe("converged operational exceptions", () => {
     expect(rows.find((item) => item.source === "FULFILLMENT")?.permittedActions).toEqual([
       "RETRY_FULFILLMENT",
     ]);
-    expect(rows.find((item) => item.source === "DELIVERY")?.permittedActions).toEqual([
-      "RETRY_DELIVERY",
-      "ESCALATE",
-    ]);
+    expect(rows.find((item) => item.source === "DELIVERY")?.permittedActions).toEqual(["ESCALATE"]);
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { coreServiceMethodNames, type CoreServiceBinding } from "@freshmarkets/contracts";
 import { CoreEntrypoint } from "../index";
 
-const lifecycleMethods = ["fetch", "scheduled"] as const;
+const lifecycleMethods = ["fetch", "queue", "scheduled"] as const;
 
 function runtimeMethods(prototype: object): string[] {
   return Object.getOwnPropertyNames(prototype)

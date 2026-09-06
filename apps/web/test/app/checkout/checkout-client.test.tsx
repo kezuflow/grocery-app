@@ -205,7 +205,6 @@ function successfulFetch(options?: {
             orderDiscountMinor: 0,
             deliverySubtotalMinor: totalMinor - 30000,
             deliveryDiscountMinor: 0,
-            serviceFeeMinor: 0,
             taxMinor: 0,
             subtotalMinor: 30000,
             discountMinor: 0,

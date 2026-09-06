@@ -96,7 +96,7 @@ describe("membership and promotions persistence", () => {
       .bind(customerId, `auth-${customerId}`, Date.now(), Date.now())
       .run();
     await env.DB.prepare(
-      "INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, parameters_json, created_at, updated_at) VALUES ('grant-intro-test', 'INTRO_TRIAL', 'MEMBERSHIP_FEE_WAIVER', 1, 'ACTIVE', '{}', ?, ?)",
+      "INSERT INTO promotion_grant (id, benefit_code, benefit_type, max_redemptions, status, parameters_json, created_at, updated_at) VALUES ('grant-intro-test', 'INTRO_TRIAL', 'MEMBERSHIP_FEE_WAIVER', 2, 'ACTIVE', '{}', ?, ?)",
     )
       .bind(Date.now(), Date.now())
       .run();

@@ -1,16 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import type {
-  MembershipPriceConfigurationView,
-  RpcResult,
-  ServiceFeeConfigurationView,
-} from "@freshmarkets/contracts";
+import type { MembershipPriceConfigurationView, RpcResult } from "@freshmarkets/contracts";
 import {
   CommerceConfigurationView,
   type MembershipPriceReplacement,
-  type ServiceFeeReplacement,
 } from "@/components/admin/commerce-configuration-view";
 import { CommandBanner } from "@/components/admin/admin-compositions";
 import { PageHeader } from "@/components/admin/admin-shell";
@@ -19,29 +13,17 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext } from "../admin-context-provider";
 
-type Notice = {
-  tone: "success" | "conflict" | "error";
-  title: string;
-  message: string;
-} | null;
+type Notice = { tone: "success" | "conflict" | "error"; title: string; message: string } | null;
 
 export default function CommerceConfigurationPage() {
-  const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") === "service-fee" ? "service-fee" : "membership";
   const admin = useAdminContext();
   const capabilities = admin.state.phase === "ready" ? admin.state.context.capabilities : [];
-  const canReadMembership = capabilities.includes("memberships.read");
-  const canManageMembership = capabilities.includes("memberships.manage");
-  const canReadServiceFee = capabilities.includes("payments.read");
-  const canManageServiceFee = capabilities.includes("payments.manage");
+  const canRead = capabilities.includes("memberships.read");
+  const canManage = capabilities.includes("memberships.manage");
   const [membership, setMembership] = useState<RpcResult<MembershipPriceConfigurationView> | null>(
     null,
   );
-  const [serviceFee, setServiceFee] = useState<RpcResult<ServiceFeeConfigurationView> | null>(null);
-  const [scheduledMembership, setScheduledMembership] =
-    useState<MembershipPriceConfigurationView | null>(null);
-  const [scheduledServiceFee, setScheduledServiceFee] =
-    useState<ServiceFeeConfigurationView | null>(null);
+  const [scheduled, setScheduled] = useState<MembershipPriceConfigurationView | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [attempt, setAttempt] = useState(0);
@@ -52,79 +34,42 @@ export default function CommerceConfigurationPage() {
   }, []);
 
   useEffect(() => {
-    if (admin.state.phase !== "ready") return;
+    if (admin.state.phase !== "ready" || !canRead) return;
     let active = true;
-    if (canReadMembership) {
-      setMembership(null);
-      void fetch("/api/admin/commerce-configuration/membership-price")
-        .then((response) => response.json() as Promise<RpcResult<MembershipPriceConfigurationView>>)
-        .then((result) => active && setMembership(result))
-        .catch(() => active && setMembership(networkFailure("Membership Price")));
-    }
-    if (canReadServiceFee) {
-      setServiceFee(null);
-      void fetch("/api/admin/commerce-configuration/service-fee")
-        .then((response) => response.json() as Promise<RpcResult<ServiceFeeConfigurationView>>)
-        .then((result) => active && setServiceFee(result))
-        .catch(() => active && setServiceFee(networkFailure("Service Fee")));
-    }
+    setMembership(null);
+    void fetch("/api/admin/commerce-configuration/membership-price")
+      .then((response) => response.json() as Promise<RpcResult<MembershipPriceConfigurationView>>)
+      .then((result) => active && setMembership(result))
+      .catch(() => active && setMembership(networkFailure()));
     return () => {
       active = false;
     };
-  }, [admin.state.phase, attempt, canReadMembership, canReadServiceFee]);
+  }, [admin.state.phase, attempt, canRead]);
 
   async function replaceMembership(replacement: MembershipPriceReplacement) {
     if (!membership?.ok) return;
-    const result = await submit<MembershipPriceConfigurationView>(
-      "/api/admin/commerce-configuration/membership-price",
-      { ...replacement, expectedVersion: membership.value.version },
-    );
-    if (result.ok) {
-      setScheduledMembership(result.value);
-      setAttempt((value) => value + 1);
-    }
-    handleResult(result, "Membership Price replacement created");
-  }
-
-  async function replaceServiceFee(replacement: ServiceFeeReplacement) {
-    if (!serviceFee?.ok) return;
-    const result = await submit<ServiceFeeConfigurationView>(
-      "/api/admin/commerce-configuration/service-fee",
-      { ...replacement, expectedVersion: serviceFee.value.version },
-    );
-    if (result.ok) {
-      setScheduledServiceFee(result.value);
-      setAttempt((value) => value + 1);
-    }
-    handleResult(result, "Service Fee replacement created");
-  }
-
-  async function submit<T>(url: string, body: object): Promise<RpcResult<T>> {
     setPending(true);
     setNotice(null);
+    let result: RpcResult<MembershipPriceConfigurationView>;
     try {
-      const response = await fetch(url, {
+      const response = await fetch("/api/admin/commerce-configuration/membership-price", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": crypto.randomUUID(),
-        },
-        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ ...replacement, expectedVersion: membership.value.version }),
       });
-      return (await response.json()) as RpcResult<T>;
+      result = (await response.json()) as RpcResult<MembershipPriceConfigurationView>;
     } catch {
-      return networkFailure<T>("Commerce configuration command");
+      result = networkFailure();
     } finally {
       setPending(false);
     }
-  }
-
-  function handleResult<T>(result: RpcResult<T>, successTitle: string) {
     if (result.ok) {
+      setScheduled(result.value);
+      setAttempt((value) => value + 1);
       setNotice({
         tone: "success",
-        title: successTitle,
-        message: "The new effective-dated version and its immutable audit evidence were recorded.",
+        title: "Membership price replacement created",
+        message: "The effective-dated version and immutable audit evidence were recorded.",
       });
       return;
     }
@@ -136,14 +81,11 @@ export default function CommerceConfigurationPage() {
     });
   }
 
-  const selectedResult = activeTab === "membership" ? membership : serviceFee;
-  const canReadSelected = activeTab === "membership" ? canReadMembership : canReadServiceFee;
-
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Pricing & fees"
-        description="Global effective-dated Membership Price and FreshMarkets Instant Service Fee configuration."
+        title="Membership pricing"
+        description="Global effective-dated paid membership pricing. Customer orders have no FreshMarkets fee."
       />
       {notice ? (
         <CommandBanner
@@ -151,56 +93,44 @@ export default function CommerceConfigurationPage() {
           title={notice.title}
           message={notice.message}
           action={
-            notice.tone === "conflict" ? (
-              <Button onClick={refresh}>Refresh current version</Button>
-            ) : undefined
+            notice.tone === "conflict" ? <Button onClick={refresh}>Refresh</Button> : undefined
           }
         />
       ) : null}
-      {admin.state.phase !== "ready" || (canReadSelected && selectedResult === null) ? (
+      {admin.state.phase !== "ready" || (canRead && membership === null) ? (
         <Skeleton className="h-96 w-full" />
       ) : null}
-      {admin.state.phase === "ready" && !canReadSelected ? (
+      {admin.state.phase === "ready" && !canRead ? (
         <Alert>
-          <AlertTitle>Configuration is not available to this role</AlertTitle>
-          <AlertDescription>
-            {activeTab === "membership" ? "memberships.read" : "payments.read"} is required to view
-            the current authoritative version.
-          </AlertDescription>
+          <AlertTitle>Membership pricing is not available to this role</AlertTitle>
+          <AlertDescription>memberships.read is required.</AlertDescription>
         </Alert>
       ) : null}
-      {selectedResult && !selectedResult.ok ? (
+      {membership && !membership.ok ? (
         <Alert variant="destructive">
-          <AlertTitle>Configuration could not be loaded</AlertTitle>
-          <AlertDescription>
-            {selectedResult.error.message} Request reference: {selectedResult.error.requestId}
-          </AlertDescription>
+          <AlertTitle>Membership pricing could not be loaded</AlertTitle>
+          <AlertDescription>{membership.error.message}</AlertDescription>
         </Alert>
       ) : null}
-      {admin.state.phase === "ready" && selectedResult?.ok ? (
+      {membership?.ok ? (
         <CommerceConfigurationView
-          activeTab={activeTab}
-          membership={membership?.ok ? membership.value : null}
-          serviceFee={serviceFee?.ok ? serviceFee.value : null}
-          scheduledMembership={scheduledMembership}
-          scheduledServiceFee={scheduledServiceFee}
-          canManageMembership={canManageMembership}
-          canManageServiceFee={canManageServiceFee}
+          membership={membership.value}
+          scheduledMembership={scheduled}
+          canManageMembership={canManage}
           pending={pending}
           onMembershipSubmit={(replacement) => void replaceMembership(replacement)}
-          onServiceFeeSubmit={(replacement) => void replaceServiceFee(replacement)}
         />
       ) : null}
     </div>
   );
 }
 
-function networkFailure<T>(label: string): RpcResult<T> {
+function networkFailure(): RpcResult<MembershipPriceConfigurationView> {
   return {
     ok: false,
     error: {
       code: "INTERNAL_ERROR",
-      message: `Network error loading ${label}.`,
+      message: "Network error loading membership pricing.",
       requestId: "unavailable",
     },
   };

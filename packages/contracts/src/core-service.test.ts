@@ -22,28 +22,10 @@ import type {
 } from "./core-service";
 import type { CheckoutQuoteCommandRequest } from "./checkout";
 import type { SubscriptionSummary } from "./membership";
-import type {
-  PaymentActionView,
-  PaymentSummary,
-  SimulateMockPaymentRequest,
-  MockPaymentSimulationView,
-} from "./payments";
+import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
 import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
 import { appErrorCodes, type RpcResult } from "./common";
-import type {
-  BatchRoutePreview,
-  CreateAndAssignDeliveryBatchRequest,
-  DeliveryBatchView,
-  DeliveryMapDetail,
-  DeliveryMapDetailRequest,
-  DeliveryMapRequest,
-  DeliveryMapView,
-  EligibleRiderPage,
-  EligibleRidersRequest,
-  PreviewDeliveryBatchRouteRequest,
-  RiderBatchList,
-} from "./delivery-maps";
 import type {
   CancelCustomerOrderRequest,
   OrderCancellationView,
@@ -93,34 +75,10 @@ describe("domain-grouped core services", () => {
     void (true as SummarySignature);
     expect(true).toBe(true);
   });
-  it("publishes a constrained mock simulator without client-controlled money", () => {
-    type SimulationSignature = Expect<
-      Equal<
-        CoreServiceBinding["simulateMockProviderEvent"],
-        (request: SimulateMockPaymentRequest) => Promise<RpcResult<MockPaymentSimulationView>>
-      >
-    >;
-    type RequestKeys = keyof SimulateMockPaymentRequest;
-    type HasAmount = "amountMinor" extends RequestKeys ? true : false;
-    type HasCurrency = "currency" extends RequestKeys ? true : false;
-    type HasCustomer = "customerId" extends RequestKeys ? true : false;
-
-    void (true as SimulationSignature);
-    expect([false, false, false] satisfies [HasAmount, HasCurrency, HasCustomer]).toEqual([
-      false,
-      false,
-      false,
-    ]);
-  });
-
   it("publishes typed commerce pricing configuration commands", () => {
     type MembershipPriceUpdate = Parameters<
       CommerceConfigurationService["updateMembershipPriceConfiguration"]
     >[0];
-    type ServiceFeeUpdate = Parameters<
-      CommerceConfigurationService["updateServiceFeeConfiguration"]
-    >[0];
-
     const membership: MembershipPriceUpdate = {
       requestId: "membership-price-request",
       headers: {},
@@ -131,21 +89,7 @@ describe("domain-grouped core services", () => {
       reason: "Scheduled annual price review",
       idempotencyKey: "membership-price-v2",
     };
-    const serviceFee: ServiceFeeUpdate = {
-      requestId: "service-fee-request",
-      headers: {},
-      expectedVersion: 0,
-      feeType: "MIXED",
-      flatMinor: 1_500,
-      percentageBasisPoints: 300,
-      currency: "PHP",
-      effectiveFrom: "2026-10-01T00:00:00.000Z",
-      reason: "Initial Instant service fee",
-      idempotencyKey: "service-fee-v1",
-    };
-
     expect(membership.amountMinor).toBe(24_900);
-    expect(serviceFee.feeType).toBe("MIXED");
   });
   it("publishes stable financial-safety error codes", () => {
     expect(appErrorCodes).toEqual(
@@ -153,7 +97,6 @@ describe("domain-grouped core services", () => {
         "TRIAL_ENDED",
         "SUBSCRIPTION_GRACE_ENDED",
         "MINIMUM_ORDER_NOT_MET",
-        "CAPACITY_UNAVAILABLE",
         "PAYMENT_OUTCOME_UNRESOLVED",
         "AUTHORIZATION_OUTCOME_UNRESOLVED",
         "PAYMENT_ACTION_EXPIRED",
@@ -171,53 +114,6 @@ describe("domain-grouped core services", () => {
     >;
 
     void (true as AddressSearchSignature);
-    expect(true).toBe(true);
-  });
-
-  it("exposes the scoped dispatch map and atomic create-and-assign surface", () => {
-    type MapSignature = Expect<
-      Equal<
-        CoreServiceBinding["getDeliveryMap"],
-        (request: DeliveryMapRequest) => Promise<RpcResult<DeliveryMapView>>
-      >
-    >;
-    type DetailSignature = Expect<
-      Equal<
-        CoreServiceBinding["getDeliveryMapDetail"],
-        (request: DeliveryMapDetailRequest) => Promise<RpcResult<DeliveryMapDetail>>
-      >
-    >;
-    type RidersSignature = Expect<
-      Equal<
-        CoreServiceBinding["getEligibleRiders"],
-        (request: EligibleRidersRequest) => Promise<RpcResult<EligibleRiderPage>>
-      >
-    >;
-    type PreviewSignature = Expect<
-      Equal<
-        CoreServiceBinding["previewDeliveryBatchRoute"],
-        (request: PreviewDeliveryBatchRouteRequest) => Promise<RpcResult<BatchRoutePreview>>
-      >
-    >;
-    type CreateSignature = Expect<
-      Equal<
-        CoreServiceBinding["createAndAssignDeliveryBatch"],
-        (request: CreateAndAssignDeliveryBatchRequest) => Promise<RpcResult<DeliveryBatchView>>
-      >
-    >;
-    type RiderBatchesSignature = Expect<
-      Equal<
-        CoreServiceBinding["getRiderBatches"],
-        (request: import("./index").AuthenticatedRequest) => Promise<RpcResult<RiderBatchList>>
-      >
-    >;
-
-    void (true as MapSignature);
-    void (true as DetailSignature);
-    void (true as RidersSignature);
-    void (true as PreviewSignature);
-    void (true as CreateSignature);
-    void (true as RiderBatchesSignature);
     expect(true).toBe(true);
   });
 

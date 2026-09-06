@@ -18,7 +18,7 @@ import type {
 import type { AdminOperationsService } from "./admin-operations";
 import type { AdminAnalyticsService } from "./admin-analytics";
 import type { AdminOverviewService } from "./admin-overview";
-import type { AuthenticatedRequest, AuthService } from "./auth";
+import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
 import type { CommerceConfigurationService } from "./commerce-configuration";
 import type {
@@ -41,19 +41,6 @@ import type {
   PaymentIntentCommandRequest,
   PaymentsService,
 } from "./payments";
-import type {
-  BatchRoutePreview,
-  CreateAndAssignDeliveryBatchRequest,
-  DeliveryBatchView,
-  DeliveryMapDetail,
-  DeliveryMapDetailRequest,
-  DeliveryMapRequest,
-  DeliveryMapView,
-  EligibleRiderPage,
-  EligibleRidersRequest,
-  PreviewDeliveryBatchRouteRequest,
-  RiderBatchList,
-} from "./delivery-maps";
 
 /**
  * The Core binding surface Core supplies today. The five operations commands
@@ -67,10 +54,7 @@ export interface ImplementedCoreService
     Pick<AuthService, "auth" | "getApplicationContext">,
     CatalogService,
     MembershipService,
-    Pick<
-      PaymentsService,
-      "beginRecurringAuthorization" | "completeRecurringAuthorization" | "simulateMockProviderEvent"
-    >,
+    Pick<PaymentsService, "beginRecurringAuthorization" | "completeRecurringAuthorization">,
     CheckoutService,
     OrdersService,
     OperationsReadService,
@@ -119,22 +103,6 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   createAmendmentPaymentIntent(
     request: AmendmentPaymentIntentRequest,
   ): Promise<RpcResult<PaymentActionView>>;
-  /** Scoped open-delivery projection with Core-derived selectability. */
-  getDeliveryMap(request: DeliveryMapRequest): Promise<RpcResult<DeliveryMapView>>;
-  /** Protected delivery detail; raw snapshots never cross the binding. */
-  getDeliveryMapDetail(request: DeliveryMapDetailRequest): Promise<RpcResult<DeliveryMapDetail>>;
-  /** Canonical active rider candidates and current open workload. */
-  getEligibleRiders(request: EligibleRidersRequest): Promise<RpcResult<EligibleRiderPage>>;
-  /** Non-authoritative preview of the submitted manual delivery order. */
-  previewDeliveryBatchRoute(
-    request: PreviewDeliveryBatchRouteRequest,
-  ): Promise<RpcResult<BatchRoutePreview>>;
-  /** Atomically creates one batch, its ordered stops, and the rider assignment. */
-  createAndAssignDeliveryBatch(
-    request: CreateAndAssignDeliveryBatchRequest,
-  ): Promise<RpcResult<DeliveryBatchView>>;
-  /** Assigned operational batches for the authenticated active canonical Rider. */
-  getRiderBatches(request: AuthenticatedRequest): Promise<RpcResult<RiderBatchList>>;
 }
 
 /** Runtime manifest paired with the structural interface for deployment conformance tests. */
@@ -148,8 +116,6 @@ export const coreServiceMethodNames = [
   "getAdminOverview",
   "getMembershipPriceConfiguration",
   "updateMembershipPriceConfiguration",
-  "getServiceFeeConfiguration",
-  "updateServiceFeeConfiguration",
   "listAdminScopes",
   "listMetricDefinitions",
   "getOverview",
@@ -226,7 +192,6 @@ export const coreServiceMethodNames = [
   "recordAdminReceivedLine",
   "completeAdminReceiving",
   "advanceAdminFulfillment",
-  "advanceAdminDelivery",
   "resolveAdminOperationalException",
   "listProcurementRequirements",
   "listReceivingSessions",
@@ -237,11 +202,6 @@ export const coreServiceMethodNames = [
   "requestExternalDelivery",
   "refreshExternalDelivery",
   "cancelExternalDelivery",
-  "getDeliveryMap",
-  "getDeliveryMapDetail",
-  "getEligibleRiders",
-  "previewDeliveryBatchRoute",
-  "createAndAssignDeliveryBatch",
   "listOperationalExceptions",
   "listAdminOrders",
   "getAdminOrder",
@@ -276,7 +236,6 @@ export const coreServiceMethodNames = [
   "cancelSubscription",
   "beginRecurringAuthorization",
   "completeRecurringAuthorization",
-  "simulateMockProviderEvent",
   "getSubscriptionEligibility",
   "listDeliveryCycles",
   "getCart",
@@ -300,11 +259,6 @@ export const coreServiceMethodNames = [
   "createProcurementRequirement",
   "receiveProcurement",
   "advanceFulfillment",
-  "advanceDelivery",
-  "adminOperationsBoard",
-  "assignRider",
-  "riderJobs",
-  "getRiderBatches",
   "adminScheduledJobRuns",
 ] as const satisfies ReadonlyArray<keyof CoreServiceBinding>;
 

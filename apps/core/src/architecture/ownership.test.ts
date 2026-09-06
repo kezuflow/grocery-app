@@ -13,7 +13,6 @@ import * as listCustomerOrders from "../orders/application/list-customer-orders"
 import * as createProcurementRequirement from "../procurement/application/create-procurement-requirement";
 import * as receiveProcurement from "../procurement/application/receive-procurement";
 import * as advanceFulfillment from "../operations/application/advance-fulfillment";
-import * as advanceDelivery from "../operations/application/advance-delivery";
 
 describe("core architecture ownership (runtime checks)", () => {
   it("exposes no mock commitment surface on the entrypoint", () => {
@@ -55,7 +54,6 @@ describe("core architecture ownership (runtime checks)", () => {
     expect(typeof createProcurementRequirement.createProcurementRequirement).toBe("function");
     expect(typeof receiveProcurement.receiveProcurement).toBe("function");
     expect(typeof advanceFulfillment.advanceFulfillment).toBe("function");
-    expect(typeof advanceDelivery.advanceDelivery).toBe("function");
   });
 
   it("keeps principal resolution, capability checks, and idempotency claims off the entrypoint prototype", () => {

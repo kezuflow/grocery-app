@@ -27,9 +27,9 @@ describe("Core entrypoint composition boundary", () => {
     );
   });
 
-  it("leaves the explicitly excluded Admin and Maps transports in place", () => {
+  it("leaves the explicitly excluded Admin transports in place", () => {
     expect(indexSource).toContain("async getAdminContext(");
     expect(indexSource).toContain("async searchAddressCandidates(");
-    expect(indexSource).toContain("async getDeliveryMap(");
+    expect(indexSource).not.toContain("async getDeliveryMap(");
   });
 });

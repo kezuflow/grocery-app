@@ -279,7 +279,6 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
         expectedDeliverySubtotalMinor: pendingQuote.deliverySubtotalMinor,
         expectedDeliveryFeeMinor: pendingQuote.deliveryFeeMinor,
         expectedDeliveryDiscountMinor: pendingQuote.deliveryDiscountMinor,
-        expectedServiceFeeMinor: pendingQuote.serviceFeeMinor,
         expectedTaxMinor: pendingQuote.taxMinor,
         expectedTotalMinor: pendingQuote.totalMinor,
         returnUrl: window.location.origin + "/orders",
@@ -441,7 +440,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                   <h2 className="text-lg font-bold">Delivery option</h2>
                   <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
                     Choose Instant or Scheduled when available. Core rechecks the promise, fee,
-                    inventory, cutoff, and capacity before payment.
+                    inventory or cutoff rules before payment.
                   </p>
                 </div>
               </div>

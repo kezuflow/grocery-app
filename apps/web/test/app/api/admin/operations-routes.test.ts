@@ -10,9 +10,7 @@ const coreMocks = vi.hoisted(() => ({
   listFulfillmentQueue: vi.fn(),
   advanceAdminFulfillment: vi.fn(),
   listDeliveryOperations: vi.fn(),
-  advanceAdminDelivery: vi.fn(),
   advanceFulfillment: vi.fn(),
-  advanceDelivery: vi.fn(),
   getFulfillmentMode: vi.fn(),
   activateFulfillmentMode: vi.fn(),
   listOperationalExceptions: vi.fn(),
@@ -31,7 +29,7 @@ import {
   GET as fulfillmentGet,
   POST as advanceFulfillment,
 } from "@/app/api/admin/fulfillment/route";
-import { GET as deliveryGet, POST as advanceDelivery } from "@/app/api/admin/delivery/route";
+import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
 import { GET as modeGet, POST as activateMode } from "@/app/api/admin/fulfillment-mode/route";
 import { GET as exceptionsGet, POST as resolveException } from "@/app/api/admin/exceptions/route";
 
@@ -101,7 +99,6 @@ describe("admin operations BFF routes", () => {
       coreMocks.recordAdminReceivedLine,
       coreMocks.completeAdminReceiving,
       coreMocks.advanceAdminFulfillment,
-      coreMocks.advanceAdminDelivery,
       coreMocks.activateFulfillmentMode,
       coreMocks.resolveAdminOperationalException,
     ])
@@ -112,6 +109,7 @@ describe("admin operations BFF routes", () => {
         locationId: "l1",
         cycleId: "c1",
         inventoryPoolId: "p1",
+        skuId: "sku1",
         expectedVersion: 4,
       }),
     );
@@ -147,14 +145,6 @@ describe("admin operations BFF routes", () => {
         expectedVersion: 7,
       }),
     );
-    await advanceDelivery(
-      command("https://app/delivery", {
-        locationId: "l1",
-        orderId: "o1",
-        action: "MARK_EN_ROUTE",
-        expectedVersion: 8,
-      }),
-    );
     await activateMode(
       command("https://app/mode", {
         locationId: "l1",
@@ -166,11 +156,11 @@ describe("admin operations BFF routes", () => {
     await resolveException(
       command("https://app/exceptions", {
         locationId: "l1",
-        kind: "DELIVERY_FAILED",
-        action: "RETRY_DELIVERY",
+        kind: "FULFILLMENT_SHORTAGE",
+        action: "RETRY_FULFILLMENT",
         orderId: "o1",
         expectedVersion: 9,
-        reason: "rider available",
+        reason: "stock reconciled",
       }),
     );
 
@@ -180,16 +170,11 @@ describe("admin operations BFF routes", () => {
       coreMocks.recordAdminReceivedLine,
       coreMocks.completeAdminReceiving,
       coreMocks.advanceAdminFulfillment,
-      coreMocks.advanceAdminDelivery,
       coreMocks.activateFulfillmentMode,
       coreMocks.resolveAdminOperationalException,
     ]) {
       expect(mock.mock.calls[0][0]).toMatchObject({ idempotencyKey: "command-1", headers: cookie });
     }
-    expect(coreMocks.advanceAdminDelivery.mock.calls[0][0]).toMatchObject({
-      expectedVersion: 8,
-      action: "MARK_EN_ROUTE",
-    });
   });
 
   it("rejects writes without idempotency or a current version before Core", async () => {
@@ -202,30 +187,5 @@ describe("admin operations BFF routes", () => {
     );
     expect(response.status).toBe(400);
     expect(coreMocks.advanceAdminFulfillment).not.toHaveBeenCalled();
-  });
-
-  it("rejects the removed simplified operations-board adapter", async () => {
-    coreMocks.advanceAdminFulfillment.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-    coreMocks.advanceAdminDelivery.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-
-    const fulfillmentResponse = await advanceDelivery(
-      command(
-        "https://app/delivery?v=12&locationId=l1",
-        { orderId: "o1", command: "fulfillment", action: "PACK" },
-        "legacy-command",
-      ),
-    );
-    const deliveryResponse = await advanceDelivery(
-      command(
-        "https://app/delivery?v=13&locationId=l1",
-        { orderId: "o1", command: "delivery", action: "DISPATCH" },
-        "legacy-command-2",
-      ),
-    );
-
-    expect(fulfillmentResponse.status).toBe(400);
-    expect(deliveryResponse.status).toBe(400);
-    expect(coreMocks.advanceAdminFulfillment).not.toHaveBeenCalled();
-    expect(coreMocks.advanceAdminDelivery).not.toHaveBeenCalled();
   });
 });

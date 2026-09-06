@@ -8,7 +8,6 @@ export type CoreRuntimeEnvironment = {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   PAYMENT_PROVIDER?: string;
-  LOCAL_PAYMENT_PROVIDER?: string;
   PAYMONGO_SECRET_KEY?: string;
   PAYMONGO_WEBHOOK_SECRET?: string;
 };
@@ -123,15 +122,10 @@ export function parseCoreRuntimeConfiguration(
       ? { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! }
       : null;
 
-  if (deployed && env.LOCAL_PAYMENT_PROVIDER) throw new Error("LOCAL_PAYMENT_PROVIDER_FORBIDDEN");
-  const configuredPaymentProvider =
-    environment === "development" && env.LOCAL_PAYMENT_PROVIDER
-      ? env.LOCAL_PAYMENT_PROVIDER
-      : env.PAYMENT_PROVIDER;
+  const configuredPaymentProvider = env.PAYMENT_PROVIDER;
   let providerCode: "mock" | "paymongo" | null = null;
   let paymongo: CoreRuntimeConfiguration["payments"]["paymongo"] = null;
-  if (configuredPaymentProvider === "mock") {
-    if (deployed) throw new Error("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+  if (configuredPaymentProvider === "mock" && environment === "test") {
     providerCode = "mock";
   } else if (configuredPaymentProvider === "paymongo") {
     if (!env.PAYMONGO_SECRET_KEY) throw new Error("PAYMONGO_SECRET_KEY_REQUIRED");

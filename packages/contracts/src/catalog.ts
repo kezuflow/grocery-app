@@ -87,7 +87,6 @@ export type DeliveryCycleView = {
   cutoffAt: string;
   deliveryDate: string;
   status: DeliveryCycleState;
-  capacityRemaining: number;
 };
 
 export type CatalogService = {

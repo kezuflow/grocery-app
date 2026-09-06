@@ -67,11 +67,11 @@ describe("admin navigation mapping", () => {
     expect(adminNavigationFromContext([])).toEqual([]);
   });
 
-  it("renders the Core-authorized Pricing & fees workspace", () => {
+  it("renders the Core-authorized Membership pricing workspace", () => {
     const items = adminNavigationFromContext([
       {
         code: "commerce-configuration",
-        label: "Pricing & fees",
+        label: "Membership pricing",
         href: "/admin/commerce-configuration",
         section: "finance",
         scopeKinds: globalScope,
@@ -81,7 +81,7 @@ describe("admin navigation mapping", () => {
     ]);
     expect(items[0]).toMatchObject({
       code: "commerce-configuration",
-      label: "Pricing & fees",
+      label: "Membership pricing",
       href: "/admin/commerce-configuration",
     });
     expect(items[0]?.icon).toBeTruthy();

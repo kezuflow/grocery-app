@@ -209,7 +209,7 @@ describe("scoped admin context", () => {
     });
     expect(context.value.navigation).toContainEqual({
       code: "commerce-configuration",
-      label: "Pricing & fees",
+      label: "Membership pricing",
       href: "/admin/commerce-configuration",
       section: "finance",
       scopeKinds: ["GLOBAL"],

@@ -34,10 +34,10 @@ function summary(source: "CHECKOUT_QUOTE" | "ORDER_TOTAL_ONLY"): ProvisionalTran
 }
 
 describe("TransactionSummary", () => {
-  it("prominently labels the document and renders Core-provided service fees", () => {
+  it("prominently labels the document and renders historical fee evidence", () => {
     const html = renderToStaticMarkup(<TransactionSummary summary={summary("CHECKOUT_QUOTE")} />);
     expect(html.match(/NOT AN OFFICIAL BIR INVOICE/g)).toHaveLength(2);
-    expect(html).toContain("FreshMarkets Service Fee");
+    expect(html).toContain("Historical FreshMarkets fee");
     expect(html).toContain("₱25.00");
     expect(html).toContain("Print transaction summary");
     expect(html).not.toMatch(/TIN|official serial/i);

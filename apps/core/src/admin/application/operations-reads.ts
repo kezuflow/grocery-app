@@ -15,10 +15,7 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { listOperationalExceptions as listExceptionRows } from "../../audit/application/list-operational-exceptions";
-import {
-  listDeliveryDispatch,
-  allowedDeliveryActions,
-} from "../../delivery/application/list-delivery-dispatch";
+import { listDeliveryDispatch } from "../../delivery/application/list-delivery-dispatch";
 import {
   allowedFulfillmentActions,
   listFulfillmentQueue as listFulfillmentRows,
@@ -255,7 +252,6 @@ export async function listAdminDeliveryOperations(
     locationId: request.locationId,
     fulfillmentMode: row.fulfillmentMode,
     status: row.status,
-    riderAssigned: row.riderAuthUserId !== null,
     externalDispatch:
       row.externalDispatchId && row.externalProvider && row.externalStatus && row.externalVersion
         ? {
@@ -268,7 +264,6 @@ export async function listAdminDeliveryOperations(
         : null,
     deliveredAtIso: row.deliveredAtIso,
     version: row.version,
-    allowedActions: allowedDeliveryActions(row.status, row.riderAuthUserId !== null),
   }));
   const clauses = ["f.location_id=?", "d.status NOT IN ('CANCELED','DELIVERED')"];
   const binds: unknown[] = [request.locationId];
@@ -279,14 +274,14 @@ export async function listAdminDeliveryOperations(
   const totals = await deps.db
     .prepare(
       `SELECT COUNT(*) AS totalOpenJobs,
-              SUM(CASE WHEN dispatch.id IS NOT NULL THEN 1 ELSE 0 END) AS assignedJobs
+              SUM(CASE WHEN dispatch.id IS NOT NULL THEN 1 ELSE 0 END) AS bookedJobs
        FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
        LEFT JOIN grocery_order o ON o.id=d.order_id
        LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.delivery_job_id=d.id
        WHERE ${clauses.join(" AND ")}`,
     )
     .bind(...binds)
-    .first<{ totalOpenJobs: number; assignedJobs: number | null }>();
+    .first<{ totalOpenJobs: number; bookedJobs: number | null }>();
   return {
     ok: true,
     value: {
@@ -294,7 +289,7 @@ export async function listAdminDeliveryOperations(
       cycleId: request.cycleId ?? null,
       status: (totals?.totalOpenJobs ?? 0) > 0 ? "OPEN" : "EMPTY",
       totalOpenJobs: totals?.totalOpenJobs ?? 0,
-      assignedJobs: totals?.assignedJobs ?? 0,
+      bookedJobs: totals?.bookedJobs ?? 0,
       items,
       nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.jobId),
     },

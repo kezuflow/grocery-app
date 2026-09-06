@@ -7,8 +7,8 @@ import { requestHeaders } from "@/lib/core-client/request";
 import { commandMeta, invalid, optionalLimit, requiredLocation } from "../operations-route-utils";
 const schema = z.object({
   locationId: z.string().trim().min(1),
-  kind: z.enum(["FULFILLMENT_SHORTAGE", "DELIVERY_FAILED"]),
-  action: z.enum(["RETRY_FULFILLMENT", "RETRY_DELIVERY"]),
+  kind: z.literal("FULFILLMENT_SHORTAGE"),
+  action: z.literal("RETRY_FULFILLMENT"),
   orderId: z.string().trim().min(1),
   expectedVersion: z.number().int().nonnegative(),
   reason: z.string().trim().min(1),

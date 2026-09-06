@@ -58,7 +58,7 @@ export async function listOperationalExceptionsForLocations(
          WHERE f.status='SHORTED'
          UNION ALL
          SELECT 'DELIVERY', d.id, d.order_id, f.location_id, 'DELIVERY_FAILED',
-                NULL, NULL, NULL, NULL, d.rider_user_id, d.updated_at, d.status
+                NULL, NULL, NULL, NULL, NULL, d.updated_at, d.status
          FROM delivery_job d
          JOIN fulfillment_record f ON f.order_id=d.order_id
          JOIN selected_locations sl ON sl.location_id=f.location_id
@@ -148,14 +148,15 @@ export async function listOperationalExceptionsForLocations(
       source: row.source,
       severity: "HIGH",
       ageMinutes: ageMinutes(row.occurredAt, now),
-      ownerId: row.ownerId,
+      ownerId: null,
       referenceId: row.referenceId,
       orderId: row.orderId,
       locationId: row.locationId,
       reason: row.reason,
-      permittedActions: ["RETRY_DELIVERY", "ESCALATE"],
+      permittedActions: ["ESCALATE"],
       queueKey: row.queueKey,
-      detail: "Failed delivery; retry from the delivery queue.",
+      detail:
+        "Failed external delivery; refresh provider state or escalate from the delivery queue.",
     };
   });
 }

@@ -117,7 +117,7 @@ describe("admin operations contracts", () => {
       cycleId: "cycle-1",
       status: "OPEN",
       totalOpenJobs: 2,
-      assignedJobs: 1,
+      bookedJobs: 1,
       items: [],
       nextCursor: "cursor-1",
     } satisfies DeliveryOperationsSummary);
@@ -128,11 +128,9 @@ describe("admin operations contracts", () => {
       locationId: "location-cebu-central",
       fulfillmentMode: "SCHEDULED",
       status: "UNASSIGNED",
-      riderAssigned: false,
       externalDispatch: null,
       deliveredAtIso: null,
       version: 1,
-      allowedActions: [],
     } satisfies AdminDeliveryOperationView);
     void ({ items: [], nextCursor: null } satisfies OperationalExceptionPage);
   });

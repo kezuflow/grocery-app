@@ -3,6 +3,23 @@
 Status date: 2026-09-06. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
+## Commerce and external-delivery realignment — Phase 11 compatibility cleanup (2026-09-06)
+
+- Deployed development and E2E Worker configuration now fails closed for payments; PayMongo sandbox
+  is the only supported development runtime. The deterministic adapter remains an internal test
+  fixture only. The mock-payment RPC, BFF route, page, and browser journey were removed.
+- Active checkout quote/payment contracts and customer/Admin configuration screens no longer expose
+  FreshMarkets Service Fee values. Historical committed Order and transaction-summary DTO fields
+  remain nullable and render only when an old positive snapshot exists.
+- Internal Rider navigation, assignment, batch, map, route-preview, manual delivery-advance, and
+  simplified operations-board contracts and implementations were removed. The location-scoped
+  external-courier queue, profile, book, refresh, cancel, tracking, and provider reconciliation
+  surfaces remain active.
+- Scheduled cycle reads and abandonment results no longer expose capacity. Legacy sourcing values
+  are fixed persistence compatibility only and cannot be selected through active contracts or Admin.
+- Operational guidance now covers authoritative pause/switch/reopen behavior, address incidents,
+  external dispatch, uncertain provider outcomes, refresh/cancel, and production activation gates.
+
 ## Commerce and external-delivery realignment — Phase 4 catalog and availability (2026-09-06)
 
 - Active catalog authoring now permits only `MASS`/`COUNT` base units. Migration `0060` preserves
@@ -596,9 +613,9 @@ Status date: 2026-09-06. This file is descriptive evidence only. The canonical d
 | Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests                                                                                                                             | Production deployment acceptance                          |
 | Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                                                                                                                                  | Production sender/domain and OAuth configuration          |
 | Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                                                                                                                                        | Approved production polygons/geocoder and Mapbox secret   |
-| Checkout/orders            | Opaque Core fulfillment options, accepted quotes/promotions, mock payment reaction, immutable detail/timeline, reorder/issues/amendments, coordinated cancellation, provisional transaction summary | Production payment provider and official invoice issuance |
+| Checkout/orders            | Opaque Core fulfillment options, accepted quotes/promotions, PayMongo adapter/provider-event reaction, immutable detail/timeline, reorder/issues/amendments, coordinated cancellation, provisional transaction summary | PayMongo sandbox credential acceptance and official invoice issuance |
 | Membership                 | Customer experience plus provider-neutral trial/authorization/renewal state                                                                                                                         | Approved production mandates and automatic charges        |
-| Operations                 | Scoped commands/read models and local integration tests                                                                                                                                             | Complete staff/rider authenticated Playwright acceptance  |
+| Operations                 | Scoped procurement/receiving/fulfillment commands plus external-provider delivery operations and local integration tests                                                                           | Complete authenticated staff provider-flow acceptance     |
 | Notifications              | Durable email outbox/attempts, leases, retry, cancellation/refund projections, and safe templates                                                                                                   | Production sender/domain and delivery acceptance          |
 | Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright                                                                                                                | Production deployment acceptance remains external         |
 
@@ -616,11 +633,11 @@ have been executed.
 
 ## Remaining decisions and deployment work
 
-- Select and approve a production grocery/recurring payment provider and define its mandate, retry,
-  reconciliation, and refund policies.
+- Complete PayMongo sandbox and production credential acceptance, recurring-payment mandate,
+  reconciliation, and refund-policy gates.
 - Decide membership-cancellation customer UX and effective timing before exposing a command.
 - Configure an onboarded transactional email sender/adapter and the Core Mapbox secret outside source.
 - Approve BIR seller/tax/serial/retention policy before invoice issuance.
 - Treat the Customer launch implementation as locally verified product behavior only after the current-tree completion report gates pass; production deployment acceptance remains external.
-- Provision authenticated staff/rider/customer browser test identities and run the written
+- Provision authenticated staff/customer browser test identities and run the written
   Playwright acceptance journeys without skips.

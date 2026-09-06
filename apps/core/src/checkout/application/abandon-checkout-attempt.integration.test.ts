@@ -119,7 +119,6 @@ describe("abandonCheckoutAttempt", () => {
         value: {
           outcome: "ABANDONED",
           releasedInventoryHolds: mode === "INSTANT" ? 1 : 0,
-          releasedCapacityAllocations: mode === "SCHEDULED" ? 1 : 0,
         },
       });
       expect(replay).toEqual(result);

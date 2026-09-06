@@ -33,7 +33,7 @@ test("a provisioned Staff reader opens the real Orders workspace", async ({ admi
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 });
 
-test("a Global Administrator reviews Pricing & fees and recovers from a stale replacement", async ({
+test("a Global Administrator reviews membership pricing and recovers from a stale replacement", async ({
   adminPage,
 }) => {
   await adminPage.route("**/api/admin/commerce-configuration/membership-price", async (route) => {
@@ -76,32 +76,13 @@ test("a Global Administrator reviews Pricing & fees and recovers from a stale re
       }),
     });
   });
-  await adminPage.route("**/api/admin/commerce-configuration/service-fee", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "fee-read-e2e",
-        value: {
-          configurationId: "fee-v4",
-          feeType: "MIXED",
-          flatMinor: 1_500,
-          percentageBasisPoints: 250,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 4,
-          reason: "Approved fee review",
-        },
-      }),
-    }),
-  );
-
   await adminPage.goto("/admin/commerce-configuration");
-  await expect(adminPage.getByRole("heading", { level: 1, name: "Pricing & fees" })).toBeVisible();
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "Membership pricing" }),
+  ).toBeVisible();
   await expect(adminPage.getByText("price-v7")).toBeVisible();
   await expect(
-    adminPage.getByText(/Existing subscriptions retain their snapshotted price/),
+    adminPage.getByText(/Existing paid subscriptions retain their snapshotted price/),
   ).toBeVisible();
   await adminPage.getByLabel("Amount in minor units (PHP)").fill("35000");
   await adminPage.getByLabel("Replacement effective from").fill("2026-09-01T08:00");
@@ -110,12 +91,8 @@ test("a Global Administrator reviews Pricing & fees and recovers from a stale re
   await adminPage.getByRole("button", { name: "Create replacement version" }).click();
   await expect(adminPage.getByRole("alert")).toContainText("Configuration changed");
   await expect(adminPage.getByRole("alert")).toContainText("pricing-stale-e2e");
-  await adminPage.getByRole("button", { name: "Refresh current version" }).click();
-
-  await adminPage.getByRole("link", { name: "Instant Service Fee" }).click();
-  await expect(adminPage.getByText("fee-v4")).toBeVisible();
-  await expect(adminPage.getByText(/Instant orders only/)).toBeVisible();
-  await expect(adminPage.getByText("Replace Service Fee", { exact: true })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Refresh" }).click();
+  await expect(adminPage.getByText("FreshMarkets Service Fee")).toHaveCount(0);
 });
 
 test("a provisioned Staff operator uses the real payment workspaces and contextual refund", async ({

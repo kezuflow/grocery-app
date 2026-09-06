@@ -14,8 +14,6 @@ const quote: CheckoutQuoteView = {
   orderDiscountMinor: 1_000,
   deliverySubtotalMinor: 500,
   deliveryDiscountMinor: 500,
-  serviceFeeMinor: 0,
-  preServiceFeeTotalMinor: 9_000,
   taxMinor: 0,
   subtotalMinor: 10_000,
   discountMinor: 1_500,
@@ -58,22 +56,5 @@ describe("CheckoutTotalReview", () => {
     expect(html).toContain("₱90.00");
     expect(html).toContain("Accept total and continue to payment");
     expect(html).not.toContain("FreshMarkets Service Fee");
-  });
-
-  it("labels a positive Instant fee as the FreshMarkets Service Fee", () => {
-    const html = renderToStaticMarkup(
-      <CheckoutTotalReview
-        quote={{
-          ...quote,
-          serviceFeeMinor: 500,
-          preServiceFeeTotalMinor: 9_000,
-          totalMinor: 9_500,
-        }}
-        onAccept={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain("FreshMarkets Service Fee");
-    expect(html).toContain("₱5.00");
   });
 });

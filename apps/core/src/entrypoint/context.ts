@@ -15,11 +15,7 @@ import {
 } from "../payments/infrastructure/providers/runtime-providers";
 import { buildRouteDistancePort } from "../geography/infrastructure/runtime-route-distance";
 import { buildDeliveryProviderRegistry } from "../delivery/infrastructure/runtime-delivery-provider";
-import {
-  activeFulfillmentLocationId,
-  activeMarketCode,
-  fulfillmentLocationMarketId,
-} from "../geography/market-defaults";
+import { fulfillmentLocationMarketId } from "../geography/market-defaults";
 import {
   resolveAuthenticatedCustomer,
   type AuthenticatedCustomer,
@@ -104,40 +100,6 @@ export class CoreContext {
     if (!context) return false;
     const marketId = await fulfillmentLocationMarketId(this.env.DB, locationId);
     return hasOperationalScope(context.scopes, locationId, marketId ?? undefined);
-  }
-
-  /**
-   * Delivery-job authorization: delivery capability with location scope, and
-   * — for a job already assigned to a rider — either the assigned rider
-   * themselves or an actor holding the supervisory orders.manage capability.
-   * This enforces that riders act only on their own assignments.
-   */
-  async authorizeDeliveryJob(
-    input: AuthenticatedRequest,
-    job: { locationId: string; riderAuthUserId: string | null },
-  ): Promise<boolean> {
-    if (!(await this.requireOperationalAccess(input, "delivery.manage", job.locationId)))
-      return false;
-    if (job.riderAuthUserId === null) return true;
-    const context = await applicationContext(
-      createAuth(this.env),
-      drizzle(this.env.DB, { schema: iamSchema }),
-      { headers: input.headers, requestId: input.requestId },
-    );
-    if (!context.ok || !context.value.authenticated) return false;
-    return (
-      context.value.capabilities.includes("orders.manage") ||
-      context.value.principal?.userId === job.riderAuthUserId
-    );
-  }
-
-  /**
-   * Resolve the board's effective location: an explicitly requested location
-   * or the market's active default. Returns null when none is configured.
-   */
-  async resolveBoardLocation(requestedLocationId?: string | null): Promise<string | null> {
-    if (requestedLocationId) return requestedLocationId;
-    return activeFulfillmentLocationId(this.env.DB, await activeMarketCode(this.env.DB));
   }
 }
 

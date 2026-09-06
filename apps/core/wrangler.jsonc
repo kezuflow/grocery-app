@@ -31,9 +31,8 @@
     // Production sets TRUSTED_ORIGINS through environment configuration,
     // never a source default.
     "TRUSTED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,https://core.example.invalid",
-    // Deterministic mock payments are local-only. Deployed environments set
-    // PAYMENT_PROVIDER=paymongo and bind the PayMongo secrets below.
-    "PAYMENT_PROVIDER": "mock",
+    // Local runtime fails closed until PayMongo sandbox credentials are bound.
+    "PAYMENT_PROVIDER": "disabled",
     // The customer-visible Instant catalog is explicit and ordered. Every
     // environment stays disabled until credentials and GET /v3/cities service
     // evidence have been supplied outside source control.
@@ -42,12 +41,7 @@
     "ROUTE_DISTANCE_PROVIDER": "mapbox",
   },
   "secrets": {
-    "required": [
-      "MAPBOX_ACCESS_TOKEN",
-      "LOCAL_PAYMENT_PROVIDER",
-      "PAYMONGO_SECRET_KEY",
-      "PAYMONGO_WEBHOOK_SECRET",
-    ],
+    "required": ["MAPBOX_ACCESS_TOKEN", "PAYMONGO_SECRET_KEY", "PAYMONGO_WEBHOOK_SECRET"],
   },
   // Cloudflare Email Service supplies transactional auth delivery without an
   // API token. AUTH_EMAIL_FROM is deployment configuration and intentionally

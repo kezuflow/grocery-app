@@ -2,12 +2,10 @@ import { describe, expect, it } from "vitest";
 import { buildProviderRegistry, selectedPaymentProviderCode } from "./runtime-providers";
 
 describe("runtime payment provider selection", () => {
-  it("registers the deterministic mock only when explicitly selected in development or test", () => {
-    for (const environment of ["development", "test"]) {
-      const config = { ENVIRONMENT: environment, PAYMENT_PROVIDER: "mock" };
-      expect(selectedPaymentProviderCode(config)).toBe("mock");
-      expect(buildProviderRegistry(config).require("mock").code).toBe("mock");
-    }
+  it("registers the deterministic provider only inside the test harness", () => {
+    const config = { ENVIRONMENT: "test", PAYMENT_PROVIDER: "mock" };
+    expect(selectedPaymentProviderCode(config)).toBe("mock");
+    expect(buildProviderRegistry(config).require("mock").code).toBe("mock");
   });
 
   it("fails closed when selection is absent", () => {
@@ -42,7 +40,7 @@ describe("runtime payment provider selection", () => {
     ).toThrow("PAYMENT_PROVIDER_INVALID");
     expect(() =>
       selectedPaymentProviderCode({ ENVIRONMENT: "production", PAYMENT_PROVIDER: "mock" }),
-    ).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+    ).toThrow("PAYMENT_PROVIDER_INVALID");
     expect(() => selectedPaymentProviderCode({ PAYMENT_PROVIDER: "mock" })).toThrow(
       "ENVIRONMENT_REQUIRED",
     );
@@ -53,7 +51,7 @@ describe("runtime payment provider selection", () => {
     (environment) => {
       expect(() =>
         buildProviderRegistry({ ENVIRONMENT: environment, PAYMENT_PROVIDER: "mock" }),
-      ).toThrow("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
+      ).toThrow("PAYMENT_PROVIDER_INVALID");
       const disabled = buildProviderRegistry({
         ENVIRONMENT: environment,
         PAYMENT_PROVIDER: "disabled",

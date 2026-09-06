@@ -15,24 +15,24 @@ export function selectedPaymentProviderCode(
   environment: RuntimePaymentsEnvironment | CoreRuntimeConfiguration,
 ): string | null {
   if ("payments" in environment) return environment.payments.providerCode;
-  const runtimeEnvironment = parseRuntimeEnvironment(environment.ENVIRONMENT);
   if (!environment.PAYMENT_PROVIDER || environment.PAYMENT_PROVIDER === "disabled") return null;
   if (environment.PAYMENT_PROVIDER === "paymongo") {
     if (!environment.PAYMONGO_SECRET_KEY) throw new Error("PAYMONGO_SECRET_KEY_REQUIRED");
     if (!environment.PAYMONGO_WEBHOOK_SECRET) throw new Error("PAYMONGO_WEBHOOK_SECRET_REQUIRED");
     return "paymongo";
   }
-  if (environment.PAYMENT_PROVIDER !== "mock") throw new Error("PAYMENT_PROVIDER_INVALID");
-  if (runtimeEnvironment !== "development" && runtimeEnvironment !== "test")
-    throw new Error("MOCK_PAYMENT_PROVIDER_FORBIDDEN");
-  return "mock";
+  if (
+    environment.PAYMENT_PROVIDER === "mock" &&
+    parseRuntimeEnvironment(environment.ENVIRONMENT) === "test"
+  )
+    return "mock";
+  throw new Error("PAYMENT_PROVIDER_INVALID");
 }
 
 /**
  * The single runtime construction point. Provider selection is explicit
- * configuration, never registration order. Only the deterministic mock is
- * approved for the current release and only in development/test; every other combination
- * yields an empty registry and therefore fails closed.
+ * configuration, never registration order. Runtime commerce supports PayMongo
+ * or a fail-closed disabled state; the deterministic adapter is test-harness only.
  */
 export function buildProviderRegistry(
   environment: RuntimePaymentsEnvironment | CoreRuntimeConfiguration,

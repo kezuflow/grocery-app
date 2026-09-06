@@ -336,25 +336,6 @@ async function installDeterministicReads(page: Page) {
       }),
     ),
   );
-  await page.route("**/api/admin/commerce-configuration/service-fee", (route) =>
-    route.fulfill(
-      json({
-        ok: true,
-        requestId: "visual-fee",
-        value: {
-          configurationId: "fee-v4",
-          feeType: "MIXED",
-          flatMinor: 1_500,
-          percentageBasisPoints: 250,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 4,
-          reason: "Approved fee review",
-        },
-      }),
-    ),
-  );
 }
 
 async function capture(page: Page, route: string, heading: string, name: string) {
@@ -403,7 +384,7 @@ for (const viewport of viewports) {
     await capture(
       adminPage,
       "/admin/commerce-configuration",
-      "Pricing & fees",
+      "Membership pricing",
       `commerce-configuration-${viewport.name}.png`,
     );
   });

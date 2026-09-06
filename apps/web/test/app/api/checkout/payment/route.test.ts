@@ -34,7 +34,6 @@ describe("checkout payment route", () => {
     expectedDeliverySubtotalMinor: 500,
     expectedDeliveryFeeMinor: 0,
     expectedDeliveryDiscountMinor: 500,
-    expectedServiceFeeMinor: 0,
     expectedTaxMinor: 0,
     expectedTotalMinor: 9_000,
   };

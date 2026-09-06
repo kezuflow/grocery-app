@@ -15,7 +15,11 @@ export function TransactionSummary({ summary }: { summary: ProvisionalTransactio
     ["Order promotion", summary.financial.orderDiscountMinor],
     ["Delivery fee", summary.financial.deliveryFeeMinor],
     ["Delivery promotion", summary.financial.deliveryDiscountMinor],
-    ["FreshMarkets Service Fee", summary.financial.serviceFeeMinor],
+    ...(summary.financial.serviceFeeMinor && summary.financial.serviceFeeMinor > 0
+      ? ([["Historical FreshMarkets fee", summary.financial.serviceFeeMinor]] as Array<
+          [string, number]
+        >)
+      : []),
     ["Tax", summary.financial.taxMinor],
   ];
   return (

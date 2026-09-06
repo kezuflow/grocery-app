@@ -321,7 +321,6 @@ export const createPaymentIntentSchema = headersRequest.extend({
   expectedDeliverySubtotalMinor: z.number().int().nonnegative(),
   expectedDeliveryFeeMinor: z.number().int().nonnegative(),
   expectedDeliveryDiscountMinor: z.number().int().nonnegative(),
-  expectedServiceFeeMinor: z.number().int().nonnegative(),
   expectedTaxMinor: z.number().int().nonnegative(),
   expectedTotalMinor: z.number().int().nonnegative(),
   returnUrl: z.string().url().max(2000),

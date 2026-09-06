@@ -1,6 +1,9 @@
-import type { DeliveryDispatchItem } from "@freshmarkets/contracts";
-
-type DispatchRow = Omit<DeliveryDispatchItem, "allowedActions"> & {
+type DispatchRow = {
+  jobId: string;
+  orderId: string;
+  status: string;
+  deliveredAtIso: string | null;
+  version: number;
   cycleId: string | null;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   addressSnapshotJson: string;
@@ -10,24 +13,6 @@ type DispatchRow = Omit<DeliveryDispatchItem, "allowedActions"> & {
   externalTrackingUrl: string | null;
   externalVersion: number | null;
 };
-
-export function allowedDeliveryActions(
-  status: string,
-  assigned: boolean,
-): DeliveryDispatchItem["allowedActions"] {
-  switch (status) {
-    case "ASSIGNED":
-      return assigned ? ["MARK_EN_ROUTE"] : [];
-    case "EN_ROUTE":
-      return ["MARK_ARRIVED"];
-    case "ARRIVED":
-      return ["MARK_DELIVERED", "MARK_FAILED"];
-    case "FAILED":
-      return ["SCHEDULE_RETRY", "ESCALATE", "CANCEL"];
-    default:
-      return [];
-  }
-}
 
 /**
  * Location-scoped delivery dispatch board joined to the fulfillment record
@@ -50,7 +35,7 @@ export async function listDeliveryDispatch(
   }
   const rows = await database
     .prepare(
-      `SELECT d.id AS job_id,d.order_id,d.status,d.rider_user_id,d.address_snapshot_json,
+      `SELECT d.id AS job_id,d.order_id,d.status,d.address_snapshot_json,
               d.delivered_at,d.version,o.cycle_id,d.fulfillment_mode,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
               dispatch.status AS external_status,dispatch.tracking_url AS external_tracking_url,
@@ -65,7 +50,6 @@ export async function listDeliveryDispatch(
       job_id: string;
       order_id: string;
       status: string;
-      rider_user_id: string | null;
       address_snapshot_json: string;
       delivered_at: number | null;
       version: number;
@@ -81,7 +65,6 @@ export async function listDeliveryDispatch(
     jobId: r.job_id,
     orderId: r.order_id,
     status: r.status,
-    riderAuthUserId: r.rider_user_id,
     addressSnapshotJson: r.address_snapshot_json,
     deliveredAtIso: r.delivered_at === null ? null : new Date(r.delivered_at).toISOString(),
     version: r.version,

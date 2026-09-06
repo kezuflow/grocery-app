@@ -674,7 +674,7 @@ export function AddressEditor({
               <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
                 Search-result address fields are provider-resolved when saved. Move the pin to
                 establish a first-party location before changing them; add unit, entrance, landmark,
-                and rider guidance under Delivery instructions.
+                and courier guidance under Delivery instructions.
               </p>
             ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -700,7 +700,7 @@ export function AddressEditor({
                 inputMode="tel"
                 autoComplete="tel"
                 placeholder="0917 123 4567"
-                description="Shared with the delivery rider so they can reach the recipient."
+                description="Shared with the external courier so they can reach the recipient."
                 value={phone}
                 error={fieldErrors.phone}
                 onChange={(event) => setPhone(event.currentTarget.value)}
@@ -780,7 +780,7 @@ export function AddressEditor({
                 Delivery instructions
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                Add only details a delivery rider needs for this destination.
+                Add only details the external courier needs for this destination.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">

@@ -1,5 +1,4 @@
 import type {
-  AdvanceAdminDeliveryRequest,
   AdvanceAdminFulfillmentRequest,
   AggregateAdminProcurementDemandRequest,
   CompleteAdminReceivingRequest,
@@ -9,7 +8,6 @@ import type {
   RpcResult,
   StartAdminReceivingRequest,
   ActivateFulfillmentModeRequest,
-  AdminDeliveryOperationView,
   ActivateGlobalFulfillmentModeRequest,
   FulfillmentModeConfigurationView,
   GlobalCommerceConfigurationView,
@@ -20,14 +18,12 @@ import type {
   ReceivingSessionView,
 } from "@freshmarkets/contracts";
 import { appendAuditEvent } from "../../audit/application/append-audit-event";
-import { advanceDelivery } from "../../operations/application/advance-delivery";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { createProcurementRequirement } from "../../procurement/application/create-procurement-requirement";
 import { recordReceivedLine } from "../../procurement/application/record-received-line";
 import { startReceiving } from "../../procurement/application/start-receiving";
 import { completeReceiving } from "../../procurement/application/complete-receiving";
 import { allowedFulfillmentActions } from "../../fulfillment/application/list-fulfillment-queue";
-import { allowedDeliveryActions } from "../../delivery/application/list-delivery-dispatch";
 import { setGlobalFulfillmentMode } from "../../fulfillment/application/location-mode";
 import {
   activateGlobalFulfillmentMode,
@@ -569,89 +565,14 @@ export async function advanceAdminFulfillment(
   };
 }
 
-export async function advanceAdminDelivery(
-  deps: OperationsAdministrationDeps,
-  request: AdvanceAdminDeliveryRequest,
-): Promise<RpcResult<AdminDeliveryOperationView>> {
-  const permitted = await access(deps, request, "delivery.manage");
-  if (!permitted.ok) return permitted;
-  const result = await advanceDelivery(
-    deps.db,
-    {
-      requestId: request.requestId,
-      headers: request.headers,
-      orderId: request.orderId,
-      action: request.action,
-      expectedVersion: request.expectedVersion,
-      idempotencyKey: request.idempotencyKey,
-    },
-    { authorize: async (job) => job.locationId === request.locationId },
-  );
-  if (!result.ok)
-    return {
-      ok: false,
-      error: {
-        code: result.error.code as import("@freshmarkets/contracts").AppErrorCode,
-        message: result.error.message,
-        requestId: request.requestId,
-      },
-    };
-  const row = await deps.db
-    .prepare(
-      "SELECT d.id,d.status,d.version,d.rider_user_id,d.delivered_at,d.cycle_id,d.fulfillment_mode,f.location_id FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id WHERE d.order_id=?",
-    )
-    .bind(request.orderId)
-    .first<{
-      id: string;
-      status: string;
-      version: number;
-      rider_user_id: string | null;
-      delivered_at: number | null;
-      cycle_id: string | null;
-      fulfillment_mode: "INSTANT" | "SCHEDULED";
-      location_id: string;
-    }>();
-  if (!row || row.location_id !== request.locationId)
-    return failed("NOT_FOUND", "Delivery job not found at this location", request.requestId);
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    "OPERATIONS.DELIVERY_ADVANCED",
-    "delivery_job",
-    row.id,
-    request.locationId,
-    { status: row.status, version: row.version },
-  );
-  return {
-    ok: true,
-    value: {
-      jobId: row.id,
-      orderId: request.orderId,
-      cycleId: row.cycle_id,
-      locationId: row.location_id,
-      fulfillmentMode: row.fulfillment_mode,
-      status: row.status,
-      riderAssigned: row.rider_user_id !== null,
-      externalDispatch: null,
-      deliveredAtIso: row.delivered_at === null ? null : new Date(row.delivered_at).toISOString(),
-      version: row.version,
-      allowedActions: allowedDeliveryActions(row.status, row.rider_user_id !== null),
-    },
-    requestId: request.requestId,
-  };
-}
-
 export async function resolveAdminOperationalException(
   deps: OperationsAdministrationDeps,
   request: ResolveAdminOperationalExceptionRequest,
-): Promise<RpcResult<FulfillmentQueueView | AdminDeliveryOperationView>> {
+): Promise<RpcResult<FulfillmentQueueView>> {
   if (request.reason.trim() === "")
     return failed("VALIDATION_FAILED", "A resolution reason is required", request.requestId);
   if (request.kind === "FULFILLMENT_SHORTAGE" && request.action === "RETRY_FULFILLMENT")
     return advanceAdminFulfillment(deps, { ...request, action: "RESUME_PICKING" });
-  if (request.kind === "DELIVERY_FAILED" && request.action === "RETRY_DELIVERY")
-    return advanceAdminDelivery(deps, { ...request, action: "SCHEDULE_RETRY" });
   return failed(
     "VALIDATION_FAILED",
     "Exception action is not supported for this source",
