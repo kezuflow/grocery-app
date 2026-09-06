@@ -580,6 +580,15 @@ Status date: 2026-09-06. This file is descriptive evidence only. The canonical d
   plus one delivery benefit. D1 write guards enforce global, per-customer, and grant usage limits at
   the concurrency boundary.
 
+### Notification Queue delivery
+
+- D1 remains the source of notification intent. The scheduled recovery job publishes stable outbox
+  identities to an environment-scoped Cloudflare Queue; it recovers failed publication and expired
+  publication leases without changing source domain state.
+- The Queue consumer isolates every message, explicitly acknowledges or retries, records conditional
+  delivery-attempt evidence, deduplicates completed sends, and quarantines unknown send outcomes to
+  avoid duplicate customer email. Retry exhaustion is visible in D1 and the configured DLQ.
+
 ## Maturity by area
 
 | Area                       | Current evidence                                                                                                                                                                                    | Not established                                           |

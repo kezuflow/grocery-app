@@ -17,6 +17,11 @@ import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/valid
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { configuredInstantDeliveryPartners } from "./delivery/infrastructure/runtime-delivery-provider";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
+import {
+  consumeNotificationBatch,
+  type NotificationQueueMessage,
+} from "./notifications/application/notification-queue";
+import { createCloudflareEmailDeliveryPort } from "./notifications/infrastructure/email-delivery-port";
 import { listRecentScheduledJobRuns } from "./scheduling/list-recent-runs";
 import { systemClock } from "@freshmarkets/domain-shared";
 import {
@@ -2775,6 +2780,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
    */
   async scheduled(controller: { readonly cron: string }): Promise<void> {
     await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
+  }
+
+  /** Queue delivery is per-message isolated; domain state remains D1-owned. */
+  async queue(batch: MessageBatch<NotificationQueueMessage>): Promise<void> {
+    await consumeNotificationBatch(
+      this.env.DB,
+      createCloudflareEmailDeliveryPort(this.env),
+      batch,
+      systemClock.now().getTime(),
+    );
   }
 
   /**

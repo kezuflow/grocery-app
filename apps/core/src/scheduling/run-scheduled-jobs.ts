@@ -13,6 +13,7 @@ import {
   type EmailDeliveryEnvironment,
   type EmailDeliveryPort,
 } from "../notifications/infrastructure/email-delivery-port";
+import type { NotificationQueueProducer } from "../notifications/application/notification-queue";
 
 const MAX_DETAIL_LENGTH = 200;
 
@@ -69,12 +70,13 @@ export async function runRegisteredJobs(
     PAYMENT_PROVIDER: "disabled",
   }),
   emailDelivery: EmailDeliveryPort = disabledEmailDeliveryPort,
+  notificationQueue?: NotificationQueueProducer,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
     let outcome: ScheduledJobOutcome;
     try {
-      outcome = await job.run({ database, now, registry, emailDelivery });
+      outcome = await job.run({ database, now, registry, emailDelivery, notificationQueue });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
     }
@@ -86,7 +88,11 @@ export async function runRegisteredJobs(
 
 /** Entrypoint-facing wrapper resolving the registry for a fired cron expression. */
 export async function runScheduledJobs(
-  env: CoreRuntimeEnvironment & EmailDeliveryEnvironment & { DB: D1Database },
+  env: CoreRuntimeEnvironment &
+    EmailDeliveryEnvironment & {
+      DB: D1Database;
+      NOTIFICATION_QUEUE?: NotificationQueueProducer;
+    },
   cronExpression: string,
   now: number,
 ): Promise<ScheduledJobOutcome[]> {
@@ -98,5 +104,6 @@ export async function runScheduledJobs(
     undefined,
     buildProviderRegistry(runtime),
     createCloudflareEmailDeliveryPort(env),
+    env.NOTIFICATION_QUEUE,
   );
 }

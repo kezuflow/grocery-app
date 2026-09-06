@@ -20,6 +20,7 @@ describe("Core Worker foundation", () => {
       PAYMONGO_SECRET_KEY: "test-placeholder",
       PAYMONGO_WEBHOOK_SECRET: "test-placeholder",
       EMAIL: { send: async () => ({ messageId: "test-message" }) },
+      NOTIFICATION_QUEUE: { send: async () => ({}) } as unknown as Queue,
     });
 
     expect(response.service).toBe("core");

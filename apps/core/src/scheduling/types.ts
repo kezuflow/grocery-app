@@ -1,5 +1,6 @@
 import type { PaymentProviderRegistry } from "../payments/ports/provider-registry";
 import type { EmailDeliveryPort } from "../notifications/infrastructure/email-delivery-port";
+import type { NotificationQueueProducer } from "../notifications/application/notification-queue";
 
 /** Outcome of one scheduled job attempt. */
 export interface ScheduledJobOutcome {
@@ -15,6 +16,7 @@ export interface ScheduledJobContext {
   /** Configured provider adapters for jobs that must observe provider truth. */
   readonly registry: PaymentProviderRegistry;
   readonly emailDelivery: EmailDeliveryPort;
+  readonly notificationQueue?: NotificationQueueProducer;
   readonly now: number;
 }
 

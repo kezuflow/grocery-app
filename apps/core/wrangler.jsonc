@@ -53,6 +53,19 @@
   // API token. AUTH_EMAIL_FROM is deployment configuration and intentionally
   // has no source-controlled production default.
   "send_email": [{ "name": "EMAIL" }],
+  "queues": {
+    "producers": [{ "binding": "NOTIFICATION_QUEUE", "queue": "freshmarkets-notifications-dev" }],
+    "consumers": [
+      {
+        "queue": "freshmarkets-notifications-dev",
+        "dead_letter_queue": "freshmarkets-notifications-dlq-dev",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "retry_delay": 60,
+      },
+    ],
+  },
   "r2_buckets": [
     {
       "binding": "PRODUCT_MEDIA",
@@ -91,6 +104,21 @@
         ],
       },
       "send_email": [{ "name": "EMAIL" }],
+      "queues": {
+        "producers": [
+          { "binding": "NOTIFICATION_QUEUE", "queue": "freshmarkets-notifications-staging" },
+        ],
+        "consumers": [
+          {
+            "queue": "freshmarkets-notifications-staging",
+            "dead_letter_queue": "freshmarkets-notifications-dlq-staging",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "retry_delay": 60,
+          },
+        ],
+      },
       "r2_buckets": [
         {
           "binding": "PRODUCT_MEDIA",
