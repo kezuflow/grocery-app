@@ -144,10 +144,10 @@ describe("generateProduceCatalogSql", () => {
       "INSERT OR IGNORE INTO category (id, code, name, slug, status, sort_order, created_at, updated_at)",
     );
     expect(sql).toContain(
-      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-papaya', 'AVAILABLE', 'PLANNED_PROCUREMENT', 0);`,
+      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-papaya', 'AVAILABLE', 'STOCKED', 0);`,
     );
     expect(sql).toContain(
-      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-chili-pepper-fruit-siling-labuyo', 'AVAILABLE', 'PLANNED_PROCUREMENT', 0);`,
+      `VALUES ('${LOCATION_CEBU_CENTRAL}', 'product-chili-pepper-fruit-siling-labuyo', 'AVAILABLE', 'STOCKED', 0);`,
     );
     expect(sql).not.toContain("canonical_sourcing_mode");
     expect(sql).toContain(MARKET_METRO_CEBU);
@@ -155,5 +155,6 @@ describe("generateProduceCatalogSql", () => {
       .split("\n")
       .filter((line) => line.includes("INTO sku_location_availability"));
     expect(availabilityLines).toHaveLength(2);
+    expect(sql).toContain("'location-cebu-central', 'STANDARD'");
   });
 });

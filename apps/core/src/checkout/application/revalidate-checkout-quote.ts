@@ -37,7 +37,7 @@ function rejected(code: AppErrorCode, message: string): RevalidationFailure {
  * creating, superseding, or reserving another quote. The accepted quote stays
  * the payment subject; this function only proves that its immutable evidence
  * still agrees with current entitlement, cart, routing, price, fee, and
- * mode-specific capacity/hold state.
+ * mode-specific window/hold state.
  */
 export async function revalidateCheckoutQuote(
   database: D1Database,
@@ -84,7 +84,7 @@ export async function revalidateCheckoutQuote(
          FROM cart_item ci
          JOIN sku s ON s.id=ci.sku_id
          JOIN product p ON p.id=s.product_id
-         WHERE ci.cart_id=? ORDER BY ci.sku_id`,
+         WHERE ci.cart_id=? AND s.status='active' AND p.status='active' ORDER BY ci.sku_id`,
       )
       .bind(quote.cartId)
       .all<LiveCartItem>(),
@@ -148,15 +148,14 @@ export async function revalidateCheckoutQuote(
       .prepare(
         `SELECT dc.market_id, fl.latitude, fl.longitude
          FROM delivery_cycle dc
-         JOIN cycle_zone_capacity czc ON czc.cycle_id=dc.id
-         JOIN fulfillment_location fl ON fl.id=czc.location_id AND fl.status='active'
+         JOIN delivery_cycle_zone dcz ON dcz.cycle_id=dc.id AND dcz.status='ACTIVE'
+         JOIN fulfillment_location fl ON fl.id=dcz.location_id AND fl.status='active'
          WHERE dc.id=? AND dc.status='OPEN' AND dc.cutoff_at>?
-           AND czc.zone_id=? AND czc.location_id=? AND czc.allocated<czc.capacity`,
+           AND dcz.zone_id=? AND dcz.location_id=?`,
       )
       .bind(quote.deliveryCycleId, now, snapshot.zoneId, snapshot.locationId)
       .first<{ market_id: string; latitude: number; longitude: number }>();
-    if (!cycle)
-      return rejected("CAPACITY_UNAVAILABLE", "Scheduled capacity is no longer available");
+    if (!cycle) return rejected("CYCLE_CLOSED", "Scheduled delivery window is no longer available");
     const routed = await database
       .prepare(
         `SELECT 1 AS eligible FROM delivery_zone dz
@@ -179,7 +178,7 @@ export async function revalidateCheckoutQuote(
         .prepare(
           `SELECT amount_minor FROM price_version
            WHERE sku_id=? AND market_id=? AND currency=? AND price_type='STANDARD'
-             AND location_id=?
+             AND location_id=? AND amount_minor>0
              AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)
            ORDER BY version DESC LIMIT 1`,
         )
@@ -195,7 +194,8 @@ export async function revalidateCheckoutQuote(
     if (
       !price ||
       price.amount_minor !== line.unitPriceMinor ||
-      (availability && availability.availability_status !== "AVAILABLE")
+      !availability ||
+      availability.availability_status !== "AVAILABLE"
     )
       return rejected("PRICE_CHANGED", "Price or availability changed; accept a new quote");
     subtotalMinor += price.amount_minor * item.quantity;

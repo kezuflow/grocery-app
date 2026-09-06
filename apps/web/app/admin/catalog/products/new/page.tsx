@@ -84,6 +84,7 @@ export default function NewProductPage() {
         name: "",
         sellableUnitId: "",
         sellQuantity: "",
+        estimatedShippingWeightGrams: "",
         merchandisingLabel: "",
       },
     ],
@@ -137,25 +138,37 @@ export default function NewProductPage() {
       variant: (typeof variants)[number];
       sellQuantity: number;
       consumptionBaseQuantity: number;
+      estimatedShippingWeightGrams: number | null;
     }> = [];
     for (const [index, variant] of variants.entries()) {
       const unit = units.find((candidate) => candidate.unitId === variant.sellableUnitId);
       const sellQuantity = Number(variant.sellQuantity);
       const convertedNumerator = sellQuantity * (unit?.conversionNumerator ?? 0);
       const consumptionBaseQuantity = unit ? convertedNumerator / unit.conversionDenominator : 0;
+      const estimatedShippingWeightGrams =
+        unit?.canonicalBaseCode === "GRAM" ? null : Number(variant.estimatedShippingWeightGrams);
       if (
         !unit ||
         !Number.isSafeInteger(sellQuantity) ||
         sellQuantity < 1 ||
         !Number.isSafeInteger(consumptionBaseQuantity) ||
-        consumptionBaseQuantity < 1
+        consumptionBaseQuantity < 1 ||
+        (unit.canonicalBaseCode !== "GRAM" &&
+          (typeof estimatedShippingWeightGrams !== "number" ||
+            !Number.isSafeInteger(estimatedShippingWeightGrams) ||
+            estimatedShippingWeightGrams < 1))
       ) {
         setError(
           `Variant ${index + 1} needs a sell quantity that converts exactly to its base unit.`,
         );
         return;
       }
-      normalizedVariants.push({ variant, sellQuantity, consumptionBaseQuantity });
+      normalizedVariants.push({
+        variant,
+        sellQuantity,
+        consumptionBaseQuantity,
+        estimatedShippingWeightGrams,
+      });
     }
     try {
       const result = await intent.submit(async (idempotencyKey) => {
@@ -207,6 +220,7 @@ export default function NewProductPage() {
               sellableUnitId: normalized.variant.sellableUnitId,
               sellQuantity: normalized.sellQuantity,
               consumptionBaseQuantity: normalized.consumptionBaseQuantity,
+              estimatedShippingWeightGrams: normalized.estimatedShippingWeightGrams,
               merchandisingLabel: normalized.variant.merchandisingLabel.trim() || null,
               sortOrder: index,
             },

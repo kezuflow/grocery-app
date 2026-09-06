@@ -110,6 +110,7 @@ export const sku = sqliteTable(
       .notNull()
       .references(() => unit.id, { onDelete: "restrict" }),
     consumptionBaseQuantity: integer("consumption_base_quantity").notNull(),
+    estimatedShippingWeightGrams: integer("estimated_shipping_weight_grams"),
     merchandisingLabel: text("merchandising_label"),
     sellQuantity: integer("sell_quantity").notNull().default(1),
     version: integer("version").notNull().default(1),

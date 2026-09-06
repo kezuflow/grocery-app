@@ -234,7 +234,9 @@ export async function listAdminUnits(
               conversion_numerator AS conversionNumerator,
               conversion_denominator AS conversionDenominator,
               status, version
-       FROM unit ORDER BY dimension, code`,
+       FROM unit
+       WHERE status='active' AND dimension IN ('MASS','COUNT')
+       ORDER BY dimension, code`,
     )
     .all<AdminUnitSummary>();
   return { ok: true, value: rows.results, requestId: request.requestId };
@@ -577,6 +579,7 @@ type SkuRow = {
   unitSymbol: string;
   sellQuantity: number;
   consumptionBaseQuantity: number;
+  estimatedShippingWeightGrams: number | null;
   status: "active" | "inactive";
   sortOrder: number;
   version: number;
@@ -679,6 +682,7 @@ export async function getAdminProduct(
       `SELECT s.id AS skuId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
               u.symbol AS unitSymbol, s.sell_quantity AS sellQuantity,
               s.consumption_base_quantity AS consumptionBaseQuantity,
+              s.estimated_shipping_weight_grams AS estimatedShippingWeightGrams,
               s.status, s.sort_order AS sortOrder, s.version,
               current_price.amount_minor AS priceMinor,
               current_price.currency,
@@ -954,6 +958,7 @@ export async function readSkuSummary(
       `SELECT s.id AS skuId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
               u.symbol AS unitSymbol, s.sell_quantity AS sellQuantity,
               s.consumption_base_quantity AS consumptionBaseQuantity,
+              s.estimated_shipping_weight_grams AS estimatedShippingWeightGrams,
               s.status, s.sort_order AS sortOrder, s.version,
               current_price.amount_minor AS priceMinor,
               current_price.currency,
@@ -992,6 +997,7 @@ export async function readSkuSummary(
     unitSymbol: row.unitSymbol,
     sellQuantity: row.sellQuantity,
     consumptionBaseQuantity: row.consumptionBaseQuantity,
+    estimatedShippingWeightGrams: row.estimatedShippingWeightGrams,
     status: row.status,
     sortOrder: row.sortOrder,
     version: row.version,

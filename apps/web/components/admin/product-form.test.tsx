@@ -95,4 +95,104 @@ describe("ProductForm", () => {
     expect(html).not.toContain("Create product");
     expect(html).not.toContain("Save Product");
   });
+
+  it("collects per-sold-unit shipping grams for count inventory", () => {
+    const html = renderToStaticMarkup(
+      <ProductForm
+        categories={[]}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        pending={false}
+        submitLabel="Create product"
+        units={[
+          {
+            unitId: "unit-piece",
+            code: "PC",
+            displayName: "Piece",
+            dimension: "COUNT",
+            canonicalBaseCode: "PIECE",
+            conversionNumerator: 1,
+            conversionDenominator: 1,
+            status: "active",
+            version: 1,
+          },
+        ]}
+        value={{
+          name: "Chili pepper",
+          slug: "chili-pepper",
+          description: null,
+          categoryId: "category-produce",
+          inventoryBaseUnitId: "unit-piece",
+          status: "active",
+          statusReason: "",
+          customerDetails: [],
+          media: [],
+          variants: [
+            {
+              id: "variant-1",
+              code: "CHILI-50G",
+              name: "1 pack",
+              sellableUnitId: "unit-piece",
+              sellQuantity: "1",
+              estimatedShippingWeightGrams: "50",
+              merchandisingLabel: "",
+            },
+          ],
+        }}
+      />,
+    );
+    expect(html).toContain("Estimated shipping weight per sold unit (grams)");
+    expect(html).toContain('value="50"');
+  });
+
+  it("does not offer inactive volume units for catalog authoring", () => {
+    const html = renderToStaticMarkup(
+      <ProductForm
+        categories={[]}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        pending={false}
+        submitLabel="Create product"
+        units={[
+          {
+            unitId: "unit-gram",
+            code: "GRAM",
+            displayName: "Gram",
+            dimension: "MASS",
+            canonicalBaseCode: "GRAM",
+            conversionNumerator: 1,
+            conversionDenominator: 1,
+            status: "active",
+            version: 1,
+          },
+          {
+            unitId: "unit-milliliter",
+            code: "MILLILITER",
+            displayName: "Milliliter",
+            dimension: "VOLUME",
+            canonicalBaseCode: "MILLILITER",
+            conversionNumerator: 1,
+            conversionDenominator: 1,
+            status: "inactive",
+            version: 2,
+          },
+        ]}
+        value={{
+          name: "Cooking oil",
+          slug: "cooking-oil",
+          description: null,
+          categoryId: "category-grocery",
+          inventoryBaseUnitId: "",
+          status: "active",
+          statusReason: "",
+          customerDetails: [],
+          media: [],
+          variants: [],
+        }}
+      />,
+    );
+    expect(html).toContain("Gram (GRAM)");
+    expect(html).not.toContain("Milliliter");
+    expect(html).not.toContain("MILLILITER");
+  });
 });

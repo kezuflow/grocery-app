@@ -6,6 +6,8 @@ export type QuoteLine = {
   unit: string;
   quantity: number;
   baseQuantity: number;
+  baseUnitCode: "GRAM" | "MILLILITER" | "PIECE";
+  shippingWeightGrams: number | null;
   unitPriceMinor: number;
   lineTotalMinor: number;
 };

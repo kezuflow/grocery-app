@@ -3,6 +3,20 @@
 Status date: 2026-09-06. This file is descriptive evidence only. The canonical documents named in
 `AGENTS.md` remain authoritative.
 
+## Commerce and external-delivery realignment — Phase 4 catalog and availability (2026-09-06)
+
+- Active catalog authoring now permits only `MASS`/`COUNT` base units. Migration `0060` preserves
+  historical volume definitions while marking them inactive, and packaged liquids are authored as
+  count-based products.
+- Non-gram sell variants require a positive per-sold-unit shipping weight; gram variants derive it
+  from exact base consumption. Quote lines snapshot canonical base unit and multiplied shipping
+  grams, including large Scheduled quantities without floating-point conversion.
+- Storefront and checkout use only positive exact-location SKU prices, active Product/SKU/local
+  selling status, and mode-derived availability. Instant consults physical stock; Scheduled uses an
+  active open pre-cutoff cycle-zone-location and never reads legacy inventory or capacity authority.
+- Catalog seed generation no longer selects sourcing behavior. Legacy required sourcing columns
+  receive a fixed compatibility value while the global fulfillment mode determines active behavior.
+
 ## Commerce and external-delivery realignment — Phase 3 selling gate (2026-09-06)
 
 - Core now owns one `GlobalCommerceConfiguration` query plus explicit audited

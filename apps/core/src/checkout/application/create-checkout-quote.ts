@@ -6,6 +6,7 @@ import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
+import { resolveLineShippingWeightGrams } from "../../fulfillment/domain/delivery-package";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { quoteDeliveryFee } from "../../geography/application/quote-delivery-fee";
 import { deliveryFeeFailure } from "./delivery-fee-failure";
@@ -69,7 +70,7 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
 /**
  * Create (or replay) the authoritative Core-side checkout quote. The quote is
  * evidence only: it reserves nothing and asserts no payment outcome. Pricing,
- * eligibility, serviceability, cycle/cutoff/capacity, and sourcing are all
+ * eligibility, serviceability, cycle/cutoff, availability, and pricing are all
  * resolved here in integer minor/base units.
  */
 export async function createCheckoutQuote(
@@ -123,10 +124,14 @@ export async function createCheckoutQuote(
 
   const cartItems = await database
     .prepare(
-      `SELECT ci.sku_id, ci.quantity, s.name AS variant_name, s.sellable_unit_id AS unit, s.consumption_base_quantity,
+      `SELECT ci.sku_id, ci.quantity, s.name AS variant_name, s.sellable_unit_id AS unit,
+              s.consumption_base_quantity, s.estimated_shipping_weight_grams,
+              bu.canonical_base_code AS base_unit_code,
               p.id AS product_id, p.name AS product_name, p.category_id, p.inventory_pool_id
        FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
-       WHERE ci.cart_id=?`,
+       JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+       JOIN unit bu ON bu.id=ip.base_unit_id
+       WHERE ci.cart_id=? AND s.status='active' AND p.status='active'`,
     )
     .bind(command.cartId)
     .all<{
@@ -135,6 +140,8 @@ export async function createCheckoutQuote(
       variant_name: string;
       unit: string;
       consumption_base_quantity: number;
+      base_unit_code: "GRAM" | "MILLILITER" | "PIECE";
+      estimated_shipping_weight_grams: number | null;
       product_id: string;
       product_name: string;
       category_id: string;
@@ -181,7 +188,7 @@ export async function createCheckoutQuote(
   );
 }
 
-/** The existing Scheduled path: open-cycle, cutoff, capacity, priced lines. */
+/** Scheduled path: open window, exact-location active catalog, and priced lines. */
 async function createScheduledQuote(
   database: D1Database,
   repository: ReturnType<typeof createCheckoutRepository>,
@@ -233,8 +240,9 @@ async function createScheduledQuote(
        JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
        JOIN global_commerce_configuration mode ON mode.id='global'
         AND mode.selling_state='OPEN' AND mode.fulfillment_mode='SCHEDULED'
-       JOIN cycle_zone_capacity capacity ON capacity.cycle_id=? AND capacity.zone_id=dz.id
-         AND capacity.location_id=fl.id AND capacity.allocated<capacity.capacity
+       JOIN delivery_cycle_zone cycle_zone ON cycle_zone.cycle_id=?
+         AND cycle_zone.zone_id=dz.id AND cycle_zone.location_id=fl.id
+         AND cycle_zone.status='ACTIVE'
        WHERE dz.code=? AND dz.status='active' AND sa.market_id=?
          AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
          AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
@@ -267,7 +275,7 @@ async function createScheduledQuote(
       .prepare(
         `SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=?
          WHERE pv.sku_id=? AND pv.market_id=dc.market_id AND pv.currency=(SELECT currency FROM market WHERE id=dc.market_id)
-           AND pv.price_type='STANDARD' AND pv.location_id=?
+           AND pv.price_type='STANDARD' AND pv.location_id=? AND pv.amount_minor>0
            AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
          ORDER BY pv.version DESC LIMIT 1`,
       )
@@ -302,6 +310,13 @@ async function createScheduledQuote(
       unit: item.unit,
       quantity: item.quantity,
       baseQuantity,
+      baseUnitCode: item.base_unit_code,
+      shippingWeightGrams: resolveLineShippingWeightGrams({
+        baseUnitCode: item.base_unit_code,
+        quantity: item.quantity,
+        baseQuantity,
+        estimatedShippingWeightGrams: item.estimated_shipping_weight_grams,
+      }),
       unitPriceMinor: price.amount_minor,
       lineTotalMinor: lineTotal,
     });

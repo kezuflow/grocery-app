@@ -19,6 +19,10 @@ import {
 } from "../../promotions/application/evaluate-checkout-promotions";
 import { resolveServiceFee } from "./resolve-service-fee";
 import { closestLocation } from "../../geography/geometry";
+import {
+  resolveLineShippingWeightGrams,
+  type CanonicalBaseUnitCode,
+} from "../../fulfillment/domain/delivery-package";
 
 export type QuoteItem = {
   sku_id: string;
@@ -26,6 +30,8 @@ export type QuoteItem = {
   variant_name: string;
   unit: string;
   consumption_base_quantity: number;
+  base_unit_code: CanonicalBaseUnitCode;
+  estimated_shipping_weight_grams: number | null;
   product_id: string;
   product_name: string;
   category_id: string;
@@ -140,7 +146,7 @@ export async function createInstantQuote(
       .prepare(
         `SELECT amount_minor FROM price_version pv
          WHERE pv.sku_id=? AND pv.market_id=? AND pv.currency=(SELECT currency FROM market WHERE id=?)
-           AND pv.price_type='STANDARD' AND pv.location_id=?
+           AND pv.price_type='STANDARD' AND pv.location_id=? AND pv.amount_minor>0
            AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
          ORDER BY pv.version DESC LIMIT 1`,
       )
@@ -166,6 +172,7 @@ export async function createInstantQuote(
       );
     const lineTotal = price.amount_minor * item.quantity;
     subtotalMinor += lineTotal;
+    const baseQuantity = item.quantity * item.consumption_base_quantity;
     lines.push({
       skuId: item.sku_id,
       productId: item.product_id,
@@ -173,7 +180,14 @@ export async function createInstantQuote(
       variantName: item.variant_name,
       unit: item.unit,
       quantity: item.quantity,
-      baseQuantity: item.quantity * item.consumption_base_quantity,
+      baseQuantity,
+      baseUnitCode: item.base_unit_code,
+      shippingWeightGrams: resolveLineShippingWeightGrams({
+        baseUnitCode: item.base_unit_code,
+        quantity: item.quantity,
+        baseQuantity,
+        estimatedShippingWeightGrams: item.estimated_shipping_weight_grams,
+      }),
       unitPriceMinor: price.amount_minor,
       lineTotalMinor: lineTotal,
     });

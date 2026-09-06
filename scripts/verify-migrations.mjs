@@ -66,7 +66,12 @@ function assertFinalSchema(database) {
     .prepare("PRAGMA table_info(sku)")
     .all()
     .map((column) => column.name);
-  for (const column of ["merchandising_label", "sell_quantity", "version"])
+  for (const column of [
+    "merchandising_label",
+    "sell_quantity",
+    "version",
+    "estimated_shipping_weight_grams",
+  ])
     assert.ok(skuColumns.includes(column), `missing sku column ${column}`);
   // Every active SKU of a product with product-level Cebu availability was
   // backfilled into SKU-level availability.
@@ -93,7 +98,7 @@ function assertFinalSchema(database) {
   assert.deepEqual(
     database
       .prepare(
-        "SELECT code, canonical_base_code, conversion_numerator, conversion_denominator FROM unit WHERE dimension='VOLUME' ORDER BY code",
+        "SELECT code, canonical_base_code, conversion_numerator, conversion_denominator, status FROM unit WHERE dimension='VOLUME' ORDER BY code",
       )
       .all()
       .map((row) => ({ ...row })),
@@ -103,15 +108,17 @@ function assertFinalSchema(database) {
         canonical_base_code: "MILLILITER",
         conversion_numerator: 1000,
         conversion_denominator: 1,
+        status: "inactive",
       },
       {
         code: "MILLILITER",
         canonical_base_code: "MILLILITER",
         conversion_numerator: 1,
         conversion_denominator: 1,
+        status: "inactive",
       },
     ],
-    "canonical volume units are incomplete",
+    "historical volume units must remain present but inactive",
   );
 }
 

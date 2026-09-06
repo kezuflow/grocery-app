@@ -139,15 +139,32 @@ export async function listFulfillmentOptions(
         .bind(candidate.locationId, query.cartId, candidate.locationId)
         .first();
       if (unavailable) reason = "INVENTORY_UNAVAILABLE";
+      if (reason === null) {
+        const missingDeliveryWeight = await database
+          .prepare(
+            `SELECT 1 found
+             FROM cart_item ci
+             JOIN sku s ON s.id=ci.sku_id
+             JOIN product p ON p.id=s.product_id
+             JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+             JOIN unit bu ON bu.id=ip.base_unit_id
+             WHERE ci.cart_id=? AND bu.canonical_base_code<>'GRAM'
+               AND s.estimated_shipping_weight_grams IS NULL
+             LIMIT 1`,
+          )
+          .bind(query.cartId)
+          .first();
+        if (missingDeliveryWeight) reason = "DELIVERY_WEIGHT_UNAVAILABLE";
+      }
     }
     if (candidate && mode === "SCHEDULED") {
       for (const operationalCandidate of orderedCandidates) {
         const availableCycle = await database
           .prepare(
             `SELECT dc.id,dc.cutoff_at cutoff,dc.delivery_date delivery,dc.version
-         FROM delivery_cycle dc JOIN cycle_zone_capacity c ON c.cycle_id=dc.id
-          AND c.zone_id=? AND c.location_id=?
-         WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>? AND c.allocated<c.capacity
+         FROM delivery_cycle dc JOIN delivery_cycle_zone cycle_zone ON cycle_zone.cycle_id=dc.id
+          AND cycle_zone.zone_id=? AND cycle_zone.location_id=? AND cycle_zone.status='ACTIVE'
+         WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>?
          ORDER BY dc.delivery_date,dc.id LIMIT 1`,
           )
           .bind(
@@ -164,6 +181,38 @@ export async function listFulfillmentOptions(
         }
       }
       if (!cycle) reason = "CYCLE_UNAVAILABLE";
+    }
+    if (candidate && reason === null) {
+      const unavailableCatalogItem = await database
+        .prepare(
+          `SELECT 1 found
+           FROM cart_item ci
+           JOIN sku s ON s.id=ci.sku_id
+           JOIN product p ON p.id=s.product_id
+           LEFT JOIN sku_location_availability availability
+             ON availability.sku_id=s.id AND availability.location_id=?
+           WHERE ci.cart_id=? AND (
+             s.status<>'active' OR p.status<>'active'
+             OR availability.availability_status IS NULL
+             OR availability.availability_status<>'AVAILABLE'
+             OR NOT EXISTS (
+               SELECT 1 FROM price_version price
+               WHERE price.sku_id=s.id AND price.market_id=? AND price.location_id=?
+                 AND price.price_type='STANDARD' AND price.amount_minor>0
+                 AND price.valid_from<=? AND (price.valid_to IS NULL OR price.valid_to>?)
+             )
+           ) LIMIT 1`,
+        )
+        .bind(
+          candidate.locationId,
+          query.cartId,
+          candidate.marketId,
+          candidate.locationId,
+          Date.now(),
+          Date.now(),
+        )
+        .first();
+      if (unavailableCatalogItem) reason = "CATALOG_UNAVAILABLE";
     }
     if (candidate && reason === null) {
       try {

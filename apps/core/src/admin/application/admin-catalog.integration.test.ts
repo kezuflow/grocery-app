@@ -110,11 +110,11 @@ async function seedProduct(): Promise<{
       now,
     ),
     env.DB.prepare(
-      "INSERT INTO unit (id, code, name, dimension, symbol, created_at) VALUES (?, ?, 'Gram', 'MASS', 'g', ?)",
-    ).bind(unitGramId, `GRAM_T_${crypto.randomUUID().slice(0, 12)}`, now),
+      "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Gram', 'MASS', 'g', 'GRAM', 1, 1, 'active', 1, ?, ?)",
+    ).bind(unitGramId, `GRAM_T_${crypto.randomUUID().slice(0, 12)}`, now, now),
     env.DB.prepare(
-      "INSERT INTO unit (id, code, name, dimension, symbol, created_at) VALUES (?, ?, 'Kilogram', 'MASS', 'kg', ?)",
-    ).bind(unitKgId, `KG_T_${crypto.randomUUID().slice(0, 12)}`, now),
+      "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Kilogram', 'MASS', 'kg', 'GRAM', 1000, 1, 'active', 1, ?, ?)",
+    ).bind(unitKgId, `KG_T_${crypto.randomUUID().slice(0, 12)}`, now, now),
     env.DB.prepare(
       "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
     ).bind(poolId, productId, unitGramId, now, now),
@@ -767,7 +767,7 @@ describe("catalog administration", () => {
     expect(productPage.value.readiness.missingPrimaryMedia).toBeGreaterThanOrEqual(1);
   });
 
-  it("creates a category and a unit idempotently with conflicts on duplicates", async () => {
+  it("creates categories and count units while rejecting unsupported volume units", async () => {
     const manager = await seedManager();
     const categoryKey = `cat-${crypto.randomUUID()}`;
     const created = await core.createAdminCategory({
@@ -806,7 +806,7 @@ describe("catalog administration", () => {
     });
     expect(invalidUnit).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
-    const unit = await core.createAdminUnit({
+    const volumeUnit = await core.createAdminUnit({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       code: `TSP_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
@@ -817,15 +817,30 @@ describe("catalog administration", () => {
       conversionDenominator: 1,
       idempotencyKey: `unit-${crypto.randomUUID()}`,
     });
-    expect(unit.ok).toBe(true);
-    if (!unit.ok) return;
-    expect(unit.value).toMatchObject({
-      dimension: "VOLUME",
-      canonicalBaseCode: "MILLILITER",
-      conversionNumerator: 5,
+    expect(volumeUnit).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+
+    const unit = await core.createAdminUnit({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      code: `DOZEN_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
+      displayName: "Dozen",
+      dimension: "COUNT",
+      canonicalBaseCode: "PIECE",
+      conversionNumerator: 12,
       conversionDenominator: 1,
-      status: "active",
-      version: 1,
+      idempotencyKey: `unit-${crypto.randomUUID()}`,
+    });
+    expect(unit).toMatchObject({
+      ok: true,
+      value: {
+        dimension: "COUNT",
+        canonicalBaseCode: "PIECE",
+        conversionNumerator: 12,
+        status: "active",
+      },
     });
 
     const units = await core.listAdminUnits({
@@ -834,7 +849,10 @@ describe("catalog administration", () => {
     });
     expect(units.ok).toBe(true);
     if (!units.ok) return;
-    expect(units.value.some((item) => item.unitId === unit.value.unitId)).toBe(true);
+    expect(
+      units.value.every((item) => item.dimension === "MASS" || item.dimension === "COUNT"),
+    ).toBe(true);
+    if (unit.ok) expect(units.value.some((item) => item.unitId === unit.value.unitId)).toBe(true);
   });
 
   it("creates SKUs with matching dimensions, sets prices and availability, and audits", async () => {
@@ -1132,6 +1150,82 @@ describe("catalog administration", () => {
       },
     });
     void unitKgId;
+  });
+
+  it("requires and updates per-unit shipping grams for count-based variants", async () => {
+    const manager = await seedManager();
+    const now = Date.now();
+    const categoryId = crypto.randomUUID();
+    const productId = crypto.randomUUID();
+    const poolId = crypto.randomUUID();
+    const pieceUnitId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO category (id, code, name, slug, status, sort_order, created_at, updated_at) VALUES (?, ?, 'Count products', ?, 'active', 90, ?, ?)",
+      ).bind(
+        categoryId,
+        `COUNT_${crypto.randomUUID().slice(0, 12)}`,
+        `count-${crypto.randomUUID().slice(0, 12)}`,
+        now,
+        now,
+      ),
+      env.DB.prepare(
+        "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Piece', 'COUNT', 'pc', 'PIECE', 1, 1, 'active', 1, ?, ?)",
+      ).bind(pieceUnitId, `PC_${crypto.randomUUID().slice(0, 12)}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
+      ).bind(poolId, productId, pieceUnitId, now, now),
+      env.DB.prepare(
+        "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Chili Pepper Pack', 'active', ?, ?)",
+      ).bind(productId, categoryId, poolId, `chili-${crypto.randomUUID().slice(0, 12)}`, now, now),
+    ]);
+
+    const withoutWeight = await core.createAdminSku({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      code: `CHILI_${crypto.randomUUID().slice(0, 12)}`,
+      name: "1 pack",
+      sellableUnitId: pieceUnitId,
+      sellQuantity: 1,
+      consumptionBaseQuantity: 1,
+      idempotencyKey: `sku-${crypto.randomUUID()}`,
+    });
+    expect(withoutWeight).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+
+    const created = await core.createAdminSku({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      code: `CHILI_${crypto.randomUUID().slice(0, 12)}`,
+      name: "1 pack",
+      sellableUnitId: pieceUnitId,
+      sellQuantity: 1,
+      consumptionBaseQuantity: 1,
+      estimatedShippingWeightGrams: 50,
+      idempotencyKey: `sku-${crypto.randomUUID()}`,
+    });
+    expect(created).toMatchObject({
+      ok: true,
+      value: { estimatedShippingWeightGrams: 50, version: 1 },
+    });
+    if (!created.ok) return;
+
+    const updated = await core.updateAdminSku({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: created.value.skuId,
+      estimatedShippingWeightGrams: 60,
+      expectedVersion: created.value.version,
+      idempotencyKey: `sku-update-${crypto.randomUUID()}`,
+    });
+    expect(updated).toMatchObject({
+      ok: true,
+      value: { estimatedShippingWeightGrams: 60, version: 2 },
+    });
   });
 
   it("toggles product status with reasons and guards", async () => {

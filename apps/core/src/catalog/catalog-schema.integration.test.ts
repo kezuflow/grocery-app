@@ -96,14 +96,14 @@ describe("catalog detail and SKU-availability schema", () => {
         canonical_base_code: "MILLILITER",
         conversion_numerator: 1000,
         conversion_denominator: 1,
-        status: "active",
+        status: "inactive",
       },
       {
         code: "MILLILITER",
         canonical_base_code: "MILLILITER",
         conversion_numerator: 1,
         conversion_denominator: 1,
-        status: "active",
+        status: "inactive",
       },
     ]);
     const invalidSourcing = await env.DB.prepare(

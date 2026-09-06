@@ -391,12 +391,21 @@ async function hydrateProducts(
           [context.locationId, ...ids],
         )
       : Promise.resolve([]),
-    database
-      .prepare(
-        "SELECT fulfillment_mode activeMode FROM global_commerce_configuration WHERE id='global'",
-      )
-      .bind()
-      .first<{ activeMode: "INSTANT" | "SCHEDULED" }>(),
+    context
+      ? database
+          .prepare(
+            `SELECT configuration.fulfillment_mode activeMode,
+                    CASE WHEN configuration.fulfillment_mode='INSTANT' THEN 1 ELSE EXISTS (
+                      SELECT 1 FROM delivery_cycle cycle
+                      JOIN delivery_cycle_zone cycle_zone ON cycle_zone.cycle_id=cycle.id
+                        AND cycle_zone.location_id=? AND cycle_zone.status='ACTIVE'
+                      WHERE cycle.market_id=? AND cycle.status='OPEN' AND cycle.cutoff_at>?
+                    ) END modeAvailable
+             FROM global_commerce_configuration configuration WHERE configuration.id='global'`,
+          )
+          .bind(context.locationId, context.marketId, nowMs)
+          .first<{ activeMode: "INSTANT" | "SCHEDULED"; modeAvailable: number }>()
+      : Promise.resolve(null),
     rawAll<{ product_id: string; label: string; value: string; sortOrder: number }>(
       database,
       `SELECT product_id, label, value, sort_order AS sortOrder
@@ -424,6 +433,7 @@ async function hydrateProducts(
     inventoryRows.map((row) => [row.product_id, row.available_base]),
   );
   const activeMode = modeRow?.activeMode ?? "SCHEDULED";
+  const modeAvailable = modeRow?.modeAvailable === 1;
   const detailsByProduct = new Map<string, CatalogDetail[]>();
   for (const detail of productDetailRows) {
     const bucket = detailsByProduct.get(detail.product_id) ?? [];
@@ -450,10 +460,12 @@ async function hydrateProducts(
           ? "LOCATION_REQUIRED"
           : !price
             ? "PRICE_UNAVAILABLE"
-            : activeMode === "INSTANT" &&
-                (inventoryByProduct.get(row.productId) ?? 0) < sku.consumption_base_quantity
+            : !modeAvailable
               ? "OUT_OF_STOCK"
-              : "AVAILABLE";
+              : activeMode === "INSTANT" &&
+                  (inventoryByProduct.get(row.productId) ?? 0) < sku.consumption_base_quantity
+                ? "OUT_OF_STOCK"
+                : "AVAILABLE";
         return {
           id: sku.id,
           code: sku.code,

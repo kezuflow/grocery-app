@@ -250,6 +250,7 @@ describe("catalog contracts", () => {
       unitSymbol: "g",
       sellQuantity: 250,
       consumptionBaseQuantity: 250,
+      estimatedShippingWeightGrams: null,
       status: "active",
       sortOrder: 1,
       version: 3,

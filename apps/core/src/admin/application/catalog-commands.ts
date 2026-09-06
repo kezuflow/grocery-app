@@ -510,7 +510,7 @@ export async function createAdminProduct(
       .first<{ id: string }>(),
     deps.db
       .prepare(
-        `SELECT id FROM unit WHERE id=? AND status='active'
+        `SELECT id FROM unit WHERE id=? AND status='active' AND dimension IN ('MASS','COUNT')
          AND code=canonical_base_code AND conversion_numerator=1 AND conversion_denominator=1`,
       )
       .bind(request.inventoryBaseUnitId)
@@ -726,6 +726,12 @@ export async function createAdminUnit(
 
   const code = request.code.trim().toUpperCase();
   const displayName = request.displayName.trim();
+  if (request.dimension === "VOLUME")
+    return failure(
+      "VALIDATION_FAILED",
+      "Volume units are not enabled; packaged liquids must be configured as count-based products",
+      request.requestId,
+    );
   const requiredBaseByDimension = {
     MASS: "GRAM",
     COUNT: "PIECE",
@@ -967,13 +973,16 @@ export async function createAdminSku(
 
   const code = request.code.trim().toUpperCase();
   const name = request.name.trim();
+  const estimatedShippingWeightGrams = request.estimatedShippingWeightGrams ?? null;
   if (
     code === "" ||
     name === "" ||
     !Number.isSafeInteger(request.sellQuantity) ||
     request.sellQuantity <= 0 ||
     !Number.isSafeInteger(request.consumptionBaseQuantity) ||
-    request.consumptionBaseQuantity <= 0
+    request.consumptionBaseQuantity <= 0 ||
+    (estimatedShippingWeightGrams !== null &&
+      (!Number.isSafeInteger(estimatedShippingWeightGrams) || estimatedShippingWeightGrams <= 0))
   ) {
     return failure(
       "VALIDATION_FAILED",
@@ -984,14 +993,32 @@ export async function createAdminSku(
 
   const pool = await deps.db
     .prepare(
-      `SELECT ip.id AS poolId, ip.base_unit_id AS baseUnitId, bu.dimension AS baseDimension
+      `SELECT ip.id AS poolId, ip.base_unit_id AS baseUnitId, bu.dimension AS baseDimension,
+              bu.canonical_base_code AS baseUnitCode
        FROM product p JOIN inventory_pool ip ON ip.id = p.inventory_pool_id
        JOIN unit bu ON bu.id = ip.base_unit_id
        WHERE p.id = ?`,
     )
     .bind(request.productId)
-    .first<{ poolId: string; baseUnitId: string; baseDimension: string }>();
+    .first<{
+      poolId: string;
+      baseUnitId: string;
+      baseDimension: string;
+      baseUnitCode: "GRAM" | "MILLILITER" | "PIECE";
+    }>();
   if (!pool) return failure("NOT_FOUND", "Product not found", request.requestId);
+  if (pool.baseUnitCode !== "GRAM" && estimatedShippingWeightGrams === null)
+    return failure(
+      "VALIDATION_FAILED",
+      "A positive estimated shipping weight in grams is required for non-gram variants",
+      request.requestId,
+    );
+  if (pool.baseUnitCode === "GRAM" && estimatedShippingWeightGrams !== null)
+    return failure(
+      "VALIDATION_FAILED",
+      "Gram-based variants derive shipping weight from base consumption",
+      request.requestId,
+    );
   const sellableUnit = await deps.db
     .prepare(
       `SELECT dimension, conversion_numerator AS conversionNumerator,
@@ -1041,6 +1068,7 @@ export async function createAdminSku(
       sellableUnitId: request.sellableUnitId,
       sellQuantity: request.sellQuantity,
       consumptionBaseQuantity: request.consumptionBaseQuantity,
+      estimatedShippingWeightGrams,
       merchandisingLabel: request.merchandisingLabel ?? null,
       sortOrder: request.sortOrder ?? 0,
     },
@@ -1064,7 +1092,7 @@ export async function createAdminSku(
     await deps.db.batch([
       deps.db
         .prepare(
-          "INSERT INTO sku (id, product_id, code, name, sellable_unit_id, sell_quantity, consumption_base_quantity, status, sort_order, merchandising_label, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 1, ?, ?)",
+          "INSERT INTO sku (id, product_id, code, name, sellable_unit_id, sell_quantity, consumption_base_quantity, estimated_shipping_weight_grams, status, sort_order, merchandising_label, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 1, ?, ?)",
         )
         .bind(
           skuId,
@@ -1074,6 +1102,7 @@ export async function createAdminSku(
           request.sellableUnitId,
           request.sellQuantity,
           request.consumptionBaseQuantity,
+          estimatedShippingWeightGrams,
           request.sortOrder ?? 0,
           request.merchandisingLabel ?? null,
           now,
@@ -1089,6 +1118,7 @@ export async function createAdminSku(
           productId: request.productId,
           sellQuantity: request.sellQuantity,
           consumptionBaseQuantity: request.consumptionBaseQuantity,
+          estimatedShippingWeightGrams,
         },
         correlationId: request.requestId,
         occurredAt: now,
@@ -1123,6 +1153,33 @@ export async function updateAdminSku(
     .bind(request.skuId)
     .first<{ id: string; version: number }>();
   if (!current) return failure("NOT_FOUND", "SKU not found", request.requestId);
+  if (
+    request.estimatedShippingWeightGrams !== undefined &&
+    (!Number.isSafeInteger(request.estimatedShippingWeightGrams) ||
+      request.estimatedShippingWeightGrams <= 0)
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Estimated shipping weight must be a positive integer number of grams",
+      request.requestId,
+    );
+  if (request.estimatedShippingWeightGrams !== undefined) {
+    const baseUnit = await deps.db
+      .prepare(
+        `SELECT bu.canonical_base_code AS baseUnitCode
+         FROM sku s JOIN product p ON p.id=s.product_id
+         JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+         JOIN unit bu ON bu.id=ip.base_unit_id WHERE s.id=?`,
+      )
+      .bind(request.skuId)
+      .first<{ baseUnitCode: "GRAM" | "MILLILITER" | "PIECE" }>();
+    if (baseUnit?.baseUnitCode === "GRAM")
+      return failure(
+        "VALIDATION_FAILED",
+        "Gram-based variants derive shipping weight from base consumption",
+        request.requestId,
+      );
+  }
 
   const now = Date.now();
   const claim = await claimCommandIdempotency(
@@ -1136,6 +1193,10 @@ export async function updateAdminSku(
       merchandisingLabel: request.merchandisingLabel ?? null,
       status: request.status ?? null,
       sortOrder: request.sortOrder ?? null,
+      estimatedShippingWeightGrams:
+        request.estimatedShippingWeightGrams === undefined
+          ? "UNCHANGED"
+          : request.estimatedShippingWeightGrams,
       expectedVersion: request.expectedVersion,
     },
   );
@@ -1162,6 +1223,7 @@ export async function updateAdminSku(
              merchandising_label = COALESCE(?, merchandising_label),
              status = COALESCE(?, status),
              sort_order = COALESCE(?, sort_order),
+             estimated_shipping_weight_grams = CASE WHEN ? THEN ? ELSE estimated_shipping_weight_grams END,
              updated_at = ?, version = version + 1
            WHERE id = ? AND version = ?`,
         )
@@ -1170,6 +1232,8 @@ export async function updateAdminSku(
           request.merchandisingLabel ?? null,
           request.status ?? null,
           request.sortOrder ?? null,
+          request.estimatedShippingWeightGrams === undefined ? 0 : 1,
+          request.estimatedShippingWeightGrams ?? null,
           now,
           request.skuId,
           request.expectedVersion,

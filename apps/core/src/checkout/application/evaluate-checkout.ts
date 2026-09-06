@@ -17,8 +17,8 @@ export type CheckoutEvaluation = {
 /**
  * Central checkout eligibility orchestration for a Scheduled cycle: resolves
  * subscription entitlement, address ownership/serviceability, zone routing,
- * live cart total under the authoritative price context, zone fee, and
- * capacity. Core repeats this validation at quote and commitment; the browser
+ * live cart total under the authoritative price context and zone fee. Core
+ * repeats this validation at quote and commitment; the browser
  * result here is advisory.
  */
 export async function evaluateCheckout(
@@ -36,17 +36,13 @@ export async function evaluateCheckout(
       .bind(command.addressId, command.customerId)
       .first<{ latitude: number; longitude: number; delivery_zone_code: string | null }>(),
     database
-      .prepare(
-        "SELECT id, market_id, status, cutoff_at, capacity, allocated FROM delivery_cycle WHERE id=?",
-      )
+      .prepare("SELECT id, market_id, status, cutoff_at FROM delivery_cycle WHERE id=?")
       .bind(command.cycleId)
       .first<{
         id: string;
         market_id: string;
         status: string;
         cutoff_at: number;
-        capacity: number;
-        allocated: number;
       }>(),
     database
       .prepare(
@@ -64,8 +60,8 @@ export async function evaluateCheckout(
              JOIN delivery_cycle dc ON dc.market_id=sa.market_id
              JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
              JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active'
-             JOIN cycle_zone_capacity czc ON czc.cycle_id=dc.id AND czc.zone_id=dz.id
-               AND czc.location_id=fl.id AND czc.allocated<czc.capacity
+             JOIN delivery_cycle_zone dcz ON dcz.cycle_id=dc.id AND dcz.zone_id=dz.id
+               AND dcz.location_id=fl.id AND dcz.status='ACTIVE'
              JOIN global_commerce_configuration mode ON mode.id='global'
               AND mode.selling_state='OPEN' AND mode.fulfillment_mode='SCHEDULED'
             WHERE dz.code=? AND dz.status='active' AND dc.id=?
@@ -81,10 +77,10 @@ export async function evaluateCheckout(
         }>()
     : { results: [] };
   const routing = address ? closestLocation(address, routingCandidates.results) : null;
-  const [cart, fee, zoneCapacity] = await Promise.all([
+  const [cart, fee, unavailableItem] = await Promise.all([
     database
       .prepare(
-        "SELECT c.id, COALESCE(SUM(ci.quantity * COALESCE((SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=? WHERE pv.sku_id=ci.sku_id AND pv.market_id=dc.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND pv.location_id=? AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY pv.version DESC LIMIT 1),0)),0) AS total_minor FROM cart c LEFT JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=? AND c.customer_id=? AND c.status='ACTIVE' GROUP BY c.id",
+        "SELECT c.id, COALESCE(SUM(ci.quantity * (SELECT amount_minor FROM price_version pv JOIN delivery_cycle dc ON dc.id=? WHERE pv.sku_id=ci.sku_id AND pv.market_id=dc.market_id AND pv.currency=? AND pv.price_type='STANDARD' AND pv.location_id=? AND pv.amount_minor>0 AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?) ORDER BY pv.version DESC LIMIT 1)),0) AS total_minor FROM cart c LEFT JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=? AND c.customer_id=? AND c.status='ACTIVE' GROUP BY c.id",
       )
       .bind(
         command.cycleId,
@@ -107,10 +103,33 @@ export async function evaluateCheckout(
     routing
       ? database
           .prepare(
-            "SELECT capacity-allocated AS remaining FROM cycle_zone_capacity WHERE cycle_id=? AND zone_id=? AND location_id=?",
+            `SELECT 1 found FROM cart_item ci
+             JOIN sku s ON s.id=ci.sku_id
+             JOIN product p ON p.id=s.product_id
+             LEFT JOIN sku_location_availability availability
+               ON availability.sku_id=s.id AND availability.location_id=?
+             WHERE ci.cart_id=? AND (
+               s.status<>'active' OR p.status<>'active'
+               OR availability.availability_status IS NULL
+               OR availability.availability_status<>'AVAILABLE'
+               OR NOT EXISTS (
+                 SELECT 1 FROM price_version pv JOIN delivery_cycle dc ON dc.id=?
+                 WHERE pv.sku_id=s.id AND pv.market_id=dc.market_id AND pv.currency=?
+                   AND pv.location_id=? AND pv.price_type='STANDARD' AND pv.amount_minor>0
+                   AND pv.valid_from<=? AND (pv.valid_to IS NULL OR pv.valid_to>?)
+               )
+             ) LIMIT 1`,
           )
-          .bind(command.cycleId, routing.zone_id, routing.location_id)
-          .first<{ remaining: number }>()
+          .bind(
+            routing.location_id,
+            command.cartId,
+            command.cycleId,
+            policy?.currency ?? "",
+            routing.location_id,
+            now,
+            now,
+          )
+          .first()
       : null,
   ]);
   const geo = address
@@ -134,9 +153,7 @@ export async function evaluateCheckout(
   if (!address) failures.push("ADDRESS_REQUIRED");
   if (address && !routing) failures.push("ADDRESS_NOT_SERVICEABLE");
   if (!cycle || cycle.status !== "OPEN" || cycle.cutoff_at <= now) failures.push("CYCLE_CLOSED");
-  if (zoneCapacity?.remaining !== null && zoneCapacity?.remaining !== undefined) {
-    if (zoneCapacity.remaining <= 0) failures.push("CYCLE_FULL");
-  } else if (cycle && cycle.allocated >= cycle.capacity) failures.push("CYCLE_FULL");
+  if (unavailableItem) failures.push("CATALOG_UNAVAILABLE");
   if (routing && !fee) failures.push("CONFIGURATION_ERROR");
   const financial = {
     merchandiseSubtotalMinor: cart?.total_minor ?? 0,

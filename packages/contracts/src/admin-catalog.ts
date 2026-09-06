@@ -114,6 +114,7 @@ export type AdminCatalogSkuSummary = {
   unitSymbol: string;
   sellQuantity: number;
   consumptionBaseQuantity: number;
+  estimatedShippingWeightGrams: number | null;
   status: CatalogStatus;
   sortOrder: number;
   version: number;
@@ -357,6 +358,8 @@ export type AdminSkuCreateRequest = AuthenticatedRequest & {
   sellableUnitId: string;
   sellQuantity: number;
   consumptionBaseQuantity: number;
+  /** Required for delivery weight resolution when the Product base unit is not GRAM. */
+  estimatedShippingWeightGrams?: number;
   merchandisingLabel?: string | null;
   sortOrder?: number;
   idempotencyKey: string;
@@ -368,6 +371,7 @@ export type AdminSkuUpdateRequest = AuthenticatedRequest & {
   merchandisingLabel?: string | null;
   status?: CatalogStatus;
   sortOrder?: number;
+  estimatedShippingWeightGrams?: number;
   expectedVersion: number;
   idempotencyKey: string;
 };

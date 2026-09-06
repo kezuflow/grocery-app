@@ -24,6 +24,7 @@ export type ProductVariantDraft = {
   name: string;
   sellableUnitId: string;
   sellQuantity: string;
+  estimatedShippingWeightGrams?: string;
   merchandisingLabel: string;
 };
 
@@ -83,7 +84,10 @@ export function ProductForm({
   }
   const baseUnit = units?.find((unit) => unit.unitId === value.inventoryBaseUnitId);
   const sellableUnits = (units ?? []).filter(
-    (unit) => unit.status === "active" && (!baseUnit || unit.dimension === baseUnit.dimension),
+    (unit) =>
+      unit.status === "active" &&
+      unit.dimension !== "VOLUME" &&
+      (!baseUnit || unit.dimension === baseUnit.dimension),
   );
   return (
     <form id={formId} onSubmit={onSubmit}>
@@ -323,6 +327,28 @@ export function ProductForm({
                             }
                           />
                         </label>
+                        {baseUnit && baseUnit.canonicalBaseCode !== "GRAM" ? (
+                          <label className="grid gap-1 text-sm font-medium sm:col-span-2">
+                            <span>Estimated shipping weight per sold unit (grams)</span>
+                            <Input
+                              value={variant.estimatedShippingWeightGrams ?? ""}
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              step={1}
+                              placeholder="60"
+                              required
+                              onChange={(event) =>
+                                updateVariant(variant.id, {
+                                  estimatedShippingWeightGrams: event.target.value,
+                                })
+                              }
+                            />
+                            <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                              Used only to calculate delivery weight for piece or volume inventory.
+                            </span>
+                          </label>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -340,6 +366,7 @@ export function ProductForm({
                             name: "",
                             sellableUnitId: "",
                             sellQuantity: "",
+                            estimatedShippingWeightGrams: "",
                             merchandisingLabel: "",
                           },
                         ],
@@ -461,6 +488,8 @@ export function ProductForm({
                       {units
                         .filter(
                           (unit) =>
+                            unit.status === "active" &&
+                            unit.dimension !== "VOLUME" &&
                             unit.code === unit.canonicalBaseCode &&
                             unit.conversionNumerator === unit.conversionDenominator,
                         )

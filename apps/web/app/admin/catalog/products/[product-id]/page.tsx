@@ -79,6 +79,7 @@ export default function ProductDetailPage({
     name: "",
     unitId: "",
     sellQuantity: "",
+    estimatedShippingWeightGrams: "",
   });
   const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
   const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
@@ -520,6 +521,19 @@ export default function ProductDetailPage({
                   setNotice("This amount does not convert to an exact base inventory unit.");
                   return;
                 }
+                const estimatedShippingWeightGrams =
+                  product.inventoryPool.baseUnitCode === "GRAM"
+                    ? null
+                    : Number(newSku.estimatedShippingWeightGrams);
+                if (
+                  product.inventoryPool.baseUnitCode !== "GRAM" &&
+                  (typeof estimatedShippingWeightGrams !== "number" ||
+                    !Number.isSafeInteger(estimatedShippingWeightGrams) ||
+                    estimatedShippingWeightGrams < 1)
+                ) {
+                  setNotice("Enter a positive shipping weight in grams for one sold unit.");
+                  return;
+                }
                 void run(`${BASE}/skus`, "POST", {
                   productId,
                   code: newSku.code.trim().toUpperCase(),
@@ -527,6 +541,7 @@ export default function ProductDetailPage({
                   sellableUnitId: unit.unitId,
                   sellQuantity: Math.round(Number(newSku.sellQuantity)),
                   consumptionBaseQuantity: convertedNumerator / unit.conversionDenominator,
+                  estimatedShippingWeightGrams,
                 });
               }}
             >
@@ -550,6 +565,29 @@ export default function ProductDetailPage({
                     onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
                   />
                 </label>
+                {product.inventoryPool.baseUnitCode !== "GRAM" ? (
+                  <label className="grid gap-1 text-sm font-medium">
+                    Shipping weight (g)
+                    <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                      Estimate for one sold unit
+                    </span>
+                    <Input
+                      aria-label="Estimated shipping weight"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      placeholder="60"
+                      value={newSku.estimatedShippingWeightGrams}
+                      onChange={(event) =>
+                        setNewSku({
+                          ...newSku,
+                          estimatedShippingWeightGrams: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
                 <label className="grid gap-1 text-sm font-medium">
                   Display name
                   <span className="text-xs font-normal text-[var(--fm-text-muted)]">
@@ -574,11 +612,13 @@ export default function ProductDetailPage({
                     className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
                   >
                     <option value="">Select unit</option>
-                    {units.map((unit) => (
-                      <option key={unit.unitId} value={unit.unitId}>
-                        {unit.displayName}
-                      </option>
-                    ))}
+                    {units
+                      .filter((unit) => unit.status === "active" && unit.dimension !== "VOLUME")
+                      .map((unit) => (
+                        <option key={unit.unitId} value={unit.unitId}>
+                          {unit.displayName}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 <label className="grid gap-1 text-sm font-medium">
@@ -616,6 +656,7 @@ export default function ProductDetailPage({
                   <TableHead>SKU code</TableHead>
                   <TableHead>Display name</TableHead>
                   <TableHead>Inventory consumed</TableHead>
+                  <TableHead>Shipping weight</TableHead>
                   {product.scope.kind === "LOCATION" ? <TableHead>Price</TableHead> : null}
                   {product.scope.kind === "LOCATION" ? <TableHead>Selling status</TableHead> : null}
                   {product.scope.kind === "LOCATION" ? <TableHead>Stock status</TableHead> : null}
@@ -639,6 +680,53 @@ export default function ProductDetailPage({
                     <TableCell>
                       {sku.consumptionBaseQuantity.toLocaleString()}{" "}
                       {product.inventoryPool.baseUnitSymbol}
+                    </TableCell>
+                    <TableCell>
+                      {product.inventoryPool.baseUnitCode === "GRAM" ? (
+                        `${sku.consumptionBaseQuantity.toLocaleString()} g`
+                      ) : canManageProduct ? (
+                        <form
+                          className="flex min-w-44 items-center gap-1"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const fields = new FormData(event.currentTarget);
+                            const weight = Number(fields.get("estimatedShippingWeightGrams"));
+                            if (!Number.isSafeInteger(weight) || weight < 1) {
+                              setNotice("Shipping weight must be a positive integer in grams.");
+                              return;
+                            }
+                            void run(
+                              `${BASE}/skus/${encodeURIComponent(sku.skuId)}`,
+                              "PATCH",
+                              {
+                                estimatedShippingWeightGrams: weight,
+                                expectedVersion: sku.version,
+                              },
+                              "Shipping weight updated.",
+                            );
+                          }}
+                        >
+                          <Input
+                            name="estimatedShippingWeightGrams"
+                            aria-label={`Shipping weight for ${sku.code}`}
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            step={1}
+                            defaultValue={sku.estimatedShippingWeightGrams ?? ""}
+                            placeholder="grams"
+                            className="w-24"
+                            required
+                          />
+                          <Button type="submit" size="sm" variant="outline">
+                            Save
+                          </Button>
+                        </form>
+                      ) : sku.estimatedShippingWeightGrams === null ? (
+                        "Not configured"
+                      ) : (
+                        `${sku.estimatedShippingWeightGrams.toLocaleString()} g each`
+                      )}
                     </TableCell>
                     {product.scope.kind === "LOCATION" ? (
                       <TableCell className="text-xs">

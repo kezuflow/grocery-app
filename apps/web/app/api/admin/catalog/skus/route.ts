@@ -51,6 +51,9 @@ async function POSTHandler(request: Request) {
     sellableUnitId: body.sellableUnitId,
     sellQuantity: body.sellQuantity as number,
     consumptionBaseQuantity: body.consumptionBaseQuantity as number,
+    estimatedShippingWeightGrams: Number.isInteger(body.estimatedShippingWeightGrams)
+      ? (body.estimatedShippingWeightGrams as number)
+      : undefined,
     merchandisingLabel:
       typeof body.merchandisingLabel === "string" ? body.merchandisingLabel : null,
     sortOrder: typeof body.sortOrder === "number" ? body.sortOrder : 0,

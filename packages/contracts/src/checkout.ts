@@ -111,7 +111,10 @@ export type FulfillmentOptionView = {
     | "INVENTORY_UNAVAILABLE"
     | "CYCLE_UNAVAILABLE"
     | "CAPACITY_UNAVAILABLE"
+    | "CATALOG_UNAVAILABLE"
     | "FEE_UNAVAILABLE"
+    | "DELIVERY_PARTNER_UNAVAILABLE"
+    | "DELIVERY_WEIGHT_UNAVAILABLE"
     | null;
   promisedAt: string | null;
   deliveryWindow: { startsAt: string; endsAt: string } | null;

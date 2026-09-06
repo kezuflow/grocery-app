@@ -245,6 +245,89 @@ describe("instant checkout quotes", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "MEMBERSHIP_REQUIRED" } });
   });
 
+  it("quotes 100 Scheduled units without consulting physical stock or legacy capacity", async () => {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+      ).bind(now),
+      env.DB.prepare(
+        "UPDATE cycle_zone_capacity SET allocated=capacity WHERE cycle_id='cycle-next-cebu'",
+      ),
+      env.DB.prepare(
+        "UPDATE inventory_pool SET base_unit_id='unit-gram' WHERE id='pool-red-onion'",
+      ),
+    ]);
+    const basket = await seedBasket({ onHand: 0, quantity: 100 });
+    const result = await createCheckoutQuote(
+      env.DB,
+      {
+        ...command(basket.customerId, basket.cartId, basket.addressId),
+        deliveryCycleId: "cycle-next-cebu",
+      },
+      quoteDependencies,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        lines: [
+          expect.objectContaining({
+            quantity: 100,
+            baseQuantity: 50_000,
+            shippingWeightGrams: 50_000,
+          }),
+        ],
+      },
+    });
+    await env.DB.prepare(
+      "UPDATE cycle_zone_capacity SET allocated=0 WHERE cycle_id='cycle-next-cebu'",
+    ).run();
+  });
+
+  it("does not fall back to a market price when the exact store price is missing", async () => {
+    const now = Date.now();
+    await env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+    )
+      .bind(now)
+      .run();
+    const basket = await seedBasket({ onHand: 100_000 });
+    const current = await env.DB.prepare(
+      "SELECT id,valid_to FROM price_version WHERE sku_id='sku-red-onion-500g' AND location_id=? AND valid_to IS NULL ORDER BY version DESC LIMIT 1",
+    )
+      .bind(LOCATION)
+      .first<{ id: string; valid_to: number | null }>();
+    expect(current).toBeTruthy();
+    const fallbackId = `other-location-price-${crypto.randomUUID()}`;
+    const otherLocationId = `other-location-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare("UPDATE price_version SET valid_to=? WHERE id=?").bind(now, current!.id),
+      env.DB.prepare(
+        "INSERT INTO fulfillment_location (id,market_id,code,name,type,address_json,latitude,longitude,status,version,created_at,updated_at) VALUES (?,'market-metro-cebu',?,'Other store','FULFILLMENT_CENTER','{}',10.31,123.89,'active',1,?,?)",
+      ).bind(otherLocationId, `OTHER_${crypto.randomUUID().slice(0, 8)}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO price_version (id,sku_id,currency,amount_minor,valid_from,valid_to,version,created_at,market_id,location_id,price_type) VALUES (?,'sku-red-onion-500g','PHP',1,?,NULL,999,?,'market-metro-cebu',?,'STANDARD')",
+      ).bind(fallbackId, now - 1, now, otherLocationId),
+    ]);
+
+    const result = await createCheckoutQuote(
+      env.DB,
+      {
+        ...command(basket.customerId, basket.cartId, basket.addressId),
+        deliveryCycleId: "cycle-next-cebu",
+      },
+      quoteDependencies,
+    );
+    expect(result).toMatchObject({ ok: false, error: { code: "PRICE_CHANGED" } });
+
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM price_version WHERE id=?").bind(fallbackId),
+      env.DB.prepare("UPDATE price_version SET valid_to=NULL WHERE id=?").bind(current!.id),
+      env.DB.prepare("DELETE FROM fulfillment_location WHERE id=?").bind(otherLocationId),
+    ]);
+  });
+
   it("requires a replacement quote when the effective Service Fee changes", async () => {
     await configureInstant();
     await env.DB.prepare(

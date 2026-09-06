@@ -44,6 +44,12 @@ async function PATCHHandler(request: Request, context: { params: Promise<{ "sku-
       typeof body?.merchandisingLabel === "string" ? body.merchandisingLabel : null,
     status: body?.status === "active" || body?.status === "inactive" ? body.status : undefined,
     sortOrder: typeof body?.sortOrder === "number" ? body.sortOrder : undefined,
+    estimatedShippingWeightGrams:
+      body && "estimatedShippingWeightGrams" in body
+        ? typeof body.estimatedShippingWeightGrams === "number"
+          ? body.estimatedShippingWeightGrams
+          : undefined
+        : undefined,
     expectedVersion: body!.expectedVersion as number,
     idempotencyKey,
   });
