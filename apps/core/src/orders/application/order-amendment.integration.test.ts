@@ -3,7 +3,11 @@ import { env } from "cloudflare:workers";
 import { createOrderAmendment } from "./create-order-amendment";
 import { applyAmendmentPaymentReaction } from "./apply-amendment-payment-reaction";
 import { createAmendmentPaymentIntent } from "../../payments/application/create-amendment-payment-intent";
-import { createMockPaymentProvider } from "../../payments/infrastructure/providers/mock-payment-provider";
+import { reconcilePayment } from "../../payments/application/reconcile-payment";
+import {
+  createMockPaymentProvider,
+  setMockObservedState,
+} from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
 
@@ -135,22 +139,19 @@ describe("paid-order amendments", () => {
       .first<{ total_minor: number }>();
     expect(after?.total_minor).toBe(before?.total_minor);
 
-    const payment = await createAmendmentPaymentIntent(
-      env.DB,
-      new ProviderRegistry("test", [createMockPaymentProvider()]),
-      "mock",
-      {
-        customerId: fixture.customerId,
-        amendmentId: result.value.amendmentId,
-        expectedAmendmentVersion: result.value.version,
-        expectedCurrency: result.value.financial.currency,
-        expectedTotalMinor: result.value.financial.totalMinor,
-        returnUrl: "https://freshmarkets.ph/orders",
-        idempotencyKey: `amendment-payment-${crypto.randomUUID()}`,
-        requestId: "amendment-payment",
-        headers: {},
-      },
-    );
+    const provider = createMockPaymentProvider();
+    const registry = new ProviderRegistry("test", [provider]);
+    const payment = await createAmendmentPaymentIntent(env.DB, registry, "mock", {
+      customerId: fixture.customerId,
+      amendmentId: result.value.amendmentId,
+      expectedAmendmentVersion: result.value.version,
+      expectedCurrency: result.value.financial.currency,
+      expectedTotalMinor: result.value.financial.totalMinor,
+      returnUrl: "https://freshmarkets.ph/orders",
+      idempotencyKey: `amendment-payment-${crypto.randomUUID()}`,
+      requestId: "amendment-payment",
+      headers: {},
+    });
     expect(payment.ok).toBe(true);
     const started = await env.DB.prepare(
       "SELECT a.status,pi.amount_minor amount,pi.purpose FROM paid_order_amendment a JOIN payment_intent pi ON pi.id=a.payment_intent_id WHERE a.id=?",
@@ -163,29 +164,90 @@ describe("paid-order amendments", () => {
       purpose: "ORDER_AMENDMENT",
     });
 
-    // Its own SUCCEEDED reaction commits only the delta.
-    const intentId = crypto.randomUUID();
-    await env.DB.prepare(
-      "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'ORDER_AMENDMENT', 'paid_order_amendment', ?, ?, 16000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
+    if (!payment.ok) throw new Error("Payment initiation failed");
+    const intentId = payment.value.paymentIntentId;
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
     )
-      .bind(
-        intentId,
-        result.value.amendmentId,
-        fixture.customerId,
-        `pi-${intentId}`,
-        Date.now(),
-        Date.now(),
-      )
-      .run();
-    await env.DB.prepare("UPDATE paid_order_amendment SET payment_intent_id=? WHERE id=?")
-      .bind(intentId, result.value.amendmentId)
-      .run();
-    const outcome = await applyAmendmentPaymentReaction(env.DB, {
-      reactionId: crypto.randomUUID(),
+      .bind(intentId)
+      .first<{ provider_reference: string }>();
+    if (!attempt) throw new Error("Payment attempt missing");
+    setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+    await reconcilePayment(env.DB, registry, {
+      paymentIntentId: intentId,
+      idempotencyKey: crypto.randomUUID(),
+      actorId: "test",
+      requestId: "test",
+    });
+    const reaction = await env.DB.prepare(
+      "SELECT id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_AMENDMENT'",
+    )
+      .bind(intentId)
+      .first<{ id: string }>();
+    if (!reaction) throw new Error("Canonical payment reaction missing");
+    const command = {
+      reactionId: reaction.id,
       paymentIntentId: intentId,
       amendmentId: result.value.amendmentId,
-      canonicalPaymentState: "SUCCEEDED",
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    await env.DB.prepare("UPDATE payment_intent SET status='PROCESSING' WHERE id=?")
+      .bind(intentId)
+      .run();
+    expect(await applyAmendmentPaymentReaction(env.DB, command)).toEqual({
+      applied: false,
+      reason: "INSUFFICIENT_STATE",
     });
+    await env.DB.prepare("UPDATE payment_intent SET status='SUCCEEDED' WHERE id=?")
+      .bind(intentId)
+      .run();
+    await env.DB.prepare("UPDATE grocery_order SET status='CANCELED' WHERE id=?")
+      .bind(fixture.orderId)
+      .run();
+    expect(await applyAmendmentPaymentReaction(env.DB, command)).toEqual({
+      applied: false,
+      reason: "CAS_CONFLICT",
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM paid_order_amendment WHERE id=?")
+        .bind(command.amendmentId)
+        .first(),
+    ).toEqual({ status: "PENDING_PAYMENT" });
+    await env.DB.prepare("UPDATE grocery_order SET status='COMMITTED' WHERE id=?")
+      .bind(fixture.orderId)
+      .run();
+    await env.DB.prepare(`CREATE TRIGGER lose_amendment_claim BEFORE UPDATE ON paid_order_amendment
+      WHEN NEW.id='${result.value.amendmentId}' AND NEW.status='COMMITTED' BEGIN SELECT RAISE(IGNORE); END`).run();
+    try {
+      expect(await applyAmendmentPaymentReaction(env.DB, command)).toEqual({
+        applied: false,
+        reason: "CAS_CONFLICT",
+      });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) AS count FROM committed_demand WHERE order_id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
+          .bind(reaction.id)
+          .first(),
+      ).toEqual({ status: "PENDING" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER lose_amendment_claim");
+    }
+    const outcomes = await Promise.all([
+      applyAmendmentPaymentReaction(env.DB, command),
+      applyAmendmentPaymentReaction(env.DB, command),
+    ]);
+    expect(outcomes.filter((value) => value.reason === "APPLIED")).toHaveLength(1);
+    expect(outcomes.every((value) => value.applied)).toBe(true);
+    const outcome = outcomes.find((value) => value.reason === "APPLIED");
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
+        .bind(reaction.id)
+        .first(),
+    ).toEqual({ status: "SUCCEEDED" });
     expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
     // Additive delta lands on the same order's operational records.
     const demand = await env.DB.prepare(
