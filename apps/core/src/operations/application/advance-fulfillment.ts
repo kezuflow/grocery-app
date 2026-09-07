@@ -1,7 +1,10 @@
 import type { FulfillmentCommandRequest } from "@freshmarkets/contracts";
-import type { AppErrorCode, OperationsCommandState } from "@freshmarkets/contracts";
+import type { AppErrorCode } from "@freshmarkets/contracts";
 import { fulfillmentTransitions, transitionToResult } from "../../commerce/state-machines";
-import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { fulfillmentStates } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -10,10 +13,20 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
 export type AdvanceFulfillmentPorts = {
   /** Capability + location-scope authorization resolved by the caller. */
   authorize: (locationId: string) => Promise<boolean>;
+  /** Trusted authenticated actor supplied by both reachable RPC adapters. */
+  actorAuthUserId?: string;
+  reason?: string;
 };
 
+const resultSchema = z.object({
+  id: z.string(),
+  status: z.enum(fulfillmentStates),
+  version: z.number().int().positive(),
+  locationId: z.string(),
+  cycleId: z.string().nullable(),
+});
 export type AdvanceFulfillmentResult =
-  | { ok: true; value: { id: string; status: OperationsCommandState }; requestId: string }
+  | { ok: true; value: z.infer<typeof resultSchema>; requestId: string }
   | { ok: false; error: { code: AppErrorCode; message: string; requestId: string } };
 
 const SCOPE = "fulfillment.advance";
@@ -35,9 +48,9 @@ const ACTION_TARGET = {
 /**
  * Advance the fulfillment record through its guarded machine
  * through the canonical picking/packing/hand-off lifecycle with a conditional version update.
- * The location is discovered from the record before authorization; an
- * idempotency claim wraps the mutation and is marked FAILED on a stale
- * version so the key can be reclaimed after refresh.
+ * The location is discovered from the record before authorization. The
+ * claim, mutation, audit and original result share one guarded transaction.
+ * A rejection leaves no new claim or business effects.
  */
 export async function advanceFulfillment(
   database: D1Database,
@@ -45,9 +58,11 @@ export async function advanceFulfillment(
   ports: AdvanceFulfillmentPorts,
 ): Promise<AdvanceFulfillmentResult> {
   const row = await database
-    .prepare("SELECT status, location_id, version FROM fulfillment_record WHERE order_id=?")
+    .prepare(
+      "SELECT f.status,f.location_id,f.version,o.cycle_id FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE f.order_id=?",
+    )
     .bind(command.orderId)
-    .first<{ status: string; location_id: string; version: number }>();
+    .first<{ status: string; location_id: string; version: number; cycle_id: string | null }>();
   if (!row) return failure("NOT_FOUND", "Fulfillment record not found", command.requestId);
   if (!(await ports.authorize(row.location_id)))
     return failure(
@@ -60,24 +75,54 @@ export async function advanceFulfillment(
     action: command.action,
     expectedVersion: command.expectedVersion,
   };
-  const hash = await requestHash(payload);
-  const priorCommand = await findIdempotencyRecord(database, SCOPE, command.idempotencyKey);
-  if (priorCommand?.requestHash !== undefined && priorCommand.requestHash !== hash)
+  const legacyHash = await requestHash(payload);
+  const hash = ports.actorAuthUserId
+    ? await requestHash({ ...payload, actor: ports.actorAuthUserId, reason: ports.reason ?? null })
+    : legacyHash;
+  const { location_id: locationId, cycle_id: cycleId } = row;
+  async function replay(): Promise<AdvanceFulfillmentResult | null> {
+    const record = await findIdempotencyRecord(database, SCOPE, command.idempotencyKey);
+    if (!record) return null;
+    const retained =
+      record.requestHash === legacyHash && record.resultReference === command.orderId;
+    const retainedUnapplied =
+      record.requestHash === legacyHash &&
+      record.resultReference === null &&
+      record.status !== "SUCCEEDED";
+    if (record.requestHash !== hash && !retained && !retainedUnapplied)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        command.requestId,
+      );
+    if (record.status === "SUCCEEDED")
+      return {
+        ok: true,
+        requestId: command.requestId,
+        value: retained
+          ? {
+              id: command.orderId,
+              status: ACTION_TARGET[command.action],
+              version: command.expectedVersion + 1,
+              locationId,
+              cycleId,
+            }
+          : resultSchema.parse(JSON.parse(record.resultReference ?? "null")),
+      };
+    if (record.status === "PROCESSING" && !retainedUnapplied)
+      return failure(
+        "CONFLICT",
+        "The original fulfillment command requires reconciliation before retry",
+        command.requestId,
+      );
+    return null;
+  }
+  const prior = await replay();
+  if (prior) return prior;
+  if (row.version !== command.expectedVersion)
     return failure(
-      "IDEMPOTENCY_CONFLICT",
-      "Idempotency key was used with a different request",
-      command.requestId,
-    );
-  if (priorCommand?.status === "SUCCEEDED")
-    return {
-      ok: true,
-      value: { id: command.orderId, status: row.status as OperationsCommandState },
-      requestId: command.requestId,
-    };
-  if (priorCommand?.status === "PROCESSING")
-    return failure(
-      "CONFLICT",
-      "The original fulfillment command is still processing",
+      "STALE_VERSION",
+      "Fulfillment changed; refresh before retrying",
       command.requestId,
     );
   const order = await database
@@ -115,41 +160,34 @@ export async function advanceFulfillment(
   );
   if (!transitionResult.ok) return transitionResult;
   const next = transitionResult.value;
-  const idempotency = await claimCommandIdempotency(
-    database,
-    Date.now,
-    SCOPE,
-    command.idempotencyKey,
-    payload,
-  );
-  if (!idempotency.claimed) {
-    if (!idempotency.existing)
-      return failure(
-        "CONFLICT",
-        "The original fulfillment command is still processing",
-        command.requestId,
-      );
-    if (idempotency.existing.requestHash !== idempotency.hash)
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        command.requestId,
-      );
-    if (idempotency.existing.status === "SUCCEEDED")
-      return {
-        ok: true as const,
-        value: { id: command.orderId, status: next as OperationsCommandState },
-        requestId: command.requestId,
-      };
-    return failure(
-      "CONFLICT",
-      "The original fulfillment command is still processing",
-      command.requestId,
-    );
-  }
+  const result = resultSchema.parse({
+    id: command.orderId,
+    status: next,
+    version: row.version + 1,
+    locationId: row.location_id,
+    cycleId: row.cycle_id,
+  });
   try {
     const now = Date.now();
     const statements: D1PreparedStatement[] = [
+      ...(ports.actorAuthUserId
+        ? [
+            database
+              .prepare(`INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS (
+        SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id JOIN role_permission rp ON rp.role_id=sr.role_id
+        JOIN permission p ON p.id=rp.permission_id AND p.code='fulfillment.manage'
+        JOIN staff_scope scope ON scope.staff_id=staff.id JOIN fulfillment_location location ON location.id=?
+        WHERE staff.auth_user_id=? AND staff.status='active' AND (scope.scope_kind='global' OR (scope.scope_kind='location' AND scope.location_id=location.id) OR (scope.scope_kind='market' AND scope.market_id=location.market_id))
+      )`)
+              .bind(row.location_id, ports.actorAuthUserId),
+          ]
+        : []),
+      database
+        .prepare(`INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at)
+        VALUES (?,?,?,'PROCESSING','fulfillment',?,?) ON CONFLICT(scope,idempotency_key) DO UPDATE SET request_hash=excluded.request_hash,status='PROCESSING',result_reference=NULL,updated_at=excluded.updated_at
+        WHERE (idempotency_records.status='FAILED' AND idempotency_records.request_hash IN (?,?)) OR (idempotency_records.status='PROCESSING' AND idempotency_records.request_hash=? AND idempotency_records.result_reference IS NULL)`)
+        .bind(SCOPE, command.idempotencyKey, hash, now, now, hash, legacyHash, legacyHash),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -30 WHERE changes()<>1"),
       database
         .prepare(
           "INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
@@ -157,9 +195,9 @@ export async function advanceFulfillment(
         .bind(command.orderId, order.status, order.version),
       database
         .prepare(
-          "UPDATE fulfillment_record SET status=?, updated_at=?, version=version+1 WHERE order_id=? AND version=? AND status=?",
+          "UPDATE fulfillment_record SET status=?, updated_at=?, version=version+1 WHERE order_id=? AND version=? AND status=? AND location_id=?",
         )
-        .bind(next, now, command.orderId, command.expectedVersion, row.status),
+        .bind(next, now, command.orderId, command.expectedVersion, row.status, row.location_id),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -30 WHERE changes()!=1"),
     ];
     if (command.action === "START_PICKING" || command.action === "MARK_PACKED") {
@@ -234,20 +272,30 @@ export async function advanceFulfillment(
       );
     }
     statements.push(
+      auditEventStatement(database, {
+        actorUserId: ports.actorAuthUserId ?? null,
+        action: "OPERATIONS.FULFILLMENT_ADVANCED",
+        resourceType: "fulfillment_record",
+        resourceId: command.orderId,
+        locationId: row.location_id,
+        reason: ports.reason ?? null,
+        idempotencyKey: command.idempotencyKey,
+        correlationId: command.requestId,
+        occurredAt: now,
+        before: { status: row.status, version: row.version },
+        after: { status: next, version: result.version },
+      }),
       database
         .prepare(
           "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
         )
-        .bind(command.orderId, now, SCOPE, command.idempotencyKey, idempotency.hash),
+        .bind(JSON.stringify(result), now, SCOPE, command.idempotencyKey, hash),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -30 WHERE changes()<>1"),
     );
     await database.batch(statements);
   } catch (error) {
-    await database
-      .prepare(
-        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-      )
-      .bind(Date.now(), SCOPE, command.idempotencyKey)
-      .run();
+    const replayed = await replay();
+    if (replayed) return replayed;
     if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed"))
       throw error;
     return failure(
@@ -258,7 +306,7 @@ export async function advanceFulfillment(
   }
   return {
     ok: true as const,
-    value: { id: command.orderId, status: next as OperationsCommandState },
+    value: result,
     requestId: command.requestId,
   };
 }

@@ -86,10 +86,21 @@ export function createOperationsRpc(context: CoreRpcContext) {
     async advanceFulfillment(input: FulfillmentCommandRequest) {
       const validation = fulfillmentCommandSchema.safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);
-      return advanceFulfillment(context.env.DB, input, {
+      const actor = await context.access.session(input);
+      if (!actor)
+        return rpcFailure("UNAUTHENTICATED", "Authentication is required", input.requestId);
+      const result = await advanceFulfillment(context.env.DB, validation.data, {
+        actorAuthUserId: actor.id,
         authorize: (locationId) =>
           context.access.requireOperationalAccess(input, "fulfillment.manage", locationId),
       });
+      return result.ok
+        ? {
+            ok: true as const,
+            requestId: result.requestId,
+            value: { id: result.value.id, status: result.value.status },
+          }
+        : result;
     },
   };
 }

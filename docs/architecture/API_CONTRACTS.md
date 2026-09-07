@@ -488,6 +488,8 @@ Starting receiving is explicit. The retained `receiveProcurement` adapter only r
 
 ## Fulfillment
 
+Fulfillment lifecycle commands persist the original result and audit in the same guarded transaction as the Order lock, fulfillment state and any Instant reservation consumption. Both operational RPC adapters pass a trusted authenticated actor; Core rechecks current capability and Global/market/location scope inside that batch. Duplicate commands return the original fulfillment status/version even after subsequent advances. Rejected new commands create neither a success result nor a stranded processing claim. Supported historical pre-transaction claims recover only through the original request identity and current aggregate guards.
+
 - `admin.fulfillment.getWorkQueue({ fulfillmentMode?, cycleId?, locationId, state?, cursor? }) -> FulfillmentQueueView`
 - `admin.fulfillment.startPicking({ taskId, expectedVersion, idempotencyKey })`
 - `admin.fulfillment.recordPicked(...)`

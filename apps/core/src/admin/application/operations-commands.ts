@@ -463,7 +463,11 @@ export async function advanceAdminFulfillment(
       expectedVersion: request.expectedVersion,
       idempotencyKey: request.idempotencyKey,
     },
-    { authorize: async (locationId) => locationId === request.locationId },
+    {
+      authorize: async (locationId) => locationId === request.locationId,
+      actorAuthUserId: permitted.value.authUserId,
+      reason: request.reason,
+    },
   );
   if (!result.ok)
     return {
@@ -474,33 +478,15 @@ export async function advanceAdminFulfillment(
         requestId: request.requestId,
       },
     };
-  const row = await deps.db
-    .prepare(
-      "SELECT f.location_id, f.status, f.version, o.cycle_id FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE f.order_id=?",
-    )
-    .bind(request.orderId)
-    .first<{ location_id: string; status: string; version: number; cycle_id: string | null }>();
-  if (!row || row.location_id !== request.locationId)
-    return failed("NOT_FOUND", "Fulfillment task not found at this location", request.requestId);
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    "OPERATIONS.FULFILLMENT_ADVANCED",
-    "fulfillment_record",
-    request.orderId,
-    request.locationId,
-    { status: row.status, version: row.version },
-  );
   return {
     ok: true,
     value: {
       orderId: request.orderId,
-      cycleId: row.cycle_id,
-      locationId: row.location_id,
-      status: row.status,
-      version: row.version,
-      allowedActions: allowedFulfillmentActions(row.status),
+      cycleId: result.value.cycleId,
+      locationId: result.value.locationId,
+      status: result.value.status,
+      version: result.value.version,
+      allowedActions: allowedFulfillmentActions(result.value.status),
     },
     requestId: request.requestId,
   };
