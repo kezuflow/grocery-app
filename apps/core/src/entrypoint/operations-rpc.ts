@@ -64,7 +64,19 @@ export function createOperationsRpc(context: CoreRpcContext) {
           "Procurement capability and location scope are required",
           input.requestId,
         );
-      return createProcurementRequirement(context.env.DB, input);
+      const actor = await context.access.session(input);
+      if (!actor)
+        return rpcFailure("UNAUTHENTICATED", "Authentication is required", input.requestId);
+      const result = await createProcurementRequirement(context.env.DB, input, {
+        actorAuthUserId: actor.id,
+      });
+      return result.ok
+        ? {
+            ok: true as const,
+            value: { id: result.value.id, status: result.value.status },
+            requestId: input.requestId,
+          }
+        : result;
     },
 
     async receiveProcurement(input: ReceivingCommandRequest) {

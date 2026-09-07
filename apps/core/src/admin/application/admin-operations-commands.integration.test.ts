@@ -153,8 +153,12 @@ describe("admin operations commands", () => {
     const orderId = crypto.randomUUID(),
       orderItemId = crypto.randomUUID(),
       paymentId = crypto.randomUUID(),
-      cycleId = "cycle-next-cebu",
+      cycleId = crypto.randomUUID(),
       key = `aggregate-${crypto.randomUUID()}`;
+    await seedTestCycle(env.DB, cycleId);
+    await env.DB.prepare("UPDATE delivery_cycle SET cutoff_at=? WHERE id=?")
+      .bind(Date.now() - 1, cycleId)
+      .run();
     await env.DB.batch([
       env.DB.prepare(
         "UPDATE inventory_balance SET on_hand=10000, reserved=0 WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-red-onion'",
