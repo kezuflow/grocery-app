@@ -2,6 +2,8 @@
 
 ## Commerce alignment execution — 2026-09-07
 
+**Resumed from `619df3c`, initially clean working tree:** Scheduled quote creation, pre-payment revalidation, compatibility eligibility and paid commitment no longer consult membership. A Worker/D1 regression reaches quote -> payment initiation/replay -> test-provider reconciliation -> exact paid demand/commitment/replay with no subscription and zero physical stock. It asserts no pre-confirmation Order, unchanged stock and one demand effect. Existing commitment/promotion failure and race tests now run without subscription fixtures. Focused results: 30 checkout/commitment tests, then all 16 commitment tests after strengthening payment reachability; Core types/lint and 15 Web checkout/adapter tests passed. Aggregate `pnpm check` passed: 857 Core tests, 360 Web tests, 68 contract tests, shared/harness suites, conventions, migrations, lint/types and both builds. No browser/provider acceptance is inferred. Active enrollment/jobs and broader phase acceptance remain pending. Recovery: [execution checkpoint](../operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md).
+
 The owner authorized all phases of `COMMERCE_ALIGNMENT_E2E_PLAN.md`. Work is on `main`; existing uncommitted documentation edits are preserved. No deployment, persistent database reset, live payment or live booking has been performed. The 2026-09-06 reports below remain historical evidence.
 
 The owner additionally authorized committing and pushing each verified slice before continuing. The initial correctness/documentation slice is committed and pushed as `6c11b2f`; this is not acceptance of all Phase 1 work.

@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/d1";
 import { resolveServiceability } from "../../geography/serviceability";
 import { defaultCurrency } from "../../geography/market-defaults";
 import { checkoutEligibility } from "../../commerce/service";
-import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import { closestLocation } from "../../geography/geometry";
 
@@ -16,7 +15,7 @@ export type CheckoutEvaluation = {
 
 /**
  * Central checkout eligibility orchestration for a Scheduled cycle: resolves
- * subscription entitlement, address ownership/serviceability, zone routing,
+ * address ownership/serviceability, zone routing,
  * live cart total under the authoritative price context and zone fee. Core
  * repeats this validation at quote and commitment; the browser
  * result here is advisory.
@@ -27,8 +26,7 @@ export async function evaluateCheckout(
 ): Promise<{ ok: true; value: CheckoutEvaluation; requestId: string }> {
   const db = drizzle(database);
   const now = Date.now();
-  const [subscription, address, cycle, policy] = await Promise.all([
-    evaluateSubscriptionEntitlement(database, { customerId: command.customerId, at: now }),
+  const [address, cycle, policy] = await Promise.all([
     database
       .prepare(
         "SELECT latitude, longitude, delivery_zone_code FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
@@ -145,7 +143,6 @@ export async function evaluateCheckout(
       latitude: address?.latitude ?? 0,
       longitude: address?.longitude ?? 0,
       customerId: command.customerId,
-      hasEligibleSubscription: subscription.eligible,
     },
     Boolean(geo?.ok && geo.value.serviceable),
   );

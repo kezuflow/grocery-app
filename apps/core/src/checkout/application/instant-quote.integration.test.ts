@@ -282,13 +282,13 @@ describe("instant checkout quotes", () => {
     });
   });
 
-  it("rejects Scheduled checkout without eligible membership", async () => {
+  it("quotes and revalidates Scheduled checkout without membership or physical stock", async () => {
     await env.DB.prepare(
       "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
     )
       .bind(Date.now())
       .run();
-    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const basket = await seedBasket({ onHand: 0, member: false });
     const result = await createCheckoutQuote(
       env.DB,
       {
@@ -297,7 +297,42 @@ describe("instant checkout quotes", () => {
       },
       quoteDependencies,
     );
-    expect(result).toMatchObject({ ok: false, error: { code: "MEMBERSHIP_REQUIRED" } });
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error(result.error.message);
+    const quote = await createCheckoutRepository(env.DB).findQuoteById(result.value.quoteId);
+    if (!quote) throw new Error("Missing persisted quote");
+    expect(quote.financial.serviceFeeMinor).toBe(0);
+    expect(quote.totalMinor).toBe(
+      quote.financial.merchandiseSubtotalMinor -
+        quote.financial.itemDiscountMinor -
+        quote.financial.orderDiscountMinor +
+        quote.financial.deliverySubtotalMinor -
+        quote.financial.deliveryDiscountMinor +
+        quote.financial.taxMinor,
+    );
+    expect(
+      await revalidateCheckoutQuote(
+        env.DB,
+        quote,
+        quoteDependencies.routeDistance,
+        Date.now(),
+        quoteDependencies.deliveryProviders,
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      await env.DB.prepare(
+        "SELECT on_hand,reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+      )
+        .bind(LOCATION)
+        .first(),
+    ).toEqual({ on_hand: 0, reserved: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM checkout_inventory_holds WHERE checkout_attempt_id=?",
+      )
+        .bind(quote.id)
+        .first(),
+    ).toEqual({ count: 0 });
   });
 
   it("quotes 100 Scheduled units without consulting physical stock or legacy capacity", async () => {

@@ -8,7 +8,6 @@ import { QUOTE_TTL_MS } from "../domain/quote";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
 import { resolveLineShippingWeightGrams } from "../../fulfillment/domain/delivery-package";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
-import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import type {
   CheckoutPromotionApplicationView,
@@ -207,17 +206,6 @@ async function createScheduledQuote(
   address: ProviderCheckoutAddress & { delivery_zone_code: string | null },
   dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
-  const membership = await evaluateSubscriptionEntitlement(database, {
-    customerId: command.customerId,
-    at: Date.now(),
-  });
-  if (!membership.eligible)
-    return failure(
-      "MEMBERSHIP_REQUIRED",
-      "Scheduled delivery requires an active or trialing membership",
-      command.requestId,
-    );
-
   // Cycle must be open and before cutoff.
   const cycle = await database
     .prepare(

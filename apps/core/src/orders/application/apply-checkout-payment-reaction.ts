@@ -2,7 +2,6 @@ import { isSufficientForCommitment } from "../../payments/domain/payment";
 import { createInvoiceReadinessStatement } from "./create-invoice-readiness";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
-import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { recordFinancialEvent } from "../../payments/application/financial-observability";
 import { permitsPromotionStack } from "../../promotions/domain/checkout-promotion";
 
@@ -15,13 +14,7 @@ export type ApplyCheckoutPaymentReactionInput = {
 
 export type OrderCommittedOutcome = {
   applied: boolean;
-  reason:
-    | "APPLIED"
-    | "ALREADY_APPLIED"
-    | "INSUFFICIENT_STATE"
-    | "QUOTE_UNUSABLE"
-    | "MEMBERSHIP_LOST"
-    | "CAS_CONFLICT";
+  reason: "APPLIED" | "ALREADY_APPLIED" | "INSUFFICIENT_STATE" | "QUOTE_UNUSABLE" | "CAS_CONFLICT";
   orderId?: string;
 };
 
@@ -77,17 +70,6 @@ export async function applyCheckoutPaymentReaction(
     .first<{ eligible: number }>();
   if (!payment) return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
   const instant = quote.fulfillmentMode === "INSTANT";
-
-  // Scheduled membership must still be entitled at commitment. Instant is
-  // authenticated pay-as-you-go commerce and has no membership gate.
-  if (!instant) {
-    const membership = await evaluateSubscriptionEntitlement(database, {
-      customerId: quote.customerId,
-      at: now,
-    });
-    if (!membership.eligible)
-      return recordException(database, input, "MEMBERSHIP_LOST", "MEMBERSHIP_LOST");
-  }
 
   const promotionClaims = await database
     .prepare(
@@ -707,7 +689,6 @@ async function recordException(
   input: ApplyCheckoutPaymentReactionInput,
   kind:
     | "QUOTE_EXPIRED"
-    | "MEMBERSHIP_LOST"
     | "CYCLE_CLOSED"
     | "INSTANT_MODE_UNAVAILABLE"
     | "SOURCING_MODE_UNAVAILABLE"

@@ -44,11 +44,11 @@ Use the current migration chain as the supported starting baseline while correct
 
 | Area | Actual call path and gap observed at Phase 0 |
 | --- | --- |
-| Commitment | `orders/application/apply-checkout-payment-reaction.ts` checks Scheduled membership, rejects expired Quotes after payment, converts holds without proving the full set, and reuses the reaction ID for every pool's unique ledger key. Existing Worker tests need multi-pool/missing-hold regressions. |
-| Receiving | Admin `operations-commands.ts` calls `startReceiving`; it mutates through `startReceivingRecord` before checking requirement state. `recordReceivedLine` can update receipt/stock before a lost requirement-version guard. Existing test asserts the error but not rejected-command atomicity. |
+| Commitment | The multi-pool identities, full hold entitlement and already-started-payment expiry fixes are present at `619df3c`. The current pay-as-you-go slice removes Scheduled membership checks at quote creation, revalidation, compatibility eligibility and paid commitment. Worker tests cover no-subscription payment initiation/reconciliation/commitment and stable replay; release acceptance remains separate. |
+| Receiving | The baseline now validates start before mutation and aborts the complete batch on a lost requirement/receipt claim. Reachable purchase confirmation and cycle allocation remain Phase 5 work; current receiving must not be mistaken for accepted Scheduled supply. |
 | Price authority | `admin/application/catalog-administration-access.ts` permits catalog writes with operational scope; price commands need a separate Global capability boundary. |
 | Delivery | `delivery/application/request-provider-delivery.ts` projects create success to `ASSIGNED`; booking success is not rider acceptance. Attempt/reconciliation and prerequisite work remain open. |
 | Media | Product R2 authoring exists; canonical catalog reads still use bundled compatibility assets. Campaign publication and cleanup need completion. |
-| Setup | Existing service manifest and Admin commands do not establish complete location, cycle, warehouse-transfer or invitation-acceptance journeys. |
+| Setup | Saved staff grants and verified-identity invitation acceptance are implemented at `619df3c`; full onboarding/browser acceptance and location, cycle and warehouse-transfer setup remain open. |
 
 These are source observations, not reproduced runtime defects or an exhaustive audit. Phase status and executed evidence belong in `IMPLEMENTATION_STATUS.md`; no phase is accepted merely by this record.

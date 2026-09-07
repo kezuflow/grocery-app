@@ -1,7 +1,6 @@
 import type { CheckoutQuoteRow } from "../infrastructure/d1-checkout-repository";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
-import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
 import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
@@ -64,15 +63,6 @@ export async function revalidateCheckoutQuote(
     globalMode.fulfillment_mode !== quote.fulfillmentMode
   )
     return rejected("PRICE_CHANGED", "Fulfillment mode changed; accept a new quote");
-
-  if (quote.fulfillmentMode !== "INSTANT") {
-    const entitlement = await evaluateSubscriptionEntitlement(database, {
-      customerId: quote.customerId,
-      at: now,
-    });
-    if (!entitlement.eligible)
-      return rejected("MEMBERSHIP_REQUIRED", "Membership is no longer eligible for checkout");
-  }
 
   const [cart, address, liveItems] = await Promise.all([
     database

@@ -4,6 +4,13 @@ import { createCheckoutQuote } from "../../checkout/application/create-checkout-
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
+import { createCheckoutPaymentIntent } from "../../payments/application/create-checkout-payment-intent";
+import { reconcilePayment } from "../../payments/application/reconcile-payment";
+import {
+  createMockPaymentProvider,
+  setMockObservedState,
+} from "../../payments/infrastructure/providers/mock-payment-provider";
+import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 
 const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
@@ -54,12 +61,6 @@ async function seededCheckout(
     "INSERT INTO customer (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
   )
     .bind(customerId, authId, now, now)
-    .run();
-  const subscriptionId = crypto.randomUUID();
-  await env.DB.prepare(
-    "INSERT INTO subscription (id, customer_id, offer_id, status, starts_at, trial_ends_at, created_at, updated_at) VALUES (?, ?, (SELECT id FROM subscription_offer WHERE code='MEMBERSHIP_MONTHLY'), 'TRIALING', ?, ?, ?, ?)",
-  )
-    .bind(subscriptionId, customerId, now, now + 86_400_000 * 30, now, now)
     .run();
   const addressId = `addr-co-${n}`;
   await env.DB.prepare(
@@ -119,7 +120,7 @@ async function seededCheckout(
     .bind(cartId, skuId, options.quantity ?? 4)
     .run();
 
-  return { customerId, cartId, addressId, skuId, poolId, subscriptionId };
+  return { customerId, cartId, addressId, skuId, poolId };
 }
 
 async function createQuote(
@@ -446,33 +447,80 @@ describe("order commitment from canonical payment reactions", () => {
     expect(persisted?.count).toBe(0);
   });
 
-  it("allows quote creation for PAST_DUE membership inside grace", async () => {
+  it("allows quote creation without any subscription", async () => {
     const fixture = await seededCheckout();
-    await env.DB.prepare(
-      "UPDATE subscription SET status='PAST_DUE', trial_ends_at=?, grace_ends_at=?, version=version+1, updated_at=? WHERE id=?",
-    )
-      .bind(Date.now() - 1_000, Date.now() + 86_400_000, Date.now(), fixture.subscriptionId)
-      .run();
-
     const quote = await createQuote(fixture);
 
     expect(quote.ok).toBe(true);
   });
 
-  it("allows commitment for PAST_DUE membership still inside grace", async () => {
-    const fixture = await seededCheckout();
+  it("commits paid Scheduled demand without subscription or stock and replays once", async () => {
+    const fixture = await seededCheckout({ onHand: 0 });
     const quote = await createQuote(fixture);
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
-    await env.DB.prepare(
-      "UPDATE subscription SET status='PAST_DUE', trial_ends_at=?, grace_ends_at=?, version=version+1, updated_at=? WHERE id=?",
+    const provider = createMockPaymentProvider();
+    const registry = new ProviderRegistry("test", [provider]);
+    const paymentCommand = {
+      customerId: fixture.customerId,
+      headers: {},
+      requestId: crypto.randomUUID(),
+      checkoutAttemptId: quote.value.quoteId,
+      expectedQuoteVersion: quote.value.attemptVersion,
+      expectedPriceAcceptanceVersion: quote.value.priceAcceptanceVersion,
+      expectedCurrency: quote.value.currency,
+      expectedMerchandiseSubtotalMinor: quote.value.merchandiseSubtotalMinor,
+      expectedItemDiscountMinor: quote.value.itemDiscountMinor,
+      expectedOrderDiscountMinor: quote.value.orderDiscountMinor,
+      expectedDeliverySubtotalMinor: quote.value.deliverySubtotalMinor,
+      expectedDeliveryFeeMinor: quote.value.deliveryFeeMinor,
+      expectedDeliveryDiscountMinor: quote.value.deliveryDiscountMinor,
+      expectedTaxMinor: quote.value.taxMinor,
+      expectedTotalMinor: quote.value.totalMinor,
+      returnUrl: "https://freshmarkets.ph/checkout/payment",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const startPayment = () =>
+      createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommand,
+        quoteDependencies.deliveryProviders,
+      );
+    const payment = await startPayment();
+    if (!payment.ok) throw new Error(payment.error.message);
+    expect(await startPayment()).toEqual(payment);
+    const intentId = payment.value.paymentIntentId;
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
     )
-      .bind(Date.now() - 1_000, Date.now() + 86_400_000, Date.now(), fixture.subscriptionId)
-      .run();
-    const { intentId, reactionId } = await intentWithReaction(
-      quote.value.quoteId,
-      fixture.customerId,
-      quote.value.totalMinor,
-    );
+      .bind(intentId)
+      .first<{ provider_reference: string }>();
+    if (!attempt) throw new Error("Missing payment attempt");
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM order_payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(intentId)
+        .first(),
+    ).toEqual({ count: 0 });
+    setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+    expect(
+      await reconcilePayment(env.DB, registry, {
+        paymentIntentId: intentId,
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "test",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const reaction = await env.DB.prepare(
+      "SELECT id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER'",
+    )
+      .bind(intentId)
+      .first<{ id: string }>();
+    if (!reaction) throw new Error("Missing canonical payment reaction");
+    const reactionId = reaction.id;
 
     const outcome = await applyCheckoutPaymentReaction(env.DB, {
       reactionId,
@@ -482,6 +530,33 @@ describe("order commitment from canonical payment reactions", () => {
     });
 
     expect(outcome).toMatchObject({ applied: true, reason: "APPLIED" });
+    expect(
+      await applyCheckoutPaymentReaction(env.DB, {
+        reactionId,
+        paymentIntentId: intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+    ).toEqual({ applied: true, reason: "ALREADY_APPLIED", orderId: outcome.orderId });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM subscription WHERE customer_id=?")
+        .bind(fixture.customerId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT on_hand,reserved FROM inventory_balance WHERE inventory_pool_id=?",
+      )
+        .bind(fixture.poolId)
+        .first(),
+    ).toEqual({ on_hand: 0, reserved: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count,SUM(quantity_base_total) quantity FROM committed_demand WHERE order_id=?",
+      )
+        .bind(outcome.orderId)
+        .first(),
+    ).toEqual({ count: 1, quantity: 2000 });
   });
 
   it("ignores insufficient canonical states", async () => {
