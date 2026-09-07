@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appErrorCodes } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
 import type {
   AdminInventoryLedgerPage,
   AdminInventoryPage,
@@ -38,6 +40,32 @@ type LedgerLoadState =
   | { phase: "ready"; key: string; page: AdminInventoryLedgerPage };
 
 type StockMovement = "ADD" | "REMOVE";
+type StockCommand = {
+  locationId: string;
+  poolId: string;
+  productName: string;
+  baseUnitSymbol: string;
+  movement: StockMovement;
+  body: string;
+};
+const adjustmentResult = z.union([
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ code: z.enum(appErrorCodes), message: z.string(), requestId: z.string() }),
+  }),
+  z.object({
+    ok: z.literal(true),
+    requestId: z.string(),
+    value: z.object({
+      locationId: z.string(),
+      inventoryPoolId: z.string(),
+      onHandBase: z.number().int().safe().nonnegative(),
+      reservedBase: z.number().int().safe().nonnegative(),
+      version: z.number().int().safe().positive(),
+      ledgerEntryId: z.string(),
+    }),
+  }),
+]);
 
 function formatActivityDate(value: string): string {
   return new Intl.DateTimeFormat("en-PH", {
@@ -69,6 +97,7 @@ export default function InventoryPage() {
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adjustmentIntent = useAdminCommandIntent();
+  const [unresolved, setUnresolved] = useState<StockCommand | null>(null);
   const pagination = useAdminPagination(locationId);
   const ledgerPagination = useAdminPagination(
     `${locationId ?? "no-location"}:${ledgerFor?.poolId ?? "no-pool"}`,
@@ -161,70 +190,74 @@ export default function InventoryPage() {
         ? { phase: "loading", key: ledgerKey }
         : { phase: "idle" };
 
+  async function submit(command: StockCommand) {
+    setUnresolved(command);
+    setConfirming(null);
+    try {
+      const payload = await adjustmentIntent.submit(async (idempotencyKey) => {
+        const response = await fetch(
+          `/api/admin/inventory/${encodeURIComponent(command.poolId)}/adjustments`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+            body: command.body,
+          },
+        );
+        return adjustmentResult.parse(await response.json());
+      });
+      setUnresolved(null);
+      setNotice(
+        payload.ok
+          ? command.movement === "ADD"
+            ? "Stock added. The dated activity entry is shown below."
+            : "Stock removed. The dated activity entry is shown below."
+          : payload.error.message,
+      );
+      if (locationId === command.locationId) {
+        if (payload.ok) {
+          setLedgerFor({
+            poolId: command.poolId,
+            name: command.productName,
+            baseUnitSymbol: command.baseUnitSymbol,
+          });
+          setAdjustQuantity({});
+          setLedgerReloadVersion((current) => current + 1);
+        }
+        load(command.locationId, pagination.cursor);
+      }
+    } catch {
+      setNotice(
+        "The stock result is unknown. Retry the saved adjustment before changing more stock.",
+      );
+    }
+  }
   async function adjust(
     poolId: string,
     expectedVersion: number,
     movement: StockMovement,
     reason: string,
   ) {
-    if (!locationId) {
-      setNotice("Select an explicit location scope before adjusting inventory.");
-      return;
-    }
+    if (!locationId || !confirming || unresolved || adjustmentIntent.pending) return;
     const quantity = Number(adjustQuantity[poolId]);
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
       setNotice("Enter a whole-number quantity greater than zero.");
       return;
     }
-    const delta = movement === "ADD" ? quantity : -quantity;
-    let payload: RpcResult<unknown>;
-    try {
-      payload = await adjustmentIntent.submit(async (idempotencyKey) => {
-        const response = await fetch(
-          `/api/admin/inventory/${encodeURIComponent(poolId)}/adjustments`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-            body: JSON.stringify({
-              locationId,
-              inventoryPoolId: poolId,
-              operation: movement,
-              quantityBase: Math.abs(delta),
-              reason,
-              expectedVersion,
-            }),
-          },
-        );
-        return (await response.json()) as RpcResult<unknown>;
-      });
-    } catch {
-      setNotice("Connection lost. Retry confirmation to safely reuse the adjustment request.");
-      return;
-    }
-    if (payload.ok || payload.error?.code === "STALE_VERSION") {
-      setNotice(
-        payload.ok
-          ? movement === "ADD"
-            ? "Stock added. The dated activity entry is shown below."
-            : "Stock removed. The dated activity entry is shown below."
-          : (payload.error?.message ?? "Version conflict; refresh."),
-      );
-      if (payload.ok) {
-        if (confirming?.poolId === poolId) {
-          setLedgerFor({
-            poolId,
-            name: confirming.productName,
-            baseUnitSymbol: confirming.baseUnitSymbol,
-          });
-        }
-        setAdjustQuantity({});
-        setConfirming(null);
-        setLedgerReloadVersion((current) => current + 1);
-      }
-      load(locationId, pagination.cursor);
-    } else {
-      setNotice(payload.error?.message ?? "The adjustment failed.");
-    }
+    await submit({
+      locationId,
+      poolId,
+      productName: confirming.productName,
+      baseUnitSymbol: confirming.baseUnitSymbol,
+      movement,
+      body: JSON.stringify({
+        locationId,
+        inventoryPoolId: poolId,
+        operation: movement,
+        quantityBase: quantity,
+        reason,
+        expectedVersion,
+      }),
+    });
   }
 
   return (
@@ -234,6 +267,17 @@ export default function InventoryPage() {
         description="Add or remove stock for the selected location. Every change records its date, reason, and staff actor."
       />
 
+      {unresolved ? (
+        <Alert>
+          <AlertTitle>Stock adjustment needs recovery</AlertTitle>
+          <AlertDescription>
+            {unresolved.productName}: the saved quantities, location and request key are retained.
+            <Button disabled={adjustmentIntent.pending} onClick={() => void submit(unresolved)}>
+              Retry saved adjustment
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {!locationId ? (
         <Alert>
           <AlertTitle>Location scope required</AlertTitle>
@@ -286,8 +330,8 @@ export default function InventoryPage() {
               </p>
             ) : (
               <>
-                <Table>
-                  <TableHeader>
+                <Table className="block sm:table" aria-label="Stock levels">
+                  <TableHeader className="hidden sm:table-header-group">
                     <TableRow>
                       <TableHead>Product</TableHead>
                       <TableHead>On hand</TableHead>
@@ -297,20 +341,31 @@ export default function InventoryPage() {
                       <TableHead>Activity</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="block sm:table-row-group">
                     {state.page.items.map((item) => (
-                      <TableRow key={item.inventoryPoolId}>
-                        <TableCell className="font-medium">{item.productName}</TableCell>
+                      <TableRow
+                        key={item.inventoryPoolId}
+                        className="grid grid-cols-2 gap-3 p-4 sm:table-row sm:p-0 [&>td]:min-w-0 [&>td]:p-0 sm:[&>td]:px-4 sm:[&>td]:py-3"
+                      >
+                        <TableCell className="col-span-2 whitespace-normal font-medium">
+                          {item.productName}
+                        </TableCell>
                         <TableCell className="text-xs">
+                          <span className="block text-[var(--fm-text-muted)] sm:hidden">
+                            On hand
+                          </span>
                           {item.onHandBase} {item.baseUnitSymbol}
                           <span className="block text-[var(--fm-text-muted)]">
-                            {item.reservedBase} reserved
+                            {item.reservedBase} reserved · {item.heldBase ?? "Unknown"} held
                           </span>
                         </TableCell>
                         <TableCell className="text-xs font-medium">
-                          {item.onHandBase - item.reservedBase} {item.baseUnitSymbol}
+                          <span className="block text-[var(--fm-text-muted)] sm:hidden">
+                            Available
+                          </span>
+                          {item.availableBase ?? "Unavailable"} {item.baseUnitSymbol}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="col-span-2">
                           <Input
                             aria-label={`Stock quantity for ${item.productName}`}
                             type="number"
@@ -318,6 +373,7 @@ export default function InventoryPage() {
                             step="1"
                             inputMode="numeric"
                             placeholder="0"
+                            disabled={unresolved !== null}
                             value={adjustQuantity[item.inventoryPoolId] ?? ""}
                             onChange={(event) =>
                               setAdjustQuantity({
@@ -328,14 +384,14 @@ export default function InventoryPage() {
                             className="w-24"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="col-span-2">
                           <span className="flex flex-wrap items-center gap-2">
                             <Button
                               size="sm"
-                              disabled={adjustmentIntent.pending}
+                              disabled={adjustmentIntent.pending || unresolved !== null}
                               onClick={() => {
                                 const quantity = Number(adjustQuantity[item.inventoryPoolId]);
-                                if (!Number.isInteger(quantity) || quantity <= 0) {
+                                if (!Number.isSafeInteger(quantity) || quantity <= 0) {
                                   setNotice("Enter a whole-number quantity greater than zero.");
                                   return;
                                 }
@@ -353,10 +409,10 @@ export default function InventoryPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={adjustmentIntent.pending}
+                              disabled={adjustmentIntent.pending || unresolved !== null}
                               onClick={() => {
                                 const quantity = Number(adjustQuantity[item.inventoryPoolId]);
-                                if (!Number.isInteger(quantity) || quantity <= 0) {
+                                if (!Number.isSafeInteger(quantity) || quantity <= 0) {
                                   setNotice("Enter a whole-number quantity greater than zero.");
                                   return;
                                 }

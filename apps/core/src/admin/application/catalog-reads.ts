@@ -826,7 +826,7 @@ export async function listAdminInventory(
     }
   }
 
-  const clauses = ["ib.location_id = ?"];
+  const clauses = ["1=1"];
   const binds: unknown[] = [request.locationId];
   if (cursor) {
     clauses.push("(p.id > ?)");
@@ -834,18 +834,18 @@ export async function listAdminInventory(
   }
   const rows = await deps.db
     .prepare(
-      `SELECT ib.location_id AS locationId, ib.inventory_pool_id AS inventoryPoolId,
+      `WITH target AS (SELECT ? locationId) SELECT target.locationId, ip.id AS inventoryPoolId,
               p.id AS productId, p.name AS productName, u.symbol AS baseUnitSymbol,
-              ib.on_hand AS onHandBase, ib.reserved AS reservedBase, ib.version
-       FROM inventory_balance ib
-       JOIN inventory_pool ip ON ip.id = ib.inventory_pool_id
-       JOIN product p ON p.inventory_pool_id = ip.id
+              COALESCE(ib.on_hand,0) AS onHandBase, COALESCE(ib.reserved,0) AS reservedBase, COALESCE(ib.version,0) version,
+              COALESCE((SELECT SUM(quantity) FROM checkout_inventory_holds hold WHERE hold.location_id=target.locationId AND hold.inventory_pool_id=ip.id AND hold.status='HELD'),0) heldBase
+       FROM product p JOIN inventory_pool ip ON ip.id=p.inventory_pool_id CROSS JOIN target
+       LEFT JOIN inventory_balance ib ON ib.inventory_pool_id=ip.id AND ib.location_id=target.locationId
        JOIN unit u ON u.id = ip.base_unit_id
        WHERE ${clauses.join(" AND ")}
        ORDER BY p.id LIMIT ?`,
     )
     .bind(...binds, limit + 1)
-    .all<AdminInventoryItem & { locationId: string }>();
+    .all<AdminInventoryItem & { locationId: string; heldBase: number }>();
   const hasMore = rows.results.length > limit;
   const items = rows.results.slice(0, limit).map((row) => ({
     locationId: row.locationId,
@@ -855,6 +855,8 @@ export async function listAdminInventory(
     baseUnitSymbol: row.baseUnitSymbol,
     onHandBase: row.onHandBase,
     reservedBase: row.reservedBase,
+    heldBase: row.heldBase,
+    availableBase: Math.max(0, row.onHandBase - row.reservedBase - row.heldBase),
     version: row.version,
   }));
   const nextCursor =

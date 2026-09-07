@@ -40,6 +40,7 @@ export function createOperationsRpc(context: CoreRpcContext) {
       return adjustInventory(context.env.DB, {
         requestId: input.requestId,
         actorId: actor.id,
+        actorAuthUserId: actor.id,
         locationId: input.locationId,
         inventoryPoolId: input.inventoryPoolId,
         deltaBase: input.delta,

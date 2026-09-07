@@ -189,6 +189,8 @@ export type AdminInventoryItem = {
   baseUnitSymbol: string;
   onHandBase: number;
   reservedBase: number;
+  heldBase?: number;
+  availableBase?: number;
   version: number;
 };
 

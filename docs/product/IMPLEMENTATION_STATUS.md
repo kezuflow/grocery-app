@@ -720,3 +720,5 @@ Additional policy placement completed (2026-09-07): 0069 replaces component stac
 Receiving slice verification completed: 910 Core tests, final 34 focused Worker checks, nine schema/retained-upgrade checks, six Web checks and 68 contract checks pass. Executed managed desktop/mobile receiving journeys and builds pass. No whole commerce phase, provider sandbox or retained deployment acceptance claimed.
 
 Procurement aggregation now guards operational cutoff, exact demand, current IAM, run/receipt state and every dependent effect with frozen replay. Focused Worker checks pass. Purchase confirmation and supplier/workspace authoring remain incomplete; no commerce phase accepted.
+
+Inventory correction now guards current IAM, exact stock, reservations/holds, ledger, audit and original replay in one transaction. The stock workspace supports first balances and lost-response recovery; final desktop/mobile local Web/Core/D1 flows passed. No schema change or whole-phase acceptance. Cancellation/refund recovery and all remaining setup/operations phases continue; see the execution checkpoint.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
+import { locationManager } from "../../test-location-fixtures";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { startPromotionalTrial } from "../../membership/application/start-promotional-trial";
@@ -434,6 +435,42 @@ describe("instant order commitment", () => {
       .bind(LOCATION)
       .first<{ on_hand: number; reserved: number; version: number }>();
     if (!before) throw new Error("Inventory fixture missing");
+    const manager = await locationManager("location");
+    await env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='inventory.read'",
+    )
+      .bind(manager.id)
+      .run();
+    const held = await env.DB.prepare(
+      "SELECT SUM(quantity) quantity FROM checkout_inventory_holds WHERE location_id=? AND inventory_pool_id='pool-red-onion' AND status='HELD'",
+    )
+      .bind(LOCATION)
+      .first<{ quantity: number }>();
+    expect(held?.quantity).toBeGreaterThan(0);
+    let cursor: string | undefined;
+    let observed = false;
+    do {
+      const page = await exports.default.listAdminInventory({
+        headers: manager.headers,
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        limit: 100,
+        cursor,
+      });
+      expect(page.ok).toBe(true);
+      if (!page.ok) throw new Error("Inventory read rejected");
+      const item = page.value.items.find((row) => row.inventoryPoolId === "pool-red-onion");
+      if (item) {
+        expect(item).toMatchObject({
+          heldBase: held?.quantity,
+          availableBase: before.on_hand - before.reserved - (held?.quantity ?? 0),
+        });
+        observed = true;
+        break;
+      }
+      cursor = page.value.nextCursor ?? undefined;
+    } while (cursor);
+    expect(observed).toBe(true);
     const key = crypto.randomUUID();
     const result = await adjustInventory(env.DB, {
       locationId: LOCATION,

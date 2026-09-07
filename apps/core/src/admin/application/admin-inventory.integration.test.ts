@@ -158,6 +158,41 @@ describe("inventory administration reads", () => {
     expect(otherLedger).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 
+  it("lists a catalog product with no balance and creates its first stock through Core", async () => {
+    const manager = await seedStaff({
+      capabilities: ["inventory.read", "inventory.adjust"],
+      scope: "global",
+    });
+    const { poolId } = await seedInventory();
+    await env.DB.prepare(
+      "DELETE FROM inventory_balance WHERE location_id='location-cebu-central' AND inventory_pool_id=?",
+    )
+      .bind(poolId)
+      .run();
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      locationId: "location-cebu-central",
+    };
+    const before = await core.listAdminInventory(request);
+    expect(
+      before.ok && before.value.items.find((item) => item.inventoryPoolId === poolId),
+    ).toMatchObject({ onHandBase: 0, reservedBase: 0, heldBase: 0, availableBase: 0, version: 0 });
+    expect(
+      await core.adjustInventory({
+        ...request,
+        inventoryPoolId: poolId,
+        delta: 500,
+        reason: "Initial inspected stock",
+        expectedVersion: 0,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { onHandBase: 500, version: 1 } });
+    const after = await core.listAdminInventory(request);
+    expect(
+      after.ok && after.value.items.find((item) => item.inventoryPoolId === poolId),
+    ).toMatchObject({ onHandBase: 500, availableBase: 500, version: 1 });
+  });
   it("lists balances and the ledger after an audited adjustment", async () => {
     const manager = await seedStaff({
       capabilities: ["inventory.read", "inventory.adjust"],
