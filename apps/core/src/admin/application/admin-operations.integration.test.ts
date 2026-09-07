@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { createAuth } from "../../auth/service";
+import { openAdminSelling, pauseAdminSelling } from "./operations-commands";
 
 const core = exports.default as unknown as CoreServiceBinding;
 let counter = 0;
@@ -92,6 +94,143 @@ async function seedReceivingRecord(requirementId: string): Promise<void> {
 }
 
 describe("admin operations reads", () => {
+  it.each(["scope", "capability", "staff", "batch"] as const)(
+    "keeps selling, audit and command result atomic when %s changes at the write boundary",
+    async (changed) => {
+      const cookie = await seedStaff("fulfillment.manage", "global");
+      const auth = createAuth(env);
+      const session = await auth.api.getSession({ headers: new Headers({ cookie }) });
+      if (!session) throw new Error("Expected authenticated fixture");
+      await env.DB.prepare(
+        "UPDATE global_commerce_configuration SET selling_state='OPEN',version=1 WHERE id='global'",
+      ).run();
+      const request = {
+        headers: { cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        expectedVersion: 1,
+        reason: "Pause for setup",
+      };
+      const database = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (changed === "scope")
+                await target
+                  .prepare(
+                    "DELETE FROM staff_scope WHERE staff_id IN (SELECT id FROM staff_identity WHERE auth_user_id=?)",
+                  )
+                  .bind(session.user.id)
+                  .run();
+              if (changed === "capability")
+                await target
+                  .prepare(
+                    "DELETE FROM staff_role WHERE staff_id IN (SELECT id FROM staff_identity WHERE auth_user_id=?)",
+                  )
+                  .bind(session.user.id)
+                  .run();
+              if (changed === "staff")
+                await target
+                  .prepare("UPDATE staff_identity SET status='inactive' WHERE auth_user_id=?")
+                  .bind(session.user.id)
+                  .run();
+              // Failure after the audit/result writes must roll back the whole command.
+              return target.batch(
+                changed === "batch"
+                  ? [...statements, target.prepare("INSERT INTO commitment_abort(id) VALUES (-99)")]
+                  : statements,
+              );
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect((await pauseAdminSelling({ db: database, auth }, request)).ok).toBe(false);
+      expect(
+        await env.DB.prepare(
+          "SELECT selling_state,version FROM global_commerce_configuration WHERE id='global'",
+        ).first(),
+      ).toEqual({ selling_state: "OPEN", version: 1 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
+
+  it("cannot reopen after readiness is revoked between the read and the batch", async () => {
+    const cookie = await seedStaff("fulfillment.manage", "global");
+    await env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='PAUSED',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=1 WHERE id='global'",
+    ).run();
+    await seedTestCycle(env.DB, `ready-${crypto.randomUUID()}`);
+    const request = {
+      headers: { cookie },
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: 1,
+      reason: "Reopen after setup",
+    };
+    let reachedWrite = false;
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            reachedWrite = true;
+            const zones = await target
+              .prepare("SELECT cycle_id,zone_id,status FROM delivery_cycle_zone")
+              .all<{ cycle_id: string; zone_id: string; status: string }>();
+            await target.prepare("UPDATE delivery_cycle_zone SET status='INACTIVE'").run();
+            try {
+              return await target.batch(statements);
+            } finally {
+              await target.batch(
+                zones.results.map((zone) =>
+                  target
+                    .prepare(
+                      "UPDATE delivery_cycle_zone SET status=? WHERE cycle_id=? AND zone_id=?",
+                    )
+                    .bind(zone.status, zone.cycle_id, zone.zone_id),
+                ),
+              );
+            }
+          };
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect((await openAdminSelling({ db: database, auth: createAuth(env) }, request)).ok).toBe(
+      false,
+    );
+    expect(reachedWrite).toBe(true);
+    expect(
+      await env.DB.prepare(
+        "SELECT selling_state,version FROM global_commerce_configuration WHERE id='global'",
+      ).first(),
+    ).toEqual({ selling_state: "PAUSED", version: 1 });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 0 });
+    await env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',version=1 WHERE id='global'",
+    ).run();
+  });
+
   it("requires the named capability and operational scope instead of global scope", async () => {
     expect(
       await core.listProcurementRequirements({
@@ -298,14 +437,27 @@ describe("admin operations reads", () => {
 
   it("returns the persisted Scheduled cadence from mode activation", async () => {
     const manager = await seedStaff("fulfillment.manage", "global");
-    const paused = await core.pauseSelling({
+    const pauseRequest = {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager },
       expectedVersion: 1,
       reason: "Prepare the global mode",
       idempotencyKey: `pause-${crypto.randomUUID()}`,
-    });
+    };
+    const paused = await core.pauseSelling(pauseRequest);
     expect(paused.ok).toBe(true);
+    expect(await core.pauseSelling(pauseRequest)).toEqual(paused);
+    expect(await core.pauseSelling({ ...pauseRequest, reason: "Different intent" })).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare("SELECT action,reason FROM audit_event WHERE idempotency_key=?")
+        .bind(pauseRequest.idempotencyKey)
+        .all(),
+    ).toMatchObject({
+      results: [{ action: "COMMERCE.SELLING_PAUSED", reason: pauseRequest.reason }],
+    });
     const result = await core.activateGlobalMode({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager },

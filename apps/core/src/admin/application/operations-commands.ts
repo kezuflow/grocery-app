@@ -132,8 +132,7 @@ async function loadReceiving(database: D1Database, id: string) {
 async function runCommerceConfigurationCommand(
   deps: OperationsAdministrationDeps,
   request: PauseSellingRequest | OpenSellingRequest | ActivateGlobalFulfillmentModeRequest,
-  action: string,
-  command: () => Promise<
+  command: (actor: { staffId: string; authUserId: string }) => Promise<
     | { ok: true; value: GlobalCommerceConfigurationView; requestId: string }
     | {
         ok: false;
@@ -151,31 +150,15 @@ async function runCommerceConfigurationCommand(
     "fulfillment.manage",
   );
   if (!permitted.ok) return permitted;
-  const result = await command();
-  if (!result.ok) return result;
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    action,
-    "global_commerce_configuration",
-    "global",
-    "global",
-    {
-      sellingState: result.value.sellingState,
-      fulfillmentMode: result.value.fulfillmentMode,
-      version: result.value.version,
-    },
-  );
-  return result;
+  return command(permitted.value);
 }
 
 export function pauseAdminSelling(
   deps: OperationsAdministrationDeps,
   request: PauseSellingRequest,
 ): Promise<RpcResult<GlobalCommerceConfigurationView>> {
-  return runCommerceConfigurationCommand(deps, request, "COMMERCE.SELLING_PAUSED", () =>
-    pauseSelling(deps.db, request),
+  return runCommerceConfigurationCommand(deps, request, (actor) =>
+    pauseSelling(deps.db, { ...request, actor }),
   );
 }
 
@@ -183,8 +166,8 @@ export function activateAdminGlobalMode(
   deps: OperationsAdministrationDeps,
   request: ActivateGlobalFulfillmentModeRequest,
 ): Promise<RpcResult<GlobalCommerceConfigurationView>> {
-  return runCommerceConfigurationCommand(deps, request, "COMMERCE.FULFILLMENT_MODE_ACTIVATED", () =>
-    activateGlobalFulfillmentMode(deps.db, request),
+  return runCommerceConfigurationCommand(deps, request, (actor) =>
+    activateGlobalFulfillmentMode(deps.db, { ...request, actor }),
   );
 }
 
@@ -192,8 +175,8 @@ export function openAdminSelling(
   deps: OperationsAdministrationDeps,
   request: OpenSellingRequest,
 ): Promise<RpcResult<GlobalCommerceConfigurationView>> {
-  return runCommerceConfigurationCommand(deps, request, "COMMERCE.SELLING_OPENED", () =>
-    openSelling(deps.db, request),
+  return runCommerceConfigurationCommand(deps, request, (actor) =>
+    openSelling(deps.db, { ...request, actor }),
   );
 }
 

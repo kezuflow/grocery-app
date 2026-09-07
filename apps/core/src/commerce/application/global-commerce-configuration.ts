@@ -1,5 +1,6 @@
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 
 export type CommerceSellingState = "OPEN" | "PAUSED";
 export type CommerceFulfillmentMode = "INSTANT" | "SCHEDULED";
@@ -28,6 +29,9 @@ type CommerceCommand = {
   expectedVersion: number;
   idempotencyKey: string;
   requestId: string;
+  /** Trusted application identity; never taken from the client DTO. */
+  actor?: { staffId: string; authUserId: string };
+  reason?: string;
 };
 
 type StoredConfiguration = {
@@ -226,6 +230,12 @@ async function execute(
   const targetMode = input.fulfillmentMode;
   const targetCadence = input.cadence ?? null;
   if (input.action === "SWITCH_MODE") {
+    if (targetMode !== "INSTANT" && targetMode !== "SCHEDULED")
+      return failure(
+        "VALIDATION_FAILED",
+        "A supported fulfillment mode is required",
+        input.requestId,
+      );
     if (targetMode === "INSTANT" && targetCadence !== null)
       return failure("VALIDATION_FAILED", "INSTANT cannot have a cadence", input.requestId);
     if (targetMode === "SCHEDULED" && targetCadence !== "WEEKLY")
@@ -236,6 +246,8 @@ async function execute(
     expectedVersion: input.expectedVersion,
     fulfillmentMode: targetMode ?? null,
     cadence: targetCadence,
+    actorUserId: input.actor?.authUserId ?? null,
+    reason: input.reason?.trim() ?? null,
   });
   const prior = await replay(database, input.scope, input.idempotencyKey, hash, input.requestId);
   if (prior) return prior;
@@ -276,7 +288,8 @@ async function execute(
       );
   }
 
-  const nextMode = input.action === "SWITCH_MODE" ? targetMode! : current.fulfillment_mode;
+  const nextMode =
+    input.action === "SWITCH_MODE" && targetMode ? targetMode : current.fulfillment_mode;
   const nextCadence = input.action === "SWITCH_MODE" ? targetCadence : current.cadence;
   if (input.action === "OPEN") {
     const blockers = await readinessBlockers(database, nextMode);
@@ -320,8 +333,52 @@ async function execute(
       ),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -21 WHERE changes()=0"),
   ];
+  if (input.actor) {
+    // A cached access decision cannot authorize a write after role/scope revocation.
+    statements.unshift(
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -22 WHERE NOT EXISTS (
+        SELECT 1 FROM staff_identity staff
+        JOIN staff_scope scope ON scope.staff_id=staff.id AND scope.scope_kind='global'
+        JOIN staff_role assignment ON assignment.staff_id=staff.id
+        JOIN role_permission grant_entry ON grant_entry.role_id=assignment.role_id
+        JOIN permission ON permission.id=grant_entry.permission_id
+        WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active'
+          AND permission.code='fulfillment.manage'
+      )`)
+        .bind(input.actor.staffId, input.actor.authUserId),
+    );
+  }
+  if (input.action === "OPEN") {
+    // These predicates guard every effect, including the version, audit and replay result.
+    statements.push(
+      database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE
+        NOT EXISTS (SELECT 1 FROM fulfillment_location WHERE status='active')
+        OR EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.status='active'
+          AND (SELECT COUNT(DISTINCT capability) FROM location_capability
+            WHERE location_id=location.id AND enabled=1
+              AND capability IN ('PICKING','PACKING','DISPATCH'))<>3)`),
+      nextMode === "INSTANT"
+        ? database.prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE EXISTS (
+            SELECT 1 FROM fulfillment_location location
+            LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=location.id
+            WHERE location.status='active' AND (readiness.location_id IS NULL
+              OR readiness.dispatch_ready!=1 OR readiness.instant_promise_minutes IS NULL))`)
+        : database
+            .prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE NOT EXISTS (
+            SELECT 1 FROM delivery_cycle cycle
+            JOIN delivery_cycle_zone zone ON zone.cycle_id=cycle.id AND zone.status='ACTIVE'
+            WHERE cycle.status='OPEN' AND cycle.cutoff_at>?)`)
+            .bind(now),
+    );
+  }
   if (input.action === "SWITCH_MODE" && targetMode !== current.fulfillment_mode) {
     statements.push(
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -25 WHERE EXISTS (
+        SELECT 1 FROM grocery_order WHERE fulfillment_mode<>?
+          AND status NOT IN ('DELIVERED','CANCELED','REFUNDED','EXPIRED'))`)
+        .bind(targetMode),
       database
         .prepare(
           `UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=?
@@ -332,6 +389,35 @@ async function execute(
             )`,
         )
         .bind(now),
+    );
+  }
+  if (input.actor) {
+    statements.push(
+      auditEventStatement(database, {
+        actorUserId: input.actor.authUserId,
+        action:
+          input.action === "PAUSE"
+            ? "COMMERCE.SELLING_PAUSED"
+            : input.action === "OPEN"
+              ? "COMMERCE.SELLING_OPENED"
+              : "COMMERCE.FULFILLMENT_MODE_ACTIVATED",
+        resourceType: "global_commerce_configuration",
+        resourceId: "global",
+        reason: input.reason?.trim() ?? null,
+        idempotencyKey: input.idempotencyKey,
+        before: {
+          sellingState: current.selling_state,
+          fulfillmentMode: current.fulfillment_mode,
+          version: current.version,
+        },
+        after: {
+          sellingState: next.sellingState,
+          fulfillmentMode: next.fulfillmentMode,
+          version: next.version,
+        },
+        correlationId: input.requestId,
+        occurredAt: now,
+      }),
     );
   }
   statements.push(

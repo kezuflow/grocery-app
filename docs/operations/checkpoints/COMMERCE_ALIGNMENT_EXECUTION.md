@@ -1,5 +1,9 @@
 # Commerce alignment execution
 
+Resumed 2026-09-07 after `dc18720`, clean working tree. Owner reaffirmed continuing all remaining phases and deferring the reminder about factual policy/external acceptance items until the final handoff. No external blocker is established.
+
+Current verified slice: selling configuration now batches audit with configuration, quote invalidation and idempotency success. Core rechecks current staff/scope/capability, reopening readiness and mode-switch unresolved work at the write boundary. Reasons participate in replay identity. Focused `global-commerce-configuration.integration.test.ts` and `admin-operations.integration.test.ts` passed 21 Worker tests, including injected scope/role/staff revocation, late batch failure and readiness change, plus reachable RPC replay and changed-reason rejection. Core types, lint, architecture and readiness checks pass. No new browser/provider acceptance or retained database migration. All phase acceptance remains open; continue location setup next.
+
 Status: in progress, 2026-09-07. Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, all remaining phases authorized in dependency order.
 
 Workspace: main at observed baseline `619df3c`, following `6daaf3d`. Initial working tree was clean. Existing local/shared databases remain preserved; no migration/reset/deployment performed.

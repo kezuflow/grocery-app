@@ -179,6 +179,8 @@ Core validates current mode/cadence policy on writes and rejects unsupported sto
 
 `getGlobalCommerceConfiguration`, `pauseSelling`, `activateGlobalFulfillmentMode`, and `openSelling` require global scope and the existing fulfillment read/manage capability. Mutations require expected version, reason and stable idempotency. Mode changes require PAUSED. Readiness evaluates customer-serving locations only; inventory-only warehouses neither serve customers nor block reopening for missing courier/packing settings.
 
+Selling-state and mode commands recheck current staff identity, Global scope and capability inside the mutation batch. The configuration, quote invalidation, audit and successful replay result commit together. Reopening rechecks mutable readiness in that same batch; switching rechecks unresolved committed work. The reason is part of command identity, so changing it with the same key conflicts.
+
 Membership, trial, subscription pricing, recurring authorization and membership payment contracts are retired from the active release. No checkout method requires a Subscription.
 
 ## Cart
