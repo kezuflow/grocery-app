@@ -1,3 +1,7 @@
+import {
+  getMyStaffInvitation,
+  acceptStaffInvitation,
+} from "./iam/application/accept-staff-invitation";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type AppErrorCode,
@@ -273,12 +277,6 @@ const emailTextSchema = validationSchema
   .max(200)
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "expected an email address");
 
-const staffInviteRequestSchema = authenticatedRequestSchema.extend({
-  email: emailTextSchema,
-  displayName: validationSchema.string().trim().min(1).max(120),
-  idempotencyKey: idempotencyKeySchema,
-});
-
 const staffInvitationRevokeRequestSchema = authenticatedRequestSchema.extend({
   invitationId: validationSchema.string().trim().min(1).max(200),
   reason: validationSchema.string().trim().min(1).max(500),
@@ -318,6 +316,14 @@ const scopeInputSchema = validationSchema.union([
     locationId: validationSchema.string().trim().min(1).max(200),
   }),
 ]);
+
+const staffInviteRequestSchema = authenticatedRequestSchema.extend({
+  roleIds: validationSchema.array(validationSchema.string().trim().min(1).max(200)).min(1).max(10),
+  scopes: validationSchema.array(scopeInputSchema).min(1).max(10),
+  email: emailTextSchema,
+  displayName: validationSchema.string().trim().min(1).max(120),
+  idempotencyKey: idempotencyKeySchema,
+});
 
 const staffScopesRequestSchema = authenticatedRequestSchema.extend({
   staffId: validationSchema.string().trim().min(1).max(200),
@@ -1221,6 +1227,32 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminStaffInvitationsQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getMyStaffInvitation(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getMyStaffInvitation(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async acceptStaffInvitation(
+    input: import("@freshmarkets/contracts").AcceptStaffInvitationRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({
+        invitationId: validationSchema.string().trim().min(1).max(200),
+        expectedVersion: validationSchema.number().int().min(1),
+        idempotencyKey: idempotencyKeySchema,
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return acceptStaffInvitation(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

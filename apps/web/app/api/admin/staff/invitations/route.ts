@@ -1,3 +1,4 @@
+import { z } from "@freshmarkets/validation";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
@@ -54,28 +55,39 @@ async function POSTHandler(request: Request) {
       { status: 400 },
     );
   }
-  const body = (await request.json().catch(() => null)) as {
-    email?: unknown;
-    displayName?: unknown;
-  } | null;
-  if (typeof body?.email !== "string" || typeof body?.displayName !== "string") {
+  const parsed = z
+    .object({
+      email: z.string().email(),
+      displayName: z.string().trim().min(1).max(120),
+      roleIds: z.array(z.string().trim().min(1).max(200)).min(1).max(10),
+      scopes: z
+        .array(
+          z.discriminatedUnion("kind", [
+            z.object({ kind: z.literal("global") }),
+            z.object({ kind: z.literal("market"), marketId: z.string().min(1) }),
+            z.object({ kind: z.literal("location"), locationId: z.string().min(1) }),
+          ]),
+        )
+        .min(1)
+        .max(10),
+    })
+    .safeParse(await request.json().catch(() => null));
+  if (!parsed.success)
     return adminJson(
       {
-        ok: false as const,
+        ok: false,
         error: {
-          code: "VALIDATION_FAILED" as const,
-          message: "email and displayName are required",
+          code: "VALIDATION_FAILED",
+          message: "Email, name, roles and scopes are required",
           requestId: webRequestId(request),
         },
       },
       { status: 400 },
     );
-  }
   const result = await coreClient(env.CORE).inviteAdminStaff({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
-    email: body.email,
-    displayName: body.displayName,
+    ...parsed.data,
     idempotencyKey,
   });
   return adminJson(result);

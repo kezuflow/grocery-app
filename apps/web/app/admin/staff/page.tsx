@@ -1,8 +1,21 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import type { AdminStaffInvitationPage, AdminStaffPage, RpcResult } from "@freshmarkets/contracts";
+import type {
+  AdminStaffInvitationPage,
+  AdminStaffPage,
+  AdminRolePage,
+  AdminScopeOptionView,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
@@ -48,6 +61,10 @@ export default function StaffPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [staff, setStaff] = useState<AdminStaffPage | null>(null);
   const [invitations, setInvitations] = useState<AdminStaffInvitationPage | null>(null);
+  const [roles, setRoles] = useState<AdminRolePage | null>(null);
+  const [scopeOptions, setScopeOptions] = useState<ReadonlyArray<AdminScopeOptionView>>([]);
+  const [inviteRole, setInviteRole] = useState("");
+  const [inviteScope, setInviteScope] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
@@ -57,10 +74,13 @@ export default function StaffPage() {
     setState({ phase: "loading" });
     void (async () => {
       try {
-        const [staffResponse, invitationResponse] = await Promise.all([
-          fetch("/api/admin/staff"),
-          fetch("/api/admin/staff/invitations"),
-        ]);
+        const [staffResponse, invitationResponse, rolesResponse, scopesResponse] =
+          await Promise.all([
+            fetch("/api/admin/staff"),
+            fetch("/api/admin/staff/invitations"),
+            fetch("/api/admin/roles?limit=100"),
+            fetch("/api/admin/scopes"),
+          ]);
         const staffPayload = (await staffResponse.json()) as RpcResult<AdminStaffPage>;
         if (!staffPayload.ok) {
           setState({
@@ -75,6 +95,13 @@ export default function StaffPage() {
         }
         const invitationPayload =
           (await invitationResponse.json()) as RpcResult<AdminStaffInvitationPage>;
+        const rolePayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
+        const scopePayload = (await scopesResponse.json()) as RpcResult<
+          ReadonlyArray<AdminScopeOptionView>
+        >;
+        if (!rolePayload.ok || !scopePayload.ok) throw new Error("Access options unavailable");
+        setRoles(rolePayload.value);
+        setScopeOptions(scopePayload.value);
         setStaff(staffPayload.value);
         setInvitations(invitationPayload.ok ? invitationPayload.value : null);
         setState({ phase: "ready" });
@@ -88,8 +115,8 @@ export default function StaffPage() {
 
   async function invite(event: React.FormEvent) {
     event.preventDefault();
-    if (inviteEmail.trim() === "" || inviteName.trim() === "") {
-      setNotice("An email and display name are required.");
+    if (inviteEmail.trim() === "" || inviteName.trim() === "" || !inviteRole || !inviteScope) {
+      setNotice("Email, display name, role and scope are required.");
       return;
     }
     const ok = await run(
@@ -98,6 +125,12 @@ export default function StaffPage() {
       {
         email: inviteEmail.trim(),
         displayName: inviteName.trim(),
+        roleIds: [inviteRole],
+        scopes: [
+          inviteScope === "global"
+            ? { kind: "global" }
+            : { kind: "location", locationId: inviteScope },
+        ],
       },
     );
     if (ok) {
@@ -151,9 +184,9 @@ export default function StaffPage() {
 
           <ListPageSection
             title="Invite a staff member"
-            description="Invitations never collect a password."
+            description="Choose explicit access. The invitee signs in with their verified email at /staff-invitation."
           >
-            <form className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center" onSubmit={invite}>
+            <form className="flex flex-wrap gap-2 p-4 sm:items-center" onSubmit={invite}>
               <Input
                 aria-label="Invitee email"
                 placeholder="work email"
@@ -169,8 +202,39 @@ export default function StaffPage() {
                 onChange={(event) => setInviteName(event.target.value)}
                 className="sm:w-56"
               />
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger aria-label="Invitation role" className="w-56">
+                  <SelectValue placeholder="Choose role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles?.items
+                    .filter((role) => role.status === "ACTIVE")
+                    .map((role) => (
+                      <SelectItem key={role.roleId} value={role.roleId}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Select value={inviteScope} onValueChange={setInviteScope}>
+                <SelectTrigger aria-label="Invitation scope" className="w-56">
+                  <SelectValue placeholder="Choose scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="global">Global</SelectItem>
+                  {scopeOptions
+                    .filter((scope) => scope.kind === "location")
+                    .map((scope) =>
+                      scope.kind === "location" ? (
+                        <SelectItem key={scope.locationId} value={scope.locationId}>
+                          {scope.locationName}
+                        </SelectItem>
+                      ) : null,
+                    )}
+                </SelectContent>
+              </Select>
               <Button type="submit" size="sm">
-                Send invitation
+                Create invitation
               </Button>
             </form>
             <div className="border-t border-[var(--fm-border)] p-4">

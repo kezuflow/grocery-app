@@ -1,3 +1,4 @@
+import { invitationGrantStatements } from "../../iam/infrastructure/staff-invitation-repository";
 import type {
   AdminStaffInviteRequest,
   AdminStaffInvitationRevokeRequest,
@@ -82,7 +83,7 @@ function idempotencyFailed(database: D1Database, scope: string, key: string): Pr
 /**
  * Create a durable staff invitation: one PENDING record per normalized email,
  * 14-day expiry, idempotent by caller key. Identity provisioning from an
- * invitation is a later, separately approved flow.
+ * invitation uses verified identity and the explicit saved grants.
  */
 export async function inviteAdminStaff(
   deps: StaffAdministrationDeps,
@@ -107,7 +108,7 @@ export async function inviteAdminStaff(
     () => now,
     INVITE_SCOPE,
     request.idempotencyKey,
-    { email, displayName },
+    { email, displayName, roleIds: request.roleIds, scopes: request.scopes },
   );
   if (!claim.claimed) {
     if (claim.existing && claim.existing.requestHash !== claim.hash) {
@@ -143,6 +144,7 @@ export async function inviteAdminStaff(
           now,
           now,
         ),
+      ...invitationGrantStatements(deps.db, invitationId, request.roleIds, request.scopes),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "STAFF.INVITED",

@@ -233,6 +233,8 @@ describe("staff administration commands", () => {
       scope: { kind: "global" },
     });
     const denied = await core.inviteAdminStaff({
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
       requestId: crypto.randomUUID(),
       headers: { cookie: reader.cookie },
       email: `new-${crypto.randomUUID().slice(0, 6)}@example.com`,
@@ -247,6 +249,8 @@ describe("staff administration commands", () => {
     const email = `invited-${crypto.randomUUID().slice(0, 6)}@example.com`;
     const key = `inv-${crypto.randomUUID()}`;
     const created = await core.inviteAdminStaff({
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       email,
@@ -258,6 +262,8 @@ describe("staff administration commands", () => {
     expect(created.value).toMatchObject({ email, displayName: "Invited Staff", status: "PENDING" });
 
     const replay = await core.inviteAdminStaff({
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       email,
@@ -269,6 +275,8 @@ describe("staff administration commands", () => {
     expect(replay.value.invitationId).toBe(created.value.invitationId);
 
     const conflict = await core.inviteAdminStaff({
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       email: `other-${crypto.randomUUID().slice(0, 6)}@example.com`,
@@ -278,6 +286,8 @@ describe("staff administration commands", () => {
     expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
 
     const duplicate = await core.inviteAdminStaff({
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       email,
@@ -295,6 +305,8 @@ describe("staff administration commands", () => {
   it("revokes a pending invitation once", async () => {
     const manager = await seedManager();
     const created = await core.inviteAdminStaff({
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       email: `revoke-${crypto.randomUUID().slice(0, 6)}@example.com`,
@@ -737,5 +749,165 @@ describe("staff administration commands", () => {
       .bind(targetPrincipal.userId)
       .first<{ count: number }>();
     expect(after?.count).toBe(before?.count);
+  });
+});
+
+describe("staff invitation acceptance", () => {
+  async function offered() {
+    const manager = await seedManager();
+    const principal = await signUp();
+    const role = await core.createAdminRole({
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      code: `onboarding-${crypto.randomUUID()}`,
+      name: "Local inventory reader",
+      description: "Onboarding test",
+      capabilityCodes: ["inventory.read"],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!role.ok) throw new Error("Role creation failed");
+    const invitation = await core.inviteAdminStaff({
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      email: principal.email,
+      displayName: "Invited operator",
+      roleIds: [role.value.roleId],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!invitation.ok) throw new Error("Invitation creation failed");
+    return { manager, principal, invitation: invitation.value, role: role.value };
+  }
+  it("accepts the saved grants once through Core and cannot escalate or cross identities", async () => {
+    const fixture = await offered();
+    const own = { headers: { cookie: fixture.principal.cookie }, requestId: crypto.randomUUID() };
+    const offer = await core.getMyStaffInvitation(own);
+    expect(offer).toMatchObject({
+      ok: true,
+      value: {
+        invitationId: fixture.invitation.invitationId,
+        roles: [{ roleId: fixture.role.roleId }],
+        scopes: [{ scope: { kind: "location", locationId: "location-cebu-central" } }],
+      },
+    });
+    if (!offer.ok || !offer.value) throw new Error("Offer missing");
+    const command = {
+      ...own,
+      invitationId: offer.value.invitationId,
+      expectedVersion: offer.value.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const other = await signUp();
+    expect(
+      await core.acceptStaffInvitation({ ...command, headers: { cookie: other.cookie } }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(await core.acceptStaffInvitation({ ...command, headers: {} })).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED" },
+    });
+    const second = { ...command, idempotencyKey: crypto.randomUUID() };
+    const results = await Promise.all([
+      core.acceptStaffInvitation(command),
+      core.acceptStaffInvitation(second),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const winning = results[0]?.ok ? command : second;
+    expect(await core.acceptStaffInvitation(winning)).toMatchObject({ ok: true });
+    expect(
+      await core.acceptStaffInvitation({
+        ...winning,
+        expectedVersion: winning.expectedVersion + 1,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    const context = await core.getAdminContext(own);
+    expect(context).toMatchObject({
+      ok: true,
+      value: {
+        capabilities: ["inventory.read"],
+        scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+      },
+    });
+    expect(await core.listAdminStaff(own)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS count FROM staff_identity WHERE auth_user_id=?")
+        .bind(fixture.principal.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM audit_event WHERE action='STAFF.INVITATION_ACCEPTED' AND actor_user_id=?",
+      )
+        .bind(fixture.principal.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it("rolls back every access effect when acceptance audit fails, then safely retries", async () => {
+    const fixture = await offered();
+    const command = {
+      headers: { cookie: fixture.principal.cookie },
+      requestId: crypto.randomUUID(),
+      invitationId: fixture.invitation.invitationId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await env.DB.prepare(`CREATE TRIGGER reject_staff_acceptance BEFORE INSERT ON audit_event
+      WHEN NEW.action='STAFF.INVITATION_ACCEPTED' BEGIN SELECT RAISE(ABORT,'test audit rejection'); END`).run();
+    try {
+      expect(await core.acceptStaffInvitation(command)).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM staff_invitation WHERE id=?")
+          .bind(command.invitationId)
+          .first(),
+      ).toEqual({ status: "PENDING", version: 1 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) AS count FROM staff_identity WHERE auth_user_id=?")
+          .bind(fixture.principal.userId)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER reject_staff_acceptance");
+    }
+    expect(await core.acceptStaffInvitation(command)).toMatchObject({ ok: true });
+  });
+  it("rejects unverified identity, expired invitations and archived roles without access", async () => {
+    const fixture = await offered();
+    const command = {
+      headers: { cookie: fixture.principal.cookie },
+      requestId: crypto.randomUUID(),
+      invitationId: fixture.invitation.invitationId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await env.DB.prepare("UPDATE user SET email_verified=0 WHERE id=?")
+      .bind(fixture.principal.userId)
+      .run();
+    expect(await core.acceptStaffInvitation(command)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?")
+      .bind(fixture.principal.userId)
+      .run();
+    await env.DB.prepare("UPDATE staff_invitation SET expires_at=? WHERE id=?")
+      .bind(Date.now() - 1, command.invitationId)
+      .run();
+    expect(await core.acceptStaffInvitation(command)).toMatchObject({ ok: false });
+    await env.DB.prepare("UPDATE staff_invitation SET expires_at=? WHERE id=?")
+      .bind(Date.now() + 60_000, command.invitationId)
+      .run();
+    await env.DB.prepare("UPDATE role SET status='ARCHIVED' WHERE id=?")
+      .bind(fixture.role.roleId)
+      .run();
+    expect(
+      await core.acceptStaffInvitation({ ...command, idempotencyKey: crypto.randomUUID() }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS count FROM staff_identity WHERE auth_user_id=?")
+        .bind(fixture.principal.userId)
+        .first(),
+    ).toEqual({ count: 0 });
   });
 });

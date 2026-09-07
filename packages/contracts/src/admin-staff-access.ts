@@ -90,8 +90,24 @@ export type AdminStaffDetailRequest = AuthenticatedRequest & {
 };
 
 export type AdminStaffInviteRequest = AuthenticatedRequest & {
+  roleIds: ReadonlyArray<string>;
+  scopes: ReadonlyArray<Scope>;
   email: string;
   displayName: string;
+  idempotencyKey: string;
+};
+
+export type StaffInvitationOffer = {
+  invitationId: string;
+  displayName: string;
+  expiresAt: string;
+  version: number;
+  roles: ReadonlyArray<{ roleId: string; name: string }>;
+  scopes: ReadonlyArray<{ scope: Scope; label: string }>;
+};
+export type AcceptStaffInvitationRequest = AuthenticatedRequest & {
+  invitationId: string;
+  expectedVersion: number;
   idempotencyKey: string;
 };
 
@@ -186,6 +202,12 @@ export type AdminRoleArchiveRequest = AuthenticatedRequest & {
  * Core, and returns purpose-built DTOs or stable error codes.
  */
 export type AdminStaffAccessService = {
+  getMyStaffInvitation(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<StaffInvitationOffer | null>>;
+  acceptStaffInvitation(
+    request: AcceptStaffInvitationRequest,
+  ): Promise<RpcResult<{ staffId: string }>>;
   listAdminStaff(request: AdminStaffListRequest): Promise<RpcResult<AdminStaffPage>>;
   getAdminStaff(request: AdminStaffDetailRequest): Promise<RpcResult<AdminStaffDetail>>;
   listAdminStaffInvitations(

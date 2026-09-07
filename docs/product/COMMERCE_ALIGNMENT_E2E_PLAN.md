@@ -31,6 +31,8 @@ Lalamove quotation remains a checkout dependency even when a Scheduled order may
 
 These observations come from the code/document review and targeted contract inspection. Recheck them at phase start; an implemented primitive is not a completed business journey.
 
+Repository handoff update, 2026-09-07: staff invitation creation now saves explicit roles/scopes, and verified invitees have Core acceptance commands plus a Web review/acceptance page. This is partial Phase 2 implementation; complete setup/onboarding and browser acceptance remain open. The schema/policy remediation and staff work are being saved together on main so the next task can inspect one complete source baseline. Recheck actual commands and the latest implementation status rather than assuming any phase is accepted.
+
 | Surface                  | Current evidence                                                                                                                     | Work required                                                                                                                                          |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Product R2 authoring     | `uploadAdminProductMedia`, update/remove/content reads and Core-owned `product_media`/R2 handling exist.                             | Prove upload/edit/remove end to end and connect published R2 media to customer catalog reads.                                                          |

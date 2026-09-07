@@ -128,6 +128,8 @@ export const coreServiceMethodNames = [
   "getAdminStaff",
   "listAdminStaffInvitations",
   "inviteAdminStaff",
+  "getMyStaffInvitation",
+  "acceptStaffInvitation",
   "revokeAdminStaffInvitation",
   "updateAdminStaff",
   "changeAdminStaffAccess",

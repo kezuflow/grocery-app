@@ -120,6 +120,8 @@ describe("staff access BFF routes", () => {
     });
     const response = await invite(
       jsonRequest("https://freshmarkets.ph/api/admin/staff/invitations", {
+        roleIds: ["role-1"],
+        scopes: [{ kind: "location", locationId: "location-1" }],
         email: "a@example.com",
         displayName: "A",
       }),
