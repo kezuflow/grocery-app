@@ -729,3 +729,7 @@ These target contracts supersede conflicting historical implementation descripti
 - Webhook, refresh and inbox redrive invoke one normalized Delivery application path. Searching is distinct from assigned, active/uncertain attempts are exclusive, prior-attempt observations cannot overwrite current work, and courier cancellation never cancels a grocery Order.
 
 See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseline and ownership design. Membership RPCs, membership navigation/errors/jobs, customer courier selection and local price writes described in historical slices are removal work, never active target authority.
+
+### Verified provider identity recovery
+
+`refreshExternalDelivery` accepts an optional bounded `providerDeliveryId` candidate only to recover a missing identity on a previously submitted uncertain booking. Core requires `delivery.manage` and the dispatch location scope, retrieves the candidate from the configured provider, and requires its returned merchant reference to match the saved booking. An existing identity cannot be replaced. Association, original booking idempotency completion, recovery audit and durable observation are atomic; observation projection uses the shared guarded application path. A mismatch or competing claim leaves no association or booking success. This recovery performs no new provider booking.

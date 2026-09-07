@@ -200,6 +200,134 @@ async function seedActiveDispatch(now: number) {
 }
 
 describe("external delivery request", () => {
+  it("recovers an uncertain booking only from matching provider metadata and replays the original command", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(now);
+    const provider = createMockDeliveryProvider();
+    provider.create = vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: "PROVIDER_TIMEOUT",
+        message: "Unknown",
+        retryable: false,
+        outcomeUnknown: true,
+      },
+    }));
+    const booking = {
+      requestId: crypto.randomUUID(),
+      headers: {},
+      locationId: LOCATION,
+      jobId: delivery.jobId,
+      expectedVersion: 1,
+      providerCode: "lalamove" as const,
+      pickup: { kind: "IMMEDIATE" as const },
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const dependenciesWithProvider = {
+      ...deps,
+      provider,
+      configuredServiceType: "MOTORCYCLE",
+      now: () => now,
+    };
+    expect((await requestExternalDelivery(dependenciesWithProvider, booking)).ok).toBe(false);
+    const dispatch = await env.DB.prepare(
+      "SELECT id,version FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+    )
+      .bind(delivery.jobId)
+      .first<{ id: string; version: number }>();
+    expect(dispatch).not.toBeNull();
+    if (!dispatch) return;
+    const refresh = {
+      ...booking,
+      dispatchId: dispatch.id,
+      expectedVersion: dispatch.version,
+      providerDeliveryId: "recovered-provider-order",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const observation = {
+      providerDeliveryId: refresh.providerDeliveryId,
+      merchantOrderId: "other-order",
+      status: "ALLOCATING" as const,
+      trackingUrl: null,
+      pickupPin: null,
+      quote: null,
+    };
+    provider.get = vi.fn(async () => ({ ok: true as const, value: observation }));
+    expect((await refreshExternalDelivery(dependenciesWithProvider, refresh)).ok).toBe(false);
+    expect(
+      await env.DB.prepare("SELECT provider_delivery_id FROM delivery_provider_dispatch WHERE id=?")
+        .bind(dispatch.id)
+        .first(),
+    ).toEqual({ provider_delivery_id: null });
+    observation.merchantOrderId = delivery.orderId;
+    const forbidden = await refreshExternalDelivery(
+      { ...dependenciesWithProvider, accessContext: accessContext(["delivery.read"]) },
+      { ...refresh, idempotencyKey: crypto.randomUUID() },
+    );
+    expect(forbidden.ok).toBe(false);
+    expect(provider.get).toHaveBeenCalledTimes(1);
+    await env.DB.prepare(`CREATE TRIGGER reject_identity_audit BEFORE INSERT ON audit_event
+      WHEN NEW.action='DELIVERY.EXTERNAL_PROVIDER_IDENTITY_RECOVERED' BEGIN SELECT RAISE(ABORT,'identity audit failure'); END;`).run();
+    try {
+      await expect(
+        refreshExternalDelivery(dependenciesWithProvider, {
+          ...refresh,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).rejects.toThrow("identity audit failure");
+      expect(
+        await env.DB.prepare(
+          "SELECT provider_delivery_id,version FROM delivery_provider_dispatch WHERE id=?",
+        )
+          .bind(dispatch.id)
+          .first(),
+      ).toEqual({ provider_delivery_id: null, version: dispatch.version });
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+        )
+          .bind(booking.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "FAILED" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER reject_identity_audit");
+    }
+    const recover = { ...refresh, idempotencyKey: crypto.randomUUID() };
+    const competing = await Promise.all([
+      refreshExternalDelivery(dependenciesWithProvider, recover),
+      refreshExternalDelivery(dependenciesWithProvider, {
+        ...recover,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(competing.filter((result) => result.ok)).toHaveLength(1);
+    const recovered = competing.find((result) => result.ok);
+
+    expect(recovered).toMatchObject({
+      ok: true,
+      value: { providerDeliveryId: refresh.providerDeliveryId, status: "ACTIVE" },
+    });
+    expect(await requestExternalDelivery(dependenciesWithProvider, booking)).toMatchObject({
+      ok: true,
+      value: { providerDeliveryId: refresh.providerDeliveryId },
+    });
+    if (competing[0]?.ok)
+      expect(await refreshExternalDelivery(dependenciesWithProvider, recover)).toMatchObject({
+        ok: true,
+      });
+    expect(provider.create).toHaveBeenCalledOnce();
+    expect(provider.get).toHaveBeenCalledTimes(4);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM audit_event WHERE aggregate_id=? AND action='DELIVERY.EXTERNAL_PROVIDER_IDENTITY_RECOVERED'",
+      )
+        .bind(dispatch.id)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
   it("submits only one of two concurrent cancellation commands", async () => {
     const now = Date.now();
     const { dispatchId } = await seedActiveDispatch(now);

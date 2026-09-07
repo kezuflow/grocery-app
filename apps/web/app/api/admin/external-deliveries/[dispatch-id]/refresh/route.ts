@@ -9,6 +9,7 @@ import { invalid } from "../../../operations-route-utils";
 
 const schema = z.object({
   locationId: z.string().trim().min(1),
+  providerDeliveryId: z.string().trim().min(1).max(200).optional(),
   expectedVersion: z.number().int().positive(),
   idempotencyKey: z.string().trim().min(1).optional(),
 });

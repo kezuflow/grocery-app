@@ -4,6 +4,7 @@ import type { DeliveryOperationsSummary, RpcResult } from "@freshmarkets/contrac
 import { useCallback, useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
 import { Skeleton } from "../../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../admin-shell";
@@ -13,6 +14,7 @@ import { ExternalDeliveryBooking } from "./external-delivery-booking";
 export function ExternalDeliveryQueue() {
   const { locationId, label } = useAdminLocation();
   const [summary, setSummary] = useState<DeliveryOperationsSummary | null>(null);
+  const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -51,7 +53,13 @@ export function ExternalDeliveryQueue() {
           {
             method: "POST",
             headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-            body: JSON.stringify({ locationId, expectedVersion: dispatch.version }),
+            body: JSON.stringify({
+              locationId,
+              expectedVersion: dispatch.version,
+              ...(!dispatch.providerDeliveryId && operation === "refresh"
+                ? { providerDeliveryId: providerReferences[dispatch.dispatchId]?.trim() }
+                : {}),
+            }),
           },
         )
       ).json()) as RpcResult<unknown>;
@@ -128,7 +136,23 @@ export function ExternalDeliveryQueue() {
                       </TableCell>
                       <TableCell className="min-w-72">
                         {item.externalDispatch ? (
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            {!item.externalDispatch.providerDeliveryId ? (
+                              <label className="w-full text-xs">
+                                Lalamove order number for recovery
+                                <Input
+                                  value={providerReferences[item.externalDispatch.dispatchId] ?? ""}
+                                  onChange={(event) =>
+                                    setProviderReferences((values) => ({
+                                      ...values,
+                                      [item.externalDispatch!.dispatchId]: event.target.value,
+                                    }))
+                                  }
+                                  maxLength={200}
+                                  placeholder="Order number from Lalamove"
+                                />
+                              </label>
+                            ) : null}
                             <Button
                               size="sm"
                               variant="outline"

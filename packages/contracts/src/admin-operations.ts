@@ -109,6 +109,7 @@ export type AdminDeliveryOperationView = {
     provider: "lalamove" | "grab-express";
     status: string;
     trackingUrl: string | null;
+    providerDeliveryId: string | null;
     version: number;
   } | null;
   deliveredAtIso: string | null;
@@ -166,6 +167,11 @@ export type ExternalDeliveryMutationRequest = AdminOperationsLocationRequest & {
   dispatchId: string;
   expectedVersion: number;
   idempotencyKey: string;
+};
+
+export type RefreshExternalDeliveryRequest = ExternalDeliveryMutationRequest & {
+  /** Candidate identity for an uncertain booking; Core verifies provider merchant metadata. */
+  providerDeliveryId?: string;
 };
 
 export type ExternalDeliveryDispatchView = {
@@ -341,7 +347,7 @@ export type AdminOperationsService = {
     request: RequestExternalDeliveryRequest,
   ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
   refreshExternalDelivery(
-    request: ExternalDeliveryMutationRequest,
+    request: RefreshExternalDeliveryRequest,
   ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
   cancelExternalDelivery(
     request: ExternalDeliveryMutationRequest,

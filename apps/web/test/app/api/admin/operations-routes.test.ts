@@ -10,6 +10,7 @@ const coreMocks = vi.hoisted(() => ({
   listFulfillmentQueue: vi.fn(),
   advanceAdminFulfillment: vi.fn(),
   listDeliveryOperations: vi.fn(),
+  refreshExternalDelivery: vi.fn(),
   advanceFulfillment: vi.fn(),
   getGlobalCommerceConfiguration: vi.fn(),
   pauseSelling: vi.fn(),
@@ -31,6 +32,7 @@ import {
   GET as fulfillmentGet,
   POST as advanceFulfillment,
 } from "@/app/api/admin/fulfillment/route";
+import { POST as refreshDelivery } from "@/app/api/admin/external-deliveries/[dispatch-id]/refresh/route";
 import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
 import {
   GET as commerceConfigurationGet,
@@ -54,6 +56,38 @@ function command(url: string, body: unknown, idempotencyKey = "command-1"): Requ
 }
 
 describe("admin operations BFF routes", () => {
+  it("forwards a bounded provider recovery reference with the authorized command context", async () => {
+    coreMocks.refreshExternalDelivery.mockResolvedValue(ok);
+    const context = { params: Promise.resolve({ "dispatch-id": "dispatch-1" }) };
+    await refreshDelivery(
+      command("https://app/delivery/refresh", {
+        locationId: "l1",
+        expectedVersion: 3,
+        providerDeliveryId: "  provider-order-1  ",
+      }),
+      context,
+    );
+    expect(coreMocks.refreshExternalDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatchId: "dispatch-1",
+        locationId: "l1",
+        expectedVersion: 3,
+        providerDeliveryId: "provider-order-1",
+        idempotencyKey: "command-1",
+        headers: expect.objectContaining(cookie),
+      }),
+    );
+    const rejected = await refreshDelivery(
+      command("https://app/delivery/refresh", {
+        locationId: "l1",
+        expectedVersion: 3,
+        providerDeliveryId: "x".repeat(201),
+      }),
+      context,
+    );
+    expect(rejected.status).toBe(400);
+    expect(coreMocks.refreshExternalDelivery).toHaveBeenCalledOnce();
+  });
   it("forwards scoped queue filters and request cookies to Core", async () => {
     coreMocks.listProcurementRequirements.mockResolvedValue(ok);
     coreMocks.listReceivingSessions.mockResolvedValue(ok);

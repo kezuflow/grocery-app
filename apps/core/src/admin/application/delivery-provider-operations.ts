@@ -1,3 +1,4 @@
+import type { RefreshExternalDeliveryRequest } from "@freshmarkets/contracts";
 import { applyProviderObservation } from "../../delivery/application/apply-provider-observation";
 import type {
   AddressComponents,
@@ -762,7 +763,7 @@ async function loadExternalDispatch(
 
 async function providerMutation(
   deps: OperationsAdministrationDeps & { provider: DeliveryProvider; now: () => number },
-  request: ExternalDeliveryMutationRequest,
+  request: RefreshExternalDeliveryRequest,
   operation: "REFRESH" | "CANCEL",
 ): Promise<RpcResult<ExternalDeliveryDispatchView>> {
   const access = await resolveOperationsAdministrationAccess(
@@ -777,6 +778,7 @@ async function providerMutation(
     locationId: request.locationId,
     dispatchId: request.dispatchId,
     expectedVersion: request.expectedVersion,
+    ...(request.providerDeliveryId ? { providerDeliveryId: request.providerDeliveryId } : {}),
   });
   if (!claim.claimed) {
     if (claim.existing?.requestHash !== claim.hash)
@@ -795,7 +797,18 @@ async function providerMutation(
     await failIdempotency(deps.db, scope, request.idempotencyKey);
     return failure("STALE_VERSION", "External delivery changed; refresh first", request.requestId);
   }
-  if (!current.providerDeliveryId) {
+  const providerDeliveryId = current.providerDeliveryId ?? request.providerDeliveryId;
+  const recoveringIdentity = !current.providerDeliveryId;
+  if (
+    deps.provider.code !== current.provider ||
+    (request.providerDeliveryId &&
+      current.providerDeliveryId &&
+      request.providerDeliveryId !== current.providerDeliveryId) ||
+    !providerDeliveryId ||
+    (recoveringIdentity &&
+      (operation !== "REFRESH" ||
+        !["CREATING", "OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED"].includes(current.status)))
+  ) {
     await failIdempotency(deps.db, scope, request.idempotencyKey);
     return failure("CONFLICT", "Provider delivery identity is unavailable", request.requestId);
   }
@@ -882,7 +895,7 @@ async function providerMutation(
   if (operation === "CANCEL") {
     let canceled;
     try {
-      canceled = await deps.provider.cancel(current.providerDeliveryId);
+      canceled = await deps.provider.cancel(providerDeliveryId);
     } catch {
       await reject(true);
       return failure(
@@ -896,7 +909,7 @@ async function providerMutation(
       return failure("CONFLICT", "Provider cancellation was not confirmed", request.requestId);
     }
     observation = {
-      providerDeliveryId: current.providerDeliveryId,
+      providerDeliveryId,
       merchantOrderId: null,
       status: "CANCELED",
       trackingUrl: null,
@@ -906,7 +919,7 @@ async function providerMutation(
   } else {
     let observed;
     try {
-      observed = await deps.provider.get(current.providerDeliveryId);
+      observed = await deps.provider.get(providerDeliveryId);
     } catch {
       await reject(false);
       return failure("CONFLICT", "Provider delivery could not be refreshed", request.requestId);
@@ -915,9 +928,23 @@ async function providerMutation(
       await reject(false);
       return failure("CONFLICT", "Provider delivery could not be refreshed", request.requestId);
     }
-    if (observed.value.providerDeliveryId !== current.providerDeliveryId) {
+    if (observed.value.providerDeliveryId !== providerDeliveryId) {
       await reject(false);
       return failure("CONFLICT", "Provider returned a different delivery", request.requestId);
+    }
+    if (recoveringIdentity) {
+      const match = await deps.db
+        .prepare("SELECT id FROM delivery_provider_dispatch WHERE id=? AND merchant_order_id=?")
+        .bind(request.dispatchId, observed.value.merchantOrderId)
+        .first();
+      if (!observed.value.merchantOrderId || !match) {
+        await reject(false);
+        return failure(
+          "CONFLICT",
+          "Provider merchant reference does not match this booking",
+          request.requestId,
+        );
+      }
     }
     observation = observed.value;
   }
@@ -932,29 +959,77 @@ async function providerMutation(
   const now = deps.now();
   // Failed command retries must not attach new evidence to an older observation.
   const inboxId = `admin-delivery:${crypto.randomUUID()}`;
-  await deps.db.batch([
-    deps.db
-      .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox
+  const identityStatements: D1PreparedStatement[] = recoveringIdentity
+    ? [
+        deps.db
+          .prepare(`UPDATE delivery_provider_dispatch SET provider_delivery_id=?,version=version+1,updated_at=?
+      WHERE id=? AND version=? AND provider_delivery_id IS NULL AND status IN ('CREATING','OUTCOME_UNKNOWN','RECONCILIATION_REQUIRED')
+        AND NOT EXISTS (SELECT 1 FROM delivery_provider_dispatch WHERE provider=? AND provider_delivery_id=?)`)
+          .bind(
+            providerDeliveryId,
+            now,
+            request.dispatchId,
+            request.expectedVersion,
+            current.provider,
+            providerDeliveryId,
+          ),
+        deps.db.prepare("INSERT INTO commitment_abort(id) SELECT -33 WHERE changes()!=1"),
+        deps.db
+          .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=?
+      WHERE scope='admin.delivery.externalDispatch' AND status IN ('PROCESSING','FAILED') AND idempotency_key=
+        (SELECT client_idempotency_key FROM delivery_provider_dispatch WHERE id=?)`)
+          .bind(request.dispatchId, now, request.dispatchId),
+        deps.db
+          .prepare(`INSERT INTO audit_event
+      (id,actor_user_id,action,aggregate_type,aggregate_id,details_json,idempotency_key,location_id,correlation_id,occurred_at)
+      VALUES (?,?,'DELIVERY.EXTERNAL_PROVIDER_IDENTITY_RECOVERED','delivery_provider_dispatch',?, '{}',?,?,?,?)`)
+          .bind(
+            `delivery-identity:${request.dispatchId}`,
+            access.value.authUserId,
+            request.dispatchId,
+            request.idempotencyKey,
+            request.locationId,
+            request.requestId,
+            now,
+          ),
+      ]
+    : [];
+  if (recoveringIdentity) observationVersion += 1;
+  try {
+    await deps.db.batch([
+      ...identityStatements,
+      deps.db
+        .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox
     (id,provider,provider_event_id,dispatch_id,provider_delivery_id,merchant_order_id,observed_at,
      provider_status,payload_hash,raw_payload,processing_status,received_at)
     SELECT ?,provider,?,id,provider_delivery_id,merchant_order_id,?,?,?,?, 'RECEIVED',?
     FROM delivery_provider_dispatch WHERE id=?`)
-      .bind(
-        inboxId,
-        inboxId,
-        now,
-        observation.status,
-        await requestHash(observation),
-        JSON.stringify(observation),
-        now,
-        request.dispatchId,
-      ),
-    deps.db
-      .prepare(
-        "UPDATE delivery_provider_command SET status='OBSERVED',observation_id=?,updated_at=? WHERE id=? AND status IN ('SUBMITTING','OUTCOME_UNKNOWN')",
-      )
-      .bind(inboxId, now, commandId),
-  ]);
+        .bind(
+          inboxId,
+          inboxId,
+          now,
+          observation.status,
+          await requestHash(observation),
+          JSON.stringify(observation),
+          now,
+          request.dispatchId,
+        ),
+      deps.db
+        .prepare(
+          "UPDATE delivery_provider_command SET status='OBSERVED',observation_id=?,updated_at=? WHERE id=? AND status IN ('SUBMITTING','OUTCOME_UNKNOWN')",
+        )
+        .bind(inboxId, now, commandId),
+    ]);
+  } catch (error) {
+    await reject(false);
+    if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed: id = 0"))
+      throw error;
+    return failure(
+      "STALE_VERSION",
+      "Delivery identity changed during recovery; refresh first",
+      request.requestId,
+    );
+  }
   const applied = await applyProviderObservation(
     deps.db,
     {
@@ -984,7 +1059,7 @@ async function providerMutation(
 
 export function refreshExternalDelivery(
   deps: OperationsAdministrationDeps & { provider: DeliveryProvider; now: () => number },
-  request: ExternalDeliveryMutationRequest,
+  request: RefreshExternalDeliveryRequest,
 ) {
   return providerMutation(deps, request, "REFRESH");
 }

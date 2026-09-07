@@ -8,6 +8,7 @@ type DispatchRow = {
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   addressSnapshotJson: string;
   externalProvider: "lalamove" | "grab-express" | null;
+  externalProviderDeliveryId: string | null;
   externalDispatchId: string | null;
   externalStatus: string | null;
   externalTrackingUrl: string | null;
@@ -38,6 +39,7 @@ export async function listDeliveryDispatch(
       `SELECT d.id AS job_id,d.order_id,d.status,d.address_snapshot_json,
               d.delivered_at,d.version,o.cycle_id,d.fulfillment_mode,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
+              dispatch.provider_delivery_id AS external_provider_delivery_id,
               dispatch.status AS external_status,dispatch.tracking_url AS external_tracking_url,
               dispatch.version AS external_version
        FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
@@ -56,6 +58,7 @@ export async function listDeliveryDispatch(
       cycle_id: string | null;
       fulfillment_mode: "INSTANT" | "SCHEDULED";
       external_provider: "lalamove" | "grab-express" | null;
+      external_provider_delivery_id: string | null;
       external_dispatch_id: string | null;
       external_status: string | null;
       external_tracking_url: string | null;
@@ -72,6 +75,7 @@ export async function listDeliveryDispatch(
     fulfillmentMode: r.fulfillment_mode,
     externalProvider: r.external_provider,
     externalDispatchId: r.external_dispatch_id,
+    externalProviderDeliveryId: r.external_provider_delivery_id,
     externalStatus: r.external_status,
     externalTrackingUrl: r.external_tracking_url,
     externalVersion: r.external_version,

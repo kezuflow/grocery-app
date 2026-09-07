@@ -239,6 +239,7 @@ export async function listAdminDeliveryOperations(
             provider: row.externalProvider,
             status: row.externalStatus,
             trackingUrl: row.externalTrackingUrl,
+            providerDeliveryId: row.externalProviderDeliveryId,
             version: row.externalVersion,
           }
         : null,

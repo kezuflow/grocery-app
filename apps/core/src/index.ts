@@ -1980,9 +1980,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     );
   }
   async refreshExternalDelivery(
-    input: import("@freshmarkets/contracts").ExternalDeliveryMutationRequest,
+    input: import("@freshmarkets/contracts").RefreshExternalDeliveryRequest,
   ) {
-    const validation = externalDeliveryMutationSchema.safeParse(input);
+    const validation = externalDeliveryMutationSchema
+      .extend({
+        providerDeliveryId: validationSchema.string().trim().min(1).max(200).optional(),
+      })
+      .safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     try {
