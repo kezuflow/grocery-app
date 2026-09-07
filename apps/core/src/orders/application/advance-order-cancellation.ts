@@ -16,29 +16,62 @@ export async function advanceOrderCancellation(
     .bind(input.paymentIntentId, input.refundId)
     .first<{ id: string; cancellation_id: string; status: string }>();
   if (!member) return { applied: false, completed: false };
-  const update = await database
-    .prepare(
-      `UPDATE order_cancellation_refund_member
-       SET refund_id=COALESCE(refund_id,?), status=?, updated_at=?
-       WHERE id=? AND status!='SUCCEEDED'`,
-    )
-    .bind(input.refundId, input.refundState, now, member.id)
-    .run();
-  const completed = await completeIfReady(database, member.cancellation_id, now);
-  if (!completed && ["REJECTED", "FAILED", "ESCALATED"].includes(input.refundState))
-    await database
-      .prepare(
-        "UPDATE order_cancellation SET status='EXCEPTION',version=version+1,updated_at=? WHERE id=? AND status!='COMPLETED'",
-      )
-      .bind(now, member.cancellation_id)
-      .run();
+  // The observation is a wake-up signal. Only the current Payments row can
+  // authorize a projection, including recovery before the refund ID was linked.
+  const updates = await database.batch([
+    database
+      .prepare(`UPDATE order_cancellation_refund_member AS member
+      SET refund_id=?,status=(SELECT status FROM payment_refund WHERE id=?),updated_at=?
+      WHERE member.id=? AND member.status!='SUCCEEDED' AND EXISTS (
+        SELECT 1 FROM payment_refund refund WHERE refund.id=?
+        AND refund.payment_intent_id=member.payment_intent_id
+        AND refund.amount_minor=member.required_amount_minor AND refund.currency=member.currency
+        AND (member.refund_id=refund.id OR (member.refund_id IS NULL
+          AND refund.idempotency_key='order-cancel:'||member.cancellation_id||':'||member.payment_intent_id)))`)
+      .bind(input.refundId, input.refundId, now, member.id, input.refundId),
+    database
+      .prepare(`UPDATE order_cancellation SET status='COMPLETED',version=version+1,updated_at=?
+      WHERE id=? AND status!='COMPLETED'
+      AND EXISTS (SELECT 1 FROM order_cancellation_refund_member WHERE cancellation_id=order_cancellation.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM order_cancellation_refund_member member LEFT JOIN payment_refund refund ON refund.id=member.refund_id
+        WHERE member.cancellation_id=order_cancellation.id AND
+        (member.status!='SUCCEEDED' OR refund.id IS NULL OR refund.status!='SUCCEEDED'
+          OR refund.payment_intent_id!=member.payment_intent_id OR refund.amount_minor!=member.required_amount_minor OR refund.currency!=member.currency))`)
+      .bind(now, member.cancellation_id),
+    database
+      .prepare(`UPDATE grocery_order SET status='CANCELED',version=version+1
+      WHERE status IN ('CANCELLATION_REQUESTED','EXCEPTION') AND EXISTS (
+        SELECT 1 FROM order_cancellation cancellation WHERE cancellation.id=? AND cancellation.order_id=grocery_order.id
+        AND cancellation.status='COMPLETED' AND cancellation.actor_type!='STAFF_EXCEPTION')`)
+      .bind(member.cancellation_id),
+    database
+      .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE EXISTS (
+      SELECT 1 FROM order_cancellation cancellation JOIN grocery_order grocery ON grocery.id=cancellation.order_id
+      WHERE cancellation.id=? AND cancellation.status='COMPLETED' AND cancellation.actor_type!='STAFF_EXCEPTION'
+      AND grocery.status!='CANCELED')`)
+      .bind(member.cancellation_id),
+    database
+      .prepare(`UPDATE order_cancellation SET status='EXCEPTION',version=version+1,updated_at=?
+      WHERE id=? AND status NOT IN ('COMPLETED','EXCEPTION') AND EXISTS (
+        SELECT 1 FROM order_cancellation_refund_member member JOIN payment_refund refund ON refund.id=member.refund_id
+        WHERE member.cancellation_id=order_cancellation.id AND member.status=refund.status
+        AND refund.payment_intent_id=member.payment_intent_id AND refund.amount_minor=member.required_amount_minor
+        AND refund.currency=member.currency AND refund.status IN ('REJECTED','FAILED','ESCALATED'))`)
+      .bind(now, member.cancellation_id),
+  ]);
+  const cancellation = await database
+    .prepare("SELECT status FROM order_cancellation WHERE id=?")
+    .bind(member.cancellation_id)
+    .first<{ status: string }>();
+  const completed = cancellation?.status === "COMPLETED";
   try {
     if (completed)
       await projectOrderCancellationNotification(database, {
         cancellationId: member.cancellation_id,
         state: "COMPLETED",
       });
-    else if (["REJECTED", "FAILED", "ESCALATED"].includes(input.refundState))
+    else if (cancellation?.status === "EXCEPTION")
       await projectOrderCancellationNotification(database, {
         cancellationId: member.cancellation_id,
         state: "EXCEPTION",
@@ -46,7 +79,7 @@ export async function advanceOrderCancellation(
   } catch {
     // Notifications remain a retryable projection, never refund authority.
   }
-  return { applied: (update.meta?.changes ?? 0) === 1, completed };
+  return { applied: (updates[0]?.meta?.changes ?? 0) === 1, completed };
 }
 
 export async function synchronizeOrderCancellationForPayment(
@@ -55,9 +88,10 @@ export async function synchronizeOrderCancellationForPayment(
 ): Promise<void> {
   const rows = await database
     .prepare(
-      `SELECT m.refund_id, r.status
+      `SELECT r.id refund_id, r.status
        FROM order_cancellation_refund_member m
-       JOIN payment_refund r ON r.id=m.refund_id
+       JOIN payment_refund r ON r.payment_intent_id=m.payment_intent_id
+         AND (r.id=m.refund_id OR (m.refund_id IS NULL AND r.idempotency_key='order-cancel:'||m.cancellation_id||':'||m.payment_intent_id))
        WHERE m.payment_intent_id=?`,
     )
     .bind(paymentIntentId)
@@ -68,38 +102,4 @@ export async function synchronizeOrderCancellationForPayment(
       refundId: row.refund_id,
       refundState: row.status,
     });
-}
-
-async function completeIfReady(
-  database: D1Database,
-  cancellationId: string,
-  now: number,
-): Promise<boolean> {
-  const pending = await database
-    .prepare(
-      "SELECT COUNT(*) AS count FROM order_cancellation_refund_member WHERE cancellation_id=? AND status!='SUCCEEDED'",
-    )
-    .bind(cancellationId)
-    .first<{ count: number }>();
-  if ((pending?.count ?? 0) !== 0) return false;
-  const cancellation = await database
-    .prepare("SELECT order_id,actor_type,status FROM order_cancellation WHERE id=?")
-    .bind(cancellationId)
-    .first<{ order_id: string; actor_type: string; status: string }>();
-  if (!cancellation) return false;
-  await database.batch([
-    database
-      .prepare(
-        "UPDATE order_cancellation SET status='COMPLETED',version=version+1,updated_at=? WHERE id=? AND status!='COMPLETED'",
-      )
-      .bind(now, cancellationId),
-    database
-      .prepare(
-        `UPDATE grocery_order SET status='CANCELED',version=version+1
-         WHERE id=? AND status IN ('CANCELLATION_REQUESTED','EXCEPTION')
-           AND ?!='STAFF_EXCEPTION'`,
-      )
-      .bind(cancellation.order_id, cancellation.actor_type),
-  ]);
-  return true;
 }

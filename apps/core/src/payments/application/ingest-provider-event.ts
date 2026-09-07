@@ -136,12 +136,12 @@ export async function applyVerifiedProviderEvent(
           settlement: event.settlement,
           now,
         });
-      await finish("APPLIED");
       await advanceOrderCancellation(database, {
         paymentIntentId: refund.paymentIntentId,
         refundId: refund.id,
         refundState: refund.status as import("@freshmarkets/contracts").RefundState,
       });
+      await finish("APPLIED");
       return result(event, "DUPLICATE", refund.paymentIntentId, event.canonicalState);
     }
     const changed = await refunds.updateRefundStatusCas({

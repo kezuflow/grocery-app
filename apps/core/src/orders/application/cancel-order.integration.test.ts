@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { cancelOrder, applyOrderRefundObservation } from "./cancel-order";
-import { advanceOrderCancellation } from "./advance-order-cancellation";
+import {
+  advanceOrderCancellation,
+  synchronizeOrderCancellationForPayment,
+} from "./advance-order-cancellation";
 
 let counter = 0;
 async function paidOrderFixture(options: { cutoffOffsetMs?: number } = {}) {
@@ -106,6 +109,178 @@ function command(orderId: string): Parameters<typeof cancelOrder>[1] {
 }
 
 describe("explicit cancellation and refund orchestration", () => {
+  it("completes competing original/addition observations once", async () => {
+    const fixture = await paidOrderFixture();
+    const addition = await addCommittedAmendment(fixture, 5000);
+    const cancellation = await cancelOrder(env.DB, command(fixture.orderId));
+    if (!cancellation.ok || !cancellation.value.cancellationId)
+      throw new Error("Cancellation missing");
+    const now = Date.now();
+    for (const [paymentId, amount] of [
+      [fixture.intentId, 24000],
+      [addition, 5000],
+    ] as const)
+      await env.DB.prepare(`INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at)
+        VALUES (?,?,?,'PHP','SUCCEEDED','Cancellation',?,1,?,?)`)
+        .bind(
+          crypto.randomUUID(),
+          paymentId,
+          amount,
+          `order-cancel:${cancellation.value.cancellationId}:${paymentId}`,
+          now,
+          now,
+        )
+        .run();
+    const before = await env.DB.prepare("SELECT version FROM order_cancellation WHERE id=?")
+      .bind(cancellation.value.cancellationId)
+      .first<{ version: number }>();
+    await Promise.all(
+      [fixture.intentId, addition, fixture.intentId, addition].map((paymentId) =>
+        synchronizeOrderCancellationForPayment(env.DB, paymentId),
+      ),
+    );
+    expect(
+      await env.DB.prepare("SELECT status,version FROM order_cancellation WHERE id=?")
+        .bind(cancellation.value.cancellationId)
+        .first(),
+    ).toEqual({ status: "COMPLETED", version: before!.version + 1 });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "CANCELED", version: 3 });
+  });
+
+  it("keeps canonical completion when refund submission returns after its success observation", async () => {
+    const fixture = await paidOrderFixture();
+    const result = await cancelOrder(env.DB, command(fixture.orderId), {
+      requestRefund: async (input) => {
+        const id = crypto.randomUUID(),
+          now = Date.now();
+        await env.DB.prepare(`INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at)
+          VALUES (?,?,?,'PHP','SUCCEEDED',?,?,1,?,?)`)
+          .bind(
+            id,
+            input.paymentIntentId,
+            input.amountMinor,
+            input.reason,
+            input.idempotencyKey,
+            now,
+            now,
+          )
+          .run();
+        await synchronizeOrderCancellationForPayment(env.DB, input.paymentIntentId);
+        return { ok: true, refundId: id, refundState: "PROCESSING" };
+      },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { state: "CANCELED", status: "COMPLETED", refunds: [{ status: "SUCCEEDED" }] },
+    });
+  });
+
+  it("recovers an unlinked refund from canonical identity and ignores stale observation state", async () => {
+    const fixture = await paidOrderFixture();
+    const canceled = await cancelOrder(env.DB, command(fixture.orderId));
+    if (!canceled.ok || !canceled.value.cancellationId)
+      throw new Error("Cancellation fixture failed");
+    const refundId = crypto.randomUUID();
+    await env.DB.prepare(`INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at)
+      VALUES (?, ?,24000,'PHP','PROCESSING','Cancellation',?,1,?,?)`)
+      .bind(
+        refundId,
+        fixture.intentId,
+        `order-cancel:${canceled.value.cancellationId}:${fixture.intentId}`,
+        Date.now(),
+        Date.now(),
+      )
+      .run();
+    // A provider handler's stale/premature argument cannot manufacture canonical success.
+    expect(
+      await advanceOrderCancellation(env.DB, {
+        paymentIntentId: fixture.intentId,
+        refundId,
+        refundState: "SUCCEEDED",
+      }),
+    ).toEqual({ applied: true, completed: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT status,refund_id FROM order_cancellation_refund_member WHERE cancellation_id=?",
+      )
+        .bind(canceled.value.cancellationId)
+        .first(),
+    ).toEqual({ status: "PROCESSING", refund_id: refundId });
+    await env.DB.prepare("UPDATE payment_refund SET status='SUCCEEDED' WHERE id=?")
+      .bind(refundId)
+      .run();
+    await synchronizeOrderCancellationForPayment(env.DB, fixture.intentId);
+    expect(
+      await advanceOrderCancellation(env.DB, {
+        paymentIntentId: fixture.intentId,
+        refundId,
+        refundState: "FAILED",
+      }),
+    ).toEqual({ applied: false, completed: true });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "CANCELED" });
+  });
+
+  it("does not attach another refund and rolls back all projections when Order completion loses", async () => {
+    const fixture = await paidOrderFixture();
+    const canceled = await cancelOrder(env.DB, command(fixture.orderId));
+    if (!canceled.ok || !canceled.value.cancellationId)
+      throw new Error("Cancellation fixture failed");
+    const unrelated = crypto.randomUUID(),
+      refundId = crypto.randomUUID(),
+      now = Date.now();
+    for (const [id, key] of [
+      [unrelated, `unrelated:${unrelated}`],
+      [refundId, `order-cancel:${canceled.value.cancellationId}:${fixture.intentId}`],
+    ])
+      await env.DB.prepare(`INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at)
+        VALUES (?, ?,24000,'PHP','SUCCEEDED','Cancellation',?,1,?,?)`)
+        .bind(id, fixture.intentId, key, now, now)
+        .run();
+    expect(
+      await advanceOrderCancellation(env.DB, {
+        paymentIntentId: fixture.intentId,
+        refundId: unrelated,
+        refundState: "SUCCEEDED",
+      }),
+    ).toEqual({ applied: false, completed: false });
+    await env.DB.exec(
+      "CREATE TRIGGER test_lost_refund_projection BEFORE UPDATE OF status ON grocery_order WHEN NEW.status='CANCELED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      await expect(
+        synchronizeOrderCancellationForPayment(env.DB, fixture.intentId),
+      ).rejects.toThrow();
+      expect(
+        await env.DB.prepare(
+          "SELECT status,refund_id FROM order_cancellation_refund_member WHERE cancellation_id=?",
+        )
+          .bind(canceled.value.cancellationId)
+          .first(),
+      ).toEqual({ status: "NOT_REQUESTED", refund_id: null });
+      expect(
+        await env.DB.prepare("SELECT status FROM order_cancellation WHERE id=?")
+          .bind(canceled.value.cancellationId)
+          .first(),
+      ).toEqual({ status: "REFUNDS_PROCESSING" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER test_lost_refund_projection");
+    }
+    await synchronizeOrderCancellationForPayment(env.DB, fixture.intentId);
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "CANCELED" });
+  });
+
   it("checks customer ownership even when replaying a successful cancellation", async () => {
     const fixture = await paidOrderFixture();
     const request = { ...command(fixture.orderId), customerId: fixture.customerId };

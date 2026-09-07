@@ -263,6 +263,8 @@ For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiri
 - `orders.listMine(page) -> CustomerOrderPage`
 - `orders.getMine({ orderId }) -> CustomerOrderDetail`
 - `orders.cancelMine({ orderId, expectedVersion, reason, idempotencyKey }) -> OrderCancellationView`
+
+Refund observations wake the Orders projection; their supplied status is not financial authority. The projection reads the current canonical Refund, verifies payment identity, exact amount and currency, and atomically advances the member, cancellation and Order. An unlinked member recovers only through its stable cancellation-refund key. Completion requires canonical success for every member. Refund ingress marks its inbox applied only after projection succeeds, including the already-observed Refund path; a failed projection remains retryable. Payment reconciliation also attempts saved-refund projection when the Payment needs no state change. Late submission responses never overwrite canonical member success or completed cancellation.
 - `orders.getProvisionalTransactionSummary({ orderId }) -> ProvisionalTransactionSummaryView`
 - `orders.reorder({ orderId, expectedCartVersion, idempotencyKey }) -> ReorderResultView`
 - `orders.listIssues({ orderId }) -> CustomerOrderIssueView[]`

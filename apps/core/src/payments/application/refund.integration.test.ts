@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { cancelOrder } from "../../orders/application/cancel-order";
 import { env } from "cloudflare:workers";
 import { createPayment } from "./create-payment";
 import { ingestProviderEvent } from "./ingest-provider-event";
@@ -89,6 +90,132 @@ function refundCommand(
 }
 
 describe("non-synthetic refunds", () => {
+  it("replays verified refund ingress after a lost cancellation projection without premature inbox completion", async () => {
+    const { intentId } = await succeededIntent();
+    const orderId = crypto.randomUUID(),
+      now = Date.now();
+    // Paid Order linkage is the fixture boundary; payment, cancellation and refund commands are real.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO grocery_order(id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,created_at)
+        SELECT ?,customer_id,'cycle-next-cebu','SCHEDULED','{}','COMMITTED',amount_minor,currency,id,? FROM payment_attempt WHERE payment_intent_id=?`).bind(
+        orderId,
+        now,
+        intentId,
+      ),
+      env.DB.prepare(`INSERT INTO order_fulfillment_snapshot(order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,fulfillment_mode,sourcing_modes_json,created_at)
+        VALUES (?,'location-cebu-central','cycle-next-cebu','zone-cebu-city-core',?,?,'SCHEDULED','[]',?)`).bind(
+        orderId,
+        now + 86400000,
+        now + 172800000,
+        now,
+      ),
+      env.DB.prepare(
+        "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,?)",
+      ).bind(crypto.randomUUID(), intentId, crypto.randomUUID(), orderId, now),
+    ]);
+    const cancellation = await cancelOrder(
+      env.DB,
+      {
+        orderId,
+        expectedVersion: 1,
+        reason: "Customer request",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      },
+      {
+        requestRefund: async (input) => {
+          const result = await requestRefund(env.DB, testRegistry(), {
+            ...input,
+            actorId: "test-operator",
+            requestId: crypto.randomUUID(),
+          });
+          if (!result.ok) throw new Error(result.error.message);
+          return { ok: true, refundId: result.value.refundId, refundState: result.value.state };
+        },
+      },
+    );
+    expect(cancellation.ok).toBe(true);
+    const refund = await env.DB.prepare(
+      "SELECT id,provider_refund_reference FROM payment_refund WHERE payment_intent_id=?",
+    )
+      .bind(intentId)
+      .first<{ id: string; provider_refund_reference: string }>();
+    if (!refund) throw new Error("Refund missing");
+    const eventId = crypto.randomUUID(),
+      body = JSON.stringify({
+        eventId,
+        kind: "refund",
+        refundReference: refund.provider_refund_reference,
+        vendorState: "paid",
+        amountMinor: 20000,
+        currency: "PHP",
+      });
+    const send = async () =>
+      ingestProviderEvent(
+        env.DB,
+        testRegistry(),
+        "mock",
+        new Headers({
+          "x-mock-signature": await mockSignatureFor(body),
+          "x-mock-timestamp": String(Date.now()),
+        }),
+        body,
+      );
+    await env.DB.exec(
+      "CREATE TRIGGER test_refund_projection_loss BEFORE UPDATE OF status ON grocery_order WHEN NEW.status='CANCELED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      await expect(send()).rejects.toThrow();
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_refund WHERE id=?")
+          .bind(refund.id)
+          .first(),
+      ).toEqual({ status: "SUCCEEDED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT processing_status FROM payment_provider_event_inbox WHERE provider_event_id=?",
+        )
+          .bind(eventId)
+          .first(),
+      ).toEqual({ processing_status: "RECEIVED" });
+      // Retry now sees an already-SUCCEEDED Refund; failure must still leave its inbox retryable.
+      vi.spyOn(Date, "now").mockReturnValue(now + 60000);
+      await expect(send()).rejects.toThrow();
+      expect(
+        await env.DB.prepare(
+          "SELECT processing_status FROM payment_provider_event_inbox WHERE provider_event_id=?",
+        )
+          .bind(eventId)
+          .first(),
+      ).toEqual({ processing_status: "RECEIVED" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER test_refund_projection_loss");
+      vi.restoreAllMocks();
+    }
+    vi.spyOn(Date, "now").mockReturnValue(now + 120000);
+    try {
+      expect(await send()).toMatchObject({ ok: true, value: { processingStatus: "DUPLICATE" } });
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(orderId).first(),
+      ).toEqual({ status: "CANCELED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT processing_status FROM payment_provider_event_inbox WHERE provider_event_id=?",
+        )
+          .bind(eventId)
+          .first(),
+      ).toEqual({ processing_status: "APPLIED" });
+      expect(await send()).toMatchObject({ ok: true, value: { processingStatus: "DUPLICATE" } });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_refund WHERE payment_intent_id=?")
+          .bind(intentId)
+          .first(),
+      ).toEqual({ count: 1 });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("does not persist settlement evidence when the refund compare-and-swap loses", async () => {
     const { intentId } = await succeededIntent();
     const created = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));

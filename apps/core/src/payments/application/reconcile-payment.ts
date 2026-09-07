@@ -33,6 +33,10 @@ export async function reconcilePayment(
   if (!intent)
     return { ok: false, error: { code: "NOT_FOUND", message: "Payment intent not found" } };
 
+  // Recovery of a persisted Refund must also run when the Payment itself is
+  // already consistent or its provider lookup is temporarily unavailable.
+  await synchronizeOrderCancellationForPayment(database, intent.id);
+
   const attempt = await database
     .prepare(
       "SELECT provider, provider_reference FROM payment_attempt WHERE payment_intent_id=? ORDER BY created_at DESC LIMIT 1",

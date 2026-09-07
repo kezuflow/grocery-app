@@ -10,7 +10,10 @@ import {
   type CancellationActor,
   type CancellationCause,
 } from "../domain/cancellation-policy";
-import { advanceOrderCancellation } from "./advance-order-cancellation";
+import {
+  advanceOrderCancellation,
+  synchronizeOrderCancellationForPayment,
+} from "./advance-order-cancellation";
 import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
 import { projectOrderCancellationNotification } from "../../notifications/application/project-domain-notifications";
 
@@ -258,19 +261,21 @@ export async function requestOrderCancellation(
         reason,
         idempotencyKey: `order-cancel:${cancellationId}:${member.paymentIntentId}`,
       });
-      const state = requested.ok ? (requested.refundState ?? "PROCESSING") : "REJECTED";
+      // The adapter result may have lost the canonical refund identity or be
+      // older than a webhook. Reconcile by our durable key before projecting.
+      await synchronizeOrderCancellationForPayment(database, member.paymentIntentId);
       await database
         .prepare(
           `UPDATE order_cancellation_refund_member
-           SET refund_id=COALESCE(refund_id,?),status=?,attempts=attempts+1,updated_at=?
+           SET attempts=attempts+1,updated_at=?
            WHERE cancellation_id=? AND payment_intent_id=?`,
         )
-        .bind(requested.refundId ?? null, state, Date.now(), cancellationId, member.paymentIntentId)
+        .bind(Date.now(), cancellationId, member.paymentIntentId)
         .run();
       if (!requested.ok)
         await database
           .prepare(
-            "UPDATE order_cancellation SET status='EXCEPTION',version=version+1,updated_at=? WHERE id=?",
+            "UPDATE order_cancellation SET status='EXCEPTION',version=version+1,updated_at=? WHERE id=? AND status NOT IN ('COMPLETED','EXCEPTION')",
           )
           .bind(Date.now(), cancellationId)
           .run();
@@ -280,7 +285,7 @@ export async function requestOrderCancellation(
     else
       await database
         .prepare(
-          "UPDATE order_cancellation SET status=CASE WHEN status='EXCEPTION' THEN status ELSE 'REFUNDS_PROCESSING' END,version=version+1,updated_at=? WHERE id=?",
+          "UPDATE order_cancellation SET status='REFUNDS_PROCESSING',version=version+1,updated_at=? WHERE id=? AND status='REQUESTED'",
         )
         .bind(Date.now(), cancellationId)
         .run();
