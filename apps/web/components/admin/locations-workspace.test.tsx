@@ -10,6 +10,17 @@ vi.mock("./admin-shell", () => ({
     <section aria-label={title}>{children}</section>
   ),
 }));
+vi.mock("../maps/mapbox-map", () => ({
+  MapboxMap: ({
+    onPinMove,
+  }: {
+    onPinMove: (point: { latitude: number; longitude: number }) => void;
+  }) => (
+    <button type="button" onClick={() => onPinMove({ latitude: 10.35, longitude: 123.92 })}>
+      Move test pin
+    </button>
+  ),
+}));
 const view: AdminLocationsView = {
   canManage: true,
   nextCursor: null,
@@ -26,6 +37,7 @@ const view: AdminLocationsView = {
       purpose: "CENTRAL_WAREHOUSE",
       status: "inactive",
       version: 1,
+      addressProviderDerived: false,
       latitude: 10.3,
       longitude: 123.9,
       capabilities: ["RECEIVING", "INVENTORY"],
@@ -78,6 +90,57 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("location workspace", () => {
+  it("keeps temporary provider provenance when an operator moves the search-result pin", async () => {
+    const writes: RequestInit[] = [];
+    fetchMock.mockImplementation(async (url, options) => {
+      if (String(url).includes("address-search"))
+        return response([
+          {
+            candidateKey: "candidate",
+            displayAddress: "Search result",
+            coordinate: { latitude: 10.3, longitude: 123.9 },
+            accuracy: null,
+            components: view.items[0].address,
+          },
+        ]);
+      if (options?.method === "POST") {
+        writes.push(options);
+        return response(view.items[0]);
+      }
+      return response(view);
+    });
+    await act(async () =>
+      root.render(<LocationsWorkspace initial={{ ok: true, requestId: "test", value: view }} />),
+    );
+    await act(async () => button("Review Warehouse").click());
+    async function fill(selector: string, value: string) {
+      const input = container.querySelector<HTMLInputElement>(selector);
+      if (!input) throw new Error("Missing input");
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        if (!setter) throw new Error("Missing setter");
+        setter.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    await fill("#location-address-search", "Store street");
+    await act(async () => button("Search").click());
+    await act(async () => button("Search result").click());
+    await act(async () => button("Move test pin").click());
+    await fill("#location-reason", "Confirm pickup entrance");
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0].body))).toMatchObject({
+      componentsSource: "TEMPORARY_GEOCODER",
+      confirmationSource: "USER_PIN",
+      latitude: 10.35,
+      longitude: 123.92,
+    });
+  });
   it("honors the Core read-only decision", async () => {
     await act(async () =>
       root.render(

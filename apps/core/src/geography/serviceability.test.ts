@@ -54,6 +54,7 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
     ],
     candidates: [
       {
+        zoneId: "zone",
         id: "location-secondary",
         code: "SECONDARY",
         name: "Secondary",
@@ -64,6 +65,7 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
         active: true,
       },
       {
+        zoneId: "zone",
         id: "location-cebu-central",
         code: "CEBU_CENTRAL",
         name: "Central Cebu",
@@ -79,6 +81,35 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
 }
 
 describe("serviceability resolver", () => {
+  it("does not borrow a location assigned to a different delivery zone", () => {
+    const data = dataset();
+    const outcome = evaluateServiceability(request(10.5, 123.5), {
+      ...data,
+      candidates: data.candidates.map((candidate) => ({ ...candidate, zoneId: "outside-zone" })),
+    });
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { serviceable: false, reason: "NO_ELIGIBLE_LOCATION" },
+    });
+  });
+  it("resolves overlapping eligible zones using the closest location rather than polygon ordering", () => {
+    const data = dataset();
+    const outcome = evaluateServiceability(request(10.5, 123.5), {
+      ...data,
+      deliveryZones: [
+        ...data.deliveryZones,
+        { ...data.deliveryZones[0], id: "near-zone", code: "NEAR" },
+      ],
+      candidates: data.candidates.map((candidate) => ({
+        ...candidate,
+        zoneId: candidate.id === "location-cebu-central" ? "near-zone" : "zone",
+      })),
+    });
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { deliveryZone: { code: "NEAR" }, fulfillmentEligibility: { candidateCount: 2 } },
+    });
+  });
   it("rejects malformed coordinates", () => {
     const result = evaluateServiceability(request(100, 123), dataset());
     expect(result.ok && result.value.reason).toBe("INVALID_COORDINATES");
@@ -122,6 +153,7 @@ describe("serviceability resolver", () => {
       dataset({
         candidates: [
           {
+            zoneId: "zone",
             id: "location-no-dispatch",
             code: "NO_DISPATCH",
             name: "No Dispatch",

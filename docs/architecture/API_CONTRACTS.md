@@ -185,6 +185,8 @@ Global location setup uses `listAdminLocations`, `createAdminLocation`, `updateA
 
 Customer-site changes supersede unstarted quotes within the market so changed capabilities or a newly nearer site require fresh customer review. Started Payments remain reconcilable with their accepted terms. Origin address/coordinate changes reject while affected deliveries or started checkout payments remain unresolved; the complete batch rechecks this guard. Deactivation preserves scoped operational/profile access and does not rewrite committed evidence.
 
+Location detail commands accept explicit `componentsSource` and `confirmationSource` using the existing address provenance vocabulary. Temporary provider components require permanent finalization at the final confirmed coordinate, even after a user moves the pin. `SAVED_ADDRESS` requires unchanged text from that same location; unchanged coordinates retain protected provider evidence without another lookup. A moved provider-derived saved address is finalized again. Provider errors fail before business effects, and the eventual write still rechecks current IAM and aggregate version. The read model exposes only whether address text is provider-derived, not its protected provider reference.
+
 Membership, trial, subscription pricing, recurring authorization and membership payment contracts are retired from the active release. No checkout method requires a Subscription.
 
 ## Cart
@@ -748,3 +750,10 @@ See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseli
 ### Bounded customer order history
 
 listCustomerOrders accepts an authenticated request plus optional limit (1–100, default 25), filter (all, active, completed), and cursor. It returns { items, nextCursor }. Core applies ownership and status filtering before keyset pagination on descending (COALESCE(committed_at,created_at),id); the cursor is versioned and bound to customer/filter. Invalid or cross-context cursors are rejected. The cursor is navigation data, never authorization. History preserves canonical and explicitly retained historical status vocabulary. Web loads subsequent pages, resets paging on filter changes, and renders loading, retryable error and unauthenticated states separately from empty results.
+
+
+### Global service-area publication and routing
+
+Global service-area administration uses `getAdminServiceability`, `publishAdminServiceArea` and `previewAdminServiceability` through typed Service Bindings. Reads require Global `locations.read`; publication requires Global `locations.manage`, expected area version, a reason and a stable key. Area pages use stable market/code cursors (20 areas); eligible-location pages use stable location-ID cursors (50 sites). Publication accepts simple ordered boundary vertices, named delivery zones and explicit eligible customer-fulfillment locations in the same active market. Core rejects degenerate/self-intersecting polygons and zones crossing the area boundary. It publishes a new retained area/zone version, retires prior active coverage, advances geography revision, invalidates unstarted quotes, and records audit/idempotency together. Started payments retain reconciliation and accepted terms. New Scheduled zone participation must be configured explicitly. Complex retained polygons are never flattened silently by the editor.
+
+The Global routing preview and checkout options/quotes use the same current geofences, timed eligibility links, customer-site purpose, capabilities and mode readiness. Overlap selection uses exact Haversine distance and stable location ID; saved address zone labels do not authorize routing. Quote evidence includes geography/global-mode versions. Geography changes during courier quotation reject the complete quote batch, and payment initiation rechecks geography inside its durable-intent transaction before contacting the payment provider. Existing payment-command replay remains available after geography changes.

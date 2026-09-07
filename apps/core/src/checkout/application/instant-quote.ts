@@ -15,7 +15,10 @@ import {
   evaluateCheckoutPromotions,
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
-import { closestLocation } from "../../geography/geometry";
+import {
+  operationalCandidates,
+  geographyQuoteGuard,
+} from "../../geography/application/operational-candidates";
 import {
   resolveLineShippingWeightGrams,
   type CanonicalBaseUnitCode,
@@ -53,39 +56,18 @@ export async function createInstantQuote(
   address: ProviderCheckoutAddress & { delivery_zone_code: string | null },
   dependencies: CheckoutQuoteDependencies,
 ): Promise<{ ok: true; value: CheckoutQuoteView; requestId: string } | ReturnType<typeof failure>> {
-  const routingRows = await database
-    .prepare(
-      `SELECT fl.id, dz.id AS zone_id, sa.market_id, ls.location_id,
-              fl.name AS location_name, readiness.instant_promise_minutes AS promise_minutes,
-              readiness.max_concurrent_instant_orders, fl.latitude, fl.longitude
-       FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
-       JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-       JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
-       JOIN global_commerce_configuration mode ON mode.id='global'
-        AND mode.selling_state='OPEN' AND mode.fulfillment_mode='INSTANT'
-       JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
-       WHERE dz.code=? AND dz.status='active' AND readiness.dispatch_ready=1
-         AND readiness.instant_promise_minutes IS NOT NULL
-         AND readiness.max_concurrent_instant_orders IS NOT NULL
-         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
-         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
-         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='DISPATCH' AND c.enabled=1)
-       ORDER BY fl.id`,
-    )
-    .bind(address.delivery_zone_code ?? "")
-    .all<{
-      id: string;
-      zone_id: string;
-      market_id: string;
-      location_id: string;
-      location_name: string;
-      promise_minutes: number;
-      max_concurrent_instant_orders: number;
-      latitude: number;
-      longitude: number;
-    }>();
-  const routing = closestLocation(address, routingRows.results);
-  if (!routing)
+  const selected = (await operationalCandidates(database, address, { mode: "INSTANT" }))[0];
+  const routing = selected
+    ? {
+        ...selected,
+        zone_id: selected.zoneId,
+        market_id: selected.marketId,
+        location_id: selected.locationId,
+        location_name: selected.locationName,
+        promise_minutes: selected.promiseMinutes,
+      }
+    : null;
+  if (!routing || routing.promise_minutes === null)
     return failure(
       "INSTANT_MODE_UNAVAILABLE",
       "Instant delivery is not available at this address",
@@ -259,6 +241,10 @@ export async function createInstantQuote(
       lines,
       addressSnapshot: address,
       cycleSnapshot: {
+        geographyVersion: routing.geographyVersion,
+        locationVersion: routing.locationVersion,
+        readinessVersion: routing.readinessVersion,
+        modeVersion: routing.modeVersion,
         zoneId: routing.zone_id,
         locationId: routing.location_id,
         locationName: routing.location_name,
@@ -294,6 +280,7 @@ export async function createInstantQuote(
   const evidence = decision.evidence!;
   try {
     await database.batch([
+      geographyQuoteGuard(database, routing),
       database
         .prepare(
           "UPDATE checkout_inventory_holds SET status='EXPIRED', updated_at=? WHERE status='HELD' AND checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?)",
@@ -391,6 +378,43 @@ export async function createInstantQuote(
       const replayed = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
       if (replayed) return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
     }
+    const refreshed = (
+      await operationalCandidates(database, address, {
+        mode: routing.mode,
+        marketId: routing.marketId,
+        cycleId: undefined,
+      })
+    )[0];
+    if (
+      !refreshed ||
+      refreshed.locationId !== routing.locationId ||
+      refreshed.zoneId !== routing.zoneId ||
+      refreshed.locationVersion !== routing.locationVersion ||
+      refreshed.readinessVersion !== routing.readinessVersion
+    )
+      return failure(
+        "PRICE_CHANGED",
+        "Fulfillment routing changed; request a new quote",
+        command.requestId,
+      );
+    const currentGeography = await database
+      .prepare("SELECT version FROM geography_configuration WHERE market_id=?")
+      .bind(routing.market_id)
+      .first<{ version: number }>();
+    const currentMode = await database
+      .prepare("SELECT version,selling_state FROM global_commerce_configuration WHERE id='global'")
+      .first<{ version: number; selling_state: string }>();
+    if (
+      currentGeography?.version !== routing.geographyVersion ||
+      currentMode?.version !== routing.modeVersion ||
+      currentMode.selling_state !== "OPEN"
+    )
+      return failure(
+        "PRICE_CHANGED",
+        "Fulfillment routing changed; request a new quote",
+        command.requestId,
+      );
+
     if (message.includes("CHECK constraint failed: id = 0") || message.includes("commitment_abort"))
       return failure(
         "INSUFFICIENT_STOCK",

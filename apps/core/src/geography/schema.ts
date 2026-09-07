@@ -34,6 +34,14 @@ export const market = sqliteTable(
   (table) => ({ codeUnique: uniqueIndex("market_code_unique").on(table.code) }),
 );
 
+export const geographyConfiguration = sqliteTable("geography_configuration", {
+  marketId: text("market_id")
+    .primaryKey()
+    .references(() => market.id, { onDelete: "restrict" }),
+  version: integer("version").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export const fulfillmentLocation = sqliteTable(
   "fulfillment_location",
   {
@@ -186,6 +194,7 @@ export const locationServiceability = sqliteTable(
 );
 
 export const geographySchema = {
+  geographyConfiguration,
   organization,
   market,
   fulfillmentLocation,

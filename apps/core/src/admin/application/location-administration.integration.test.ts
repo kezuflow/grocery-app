@@ -1,65 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { z } from "@freshmarkets/validation";
+import { locationManager as staff } from "../../test-location-fixtures";
 import type { CreateAdminLocationRequest } from "@freshmarkets/contracts";
 import { createAuth } from "../../auth/service";
-import { createAdminLocation, transitionAdminLocation } from "./location-administration";
+import {
+  createAdminLocation,
+  transitionAdminLocation,
+  updateAdminLocation,
+} from "./location-administration";
+import type { GeocoderPort } from "../../geography/ports/geocoder";
+import { GeocoderError } from "../../geography/infrastructure/mapbox-geocoder";
 import { getGlobalCommerceConfiguration } from "../../commerce/application/global-commerce-configuration";
 
 const core = exports.default;
-async function staff(scope: "global" | "location" = "global", manage = true) {
-  const id = crypto.randomUUID();
-  const response = await SELF.fetch("https://core.example.invalid/api/auth/sign-up/email", {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
-    body: JSON.stringify({
-      name: "Location manager",
-      email: `locations-${id}@example.com`,
-      password: "correct-horse-battery-staple",
-    }),
-  });
-  const { user } = z.object({ user: z.object({ id: z.string() }) }).parse(await response.json());
-  let cookie = response.headers
-    .getSetCookie()
-    .map((value) => value.split(";", 1)[0])
-    .join("; ");
-  const now = Date.now();
-  await env.DB.batch([
-    env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(user.id),
-    env.DB.prepare(
-      "INSERT INTO staff_identity(id,auth_user_id,display_name,status,created_at,updated_at) VALUES (?,?,'Location manager','active',?,?)",
-    ).bind(id, user.id, now, now),
-    env.DB.prepare("INSERT INTO role(id,code,name,created_at) VALUES (?,?,'Locations',?)").bind(
-      id,
-      `locations-${id}`,
-      now,
-    ),
-    env.DB.prepare("INSERT INTO staff_role(staff_id,role_id) VALUES (?,?)").bind(id, id),
-    env.DB.prepare(
-      "INSERT INTO staff_scope(id,staff_id,scope_kind,location_id) VALUES (?,?,?,?)",
-    ).bind(id, id, scope, scope === "global" ? null : "location-cebu-central"),
-    env.DB.prepare(
-      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='locations.read' OR (code='locations.manage' AND ?=1)",
-    ).bind(id, manage ? 1 : 0),
-  ]);
-  if (!cookie) {
-    const signedIn = await SELF.fetch("https://core.example.invalid/api/auth/sign-in/email", {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
-      body: JSON.stringify({
-        email: `locations-${id}@example.com`,
-        password: "correct-horse-battery-staple",
-      }),
-    });
-    cookie = signedIn.headers
-      .getSetCookie()
-      .map((value) => value.split(";", 1)[0])
-      .join("; ");
-  }
-  expect(cookie.length).toBeGreaterThan(0);
-  return { id, headers: { cookie } };
-}
 function createRequest(headers: Record<string, string>): CreateAdminLocationRequest {
   return {
     headers,
@@ -98,6 +51,116 @@ async function noEffects(key: string) {
 }
 
 describe("Global location setup", () => {
+  it("permanently finalizes temporary address text at the confirmed pin and retains saved evidence", async () => {
+    const manager = await staff();
+    const request = {
+      ...createRequest(manager.headers),
+      componentsSource: "TEMPORARY_GEOCODER" as const,
+      confirmationSource: "USER_PIN" as const,
+    };
+    const coordinates: { latitude: number; longitude: number }[] = [];
+    const geocoder: GeocoderPort = {
+      search: async () => [],
+      reverseTemporary: async () => {
+        throw new Error("Unexpected temporary reverse");
+      },
+      reversePermanent: async ({ coordinate }) => {
+        coordinates.push(coordinate);
+        return {
+          provider: "mapbox",
+          providerReference: "protected-reference",
+          displayAddress: "Permanent address",
+          coordinate: { latitude: 1, longitude: 1 },
+          accuracy: null,
+          components: { ...request.address, addressLine1: "Permanently confirmed road" },
+        };
+      },
+    };
+    const deps = { db: env.DB, auth: createAuth(env), geocoder };
+    const result = await createAdminLocation(deps, request);
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        latitude: request.latitude,
+        longitude: request.longitude,
+        addressProviderDerived: true,
+        address: { addressLine1: "Permanently confirmed road" },
+      },
+    });
+    if (!result.ok || !result.value.address) throw new Error("Expected confirmed location");
+    expect(coordinates).toEqual([{ latitude: request.latitude, longitude: request.longitude }]);
+    expect(await createAdminLocation(deps, request)).toEqual(result);
+    expect(coordinates).toHaveLength(1);
+    const before = await env.DB.prepare("SELECT address_json FROM fulfillment_location WHERE id=?")
+      .bind(result.value.locationId)
+      .first();
+    const update = {
+      ...request,
+      componentsSource: "SAVED_ADDRESS" as const,
+      address: result.value.address,
+      locationId: result.value.locationId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      name: "Renamed warehouse",
+    };
+    expect((await updateAdminLocation(deps, update)).ok).toBe(true);
+    expect(coordinates).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT address_json FROM fulfillment_location WHERE id=?")
+        .bind(result.value.locationId)
+        .first(),
+    ).toEqual(before);
+    expect(
+      (
+        await updateAdminLocation(deps, {
+          ...update,
+          latitude: 10.33,
+          expectedVersion: 2,
+          idempotencyKey: crypto.randomUUID(),
+        })
+      ).ok,
+    ).toBe(true);
+    expect(coordinates).toHaveLength(2);
+    expect(coordinates[1]).toEqual({ latitude: 10.33, longitude: request.longitude });
+  });
+  it.each(["provider", "revoked"] as const)(
+    "leaves no location effects when address finalization is %s",
+    async (mode) => {
+      const manager = await staff();
+      const request = {
+        ...createRequest(manager.headers),
+        componentsSource: "TEMPORARY_GEOCODER" as const,
+        confirmationSource: "GEOCODER" as const,
+      };
+      const geocoder: GeocoderPort = {
+        search: async () => [],
+        reverseTemporary: async () => {
+          throw new Error("Unexpected temporary reverse");
+        },
+        reversePermanent: async () => {
+          if (mode === "provider") throw new GeocoderError("GEOCODER_TIMEOUT");
+          await env.DB.prepare("DELETE FROM staff_scope WHERE staff_id=?").bind(manager.id).run();
+          return {
+            provider: "mapbox",
+            providerReference: "protected-reference",
+            displayAddress: "Confirmed",
+            coordinate: { latitude: request.latitude, longitude: request.longitude },
+            accuracy: null,
+            components: request.address,
+          };
+        },
+      };
+      expect(
+        (await createAdminLocation({ db: env.DB, auth: createAuth(env), geocoder }, request)).ok,
+      ).toBe(false);
+      await noEffects(request.idempotencyKey);
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM fulfillment_location WHERE code=?")
+          .bind(request.code)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
   it("invalidates unstarted quotes but protects started payments and their origin", async () => {
     const manager = await staff();
     const request = {

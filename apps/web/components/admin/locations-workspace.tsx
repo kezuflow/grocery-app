@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import type {
   AdminLocationView,
   AdminLocationsView,
@@ -7,6 +8,8 @@ import type {
   LocationAddress,
   LocationPurpose,
   RpcResult,
+  AddressComponentsSource,
+  CoordinateConfirmationSource,
 } from "@freshmarkets/contracts";
 import { appErrorCodes } from "@freshmarkets/contracts";
 import {
@@ -23,6 +26,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
+import { LocationAddressMap } from "./location-address-map";
 
 const failed = z.object({
   ok: z.literal(false),
@@ -46,6 +50,8 @@ const blankAddress = {
   countryCode: "PH",
 };
 type Draft = {
+  componentsSource: AddressComponentsSource;
+  confirmationSource: CoordinateConfirmationSource;
   name: string;
   code: string;
   marketId: string;
@@ -57,6 +63,8 @@ type Draft = {
 };
 function draftFor(location?: AdminLocationView): Draft {
   return {
+    componentsSource: location?.address ? "SAVED_ADDRESS" : "FIRST_PARTY",
+    confirmationSource: "USER_PIN",
     name: location?.name ?? "",
     code: location?.code ?? "",
     marketId: location?.marketId ?? "",
@@ -68,7 +76,13 @@ function draftFor(location?: AdminLocationView): Draft {
   };
 }
 
-export function LocationsWorkspace({ initial }: { initial: RpcResult<AdminLocationsView> }) {
+export function LocationsWorkspace({
+  initial,
+  publicAccessToken,
+}: {
+  initial: RpcResult<AdminLocationsView>;
+  publicAccessToken?: string;
+}) {
   const [result, setResult] = useState(initial);
   const [editing, setEditing] = useState<AdminLocationView | null | undefined>(undefined);
   const [draft, setDraft] = useState<Draft>(() => draftFor());
@@ -161,6 +175,9 @@ export function LocationsWorkspace({ initial }: { initial: RpcResult<AdminLocati
         title="Locations"
         description="Set up warehouses and customer fulfillment sites. New locations start inactive."
       />
+      <Link href="/admin/locations/service-areas" className="mb-4 inline-block text-sm underline">
+        Service areas and routing preview
+      </Link>
       {notice && (
         <p role="status" className="mb-4 text-sm">
           {notice}
@@ -235,6 +252,41 @@ export function LocationsWorkspace({ initial }: { initial: RpcResult<AdminLocati
                 }}
               >
                 <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
+                  <LocationAddressMap
+                    publicAccessToken={publicAccessToken}
+                    disabled={locked}
+                    coordinate={
+                      draft.latitude.trim() &&
+                      draft.longitude.trim() &&
+                      Number.isFinite(Number(draft.latitude)) &&
+                      Number.isFinite(Number(draft.longitude)) &&
+                      Math.abs(Number(draft.latitude)) <= 90 &&
+                      Math.abs(Number(draft.longitude)) <= 180
+                        ? { latitude: Number(draft.latitude), longitude: Number(draft.longitude) }
+                        : null
+                    }
+                    onCandidate={(candidate) =>
+                      setDraft({
+                        ...draft,
+                        address: {
+                          ...candidate.components,
+                          region: candidate.components.region ?? draft.address.region,
+                        },
+                        latitude: String(candidate.coordinate.latitude),
+                        longitude: String(candidate.coordinate.longitude),
+                        componentsSource: "TEMPORARY_GEOCODER",
+                        confirmationSource: "GEOCODER",
+                      })
+                    }
+                    onCoordinate={(point, source) =>
+                      setDraft({
+                        ...draft,
+                        latitude: String(point.latitude),
+                        longitude: String(point.longitude),
+                        confirmationSource: source,
+                      })
+                    }
+                  />
                   <div>
                     <Label htmlFor="location-name">Location name</Label>
                     <Input
@@ -333,6 +385,11 @@ export function LocationsWorkspace({ initial }: { initial: RpcResult<AdminLocati
                         onChange={(event) =>
                           setDraft({
                             ...draft,
+                            componentsSource:
+                              draft.componentsSource === "TEMPORARY_GEOCODER" ||
+                              editing?.addressProviderDerived
+                                ? "TEMPORARY_GEOCODER"
+                                : "FIRST_PARTY",
                             address: { ...draft.address, [field]: event.target.value || null },
                           })
                         }
@@ -346,7 +403,13 @@ export function LocationsWorkspace({ initial }: { initial: RpcResult<AdminLocati
                       required
                       inputMode="decimal"
                       value={draft.latitude}
-                      onChange={(event) => setDraft({ ...draft, latitude: event.target.value })}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          latitude: event.target.value,
+                          confirmationSource: "USER_PIN",
+                        })
+                      }
                     />
                   </div>
                   <div>
@@ -356,7 +419,13 @@ export function LocationsWorkspace({ initial }: { initial: RpcResult<AdminLocati
                       required
                       inputMode="decimal"
                       value={draft.longitude}
-                      onChange={(event) => setDraft({ ...draft, longitude: event.target.value })}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          longitude: event.target.value,
+                          confirmationSource: "USER_PIN",
+                        })
+                      }
                     />
                   </div>
                   <div className="sm:col-span-2">

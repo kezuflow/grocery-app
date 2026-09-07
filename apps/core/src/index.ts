@@ -1,4 +1,9 @@
 import {
+  getAdminServiceability,
+  publishAdminServiceArea,
+  previewAdminServiceability,
+} from "./admin/application/serviceability-administration";
+import {
   listAdminLocations,
   createAdminLocation,
   updateAdminLocation,
@@ -1831,6 +1836,30 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
+  async getAdminServiceability(
+    input: import("@freshmarkets/contracts").AdminServiceabilityRequest,
+  ) {
+    return getAdminServiceability(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async publishAdminServiceArea(
+    input: import("@freshmarkets/contracts").PublishAdminServiceAreaRequest,
+  ) {
+    return publishAdminServiceArea(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async previewAdminServiceability(
+    input: import("@freshmarkets/contracts").PreviewAdminServiceabilityRequest,
+  ) {
+    return previewAdminServiceability(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
   async listAdminLocations(input: import("@freshmarkets/contracts").AdminLocationsRequest) {
     return listAdminLocations(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
@@ -1839,13 +1868,21 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
   async createAdminLocation(input: import("@freshmarkets/contracts").CreateAdminLocationRequest) {
     return createAdminLocation(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        geocoder: buildGeocoderPort(this.env),
+      },
       input,
     );
   }
   async updateAdminLocation(input: import("@freshmarkets/contracts").UpdateAdminLocationRequest) {
     return updateAdminLocation(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        geocoder: buildGeocoderPort(this.env),
+      },
       input,
     );
   }

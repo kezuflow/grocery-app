@@ -115,6 +115,16 @@ assert.deepEqual(
   locationsBeforeSetup.map((row) => ({ ...row })),
 );
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+assert.deepEqual(
+  database
+    .prepare("SELECT market_id,version,updated_at FROM geography_configuration ORDER BY market_id")
+    .all()
+    .map((row) => ({ ...row })),
+  database
+    .prepare("SELECT id market_id,1 version,0 updated_at FROM market ORDER BY id")
+    .all()
+    .map((row) => ({ ...row })),
+);
 assert.equal(database.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
 for (const { name } of before) {
   for (const column of database

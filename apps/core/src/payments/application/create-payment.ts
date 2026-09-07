@@ -19,6 +19,8 @@ export type CreatePaymentCommand = {
   returnUrl: string;
   idempotencyKey: string;
   requestId: string;
+  /** Trusted checkout command evidence; never accepted from a client payload. */
+  checkoutVersion?: number;
 };
 
 export type CreatedPaymentAction = {
@@ -125,7 +127,7 @@ export async function createPayment(
   const intentId = crypto.randomUUID();
   const now = Date.now();
   try {
-    await database
+    const insertIntent = database
       .prepare(
         "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'INITIATED', ?, 1, ?, ?)",
       )
@@ -140,10 +142,54 @@ export async function createPayment(
         command.idempotencyKey,
         now,
         now,
-      )
-      .run();
+      );
+    const guards: D1PreparedStatement[] = [];
+    if (command.checkoutVersion !== undefined)
+      guards.push(
+        database
+          .prepare(`INSERT INTO commitment_abort(id) SELECT -27 WHERE NOT EXISTS (
+      SELECT 1 FROM checkout_quote q
+      JOIN fulfillment_location l ON l.id=json_extract(q.cycle_snapshot_json,'$.locationId')
+      JOIN geography_configuration geography ON geography.market_id=l.market_id
+      JOIN market market ON market.id=l.market_id AND market.status='active'
+      JOIN delivery_zone zone ON zone.id=json_extract(q.cycle_snapshot_json,'$.zoneId') AND zone.status='active'
+      JOIN service_area area ON area.id=zone.service_area_id AND area.market_id=market.id AND area.status='active'
+      JOIN location_serviceability link ON link.location_id=l.id AND link.zone_id=zone.id AND link.eligible=1
+      JOIN global_commerce_configuration mode ON mode.id='global'
+      JOIN customer customer ON customer.id=q.customer_id AND customer.status='active'
+      WHERE q.id=? AND q.customer_id=? AND q.version=? AND q.status='ACTIVE' AND q.expires_at>?
+        AND q.total_minor=? AND q.currency=? AND mode.selling_state='OPEN' AND mode.fulfillment_mode=q.fulfillment_mode
+        AND geography.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.geographyVersion'),1)
+        AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
+        AND l.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.locationVersion'),l.version)
+        AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
+        AND area.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (area.active_to IS NULL OR area.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
+        AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
+        AND ((q.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness readiness WHERE readiness.location_id=l.id AND readiness.dispatch_ready=1
+          AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version)))
+          OR (q.fulfillment_mode='SCHEDULED' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
+            WHERE cycle.id=q.delivery_cycle_id AND cycle.status='OPEN' AND cycle.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
+              AND cycle.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.cycleVersion'),cycle.version)
+              AND participation.zone_id=zone.id AND participation.location_id=l.id AND participation.status='ACTIVE')))
+    )`)
+          .bind(
+            command.subjectId,
+            command.customerId,
+            command.checkoutVersion,
+            now,
+            command.amountMinor,
+            command.currency,
+          ),
+      );
+    await database.batch([...guards, insertIntent]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (/commitment_abort|CHECK constraint failed: id = 0/.test(message))
+      return failure(
+        "PRICE_CHANGED",
+        "Checkout routing changed; accept a new quote",
+        command.requestId,
+      );
     if (message.includes("UNIQUE constraint failed")) {
       return failure(
         "CONFLICT",

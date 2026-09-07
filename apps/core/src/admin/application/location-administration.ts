@@ -25,11 +25,16 @@ import { applicationContextForRequest } from "../../auth/authorization";
 import { iamSchema } from "../../iam/schema";
 import { requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { finalizeAddressConfirmation } from "../../geography/application/finalize-address-confirmation";
+import { GeocoderError } from "../../geography/infrastructure/mapbox-geocoder";
+import type { GeocoderPort } from "../../geography/ports/geocoder";
 import {
   decodeStaffCursor,
   encodeStaffCursor,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
+
+export type LocationAdministrationDeps = StaffAdministrationDeps & { geocoder?: GeocoderPort };
 
 const commandSchema = authenticatedRequestSchema.extend({
   idempotencyKey: idempotencyKeySchema,
@@ -85,12 +90,16 @@ async function access(
     authUserId: context.value.principal.userId,
   };
 }
+export { access as resolveLocationAdministrationAccess };
 
 const locationSelect = `SELECT l.id locationId,l.market_id marketId,m.name marketName,m.currency,m.timezone,
   l.code,l.name,l.purpose,l.status,l.version,l.latitude,l.longitude,l.address_json addressJson,l.created_at createdAt,
   (SELECT json_group_array(capability) FROM location_capability WHERE location_id=l.id AND enabled=1) capabilitiesJson
   FROM fulfillment_location l JOIN market m ON m.id=l.market_id`;
-type LocationRow = Omit<AdminLocationView, "address" | "capabilities"> & {
+type LocationRow = Omit<
+  AdminLocationView,
+  "address" | "capabilities" | "addressProviderDerived"
+> & {
   addressJson: string | null;
   capabilitiesJson: string;
   createdAt: number;
@@ -103,11 +112,15 @@ function view(row: LocationRow): AdminLocationView {
     address = null;
   }
   const parsed = locationAddressSchema.safeParse(address);
+  const evidence = z
+    .object({ confirmation: z.object({ provider: z.string().nullable() }) })
+    .safeParse(address);
   const { addressJson: _address, capabilitiesJson, createdAt: _created, ...fields } = row;
   // Historical incomplete addresses are visible as requiring operator confirmation.
   return {
     ...fields,
     address: parsed.success ? parsed.data : null,
+    addressProviderDerived: evidence.success && evidence.data.confirmation.provider !== null,
     capabilities: z.array(locationCapabilitySchema).parse(JSON.parse(capabilitiesJson)),
   };
 }
@@ -116,7 +129,7 @@ async function load(database: D1Database, id: string) {
     .prepare(`${locationSelect} WHERE l.id=?`)
     .bind(id)
     .first<LocationRow>();
-  return row ? view(row) : null;
+  return row ? { value: view(row), addressJson: row.addressJson } : null;
 }
 
 export async function listAdminLocations(
@@ -171,7 +184,7 @@ type LocationMutation =
   | { kind: "TRANSITION"; request: z.infer<typeof transitionSchema> };
 
 async function execute(
-  deps: StaffAdministrationDeps,
+  deps: LocationAdministrationDeps,
   mutation: LocationMutation,
 ): Promise<RpcResult<AdminLocationView>> {
   const { request } = mutation;
@@ -209,8 +222,9 @@ async function execute(
   }
   const prior = await replay();
   if (prior) return prior;
-  const current =
+  const stored =
     mutation.kind === "CREATE" ? null : await load(deps.db, mutation.request.locationId);
+  const current = stored?.value ?? null;
   if (mutation.kind !== "CREATE" && !current)
     return failure("NOT_FOUND", "Location not found", request.requestId);
   if (mutation.kind !== "CREATE" && current?.version !== mutation.request.expectedVersion)
@@ -235,6 +249,7 @@ async function execute(
       currency: market.currency,
       timezone: market.timezone,
       status: "inactive",
+      addressProviderDerived: false,
       version: 1,
     };
   else {
@@ -262,6 +277,80 @@ async function execute(
   }
   // Strip transport metadata before durable result and public response.
   next = adminLocationViewSchema.parse(next);
+  let addressJson = stored?.addressJson ?? JSON.stringify(next.address);
+  if (mutation.kind !== "TRANSITION") {
+    const addressRequest = mutation.request;
+    const componentsSource = addressRequest.componentsSource ?? "FIRST_PARTY";
+    const source = addressRequest.confirmationSource ?? "USER_PIN";
+    const sameCoordinate =
+      current?.latitude === next.latitude && current?.longitude === next.longitude;
+    if (
+      componentsSource === "SAVED_ADDRESS" &&
+      (!current || JSON.stringify(current.address) !== JSON.stringify(next.address))
+    )
+      return failure(
+        "VALIDATION_FAILED",
+        "Saved address text must match this location",
+        request.requestId,
+      );
+    if (componentsSource !== "SAVED_ADDRESS" || !sameCoordinate) {
+      const needsProvider =
+        componentsSource === "TEMPORARY_GEOCODER" ||
+        source === "GEOCODER" ||
+        (componentsSource === "SAVED_ADDRESS" && current?.addressProviderDerived);
+      if (needsProvider && !deps.geocoder)
+        return failure(
+          "GEOCODER_UNCONFIGURED",
+          "Address confirmation is unavailable",
+          request.requestId,
+        );
+      try {
+        const confirmed = deps.geocoder
+          ? await finalizeAddressConfirmation(deps.geocoder, {
+              latitude: next.latitude,
+              longitude: next.longitude,
+              components: addressRequest.address,
+              componentsSource,
+              source,
+              confirmedAt: now,
+              locationChanged: !sameCoordinate,
+              persistedProvider: current?.addressProviderDerived ? "retained" : null,
+            })
+          : {
+              components: addressRequest.address,
+              provider: null,
+              providerReference: null,
+              source,
+              confirmedAt: now,
+            };
+        const address = locationAddressSchema.safeParse({
+          ...confirmed.components,
+          region: confirmed.components.region ?? addressRequest.address.region,
+        });
+        if (!address.success)
+          return failure(
+            "GEOCODER_INVALID_RESPONSE",
+            "Confirmed address is incomplete",
+            request.requestId,
+          );
+        next = {
+          ...next,
+          address: address.data,
+          addressProviderDerived: confirmed.provider !== null,
+        };
+        const { components: _components, ...confirmation } = confirmed;
+        addressJson = JSON.stringify({ ...next.address, confirmation });
+      } catch (error) {
+        if (error instanceof GeocoderError)
+          return failure(
+            error.code,
+            "Address confirmation is temporarily unavailable",
+            request.requestId,
+          );
+        throw error;
+      }
+    }
+  }
   if (
     next.purpose === "CENTRAL_WAREHOUSE" &&
     next.capabilities.some((cap) => !["RECEIVING", "INVENTORY", "PROCUREMENT"].includes(cap))
@@ -344,7 +433,7 @@ async function execute(
           next.code,
           next.name,
           next.purpose,
-          JSON.stringify(next.address),
+          addressJson,
           next.latitude,
           next.longitude,
           now,
@@ -382,7 +471,7 @@ async function execute(
         )
         .bind(
           next.name,
-          JSON.stringify(next.address),
+          addressJson,
           next.latitude,
           next.longitude,
           next.status,
@@ -407,6 +496,11 @@ async function execute(
     // A changed origin/capability or newly active nearer site requires a fresh customer quote.
     // Already-started Payments retain their accepted terms and reconciliation path.
     statements.push(
+      deps.db
+        .prepare(
+          "INSERT INTO geography_configuration(market_id,version,updated_at) VALUES (?,2,?) ON CONFLICT(market_id) DO UPDATE SET version=version+1,updated_at=excluded.updated_at",
+        )
+        .bind(marketId, now),
       deps.db
         .prepare(`UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=?
       WHERE status='ACTIVE' AND json_extract(cycle_snapshot_json,'$.locationId') IN
@@ -454,7 +548,7 @@ async function execute(
 }
 
 export async function createAdminLocation(
-  deps: StaffAdministrationDeps,
+  deps: LocationAdministrationDeps,
   input: CreateAdminLocationRequest,
 ): Promise<RpcResult<AdminLocationView>> {
   const parsed = createSchema.safeParse(input);
@@ -467,7 +561,7 @@ export async function createAdminLocation(
       );
 }
 export async function updateAdminLocation(
-  deps: StaffAdministrationDeps,
+  deps: LocationAdministrationDeps,
   input: UpdateAdminLocationRequest,
 ): Promise<RpcResult<AdminLocationView>> {
   const parsed = updateSchema.safeParse(input);

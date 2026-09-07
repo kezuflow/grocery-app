@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "./create-checkout-quote";
 import { startPromotionalTrial } from ".././../membership/application/start-promotional-trial";
@@ -124,6 +124,87 @@ function command(customerId: string, cartId: string, addressId: string) {
 }
 
 describe("instant checkout quotes", () => {
+  it.each(["revision", "expiry", "readiness"])(
+    "rejects %s changes during courier quotation with no quote, attempt or holds",
+    async (change) => {
+      await configureInstant();
+      const basket = await seedBasket({ onHand: 100_000, member: false });
+      const links = await env.DB.prepare(
+        "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
+      ).all<{
+        zone_id: string;
+        location_id: string;
+        valid_from: number;
+        valid_to: number | null;
+      }>();
+      const readiness = await env.DB.prepare(
+        "SELECT location_id,dispatch_ready FROM fulfillment_location_readiness",
+      ).all<{ location_id: string; dispatch_ready: number }>();
+      const cycles = await env.DB.prepare("SELECT id,status,version FROM delivery_cycle").all<{
+        id: string;
+        status: string;
+        version: number;
+      }>();
+      onTestFinished(async () => {
+        await env.DB.batch([
+          ...links.results.map((row) =>
+            env.DB.prepare(
+              "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
+            ).bind(row.valid_to, row.zone_id, row.location_id, row.valid_from),
+          ),
+          ...readiness.results.map((row) =>
+            env.DB.prepare(
+              "UPDATE fulfillment_location_readiness SET dispatch_ready=? WHERE location_id=?",
+            ).bind(row.dispatch_ready, row.location_id),
+          ),
+          ...cycles.results.map((row) =>
+            env.DB.prepare("UPDATE delivery_cycle SET status=?,version=? WHERE id=?").bind(
+              row.status,
+              row.version,
+              row.id,
+            ),
+          ),
+        ]);
+      });
+      let reachedProvider = false;
+      const changingProvider = {
+        ...deliveryProvider,
+        quote: async (...args: Parameters<typeof deliveryProvider.quote>) => {
+          reachedProvider = true;
+          const sql =
+            change === "revision"
+              ? "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'"
+              : change === "expiry"
+                ? "UPDATE location_serviceability SET valid_to=1"
+                : "UPDATE fulfillment_location_readiness SET dispatch_ready=0";
+          await env.DB.prepare(sql).run();
+          return deliveryProvider.quote(...args);
+        },
+      };
+      const result = await createCheckoutQuote(
+        env.DB,
+        command(basket.customerId, basket.cartId, basket.addressId),
+        { ...quoteDependencies, deliveryProviders: new Map([["lalamove", changingProvider]]) },
+      );
+      expect(reachedProvider).toBe(true);
+      expect(result).toMatchObject({ ok: false, error: { code: "PRICE_CHANGED" } });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM checkout_quote WHERE cart_id=?")
+          .bind(basket.cartId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM checkout_attempts WHERE customer_id=?")
+          .bind(basket.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM checkout_inventory_holds WHERE status='HELD'",
+        ).first(),
+      ).toEqual({ count: 0 });
+    },
+  );
   it("rejects a basket below the market minimum before creating a quote or hold", async () => {
     await configureInstant();
     await env.DB.prepare(

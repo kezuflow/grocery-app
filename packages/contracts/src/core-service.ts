@@ -6,6 +6,7 @@ import type {
 } from "./geography";
 import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminLocationsService } from "./admin-locations";
+import type { AdminServiceabilityService } from "./admin-serviceability";
 import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
 import type { AdminPromotionsService } from "./admin-promotions";
@@ -62,6 +63,7 @@ export interface ImplementedCoreService
     OperationsService,
     AdminFoundationService,
     AdminLocationsService,
+    AdminServiceabilityService,
     AdminStaffAccessService,
     AdminCustomerService,
     AdminPrivacyService,
@@ -188,6 +190,9 @@ export const coreServiceMethodNames = [
   "createAdminLocation",
   "updateAdminLocation",
   "transitionAdminLocation",
+  "getAdminServiceability",
+  "publishAdminServiceArea",
+  "previewAdminServiceability",
   "listAdminInventory",
   "getAdminInventoryLedger",
   "getGlobalCommerceConfiguration",

@@ -1,5 +1,6 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { RpcResult } from "./common";
+import type { AddressComponentsSource, CoordinateConfirmationSource } from "./geography";
 
 export type LocationPurpose = "CUSTOMER_FULFILLMENT" | "CENTRAL_WAREHOUSE";
 export type LocationCapability =
@@ -19,6 +20,8 @@ export type LocationAddress = {
   countryCode: string;
 };
 export type AdminLocationDetails = {
+  componentsSource?: AddressComponentsSource;
+  confirmationSource?: CoordinateConfirmationSource;
   name: string;
   address: LocationAddress;
   latitude: number;
@@ -37,6 +40,7 @@ export type AdminLocationView = {
   status: "active" | "inactive";
   version: number;
   address: LocationAddress | null;
+  addressProviderDerived: boolean;
   latitude: number;
   longitude: number;
   capabilities: readonly LocationCapability[];

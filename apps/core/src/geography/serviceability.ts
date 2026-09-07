@@ -51,6 +51,7 @@ export type GeographyDataset = {
   }>;
   candidates: ReadonlyArray<{
     id: string;
+    zoneId: string;
     code: string;
     name: string;
     type: LocationType;
@@ -122,11 +123,12 @@ export function evaluateServiceability(
   };
 
   const point = [request.longitude, request.latitude] as const;
-  const area = dataset.serviceAreas.find((candidate) => {
+  const areas = dataset.serviceAreas.filter((candidate) => {
     if (!candidate.active) return false;
     const polygon = parsePolygonGeoJson(candidate.polygonGeoJson);
     return polygon ? pointInPolygon(point, polygon) : false;
   });
+  const area = areas[0];
   if (!area)
     return result(
       request,
@@ -145,11 +147,13 @@ export function evaluateServiceability(
     name: area.name,
     polygonVersion: area.polygonVersion,
   };
-  const zone = dataset.deliveryZones.find((candidate) => {
-    if (!candidate.active || candidate.serviceAreaId !== area.id) return false;
+  const zones = dataset.deliveryZones.filter((candidate) => {
+    if (!candidate.active || !areas.some((area) => area.id === candidate.serviceAreaId))
+      return false;
     const polygon = parsePolygonGeoJson(candidate.polygonGeoJson);
     return polygon ? pointInPolygon(point, polygon) : false;
   });
+  const zone = zones[0];
   if (!zone) {
     return result(
       request,
@@ -166,7 +170,7 @@ export function evaluateServiceability(
   }
 
   const locations = dataset.candidates
-    .filter((candidate) => candidate.active)
+    .filter((candidate) => candidate.active && zones.some((zone) => zone.id === candidate.zoneId))
     .filter((candidate) =>
       REQUIRED_FULFILLMENT_CAPABILITIES.every((capability) =>
         candidate.capabilities.includes(capability),
@@ -176,8 +180,10 @@ export function evaluateServiceability(
       const distance =
         haversineDistanceMeters(request, left) - haversineDistanceMeters(request, right);
       return distance !== 0 ? distance : left.id.localeCompare(right.id);
-    })
-    .map(({ code, name, type }) => ({ code, name, type }));
+    });
+  const chosenZone = zones.find((zone) => zone.id === locations[0]?.zoneId) ?? zone;
+  const chosenArea = areas.find((area) => area.id === chosenZone.serviceAreaId) ?? area;
+  const count = new Set(locations.map((location) => location.id)).size;
 
   return result(
     request,
@@ -185,9 +191,17 @@ export function evaluateServiceability(
       serviceable: locations.length > 0,
       reason: locations.length ? null : "NO_ELIGIBLE_LOCATION",
       market,
-      serviceArea,
-      deliveryZone: { code: zone.code, name: zone.name, polygonVersion: zone.polygonVersion },
-      fulfillmentEligibility: { eligible: locations.length > 0, candidateCount: locations.length },
+      serviceArea: {
+        code: chosenArea.code,
+        name: chosenArea.name,
+        polygonVersion: chosenArea.polygonVersion,
+      },
+      deliveryZone: {
+        code: chosenZone.code,
+        name: chosenZone.name,
+        polygonVersion: chosenZone.polygonVersion,
+      },
+      fulfillmentEligibility: { eligible: count > 0, candidateCount: count },
     },
     now,
   );
@@ -304,6 +318,7 @@ export async function resolveServiceability(
       deliveryZones: deliveryZones.map((zone) => ({ ...zone, active: true })),
       candidates: assignments.map((candidate) => ({
         id: candidate.locationId,
+        zoneId: candidate.zoneId,
         code: candidate.code,
         name: candidate.name,
         type: candidate.type,

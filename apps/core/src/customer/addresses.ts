@@ -1,3 +1,4 @@
+import { finalizeAddressConfirmation as finalizeConfirmation } from "../geography/application/finalize-address-confirmation";
 import type {
   AddressComponents,
   AddressComponentsSource,
@@ -9,7 +10,7 @@ import type {
 } from "@freshmarkets/contracts";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { drizzle } from "drizzle-orm/d1";
-import type { GeocoderPort, PermanentGeocode } from "../geography/ports/geocoder";
+import type { GeocoderPort } from "../geography/ports/geocoder";
 import { resolveServiceability } from "../geography/serviceability";
 import { normalizePhilippineMobile } from "./domain/customer-phone";
 
@@ -397,54 +398,6 @@ export async function updateCustomerAddress(
   if (!row)
     return failure("INTERNAL_ERROR", "Updated address could not be read", command.requestId);
   return { ok: true as const, value: customerAddressView(row), requestId: command.requestId };
-}
-
-type FinalizedConfirmation = {
-  components: AddressComponents;
-  provider: string | null;
-  providerReference: string | null;
-  source: CoordinateConfirmationSource;
-  confirmedAt: number;
-};
-
-async function finalizeConfirmation(
-  geocoder: GeocoderPort,
-  input: {
-    latitude: number;
-    longitude: number;
-    components: AddressComponents;
-    componentsSource: AddressComponentsSource;
-    persistedProvider?: string | null;
-    locationChanged?: boolean;
-    source: CoordinateConfirmationSource;
-    confirmedAt: number;
-  },
-): Promise<FinalizedConfirmation> {
-  const requiresPermanentComponents =
-    input.componentsSource === "TEMPORARY_GEOCODER" ||
-    (input.componentsSource === "SAVED_ADDRESS"
-      ? input.locationChanged === true &&
-        (input.source === "GEOCODER" ||
-          (input.persistedProvider !== null && input.persistedProvider !== undefined))
-      : input.source === "GEOCODER");
-  if (!requiresPermanentComponents)
-    return {
-      components: input.components,
-      provider: null,
-      providerReference: null,
-      source: input.source,
-      confirmedAt: input.confirmedAt,
-    };
-  const permanent: PermanentGeocode = await geocoder.reversePermanent({
-    coordinate: { latitude: input.latitude, longitude: input.longitude },
-  });
-  return {
-    components: permanent.components,
-    provider: permanent.provider,
-    providerReference: permanent.providerReference,
-    source: input.source,
-    confirmedAt: input.confirmedAt,
-  };
 }
 
 function componentsEqual(left: AddressComponents, right: AddressComponents): boolean {

@@ -2,16 +2,15 @@ import { headers } from "next/headers";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { coreRequestHeaders } from "@/lib/core-client/request";
-import { LocationsWorkspace } from "@/components/admin/locations-workspace";
-
-export default async function LocationsPage() {
-  const result = await coreClient(env.CORE).listAdminLocations({
+import { ServiceAreasWorkspace } from "@/components/admin/service-areas-workspace";
+export default async function ServiceAreasPage() {
+  const initial = await coreClient(env.CORE).getAdminServiceability({
     headers: coreRequestHeaders(await headers()),
     requestId: crypto.randomUUID(),
   });
   return (
-    <LocationsWorkspace
-      initial={result}
+    <ServiceAreasWorkspace
+      initial={initial}
       publicAccessToken={env.MAPBOX_BROWSER_TOKEN || undefined}
     />
   );

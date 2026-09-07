@@ -1,7 +1,7 @@
 import type { FulfillmentOptionView, RpcResult } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
-import { sortLocationsByDistance } from "../../geography/geometry";
+import { operationalCandidates } from "../../geography/application/operational-candidates";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 import { quoteProviderDelivery } from "./quote-provider-delivery";
@@ -22,18 +22,6 @@ type InstantDeliveryPartner = Readonly<{
   serviceLabel: string;
   provider: DeliveryProvider;
 }>;
-type Candidate = {
-  id: string;
-  locationId: string;
-  latitude: number;
-  longitude: number;
-  marketId: string;
-  mode: "INSTANT" | "SCHEDULED";
-  promiseMinutes: number | null;
-  modeVersion: number;
-  zoneId: string;
-};
-
 async function optionId(
   query: Query & { addressVersion: number },
   mode: string,
@@ -124,28 +112,7 @@ export async function listFulfillmentOptions(
       },
     };
 
-  const candidateRows = await database
-    .prepare(
-      `SELECT fl.id id,fl.id locationId,fl.latitude,fl.longitude,fl.market_id marketId,
-            mode.fulfillment_mode mode,readiness.instant_promise_minutes promiseMinutes,
-            mode.version modeVersion,dz.id zoneId
-     FROM delivery_zone dz JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-     JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
-     JOIN global_commerce_configuration mode ON mode.id='global' AND mode.selling_state='OPEN'
-     LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
-     WHERE dz.code=? AND dz.status='active'
-       AND (mode.fulfillment_mode='SCHEDULED' OR (
-         readiness.dispatch_ready=1 AND readiness.instant_promise_minutes IS NOT NULL
-         AND readiness.max_concurrent_instant_orders IS NOT NULL
-       ))
-       AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
-       AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
-       AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='DISPATCH' AND c.enabled=1)
-     ORDER BY fl.id`,
-    )
-    .bind(address.delivery_zone_code)
-    .all<Candidate>();
-  const orderedCandidates = sortLocationsByDistance(address, candidateRows.results);
+  const orderedCandidates = await operationalCandidates(database, address);
   let candidate = orderedCandidates[0] ?? null;
   const currentQuery = { ...query, addressVersion: address.version };
   const options: FulfillmentOptionView[] = [];
@@ -276,6 +243,7 @@ export async function listFulfillmentOptions(
         ? {
             locationId: candidate.locationId,
             modeVersion: candidate.modeVersion,
+            geographyVersion: candidate.geographyVersion,
             cycle,
             ...(partner
               ? { providerCode: partner.providerCode, providerServiceType: partner.serviceType }

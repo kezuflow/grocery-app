@@ -115,6 +115,7 @@ export async function createCheckoutPaymentIntent(
     purpose: "GROCERY_CHECKOUT",
     subjectType: "checkout_quote",
     subjectId: quote.id,
+    checkoutVersion: quote.version,
     customerId: command.customerId,
     amountMinor: quote.totalMinor,
     currency: quote.currency,

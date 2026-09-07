@@ -17,7 +17,10 @@ import {
   evaluateCheckoutPromotions,
   promotionClaimStatements,
 } from "../../promotions/application/evaluate-checkout-promotions";
-import { closestLocation } from "../../geography/geometry";
+import {
+  operationalCandidates,
+  geographyQuoteGuard,
+} from "../../geography/application/operational-candidates";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 import { quoteProviderDelivery, type ProviderCheckoutAddress } from "./quote-provider-delivery";
@@ -209,11 +212,12 @@ async function createScheduledQuote(
   // Cycle must be open and before cutoff.
   const cycle = await database
     .prepare(
-      "SELECT id, market_id, cutoff_at, delivery_date, status FROM delivery_cycle WHERE id=? AND status='OPEN'",
+      "SELECT id, version, market_id, cutoff_at, delivery_date, status FROM delivery_cycle WHERE id=? AND status='OPEN'",
     )
     .bind(command.deliveryCycleId)
     .first<{
       id: string;
+      version: number;
       market_id: string;
       cutoff_at: number;
       delivery_date: number;
@@ -225,34 +229,23 @@ async function createScheduledQuote(
     return failure("CYCLE_CLOSED", "The cycle cutoff has passed", command.requestId);
 
   // Zone routing for this cycle's market (address already resolved).
-  const routingRows = await database
-    .prepare(
-      `SELECT fl.id, dz.id AS zone_id, ls.location_id, fl.name AS location_name,
-              fl.latitude, fl.longitude
-       FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
-       JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-       JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
-       JOIN global_commerce_configuration mode ON mode.id='global'
-        AND mode.selling_state='OPEN' AND mode.fulfillment_mode='SCHEDULED'
-       JOIN delivery_cycle_zone cycle_zone ON cycle_zone.cycle_id=?
-         AND cycle_zone.zone_id=dz.id AND cycle_zone.location_id=fl.id
-         AND cycle_zone.status='ACTIVE'
-       WHERE dz.code=? AND dz.status='active' AND sa.market_id=?
-         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PICKING' AND c.enabled=1)
-         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='PACKING' AND c.enabled=1)
-         AND EXISTS (SELECT 1 FROM location_capability c WHERE c.location_id=fl.id AND c.capability='DISPATCH' AND c.enabled=1)
-       ORDER BY fl.id`,
-    )
-    .bind(cycle.id, address.delivery_zone_code ?? "", cycle.market_id)
-    .all<{
-      id: string;
-      zone_id: string;
-      location_id: string;
-      location_name: string;
-      latitude: number;
-      longitude: number;
-    }>();
-  const routing = closestLocation(address, routingRows.results);
+  const selected = (
+    await operationalCandidates(database, address, {
+      mode: "SCHEDULED",
+      marketId: cycle.market_id,
+      cycleId: cycle.id,
+    })
+  )[0];
+  const routing = selected
+    ? {
+        ...selected,
+        zone_id: selected.zoneId,
+        market_id: selected.marketId,
+        location_id: selected.locationId,
+        location_name: selected.locationName,
+        promise_minutes: selected.promiseMinutes,
+      }
+    : null;
   if (!routing)
     return failure(
       "ADDRESS_UNSERVICEABLE",
@@ -399,6 +392,11 @@ async function createScheduledQuote(
       lines,
       addressSnapshot: address,
       cycleSnapshot: {
+        cycleVersion: cycle.version,
+        geographyVersion: routing.geographyVersion,
+        locationVersion: routing.locationVersion,
+        readinessVersion: routing.readinessVersion,
+        modeVersion: routing.modeVersion,
         cycleId: cycle.id,
         cutoffAt: new Date(cycle.cutoff_at).toISOString(),
         deliveryDate: new Date(cycle.delivery_date).toISOString(),
@@ -433,6 +431,7 @@ async function createScheduledQuote(
   const evidence = decision.evidence!;
   try {
     await database.batch([
+      geographyQuoteGuard(database, routing, cycle),
       repository.insertQuote(
         {
           id: quoteId,
@@ -481,6 +480,53 @@ async function createScheduledQuote(
       const replayed = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
       if (replayed) return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
     }
+    const refreshed = (
+      await operationalCandidates(database, address, {
+        mode: routing.mode,
+        marketId: routing.marketId,
+        cycleId: cycle.id,
+      })
+    )[0];
+    if (
+      !refreshed ||
+      refreshed.locationId !== routing.locationId ||
+      refreshed.zoneId !== routing.zoneId ||
+      refreshed.locationVersion !== routing.locationVersion ||
+      refreshed.readinessVersion !== routing.readinessVersion
+    )
+      return failure(
+        "PRICE_CHANGED",
+        "Fulfillment routing changed; request a new quote",
+        command.requestId,
+      );
+    const currentCycle = await database
+      .prepare("SELECT version FROM delivery_cycle WHERE id=?")
+      .bind(cycle.id)
+      .first<{ version: number }>();
+    if (currentCycle?.version !== cycle.version)
+      return failure(
+        "PRICE_CHANGED",
+        "Scheduled window changed; request a new quote",
+        command.requestId,
+      );
+    const currentGeography = await database
+      .prepare("SELECT version FROM geography_configuration WHERE market_id=?")
+      .bind(routing.market_id)
+      .first<{ version: number }>();
+    const currentMode = await database
+      .prepare("SELECT version,selling_state FROM global_commerce_configuration WHERE id='global'")
+      .first<{ version: number; selling_state: string }>();
+    if (
+      currentGeography?.version !== routing.geographyVersion ||
+      currentMode?.version !== routing.modeVersion ||
+      currentMode.selling_state !== "OPEN"
+    )
+      return failure(
+        "PRICE_CHANGED",
+        "Fulfillment routing changed; request a new quote",
+        command.requestId,
+      );
+
     throw error;
   }
   void now;

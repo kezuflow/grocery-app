@@ -20,6 +20,8 @@ export const locationAddressSchema = z.object({
   countryCode: z.string().regex(/^[A-Z]{2}$/),
 });
 export const adminLocationDetailsSchema = z.object({
+  componentsSource: z.enum(["FIRST_PARTY", "TEMPORARY_GEOCODER", "SAVED_ADDRESS"]).optional(),
+  confirmationSource: z.enum(["GEOCODER", "USER_PIN", "DEVICE_LOCATION"]).optional(),
   name: z.string().trim().min(1).max(120),
   address: locationAddressSchema,
   latitude: z.number().finite().min(-90).max(90),
@@ -29,18 +31,21 @@ export const adminLocationDetailsSchema = z.object({
     .max(6)
     .refine((values) => new Set(values).size === values.length, "Capabilities must be unique"),
 });
-export const adminLocationViewSchema = adminLocationDetailsSchema.extend({
-  address: locationAddressSchema.nullable(),
-  locationId: z.string(),
-  marketId: z.string(),
-  marketName: z.string(),
-  currency: z.string(),
-  timezone: z.string(),
-  code: z.string(),
-  purpose: locationPurposeSchema,
-  status: z.enum(["active", "inactive"]),
-  version: z.number().int().positive(),
-});
+export const adminLocationViewSchema = adminLocationDetailsSchema
+  .omit({ componentsSource: true, confirmationSource: true })
+  .extend({
+    addressProviderDerived: z.boolean().default(false),
+    address: locationAddressSchema.nullable(),
+    locationId: z.string(),
+    marketId: z.string(),
+    marketName: z.string(),
+    currency: z.string(),
+    timezone: z.string(),
+    code: z.string(),
+    purpose: locationPurposeSchema,
+    status: z.enum(["active", "inactive"]),
+    version: z.number().int().positive(),
+  });
 export const adminLocationsViewSchema = z.object({
   items: z.array(adminLocationViewSchema),
   nextCursor: z.string().nullable(),

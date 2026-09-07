@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
@@ -180,7 +180,112 @@ async function intentWithReaction(quoteId: string, customerId: string, amountMin
   return { intentId, reactionId };
 }
 
+function paymentCommandForQuote(
+  customerId: string,
+  quote: import("../../checkout/application/create-checkout-quote").CheckoutQuoteView,
+) {
+  return {
+    customerId: customerId,
+    headers: {},
+    requestId: crypto.randomUUID(),
+    checkoutAttemptId: quote.quoteId,
+    expectedQuoteVersion: quote.attemptVersion,
+    expectedPriceAcceptanceVersion: quote.priceAcceptanceVersion,
+    expectedCurrency: quote.currency,
+    expectedMerchandiseSubtotalMinor: quote.merchandiseSubtotalMinor,
+    expectedItemDiscountMinor: quote.itemDiscountMinor,
+    expectedOrderDiscountMinor: quote.orderDiscountMinor,
+    expectedDeliverySubtotalMinor: quote.deliverySubtotalMinor,
+    expectedDeliveryFeeMinor: quote.deliveryFeeMinor,
+    expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
+    expectedTaxMinor: quote.taxMinor,
+    expectedTotalMinor: quote.totalMinor,
+    returnUrl: "https://freshmarkets.ph/checkout/payment",
+    idempotencyKey: crypto.randomUUID(),
+  };
+}
+
 describe("order commitment from canonical payment reactions", () => {
+  it.each(["revision", "expiry", "cutoff"])(
+    "rejects %s changes during provider revalidation before creating a payment intent",
+    async (change) => {
+      const fixture = await seededCheckout({ onHand: 0 });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const links = await env.DB.prepare(
+        "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
+      ).all<{
+        zone_id: string;
+        location_id: string;
+        valid_from: number;
+        valid_to: number | null;
+      }>();
+      const readiness = await env.DB.prepare(
+        "SELECT location_id,dispatch_ready FROM fulfillment_location_readiness",
+      ).all<{ location_id: string; dispatch_ready: number }>();
+      const cycles = await env.DB.prepare("SELECT id,status,version FROM delivery_cycle").all<{
+        id: string;
+        status: string;
+        version: number;
+      }>();
+      onTestFinished(async () => {
+        await env.DB.batch([
+          ...links.results.map((row) =>
+            env.DB.prepare(
+              "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
+            ).bind(row.valid_to, row.zone_id, row.location_id, row.valid_from),
+          ),
+          ...readiness.results.map((row) =>
+            env.DB.prepare(
+              "UPDATE fulfillment_location_readiness SET dispatch_ready=? WHERE location_id=?",
+            ).bind(row.dispatch_ready, row.location_id),
+          ),
+          ...cycles.results.map((row) =>
+            env.DB.prepare("UPDATE delivery_cycle SET status=?,version=? WHERE id=?").bind(
+              row.status,
+              row.version,
+              row.id,
+            ),
+          ),
+        ]);
+      });
+      let reachedProvider = false;
+      const changedProvider = {
+        ...deliveryProvider,
+        quote: async (...args: Parameters<typeof deliveryProvider.quote>) => {
+          reachedProvider = true;
+          const sql =
+            change === "revision"
+              ? "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'"
+              : change === "expiry"
+                ? "UPDATE location_serviceability SET valid_to=1"
+                : "UPDATE delivery_cycle SET status='CLOSED',version=version+1 WHERE status='OPEN'";
+          await env.DB.prepare(sql).run();
+          return deliveryProvider.quote(...args);
+        },
+      };
+      const result = await createCheckoutPaymentIntent(
+        env.DB,
+        new ProviderRegistry("test", [createMockPaymentProvider()]),
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommandForQuote(fixture.customerId, quote.value),
+        new Map([["lalamove", changedProvider]]),
+      );
+      expect(reachedProvider).toBe(true);
+      expect(result).toMatchObject({ ok: false, error: { code: "PRICE_CHANGED" } });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_intent WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_attempt WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
   it("keeps one benefit per component in Core even though storage can represent a larger stack", async () => {
     const fixture = await seededCheckout();
     const ids = [crypto.randomUUID(), crypto.randomUUID()];
@@ -460,25 +565,7 @@ describe("order commitment from canonical payment reactions", () => {
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
     const provider = createMockPaymentProvider();
     const registry = new ProviderRegistry("test", [provider]);
-    const paymentCommand = {
-      customerId: fixture.customerId,
-      headers: {},
-      requestId: crypto.randomUUID(),
-      checkoutAttemptId: quote.value.quoteId,
-      expectedQuoteVersion: quote.value.attemptVersion,
-      expectedPriceAcceptanceVersion: quote.value.priceAcceptanceVersion,
-      expectedCurrency: quote.value.currency,
-      expectedMerchandiseSubtotalMinor: quote.value.merchandiseSubtotalMinor,
-      expectedItemDiscountMinor: quote.value.itemDiscountMinor,
-      expectedOrderDiscountMinor: quote.value.orderDiscountMinor,
-      expectedDeliverySubtotalMinor: quote.value.deliverySubtotalMinor,
-      expectedDeliveryFeeMinor: quote.value.deliveryFeeMinor,
-      expectedDeliveryDiscountMinor: quote.value.deliveryDiscountMinor,
-      expectedTaxMinor: quote.value.taxMinor,
-      expectedTotalMinor: quote.value.totalMinor,
-      returnUrl: "https://freshmarkets.ph/checkout/payment",
-      idempotencyKey: crypto.randomUUID(),
-    };
+    const paymentCommand = paymentCommandForQuote(fixture.customerId, quote.value);
     const startPayment = () =>
       createCheckoutPaymentIntent(
         env.DB,
@@ -490,6 +577,15 @@ describe("order commitment from canonical payment reactions", () => {
       );
     const payment = await startPayment();
     if (!payment.ok) throw new Error(payment.error.message);
+    expect(await startPayment()).toEqual(payment);
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'",
+      ),
+      env.DB.prepare(
+        "UPDATE global_commerce_configuration SET selling_state='PAUSED',version=version+1 WHERE id='global'",
+      ),
+    ]);
     expect(await startPayment()).toEqual(payment);
     const intentId = payment.value.paymentIntentId;
     const attempt = await env.DB.prepare(

@@ -1,3 +1,4 @@
+import { operationalCandidates } from "../../geography/application/operational-candidates";
 import type { CheckoutQuoteRow } from "../infrastructure/d1-checkout-repository";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
@@ -18,6 +19,7 @@ type RevalidationFailure = {
 
 type Snapshot = {
   cycleId?: string;
+  geographyVersion?: number;
   zoneId?: string;
   locationId?: string;
 };
@@ -112,28 +114,25 @@ export async function revalidateCheckoutQuote(
   if (!snapshot.locationId || !snapshot.zoneId)
     return rejected("CONFIGURATION_ERROR", "Quote routing evidence is incomplete");
 
-  let marketId: string;
+  const selected = (
+    await operationalCandidates(database, address, {
+      mode: quote.fulfillmentMode ?? "SCHEDULED",
+      cycleId: quote.deliveryCycleId ?? undefined,
+      now,
+    })
+  )[0];
+  if (
+    !selected ||
+    selected.locationId !== snapshot.locationId ||
+    selected.zoneId !== snapshot.zoneId ||
+    selected.geographyVersion !== (snapshot.geographyVersion ?? 1)
+  )
+    return rejected(
+      "PRICE_CHANGED",
+      "Service area or fulfillment location changed; accept a new quote",
+    );
+  const marketId = selected.marketId;
   if (quote.fulfillmentMode === "INSTANT") {
-    const routing = await database
-      .prepare(
-        `SELECT fl.market_id, fl.latitude, fl.longitude
-         FROM delivery_zone dz
-         JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-         JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
-         JOIN global_commerce_configuration m ON m.id='global'
-         JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
-         WHERE dz.code=? AND dz.id=? AND fl.id=? AND dz.status='active'
-           AND m.selling_state='OPEN' AND m.fulfillment_mode='INSTANT'
-           AND readiness.dispatch_ready=1
-           AND readiness.instant_promise_minutes IS NOT NULL
-           AND readiness.max_concurrent_instant_orders IS NOT NULL`,
-      )
-      .bind(address.delivery_zone_code ?? "", snapshot.zoneId, snapshot.locationId)
-      .first<{ market_id: string; latitude: number; longitude: number }>();
-    if (!routing)
-      return rejected("INSTANT_MODE_UNAVAILABLE", "Instant checkout is no longer available");
-    marketId = routing.market_id;
-
     for (const item of liveItems.results) {
       const held = await database
         .prepare(
@@ -144,30 +143,6 @@ export async function revalidateCheckoutQuote(
       if ((held?.quantity ?? 0) < item.quantity * item.consumption_base_quantity)
         return rejected("INSUFFICIENT_STOCK", "The checkout inventory hold is no longer valid");
     }
-  } else {
-    const cycle = await database
-      .prepare(
-        `SELECT dc.market_id, fl.latitude, fl.longitude
-         FROM delivery_cycle dc
-         JOIN delivery_cycle_zone dcz ON dcz.cycle_id=dc.id AND dcz.status='ACTIVE'
-         JOIN fulfillment_location fl ON fl.id=dcz.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
-         WHERE dc.id=? AND dc.status='OPEN' AND dc.cutoff_at>?
-           AND dcz.zone_id=? AND dcz.location_id=?`,
-      )
-      .bind(quote.deliveryCycleId, now, snapshot.zoneId, snapshot.locationId)
-      .first<{ market_id: string; latitude: number; longitude: number }>();
-    if (!cycle) return rejected("CYCLE_CLOSED", "Scheduled delivery window is no longer available");
-    const routed = await database
-      .prepare(
-        `SELECT 1 AS eligible FROM delivery_zone dz
-         JOIN service_area sa ON sa.id=dz.service_area_id
-         JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-         WHERE dz.code=? AND dz.id=? AND dz.status='active' AND sa.market_id=? AND ls.location_id=?`,
-      )
-      .bind(address.delivery_zone_code ?? "", snapshot.zoneId, cycle.market_id, snapshot.locationId)
-      .first<{ eligible: number }>();
-    if (!routed) return rejected("ADDRESS_UNSERVICEABLE", "Address is no longer serviceable");
-    marketId = cycle.market_id;
   }
 
   let subtotalMinor = 0;

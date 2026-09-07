@@ -48,9 +48,13 @@ Indexes: active service areas by market/time, active zones by service area, loca
 
 Phase 2 materializes these geography tables and stable seed identities for `METRO_CEBU`, `CEBU_CITY`, `CEBU_CITY_CORE`, and `CEBU_CENTRAL`. The initial GeoJSON is bootstrap operational data for local development and contract validation, not an asserted legal/production Cebu City boundary. Launch requires an approved polygon source and a new versioned seed/migration; prior versions remain available for stale-resolution detection and audit context.
 
+Migration 0072 adds Geography-owned `geography_configuration(market_id PK/FK, version, updated_at)`, initialized at version 1 for retained markets. Customer-site updates/transitions and service-area publication advance it atomically with dependent effects. New market setup must initialize its revision. New quotes retain the revision and global-mode version in immutable routing evidence; missing legacy revision means baseline 1. This is a concurrency fence owned by Core, not a database workflow-policy trigger. Publication inserts fresh `service_area` and `delivery_zone` identities and retains old polygons/foreign-key evidence; it ends old eligibility intervals and never rewrites committed Orders.
+
 ## Application Identity and RBAC
 
 Migration 0071 adds `fulfillment_location.purpose` (`CUSTOMER_FULFILLMENT|CENTRAL_WAREHOUSE`) and `locations.read/manage` permission definitions. Existing location fields, role grants, price evidence and IDs are preserved; existing sites default to customer fulfillment. No role receives the new permissions automatically. Purpose is immutable through setup commands. Location updates and lifecycle commands share the aggregate version and atomically persist audit/idempotency evidence. Existing incomplete address JSON remains retained until an explicit detail update; lifecycle transitions never rewrite it.
+
+Location address JSON stores validated structured fields plus protected `confirmation` evidence (`provider`, `providerReference`, coordinate confirmation source and timestamp). The location latitude/longitude remain the single authoritative coordinate pair. New manually confirmed text has null provider evidence; temporary geocoder text is replaced by permanent results before persistence. Saved-address-only edits preserve the existing evidence. This extends JSON application data without rewriting retained location rows.
 
 - `customer_principal(id PK, auth_user_id UNIQUE FK Better Auth user, status active|disabled, created_at, updated_at)`
 - `customers(id PK, principal_id UNIQUE FK customer_principal, auth_user_id UNIQUE legacy compatibility column, status, version, created_at, updated_at)`
