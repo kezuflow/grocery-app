@@ -379,12 +379,32 @@ describe("instant order commitment", () => {
         expectedVersion: index + 2,
         idempotencyKey: crypto.randomUUID(),
       };
-      expect((await advanceFulfillment(env.DB, step, { authorize: async () => true })).ok).toBe(
-        true,
-      );
-      expect((await advanceFulfillment(env.DB, step, { authorize: async () => true })).ok).toBe(
-        true,
-      );
+      if (action === "MARK_PACKED") {
+        const competitor = { ...step, idempotencyKey: crypto.randomUUID() };
+        const results = await Promise.all([
+          advanceFulfillment(env.DB, step, { authorize: async () => true }),
+          advanceFulfillment(env.DB, competitor, { authorize: async () => true }),
+        ]);
+        expect(results.filter((result) => result.ok)).toHaveLength(1);
+        const winner = results[0].ok ? step : competitor;
+        expect(
+          await advanceFulfillment(env.DB, winner, { authorize: async () => true }),
+        ).toMatchObject({ ok: true });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key IN (?,?) AND status='SUCCEEDED'",
+          )
+            .bind(step.idempotencyKey, competitor.idempotencyKey)
+            .first(),
+        ).toEqual({ count: 1 });
+      } else {
+        expect((await advanceFulfillment(env.DB, step, { authorize: async () => true })).ok).toBe(
+          true,
+        );
+        expect((await advanceFulfillment(env.DB, step, { authorize: async () => true })).ok).toBe(
+          true,
+        );
+      }
     }
     expect(
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(orderId).first(),
