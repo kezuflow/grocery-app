@@ -118,6 +118,30 @@ apply(fresh, through(phaseTwoEnd));
 assertPhaseTwoSchema(fresh);
 fresh.close();
 
+const recovery = database();
+apply(recovery, through("0065_promotion_usage_guards.sql"));
+recovery.exec(`INSERT INTO delivery_provider_event_inbox
+  (id,provider,provider_event_id,provider_delivery_id,merchant_order_id,observed_at,
+   provider_status,payload_hash,raw_payload,processing_status,received_at)
+  VALUES ('retained-delivery-event','lalamove','retained-event','provider-id','merchant-id',1,
+    'IN_DELIVERY','fixture-hash','{}','RECEIVED',1)`);
+apply(
+  recovery,
+  migrations.filter((migration) => migration.name > "0065_promotion_usage_guards.sql"),
+);
+assert.deepEqual(
+  {
+    ...recovery
+      .prepare(`SELECT processing_status,recovery_attempts,next_recovery_at
+  FROM delivery_provider_event_inbox WHERE id='retained-delivery-event'`)
+      .get(),
+  },
+  { processing_status: "RECEIVED", recovery_attempts: 0, next_recovery_at: 0 },
+);
+assert.throws(() => recovery.exec("UPDATE delivery_provider_event_inbox SET recovery_attempts=-1"));
+assert.deepEqual(recovery.prepare("PRAGMA foreign_key_check").all(), []);
+recovery.close();
+
 const populated = database();
 apply(populated, through("0055_delivery_provider_dispatch.sql"));
 populated.exec(`

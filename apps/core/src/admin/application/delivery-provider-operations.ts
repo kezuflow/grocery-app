@@ -1,3 +1,4 @@
+import { applyProviderObservation } from "../../delivery/application/apply-provider-observation";
 import type {
   AddressComponents,
   AppErrorCode,
@@ -17,10 +18,7 @@ import {
   type ProviderDispatchView,
 } from "../../delivery/application/request-provider-delivery";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
-import type {
-  ProviderDelivery,
-  ProviderDeliveryStatus,
-} from "../../delivery/ports/delivery-provider";
+import type { ProviderDelivery } from "../../delivery/ports/delivery-provider";
 import {
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
@@ -740,21 +738,6 @@ export async function requestExternalDelivery(
   };
 }
 
-function normalizedDispatchStatus(status: ProviderDeliveryStatus): string {
-  switch (status) {
-    case "COMPLETED":
-      return "COMPLETED";
-    case "CANCELED":
-      return "CANCELED";
-    case "RETURNED":
-      return "RETURNED";
-    case "FAILED":
-      return "FAILED";
-    default:
-      return "ACTIVE";
-  }
-}
-
 async function loadExternalDispatch(
   database: D1Database,
   dispatchId: string,
@@ -775,32 +758,6 @@ async function loadExternalDispatch(
     )
     .bind(dispatchId, locationId)
     .first<ExternalDeliveryDispatchView & { providerDeliveryId: string | null }>();
-}
-
-async function updateDispatchFromProvider(
-  database: D1Database,
-  request: ExternalDeliveryMutationRequest,
-  observed: ProviderDelivery,
-  now: number,
-) {
-  const updated = await database
-    .prepare(
-      `UPDATE delivery_provider_dispatch
-       SET status=?,provider_status=?,tracking_url=COALESCE(?,tracking_url),
-           pickup_pin=COALESCE(?,pickup_pin),last_error_code=NULL,
-           version=version+1,updated_at=? WHERE id=? AND version=?`,
-    )
-    .bind(
-      normalizedDispatchStatus(observed.status),
-      observed.status,
-      observed.trackingUrl,
-      observed.pickupPin,
-      now,
-      request.dispatchId,
-      request.expectedVersion,
-    )
-    .run();
-  return (updated.meta?.changes ?? 0) === 1;
 }
 
 async function providerMutation(
@@ -842,61 +799,92 @@ async function providerMutation(
     await failIdempotency(deps.db, scope, request.idempotencyKey);
     return failure("CONFLICT", "Provider delivery identity is unavailable", request.requestId);
   }
+  let observation: ProviderDelivery;
   if (operation === "CANCEL") {
     const canceled = await deps.provider.cancel(current.providerDeliveryId);
     if (!canceled.ok) {
       await failIdempotency(deps.db, scope, request.idempotencyKey);
       return failure("CONFLICT", "Provider cancellation was not confirmed", request.requestId);
     }
-    const now = deps.now();
-    const updated = await deps.db
-      .prepare(
-        `UPDATE delivery_provider_dispatch SET status='CANCELED',provider_status='CANCELED',
-         version=version+1,updated_at=? WHERE id=? AND version=?`,
-      )
-      .bind(now, request.dispatchId, request.expectedVersion)
-      .run();
-    if ((updated.meta?.changes ?? 0) !== 1) {
-      await failIdempotency(deps.db, scope, request.idempotencyKey);
-      return failure(
-        "STALE_VERSION",
-        "External delivery changed during cancellation",
-        request.requestId,
-      );
-    }
+    observation = {
+      providerDeliveryId: current.providerDeliveryId,
+      merchantOrderId: null,
+      status: "CANCELED",
+      trackingUrl: null,
+      pickupPin: null,
+      quote: null,
+    };
   } else {
     const observed = await deps.provider.get(current.providerDeliveryId);
     if (!observed.ok || !observed.value) {
       await failIdempotency(deps.db, scope, request.idempotencyKey);
       return failure("CONFLICT", "Provider delivery could not be refreshed", request.requestId);
     }
-    if (!(await updateDispatchFromProvider(deps.db, request, observed.value, deps.now()))) {
+    if (observed.value.providerDeliveryId !== current.providerDeliveryId) {
       await failIdempotency(deps.db, scope, request.idempotencyKey);
-      return failure(
-        "STALE_VERSION",
-        "External delivery changed during refresh",
-        request.requestId,
-      );
+      return failure("CONFLICT", "Provider returned a different delivery", request.requestId);
     }
+    observation = observed.value;
+  }
+  const now = deps.now();
+  // Failed command retries must not attach new evidence to an older observation.
+  const inboxId = `admin-delivery:${crypto.randomUUID()}`;
+  await deps.db
+    .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox
+    (id,provider,provider_event_id,dispatch_id,provider_delivery_id,merchant_order_id,observed_at,
+     provider_status,payload_hash,raw_payload,processing_status,received_at)
+    SELECT ?,provider,?,id,provider_delivery_id,merchant_order_id,?,?,?,?, 'RECEIVED',?
+    FROM delivery_provider_dispatch WHERE id=?`)
+    .bind(
+      inboxId,
+      inboxId,
+      now,
+      observation.status,
+      await requestHash(observation),
+      JSON.stringify(observation),
+      now,
+      request.dispatchId,
+    )
+    .run();
+  const applied = await applyProviderObservation(
+    deps.db,
+    {
+      dispatchId: request.dispatchId,
+      status: observation.status,
+      observedAt: now,
+      trackingUrl: observation.trackingUrl,
+      pickupPin: observation.pickupPin,
+    },
+    {
+      inboxId,
+      expectedVersion: request.expectedVersion,
+      completionStatements: [
+        completeIdempotency(deps.db, scope, request.idempotencyKey, request.dispatchId, now),
+        auditEventStatement(deps.db, {
+          actorUserId: access.value.authUserId,
+          action: `DELIVERY.EXTERNAL_PROVIDER_${operation === "REFRESH" ? "REFRESHED" : "CANCELED"}`,
+          resourceType: "delivery_provider_dispatch",
+          resourceId: request.dispatchId,
+          locationId: request.locationId,
+          details: { provider: current.provider },
+          idempotencyKey: request.idempotencyKey,
+          correlationId: request.requestId,
+          occurredAt: now,
+        }),
+      ],
+    },
+  );
+  if (applied.outcome === "RECONCILIATION_REQUIRED") {
+    await failIdempotency(deps.db, scope, request.idempotencyKey);
+    return failure(
+      applied.reason === "DELIVERY_DISPATCH_STALE" ? "STALE_VERSION" : "CONFLICT",
+      "Provider evidence requires delivery reconciliation",
+      request.requestId,
+    );
   }
   const saved = await loadExternalDispatch(deps.db, request.dispatchId, request.locationId);
   if (!saved)
     return failure("INTERNAL_ERROR", "External delivery persistence failed", request.requestId);
-  const now = deps.now();
-  await deps.db.batch([
-    completeIdempotency(deps.db, scope, request.idempotencyKey, request.dispatchId, now),
-    auditEventStatement(deps.db, {
-      actorUserId: access.value.authUserId,
-      action: `DELIVERY.EXTERNAL_PROVIDER_${operation === "REFRESH" ? "REFRESHED" : "CANCELED"}`,
-      resourceType: "delivery_provider_dispatch",
-      resourceId: request.dispatchId,
-      locationId: request.locationId,
-      details: { provider: saved.provider },
-      idempotencyKey: request.idempotencyKey,
-      correlationId: request.requestId,
-      occurredAt: now,
-    }),
-  ]);
   return { ok: true, value: saved, requestId: request.requestId };
 }
 

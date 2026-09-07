@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { handleLalamoveWebhook } from "./lalamove-webhook";
+import { reconcileProviderObservations } from "../application/reconcile-provider-observations";
 
 const credentials = {
   DELIVERY_PROVIDERS: "lalamove",
@@ -101,6 +102,75 @@ async function seedDispatch(suffix = "1", providerId = "1900000000000000001") {
 }
 
 describe("Lalamove tracking webhook", () => {
+  it("bounds background retries and preserves unresolved early pickup evidence", async () => {
+    await seedDispatch("bounded", "1900000000000000008");
+    await env.DB.prepare(
+      "UPDATE fulfillment_record SET status='PACKING' WHERE id='webhook-fulfillment-bounded'",
+    ).run();
+    const event = payload({ eventId: "bounded-pickup-recovery" });
+    event.data.order.orderId = "1900000000000000008";
+    expect(
+      (await handleLalamoveWebhook(env.DB, credentials, await request(event), crypto.randomUUID()))
+        .status,
+    ).toBe(202);
+    const now = Date.now();
+    for (let index = 0; index < 7; index += 1)
+      await reconcileProviderObservations(env.DB, now + index * 2_000_000);
+    expect(
+      await env.DB.prepare(
+        "SELECT recovery_attempts,processing_status,last_error_code FROM delivery_provider_event_inbox WHERE provider_event_id=?",
+      )
+        .bind(event.eventId)
+        .first(),
+    ).toEqual({
+      recovery_attempts: 5,
+      processing_status: "RECONCILIATION_REQUIRED",
+      last_error_code: "DELIVERY_PACKING_NOT_COMPLETE",
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM delivery_job WHERE id='job-lalamove-webhook-bounded'",
+      ).first(),
+    ).toEqual({ status: "UNASSIGNED" });
+  });
+
+  it("does not regress pickup or reopen completed delivery from newer conflicting evidence", async () => {
+    await seedDispatch("regression", "1900000000000000009");
+    const send = async (eventId: string, status: string, updatedAt: string) => {
+      const event = payload({ eventId, status, updatedAt });
+      event.data.order.orderId = "1900000000000000009";
+      return handleLalamoveWebhook(env.DB, credentials, await request(event), crypto.randomUUID());
+    };
+    expect((await send("regression-pickup", "PICKED_UP", "2026-09-04T01:00:00Z")).status).toBe(200);
+    expect((await send("regression-assigned", "ON_GOING", "2026-09-04T02:00:00Z")).status).toBe(
+      202,
+    );
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM delivery_job WHERE id='job-lalamove-webhook-regression'",
+      ).first(),
+    ).toEqual({ status: "EN_ROUTE" });
+    expect((await send("regression-completed", "COMPLETED", "2026-09-04T03:00:00Z")).status).toBe(
+      200,
+    );
+    expect((await send("regression-canceled", "CANCELED", "2026-09-04T04:00:00Z")).status).toBe(
+      202,
+    );
+    expect(
+      (await send("regression-same-time-canceled", "CANCELED", "2026-09-04T03:00:00Z")).status,
+    ).toBe(202);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM delivery_provider_dispatch WHERE id='dispatch-lalamove-webhook-regression'",
+      ).first(),
+    ).toEqual({ status: "COMPLETED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM grocery_order WHERE id='order-lalamove-webhook-regression'",
+      ).first(),
+    ).toEqual({ status: "DELIVERED" });
+  });
+
   it("retains early pickup for reconciliation and projects the owning Order only after packing", async () => {
     await seedDispatch("early", "1900000000000000006");
     await env.DB.batch([
@@ -254,6 +324,14 @@ describe("Lalamove tracking webhook", () => {
     );
     expect(await first.json()).toMatchObject({ reconciliationRequired: true });
     await seedDispatch("late", "1900000000000000004");
+    await reconcileProviderObservations(env.DB, Date.now());
+    expect(
+      await env.DB.prepare(
+        "SELECT processing_status,dispatch_id FROM delivery_provider_event_inbox WHERE provider_event_id=?",
+      )
+        .bind(event.eventId)
+        .first(),
+    ).toEqual({ processing_status: "APPLIED", dispatch_id: "dispatch-lalamove-webhook-late" });
     const retried = await handleLalamoveWebhook(
       env.DB,
       credentials,

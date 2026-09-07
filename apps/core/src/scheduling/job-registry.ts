@@ -1,4 +1,5 @@
 import type { ScheduledJob } from "./types";
+import { deliveryObservationRedriveJob } from "./jobs/delivery-observation-redrive";
 import { checkoutHoldExpiryJob } from "./jobs/checkout-hold-expiry";
 import { membershipScheduledCancellationsJob } from "./jobs/membership-scheduled-cancellations";
 import { deliveryCycleCutoffJob } from "./jobs/delivery-cycle-cutoff";
@@ -27,6 +28,7 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
     notificationDeliveryJob,
   ],
   [EVERY_FIFTEEN_MINUTES]: [
+    deliveryObservationRedriveJob,
     deliveryCycleCloseoutJob,
     paymentsReactionRedriveJob,
     paymentsReconciliationRedriveJob,

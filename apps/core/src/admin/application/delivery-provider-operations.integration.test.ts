@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth, type AuthEnvironment } from "../../auth/service";
 import type { ResolvedApplicationContext } from "../../auth/authorization";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
+import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import {
   cancelExternalDelivery,
   getLocationDeliveryProfile,
@@ -132,6 +133,9 @@ async function seedScheduledDelivery(now: number) {
     env.DB.prepare(
       "INSERT INTO grocery_order (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,version,created_at) VALUES (?,?,'cycle-next-cebu','SCHEDULED',?,'COMMITTED',12500,'PHP',?,1,?)",
     ).bind(orderId, customerId, addressSnapshot, paymentId, now),
+    env.DB.prepare(
+      "INSERT INTO fulfillment_record (id,order_id,location_id,status,updated_at) VALUES (?, ?, ?, 'NOT_STARTED', ?)",
+    ).bind(`fulfillment-${suffix}`, orderId, LOCATION, now),
     env.DB.prepare(
       `INSERT INTO order_fulfillment_snapshot
        (order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,promised_at,
@@ -273,6 +277,48 @@ describe("external delivery request", () => {
       schedule: null,
     });
     if (!result.ok) return;
+    const early = await refreshExternalDelivery(
+      { ...deps, provider, now: () => now },
+      {
+        requestId: crypto.randomUUID(),
+        headers: {},
+        locationId: LOCATION,
+        dispatchId: result.value.dispatchId,
+        expectedVersion: result.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    );
+    expect(early).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT last_error_code FROM delivery_provider_event_inbox WHERE dispatch_id=?",
+      )
+        .bind(result.value.dispatchId)
+        .first(),
+    ).toEqual({ last_error_code: "DELIVERY_PACKING_NOT_COMPLETE" });
+    for (const [index, action] of (
+      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
+    ).entries()) {
+      expect(
+        await advanceFulfillment(
+          env.DB,
+          {
+            requestId: crypto.randomUUID(),
+            headers: {},
+            orderId: delivery.orderId,
+            action,
+            expectedVersion: index + 1,
+            idempotencyKey: crypto.randomUUID(),
+          },
+          { authorize: async () => true },
+        ),
+      ).toMatchObject({ ok: true });
+    }
     const refreshed = await refreshExternalDelivery(
       { ...deps, provider, now: () => now + 1 },
       {
@@ -288,6 +334,16 @@ describe("external delivery request", () => {
       ok: true,
       value: { providerStatus: "IN_DELIVERY", version: 4 },
     });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "OUT_FOR_DELIVERY" });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ status: "EN_ROUTE" });
     if (!refreshed.ok) return;
     const canceled = await cancelExternalDelivery(
       { ...deps, provider, now: () => now + 2 },
@@ -301,6 +357,16 @@ describe("external delivery request", () => {
       },
     );
     expect(canceled).toMatchObject({ ok: true, value: { status: "CANCELED", version: 5 } });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "OUT_FOR_DELIVERY" });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ status: "FAILED" });
     const replay = await requestExternalDelivery(
       { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now + 3 },
       { ...bookingRequest, requestId: crypto.randomUUID() },
