@@ -113,11 +113,11 @@ describe("admin operations reads", () => {
   it("returns NOT_FOUND for an unknown location even to a globally scoped reader", async () => {
     const globalReader = await seedStaff("fulfillment.read", "global");
     expect(
-      await core.getFulfillmentMode({
+      await core.getGlobalCommerceConfiguration({
         requestId: crypto.randomUUID(),
         headers: { cookie: globalReader },
       }),
-    ).toMatchObject({ ok: true, value: { activeMode: "SCHEDULED" } });
+    ).toMatchObject({ ok: true, value: { fulfillmentMode: "SCHEDULED" } });
   });
 
   it("scopes the converged exception queue and honors its cursor contract", async () => {

@@ -606,18 +606,39 @@ Status date: 2026-09-06. This file is descriptive evidence only. The canonical d
   delivery-attempt evidence, deduplicates completed sends, and quarantines unknown send outcomes to
   avoid duplicate customer email. Retry exhaustion is visible in D1 and the configured DLQ.
 
+### Commerce and external-delivery realignment (2026-09-07)
+
+- Phases 1–11 of the approved realignment are implemented in separate commits: canonical documents,
+  forward migrations, global selling/mode authority, PayMongo-only payment direction, Instant and
+  Scheduled checkout separation, exact Scheduled demand, external delivery execution, financial and
+  promotion safety, notification Queue delivery, and compatibility cleanup.
+- Phase 12 repository verification passes on the current tree: structural/security checks, all
+  typechecks, 68 contract tests, 355 Web tests, 804 Core tests, shared-package tests, Worker dry-run
+  build, and vinext production build.
+- Authenticated managed-stack browser coverage proves exact store/SKU pricing and the canonical
+  pause/switch/reopen sequence through Web, Core Service Binding, Better Auth, and local D1. The
+  final snapshot-update-disabled run passed all 86 browser tests, including 24 Admin visual
+  comparisons and 390px document-overflow assertions.
+- The former Admin fulfillment-mode compatibility RPC/route has been removed. Product edit reads now
+  preserve the explicit global or exact-location scope required by the active Product contract.
+- Runtime payment and delivery providers remain disabled locally. PayMongo and Lalamove sandbox
+  transactions, Cebu/account acceptance, credentials, webhooks, and reconciliation rehearsal remain
+  external activation gates; production continues to fail closed. Grab remains disabled.
+- Detailed evidence and activation requirements are in
+  `docs/superpowers/reports/COMMERCE_EXTERNAL_DELIVERY_REALIGNMENT_VERIFICATION_2026_09_07.md`.
+
 ## Maturity by area
 
-| Area                       | Current evidence                                                                                                                                                                                    | Not established                                           |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests                                                                                                                             | Production deployment acceptance                          |
-| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                                                                                                                                  | Production sender/domain and OAuth configuration          |
-| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                                                                                                                                        | Approved production polygons/geocoder and Mapbox secret   |
-| Checkout/orders            | Opaque Core fulfillment options, accepted quotes/promotions, PayMongo adapter/provider-event reaction, immutable detail/timeline, reorder/issues/amendments, coordinated cancellation, provisional transaction summary | PayMongo sandbox credential acceptance and official invoice issuance |
-| Membership                 | Customer experience plus provider-neutral trial/authorization/renewal state                                                                                                                         | Approved production mandates and automatic charges        |
-| Operations                 | Scoped procurement/receiving/fulfillment commands plus external-provider delivery operations and local integration tests                                                                           | Complete authenticated staff provider-flow acceptance     |
-| Notifications              | Durable email outbox/attempts, leases, retry, cancellation/refund projections, and safe templates                                                                                                   | Production sender/domain and delivery acceptance          |
-| Phase 12 Admin UI          | Complete plan, contract/Core/Web tests, vinext build, authenticated Admin Playwright                                                                                                                | Production deployment acceptance remains external         |
+| Area                       | Current evidence                                                                                                                                                                                                      | Not established                                                                |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Repository/Core boundaries | Monorepo, Core authority, Service Binding contracts, D1 ownership tests                                                                                                                                               | Production deployment acceptance                                               |
+| Auth and IAM               | Better Auth Core ownership, RBAC boundaries, fake email-flow tests                                                                                                                                                    | Production sender/domain and OAuth configuration                               |
+| Catalog/geography          | SKU/base-unit/pricing foundations; route-price adapter tests                                                                                                                                                          | Approved production polygons/geocoder and Mapbox secret                        |
+| Checkout/orders            | Opaque Core fulfillment options, Instant holds, capacity-free Scheduled exact demand, provider-priced delivery, PayMongo event reaction, immutable history, coordinated cancellation, provisional transaction summary | PayMongo/Lalamove sandbox and production acceptance; official invoice issuance |
+| Membership                 | Customer experience plus provider-neutral trial/authorization/renewal state                                                                                                                                           | Approved production mandates and automatic charges                             |
+| Operations                 | Scoped procurement/receiving/fulfillment commands, exact Scheduled aggregation, external-provider delivery operations, authenticated Admin flows, and local integration tests                                         | Real Lalamove Cebu sandbox/account acceptance                                  |
+| Notifications              | Durable email outbox/attempts, leases, retry, cancellation/refund projections, and safe templates                                                                                                                     | Production sender/domain and delivery acceptance                               |
+| Commerce realignment       | Phases 1–12 implemented; repository gate, authenticated managed-stack flows, and responsive Admin visual regression verified locally                                                                                  | Provider sandbox activation and production deployment                          |
 
 ## Verification truthfulness
 
@@ -633,11 +654,11 @@ have been executed.
 
 ## Remaining decisions and deployment work
 
-- Complete PayMongo sandbox and production credential acceptance, recurring-payment mandate,
-  reconciliation, and refund-policy gates.
+- Complete PayMongo sandbox/production acceptance and Lalamove Cebu account, wallet, pickup-profile,
+  webhook, quotation, dispatch, status, cancellation, and reconciliation acceptance.
 - Decide membership-cancellation customer UX and effective timing before exposing a command.
 - Configure an onboarded transactional email sender/adapter and the Core Mapbox secret outside source.
 - Approve BIR seller/tax/serial/retention policy before invoice issuance.
 - Treat the Customer launch implementation as locally verified product behavior only after the current-tree completion report gates pass; production deployment acceptance remains external.
-- Provision authenticated staff/customer browser test identities and run the written
-  Playwright acceptance journeys without skips.
+- Provision production secrets/bindings and run environment-specific provider and deployment smoke
+  tests only after explicit owner activation approval.

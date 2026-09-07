@@ -200,14 +200,7 @@ async function installDeterministicReads(page: Page) {
             missingPrices: 0,
             unavailableSkus: 0,
           },
-          scope: {
-            kind: "LOCATION",
-            marketId: "market-metro-cebu",
-            marketName: "Metro Cebu",
-            locationId: "location-cebu-central",
-            locationName: "Central Cebu",
-            currency: "PHP",
-          },
+          scope: { kind: "GLOBAL" },
           nextCursor: null,
         },
       }),
@@ -336,12 +329,53 @@ async function installDeterministicReads(page: Page) {
       }),
     ),
   );
+  await page.route("**/api/admin/commerce-configuration", (route) =>
+    route.fulfill(
+      json({
+        ok: true,
+        requestId: "visual-commerce",
+        value: {
+          sellingState: "OPEN",
+          fulfillmentMode: "INSTANT",
+          cadence: null,
+          version: 4,
+          readinessBlockers: [],
+        },
+      }),
+    ),
+  );
 }
 
-async function capture(page: Page, route: string, heading: string, name: string) {
+async function capture(
+  page: Page,
+  route: string,
+  heading: string,
+  name: string,
+  readyText?: string,
+) {
   await page.goto(route);
   await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
   await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0);
+  if (readyText) await expect(page.getByText(readyText, { exact: true }).first()).toBeVisible();
+  if (name.endsWith("-mobile.png")) {
+    const overflow = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      offenders: [...document.querySelectorAll<HTMLElement>("body *")]
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .slice(0, 8)
+        .map((element) => ({
+          tag: element.tagName,
+          className: element.getAttribute("class"),
+          right: Math.round(element.getBoundingClientRect().right),
+          width: Math.round(element.getBoundingClientRect().width),
+        })),
+    }));
+    expect(
+      overflow.scrollWidth,
+      `Admin page must not overflow the mobile viewport: ${JSON.stringify(overflow.offenders)}`,
+    ).toBe(overflow.clientWidth);
+  }
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot(name, {
     animations: "disabled",
@@ -354,12 +388,14 @@ for (const viewport of viewports) {
   test(`shared Admin archetypes match ${viewport.name} baselines`, async ({ adminPage }) => {
     await adminPage.setViewportSize({ width: viewport.width, height: viewport.height });
     await installDeterministicReads(adminPage);
-    await capture(adminPage, "/admin", "Overview", `overview-${viewport.name}.png`);
+    await capture(adminPage, "/admin", "Overview", `overview-${viewport.name}.png`, "Open orders");
+    await adminPage.context().clearCookies({ name: "freshmarkets.admin.product-scope" });
     await capture(
       adminPage,
       "/admin/catalog/products?query=abiu",
       "Products",
       `product-list-${viewport.name}.png`,
+      "227",
     );
     await capture(
       adminPage,

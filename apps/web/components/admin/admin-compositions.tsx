@@ -15,7 +15,7 @@ export function AdminDashboardGrid({
   return (
     <section
       aria-label={ariaLabel}
-      className={cn("grid gap-4 md:grid-cols-2 xl:grid-cols-12", className)}
+      className={cn("grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-12", className)}
     >
       {children}
     </section>
@@ -40,7 +40,7 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("gap-4 py-4 shadow-[var(--fm-shadow-card)]", className)}>
+    <Card className={cn("min-w-0 gap-4 py-4 shadow-[var(--fm-shadow-card)]", className)}>
       <CardHeader className="gap-1 px-4">
         <CardDescription>{label}</CardDescription>
         {value === null ? (
@@ -85,7 +85,7 @@ export function AdminChartCard({
   return (
     <Card
       aria-label={title}
-      className={cn("gap-4 py-0 shadow-[var(--fm-shadow-card)]", className)}
+      className={cn("min-w-0 gap-4 py-0 shadow-[var(--fm-shadow-card)]", className)}
       role="figure"
     >
       <CardHeader className="border-b px-4 py-4 sm:px-5">

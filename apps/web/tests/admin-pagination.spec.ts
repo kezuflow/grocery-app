@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import type { AdminSelectedScope } from "@freshmarkets/contracts";
 import { expect, test } from "./admin-authenticated-fixture";
 import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
@@ -10,8 +11,7 @@ test.beforeAll(async ({ request }) => {
     stackUp = false;
   }
 });
-test.beforeEach(async ({ page }) => {
-  test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
+async function installPaginationBootstrap(page: Page, selectedScope: AdminSelectedScope) {
   await installAdminBootstrapFixture(page, {
     context: {
       staffId: "staff-pagination",
@@ -86,12 +86,17 @@ test.beforeEach(async ({ page }) => {
         timezone: "Asia/Manila",
       },
     ],
-    selectedScope: {
-      kind: "LOCATION",
-      marketId: "market-metro-cebu",
-      locationId: "location-cebu-central",
-    },
+    selectedScope,
     timezone: "Asia/Manila",
+  });
+}
+
+test.beforeEach(async ({ page }) => {
+  test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
+  await installPaginationBootstrap(page, {
+    kind: "LOCATION",
+    marketId: "market-metro-cebu",
+    locationId: "location-cebu-central",
   });
 });
 
@@ -138,12 +143,12 @@ test("customer search reaches its second cursor page without losing the filter",
     });
   });
   await page.goto("/admin/customers");
-  await page.getByLabel("Search by email").fill("example.com");
-  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByLabel("Search customers").fill("example.com");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   const secondRequestPromise = page.waitForRequest((request) =>
     request.url().includes("cursor=customers-next"),
   );
-  await next(page, 1);
+  await next(page);
   await expect(page.getByText("later@example.com")).toBeVisible();
   const secondRequest = await secondRequestPromise;
   expect(new URL(secondRequest.url()).searchParams.get("query")).toBe("example.com");
@@ -258,6 +263,7 @@ test("promotion, catalog, finance, and operations queues expose later cursor rec
       ),
     });
   });
+  await installPaginationBootstrap(page, { kind: "GLOBAL" });
   await page.goto("/admin/catalog");
   await next(page, 1);
   await expect(page.getByText("Later product")).toBeVisible();
@@ -283,6 +289,11 @@ test("promotion, catalog, finance, and operations queues expose later cursor rec
         }),
       ),
     });
+  });
+  await installPaginationBootstrap(page, {
+    kind: "LOCATION",
+    marketId: "market-metro-cebu",
+    locationId: "location-cebu-central",
   });
   await page.goto("/admin/procurement");
   await next(page);

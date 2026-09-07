@@ -35,16 +35,6 @@ export type GlobalCommerceConfigurationView = {
   readinessBlockers: readonly CommerceReadinessBlockerView[];
 };
 
-/** @deprecated Compatibility shape removed after active callers migrate. */
-export type GlobalFulfillmentModeConfigurationView = {
-  activeMode: "INSTANT" | "SCHEDULED";
-  cadence: "WEEKLY" | null;
-  version: number;
-};
-
-/** @deprecated Use the explicitly global name. */
-export type FulfillmentModeConfigurationView = GlobalFulfillmentModeConfigurationView;
-
 export type ProcurementRequirementView = {
   requirementId: string;
   cycleId: string;
@@ -232,13 +222,6 @@ export type AdminOperationalExceptionsRequest = AdminOperationsLocationRequest &
   limit?: number;
 };
 
-export type ActivateFulfillmentModeRequest = AuthenticatedRequest & {
-  fulfillmentMode: "INSTANT" | "SCHEDULED";
-  cadence?: "WEEKLY" | null;
-  expectedVersion: number;
-  idempotencyKey: string;
-};
-
 export type PauseSellingRequest = AuthenticatedRequest & {
   expectedVersion: number;
   idempotencyKey: string;
@@ -318,12 +301,6 @@ export type AdminOperationsService = {
     request: ActivateGlobalFulfillmentModeRequest,
   ): Promise<RpcResult<GlobalCommerceConfigurationView>>;
   openSelling(request: OpenSellingRequest): Promise<RpcResult<GlobalCommerceConfigurationView>>;
-  getFulfillmentMode(
-    request: AuthenticatedRequest,
-  ): Promise<RpcResult<FulfillmentModeConfigurationView>>;
-  activateFulfillmentMode(
-    request: ActivateFulfillmentModeRequest,
-  ): Promise<RpcResult<FulfillmentModeConfigurationView>>;
   aggregateAdminProcurementDemand(
     request: AggregateAdminProcurementDemandRequest,
   ): Promise<RpcResult<ProcurementRequirementView>>;

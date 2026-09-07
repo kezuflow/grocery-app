@@ -7,7 +7,7 @@ import {
   deliveryStatuses,
   type DeliveryOperationsSummary,
   type AdminDeliveryOperationView,
-  type FulfillmentModeConfigurationView,
+  type GlobalCommerceConfigurationView,
   type FulfillmentQueueView,
   type OperationalExceptionPage,
   type ProcurementRequirementView,
@@ -75,10 +75,12 @@ describe("admin operations contracts", () => {
 
   it("keeps operations payloads purpose-built with integer quantities and versions", () => {
     void ({
-      activeMode: "INSTANT",
+      sellingState: "OPEN",
+      fulfillmentMode: "INSTANT",
       cadence: null,
       version: 3,
-    } satisfies FulfillmentModeConfigurationView);
+      readinessBlockers: [],
+    } satisfies GlobalCommerceConfigurationView);
     void ({
       requirementId: "requirement-1",
       cycleId: "cycle-1",

@@ -6,7 +6,6 @@ import type {
   AdminProcurementRequirementsRequest,
   AdminReceivingSessionsRequest,
   DeliveryOperationsSummary,
-  FulfillmentModeConfigurationView,
   GlobalCommerceConfigurationView,
   FulfillmentQueuePage,
   OperationalExceptionPage,
@@ -20,7 +19,6 @@ import {
   allowedFulfillmentActions,
   listFulfillmentQueue as listFulfillmentRows,
 } from "../../fulfillment/application/list-fulfillment-queue";
-import { getGlobalMode, type GlobalModeView } from "../../fulfillment/application/location-mode";
 import { getGlobalCommerceConfiguration } from "../../commerce/application/global-commerce-configuration";
 import { listProcurementQueue } from "../../procurement/application/list-procurement-queue";
 import {
@@ -34,9 +32,6 @@ import {
   encodeStaffCursor,
 } from "./staff-administration-access";
 
-function modeView(value: GlobalModeView): FulfillmentModeConfigurationView {
-  return value;
-}
 function pageRequest(request: {
   cursor?: string;
   limit?: number;
@@ -74,21 +69,6 @@ function isPageError(
 
 function nextCursor(hasMore: boolean, id: string | undefined): string | null {
   return hasMore && id ? encodeStaffCursor({ createdAt: 0, id }) : null;
-}
-
-export async function getAdminFulfillmentMode(
-  deps: OperationsAdministrationDeps,
-  request: AuthenticatedRequest,
-): Promise<RpcResult<FulfillmentModeConfigurationView>> {
-  const access = await resolveGlobalFulfillmentAdministrationAccess(
-    deps,
-    request,
-    "fulfillment.read",
-  );
-  if (!access.ok) return access;
-  const mode = await getGlobalMode(deps.db, request);
-  if (!mode.ok) return mode;
-  return { ok: true, value: modeView(mode.value), requestId: request.requestId };
 }
 
 export async function getAdminGlobalCommerceConfiguration(

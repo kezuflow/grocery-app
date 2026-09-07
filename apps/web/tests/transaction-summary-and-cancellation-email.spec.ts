@@ -100,5 +100,5 @@ test("customer sees cancellation progress and a provisional transaction summary"
   await page.getByRole("link", { name: "View transaction summary" }).click();
   await expect(page.getByRole("heading", { name: "Transaction summary" })).toBeVisible();
   await expect(page.getByText("NOT AN OFFICIAL BIR INVOICE").first()).toBeVisible();
-  await expect(page.getByText("FreshMarkets Service Fee")).toBeVisible();
+  await expect(page.getByText("Historical FreshMarkets fee")).toBeVisible();
 });

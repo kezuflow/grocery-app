@@ -84,13 +84,14 @@ describe("admin operations commands", () => {
     ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
     const { cookie } = await manager(["fulfillment.manage"], true);
     expect(
-      await core.activateFulfillmentMode({
+      await core.activateGlobalMode({
         requestId: crypto.randomUUID(),
         headers: { cookie },
         fulfillmentMode: "INSTANT",
         cadence: "WEEKLY",
         expectedVersion: 1,
         idempotencyKey: `mode-${crypto.randomUUID()}`,
+        reason: "Invalid cadence validation",
       }),
     ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });

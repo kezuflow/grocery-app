@@ -114,7 +114,7 @@ test("searches, confirms, and saves an address from the address book with map fa
   await page.getByLabel("Search for an address").fill("Ayala Cebu");
   await page.getByRole("button", { name: candidate.displayAddress }).click();
   await expect(page.getByText("Delivery is available", { exact: true })).toBeVisible();
-  await expect(page.getByText(/You can still choose a search result/)).toBeVisible();
+  await expect(page.getByText(/Search-result address fields are provider-resolved/)).toBeVisible();
   await page.getByLabel("Address label").fill("Home");
   await page.getByLabel("Recipient name").fill("Ana Santos");
   await page.getByLabel("Phone number").fill("+639171234567");

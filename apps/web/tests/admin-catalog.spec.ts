@@ -1,5 +1,5 @@
-import { expect, test } from "./admin-authenticated-fixture";
 import { resolve } from "node:path";
+import { expect, test } from "./admin-authenticated-fixture";
 
 /**
  * Catalog and Inventory workspace flows against a provisioned local stack.
@@ -85,6 +85,7 @@ test("a catalog read-only principal sees no Product or Category mutation control
 test("a Product manager can create, inspect, and edit customer-facing details", async ({
   adminPage,
 }) => {
+  test.setTimeout(120_000);
   const suffix = crypto.randomUUID();
   await adminPage.goto("/admin/catalog/products/new");
   await adminPage.getByLabel("Product name").fill("E2E authored product");
@@ -92,45 +93,19 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await adminPage.getByLabel("Product description").fill("A customer-facing description.");
   await adminPage.getByLabel("Product category").selectOption({ index: 1 });
   await adminPage.getByLabel("Inventory base unit").selectOption("unit-gram");
+  const variantCode = `E2E_${suffix.slice(0, 8)}`.toUpperCase();
+  await adminPage.getByLabel("SKU").fill(variantCode);
+  await adminPage.getByLabel("Variant name").fill("250 g");
+  await adminPage.getByLabel("Sell unit").selectOption("unit-gram");
+  await adminPage.getByLabel("Quantity").fill("250");
   await adminPage.getByLabel("Detail label 1").fill("Storage");
   await adminPage.getByLabel("Detail value 1").fill("Keep refrigerated.");
   await adminPage.getByRole("button", { name: "Create product" }).click();
-  await expect(adminPage.getByText("Product created.", { exact: true })).toBeVisible();
   await expect(
     adminPage.getByRole("heading", { level: 1, name: "E2E authored product" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(adminPage.getByText("Product created.", { exact: true })).toBeVisible();
   await expect(adminPage.getByText("Keep refrigerated.")).toBeVisible();
-  await adminPage.getByLabel("Variant code").fill(`E2E_${suffix.slice(0, 8)}`);
-  await adminPage.getByLabel("Variant name").fill("250 g");
-  await adminPage.getByLabel("Sellable unit").selectOption("unit-gram");
-  await adminPage.getByLabel("Sell quantity").fill("250");
-  await adminPage.getByRole("button", { name: "Add variant" }).click();
-  await expect(adminPage.getByText("Applied.", { exact: true })).toBeVisible();
-  await adminPage.getByLabel(/New price for E2E_/).fill("29.99");
-  await adminPage.getByRole("button", { name: "Review price" }).click();
-  await expect(adminPage.getByRole("alertdialog")).toContainText("Global catalog");
-  await expect(adminPage.getByRole("alertdialog")).toContainText("2999 minor units");
-  await adminPage.getByRole("button", { name: "Keep unchanged" }).click();
-  const scopeControl = adminPage.getByRole("combobox", { name: "Active admin scope" });
-  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
-    await scopeControl.selectOption({ label: "Central Cebu" });
-  } else {
-    await scopeControl.click();
-    await adminPage
-      .getByRole("option", { name: "Central Cebu" })
-      .evaluate((option) => (option as HTMLElement).click());
-  }
-  await adminPage.getByRole("button", { name: "Review start selling" }).click();
-  await expect(adminPage.getByRole("alertdialog")).toContainText("STOCKED sourcing");
-  await adminPage.getByRole("button", { name: "Keep unchanged" }).click();
-  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
-    await scopeControl.selectOption({ label: "Global" });
-  } else {
-    await scopeControl.click();
-    await adminPage
-      .getByRole("option", { name: "Global" })
-      .evaluate((option) => (option as HTMLElement).click());
-  }
   await adminPage.getByRole("link", { name: "Edit product" }).click();
   await adminPage.getByLabel("Product name").fill("E2E updated product");
   await adminPage.getByRole("button", { name: "Save product" }).click();
@@ -168,6 +143,28 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await expect(statusDialog.getByRole("button", { name: "Confirm deactivation" })).toBeFocused();
   await statusDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(reviewDeactivation).toBeFocused();
+
+  const scopeControl = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
+    await scopeControl.selectOption({ label: "Central Cebu" });
+  } else {
+    await scopeControl.click();
+    await adminPage
+      .getByRole("option", { name: "Central Cebu" })
+      .evaluate((option) => (option as HTMLElement).click());
+  }
+  await adminPage.getByLabel(`New price for ${variantCode}`).fill("29.99");
+  await adminPage.getByRole("button", { name: "Review price" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText("Central Cebu");
+  await expect(adminPage.getByRole("alertdialog")).toContainText("2999 minor units");
+  await adminPage.getByRole("button", { name: "Confirm price" }).click();
+  await expect(adminPage.getByText("Price version created.", { exact: true })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Review start selling" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText(
+    "sets AVAILABLE for this location",
+  );
+  await adminPage.getByRole("button", { name: "Confirm selling status" }).click();
+  await expect(adminPage.getByText("Availability updated.", { exact: true })).toBeVisible();
 });
 
 test("a category manager can create and inspect a Category", async ({ adminPage }) => {

@@ -154,8 +154,8 @@ function AdminHeader({
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-[var(--fm-admin-content)]/90 backdrop-blur-md md:rounded-t-xl">
-      <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
-        <div className="flex items-center gap-2">
+      <div className="flex h-14 items-center justify-between gap-1 px-2 min-[430px]:gap-4 min-[430px]:px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
           <AdminMobileMenu items={items} />
           <Link
             href="/admin"
@@ -166,7 +166,7 @@ function AdminHeader({
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-admin-accent)] text-white shadow-sm">
               <Sprout className="size-4.5" aria-hidden="true" />
             </span>
-            <span className="truncate pr-1 text-sm font-semibold tracking-[-0.02em]">
+            <span className="hidden truncate pr-1 text-sm font-semibold tracking-[-0.02em] min-[430px]:inline">
               freshmarkets
             </span>
           </Link>

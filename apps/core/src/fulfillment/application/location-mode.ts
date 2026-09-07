@@ -10,8 +10,6 @@ export type GlobalModeView = {
   version: number;
 };
 
-export type LocationModeView = GlobalModeView;
-
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
@@ -106,53 +104,4 @@ export async function setGlobalFulfillmentMode(
     },
     requestId: command.requestId,
   };
-}
-
-// Compatibility exports keep focused callers readable while persistence is
-// fully global. New RPC and UI contracts do not carry a location target.
-export async function getLocationMode(
-  database: D1Database,
-  query: { locationId?: string; requestId: string },
-) {
-  return getGlobalMode(database, query);
-}
-
-export type SetLocationModeCommand = Omit<SetGlobalModeCommand, "expectedVersion"> & {
-  expectedVersion: number | null;
-  locationId?: string;
-  promiseMinutes?: number | null;
-  maxConcurrentInstantOrders?: number | null;
-};
-
-export async function setFulfillmentLocationMode(
-  database: D1Database,
-  command: SetLocationModeCommand,
-) {
-  if (
-    command.locationId &&
-    command.promiseMinutes !== undefined &&
-    command.maxConcurrentInstantOrders !== undefined
-  ) {
-    await database
-      .prepare(
-        `UPDATE fulfillment_location_readiness
-            SET instant_promise_minutes=?, max_concurrent_instant_orders=?,
-                dispatch_ready=?, version=version+1, updated_at=?
-          WHERE location_id=?`,
-      )
-      .bind(
-        command.promiseMinutes,
-        command.maxConcurrentInstantOrders,
-        command.promiseMinutes !== null && command.maxConcurrentInstantOrders !== null ? 1 : 0,
-        Date.now(),
-        command.locationId,
-      )
-      .run();
-  }
-  const current = await getGlobalMode(database, { requestId: command.requestId });
-  if (!current.ok) return current;
-  return setGlobalFulfillmentMode(database, {
-    ...command,
-    expectedVersion: command.expectedVersion ?? current.value.version,
-  });
 }

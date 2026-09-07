@@ -1,4 +1,4 @@
-import { expect, test } from "./admin-authenticated-fixture";
+import { executeAdminE2eSql, expect, test } from "./admin-authenticated-fixture";
 import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
 /**
@@ -62,29 +62,39 @@ test("a provisioned Staff reader opens the real Procurement workspace", async ({
   await expect(adminPage.getByRole("heading", { level: 1, name: "Procurement" })).toBeVisible();
 });
 
-test("fulfillment-mode activation succeeds with capability and is denied without it", async ({
+test("selling pause, mode switch, and reopen succeed with capability and deny unauthorized staff", async ({
   adminPage,
   deniedAdminPage,
 }) => {
-  const data = {
-    locationId: "location-cebu-central",
-    fulfillmentMode: "SCHEDULED",
-    cadence: "WEEKLY",
-    promiseMinutes: null,
-    maxConcurrentInstantOrders: null,
-    expectedVersion: null,
-  };
-  const allowed = await adminPage.request.post("/api/admin/fulfillment-mode", {
-    data,
-    headers: { "idempotency-key": crypto.randomUUID() },
-  });
-  const allowedBody = await allowed.json();
-  expect(allowedBody, JSON.stringify(allowedBody)).toMatchObject({
-    ok: true,
-    value: { locationId: data.locationId, activeMode: "SCHEDULED" },
-  });
-  const denied = await deniedAdminPage.request.post("/api/admin/fulfillment-mode", {
-    data: { ...data, expectedVersion: 1 },
+  const now = Date.now();
+  executeAdminE2eSql(`
+    UPDATE global_commerce_configuration
+    SET selling_state='OPEN', fulfillment_mode='INSTANT', cadence=NULL, version=1, updated_at=${now}
+    WHERE id='global';
+  `);
+  await adminPage.goto("/admin/settings/fulfillment-mode");
+  await expect(adminPage.getByText("OPEN", { exact: true })).toBeVisible();
+  await adminPage.getByLabel("Commerce change reason").fill("Prepare scheduled operations");
+  await adminPage.getByRole("button", { name: "Pause selling" }).click();
+  await expect(adminPage.getByText("Selling paused.", { exact: true })).toBeVisible();
+
+  await adminPage.getByLabel("Global fulfillment mode").selectOption("SCHEDULED");
+  await adminPage.getByLabel("Commerce change reason").fill("Scheduled window is ready");
+  await adminPage.getByRole("button", { name: "Activate global mode" }).click();
+  await expect(
+    adminPage.getByText("Global fulfillment mode saved.", { exact: true }),
+  ).toBeVisible();
+
+  await adminPage.getByLabel("Commerce change reason").fill("Resume scheduled checkout");
+  await adminPage.getByRole("button", { name: "Reopen selling" }).click();
+  await expect(adminPage.getByText("Selling reopened.", { exact: true })).toBeVisible();
+
+  const denied = await deniedAdminPage.request.post("/api/admin/commerce-configuration", {
+    data: {
+      action: "PAUSE",
+      expectedVersion: 4,
+      reason: "Unauthorized attempt",
+    },
     headers: { "idempotency-key": crypto.randomUUID() },
   });
   expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });

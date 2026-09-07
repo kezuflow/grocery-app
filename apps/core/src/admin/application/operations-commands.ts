@@ -7,9 +7,7 @@ import type {
   AuthenticatedRequest,
   RpcResult,
   StartAdminReceivingRequest,
-  ActivateFulfillmentModeRequest,
   ActivateGlobalFulfillmentModeRequest,
-  FulfillmentModeConfigurationView,
   GlobalCommerceConfigurationView,
   OpenSellingRequest,
   PauseSellingRequest,
@@ -24,7 +22,6 @@ import { recordReceivedLine } from "../../procurement/application/record-receive
 import { startReceiving } from "../../procurement/application/start-receiving";
 import { completeReceiving } from "../../procurement/application/complete-receiving";
 import { allowedFulfillmentActions } from "../../fulfillment/application/list-fulfillment-queue";
-import { setGlobalFulfillmentMode } from "../../fulfillment/application/location-mode";
 import {
   activateGlobalFulfillmentMode,
   openSelling,
@@ -198,45 +195,6 @@ export function openAdminSelling(
   return runCommerceConfigurationCommand(deps, request, "COMMERCE.SELLING_OPENED", () =>
     openSelling(deps.db, request),
   );
-}
-
-export async function activateAdminFulfillmentMode(
-  deps: OperationsAdministrationDeps,
-  request: ActivateFulfillmentModeRequest,
-): Promise<RpcResult<FulfillmentModeConfigurationView>> {
-  const permitted = await resolveGlobalFulfillmentAdministrationAccess(
-    deps,
-    request,
-    "fulfillment.manage",
-  );
-  if (!permitted.ok) return permitted;
-  const result = await setGlobalFulfillmentMode(deps.db, {
-    activeMode: request.fulfillmentMode,
-    cadence: request.cadence ?? null,
-    expectedVersion: request.expectedVersion,
-    idempotencyKey: request.idempotencyKey,
-    requestId: request.requestId,
-  });
-  if (!result.ok)
-    return {
-      ok: false,
-      error: {
-        code: result.error.code as import("@freshmarkets/contracts").AppErrorCode,
-        message: result.error.message,
-        requestId: request.requestId,
-      },
-    };
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    "OPERATIONS.FULFILLMENT_MODE_ACTIVATED",
-    "global_fulfillment_mode",
-    "global",
-    "global",
-    { activeMode: result.value.activeMode, version: result.value.version },
-  );
-  return result;
 }
 
 export async function aggregateAdminProcurementDemand(

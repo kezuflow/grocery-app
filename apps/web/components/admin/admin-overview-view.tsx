@@ -75,7 +75,7 @@ export function AdminOverviewViewContent({ overview }: { overview: AdminOverview
           )}
         </AdminChartCard>
 
-        <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)] md:col-span-2 xl:col-span-5">
+        <Card className="min-w-0 gap-0 py-0 shadow-[var(--fm-shadow-card)] md:col-span-2 xl:col-span-5">
           <CardHeader className="border-b px-4 py-4 sm:px-5">
             <CardTitle>Priority exceptions</CardTitle>
           </CardHeader>
@@ -118,7 +118,7 @@ export function AdminOverviewViewContent({ overview }: { overview: AdminOverview
         </Card>
       </AdminDashboardGrid>
 
-      <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+      <Card className="min-w-0 gap-0 py-0 shadow-[var(--fm-shadow-card)]">
         <CardHeader className="border-b px-4 py-4 sm:px-5">
           <CardTitle>Recent material operations</CardTitle>
         </CardHeader>

@@ -47,7 +47,6 @@ import {
 } from "./customer/addresses";
 import {
   getAdminGlobalCommerceConfiguration,
-  getAdminFulfillmentMode,
   listAdminDeliveryOperations,
   listAdminFulfillmentQueue,
   listAdminOperationalExceptions,
@@ -56,7 +55,6 @@ import {
 } from "./admin/application/operations-reads";
 import {
   activateAdminGlobalMode,
-  activateAdminFulfillmentMode,
   aggregateAdminProcurementDemand,
   startAdminReceiving,
   recordAdminReceivedLine,
@@ -821,12 +819,6 @@ const externalDeliveryMutationSchema = adminOperationsLocationSchema.extend({
 const adminOperationalExceptionsSchema = adminOperationsLocationSchema.extend({
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
-});
-const activateFulfillmentModeSchema = authenticatedRequestSchema.extend({
-  fulfillmentMode: validationSchema.enum(["INSTANT", "SCHEDULED"]),
-  cadence: validationSchema.enum(["WEEKLY"]).nullable().optional(),
-  expectedVersion: validationSchema.number().int().min(1),
-  idempotencyKey: idempotencyKeySchema,
 });
 const commerceTransitionSchema = authenticatedRequestSchema.extend({
   expectedVersion: validationSchema.number().int().min(1),
@@ -1783,15 +1775,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
-  async getFulfillmentMode(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return getAdminFulfillmentMode(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
-  }
   async getGlobalCommerceConfiguration(
     input: import("@freshmarkets/contracts").AuthenticatedRequest,
   ) {
@@ -1828,17 +1811,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return openAdminSelling(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
-  }
-  async activateFulfillmentMode(
-    input: import("@freshmarkets/contracts").ActivateFulfillmentModeRequest,
-  ) {
-    const validation = activateFulfillmentModeSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return activateAdminFulfillmentMode(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

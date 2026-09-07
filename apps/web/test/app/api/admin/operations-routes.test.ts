@@ -11,8 +11,10 @@ const coreMocks = vi.hoisted(() => ({
   advanceAdminFulfillment: vi.fn(),
   listDeliveryOperations: vi.fn(),
   advanceFulfillment: vi.fn(),
-  getFulfillmentMode: vi.fn(),
-  activateFulfillmentMode: vi.fn(),
+  getGlobalCommerceConfiguration: vi.fn(),
+  pauseSelling: vi.fn(),
+  activateGlobalMode: vi.fn(),
+  openSelling: vi.fn(),
   listOperationalExceptions: vi.fn(),
   resolveAdminOperationalException: vi.fn(),
 }));
@@ -30,7 +32,10 @@ import {
   POST as advanceFulfillment,
 } from "@/app/api/admin/fulfillment/route";
 import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
-import { GET as modeGet, POST as activateMode } from "@/app/api/admin/fulfillment-mode/route";
+import {
+  GET as commerceConfigurationGet,
+  POST as updateCommerceConfiguration,
+} from "@/app/api/admin/commerce-configuration/route";
 import { GET as exceptionsGet, POST as resolveException } from "@/app/api/admin/exceptions/route";
 
 beforeEach(() => {
@@ -54,7 +59,7 @@ describe("admin operations BFF routes", () => {
     coreMocks.listReceivingSessions.mockResolvedValue(ok);
     coreMocks.listFulfillmentQueue.mockResolvedValue(ok);
     coreMocks.listDeliveryOperations.mockResolvedValue(ok);
-    coreMocks.getFulfillmentMode.mockResolvedValue(ok);
+    coreMocks.getGlobalCommerceConfiguration.mockResolvedValue(ok);
     coreMocks.listOperationalExceptions.mockResolvedValue(ok);
 
     await procurementGet(
@@ -67,7 +72,7 @@ describe("admin operations BFF routes", () => {
       new Request("https://app/fulfillment?locationId=l1&cycleId=c1", { headers: cookie }),
     );
     await deliveryGet(new Request("https://app/delivery?locationId=l1", { headers: cookie }));
-    await modeGet(new Request("https://app/mode?locationId=l1", { headers: cookie }));
+    await commerceConfigurationGet(new Request("https://app/commerce", { headers: cookie }));
     await exceptionsGet(new Request("https://app/exceptions?locationId=l1", { headers: cookie }));
 
     expect(coreMocks.listProcurementRequirements.mock.calls[0][0]).toMatchObject({
@@ -86,7 +91,9 @@ describe("admin operations BFF routes", () => {
       cycleId: "c1",
     });
     expect(coreMocks.listDeliveryOperations.mock.calls[0][0]).toMatchObject({ locationId: "l1" });
-    expect(coreMocks.getFulfillmentMode.mock.calls[0][0]).toMatchObject({ headers: cookie });
+    expect(coreMocks.getGlobalCommerceConfiguration.mock.calls[0][0]).toMatchObject({
+      headers: cookie,
+    });
     expect(coreMocks.listOperationalExceptions.mock.calls[0][0]).toMatchObject({
       locationId: "l1",
     });
@@ -99,7 +106,7 @@ describe("admin operations BFF routes", () => {
       coreMocks.recordAdminReceivedLine,
       coreMocks.completeAdminReceiving,
       coreMocks.advanceAdminFulfillment,
-      coreMocks.activateFulfillmentMode,
+      coreMocks.activateGlobalMode,
       coreMocks.resolveAdminOperationalException,
     ])
       mock.mockResolvedValue(ok);
@@ -145,12 +152,13 @@ describe("admin operations BFF routes", () => {
         expectedVersion: 7,
       }),
     );
-    await activateMode(
-      command("https://app/mode", {
-        locationId: "l1",
+    await updateCommerceConfiguration(
+      command("https://app/commerce", {
+        action: "SWITCH_MODE",
         fulfillmentMode: "SCHEDULED",
         cadence: "WEEKLY",
         expectedVersion: 2,
+        reason: "Scheduled operations ready",
       }),
     );
     await resolveException(
@@ -170,7 +178,7 @@ describe("admin operations BFF routes", () => {
       coreMocks.recordAdminReceivedLine,
       coreMocks.completeAdminReceiving,
       coreMocks.advanceAdminFulfillment,
-      coreMocks.activateFulfillmentMode,
+      coreMocks.activateGlobalMode,
       coreMocks.resolveAdminOperationalException,
     ]) {
       expect(mock.mock.calls[0][0]).toMatchObject({ idempotencyKey: "command-1", headers: cookie });

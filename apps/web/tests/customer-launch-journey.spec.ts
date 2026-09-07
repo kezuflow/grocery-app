@@ -53,7 +53,7 @@ test("presents membership and safe post-commit customer actions as one bounded j
   await expect(page.getByRole("heading", { name: "FreshMarkets Membership" })).toBeVisible();
   await expect(page.getByText("₱299.00 per calendar month")).toBeVisible();
   await expect(page.getByText("TRIALING", { exact: true })).toBeVisible();
-  await expect(page.getByText("READY", { exact: true })).toBeVisible();
+  await expect(page.getByText("READY", { exact: true })).toHaveCount(0);
 
   const order = {
     orderId: "order-1",

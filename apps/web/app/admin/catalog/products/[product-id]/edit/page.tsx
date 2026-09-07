@@ -13,20 +13,34 @@ import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAdminContext } from "../../../../admin-context-provider";
 
 export default function EditProductPage() {
   const productId = useParams<{ "product-id": string }>()?.["product-id"];
   const router = useRouter();
   const searchParams = useSearchParams();
   const intent = useAdminCommandIntent();
+  const adminContext = useAdminContext();
+  const selectedScope =
+    adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
   const [detail, setDetail] = useState<AdminProductDetail | null>(null);
   const [categories, setCategories] = useState<AdminCategoryPage["items"]>([]);
   const [value, setValue] = useState<ProductFormValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (!productId) return;
+    if (!productId || (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION"))
+      return;
+    const scopeParams = new URLSearchParams(
+      selectedScope.kind === "LOCATION"
+        ? {
+            scopeKind: "LOCATION",
+            marketId: selectedScope.marketId,
+            locationId: selectedScope.locationId,
+          }
+        : { scopeKind: "GLOBAL" },
+    );
     void Promise.all([
-      fetch(`/api/admin/catalog/products/${productId}`).then(
+      fetch(`/api/admin/catalog/products/${productId}?${scopeParams}`).then(
         (r) => r.json() as Promise<RpcResult<AdminProductDetail>>,
       ),
       fetch("/api/admin/catalog/categories").then(
@@ -49,7 +63,7 @@ export default function EditProductPage() {
       });
       if (categoryResult.ok) setCategories(categoryResult.value.items);
     });
-  }, [productId]);
+  }, [productId, selectedScope]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!detail || !value) return;
