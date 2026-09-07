@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { createMockPaymentProvider } from "../payments/infrastructure/providers/mock-payment-provider";
+import { describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { beginPaidEnrollment } from "../membership/application/get-membership-experience";
 import { redrivePaymentReactions } from "../payments/application/redrive-payment-reactions";
@@ -70,6 +71,118 @@ async function seedReaction(input: {
 const registry = new ProviderRegistry("development");
 
 describe("redrivePaymentReactions", () => {
+  it("claims a due reaction once across concurrent sweeps and keeps the last attempt leased", async () => {
+    const { reactionId } = await seedReaction({
+      intentStatus: "SUCCEEDED",
+      reactionType: "COMMIT_ORDER",
+      subjectId: "missing-quote",
+      attempts: 0,
+    });
+    const leased = await seedReaction({
+      intentStatus: "SUCCEEDED",
+      reactionType: "COMMIT_ORDER",
+      attempts: 5,
+      availableAt: NOW + MINUTE,
+    });
+    await Promise.all([
+      redrivePaymentReactions(env.DB, registry, NOW),
+      redrivePaymentReactions(env.DB, registry, NOW),
+    ]);
+    expect(
+      await env.DB.prepare("SELECT attempts,status FROM payment_reaction WHERE id=?")
+        .bind(reactionId)
+        .first(),
+    ).toEqual({ attempts: 1, status: "PENDING" });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
+        .bind(leased.reactionId)
+        .first(),
+    ).toEqual({ status: "PENDING" });
+  });
+
+  it("persists a thrown application failure, continues the batch and escalates it once", async () => {
+    const failed = await seedReaction({
+      intentStatus: "SUCCEEDED",
+      reactionType: "COMMIT_ORDER",
+      subjectId: "poisoned-quote",
+      attempts: 0,
+    });
+    const later = await seedReaction({
+      intentStatus: "SUCCEEDED",
+      reactionType: "COMMIT_ORDER",
+      subjectId: "another-missing-quote",
+      attempts: 0,
+    });
+    await env.DB.prepare(`CREATE TRIGGER reject_finance_evidence BEFORE INSERT ON finance_exception
+      WHEN NEW.payment_intent_id='${failed.intentId}' BEGIN SELECT RAISE(ABORT,'test-only application failure'); END`).run();
+    try {
+      await redrivePaymentReactions(env.DB, registry, NOW);
+      expect(
+        await env.DB.prepare("SELECT attempts,last_error_code FROM payment_reaction WHERE id=?")
+          .bind(failed.reactionId)
+          .first(),
+      ).toEqual({ attempts: 1, last_error_code: "APPLICATION_FAILURE" });
+      expect(
+        await env.DB.prepare("SELECT attempts FROM payment_reaction WHERE id=?")
+          .bind(later.reactionId)
+          .first(),
+      ).toEqual({ attempts: 1 });
+      for (let attempt = 1; attempt < 6; attempt++)
+        await redrivePaymentReactions(env.DB, registry, NOW + attempt * 16 * MINUTE);
+      expect(
+        await env.DB.prepare("SELECT status,attempts FROM payment_reaction WHERE id=?")
+          .bind(failed.reactionId)
+          .first(),
+      ).toEqual({ status: "ESCALATED", attempts: 5 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REACTION_FAILURE'",
+        )
+          .bind(failed.intentId)
+          .first(),
+      ).toEqual({ count: 1 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER reject_finance_evidence");
+    }
+  });
+
+  it("records provider lookup failure without losing later due work", async () => {
+    const failed = await seedReaction({
+      intentStatus: "PROCESSING",
+      reactionType: "COMMIT_ORDER",
+      attempts: 0,
+    });
+    const later = await seedReaction({
+      intentStatus: "SUCCEEDED",
+      reactionType: "COMMIT_ORDER",
+      attempts: 0,
+    });
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES ('cust-x','auth-cust-x','active',1,1)",
+    ).run();
+    await env.DB.prepare(`INSERT INTO payment_attempt
+      (id,customer_id,payment_intent_id,amount_minor,currency,status,provider,provider_reference,idempotency_key,created_at,updated_at)
+      VALUES (?,'cust-x',?,29900,'PHP','PROCESSING','mock','throwing-reference',?,?,?)`)
+      .bind(crypto.randomUUID(), failed.intentId, crypto.randomUUID(), NOW, NOW)
+      .run();
+    const provider = createMockPaymentProvider();
+    provider.getPayment = vi.fn(async () => {
+      throw new Error("provider private payload must not persist");
+    });
+    await redrivePaymentReactions(env.DB, new ProviderRegistry("test", [provider]), NOW);
+    expect(provider.getPayment).toHaveBeenCalledOnce();
+    expect(
+      await env.DB.prepare("SELECT attempts,last_error_code FROM payment_reaction WHERE id=?")
+        .bind(failed.reactionId)
+        .first(),
+    ).toEqual({ attempts: 1, last_error_code: "PROVIDER_LOOKUP_FAILED" });
+    expect(
+      await env.DB.prepare("SELECT attempts FROM payment_reaction WHERE id=?")
+        .bind(later.reactionId)
+        .first(),
+    ).toEqual({ attempts: 1 });
+  });
+
   it("applies a due membership activation and marks the reaction succeeded", async () => {
     const subscriptionId = await seedPendingPaidSubscription();
     const { reactionId } = await seedReaction({
