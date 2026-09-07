@@ -106,7 +106,10 @@ export function ExternalDeliveryQueue() {
                         {item.externalDispatch ? (
                           <div className="space-y-1 text-xs">
                             <p>
-                              {item.externalDispatch.provider} · {item.externalDispatch.status}
+                              {item.externalDispatch.provider} ·{" "}
+                              {item.externalDispatch.status === "OUTCOME_UNKNOWN"
+                                ? "Awaiting provider confirmation"
+                                : item.externalDispatch.status}
                             </p>
                             {item.externalDispatch.trackingUrl ? (
                               <a
@@ -133,9 +136,7 @@ export function ExternalDeliveryQueue() {
                             >
                               Refresh provider
                             </Button>
-                            {!["COMPLETED", "CANCELED", "RETURNED"].includes(
-                              item.externalDispatch.status,
-                            ) ? (
+                            {item.externalDispatch.status === "ACTIVE" ? (
                               <Button
                                 size="sm"
                                 variant="outline"

@@ -799,11 +799,100 @@ async function providerMutation(
     await failIdempotency(deps.db, scope, request.idempotencyKey);
     return failure("CONFLICT", "Provider delivery identity is unavailable", request.requestId);
   }
+  const commandId = `delivery-command:${scope}:${request.idempotencyKey}`;
+  let observationVersion = request.expectedVersion;
+  if (operation === "CANCEL" && current.status !== "ACTIVE") {
+    await failIdempotency(deps.db, scope, request.idempotencyKey);
+    return failure(
+      "CONFLICT",
+      "An uncertain or closed delivery cannot be canceled again; reconcile it first",
+      request.requestId,
+    );
+  }
+  const intentStatements: D1PreparedStatement[] = [
+    deps.db
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -33 WHERE NOT EXISTS (SELECT 1 FROM delivery_provider_dispatch WHERE id=? AND version=?)",
+      )
+      .bind(request.dispatchId, request.expectedVersion),
+  ];
+  if (operation === "CANCEL") {
+    intentStatements.push(
+      deps.db
+        .prepare(`UPDATE delivery_provider_dispatch SET status='OUTCOME_UNKNOWN',last_error_code='CANCEL_OUTCOME_UNKNOWN',version=version+1,updated_at=?
+      WHERE id=? AND version=? AND status='ACTIVE' AND NOT EXISTS (SELECT 1 FROM delivery_provider_command WHERE dispatch_id=? AND operation='CANCEL' AND status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED'))`)
+        .bind(deps.now(), request.dispatchId, request.expectedVersion, request.dispatchId),
+      deps.db.prepare("INSERT INTO commitment_abort(id) SELECT -33 WHERE changes()!=1"),
+    );
+    observationVersion += 1;
+  }
+  intentStatements.push(
+    deps.db
+      .prepare(`INSERT INTO delivery_provider_command
+    (id,dispatch_id,operation,idempotency_scope,idempotency_key,request_hash,actor_user_id,location_id,request_id,status,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,'SUBMITTING',?,?)
+    ON CONFLICT(idempotency_scope,idempotency_key) DO UPDATE SET status='SUBMITTING',observation_id=NULL,updated_at=excluded.updated_at
+      WHERE delivery_provider_command.status='REJECTED' AND delivery_provider_command.request_hash=excluded.request_hash`)
+      .bind(
+        commandId,
+        request.dispatchId,
+        operation,
+        scope,
+        request.idempotencyKey,
+        claim.hash,
+        access.value.authUserId,
+        request.locationId,
+        request.requestId,
+        deps.now(),
+        deps.now(),
+      ),
+    deps.db.prepare("INSERT INTO commitment_abort(id) SELECT -33 WHERE changes()!=1"),
+  );
+  try {
+    await deps.db.batch(intentStatements);
+  } catch (error) {
+    await failIdempotency(deps.db, scope, request.idempotencyKey);
+    if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed: id = 0"))
+      throw error;
+    return failure(
+      "STALE_VERSION",
+      "Delivery changed before the provider operation",
+      request.requestId,
+    );
+  }
+  const reject = async (unknown: boolean) => {
+    const statements = [
+      deps.db
+        .prepare(
+          "UPDATE delivery_provider_command SET status=?,updated_at=? WHERE id=? AND status='SUBMITTING'",
+        )
+        .bind(unknown ? "OUTCOME_UNKNOWN" : "REJECTED", deps.now(), commandId),
+    ];
+    if (operation === "CANCEL" && !unknown)
+      statements.push(
+        deps.db
+          .prepare(`UPDATE delivery_provider_dispatch
+      SET status='ACTIVE',last_error_code='CANCEL_REJECTED',version=version+1,updated_at=? WHERE id=? AND version=? AND status='OUTCOME_UNKNOWN'`)
+          .bind(deps.now(), request.dispatchId, observationVersion),
+      );
+    await deps.db.batch(statements);
+    if (!unknown) await failIdempotency(deps.db, scope, request.idempotencyKey);
+  };
   let observation: ProviderDelivery;
   if (operation === "CANCEL") {
-    const canceled = await deps.provider.cancel(current.providerDeliveryId);
+    let canceled;
+    try {
+      canceled = await deps.provider.cancel(current.providerDeliveryId);
+    } catch {
+      await reject(true);
+      return failure(
+        "CONFLICT",
+        "Provider cancellation outcome is unknown; refresh to reconcile",
+        request.requestId,
+      );
+    }
     if (!canceled.ok) {
-      await failIdempotency(deps.db, scope, request.idempotencyKey);
+      await reject(canceled.error.outcomeUnknown);
       return failure("CONFLICT", "Provider cancellation was not confirmed", request.requestId);
     }
     observation = {
@@ -815,37 +904,57 @@ async function providerMutation(
       quote: null,
     };
   } else {
-    const observed = await deps.provider.get(current.providerDeliveryId);
+    let observed;
+    try {
+      observed = await deps.provider.get(current.providerDeliveryId);
+    } catch {
+      await reject(false);
+      return failure("CONFLICT", "Provider delivery could not be refreshed", request.requestId);
+    }
     if (!observed.ok || !observed.value) {
-      await failIdempotency(deps.db, scope, request.idempotencyKey);
+      await reject(false);
       return failure("CONFLICT", "Provider delivery could not be refreshed", request.requestId);
     }
     if (observed.value.providerDeliveryId !== current.providerDeliveryId) {
-      await failIdempotency(deps.db, scope, request.idempotencyKey);
+      await reject(false);
       return failure("CONFLICT", "Provider returned a different delivery", request.requestId);
     }
     observation = observed.value;
   }
+  const alreadyCompleted = await deps.db
+    .prepare("SELECT id FROM delivery_provider_command WHERE id=? AND status='SUCCEEDED'")
+    .bind(commandId)
+    .first();
+  if (alreadyCompleted) {
+    const completed = await loadExternalDispatch(deps.db, request.dispatchId, request.locationId);
+    if (completed) return { ok: true, value: completed, requestId: request.requestId };
+  }
   const now = deps.now();
   // Failed command retries must not attach new evidence to an older observation.
   const inboxId = `admin-delivery:${crypto.randomUUID()}`;
-  await deps.db
-    .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox
+  await deps.db.batch([
+    deps.db
+      .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox
     (id,provider,provider_event_id,dispatch_id,provider_delivery_id,merchant_order_id,observed_at,
      provider_status,payload_hash,raw_payload,processing_status,received_at)
     SELECT ?,provider,?,id,provider_delivery_id,merchant_order_id,?,?,?,?, 'RECEIVED',?
     FROM delivery_provider_dispatch WHERE id=?`)
-    .bind(
-      inboxId,
-      inboxId,
-      now,
-      observation.status,
-      await requestHash(observation),
-      JSON.stringify(observation),
-      now,
-      request.dispatchId,
-    )
-    .run();
+      .bind(
+        inboxId,
+        inboxId,
+        now,
+        observation.status,
+        await requestHash(observation),
+        JSON.stringify(observation),
+        now,
+        request.dispatchId,
+      ),
+    deps.db
+      .prepare(
+        "UPDATE delivery_provider_command SET status='OBSERVED',observation_id=?,updated_at=? WHERE id=? AND status IN ('SUBMITTING','OUTCOME_UNKNOWN')",
+      )
+      .bind(inboxId, now, commandId),
+  ]);
   const applied = await applyProviderObservation(
     deps.db,
     {
@@ -857,25 +966,10 @@ async function providerMutation(
     },
     {
       inboxId,
-      expectedVersion: request.expectedVersion,
-      completionStatements: [
-        completeIdempotency(deps.db, scope, request.idempotencyKey, request.dispatchId, now),
-        auditEventStatement(deps.db, {
-          actorUserId: access.value.authUserId,
-          action: `DELIVERY.EXTERNAL_PROVIDER_${operation === "REFRESH" ? "REFRESHED" : "CANCELED"}`,
-          resourceType: "delivery_provider_dispatch",
-          resourceId: request.dispatchId,
-          locationId: request.locationId,
-          details: { provider: current.provider },
-          idempotencyKey: request.idempotencyKey,
-          correlationId: request.requestId,
-          occurredAt: now,
-        }),
-      ],
+      expectedVersion: observationVersion,
     },
   );
   if (applied.outcome === "RECONCILIATION_REQUIRED") {
-    await failIdempotency(deps.db, scope, request.idempotencyKey);
     return failure(
       applied.reason === "DELIVERY_DISPATCH_STALE" ? "STALE_VERSION" : "CONFLICT",
       "Provider evidence requires delivery reconciliation",

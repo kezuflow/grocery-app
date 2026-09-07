@@ -4,6 +4,8 @@ import { createAuth, type AuthEnvironment } from "../../auth/service";
 import type { ResolvedApplicationContext } from "../../auth/authorization";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
+import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
+import { reconcileProviderObservations } from "../../delivery/application/reconcile-provider-observations";
 import {
   cancelExternalDelivery,
   getLocationDeliveryProfile,
@@ -186,7 +188,170 @@ async function seedScheduledDelivery(now: number) {
   return { orderId, jobId };
 }
 
+async function seedActiveDispatch(now: number) {
+  const delivery = await seedScheduledDelivery(now);
+  const dispatchId = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO delivery_provider_dispatch
+    (id,delivery_job_id,provider,merchant_order_id,provider_delivery_id,request_hash,request_snapshot_json,status,provider_status,version,created_at,updated_at)
+    VALUES (?,?,'lalamove',?,?,'fixture','{}','ACTIVE','ALLOCATING',1,?,?)`)
+    .bind(dispatchId, delivery.jobId, delivery.orderId, `provider-${dispatchId}`, now, now)
+    .run();
+  return { ...delivery, dispatchId };
+}
+
 describe("external delivery request", () => {
+  it("submits only one of two concurrent cancellation commands", async () => {
+    const now = Date.now();
+    const { dispatchId } = await seedActiveDispatch(now);
+    const cancel = vi.fn<DeliveryProvider["cancel"]>(async () => ({
+      ok: false,
+      error: { code: "TIMEOUT", retryable: true, outcomeUnknown: true },
+    }));
+    const deps = {
+      ...dependencies(["delivery.manage"]),
+      provider: { ...createMockDeliveryProvider(), code: "lalamove", cancel },
+      now: () => now,
+    };
+    const request = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      dispatchId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const results = await Promise.all([
+      cancelExternalDelivery(deps, request),
+      cancelExternalDelivery(deps, { ...request, idempotencyKey: crypto.randomUUID() }),
+    ]);
+    expect(results.every((result) => !result.ok)).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM delivery_provider_command WHERE dispatch_id=? AND operation='CANCEL'",
+      )
+        .bind(dispatchId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_provider_dispatch WHERE id=?")
+        .bind(dispatchId)
+        .first(),
+    ).toEqual({ status: "OUTCOME_UNKNOWN" });
+  });
+  it.each(["returned", "thrown"])(
+    "persists a %s cancellation timeout and never resubmits it under a new key",
+    async (timeout) => {
+      const now = Date.now();
+      const delivery = await seedActiveDispatch(now);
+      const { dispatchId } = delivery;
+      const cancel = vi.fn<DeliveryProvider["cancel"]>(async () => {
+        if (timeout === "thrown") throw new Error("Provider connection interrupted");
+        return {
+          ok: false,
+          error: { code: "LALAMOVE_TIMEOUT", retryable: true, outcomeUnknown: true },
+        };
+      });
+      const deps = {
+        ...dependencies(["delivery.manage"]),
+        provider: { ...createMockDeliveryProvider(), code: "lalamove", cancel },
+        now: () => now,
+      };
+      const request = {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        dispatchId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      expect(await cancelExternalDelivery(deps, request)).toMatchObject({ ok: false });
+      const current = await env.DB.prepare(
+        "SELECT status,version FROM delivery_provider_dispatch WHERE id=?",
+      )
+        .bind(dispatchId)
+        .first<{ status: string; version: number }>();
+      expect(
+        await cancelExternalDelivery(deps, {
+          ...request,
+          expectedVersion: current?.version ?? 1,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: false });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(current?.status).toBe("OUTCOME_UNKNOWN");
+      const lostReadKey = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO idempotency_records (scope,idempotency_key,request_hash,result_type,status,created_at,updated_at) VALUES ('admin.delivery.externalRefresh',?,'lost-read','refresh','PROCESSING',?,?)",
+        ).bind(lostReadKey, now, now),
+        env.DB.prepare(`INSERT INTO delivery_provider_command
+        (id,dispatch_id,operation,idempotency_scope,idempotency_key,request_hash,actor_user_id,location_id,request_id,status,created_at,updated_at)
+        VALUES (?,?,'REFRESH','admin.delivery.externalRefresh',?,'lost-read','auth-delivery-operator',?,?,'SUBMITTING',?,?)`).bind(
+          crypto.randomUUID(),
+          dispatchId,
+          lostReadKey,
+          LOCATION,
+          crypto.randomUUID(),
+          now,
+          now,
+        ),
+      ]);
+      await reconcileProviderObservations(env.DB, now + 600_000);
+      expect(
+        await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+          .bind(lostReadKey)
+          .first(),
+      ).toEqual({ status: "FAILED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM delivery_provider_command WHERE operation='CANCEL' AND idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "OUTCOME_UNKNOWN" });
+      const get = vi.fn<DeliveryProvider["get"]>(async () => ({
+        ok: true,
+        value: {
+          providerDeliveryId: `provider-${dispatchId}`,
+          merchantOrderId: delivery.orderId,
+          status: "CANCELED",
+          trackingUrl: null,
+          pickupPin: null,
+          quote: null,
+        },
+      }));
+      const refresh = await refreshExternalDelivery(
+        { ...deps, provider: { ...deps.provider, get }, now: () => now + 1 },
+        {
+          ...request,
+          expectedVersion: current?.version ?? 2,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      );
+      expect(refresh).toMatchObject({ ok: true, value: { status: "CANCELED" } });
+      expect(await cancelExternalDelivery(deps, request)).toMatchObject({
+        ok: true,
+        value: { status: "CANCELED" },
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM delivery_provider_command WHERE operation='CANCEL' AND idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "SUCCEEDED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM audit_event WHERE idempotency_key=? AND action='DELIVERY.EXTERNAL_PROVIDER_CANCELED'",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 1 });
+    },
+  );
+
   it("builds the courier request from the store profile, stop snapshot, and order weight", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);
@@ -319,20 +484,55 @@ describe("external delivery request", () => {
         ),
       ).toMatchObject({ ok: true });
     }
+    const refreshRequest = {
+      requestId: crypto.randomUUID(),
+      headers: {},
+      locationId: LOCATION,
+      dispatchId: result.value.dispatchId,
+      expectedVersion: result.value.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await env.DB.prepare(`CREATE TRIGGER reject_refresh_projection BEFORE UPDATE ON delivery_job
+      WHEN NEW.status='EN_ROUTE' BEGIN SELECT RAISE(ABORT,'test refresh projection failure'); END`).run();
+    try {
+      await expect(
+        refreshExternalDelivery({ ...deps, provider, now: () => now + 1 }, refreshRequest),
+      ).rejects.toThrow("test refresh projection failure");
+      expect(
+        await env.DB.prepare("SELECT status FROM delivery_provider_command WHERE idempotency_key=?")
+          .bind(refreshRequest.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "OBSERVED" });
+      expect(
+        await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+          .bind(refreshRequest.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "PROCESSING" });
+      expect(
+        await env.DB.prepare("SELECT version FROM delivery_provider_dispatch WHERE id=?")
+          .bind(result.value.dispatchId)
+          .first(),
+      ).toEqual({ version: 3 });
+    } finally {
+      await env.DB.prepare("DROP TRIGGER reject_refresh_projection").run();
+    }
+    await reconcileProviderObservations(env.DB, Date.now());
+    const callsBeforeReplay = vi.mocked(provider.get).mock.calls.length;
     const refreshed = await refreshExternalDelivery(
       { ...deps, provider, now: () => now + 1 },
-      {
-        requestId: crypto.randomUUID(),
-        headers: {},
-        locationId: LOCATION,
-        dispatchId: result.value.dispatchId,
-        expectedVersion: result.value.version,
-        idempotencyKey: crypto.randomUUID(),
-      },
+      refreshRequest,
     );
+    expect(vi.mocked(provider.get).mock.calls.length).toBe(callsBeforeReplay);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE idempotency_key=? AND action='DELIVERY.EXTERNAL_PROVIDER_REFRESHED'",
+      )
+        .bind(refreshRequest.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 1 });
     expect(refreshed).toMatchObject({
       ok: true,
-      value: { providerStatus: "IN_DELIVERY", version: 4 },
+      value: { providerStatus: "IN_DELIVERY", version: 5 },
     });
     expect(
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
@@ -356,7 +556,7 @@ describe("external delivery request", () => {
         idempotencyKey: crypto.randomUUID(),
       },
     );
-    expect(canceled).toMatchObject({ ok: true, value: { status: "CANCELED", version: 5 } });
+    expect(canceled).toMatchObject({ ok: true, value: { status: "CANCELED", version: 7 } });
     expect(
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
         .bind(delivery.orderId)
@@ -371,7 +571,7 @@ describe("external delivery request", () => {
       { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now + 3 },
       { ...bookingRequest, requestId: crypto.randomUUID() },
     );
-    expect(replay).toMatchObject({ ok: true, value: { status: "CANCELED", version: 5 } });
+    expect(replay).toMatchObject({ ok: true, value: { status: "CANCELED", version: 7 } });
     expect(create).toHaveBeenCalledOnce();
   });
 });

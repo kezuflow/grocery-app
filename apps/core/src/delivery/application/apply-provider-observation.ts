@@ -1,4 +1,5 @@
 import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
+import { completeProviderCommandStatements } from "../infrastructure/provider-command-repository";
 
 export type ProviderObservation = Readonly<{
   dispatchId: string;
@@ -100,7 +101,12 @@ export async function applyProviderObservation(
       provider_status: string | null;
     }>();
   const now = Date.now();
-  const completion = options.completionStatements ?? [];
+  const completion = [
+    ...(options.completionStatements ?? []),
+    ...(options.inboxId
+      ? completeProviderCommandStatements(database, options.inboxId, observation.observedAt, now)
+      : []),
+  ];
   const inboxApplied = () =>
     database
       .prepare(`UPDATE delivery_provider_event_inbox
@@ -204,6 +210,16 @@ export async function applyProviderObservation(
       ),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()!=1"),
   );
+  if (dispatchStatus(observation.status) === "ACTIVE")
+    statements.push(
+      database
+        .prepare(`UPDATE delivery_provider_dispatch
+    SET status='OUTCOME_UNKNOWN',last_error_code='CANCEL_OUTCOME_UNKNOWN'
+    WHERE id=? AND EXISTS (SELECT 1 FROM delivery_provider_command command
+      WHERE command.dispatch_id=delivery_provider_dispatch.id AND command.operation='CANCEL'
+        AND command.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED'))`)
+        .bind(dispatch.id),
+    );
   if (orderStatus)
     statements.push(
       database

@@ -27,6 +27,19 @@ function object(value: unknown): Record<string, unknown> | null {
 
 /** Local evidence replay only: never creates, cancels, or rebooks a courier. */
 export async function reconcileProviderObservations(database: D1Database, now: number) {
+  // A lost read response is safe to retry. Never reclaim an uncertain mutation.
+  await database.batch([
+    database
+      .prepare(`UPDATE delivery_provider_command SET status='REJECTED',updated_at=?
+      WHERE operation='REFRESH' AND status='SUBMITTING' AND updated_at<?`)
+      .bind(now, now - 300_000),
+    database
+      .prepare(`UPDATE idempotency_records SET status='FAILED',updated_at=?
+      WHERE status='PROCESSING' AND EXISTS (SELECT 1 FROM delivery_provider_command command
+        WHERE command.operation='REFRESH' AND command.status='REJECTED' AND command.idempotency_scope=scope
+          AND command.idempotency_key=idempotency_records.idempotency_key AND command.request_hash=idempotency_records.request_hash)`)
+      .bind(now),
+  ]);
   const pending = await database
     .prepare(`SELECT inbox.id,inbox.provider_status,inbox.observed_at,inbox.raw_payload,
     inbox.recovery_attempts,dispatch.id AS dispatch_id

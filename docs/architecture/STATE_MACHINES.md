@@ -184,6 +184,7 @@ PENDING -> CREATING -> ACTIVE -> COMPLETED
                     -> OUTCOME_UNKNOWN -> RECONCILIATION_REQUIRED
 PENDING / RETRY_REQUIRED -> CREATING
 ACTIVE -> CANCELED / RETURNED / FAILED
+ACTIVE -> OUTCOME_UNKNOWN (cancellation submitted) -> CANCELED (confirmed)
 ```
 
 `RETRY_REQUIRED` is allowed only when Core knows the create request did not reach the provider,
@@ -192,6 +193,8 @@ or local persistence failure after create may mean the courier accepted the book
 enter `OUTCOME_UNKNOWN`/`RECONCILIATION_REQUIRED` and cannot issue another create automatically.
 An exact application replay returns the existing dispatch. A changed request for the same
 DeliveryJob is `IDEMPOTENCY_CONFLICT`.
+
+Admin provider commands retain `SUBMITTING -> OUTCOME_UNKNOWN|OBSERVED|REJECTED` and `OBSERVED -> SUCCEEDED` evidence. A confirmed cancellation completes the originating command even if delivered through webhook, refresh or inbox recovery. A nonterminal refresh does not clear a pending cancellation's uncertainty. Definitive rejection permits a fresh authorized command after current-version revalidation; a timeout does not. Confirmed incompatible terminal evidence rejects the cancellation intent rather than fabricating cancellation success.
 
 Provider-neutral observations such as `ALLOCATING`, `PENDING_PICKUP`, `PICKING_UP`,
 `PENDING_DROP_OFF`, `IN_DELIVERY`, `IN_RETURN`, `COMPLETED`, `CANCELED`, `RETURNED`, and `FAILED`
