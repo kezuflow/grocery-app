@@ -13,6 +13,8 @@ export const adminCapabilityCodes = [
   "orders.manage",
   "catalog.read",
   "catalog.manage",
+  "prices.read",
+  "prices.manage",
   "inventory.read",
   "inventory.adjust",
   "promotions.read",

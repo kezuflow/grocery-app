@@ -27,6 +27,7 @@ import {
 } from "../../../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
+import { GlobalPricePanel } from "../../../../../components/admin/global-price-panel";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
 
@@ -37,27 +38,15 @@ type LoadState =
 
 const BASE = "/api/admin/catalog";
 
-type VariantCommandConfirmation =
-  | {
-      kind: "PRICE";
-      skuId: string;
-      skuCode: string;
-      amountMinor: number;
-      expectedVersion: number;
-      marketId: string;
-      locationId: string;
-      currency: string;
-      targetLabel: string;
-    }
-  | {
-      kind: "AVAILABILITY";
-      skuId: string;
-      skuCode: string;
-      availabilityStatus: "AVAILABLE" | "UNAVAILABLE";
-      expectedVersion: number;
-      locationId: string;
-      targetLabel: string;
-    };
+type VariantCommandConfirmation = {
+  kind: "AVAILABILITY";
+  skuId: string;
+  skuCode: string;
+  availabilityStatus: "AVAILABLE" | "UNAVAILABLE";
+  expectedVersion: number;
+  locationId: string;
+  targetLabel: string;
+};
 
 export default function ProductDetailPage({
   params,
@@ -81,7 +70,6 @@ export default function ProductDetailPage({
     sellQuantity: "",
     estimatedShippingWeightGrams: "",
   });
-  const [priceBySku, setPriceBySku] = useState<Record<string, string>>({});
   const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
@@ -100,11 +88,6 @@ export default function ProductDetailPage({
           (option) => option.kind === "location" && option.locationId === selectedScope.locationId,
         )
       : null;
-  const selectedLocationTarget = selectedTarget?.kind === "location" ? selectedTarget : null;
-  const selectedMarketId = selectedScope?.kind === "LOCATION" ? selectedScope.marketId : null;
-  const selectedLocationId = selectedScope?.kind === "LOCATION" ? selectedScope.locationId : null;
-  const selectedCurrency = selectedLocationTarget?.currency;
-  const selectedTargetLabel = selectedLocationTarget?.locationName ?? "Global catalog";
 
   const load = useCallback(() => {
     if (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION") return;
@@ -495,6 +478,10 @@ export default function ProductDetailPage({
         </div>
       ) : null}
 
+      {product.scope.kind === "GLOBAL" ? (
+        <GlobalPricePanel skus={product.skus} scopes={targetOptions} />
+      ) : null}
+
       <div id="product-variants" className="scroll-mt-32">
         <ListPageSection
           title="Sell variants"
@@ -781,42 +768,6 @@ export default function ProductDetailPage({
                       <TableCell>
                         {canManageTarget ? (
                           <span className="flex flex-wrap items-center gap-1">
-                            <Input
-                              aria-label={`New price for ${sku.code}`}
-                              value={priceBySku[sku.skuId] ?? ""}
-                              onChange={(event) =>
-                                setPriceBySku({ ...priceBySku, [sku.skuId]: event.target.value })
-                              }
-                              className="w-24"
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const pesos = Number(priceBySku[sku.skuId]);
-                                if (Number.isNaN(pesos) || pesos <= 0) {
-                                  setNotice("Enter a positive price.");
-                                  return;
-                                }
-                                if (!selectedMarketId || !selectedCurrency || !selectedLocationId) {
-                                  setNotice("The selected location price target is unavailable.");
-                                  return;
-                                }
-                                setVariantCommand({
-                                  kind: "PRICE",
-                                  skuId: sku.skuId,
-                                  skuCode: sku.code,
-                                  marketId: selectedMarketId,
-                                  locationId: selectedLocationId,
-                                  currency: selectedCurrency,
-                                  amountMinor: Math.round(pesos * 100),
-                                  expectedVersion: sku.priceVersion ?? 0,
-                                  targetLabel: selectedTargetLabel,
-                                });
-                              }}
-                            >
-                              Review price
-                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -903,48 +854,28 @@ export default function ProductDetailPage({
       />
       <ConfirmCommandDialog
         open={variantCommand !== null}
-        title={variantCommand?.kind === "PRICE" ? "Set variant price?" : "Change selling status?"}
+        title="Change selling status?"
         resource={variantCommand?.skuCode ?? "Sell variant"}
         scope={variantCommand?.targetLabel ?? "Catalog target"}
-        consequence={
-          variantCommand?.kind === "PRICE"
-            ? `This creates a new ${variantCommand.currency} price version for exactly ${variantCommand.amountMinor} minor units.`
-            : `This sets ${variantCommand?.availabilityStatus ?? "selling status"} for this location.`
-        }
+        consequence={`This sets ${variantCommand?.availabilityStatus ?? "selling status"} for this location.`}
         reasonRequired={false}
-        confirmLabel={variantCommand?.kind === "PRICE" ? "Confirm price" : "Confirm selling status"}
+        confirmLabel="Confirm selling status"
         pending={commandIntent.pending}
         onCancel={() => setVariantCommand(null)}
         onConfirm={() => {
           const pendingCommand = variantCommand;
           setVariantCommand(null);
           if (!pendingCommand) return;
-          if (pendingCommand.kind === "PRICE") {
-            void run(
-              `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/price`,
-              "POST",
-              {
-                marketId: pendingCommand.marketId,
-                locationId: pendingCommand.locationId,
-                currency: pendingCommand.currency,
-                amountMinor: pendingCommand.amountMinor,
-                validFrom: Date.now(),
-                expectedVersion: pendingCommand.expectedVersion,
-              },
-              "Price version created.",
-            );
-          } else {
-            void run(
-              `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/availability`,
-              "PUT",
-              {
-                locationId: pendingCommand.locationId,
-                availabilityStatus: pendingCommand.availabilityStatus,
-                expectedVersion: pendingCommand.expectedVersion,
-              },
-              "Availability updated.",
-            );
-          }
+          void run(
+            `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/availability`,
+            "PUT",
+            {
+              locationId: pendingCommand.locationId,
+              availabilityStatus: pendingCommand.availabilityStatus,
+              expectedVersion: pendingCommand.expectedVersion,
+            },
+            "Availability updated.",
+          );
         }}
       />
     </div>

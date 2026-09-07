@@ -53,7 +53,7 @@ const before = database
   });
 apply(
   database,
-  migrations.filter((name) => name >= "0069"),
+  migrations.filter((name) => name.startsWith("0069_")),
 );
 for (const snapshot of before)
   assert.deepEqual(
@@ -61,6 +61,46 @@ for (const snapshot of before)
     snapshot.rows,
     `${snapshot.name}: preserve retained values and row identities`,
   );
+// Prove the hardening rebuild separately from later additive migrations.
+// 0070 adds explicit capabilities; it must preserve existing grants and prices.
+const permissionsBeforePricing = database
+  .prepare("SELECT rowid,* FROM permission ORDER BY rowid")
+  .all();
+const grantsBeforePricing = database
+  .prepare("SELECT rowid,* FROM role_permission ORDER BY rowid")
+  .all();
+const pricesBeforePricing = database
+  .prepare("SELECT rowid,* FROM price_version ORDER BY rowid")
+  .all();
+apply(
+  database,
+  migrations.filter((name) => name > "0069_schema_integrity.sql"),
+);
+assert.deepEqual(
+  database
+    .prepare(
+      "SELECT rowid,* FROM permission WHERE code NOT IN ('prices.read','prices.manage') ORDER BY rowid",
+    )
+    .all(),
+  permissionsBeforePricing,
+);
+assert.deepEqual(
+  database
+    .prepare(
+      "SELECT code FROM permission WHERE code IN ('prices.read','prices.manage') ORDER BY code",
+    )
+    .all()
+    .map((row) => row.code),
+  ["prices.manage", "prices.read"],
+);
+assert.deepEqual(
+  database.prepare("SELECT rowid,* FROM role_permission ORDER BY rowid").all(),
+  grantsBeforePricing,
+);
+assert.deepEqual(
+  database.prepare("SELECT rowid,* FROM price_version ORDER BY rowid").all(),
+  pricesBeforePricing,
+);
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 assert.equal(database.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
 for (const { name } of before) {

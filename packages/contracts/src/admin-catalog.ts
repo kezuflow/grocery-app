@@ -453,6 +453,7 @@ export type AdminCatalogService = {
     request: AdminSkuAvailabilityRequest,
   ): Promise<RpcResult<AdminCatalogSkuSummary>>;
   setAdminSkuPrice(request: AdminSkuPriceRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
+  getAdminSkuPrices(request: AdminSkuPricesRequest): Promise<RpcResult<AdminSkuPricesView>>;
 };
 
 /**
@@ -464,4 +465,22 @@ export type AdminInventoryReadService = {
   getAdminInventoryLedger(
     request: AdminInventoryLedgerRequest,
   ): Promise<RpcResult<AdminInventoryLedgerPage>>;
+};
+
+export type AdminSkuPricesRequest = AuthenticatedRequest & { skuId: string; locationId: string };
+export type AdminSkuPricesView = {
+  skuId: string;
+  locationId: string;
+  marketId: string;
+  currency: string;
+  latestVersion: number;
+  canManage: boolean;
+  currentPriceMinor: number | null;
+  history: ReadonlyArray<{
+    version: number;
+    amountMinor: number;
+    currency: string;
+    validFrom: number;
+    validTo: number | null;
+  }>;
 };

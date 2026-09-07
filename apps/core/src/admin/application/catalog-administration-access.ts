@@ -24,11 +24,16 @@ export type CatalogAdministrationAccess = {
   authUserId: string;
 };
 
-type CapabilityPair = "catalog.read" | "catalog.manage" | "inventory.read";
+type CapabilityPair =
+  | "catalog.read"
+  | "catalog.manage"
+  | "inventory.read"
+  | "prices.read"
+  | "prices.manage";
 
 /**
  * Catalog identity administration is global. When an operational location is
- * supplied, Product projection reads and location-owned price/availability
+ * supplied, Product projection reads and location-owned availability
  * commands may instead be authorized by global, parent-market, or exact
  * location scope. Inventory reads use the same operational scope rule.
  */
@@ -59,7 +64,11 @@ export async function resolveCatalogAdministrationAccess(
   const holdsCapability = context.value.capabilities.includes(capability);
   const globalScope = context.value.scopes.some((scope) => scope.kind === "global");
   let scopeAuthorized = globalScope;
-  if (operationalLocationId !== undefined) {
+  if (
+    operationalLocationId !== undefined &&
+    capability !== "prices.read" &&
+    capability !== "prices.manage"
+  ) {
     const marketRow = await deps.db
       .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
       .bind(operationalLocationId)

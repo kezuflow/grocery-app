@@ -181,6 +181,7 @@ export const coreServiceMethodNames = [
   "updateAdminSku",
   "setAdminSkuAvailability",
   "setAdminSkuPrice",
+  "getAdminSkuPrices",
   "listAdminInventory",
   "getAdminInventoryLedger",
   "getGlobalCommerceConfiguration",

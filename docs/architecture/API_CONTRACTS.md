@@ -718,6 +718,8 @@ Metric-definition lifecycle filters use `APPROVED|BLOCKED|SUPERSEDED`; unversion
 
 ## 2026-09-07 Setup and Operations Contract Requirements
 
+`getAdminSkuPrices({ skuId, locationId })` requires Global `prices.read` and returns exact target currency/market, the currently effective price or null, the latest expected price version, Core's management decision and the latest 25 historical versions with their own currency and effective instants. `setAdminSkuPrice` requires Global `prices.manage`; catalog permission alone is insufficient. Its complete write batch rechecks current staff/global-scope/capability and active location/market/currency before closing a prior price, inserting the successor, auditing and completing idempotency. Local catalog views retain read-only prices and authorized selling activation. Global Product detail provides the price target/editor; role grants remain explicit.
+
 These target contracts supersede conflicting historical implementation descriptions above. They require reachable Web adapters, runtime validators, Core authorization and atomic effects before acceptance; this list is not an implemented service manifest.
 
 - Global location create/update/deactivate, structured address/pin finalization, capability/schedule/closure setup, service-area/zone authoring and assignment preview use `locations.read`/`locations.manage`. Core supplies versions, legal actions and eligible scope choices. No operator types internal IDs manually.

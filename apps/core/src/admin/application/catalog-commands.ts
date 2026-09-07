@@ -1387,12 +1387,7 @@ export async function setAdminSkuPrice(
   deps: CatalogAdministrationDeps,
   request: AdminSkuPriceRequest,
 ): Promise<RpcResult<AdminCatalogSkuSummary>> {
-  const access = await resolveCatalogAdministrationAccess(
-    deps,
-    request,
-    "catalog.manage",
-    request.locationId ?? undefined,
-  );
+  const access = await resolveCatalogAdministrationAccess(deps, request, "prices.manage");
   if (!access.ok) return access;
 
   const currency = request.currency.trim().toUpperCase();
@@ -1502,7 +1497,24 @@ export async function setAdminSkuPrice(
     .first<{ nextVersion: number }>();
   const nextVersion = versionRow?.nextVersion ?? 1;
   try {
-    const statements: D1PreparedStatement[] = [];
+    const statements: D1PreparedStatement[] = [
+      deps.db
+        .prepare(`INSERT INTO admin_command_abort (id)
+        SELECT -1 WHERE NOT EXISTS (
+          SELECT 1 FROM staff_identity staff
+          WHERE staff.id=? AND staff.status='active'
+            AND EXISTS (SELECT 1 FROM staff_scope WHERE staff_id=staff.id AND scope_kind='global')
+            AND EXISTS (SELECT 1 FROM staff_role sr
+              JOIN role_permission rp ON rp.role_id=sr.role_id
+              JOIN permission permission ON permission.id=rp.permission_id
+              WHERE sr.staff_id=staff.id AND permission.code='prices.manage')
+        ) OR NOT EXISTS (
+          SELECT 1 FROM fulfillment_location location JOIN market ON market.id=location.market_id
+          WHERE location.id=? AND location.market_id=? AND location.status='active'
+            AND market.status='active' AND market.currency=?
+        )`)
+        .bind(access.value.staffId, request.locationId, request.marketId, currency),
+    ];
     if (current) {
       statements.push(
         deps.db

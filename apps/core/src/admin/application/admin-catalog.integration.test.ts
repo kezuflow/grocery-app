@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { createAuth } from "../../auth/service";
+import { setAdminSkuPrice } from "./catalog-commands";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -39,9 +41,13 @@ const CATALOG_CAPABILITIES = [
   "catalog.manage",
   "inventory.read",
   "inventory.adjust",
+  "prices.read",
+  "prices.manage",
 ];
 
-async function seedManager(options: { scope?: "global" | "location" } = {}): Promise<{
+async function seedManager(
+  options: { scope?: "global" | "location"; prices?: boolean } = {},
+): Promise<{
   cookie: string;
   staffId: string;
 }> {
@@ -70,6 +76,7 @@ async function seedManager(options: { scope?: "global" | "location" } = {}): Pro
     ),
   ];
   for (const capability of CATALOG_CAPABILITIES) {
+    if (options.prices === false && capability.startsWith("prices.")) continue;
     statements.push(
       env.DB.prepare(
         "INSERT OR IGNORE INTO permission (id, code, description, created_at) VALUES (?, ?, 'cat', ?)",
@@ -134,6 +141,155 @@ async function seedProduct(): Promise<{
 }
 
 describe("catalog administration", () => {
+  it.each(["scope", "location"] as const)(
+    "rolls back every price effect when %s changes before the write",
+    async (changed) => {
+      const manager = await seedManager();
+      const current = await env.DB.prepare(
+        "SELECT version FROM price_version WHERE sku_id='sku-red-onion-500g' AND location_id='location-cebu-central' AND valid_to IS NULL",
+      ).first<{ version: number }>();
+      const before = await env.DB.prepare(
+        "SELECT id,valid_to FROM price_version WHERE sku_id='sku-red-onion-500g'",
+      ).all();
+      const requestId = crypto.randomUUID();
+      const idempotencyKey = crypto.randomUUID();
+      const database = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (changed === "scope")
+                await target
+                  .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                  .bind(manager.staffId)
+                  .run();
+              else
+                await target
+                  .prepare(
+                    "UPDATE fulfillment_location SET status='inactive' WHERE id='location-cebu-central'",
+                  )
+                  .run();
+              try {
+                return await target.batch(statements);
+              } finally {
+                if (changed === "location")
+                  await target
+                    .prepare(
+                      "UPDATE fulfillment_location SET status='active' WHERE id='location-cebu-central'",
+                    )
+                    .run();
+              }
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const result = await setAdminSkuPrice(
+        { db: database, auth: createAuth(env) },
+        {
+          requestId,
+          headers: { cookie: manager.cookie },
+          skuId: "sku-red-onion-500g",
+          marketId: "market-metro-cebu",
+          locationId: "location-cebu-central",
+          amountMinor: 9900,
+          currency: "PHP",
+          validFrom: Date.now(),
+          expectedVersion: current?.version ?? 0,
+          idempotencyKey,
+        },
+      );
+      expect(result.ok).toBe(false);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT id,valid_to FROM price_version WHERE sku_id='sku-red-onion-500g'",
+          ).all()
+        ).results,
+      ).toEqual(before.results);
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE correlation_id=?")
+          .bind(requestId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=? AND status='SUCCEEDED'",
+        )
+          .bind(idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
+
+  it("requires dedicated price authority even for Global catalog managers", async () => {
+    const manager = await seedManager({ prices: false });
+    const idempotencyKey = crypto.randomUUID();
+    expect(
+      await core.setAdminSkuPrice({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId: "sku-red-onion-500g",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+        amountMinor: 9900,
+        currency: "PHP",
+        validFrom: Date.now(),
+        expectedVersion: 0,
+        idempotencyKey,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?")
+        .bind(idempotencyKey)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await core.getAdminSkuPrices({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId: "sku-red-onion-500g",
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+
+  it("reads exact-location price history without manufacturing a missing price", async () => {
+    const manager = await seedManager();
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      skuId: "sku-red-onion-500g",
+      locationId: "location-cebu-central",
+    };
+    const result = await core.getAdminSkuPrices(request);
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        skuId: request.skuId,
+        locationId: request.locationId,
+        canManage: true,
+        currency: "PHP",
+      },
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.history.length).toBeGreaterThan(0);
+    expect(result.value.currentPriceMinor).toBeGreaterThan(0);
+    const otherLocation = crypto.randomUUID();
+    await env.DB.prepare(`INSERT INTO fulfillment_location
+      (id,market_id,code,name,type,latitude,longitude,status,version,created_at,updated_at)
+      SELECT ?,market_id,?,'Other price target',type,latitude,longitude,'active',1,created_at,updated_at
+      FROM fulfillment_location WHERE id='location-cebu-central'`)
+      .bind(otherLocation, `price-${otherLocation}`)
+      .run();
+    expect(await core.getAdminSkuPrices({ ...request, locationId: otherLocation })).toMatchObject({
+      ok: true,
+      value: { currentPriceMinor: null, latestVersion: 0, history: [] },
+    });
+    expect(
+      await core.getAdminSkuPrices({ ...request, locationId: "missing-location" }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  });
+
   it("serves a location Product projection without granting global Product ownership", async () => {
     const manager = await seedManager({ scope: "location" });
     const seeded = await seedProduct();
@@ -224,7 +380,20 @@ describe("catalog administration", () => {
         expectedVersion: 0,
         idempotencyKey: crypto.randomUUID(),
       }),
-    ).toMatchObject({ ok: true });
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM price_version WHERE sku_id=?")
+        .bind(skuId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await core.getAdminSkuPrices({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        skuId,
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(
       await core.createAdminProduct({
         requestId: crypto.randomUUID(),

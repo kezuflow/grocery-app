@@ -188,6 +188,7 @@ import { createAuthRpc } from "./entrypoint/auth-rpc";
 import { createCatalogRpc } from "./entrypoint/catalog-rpc";
 import { getAdminOverview as getAdminOverviewQuery } from "./admin/application/admin-overview";
 import { createMembershipRpc } from "./entrypoint/membership-rpc";
+import { getAdminSkuPrices as getAdminSkuPricesQuery } from "./admin/application/sku-prices";
 import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
 import { createPaymentsRpc } from "./entrypoint/payments-rpc";
 import { createOrdersRpc } from "./entrypoint/orders-rpc";
@@ -1785,6 +1786,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return setAdminSkuPriceCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async getAdminSkuPrices(input: import("@freshmarkets/contracts").AdminSkuPricesRequest) {
+    return getAdminSkuPricesQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
     );
   }
   async listAdminInventory(input: import("@freshmarkets/contracts").AdminInventoryListRequest) {
