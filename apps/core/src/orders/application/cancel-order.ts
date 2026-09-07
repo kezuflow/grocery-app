@@ -1,5 +1,7 @@
 import type { RefundState } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { z } from "@freshmarkets/validation";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
   canTransitionOrder,
   orderLifecycleStates,
@@ -10,10 +12,11 @@ import {
   type CancellationActor,
   type CancellationCause,
 } from "../domain/cancellation-policy";
+import { advanceOrderCancellation } from "./advance-order-cancellation";
 import {
-  advanceOrderCancellation,
-  synchronizeOrderCancellationForPayment,
-} from "./advance-order-cancellation";
+  resumeCancellationRefunds,
+  type CancellationRefundPort,
+} from "./resume-cancellation-refunds";
 import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
 import { projectOrderCancellationNotification } from "../../notifications/application/project-domain-notifications";
 
@@ -25,6 +28,8 @@ export type CancelOrderCommand = {
   actor?: CancellationActor;
   cause?: CancellationCause;
   customerId?: string;
+  actorAuthUserId?: string;
+  resolution?: string;
   idempotencyKey: string;
   requestId: string;
 };
@@ -45,16 +50,38 @@ export type CancelOrderOutcome = {
   refundState?: "PROCESSING" | "REJECTED" | null;
 };
 
+const cancellationOutcomeSchema = z.object({
+  state: z.enum(["CANCELED", "CANCELLATION_REQUESTED", "UNCHANGED"]),
+  cancellationId: z.string().optional(),
+  status: z.enum(["REQUESTED", "REFUNDS_PROCESSING", "COMPLETED", "EXCEPTION"]).optional(),
+  requiredRefundMinor: z.number().int().safe().nonnegative().optional(),
+  retainedServiceFeeMinor: z.number().int().safe().nonnegative().optional(),
+  currency: z.string().optional(),
+  refunds: z
+    .array(
+      z.object({
+        paymentId: z.string(),
+        refundId: z.string().nullable(),
+        amountMinor: z.number().int().safe().nonnegative(),
+        status: z.enum([
+          "NOT_REQUESTED",
+          "REQUESTED",
+          "APPROVED",
+          "PROCESSING",
+          "SUCCEEDED",
+          "REJECTED",
+          "FAILED",
+          "ESCALATED",
+        ]),
+      }),
+    )
+    .optional(),
+  refundState: z.enum(["PROCESSING", "REJECTED"]).nullable().optional(),
+});
+
 type CancelPorts = {
-  requestRefund?: (input: {
-    paymentIntentId: string;
-    amountMinor: number;
-    reason: string;
-    idempotencyKey: string;
-  }) => Promise<
-    | { ok: true; refundId?: string; refundState?: RefundState }
-    | { ok: false; refundId?: string; refundState?: RefundState }
-  >;
+  now?: () => number;
+  requestRefund?: CancellationRefundPort;
   evidence?: (guard: {
     clause: string;
     binds: ReadonlyArray<unknown>;
@@ -81,24 +108,142 @@ export async function requestOrderCancellation(
   const actor = command.actor ?? "CUSTOMER";
   const cause = command.cause ?? (actor === "CUSTOMER" ? "CUSTOMER_REQUEST" : "OTHER");
   const reason = (command.reason ?? command.reasonCode ?? "").trim();
-  const claim = await claimCommandIdempotency(database, Date.now, scope, command.idempotencyKey, {
+  const nowClock = ports?.now ?? Date.now;
+  const legacyHash = await requestHash({
     orderId: command.orderId,
     expectedVersion: command.expectedVersion,
     actor,
     cause,
     reason,
   });
-  if (!claim.claimed) {
-    if (claim.existing?.requestHash !== claim.hash)
+  const hash = await requestHash({
+    orderId: command.orderId,
+    expectedVersion: command.expectedVersion,
+    actor,
+    cause,
+    reason,
+    authUserId: command.actorAuthUserId ?? null,
+    customerId: command.customerId ?? null,
+    resolution: command.resolution ?? null,
+  });
+  async function replay() {
+    const saved = await findIdempotencyRecord(database, scope, command.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash && saved.requestHash !== legacyHash)
       return failure("IDEMPOTENCY_CONFLICT", "Cancellation key conflict", command.requestId);
-    const existing = await cancellationView(database, command.orderId);
-    if (claim.existing?.status === "SUCCEEDED" && existing)
-      return { ok: true, value: existing, requestId: command.requestId };
-    return failure("CONFLICT", "Cancellation already processing", command.requestId);
+    if (saved.status === "SUCCEEDED") {
+      if (!saved.resultReference?.startsWith("{"))
+        return failure(
+          "CONFLICT",
+          "This historical cancellation already applied; review its current progress",
+          command.requestId,
+        );
+      return {
+        ok: true as const,
+        value: cancellationOutcomeSchema.parse(JSON.parse(saved.resultReference)),
+        requestId: command.requestId,
+      };
+    }
+    return null;
+  }
+  const prior = await replay();
+  if (prior) return prior;
+  function admission(now: number): D1PreparedStatement[] {
+    const guards: D1PreparedStatement[] = [];
+    if (command.actorAuthUserId) {
+      if (actor === "CUSTOMER")
+        guards.push(
+          database
+            .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (
+        SELECT 1 FROM customer customer JOIN grocery_order grocery ON grocery.customer_id=customer.id
+        WHERE grocery.id=? AND customer.id=? AND customer.auth_user_id=? AND customer.status='active')`)
+            .bind(command.orderId, command.customerId ?? null, command.actorAuthUserId),
+        );
+      else
+        guards.push(
+          database
+            .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (
+        SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
+        JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission permission ON permission.id=rp.permission_id
+        JOIN staff_scope scope ON scope.staff_id=staff.id AND scope.scope_kind='global'
+        WHERE staff.auth_user_id=? AND staff.status='active' AND permission.code=?)`)
+            .bind(
+              command.actorAuthUserId,
+              actor === "STAFF_EXCEPTION" ? "refunds.manage" : "orders.manage",
+            ),
+        );
+    }
+    if (command.customerId)
+      guards.push(
+        database
+          .prepare(
+            "INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND customer_id=?)",
+          )
+          .bind(command.orderId, command.customerId),
+      );
+    guards.push(
+      database
+        .prepare(`INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at)
+      VALUES (?,?,?,'PROCESSING','order_cancellation',?,?) ON CONFLICT(scope,idempotency_key) DO UPDATE SET request_hash=excluded.request_hash,status='PROCESSING',result_reference=NULL,updated_at=excluded.updated_at
+      WHERE idempotency_records.status IN ('PROCESSING','FAILED') AND idempotency_records.request_hash IN (?,?)`)
+        .bind(scope, command.idempotencyKey, hash, now, now, hash, legacyHash),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -20 WHERE changes()!=1"),
+    );
+    return guards;
+  }
+  function saveResult(value: CancelOrderOutcome, now: number): D1PreparedStatement[] {
+    return [
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (SELECT 1 FROM audit_event WHERE action='ORDER.CANCELED' AND aggregate_id=? AND idempotency_key=?)",
+        )
+        .bind(command.orderId, command.idempotencyKey),
+      database
+        .prepare(
+          "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
+        )
+        .bind(JSON.stringify(value), now, scope, command.idempotencyKey, hash),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -20 WHERE changes()!=1"),
+    ];
+  }
+  function evidence(outcome: CancelOrderOutcome["state"], status: string, version: number) {
+    const guard = {
+      clause: "EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
+      binds: [command.orderId, status, version],
+      outcome,
+    };
+    return (
+      ports?.evidence?.(guard) ?? [
+        auditEventStatement(
+          database,
+          {
+            actorUserId: command.actorAuthUserId ?? null,
+            action: "ORDER.CANCELED",
+            resourceType: "order",
+            resourceId: command.orderId,
+            reason,
+            idempotencyKey: command.idempotencyKey,
+            details: { outcome, resolution: command.resolution ?? null },
+            correlationId: command.requestId,
+            occurredAt: nowClock(),
+          },
+          guard,
+        ),
+      ]
+    );
   }
 
   try {
-    if (!reason) throw appError("VALIDATION_FAILED", "A cancellation reason is required");
+    if (
+      !reason ||
+      !Number.isSafeInteger(command.expectedVersion) ||
+      command.expectedVersion < 1 ||
+      !command.idempotencyKey.trim()
+    )
+      throw appError(
+        "VALIDATION_FAILED",
+        "A cancellation reason, version and stable key are required",
+      );
     const order = await database
       .prepare(
         `SELECT id,customer_id,status,version,fulfillment_mode,total_minor,currency,service_fee_minor
@@ -124,8 +269,27 @@ export async function requestOrderCancellation(
     // PENDING_PAYMENT order has no financial operation to review.
     const initialSet = await buildCancellationRefundSet(database, order.id, 0);
     if (!initialSet) {
+      if (actor === "CUSTOMER" && command.actorAuthUserId)
+        throw appError(
+          "ILLEGAL_TRANSITION",
+          "This order has no paid cancellation operation; review checkout progress",
+        );
+      if (order.status !== "PENDING_PAYMENT")
+        throw appError(
+          "FINANCIAL_OPERATION_REQUIRES_REVIEW",
+          "Paid evidence must be reconciled before cancellation",
+        );
       assertLegalTransition(order.status, "CANCELED");
+      const accepted: CancelOrderOutcome = { state: "CANCELED" };
       await database.batch([
+        ...admission(nowClock()),
+        database
+          .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE EXISTS (
+          SELECT 1 FROM order_payment_reaction WHERE order_id=?) OR EXISTS (
+          SELECT 1 FROM paid_order_amendment WHERE order_id=? AND status='COMMITTED') OR EXISTS (
+          SELECT 1 FROM grocery_order grocery JOIN payment_attempt payment ON payment.id=grocery.payment_id
+          WHERE grocery.id=? AND payment.status='SUCCEEDED')`)
+          .bind(order.id, order.id, order.id),
         database
           .prepare(
             "UPDATE grocery_order SET status='CANCELED',version=version+1 WHERE id=? AND status=? AND version=?",
@@ -133,13 +297,10 @@ export async function requestOrderCancellation(
           .bind(order.id, order.status, order.version),
         database.prepare("INSERT INTO commitment_abort(id) SELECT -20 WHERE changes()!=1"),
         ...releaseOperationalEffectStatements(database, order.id),
-        database
-          .prepare(
-            "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-          )
-          .bind(order.id, Date.now(), scope, command.idempotencyKey),
+        ...evidence("CANCELED", "CANCELED", order.version + 1),
+        ...saveResult(accepted, nowClock()),
       ]);
-      return { ok: true, value: { state: "CANCELED" }, requestId: command.requestId };
+      return { ok: true, value: accepted, requestId: command.requestId };
     }
     const existingRefund = await database
       .prepare(
@@ -165,32 +326,82 @@ export async function requestOrderCancellation(
       orderState: asOrderState(order.status),
       serviceFeeMinor: order.service_fee_minor ?? 0,
       grossPaidMinor: initialSet.grossPaidMinor,
-      now: Date.now(),
+      now: nowClock(),
       cutoffAt: snapshot?.cutoff_at ?? null,
     });
     if (!policy.allowed) throwPolicy(policy.code);
-    const refundSet = await buildCancellationRefundSet(
-      database,
-      order.id,
-      policy.retainedServiceFeeMinor,
-    );
-    if (!refundSet) throw appError("CONFLICT", "Refund set could not be resolved");
+    const refundSet = {
+      ...initialSet,
+      members: initialSet.members
+        .map((member) => ({
+          ...member,
+          requiredAmountMinor:
+            member.requiredAmountMinor -
+            (member.source === "ORDER" ? policy.retainedServiceFeeMinor : 0),
+        }))
+        .filter((member) => member.requiredAmountMinor !== 0),
+    };
+    if (refundSet.members.some((member) => member.requiredAmountMinor < 0))
+      throw appError(
+        "FINANCIAL_OPERATION_REQUIRES_REVIEW",
+        "Historical retained fee exceeds its original payment",
+      );
 
     const cancellationId = crypto.randomUUID();
     const nextOrderState = cancellationOrderState(actor, asOrderState(order.status));
-    const now = Date.now();
-    const guard = {
-      clause: "EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
-      binds: [order.id, nextOrderState, order.version + (nextOrderState === order.status ? 0 : 1)],
-      outcome: "CANCELLATION_REQUESTED" as const,
+    const now = nowClock();
+    const accepted: CancelOrderOutcome = {
+      state: "CANCELLATION_REQUESTED",
+      cancellationId,
+      status: "REQUESTED",
+      requiredRefundMinor: policy.refundMinor,
+      retainedServiceFeeMinor: policy.retainedServiceFeeMinor,
+      currency: refundSet.currency,
+      refunds: refundSet.members.map((member) => ({
+        paymentId: member.paymentIntentId,
+        refundId: null,
+        amountMinor: member.requiredAmountMinor,
+        status: "NOT_REQUESTED",
+      })),
+      refundState: refundSet.members.length ? "PROCESSING" : null,
     };
     const statements: D1PreparedStatement[] = [
+      ...admission(now),
       database
         .prepare(
           "INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
         )
         .bind(order.id, order.status, order.version),
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE
+        (SELECT COUNT(*) FROM order_payment_reaction WHERE order_id=?)+(SELECT COUNT(*) FROM paid_order_amendment WHERE order_id=? AND status='COMMITTED')!=?`)
+        .bind(order.id, order.id, initialSet.members.length),
+      ...initialSet.members.map((member) =>
+        database
+          .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (
+        SELECT 1 FROM payment_intent payment WHERE payment.id=? AND payment.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
+        AND payment.amount_minor=? AND payment.currency=? AND (
+          EXISTS (SELECT 1 FROM order_payment_reaction WHERE order_id=? AND payment_intent_id=payment.id) OR
+          EXISTS (SELECT 1 FROM paid_order_amendment WHERE order_id=? AND status='COMMITTED' AND payment_intent_id=payment.id)))
+        OR EXISTS (SELECT 1 FROM payment_refund WHERE payment_intent_id=?)`)
+          .bind(
+            member.paymentIntentId,
+            member.requiredAmountMinor,
+            member.currency,
+            order.id,
+            order.id,
+            member.paymentIntentId,
+          ),
+      ),
     ];
+    if (actor === "CUSTOMER" && order.fulfillment_mode === "SCHEDULED")
+      statements.push(
+        database
+          .prepare(
+            "INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (SELECT 1 FROM order_fulfillment_snapshot WHERE order_id=? AND cutoff_at=? AND cutoff_at>?)",
+          )
+          .bind(order.id, snapshot?.cutoff_at ?? null, now),
+      );
     if (nextOrderState !== order.status)
       statements.push(
         database
@@ -243,43 +454,18 @@ export async function requestOrderCancellation(
           "UPDATE paid_order_amendment SET status='CANCELED',version=version+1,updated_at=? WHERE order_id=? AND status IN ('DRAFT','PENDING_PAYMENT')",
         )
         .bind(now, order.id),
-      ...(ports?.evidence?.(guard) ?? []),
-      database
-        .prepare(
-          "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-        )
-        .bind(cancellationId, now, scope, command.idempotencyKey),
+      ...evidence(
+        accepted.state,
+        nextOrderState,
+        order.version + (nextOrderState === order.status ? 0 : 1),
+      ),
+      ...saveResult(accepted, now),
     );
     await database.batch(statements);
     await projectCancellationSafely(database, cancellationId, "REQUESTED");
 
-    for (const member of refundSet.members) {
-      if (!ports?.requestRefund) continue;
-      const requested = await ports.requestRefund({
-        paymentIntentId: member.paymentIntentId,
-        amountMinor: member.requiredAmountMinor,
-        reason,
-        idempotencyKey: `order-cancel:${cancellationId}:${member.paymentIntentId}`,
-      });
-      // The adapter result may have lost the canonical refund identity or be
-      // older than a webhook. Reconcile by our durable key before projecting.
-      await synchronizeOrderCancellationForPayment(database, member.paymentIntentId);
-      await database
-        .prepare(
-          `UPDATE order_cancellation_refund_member
-           SET attempts=attempts+1,updated_at=?
-           WHERE cancellation_id=? AND payment_intent_id=?`,
-        )
-        .bind(Date.now(), cancellationId, member.paymentIntentId)
-        .run();
-      if (!requested.ok)
-        await database
-          .prepare(
-            "UPDATE order_cancellation SET status='EXCEPTION',version=version+1,updated_at=? WHERE id=? AND status NOT IN ('COMPLETED','EXCEPTION')",
-          )
-          .bind(Date.now(), cancellationId)
-          .run();
-    }
+    if (ports?.requestRefund)
+      await resumeCancellationRefunds(database, cancellationId, ports.requestRefund, nowClock());
     if (refundSet.members.length === 0)
       await finalizeZeroRefund(database, cancellationId, order.id, actor);
     else
@@ -287,30 +473,27 @@ export async function requestOrderCancellation(
         .prepare(
           "UPDATE order_cancellation SET status='REFUNDS_PROCESSING',version=version+1,updated_at=? WHERE id=? AND status='REQUESTED'",
         )
-        .bind(Date.now(), cancellationId)
+        .bind(nowClock(), cancellationId)
         .run();
     const finalView = (await cancellationView(database, order.id))!;
     if (finalView.status)
       await projectCancellationSafely(database, cancellationId, finalView.status);
     return {
       ok: true,
-      value: finalView,
+      value: accepted,
       requestId: command.requestId,
     };
   } catch (error) {
-    await database
-      .prepare(
-        "UPDATE idempotency_records SET status='FAILED',updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-      )
-      .bind(Date.now(), scope, command.idempotencyKey)
-      .run();
+    const committed = await replay();
+    if (committed) return committed;
     const currentOrder = await database
       .prepare("SELECT version FROM grocery_order WHERE id=?")
       .bind(command.orderId)
       .first<{ version: number }>();
     if (
       (currentOrder && currentOrder.version !== command.expectedVersion) ||
-      (error instanceof Error && error.message.includes("CHECK constraint failed: id = 0"))
+      (error instanceof Error &&
+        /CHECK constraint failed|UNIQUE constraint failed/.test(error.message))
     )
       return failure(
         "STALE_VERSION",

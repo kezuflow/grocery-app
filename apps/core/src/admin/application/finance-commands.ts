@@ -22,7 +22,6 @@ import {
   resolveFinanceAdministrationAccess,
   type FinanceAdministrationDeps,
 } from "./finance-administration-access";
-import { getAdminOrder } from "./finance-reads";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -41,7 +40,7 @@ function idempotencyFailed(database: D1Database, scope: string, key: string): Pr
 export async function cancelAdminOrder(
   deps: FinanceAdministrationDeps,
   request: AdminOrderCancelRequest,
-): Promise<RpcResult<import("@freshmarkets/contracts").AdminOrderDetail>> {
+): Promise<RpcResult<import("@freshmarkets/contracts").AdminOrderCancellationResult>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "orders.manage");
   if (!access.ok) return access;
   const reason = (request.reason ?? request.reasonCode ?? "").trim();
@@ -56,6 +55,8 @@ export async function cancelAdminOrder(
       expectedVersion: request.expectedVersion,
       reason,
       actor: "BUSINESS",
+      actorAuthUserId: access.value.authUserId,
+      resolution: request.resolution,
       cause: "OPERATIONAL_FAILURE",
       idempotencyKey: request.idempotencyKey,
       requestId: request.requestId,
@@ -83,6 +84,7 @@ export async function cancelAdminOrder(
           {
             actorUserId: access.value.authUserId,
             action: "ORDER.CANCELED",
+            idempotencyKey: request.idempotencyKey,
             resourceType: "order",
             resourceId: request.orderId,
             reason,
@@ -116,7 +118,38 @@ export async function cancelAdminOrder(
     return failure("VALIDATION_FAILED", "Order is not in a cancellable state", request.requestId);
   }
 
-  return getAdminOrder(deps, request, "orders.manage");
+  const accepted = result.value;
+  if (accepted.state === "CANCELED")
+    return {
+      ok: true,
+      value: { orderId: request.orderId, state: "CANCELED", cancellation: null },
+      requestId: request.requestId,
+    };
+  if (
+    !accepted.cancellationId ||
+    !accepted.status ||
+    accepted.requiredRefundMinor === undefined ||
+    accepted.retainedServiceFeeMinor === undefined ||
+    !accepted.currency ||
+    !accepted.refunds
+  )
+    return failure("INTERNAL_ERROR", "Cancellation receipt is incomplete", request.requestId);
+  return {
+    ok: true,
+    value: {
+      orderId: request.orderId,
+      state: "CANCELLATION_REQUESTED",
+      cancellation: {
+        cancellationId: accepted.cancellationId,
+        status: accepted.status,
+        requiredRefundMinor: accepted.requiredRefundMinor,
+        retainedServiceFeeMinor: accepted.retainedServiceFeeMinor,
+        currency: accepted.currency,
+        refunds: accepted.refunds,
+      },
+    },
+    requestId: request.requestId,
+  };
 }
 
 /**
@@ -156,7 +189,7 @@ export async function requestAdminRefund(
   }
   const refundedRow = await deps.db
     .prepare(
-      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status IN ('REQUESTED', 'APPROVED', 'PROCESSING', 'SUCCEEDED')",
+      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status IN ('REQUESTED', 'APPROVED', 'PROCESSING', 'ESCALATED', 'SUCCEEDED')",
     )
     .bind(request.paymentIntentId)
     .first<{ refunded: number }>();
@@ -230,7 +263,8 @@ export async function requestAdminRefund(
            SELECT ?, i.id, ?, i.currency, 'REQUESTED', ?, ?, 1, ?, ?
            FROM payment_intent i
            WHERE i.id = ? AND i.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
-             AND ? <= i.amount_minor - COALESCE((SELECT SUM(amount_minor) FROM payment_refund r WHERE r.payment_intent_id=i.id AND r.status IN ('REQUESTED','APPROVED','PROCESSING','SUCCEEDED')), 0)`,
+             AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member member JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id WHERE member.payment_intent_id=i.id AND cancellation.status!='COMPLETED')
+             AND ? <= i.amount_minor - COALESCE((SELECT SUM(amount_minor) FROM payment_refund r WHERE r.payment_intent_id=i.id AND r.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')), 0)`,
         )
         .bind(
           refundId,

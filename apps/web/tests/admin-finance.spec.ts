@@ -196,7 +196,7 @@ test("order cancellation succeeds with capability and is denied without it", asy
   const allowedBody = await allowed.json();
   expect(allowedBody, JSON.stringify(allowedBody)).toMatchObject({
     ok: true,
-    value: { status: "CANCELED" },
+    value: { state: "CANCELED", cancellation: null },
   });
   const denied = await deniedAdminPage.request.post(`/api/admin/orders/${orderId}/cancel`, {
     data: { ...data, expectedVersion: 2 },

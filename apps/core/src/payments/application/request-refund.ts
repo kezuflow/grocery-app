@@ -73,9 +73,9 @@ export async function requestRefund(
     );
 
   const now = Date.now();
-  // Resolve the provider seam before reserving refundable value. A durable
-  // REQUESTED replay is resumed with the same provider idempotency key; if its
-  // seam disappeared, escalate it instead of leaving budget silently claimed.
+  // Resolve the provider seam before reserving refundable value. A surviving
+  // REQUESTED refund remains pending evidence; if its seam disappeared,
+  // escalate it instead of leaving budget silently claimed.
   const attempt = await database
     .prepare(
       "SELECT provider, provider_reference FROM payment_attempt WHERE payment_intent_id=? ORDER BY created_at DESC LIMIT 1",
@@ -122,6 +122,10 @@ export async function requestRefund(
 
   const refundId = replay?.id ?? crypto.randomUUID();
   const requestedVersion = replay?.version ?? 1;
+  // A surviving REQUESTED identity may already have reached the provider.
+  // Only the first budget claimant submits; later callers expose pending
+  // evidence for reconciliation instead of issuing a concurrent second request.
+  if (replay) return { ok: true, value: toView(replay), requestId: command.requestId };
   if (!replay) {
     const claimed = await repository.claimRefundBudget({
       refundId,

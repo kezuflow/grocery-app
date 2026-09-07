@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
+import { locationManager } from "../../test-location-fixtures";
+import { resumeCancellationRefunds } from "./resume-cancellation-refunds";
+import { getJobsForCron } from "../../scheduling/job-registry";
+import { runRegisteredJobs } from "../../scheduling/run-scheduled-jobs";
+import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
+import { createMockPaymentProvider } from "../../payments/infrastructure/providers/mock-payment-provider";
+import { requestRefund } from "../../payments/application/request-refund";
+import { requestHash } from "../../idempotency";
 import { cancelOrder, applyOrderRefundObservation } from "./cancel-order";
 import {
   advanceOrderCancellation,
@@ -109,6 +117,264 @@ function command(orderId: string): Parameters<typeof cancelOrder>[1] {
 }
 
 describe("explicit cancellation and refund orchestration", () => {
+  it("rejects a customer cancellation without paid evidence before any effect", async () => {
+    const fixture = await paidOrderFixture(),
+      request = command(fixture.orderId);
+    await env.DB.prepare("DELETE FROM order_payment_reaction WHERE order_id=?")
+      .bind(fixture.orderId)
+      .run();
+    await env.DB.prepare("UPDATE grocery_order SET status='PENDING_PAYMENT' WHERE id=?")
+      .bind(fixture.orderId)
+      .run();
+    expect(
+      await cancelOrder(env.DB, {
+        ...request,
+        customerId: fixture.customerId,
+        actorAuthUserId: `auth-${fixture.customerId}`,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "PENDING_PAYMENT", version: 1 });
+    expect(
+      await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toBeNull();
+  });
+
+  it("recovers an unapplied legacy claim and does not replay historical success as current state", async () => {
+    const fixture = await paidOrderFixture(),
+      request = command(fixture.orderId),
+      now = Date.now();
+    const hash = await requestHash({
+      orderId: request.orderId,
+      expectedVersion: request.expectedVersion,
+      actor: "CUSTOMER",
+      cause: "CUSTOMER_REQUEST",
+      reason: request.reasonCode,
+    });
+    await env.DB.prepare(
+      "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES ('orders.cancel',?,?,'PROCESSING','order_cancellation',?,?)",
+    )
+      .bind(request.idempotencyKey, hash, now, now)
+      .run();
+    const accepted = await cancelOrder(env.DB, request);
+    expect(accepted.ok).toBe(true);
+    expect(await cancelOrder(env.DB, request)).toEqual(accepted);
+    await env.DB.prepare(
+      "UPDATE idempotency_records SET result_reference=? WHERE scope='orders.cancel' AND idempotency_key=?",
+    )
+      .bind(fixture.orderId, request.idempotencyKey)
+      .run();
+    expect(await cancelOrder(env.DB, request)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM order_cancellation WHERE order_id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
+  it.each([-1, 0, 1])(
+    "enforces the Scheduled cancellation cutoff at offset %sms",
+    async (offset) => {
+      const fixture = await paidOrderFixture();
+      const snapshot = await env.DB.prepare(
+        "SELECT cutoff_at FROM order_fulfillment_snapshot WHERE order_id=?",
+      )
+        .bind(fixture.orderId)
+        .first<{ cutoff_at: number }>();
+      if (!snapshot) throw new Error("Cutoff missing");
+      const request = command(fixture.orderId);
+      const result = await cancelOrder(env.DB, request, { now: () => snapshot.cutoff_at + offset });
+      expect(result.ok).toBe(offset < 0);
+      if (offset >= 0) {
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: "FINANCIAL_OPERATION_REQUIRES_REVIEW" },
+        });
+        expect(
+          await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toBeNull();
+      }
+    },
+  );
+
+  it.each(["scope", "permission", "staff", "addition", "refund", "late-failure"] as const)(
+    "rolls back cancellation admission after %s changes",
+    async (kind) => {
+      const fixture = await paidOrderFixture(),
+        manager = await locationManager("global");
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='orders.manage'",
+      )
+        .bind(manager.id)
+        .run();
+      const actor = await env.DB.prepare("SELECT auth_user_id FROM staff_identity WHERE id=?")
+        .bind(manager.id)
+        .first<{ auth_user_id: string }>();
+      if (!actor) throw new Error("Actor missing");
+      const request = {
+        ...command(fixture.orderId),
+        actor: "BUSINESS" as const,
+        actorAuthUserId: actor.auth_user_id,
+      };
+      let reached = false;
+      const database = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              reached = true;
+              if (kind === "scope")
+                await target
+                  .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                  .bind(manager.id)
+                  .run();
+              if (kind === "permission")
+                await target
+                  .prepare("DELETE FROM role_permission WHERE role_id=?")
+                  .bind(manager.id)
+                  .run();
+              if (kind === "staff")
+                await target
+                  .prepare("UPDATE staff_identity SET status='inactive' WHERE id=?")
+                  .bind(manager.id)
+                  .run();
+              if (kind === "addition") await addCommittedAmendment(fixture, 100);
+              if (kind === "refund")
+                await target
+                  .prepare(
+                    "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at) VALUES (?,?,100,'PHP','PROCESSING','Race',?,1,?,?)",
+                  )
+                  .bind(
+                    crypto.randomUUID(),
+                    fixture.intentId,
+                    crypto.randomUUID(),
+                    Date.now(),
+                    Date.now(),
+                  )
+                  .run();
+              return target.batch(
+                kind === "late-failure"
+                  ? [...statements, target.prepare("INSERT INTO commitment_abort(id) VALUES (-99)")]
+                  : statements,
+              );
+            };
+          const value = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect((await cancelOrder(database, request)).ok).toBe(false);
+      expect(reached).toBe(true);
+      expect(
+        await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ status: "COMMITTED", version: 1 });
+      expect(
+        await env.DB.prepare("SELECT id FROM order_cancellation WHERE order_id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT id FROM audit_event WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT status FROM inventory_reservation WHERE order_id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ status: "RESERVED" });
+      if (kind === "late-failure") expect((await cancelOrder(env.DB, request)).ok).toBe(true);
+    },
+  );
+
+  it("recovers an accepted but unsubmitted cancellation through the registered job and preserves replay", async () => {
+    const fixture = await paidOrderFixture(),
+      request = command(fixture.orderId);
+    await env.DB.prepare(
+      "UPDATE payment_attempt SET provider='mock',provider_reference=? WHERE payment_intent_id=?",
+    )
+      .bind(`mock-${fixture.intentId}`, fixture.intentId)
+      .run();
+    const accepted = await cancelOrder(env.DB, request);
+    expect(accepted).toMatchObject({ ok: true, value: { status: "REQUESTED" } });
+    const job = getJobsForCron("* * * * *").find(
+      (job) => job.name === "orders.cancellation-refunds",
+    );
+    if (!job) throw new Error("Recovery job not registered");
+    const registry = new ProviderRegistry("test", [createMockPaymentProvider()]);
+    expect(
+      await requestRefund(env.DB, registry, {
+        paymentIntentId: fixture.intentId,
+        amountMinor: 100,
+        reason: "Competing refund",
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "test-operator",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "REFUND_AMOUNT_UNAVAILABLE" } });
+    const run = () => runRegisteredJobs(env.DB, "* * * * *", Date.now(), [job], registry);
+    expect(await run()).toMatchObject([{ status: "SUCCEEDED" }]);
+    expect(
+      await env.DB.prepare(
+        "SELECT attempts,status FROM order_cancellation_refund_member WHERE payment_intent_id=?",
+      )
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual({ attempts: 1, status: "PROCESSING" });
+    expect(await run()).toMatchObject([{ status: "SUCCEEDED", affected: 0 }]);
+    expect(await cancelOrder(env.DB, request)).toEqual(accepted);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM payment_refund WHERE payment_intent_id=?")
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
+  it("bounds failed submission retries and prevents competing recovery from submitting twice", async () => {
+    const fixture = await paidOrderFixture(),
+      result = await cancelOrder(env.DB, command(fixture.orderId));
+    if (!result.ok || !result.value.cancellationId) throw new Error("Cancellation missing");
+    let calls = 0;
+    const send = async () => {
+      calls++;
+      return { ok: false };
+    };
+    const now = Date.now();
+    await Promise.all([
+      resumeCancellationRefunds(env.DB, result.value.cancellationId, send, now),
+      resumeCancellationRefunds(env.DB, result.value.cancellationId, send, now),
+    ]);
+    expect(calls).toBe(1);
+    for (let attempt = 1; attempt < 8; attempt++)
+      await resumeCancellationRefunds(
+        env.DB,
+        result.value.cancellationId,
+        send,
+        now + attempt * 60000,
+      );
+    expect(calls).toBe(5);
+    expect(
+      await env.DB.prepare("SELECT status FROM order_cancellation WHERE id=?")
+        .bind(result.value.cancellationId)
+        .first(),
+    ).toEqual({ status: "EXCEPTION" });
+  });
+
   it("completes competing original/addition observations once", async () => {
     const fixture = await paidOrderFixture();
     const addition = await addCommittedAmendment(fixture, 5000);
@@ -175,8 +441,29 @@ describe("explicit cancellation and refund orchestration", () => {
     });
     expect(result).toMatchObject({
       ok: true,
-      value: { state: "CANCELED", status: "COMPLETED", refunds: [{ status: "SUCCEEDED" }] },
+      value: {
+        state: "CANCELLATION_REQUESTED",
+        status: "REQUESTED",
+        refunds: [{ status: "NOT_REQUESTED" }],
+      },
     });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "CANCELED" });
+    expect(
+      await env.DB.prepare("SELECT status FROM order_cancellation WHERE order_id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "COMPLETED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM order_cancellation_refund_member WHERE payment_intent_id=?",
+      )
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual({ status: "SUCCEEDED" });
   });
 
   it("recovers an unlinked refund from canonical identity and ignores stale observation state", async () => {

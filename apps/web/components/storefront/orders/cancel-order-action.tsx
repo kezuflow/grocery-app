@@ -1,5 +1,6 @@
 "use client";
 
+import { customerCancellationResponse } from "../../../lib/order-cancellation-response";
 import { useRef, useState } from "react";
 import type {
   CustomerOrderDetailView,
@@ -30,7 +31,7 @@ export function cancellationResultMessage(result: RpcResult<OrderCancellationVie
       : result.error.message;
   return result.value.status === "COMPLETED"
     ? "Cancellation completed and the refund was confirmed."
-    : "Cancellation requested. Refunds are processing; the order is not marked canceled yet.";
+    : "Cancellation requested. Check order progress for refund updates.";
 }
 
 export function CancelOrderAction({
@@ -46,37 +47,63 @@ export function CancelOrderAction({
   disabledReason: string | null;
   cancellation: CustomerOrderDetailView["cancellation"];
 }) {
-  const key = useRef<string | null>(null);
+  const intent = useRef<{ orderId: string; body: string; key: string } | null>(null);
+  const [unresolved, setUnresolved] = useState(false);
+  const [accepted, setAccepted] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
   async function submit() {
-    if (!reason.trim()) {
+    if (busy || accepted) return;
+    if (!intent.current && !reason.trim()) {
       setMessage("Enter a reason for canceling this order.");
       return;
     }
-    key.current ??= `cancel-${crypto.randomUUID()}`;
+    intent.current ??= {
+      orderId,
+      body: JSON.stringify({ expectedVersion: orderVersion, reason: reason.trim() }),
+      key: `cancel-${crypto.randomUUID()}`,
+    };
+    const command = intent.current;
+    setUnresolved(true);
     setBusy(true);
     try {
-      const response = await fetch(`/api/commerce/orders/${encodeURIComponent(orderId)}/cancel`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": key.current },
-        body: JSON.stringify({ expectedVersion: orderVersion, reason: reason.trim() }),
-      });
-      const result = (await response.json()) as RpcResult<OrderCancellationView>;
-      if (!result.ok && result.error.code === "STALE_VERSION") key.current = null;
+      const response = await fetch(
+        `/api/commerce/orders/${encodeURIComponent(command.orderId)}/cancel`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": command.key },
+          body: command.body,
+        },
+      );
+      const result = customerCancellationResponse.parse(await response.json());
+      intent.current = null;
+      setUnresolved(false);
       setMessage(cancellationResultMessage(result));
-      if (result.ok) setConfirming(false);
+      if (result.ok) {
+        setConfirming(false);
+        setAccepted(true);
+      }
     } catch {
-      setMessage("Cancellation could not be requested. Try again.");
+      setMessage("The cancellation result is unknown. Retry the saved request.");
     } finally {
       setBusy(false);
     }
   }
 
-  if (!available)
+  if (accepted)
+    return (
+      <div role="status" className="rounded-lg border p-4 text-sm">
+        <p>{message}</p>
+        <button className="mt-3 min-h-11 underline" onClick={() => window.location.reload()}>
+          View order progress
+        </button>
+      </div>
+    );
+
+  if (!available && !unresolved)
     return (
       <div className="rounded-lg border border-[var(--fm-border)] p-3 text-sm">
         <p className="font-semibold">Cancel order</p>
@@ -121,6 +148,7 @@ export function CancelOrderAction({
           </label>
           <textarea
             id={`cancel-reason-${orderId}`}
+            disabled={unresolved}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             maxLength={500}
@@ -134,12 +162,16 @@ export function CancelOrderAction({
               disabled={busy}
               className="min-h-11 rounded-[var(--fm-radius-control)] bg-red-700 px-4 font-bold text-white disabled:opacity-50"
             >
-              {busy ? "Requesting cancellation…" : "Confirm cancellation"}
+              {busy
+                ? "Requesting cancellation…"
+                : unresolved
+                  ? "Retry saved cancellation"
+                  : "Confirm cancellation"}
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              disabled={busy}
+              disabled={busy || unresolved}
               className="min-h-11 rounded-[var(--fm-radius-control)] px-4 font-semibold underline"
             >
               Keep order

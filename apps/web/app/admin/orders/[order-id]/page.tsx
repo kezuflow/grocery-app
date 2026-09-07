@@ -1,5 +1,6 @@
 "use client";
 
+import { adminCancellationResponse } from "../../../../lib/order-cancellation-response";
 import type { AdminOrderDetail, RpcResult } from "@freshmarkets/contracts";
 import { ArrowLeft, Clipboard, MapPin, Phone, UserRound } from "lucide-react";
 import Link from "next/link";
@@ -82,6 +83,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
   const [message, setMessage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const cancelIntent = useAdminCommandIntent();
+  const [savedCancellation, setSavedCancellation] = useState<{
+    orderId: string;
+    body: string;
+  } | null>(null);
 
   const load = useCallback(async (id: string) => {
     setState("loading");
@@ -109,25 +114,40 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
     });
   }, [params, load]);
 
-  async function cancel(reason: string) {
-    if (!order) return;
+  async function submitCancellation(command: { orderId: string; body: string }) {
+    setSavedCancellation(command);
+    setConfirming(false);
     try {
       const payload = await cancelIntent.submit(async (idempotencyKey) => {
-        const response = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-          body: JSON.stringify({ reasonCode: reason, expectedVersion: order.version }),
-        });
-        return (await response.json()) as RpcResult<unknown>;
+        const response = await fetch(
+          `/api/admin/orders/${encodeURIComponent(command.orderId)}/cancel`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+            body: command.body,
+          },
+        );
+        return adminCancellationResponse.parse(await response.json());
       });
-      setMessage(payload.ok ? "Cancellation submitted." : payload.error.message);
-      if (payload.ok) {
-        setConfirming(false);
-        await load(orderId);
-      }
+      setSavedCancellation(null);
+      setMessage(
+        payload.ok
+          ? payload.value.state === "CANCELED"
+            ? "Order canceled."
+            : "Cancellation accepted. Current refund progress is shown below."
+          : payload.error.message,
+      );
+      await load(command.orderId);
     } catch {
-      setMessage("Connection lost. Retry confirmation to safely reuse the cancellation request.");
+      setMessage("The cancellation result is unknown. Retry the saved request.");
     }
+  }
+  async function cancel(reason: string) {
+    if (!order || savedCancellation || cancelIntent.pending) return;
+    await submitCancellation({
+      orderId,
+      body: JSON.stringify({ reasonCode: reason, expectedVersion: order.version }),
+    });
   }
 
   async function copy(value: string, label: string) {
@@ -140,7 +160,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
   const openFinanceExceptions = financeExceptions.filter((item) => item.status !== "RESOLVED");
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="mx-auto min-w-0 max-w-[1280px] space-y-6 break-words">
+      {savedCancellation ? (
+        <Alert>
+          <AlertTitle>Cancellation needs recovery</AlertTitle>
+          <AlertDescription>
+            The submitted order, reason, version and request key are saved.
+            <Button
+              disabled={cancelIntent.pending}
+              onClick={() => void submitCancellation(savedCancellation)}
+            >
+              Retry saved cancellation
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Link
         href="/admin/orders"
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
@@ -179,7 +213,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                   <Button
                     type="button"
                     variant="destructive"
-                    disabled={cancelIntent.pending}
+                    disabled={cancelIntent.pending || savedCancellation !== null}
                     onClick={() => setConfirming(true)}
                   >
                     Cancel order
@@ -200,8 +234,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             </Alert>
           ) : null}
 
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(19rem,1fr)]">
-            <div className="space-y-6">
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(19rem,1fr)] [&>*]:min-w-0">
+            <div className="min-w-0 space-y-6">
               <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
                 <CardHeader className="px-5">
                   <CardTitle>Customer information</CardTitle>
@@ -252,7 +286,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                   <CardTitle>Delivery status</CardTitle>
                 </CardHeader>
                 <CardContent className="px-5">
-                  {order.status === "CANCELED" || order.status === "EXCEPTION" ? (
+                  {["CANCELED", "CANCELLATION_REQUESTED", "EXCEPTION"].includes(order.status) ? (
                     <OrderStatusBadge status={order.status} />
                   ) : (
                     <div>

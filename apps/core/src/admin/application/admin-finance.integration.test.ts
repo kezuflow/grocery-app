@@ -424,14 +424,10 @@ describe("finance administration", () => {
       expectedVersion: 1,
       idempotencyKey: `cancel-${crypto.randomUUID()}`,
     });
-    // The canonical command decides the outcome; admin records the decision.
-    if (canceled.ok) {
-      expect(["CANCELED", "CANCELLATION_REQUESTED"]).toContain(canceled.value.status);
-    } else {
-      expect(["VALIDATION_FAILED", "ILLEGAL_TRANSITION", "NOT_FOUND", "CONFLICT"]).toContain(
-        canceled.error.code,
-      );
-    }
+    expect(canceled).toMatchObject({
+      ok: true,
+      value: { state: "CANCELLATION_REQUESTED", cancellation: { status: "REQUESTED" } },
+    });
 
     const auditRow = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'ORDER.CANCELED'",
@@ -451,6 +447,44 @@ describe("finance administration", () => {
       idempotencyKey: `cancel-${crypto.randomUUID()}`,
     });
     expect(result).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+  });
+
+  it("preserves the accepted Admin cancellation receipt and excludes an unrelated refund", async () => {
+    const manager = await seedManager(),
+      fixture = await seedOrderWithPayment();
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      orderId: fixture.orderId,
+      reason: "Unable to fulfill",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const first = await core.cancelAdminOrder(request);
+    expect(first).toMatchObject({
+      ok: true,
+      value: { state: "CANCELLATION_REQUESTED", cancellation: { status: "REQUESTED" } },
+    });
+    expect(await core.cancelAdminOrder(request)).toEqual(first);
+    expect(
+      await core.cancelAdminOrder({ ...request, resolution: "Changed resolution" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    const refund = await core.requestAdminRefund({
+      headers: request.headers,
+      requestId: crypto.randomUUID(),
+      paymentIntentId: fixture.paymentIntentId,
+      amountMinor: 100,
+      reason: "Unrelated refund",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(refund.ok).toBe(false);
+    expect(
+      await env.DB.prepare(
+        "SELECT id FROM payment_refund WHERE payment_intent_id=? AND reason='Unrelated refund'",
+      )
+        .bind(fixture.paymentIntentId)
+        .first(),
+    ).toBeNull();
   });
 
   it("rejects a cancellation idempotency key reused for another order without false audit", async () => {

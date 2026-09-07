@@ -90,6 +90,28 @@ function refundCommand(
 }
 
 describe("non-synthetic refunds", () => {
+  it("does not resubmit a surviving REQUESTED refund identity", async () => {
+    const { intentId } = await succeededIntent(),
+      request = refundCommand(intentId),
+      id = crypto.randomUUID(),
+      now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at) VALUES (?,?,5000,'PHP','REQUESTED',?,?,1,?,?)",
+    )
+      .bind(id, intentId, request.reason, request.idempotencyKey, now, now)
+      .run();
+    const submit = vi.spyOn(sharedMock, "requestRefund");
+    try {
+      expect(await requestRefund(env.DB, testRegistry(), request)).toMatchObject({
+        ok: true,
+        value: { refundId: id, state: "REQUESTED" },
+      });
+      expect(submit).not.toHaveBeenCalled();
+    } finally {
+      submit.mockRestore();
+    }
+  });
+
   it("replays verified refund ingress after a lost cancellation projection without premature inbox completion", async () => {
     const { intentId } = await succeededIntent();
     const orderId = crypto.randomUUID(),

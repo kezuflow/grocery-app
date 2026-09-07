@@ -1,5 +1,6 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { RpcResult } from "./common";
+import type { OrderCancellationView } from "./orders";
 
 export const orderIssueCategories = [
   "MISSING_ITEM",
@@ -185,6 +186,13 @@ export type AdminOrderCancelRequest = AuthenticatedRequest & {
   resolution?: string;
   expectedVersion: number;
   idempotencyKey: string;
+};
+
+/** Frozen accepted operation; getAdminOrder supplies current progress separately. */
+export type AdminOrderCancellationResult = {
+  orderId: string;
+  state: "CANCELED" | "CANCELLATION_REQUESTED";
+  cancellation: OrderCancellationView | null;
 };
 
 export type AdminPaymentSummary = {
@@ -413,7 +421,9 @@ export type AdminOrderIssueDetailRequest = AuthenticatedRequest & { issueId: str
 export type AdminOrdersService = {
   listAdminOrders(request: AdminOrderListRequest): Promise<RpcResult<AdminOrderPage>>;
   getAdminOrder(request: AdminOrderDetailRequest): Promise<RpcResult<AdminOrderDetail>>;
-  cancelAdminOrder(request: AdminOrderCancelRequest): Promise<RpcResult<AdminOrderDetail>>;
+  cancelAdminOrder(
+    request: AdminOrderCancelRequest,
+  ): Promise<RpcResult<AdminOrderCancellationResult>>;
 };
 
 export type AdminPaymentsService = {

@@ -97,6 +97,7 @@ export function createOrdersRpc(context: CoreRpcContext) {
           actor: "CUSTOMER",
           cause: "CUSTOMER_REQUEST",
           customerId: customer.value.customerId,
+          actorAuthUserId: customer.value.user.id,
           idempotencyKey: validation.data.idempotencyKey,
           requestId: input.requestId,
         },

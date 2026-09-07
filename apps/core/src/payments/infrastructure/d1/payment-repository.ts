@@ -802,6 +802,10 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
            SELECT ?, pi.id, ?, pi.currency, 'REQUESTED', ?, ?, 1, ?, ?
            FROM payment_intent pi
            WHERE pi.id=? AND pi.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
+             AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member member
+               JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
+               WHERE member.payment_intent_id=pi.id AND cancellation.status!='COMPLETED'
+                 AND ('order-cancel:'||cancellation.id||':'||pi.id!=? OR member.required_amount_minor!=?))
              AND ? <= pi.amount_minor - COALESCE((
                SELECT SUM(pr.amount_minor) FROM payment_refund pr
                WHERE pr.payment_intent_id=pi.id
@@ -816,6 +820,8 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
           input.now,
           input.now,
           input.intentId,
+          input.idempotencyKey,
+          input.amountMinor,
           input.amountMinor,
         )
         .run()

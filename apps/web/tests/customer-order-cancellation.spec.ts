@@ -103,6 +103,6 @@ test("confirms the Core refund preview and requests cancellation without optimis
   await page.getByLabel("Reason for cancellation").fill("Plans changed");
   await page.getByRole("button", { name: "Confirm cancellation" }).click();
 
-  await expect(page.getByText(/not marked canceled yet/)).toBeVisible();
+  await expect(page.getByText(/Check order progress for refund updates/)).toBeVisible();
   expect(cancellationRequest).toEqual({ expectedVersion: 3, reason: "Plans changed" });
 });
