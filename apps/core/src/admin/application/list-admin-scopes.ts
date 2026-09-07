@@ -75,7 +75,7 @@ export async function listAdminScopes(
     async (span) => {
       const result = await deps.db
         .prepare(
-          "SELECT id, market_id, code, name FROM fulfillment_location WHERE status = 'active' ORDER BY code",
+          "SELECT id, market_id, code, CASE WHEN status='inactive' THEN name || ' (inactive)' ELSE name END name FROM fulfillment_location ORDER BY code",
         )
         .all<{ id: string; market_id: string; code: string; name: string }>();
       setD1SpanAttributes(span, result.meta);

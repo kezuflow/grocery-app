@@ -46,6 +46,9 @@ export const fulfillmentLocation = sqliteTable(
     type: text("type", {
       enum: ["FULFILLMENT_CENTER", "SATELLITE", "CROSS_DOCK", "DISPATCH_ONLY", "PICKUP_POINT"],
     }).notNull(),
+    purpose: text("purpose", { enum: ["CUSTOMER_FULFILLMENT", "CENTRAL_WAREHOUSE"] })
+      .notNull()
+      .default("CUSTOMER_FULFILLMENT"),
     addressJson: text("address_json"),
     latitude: real("latitude").notNull(),
     longitude: real("longitude").notNull(),

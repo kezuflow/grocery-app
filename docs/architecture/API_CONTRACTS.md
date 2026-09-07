@@ -181,6 +181,10 @@ Core validates current mode/cadence policy on writes and rejects unsupported sto
 
 Selling-state and mode commands recheck current staff identity, Global scope and capability inside the mutation batch. The configuration, quote invalidation, audit and successful replay result commit together. Reopening rechecks mutable readiness in that same batch; switching rechecks unresolved committed work. The reason is part of command identity, so changing it with the same key conflicts.
 
+Global location setup uses `listAdminLocations`, `createAdminLocation`, `updateAdminLocation` and `transitionAdminLocation`. Reads require `locations.read`; commands require `locations.manage`, Global scope and a reason. Creation generates the location ID and starts inactive. Purpose, market and code are fixed after creation; detail changes and activation/deactivation require the current version. Core atomically guards current staff/grants, market and location version with capabilities, audit and exact replay result. List responses include active/inactive sites, named markets, currency/timezone, validated structured address or an explicit missing-confirmation state, coordinates and capabilities, with bounded keyset pagination. New capabilities are explicit role grants, never automatically assigned.
+
+Customer-site changes supersede unstarted quotes within the market so changed capabilities or a newly nearer site require fresh customer review. Started Payments remain reconcilable with their accepted terms. Origin address/coordinate changes reject while affected deliveries or started checkout payments remain unresolved; the complete batch rechecks this guard. Deactivation preserves scoped operational/profile access and does not rewrite committed evidence.
+
 Membership, trial, subscription pricing, recurring authorization and membership payment contracts are retired from the active release. No checkout method requires a Subscription.
 
 ## Cart

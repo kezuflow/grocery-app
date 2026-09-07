@@ -147,7 +147,7 @@ async function loadProfile(
        FROM fulfillment_location location
        LEFT JOIN fulfillment_location_delivery_profile profile
          ON profile.location_id=location.id
-       WHERE location.id=? AND location.status='active'`,
+       WHERE location.id=?`,
     )
     .bind(locationId)
     .first<DeliveryProfileRow>();
@@ -169,7 +169,7 @@ export async function getLocationDeliveryProfile(
   const view = await loadProfile(deps.db, request.locationId);
   return view
     ? { ok: true, value: view, requestId: request.requestId }
-    : failure("NOT_FOUND", "Active fulfillment location not found", request.requestId);
+    : failure("NOT_FOUND", "Fulfillment location not found", request.requestId);
 }
 
 function completeIdempotency(
@@ -506,7 +506,7 @@ export async function requestExternalDelivery(
        JOIN grocery_order orders ON orders.id=job.order_id
        JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=orders.id
        JOIN delivery_stop stop ON stop.delivery_job_id=job.id
-       JOIN fulfillment_location location ON location.id=job.location_id AND location.status='active'
+       JOIN fulfillment_location location ON location.id=job.location_id
        LEFT JOIN fulfillment_location_delivery_profile profile ON profile.location_id=location.id
        WHERE job.id=? AND job.location_id=?`,
     )

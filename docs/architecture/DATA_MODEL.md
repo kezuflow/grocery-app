@@ -50,6 +50,8 @@ Phase 2 materializes these geography tables and stable seed identities for `METR
 
 ## Application Identity and RBAC
 
+Migration 0071 adds `fulfillment_location.purpose` (`CUSTOMER_FULFILLMENT|CENTRAL_WAREHOUSE`) and `locations.read/manage` permission definitions. Existing location fields, role grants, price evidence and IDs are preserved; existing sites default to customer fulfillment. No role receives the new permissions automatically. Purpose is immutable through setup commands. Location updates and lifecycle commands share the aggregate version and atomically persist audit/idempotency evidence. Existing incomplete address JSON remains retained until an explicit detail update; lifecycle transitions never rewrite it.
+
 - `customer_principal(id PK, auth_user_id UNIQUE FK Better Auth user, status active|disabled, created_at, updated_at)`
 - `customers(id PK, principal_id UNIQUE FK customer_principal, auth_user_id UNIQUE legacy compatibility column, status, version, created_at, updated_at)`
 - `staff_principals(id PK, auth_user_id UNIQUE, display_name, status, version)`

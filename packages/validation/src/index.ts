@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export { z } from "zod";
+export * from "./admin-locations";
 
 export const identifierSchema = z.string().trim().min(1).max(200);
 export const idempotencyKeySchema = z.string().trim().min(1).max(200);

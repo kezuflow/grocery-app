@@ -111,7 +111,7 @@ export async function resolveOperationsAdministrationAccess(
     };
   }
   const location = await deps.db
-    .prepare("SELECT market_id FROM fulfillment_location WHERE id = ? AND status='active'")
+    .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
     .bind(locationId)
     .first<{ market_id: string }>();
   if (!location) {
@@ -119,7 +119,7 @@ export async function resolveOperationsAdministrationAccess(
       ok: false,
       error: {
         code: "NOT_FOUND",
-        message: "Active fulfillment location not found",
+        message: "Fulfillment location not found",
         requestId: request.requestId,
       },
     };
@@ -130,7 +130,7 @@ export async function resolveOperationsAdministrationAccess(
         ok: false,
         error: {
           code: "NOT_FOUND",
-          message: "Active fulfillment location not found",
+          message: "Fulfillment location not found",
           requestId: request.requestId,
         },
       };

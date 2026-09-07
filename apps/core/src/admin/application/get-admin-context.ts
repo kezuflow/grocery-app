@@ -47,6 +47,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: [],
   },
   {
+    code: "locations",
+    label: "Locations",
+    href: "/admin/locations",
+    section: "administration",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["locations.read", "locations.manage"],
+  },
+  {
     code: "orders",
     label: "Orders",
     href: "/admin/orders",

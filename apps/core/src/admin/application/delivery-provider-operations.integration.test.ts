@@ -73,6 +73,29 @@ function profileRequest(expectedVersion: number, idempotencyKey = crypto.randomU
 }
 
 describe("location delivery profiles", () => {
+  it("keeps pickup profile reads available to scoped operations after site deactivation", async () => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    expect((await upsertLocationDeliveryProfile(deps, profileRequest(0))).ok).toBe(true);
+    await env.DB.prepare("UPDATE fulfillment_location SET status='inactive' WHERE id=?")
+      .bind(LOCATION)
+      .run();
+    try {
+      expect(
+        await getLocationDeliveryProfile(deps, {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+        }),
+      ).toMatchObject({
+        ok: true,
+        value: { profile: { senderName: "FreshMarkets Central Cebu" } },
+      });
+    } finally {
+      await env.DB.prepare("UPDATE fulfillment_location SET status='active' WHERE id=?")
+        .bind(LOCATION)
+        .run();
+    }
+  });
   it("creates, reads, updates, and idempotently replays the profile for one store location", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const before = await getLocationDeliveryProfile(deps, {

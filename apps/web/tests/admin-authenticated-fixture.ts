@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { expect, test as base, type Page } from "@playwright/test";
 
 const coreRoot = fileURLToPath(new URL("../../core", import.meta.url));
+const e2eStateName = process.env.E2E_STATE_NAME ?? "e2e-state";
+if (!/^e2e-[a-z0-9-]+$/.test(e2eStateName)) throw new Error("Invalid E2E_STATE_NAME");
 const wrangler = fileURLToPath(
   new URL("../../core/node_modules/wrangler/bin/wrangler.js", import.meta.url),
 );
@@ -35,7 +37,7 @@ export function executeAdminE2eSql(sql: string): void {
         "DB",
         "--local",
         "--persist-to",
-        ".wrangler/e2e-state",
+        `.wrangler/${e2eStateName}`,
         "--command",
         sql,
       ],

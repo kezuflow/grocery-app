@@ -15,6 +15,8 @@ export const adminCapabilityCodes = [
   "catalog.manage",
   "prices.read",
   "prices.manage",
+  "locations.read",
+  "locations.manage",
   "inventory.read",
   "inventory.adjust",
   "promotions.read",

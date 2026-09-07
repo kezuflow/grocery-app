@@ -119,7 +119,7 @@ export async function revalidateCheckoutQuote(
         `SELECT fl.market_id, fl.latitude, fl.longitude
          FROM delivery_zone dz
          JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-         JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
+         JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
          JOIN global_commerce_configuration m ON m.id='global'
          JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
          WHERE dz.code=? AND dz.id=? AND fl.id=? AND dz.status='active'
@@ -150,7 +150,7 @@ export async function revalidateCheckoutQuote(
         `SELECT dc.market_id, fl.latitude, fl.longitude
          FROM delivery_cycle dc
          JOIN delivery_cycle_zone dcz ON dcz.cycle_id=dc.id AND dcz.status='ACTIVE'
-         JOIN fulfillment_location fl ON fl.id=dcz.location_id AND fl.status='active'
+         JOIN fulfillment_location fl ON fl.id=dcz.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
          WHERE dc.id=? AND dc.status='OPEN' AND dc.cutoff_at>?
            AND dcz.zone_id=? AND dcz.location_id=?`,
       )

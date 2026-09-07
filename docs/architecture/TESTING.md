@@ -61,6 +61,8 @@ The first two execute tests; Playwright `--list` only discovers tests. Confirm p
 
 The existing Playwright configuration accepts `APP_BASE_URL` for an already-running stack. `E2E_START_STACK=1` builds and provisions a dedicated local stack using `apps/core/.wrangler/e2e-state`; inspect the setup before invoking it because it prepares disposable test data. Never point destructive test setup at a retained or production database. Do not run an extra Core listener alongside the auxiliary-Worker dev topology unless a test specifically needs it.
 
+`E2E_STATE_NAME` selects a separate direct child of `apps/core/.wrangler` for managed setup and authenticated fixtures. Names must match `e2e-[a-z0-9-]+`. Setup resets that selected directory, so choose a new name or an already identified disposable directory. The default remains `e2e-state`; setting a new name does not authorize resetting existing state.
+
 ## Required failure and concurrency scenarios
 
 For a changed critical command, select every applicable case:

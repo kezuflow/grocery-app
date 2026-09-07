@@ -1,5 +1,6 @@
 export * from "./common";
 export * from "./admin-foundation";
+export * from "./admin-locations";
 export * from "./admin-staff-access";
 export * from "./admin-customers";
 export * from "./admin-promotions";

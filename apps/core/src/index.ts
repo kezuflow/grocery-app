@@ -1,4 +1,10 @@
 import {
+  listAdminLocations,
+  createAdminLocation,
+  updateAdminLocation,
+  transitionAdminLocation,
+} from "./admin/application/location-administration";
+import {
   getMyStaffInvitation,
   acceptStaffInvitation,
 } from "./iam/application/accept-staff-invitation";
@@ -1823,6 +1829,32 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return getAdminGlobalCommerceConfiguration(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async listAdminLocations(input: import("@freshmarkets/contracts").AdminLocationsRequest) {
+    return listAdminLocations(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async createAdminLocation(input: import("@freshmarkets/contracts").CreateAdminLocationRequest) {
+    return createAdminLocation(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async updateAdminLocation(input: import("@freshmarkets/contracts").UpdateAdminLocationRequest) {
+    return updateAdminLocation(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async transitionAdminLocation(
+    input: import("@freshmarkets/contracts").TransitionAdminLocationRequest,
+  ) {
+    return transitionAdminLocation(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
     );
   }
   async pauseSelling(input: import("@freshmarkets/contracts").PauseSellingRequest) {

@@ -16,7 +16,7 @@ export async function activeFulfillmentLocationId(
 ): Promise<string | null> {
   const row = await database
     .prepare(
-      "SELECT fl.id FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id WHERE fl.status='active' AND fl.is_default=1 AND m.status='active' AND (? IS NULL OR m.code=?)",
+      "SELECT fl.id FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id WHERE fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT' AND fl.is_default=1 AND m.status='active' AND (? IS NULL OR m.code=?)",
     )
     .bind(marketCode, marketCode)
     .first<{ id: string }>();

@@ -20,6 +20,8 @@ An operational geography with a currency, timezone, service configuration, and o
 
 An internal physical or operational site. It has independent capabilities such as receiving, inventory, procurement, picking, packing, dispatch, and pickup. A site may be a fulfillment center, satellite, cross-dock, dispatch-only site, or pickup point.
 
+The setup command records immutable operational purpose `CUSTOMER_FULFILLMENT` or `CENTRAL_WAREHOUSE`, separately from the retained site type. Global `locations.manage` creates an inactive site, updates confirmed structured address/coordinates and capabilities with a version, and explicitly activates/deactivates it with a reason. `INVENTORY` is the existing storage capability. Warehouse activation requires receiving and storage; customer-site activation requires picking, packing and dispatch. Customer serviceability and courier readiness remain additional requirements. Deactivation excludes new commerce but preserves authorized access to committed work and retained records.
+
 Invariant: customers never select a location. The application assigns one from eligible candidates.
 
 FreshMarkets has two separate versioned global commerce controls: `SellingState` (`OPEN` or `PAUSED`) and `FulfillmentMode` (`INSTANT` or `SCHEDULED`). `PAUSED` blocks new fulfillment-option discovery, Quotes, and payment initiation while allowing reconciliation and exactly-once commitment of already-started payments, committed-Order reads and operations, refunds, and external delivery work.

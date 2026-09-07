@@ -57,7 +57,7 @@ export async function evaluateCheckout(
              JOIN service_area sa ON sa.id=dz.service_area_id
              JOIN delivery_cycle dc ON dc.market_id=sa.market_id
              JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-             JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active'
+             JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
              JOIN delivery_cycle_zone dcz ON dcz.cycle_id=dc.id AND dcz.zone_id=dz.id
                AND dcz.location_id=fl.id AND dcz.status='ACTIVE'
              JOIN global_commerce_configuration mode ON mode.id='global'

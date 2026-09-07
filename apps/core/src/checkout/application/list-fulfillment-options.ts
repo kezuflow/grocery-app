@@ -130,7 +130,7 @@ export async function listFulfillmentOptions(
             mode.fulfillment_mode mode,readiness.instant_promise_minutes promiseMinutes,
             mode.version modeVersion,dz.id zoneId
      FROM delivery_zone dz JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-     JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
+     JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
      JOIN global_commerce_configuration mode ON mode.id='global' AND mode.selling_state='OPEN'
      LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id
      WHERE dz.code=? AND dz.status='active'

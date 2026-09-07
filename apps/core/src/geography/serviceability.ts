@@ -273,6 +273,7 @@ export async function resolveServiceability(
             eq(geographySchema.locationServiceability.eligible, true),
             eq(geographySchema.fulfillmentLocation.marketId, market.id),
             eq(geographySchema.fulfillmentLocation.status, "active"),
+            eq(geographySchema.fulfillmentLocation.purpose, "CUSTOMER_FULFILLMENT"),
             lte(geographySchema.locationServiceability.validFrom, now),
             or(
               isNull(geographySchema.locationServiceability.validTo),

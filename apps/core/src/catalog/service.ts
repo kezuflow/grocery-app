@@ -310,7 +310,7 @@ async function resolveCommerceContext(
   if (!locationId) return null;
   const row = await database
     .prepare(
-      "SELECT id locationId,market_id marketId FROM fulfillment_location WHERE id=? AND status='active'",
+      "SELECT id locationId,market_id marketId FROM fulfillment_location WHERE id=? AND status='active' AND purpose='CUSTOMER_FULFILLMENT'",
     )
     .bind(locationId)
     .first<CommerceContext>();

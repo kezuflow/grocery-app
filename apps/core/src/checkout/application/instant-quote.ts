@@ -60,7 +60,7 @@ export async function createInstantQuote(
               readiness.max_concurrent_instant_orders, fl.latitude, fl.longitude
        FROM delivery_zone dz JOIN service_area sa ON sa.id=dz.service_area_id
        JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-       JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active'
+       JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
        JOIN global_commerce_configuration mode ON mode.id='global'
         AND mode.selling_state='OPEN' AND mode.fulfillment_mode='INSTANT'
        JOIN fulfillment_location_readiness readiness ON readiness.location_id=fl.id

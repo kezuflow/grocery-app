@@ -72,6 +72,9 @@ const grantsBeforePricing = database
 const pricesBeforePricing = database
   .prepare("SELECT rowid,* FROM price_version ORDER BY rowid")
   .all();
+const locationsBeforeSetup = database
+  .prepare("SELECT rowid,* FROM fulfillment_location ORDER BY rowid")
+  .all();
 apply(
   database,
   migrations.filter((name) => name > "0069_schema_integrity.sql"),
@@ -79,7 +82,7 @@ apply(
 assert.deepEqual(
   database
     .prepare(
-      "SELECT rowid,* FROM permission WHERE code NOT IN ('prices.read','prices.manage') ORDER BY rowid",
+      "SELECT rowid,* FROM permission WHERE code NOT IN ('prices.read','prices.manage','locations.read','locations.manage') ORDER BY rowid",
     )
     .all(),
   permissionsBeforePricing,
@@ -87,11 +90,11 @@ assert.deepEqual(
 assert.deepEqual(
   database
     .prepare(
-      "SELECT code FROM permission WHERE code IN ('prices.read','prices.manage') ORDER BY code",
+      "SELECT code FROM permission WHERE code IN ('prices.read','prices.manage','locations.read','locations.manage') ORDER BY code",
     )
     .all()
     .map((row) => row.code),
-  ["prices.manage", "prices.read"],
+  ["locations.manage", "locations.read", "prices.manage", "prices.read"],
 );
 assert.deepEqual(
   database.prepare("SELECT rowid,* FROM role_permission ORDER BY rowid").all(),
@@ -100,6 +103,16 @@ assert.deepEqual(
 assert.deepEqual(
   database.prepare("SELECT rowid,* FROM price_version ORDER BY rowid").all(),
   pricesBeforePricing,
+);
+assert.deepEqual(
+  database
+    .prepare("SELECT rowid,* FROM fulfillment_location ORDER BY rowid")
+    .all()
+    .map(({ purpose, ...row }) => {
+      assert.equal(purpose, "CUSTOMER_FULFILLMENT");
+      return row;
+    }),
+  locationsBeforeSetup.map((row) => ({ ...row })),
 );
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 assert.equal(database.prepare("PRAGMA integrity_check").get().integrity_check, "ok");

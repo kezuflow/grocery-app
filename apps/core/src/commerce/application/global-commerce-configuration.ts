@@ -51,7 +51,9 @@ async function readinessBlockers(
 ): Promise<CommerceReadinessBlocker[]> {
   const blockers: CommerceReadinessBlocker[] = [];
   const activeLocations = await database
-    .prepare("SELECT COUNT(*) count FROM fulfillment_location WHERE status='active'")
+    .prepare(
+      "SELECT COUNT(*) count FROM fulfillment_location WHERE status='active' AND purpose='CUSTOMER_FULFILLMENT'",
+    )
     .first<{ count: number }>();
   if ((activeLocations?.count ?? 0) === 0) {
     blockers.push({
@@ -65,7 +67,7 @@ async function readinessBlockers(
     .prepare(
       `SELECT location.name
          FROM fulfillment_location location
-        WHERE location.status='active'
+        WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT'
           AND NOT EXISTS (
             SELECT 1 FROM location_capability capability
              WHERE capability.location_id=location.id AND capability.enabled=1
@@ -87,7 +89,7 @@ async function readinessBlockers(
         `SELECT location.name
            FROM fulfillment_location location
            LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=location.id
-          WHERE location.status='active'
+          WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT'
             AND (readiness.location_id IS NULL OR readiness.dispatch_ready!=1 OR
                  readiness.instant_promise_minutes IS NULL)
           ORDER BY location.id LIMIT 1`,
@@ -353,8 +355,8 @@ async function execute(
     // These predicates guard every effect, including the version, audit and replay result.
     statements.push(
       database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE
-        NOT EXISTS (SELECT 1 FROM fulfillment_location WHERE status='active')
-        OR EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.status='active'
+        NOT EXISTS (SELECT 1 FROM fulfillment_location WHERE status='active' AND purpose='CUSTOMER_FULFILLMENT')
+        OR EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT'
           AND (SELECT COUNT(DISTINCT capability) FROM location_capability
             WHERE location_id=location.id AND enabled=1
               AND capability IN ('PICKING','PACKING','DISPATCH'))<>3)`),
@@ -362,7 +364,7 @@ async function execute(
         ? database.prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE EXISTS (
             SELECT 1 FROM fulfillment_location location
             LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=location.id
-            WHERE location.status='active' AND (readiness.location_id IS NULL
+            WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT' AND (readiness.location_id IS NULL
               OR readiness.dispatch_ready!=1 OR readiness.instant_promise_minutes IS NULL))`)
         : database
             .prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE NOT EXISTS (

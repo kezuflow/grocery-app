@@ -5,6 +5,7 @@ import type {
   AddressSearchRequest,
 } from "./geography";
 import type { AdminFoundationService } from "./admin-foundation";
+import type { AdminLocationsService } from "./admin-locations";
 import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
 import type { AdminPromotionsService } from "./admin-promotions";
@@ -60,6 +61,7 @@ export interface ImplementedCoreService
     OperationsReadService,
     OperationsService,
     AdminFoundationService,
+    AdminLocationsService,
     AdminStaffAccessService,
     AdminCustomerService,
     AdminPrivacyService,
@@ -182,6 +184,10 @@ export const coreServiceMethodNames = [
   "setAdminSkuAvailability",
   "setAdminSkuPrice",
   "getAdminSkuPrices",
+  "listAdminLocations",
+  "createAdminLocation",
+  "updateAdminLocation",
+  "transitionAdminLocation",
   "listAdminInventory",
   "getAdminInventoryLedger",
   "getGlobalCommerceConfiguration",
