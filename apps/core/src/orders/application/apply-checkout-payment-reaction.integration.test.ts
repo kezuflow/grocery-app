@@ -74,9 +74,9 @@ async function seededCheckout(
   const productId = `product-co-${suffix}`;
   const skuId = `sku-co-${suffix}`;
   await env.DB.prepare(
-    "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, 'unit-gram', 'STOCKED', ?, 1, 1)",
+    "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, 'unit-gram', 'STOCKED', ?, 1, 1)",
   )
-    .bind(poolId, productId, "STOCKED")
+    .bind(poolId, "STOCKED")
     .run();
   await env.DB.prepare(
     "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, description, status, created_at, updated_at) VALUES (?, (SELECT id FROM category LIMIT 1), ?, ?, 'Co Product', NULL, 'active', 1, 1)",
@@ -180,6 +180,63 @@ async function intentWithReaction(quoteId: string, customerId: string, amountMin
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("keeps one benefit per component in Core even though storage can represent a larger stack", async () => {
+    const fixture = await seededCheckout();
+    const ids = [crypto.randomUUID(), crypto.randomUUID()];
+    for (const id of ids)
+      await env.DB.prepare(`INSERT INTO promotion
+      (id,code,name,description,status,benefit_type,discount_minor,minimum_minor,starts_at,automatic,priority,version,created_at,updated_at)
+      VALUES (?,?,'Stack test','','ACTIVE','ORDER_FIXED_DISCOUNT',1000,0,0,0,0,1,1,1)`)
+        .bind(id, id.toUpperCase())
+        .run();
+    const quote = await createQuote(
+      fixture,
+      ids.map((id) => id.toUpperCase()),
+    );
+    if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    expect(quote.value.promotionApplications).toHaveLength(1);
+    const application = quote.value.promotionApplications[0];
+    if (!application) throw new Error("Missing benefit");
+    const extra = ids.find((id) => id !== application.promotionId);
+    if (!extra) throw new Error("Missing extra promotion");
+    // Direct persistence represents a future stacking policy. Today's Core
+    // must reject this evidence, even after the component uniqueness is gone.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO checkout_promotion_claim
+        (id,checkout_quote_id,promotion_id,customer_id,price_component,benefit_type,amount_minor,definition_version,grant_id,snapshot_json,status,created_at)
+        SELECT ?,checkout_quote_id,?,customer_id,price_component,benefit_type,amount_minor,definition_version,grant_id,snapshot_json,status,created_at
+        FROM checkout_promotion_claim WHERE checkout_quote_id=?`).bind(
+        crypto.randomUUID(),
+        extra,
+        quote.value.quoteId,
+      ),
+      env.DB.prepare("UPDATE checkout_quote SET promotion_applications_json=? WHERE id=?").bind(
+        JSON.stringify([application, { ...application, promotionId: extra }]),
+        quote.value.quoteId,
+      ),
+    ]);
+    const payment = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+      quote.value.totalMinor,
+    );
+    expect(
+      await applyCheckoutPaymentReaction(env.DB, {
+        reactionId: payment.reactionId,
+        paymentIntentId: payment.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+    ).toMatchObject({ applied: false, reason: "QUOTE_UNUSABLE" });
+    expect(
+      await env.DB.prepare(`SELECT
+      (SELECT COUNT(*) FROM grocery_order WHERE customer_id=?) AS orders,
+      (SELECT COUNT(*) FROM promotion_redemption WHERE customer_id=?) AS redemptions,
+      (SELECT COUNT(*) FROM checkout_promotion_claim WHERE checkout_quote_id=? AND status='COMMITTED') AS claims`)
+        .bind(fixture.customerId, fixture.customerId, quote.value.quoteId)
+        .first(),
+    ).toEqual({ orders: 0, redemptions: 0, claims: 0 });
+  });
   it("snapshots a promotion claim without redemption, then redeems it once at commitment", async () => {
     const fixture = await seededCheckout();
     const promotionId = `promotion-${crypto.randomUUID()}`;
@@ -259,56 +316,122 @@ describe("order commitment from canonical payment reactions", () => {
     expect(after).toEqual({ redemptions: 1, applications: 1, claim_status: "COMMITTED" });
   });
 
-  it("cannot exceed a promotion usage limit across separately paid commitments", async () => {
-    const firstFixture = await seededCheckout();
-    const secondFixture = await seededCheckout();
-    const promotionId = `limited-${crypto.randomUUID()}`;
-    const code = `LIMITED${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-    const now = Date.now();
-    await env.DB.prepare(
-      `INSERT INTO promotion (
+  it.each(["global", "customer", "grant", "system-grant"])(
+    "atomically enforces %s promotion limits across competing paid commitments",
+    async (limit) => {
+      const firstFixture = await seededCheckout();
+      const secondFixture = await seededCheckout();
+      const promotionId = `limited-${crypto.randomUUID()}`;
+      const code = `LIMITED${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+      const now = Date.now();
+      await env.DB.prepare(
+        `INSERT INTO promotion (
         id, code, name, description, status, benefit_type, discount_minor, percent,
         minimum_minor, starts_at, ends_at, global_usage_limit, per_customer_usage_limit,
         automatic, priority, version, created_at, updated_at
       ) VALUES (?, ?, 'Limited', '', 'ACTIVE', 'ORDER_FIXED_DISCOUNT', 1000, NULL,
-                0, ?, NULL, 1, NULL, 1, 0, 1, ?, ?)`,
-    )
-      .bind(promotionId, code, now - 1, now, now)
-      .run();
-    const firstQuote = await createQuote(firstFixture);
-    const secondQuote = await createQuote(secondFixture);
-    if (!firstQuote.ok || !secondQuote.ok) throw new Error("quote fixture failed");
-    const firstPayment = await intentWithReaction(
-      firstQuote.value.quoteId,
-      firstFixture.customerId,
-      firstQuote.value.totalMinor,
-    );
-    const secondPayment = await intentWithReaction(
-      secondQuote.value.quoteId,
-      secondFixture.customerId,
-      secondQuote.value.totalMinor,
-    );
-    const first = await applyCheckoutPaymentReaction(env.DB, {
-      reactionId: firstPayment.reactionId,
-      paymentIntentId: firstPayment.intentId,
-      checkoutAttemptId: firstQuote.value.quoteId,
-      canonicalPaymentState: "SUCCEEDED",
-    });
-    const second = await applyCheckoutPaymentReaction(env.DB, {
-      reactionId: secondPayment.reactionId,
-      paymentIntentId: secondPayment.intentId,
-      checkoutAttemptId: secondQuote.value.quoteId,
-      canonicalPaymentState: "SUCCEEDED",
-    });
-    expect(first).toMatchObject({ applied: true });
-    expect(second).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
-    const counts = await env.DB.prepare(
-      "SELECT (SELECT COUNT(*) FROM promotion_redemption WHERE promotion_id=?) AS redemptions, (SELECT COUNT(*) FROM grocery_order WHERE customer_id=?) AS second_orders",
-    )
-      .bind(promotionId, secondFixture.customerId)
-      .first<{ redemptions: number; second_orders: number }>();
-    expect(counts).toEqual({ redemptions: 1, second_orders: 0 });
-  });
+                0, ?, NULL, ?, ?, 0, 0, 1, ?, ?)`,
+      )
+        .bind(
+          promotionId,
+          code,
+          now - 1,
+          limit === "global" ? 1 : null,
+          limit === "customer" ? 1 : null,
+          now,
+          now,
+        )
+        .run();
+      if (limit === "grant" || limit === "system-grant") {
+        await env.DB.prepare(`INSERT INTO promotion_grant
+        (id,benefit_code,benefit_type,max_redemptions,status,customer_id,parameters_json,created_at,updated_at)
+        VALUES (?,?,'ORDER_FIXED_DISCOUNT',1,'ACTIVE',?,'{}',?,?)`)
+          .bind(
+            limit === "grant" ? `targeted-${promotionId}` : `order-promotion-${promotionId}`,
+            code,
+            limit === "grant" ? firstFixture.customerId : null,
+            now,
+            now,
+          )
+          .run();
+      }
+      const firstQuote = await createQuote(firstFixture, [code]);
+      if (limit === "customer" || limit === "grant") {
+        secondFixture.customerId = firstFixture.customerId;
+        await env.DB.batch([
+          env.DB.prepare("UPDATE cart SET status='ABANDONED' WHERE id=?").bind(firstFixture.cartId),
+          env.DB.prepare("UPDATE cart SET customer_id=? WHERE id=?").bind(
+            firstFixture.customerId,
+            secondFixture.cartId,
+          ),
+          env.DB.prepare("UPDATE customer_address SET customer_id=? WHERE id=?").bind(
+            firstFixture.customerId,
+            secondFixture.addressId,
+          ),
+        ]);
+      }
+      const secondQuote = await createQuote(secondFixture, [code]);
+      if (!firstQuote.ok || !secondQuote.ok) throw new Error("quote fixture failed");
+      const firstPayment = await intentWithReaction(
+        firstQuote.value.quoteId,
+        firstFixture.customerId,
+        firstQuote.value.totalMinor,
+      );
+      const secondPayment = await intentWithReaction(
+        secondQuote.value.quoteId,
+        secondFixture.customerId,
+        secondQuote.value.totalMinor,
+      );
+      const commands = [
+        {
+          reactionId: firstPayment.reactionId,
+          paymentIntentId: firstPayment.intentId,
+          checkoutAttemptId: firstQuote.value.quoteId,
+          canonicalPaymentState: "SUCCEEDED" as const,
+        },
+        {
+          reactionId: secondPayment.reactionId,
+          paymentIntentId: secondPayment.intentId,
+          checkoutAttemptId: secondQuote.value.quoteId,
+          canonicalPaymentState: "SUCCEEDED" as const,
+        },
+      ];
+      const outcomes = await Promise.all(
+        commands.map((command) => applyCheckoutPaymentReaction(env.DB, command)),
+      );
+      expect(outcomes.filter((outcome) => outcome.applied)).toHaveLength(1);
+      const loserIndex = outcomes.findIndex((outcome) => !outcome.applied);
+      expect(outcomes[loserIndex]).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+      const loser = commands[loserIndex];
+      const counts = await env.DB.prepare(
+        `SELECT (SELECT COUNT(*) FROM promotion_redemption WHERE promotion_id=?) AS redemptions,
+        (SELECT COUNT(*) FROM order_payment_reaction WHERE payment_intent_id=?) AS losing_reactions,
+        (SELECT COUNT(*) FROM grocery_order WHERE payment_id=?) AS losing_orders,
+        (SELECT COUNT(*) FROM order_promotion_application WHERE promotion_id=?) AS applications,
+        (SELECT status FROM checkout_promotion_claim WHERE checkout_quote_id=?) AS losing_claim`,
+      )
+        .bind(
+          promotionId,
+          loser.paymentIntentId,
+          `attempt-${loser.paymentIntentId}`,
+          promotionId,
+          loser.checkoutAttemptId,
+        )
+        .first();
+      expect(counts).toEqual({
+        redemptions: 1,
+        losing_reactions: 0,
+        losing_orders: 0,
+        applications: 1,
+        losing_claim: "UNCOMMITTED",
+      });
+      const winner = commands[1 - loserIndex];
+      expect(await applyCheckoutPaymentReaction(env.DB, winner)).toMatchObject({
+        applied: true,
+        reason: "ALREADY_APPLIED",
+      });
+    },
+  );
   it("rejects a scheduled basket below the market minimum", async () => {
     const fixture = await seededCheckout({ quantity: 1 });
 

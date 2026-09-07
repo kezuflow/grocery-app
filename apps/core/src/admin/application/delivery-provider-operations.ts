@@ -634,9 +634,9 @@ export async function requestExternalDelivery(
                   pickup_pin AS pickupPin,quote_amount_minor AS quoteAmountMinor,
                   quote_currency AS quoteCurrency,attempt_count AS attemptCount,
                   last_error_code AS lastErrorCode,version
-           FROM delivery_provider_dispatch WHERE delivery_job_id=?`,
+           FROM delivery_provider_dispatch WHERE client_idempotency_key=?`,
         )
-        .bind(request.jobId)
+        .bind(request.idempotencyKey)
         .first<ExternalDeliveryDispatchView>();
       if (claim.existing?.status === "SUCCEEDED" && existing)
         return { ok: true, value: existing, requestId: request.requestId };
@@ -650,7 +650,7 @@ export async function requestExternalDelivery(
     expectedDeliveryJobVersion: request.expectedVersion,
     clientIdempotencyKey: request.idempotencyKey,
     request: {
-      merchantOrderId: row.order_id,
+      merchantOrderId: `fm-${crypto.randomUUID()}`,
       serviceType,
       currencyCode: row.currency,
       currencyExponent: 2,

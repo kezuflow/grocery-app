@@ -1,5 +1,11 @@
 # Core D1 migrations
 
+## Current schema lifecycle
+
+The repository is pre-launch. [AGENTS.md](../../../AGENTS.md) and the [schema lifecycle policy](../../../docs/architecture/CODING_STANDARDS.md#pre-launch-schema-and-interface-policy) permit schema redesign and migration rewriting/squashing when that improves the model. Update repositories, contracts, generators, seeds, verifiers, and tests together; prove clean initialization and document which disposable databases must be recreated.
+
+An edited applied file does not upgrade an existing database. Retained/shared data requires a tested upgrade or explicitly authorized reset. After a supported production baseline exists, preserve its applied history and use forward upgrades. Historical phase descriptions below record how the current chain was built; they do not impose permanent pre-launch compatibility.
+
 > **Non-authoritative migration guide.** Numbered tracked migration files are the historical schema record; this README may lag them and does not define target architecture. The canonical target data model is `docs/architecture/DATA_MODEL.md`, while `docs/product/IMPLEMENTATION_STATUS.md` describes current implementation. Untracked or draft migrations are not accepted merely by existing in the working tree.
 
 Phase 1 adds the Better Auth-supported identity tables and application-owned customer/staff authorization tables in `0001_phase1_auth.sql`. `0002_better_auth_issuer.sql` adds the Better Auth 1.7 account issuer column and issuer/account identity index required for credential and OAuth account ownership.
@@ -107,3 +113,13 @@ Lalamove while preserving existing GrabExpress dispatch and webhook evidence.
 `0062_location_delivery_profiles.sql` gives every fulfillment/store location its own courier
 pickup profile while retaining authoritative coordinates on `fulfillment_location`. Provider-priced
 checkout fails closed until the selected store has a complete profile.
+
+## 0069 integrity boundary
+
+The policy-placement revision also removes promotion component-count uniqueness, the three promotion usage-count triggers, mode/cadence coupling CHECKs and service_fee_configuration.active_for_new_commerce. Benefit/claim/redemption identities remain unique; Core guards current stacking and usage within commitment transactions, validates supported cadence and never prices new quotes from retired fee configuration. Original historical migration boundaries remain reproducible. Update final-schema consumers with this baseline; do not apply a changed 0069 over an already-recorded 0069 without a tested forward upgrade.
+
+The owner-reviewed 0069 baseline keeps manual delivery eligibility and transition prerequisites in Core policy: no Scheduled-only trigger, manual-specific status subset or completion-status handover requirement. Assignment structure, consistent recorded timestamps, immutable history, one active/uncertain attempt and pending-cancellation exclusion remain database protections. Manual commands are still pending in alignment Phase 6. Editing this unapplied working-tree migration does not change any existing database; a retained environment that already applied an earlier 0069 requires a separately tested forward upgrade, not rerunning the edited file.
+
+0069_schema_integrity.sql is generated from the through-0068 schema by scripts/generate-schema-hardening-migration.mjs. --check verifies reproducibility without writing. It rebuilds application tables atomically with STRICT types, safe integer bounds, non-null keys and operational relationships; Better Auth storage is unchanged. All affected data is copied before any parent is dropped, including original row IDs, and restored before mutation triggers. Invalid retained data fails the migration and rolls back. Do not reset retained databases to bypass a failed constraint; validate a backed-up copy and resolve the reported data with its owning domain first. Budget temporary storage for the full application-table copies.
+
+Run pnpm migration:check for existing upgrade scenarios plus populated 0068 preservation, invalid-data rollback and hot-query plans; run Worker/D1 schema and affected command tests as runtime evidence. Current development seeds target the final schema. The catalog generator targets migration 0025 and intentionally emits that historical schema's columns; migration 0069 removes its reciprocal pool pointer.

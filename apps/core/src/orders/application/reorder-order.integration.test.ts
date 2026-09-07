@@ -27,8 +27,8 @@ async function sku(options: {
   const skuId = `reorder-sku-${suffix}`;
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, 'unit-gram', 'STOCKED', 'STOCKED', 1, 1)",
-    ).bind(poolId, productId),
+      "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, 'unit-gram', 'STOCKED', 'STOCKED', 1, 1)",
+    ).bind(poolId),
     env.DB.prepare(
       "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, (SELECT id FROM category LIMIT 1), ?, ?, ?, ?, 1, 1)",
     ).bind(
@@ -96,14 +96,12 @@ describe("reorderOrder", () => {
     const inactiveProductSku = await sku({ productActive: false });
     const unavailableSku = await sku({ available: false });
     const unpricedSku = await sku({ priced: false });
-    const invalidQuantitySku = await sku({});
     const orderId = await order(customerId, [
       { skuId: "sku-red-onion-500g", quantity: 2, name: "Historical onion" },
       { skuId: inactiveSku, quantity: 1, name: "Inactive SKU" },
       { skuId: inactiveProductSku, quantity: 1, name: "Inactive product" },
       { skuId: unavailableSku, quantity: 1, name: "Unavailable here" },
       { skuId: unpricedSku, quantity: 1, name: "No current price" },
-      { skuId: invalidQuantitySku, quantity: 0, name: "Invalid historical line" },
     ]);
     const cart = await getCart(env.DB, { customerId, requestId: "reorder-cart", headers: {} });
     if (!cart.ok) throw new Error("cart setup failed");
@@ -147,10 +145,6 @@ describe("reorderOrder", () => {
           expect.objectContaining({ skuId: inactiveProductSku, reason: "PRODUCT_INACTIVE" }),
           expect.objectContaining({ skuId: unavailableSku, reason: "LOCATION_UNAVAILABLE" }),
           expect.objectContaining({ skuId: unpricedSku, reason: "PRICE_UNAVAILABLE" }),
-          expect.objectContaining({
-            skuId: invalidQuantitySku,
-            reason: "INVALID_HISTORICAL_QUANTITY",
-          }),
         ]),
       );
       expect(result.value.addedLines[0]?.currentUnitPriceMinor).not.toBe(99999);

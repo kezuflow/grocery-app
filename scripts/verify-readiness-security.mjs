@@ -1,9 +1,9 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createScanner, LanguageVariant, SyntaxKind } from "typescript/unstable/ast";
+import { repositorySources } from "./repository-sources.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const forbiddenLogFields = new Set([
@@ -64,12 +64,7 @@ function logCallTokens(sourceTokens, startIndex) {
 
 export function analyzeSecuritySource(fileNameInput, sourceText) {
   const fileName = normalize(fileNameInput);
-  if (
-    fileName.endsWith(".d.ts") ||
-    fileName.endsWith(".test.ts") ||
-    fileName.endsWith(".integration.test.ts")
-  )
-    return [];
+  if (/\.d\.[cm]?ts$/u.test(fileName) || /\.test\.(?:[cm]?ts|tsx)$/u.test(fileName)) return [];
   const sourceTokens = tokens(sourceText);
   const violations = [];
 
@@ -148,15 +143,10 @@ export function verifyObservabilityConfig(source, name) {
   return [];
 }
 
-function trackedSources() {
-  return execFileSync("git", ["ls-files", "apps/core/src/**/*.ts", "apps/core/src/*.ts"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  })
-    .split(/\r?\n/u)
-    .filter(Boolean)
-    .map(normalize)
-    .filter((fileName) => existsSync(path.join(repositoryRoot, fileName)));
+export function verifySecuritySources(root = repositoryRoot) {
+  return repositorySources(root, ["apps/core/src"]).flatMap((fileName) =>
+    analyzeSecuritySource(fileName, readFileSync(path.join(root, fileName), "utf8")),
+  );
 }
 
 function main() {
@@ -178,9 +168,7 @@ function main() {
       ),
     );
   }
-  const violations = trackedSources().flatMap((fileName) =>
-    analyzeSecuritySource(fileName, readFileSync(path.join(repositoryRoot, fileName), "utf8")),
-  );
+  const violations = verifySecuritySources();
   for (const failure of failures) process.stderr.write(`${failure}\n`);
   for (const violation of violations) {
     process.stderr.write(

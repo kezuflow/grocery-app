@@ -11,6 +11,8 @@
 
 ## Local verification
 
+Use [TESTING.md](../architecture/TESTING.md) for the full risk-based matrix. The commands below cover deployment-specific checks; also run `pnpm check` and the relevant browser/provider acceptance before an implementation release. Test discovery, build/dry-run output, and readiness configuration do not prove an end-to-end customer journey. A Markdown-only task does not require deployment or provider activation.
+
 ```text
 pnpm naming:check
 pnpm migration:check

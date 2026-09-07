@@ -4,6 +4,10 @@
 
 The latest saved owner decisions and expanded frontend-to-backend checklist are in [COMMERCE_ALIGNMENT_E2E_PLAN.md](COMMERCE_ALIGNMENT_E2E_PLAN.md). It includes R2 product/promotion publication, location creation and address/serviceability setup, Global prices, physical warehouse transfers, customer/staff onboarding, cycle/purchasing/receiving, checkout, preparation-stage booking, Scheduled-only manual fallback, and recovery/acceptance work.
 
+The saved plan's **Core policy and database enforcement boundary** assigns changeable eligibility and workflow rules to Core commands. Alignment Phase 6 must enforce Scheduled-only manual eligibility, legal transitions, packed handover and completion evidence before exposing manual operations. Migration 0069 supplies flexible attempt storage and integrity/concurrency defenses, not permission to execute manual delivery. Other policy gates are reviewed with their owning phases and are removed from implemented paths only with equivalent guarded Core enforcement and tests.
+
+The plan's **Additional policy placement** checklist also records removal of promotion stacking constraints, usage-count triggers, cadence coupling CHECKs and the retired fee-activation flag from the final 0069 schema. Individual benefit/redemption uniqueness and atomic Core limits remain; current stacking, Weekly cadence and zero new Service Fee decisions are unchanged. These changes do not complete the wider commerce phases.
+
 Status: implementation authorized; Phase 0 reconciliation in progress, no phase yet accepted. Use that plan's Phase 0 to reconcile the canonical business documents before code changes, then its dependency sequence for the new realignment. The prior plan below records the previous baseline and does not override the newly saved owner decisions. Existing engineering-guidance changes remain in force; saving this plan does not execute a schema or application change.
 
 ## Historical Plan Record — 2026-09-05 Commerce and External Delivery Realignment
@@ -580,7 +584,7 @@ Phase 10 and Phase 1 staff/rider identity.
 ### D1/data changes
 
 - Delivery/batch/rider/event/proof tables.
-- One provider-dispatch record per DeliveryJob with request hash/snapshot, provider references,
+- Multiple historical execution attempts per DeliveryJob, with one active/uncertain attempt and immutable request hash/snapshot, provider references,
   observed provider status, attempt/error evidence, and optimistic version.
 
 ### RPC/contracts

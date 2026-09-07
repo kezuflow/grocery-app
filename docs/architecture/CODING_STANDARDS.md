@@ -10,6 +10,8 @@ Apply these rules to new work and the relevant code being changed. Report pre-ex
 
 ## Working method
 
+Use [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for task boundaries, context loading, recovery checkpoints, and evidence-based completion. Model upgrades change the harness only where there is a demonstrated need; they do not justify application rewrites or weaker acceptance criteria.
+
 - Establish the task, affected behavior, owning module, current call path, and working-tree changes before editing. Use repository evidence rather than assumptions about how a framework or old plan works.
 - Follow the owner's current instructions. Resolve routine implementation choices without repeated permission requests. Surface a material product-policy ambiguity; do not invent commercial behavior while refactoring.
 - Deliver a coherent change through affected contracts, Core, Web, persistence, and tests. Avoid unrelated cleanup, dependency upgrades, formatting churn, or phase expansion.
@@ -48,6 +50,18 @@ Type narrowing and discriminated-union behavior should follow the installed comp
 - Give a command one stable identity and each distinct effect its own derived identity. A multi-line operation must not reuse one unique ledger key across different lines or pools.
 
 ## D1 writes and concurrency
+
+### Policy versus storage integrity
+
+Core domain policies decide business eligibility and legal transitions; application commands enforce them with authorization, scope, current state and version at the write boundary. Keep changeable decisions such as delivery-mode eligibility, preparation/handover prerequisites, pricing authority, promotion eligibility/stacking, cutoff rules and transfer-route eligibility out of permanent schema triggers and method-specific lifecycle checks. Persist the facts and evidence those policies need. A rule being locked for the current release does not automatically make a database trigger its owner.
+
+Keep keys, foreign keys, typed/required fields, valid stored enums, exact quantities/money, unique operation identities, immutable committed evidence and concurrency protection in storage. For delivery, retain one active/uncertain attempt, pending-cancellation exclusion, consistent recorded timestamps and complete assignment identity. Core owns whether manual delivery is eligible and which transition may occur; the database does not require Scheduled mode or map manual status to mandatory handover evidence.
+
+Promotion uniqueness identifies the applied benefit/redemption, not how many benefits a component may receive. Core owns stacking and usage-count semantics, with limit checks inside the same transaction as the redemption and every dependent effect. Flexible stored cadence must be validated against implemented Core policy before it becomes runtime authority. Retired fee configuration is historical evidence, not a disabled-but-reactivatable setting. Do not remove a concurrency guard without a tested atomic replacement.
+
+Command-owned conditional SQL is appropriate for atomically revalidating a policy against current data; this differs from installing that policy as a global trigger. Guard the entire write set, including audit and idempotency results. Before removing an existing gate used by a live command, prove equivalent Core rejection and race safety. For an unimplemented feature, keep its entry points unavailable and record the missing command enforcement and acceptance tests in its owning phase. Do not delete legacy triggers indiscriminately or weaken corruption/recovery defenses merely because they involve multiple tables.
+
+### Atomic persistence
 
 - Bind SQL values; allow-list any dynamic identifiers or sort expressions. Select only needed columns and keep SQL in the repository/read-model layer.
 - Enforce stable invariants with database keys, uniqueness, foreign keys, and checks where appropriate, alongside application policy. Choose indexes from actual query predicates and ordering.

@@ -61,7 +61,9 @@ beforeEach(async (context) => {
     context.task.file?.name.includes("delivery-stop-id-");
   const selectedMigrations = isDeliveryMigrationTest
     ? migrations.filter((migration) => migration.name < "0043_delivery_batches_and_map_stops.sql")
-    : migrations;
+    : context.task.file?.name.endsWith("schema-upgrade.integration.test.ts")
+      ? migrations.filter((migration) => migration.name < "0069_schema_integrity.sql")
+      : migrations;
   await applyD1Migrations(env.DB, selectedMigrations);
   if (isDeliveryMigrationTest) {
     await emulateDeployedPre0043DeliverySchema();

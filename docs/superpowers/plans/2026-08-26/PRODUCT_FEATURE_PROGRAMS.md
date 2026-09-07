@@ -1,5 +1,7 @@
 # FreshMarkets Product Feature Programs
 
+> **Engineering policy update — 2026-09-07:** This dated document retains its original plan/review text. For any new coding work, [current coding standards](../../../architecture/CODING_STANDARDS.md) supersede its migration-immutability or compatibility instructions. Pre-launch schema redesign/rebasing is allowed under that lifecycle policy; this notice changes no business scope or recorded verification result.
+
 Status: APPROVED PROGRAM MAP (2026-08-26). Dependency-ordered decomposition of the approved
 product rulings D1-D11 plus the delivery-instruction, order-detail/tracking, and
 minimal-support decisions, reconciled into the canonical documents in the same change.

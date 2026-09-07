@@ -1,3 +1,4 @@
+import { seedTestInstantOrder } from "../../test-commerce-fixtures";
 import { env } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -7,6 +8,7 @@ import type {
   ProviderDelivery,
 } from "../ports/delivery-provider";
 import { requestProviderDelivery } from "./request-provider-delivery";
+import { applyProviderObservation } from "./apply-provider-observation";
 
 function request(merchantOrderId: string): CreateDeliveryRequest {
   const address = {
@@ -66,6 +68,7 @@ function request(merchantOrderId: string): CreateDeliveryRequest {
 }
 
 async function deliveryJob(id: string): Promise<void> {
+  await seedTestInstantOrder(env.DB, `order-${id}`);
   await env.DB.prepare(
     `INSERT INTO delivery_job
      (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status,
@@ -99,6 +102,65 @@ function provider(
 }
 
 describe("requestProviderDelivery", () => {
+  it("keeps failed attempts, blocks uncertain replacements and quarantines late observations from an older attempt", async () => {
+    const id = `job-history-${crypto.randomUUID()}`;
+    await deliveryJob(id);
+    const grab = provider({
+      ok: false,
+      error: { code: "PROVIDER_REJECTED", retryable: false, outcomeUnknown: false },
+    });
+    const firstRequest = request(`merchant-first-${id}`);
+    await requestProviderDelivery(env.DB, grab, {
+      requestId: "first",
+      deliveryJobId: id,
+      request: firstRequest,
+    });
+    const old = await env.DB.prepare(
+      "SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+    )
+      .bind(id)
+      .first<{ id: string }>();
+    if (!old) throw new Error("Missing failed attempt");
+    grab.create.mockResolvedValue({
+      ok: false,
+      error: { code: "TIMEOUT", retryable: false, outcomeUnknown: true },
+    });
+    const second = request(`merchant-second-${id}`);
+    await requestProviderDelivery(env.DB, grab, {
+      requestId: "second",
+      deliveryJobId: id,
+      request: second,
+    });
+    const rows = await env.DB.prepare(
+      "SELECT status,merchant_order_id,attempt_sequence FROM delivery_provider_dispatch WHERE delivery_job_id=? ORDER BY attempt_sequence",
+    )
+      .bind(id)
+      .all();
+    expect(rows.results).toEqual([
+      { status: "FAILED", merchant_order_id: firstRequest.merchantOrderId, attempt_sequence: 1 },
+      { status: "OUTCOME_UNKNOWN", merchant_order_id: second.merchantOrderId, attempt_sequence: 2 },
+    ]);
+    await requestProviderDelivery(env.DB, grab, {
+      requestId: "third",
+      deliveryJobId: id,
+      request: request(`merchant-third-${id}`),
+    });
+    expect(grab.create).toHaveBeenCalledTimes(2);
+    const before = await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+      .bind(id)
+      .first();
+    expect(
+      await applyProviderObservation(env.DB, {
+        dispatchId: old.id,
+        observedAt: Date.now(),
+        status: "PENDING_PICKUP",
+        trackingUrl: null,
+      }),
+    ).toEqual({ outcome: "RECONCILIATION_REQUIRED", reason: "DELIVERY_ATTEMPT_SUPERSEDED" });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?").bind(id).first(),
+    ).toEqual(before);
+  });
   it("persists one booking and returns it on an exact replay without calling Grab twice", async () => {
     const id = `job-provider-${crypto.randomUUID()}`;
     await deliveryJob(id);

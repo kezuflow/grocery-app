@@ -40,8 +40,7 @@ any index, projection, or performance SLO is approved.
 - Do not cache authentication or authorization across requests. Request-scoped reuse is allowed.
 - Validate every relied-on vinext server-component, cookie, link-prefetch, and Service Binding
   behavior with integration tests.
-- Make every schema/index change through an append-only migration and validate both fresh and
-  populated migration paths.
+- Apply the current schema lifecycle in `docs/architecture/CODING_STANDARDS.md`: pre-launch redesign/rebasing is allowed, clean creation is tested, and retained deployments require a tested populated upgrade path.
 - Preserve unrelated uncommitted work and execute directly on `main` under `TRUNK.md`.
 
 ## Execution phases

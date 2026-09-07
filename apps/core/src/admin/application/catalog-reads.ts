@@ -829,7 +829,7 @@ export async function listAdminInventory(
   const clauses = ["ib.location_id = ?"];
   const binds: unknown[] = [request.locationId];
   if (cursor) {
-    clauses.push("(ip.product_id > ?)");
+    clauses.push("(p.id > ?)");
     binds.push(cursor.id);
   }
   const rows = await deps.db
@@ -842,7 +842,7 @@ export async function listAdminInventory(
        JOIN product p ON p.inventory_pool_id = ip.id
        JOIN unit u ON u.id = ip.base_unit_id
        WHERE ${clauses.join(" AND ")}
-       ORDER BY ip.product_id LIMIT ?`,
+       ORDER BY p.id LIMIT ?`,
     )
     .bind(...binds, limit + 1)
     .all<AdminInventoryItem & { locationId: string }>();

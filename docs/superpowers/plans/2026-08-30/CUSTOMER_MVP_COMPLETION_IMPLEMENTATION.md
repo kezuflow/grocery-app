@@ -1,5 +1,7 @@
 # Customer MVP Completion Implementation Plan
 
+> **Engineering policy update — 2026-09-07:** This dated document retains its original plan/review text. For any new coding work, [current coding standards](../../../architecture/CODING_STANDARDS.md) supersede its migration-immutability or compatibility instructions. Pre-launch schema redesign/rebasing is allowed under that lifecycle policy; this notice changes no business scope or recorded verification result.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Complete the Core-authoritative customer MVP from membership through paid order follow-up while preserving financial truth, current-price/current-availability behavior, customer ownership, and the approved Maps address boundary.

@@ -1,5 +1,7 @@
 # Admin Slices 1–9 Canonical Remediation Design
 
+> **Engineering policy update — 2026-09-07:** This dated document retains its original plan/review text. For any new coding work, [current coding standards](../../architecture/CODING_STANDARDS.md) supersede its migration-immutability or compatibility instructions. Pre-launch schema redesign/rebasing is allowed under that lifecycle policy; this notice changes no business scope or recorded verification result.
+
 **Date:** 2026-08-29  
 **Status:** Approved direction, pending implementation-plan review  
 **Source review:** `docs/reviews/ADMIN_SLICES_1_9_REVIEW.md`

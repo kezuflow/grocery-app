@@ -220,6 +220,8 @@ A `Refund` is an explicit financial adjustment with amount, reason, state, provi
 
 An eligibility and benefit policy supporting a closed application vocabulary with database-configurable parameters. Promotions is one bounded context for order discounts and delivery discounts; it owns definitions, status/effective time, eligibility, grants, redemptions, limits, deterministic selection, and stacking. It never executes user-authored JavaScript, SQL, expressions, or a general scripting/rules engine.
 
+Stacking and usage-count semantics are Core policies. Persistence identifies each distinct benefit/redemption without limiting a component to one benefit; current Core policy still permits at most one merchandise and one delivery benefit. Usage limits are checked atomically with redemption and the whole commitment, not enforced by permanent count triggers. Historical fee configuration is evidence only, with no active-for-new-commerce switch. Cadence eligibility likewise belongs to Core; flexible stored cadence does not authorize unsupported schedules.
+
 Current-release benefit types are:
 
 - `ORDER_PERCENT_DISCOUNT`;

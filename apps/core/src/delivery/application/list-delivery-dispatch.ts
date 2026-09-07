@@ -44,7 +44,10 @@ export async function listDeliveryDispatch(
               dispatch.version AS external_version
        FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
        LEFT JOIN grocery_order o ON o.id=d.order_id
-       LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.delivery_job_id=d.id
+       LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.method='EXTERNAL' AND dispatch.id=(
+         SELECT latest.id FROM delivery_provider_dispatch latest WHERE latest.delivery_job_id=d.id
+         ORDER BY latest.attempt_sequence DESC LIMIT 1
+       )
        WHERE ${clauses.join(" AND ")} ORDER BY d.id DESC LIMIT ?`,
     )
     .bind(...binds, limit)

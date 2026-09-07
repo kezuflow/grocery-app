@@ -18,4 +18,5 @@ export type * from "./membership";
 export type * from "./payments";
 export type * from "./checkout";
 export type * from "./orders";
+export { customerOrderHistoryStates } from "./orders";
 export type * from "./operations";

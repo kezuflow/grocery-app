@@ -196,6 +196,15 @@ function evaluate(
   };
 }
 
+/** Current-release stacking policy; persistence identifies benefits independently. */
+export function permitsPromotionStack(
+  applications: readonly { component: "MERCHANDISE" | "DELIVERY" }[],
+): boolean {
+  return (
+    new Set(applications.map((application) => application.component)).size === applications.length
+  );
+}
+
 export function evaluateCheckoutPromotionCandidates(
   context: PromotionCheckoutContext,
   facts: PromotionEligibilityFacts,

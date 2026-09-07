@@ -1,3 +1,4 @@
+import { seedTestCycle } from "../../test-commerce-fixtures";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { startReceiving, type StartReceivingCommand } from "./start-receiving";
@@ -25,6 +26,7 @@ async function fixture(
 ): Promise<Fixture> {
   const requirementId = `req-${crypto.randomUUID()}`;
   const receivingRecordId = `rec-${crypto.randomUUID()}`;
+  await seedTestCycle(env.DB, `cycle-${requirementId}`);
   const {
     expected = 10,
     requirementStatus = "ORDERED",

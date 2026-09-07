@@ -4,12 +4,14 @@ This file is the enforcement and documentation router for this repository. The c
 
 ## Engineering Standards and Agent Conduct
 
+- Follow [AGENT_WORKFLOW.md](docs/architecture/AGENT_WORKFLOW.md) for task execution, focused context loading, evidence, and recovery after an interrupted task. Repository Codex defaults select GPT-6 Astra with Medium effort; explicit owner/session choices prevail. Quality requirements do not depend on the model that authored a file.
 - Read [CODING_STANDARDS.md](docs/architecture/CODING_STANDARDS.md) for implementation rules, [TESTING.md](docs/architecture/TESTING.md) for verification, and [NAMING_CONVENTIONS.md](docs/architecture/NAMING_CONVENTIONS.md) for naming. These are authoritative engineering guides routed by this file and apply across the repository, including work resumed from dated plans.
 - Ground changes in the actual call path and owning context. Inspect the working tree first, preserve unrelated work, and complete the authorized task without unrelated refactors or phase expansion.
 - Use the owner's current instructions when older documents disagree. Resolve ordinary technical choices independently; flag material business-policy uncertainty instead of inventing a rule. A coding-standards update does not adopt a separate product plan.
 - Prefer cohesive modules, clear names, explicit commands, and a small number of useful abstractions. Do not add speculative frameworks or split files merely to meet arbitrary line-count limits.
 - Validate untrusted inputs as `unknown`; use precise contracts and narrowing. Do not silence defects with `any`, double assertions, broad suppressions, swallowed errors, placeholder success, or weakened tests/checks.
 - Validate authorization, scope, state, and mutable preconditions at the Core write boundary. A rejected command must not leave partial business effects or an idempotency-success result.
+- Keep changeable eligibility and workflow policy in owning Core commands, not permanent cross-table triggers or method-specific lifecycle checks. Database constraints protect structural integrity, immutable evidence and concurrency. Follow the enforcement boundary in `CODING_STANDARDS.md`; removing a schema policy gate never authorizes a feature or replaces atomic command validation.
 - Guard the complete transaction, not just its first statement. A zero-row conditional D1 update does not fail a batch; detecting it after other writes committed is too late. Distinct effects within one command need distinct stable idempotency identities.
 - Await critical state changes. External side effects require durable intent, explicit unknown-outcome recovery, bounded retries, and provider-event deduplication; never treat a timeout as proof of failure or an inbox insert as proof of application.
 - Keep credentials, bearer URLs, provider payloads, and private contact/address snapshots out of logs in every environment. Use the existing redacting telemetry boundary and test-only integration fakes.
@@ -121,6 +123,7 @@ Keep code, contracts, seeds, generators, migration verifiers, and tests consiste
 
 ## Phase Execution Rules
 
+- Resolve the active plan by path and phase title before using a phase number; different dated plans reuse numbers. A checkpoint preserves progress and evidence, never changes canonical policy or authorizes another phase.
 - Before every implementation phase, read this file, the engineering guides, `docs/product/IMPLEMENTATION_PLAN.md`, and every relevant canonical architecture/product/design document named by this router.
 - Implement only the authorized phase. Do not silently begin a later phase or change locked business rules because another implementation is easier.
 - If implementation exposes a documentation gap, update the canonical document. Report any material business-rule change instead of assuming it.

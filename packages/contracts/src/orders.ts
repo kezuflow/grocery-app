@@ -1,5 +1,6 @@
 import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./auth";
+import { orderStates, implementedOrderStates } from "./states";
 import type {
   DeliveryJobState,
   FulfillmentState,
@@ -8,10 +9,17 @@ import type {
   RefundState,
 } from "./states";
 
+/** Canonical lifecycle plus explicitly retained historical order vocabulary. */
+export const customerOrderHistoryStates = [
+  ...orderStates,
+  ...implementedOrderStates,
+  "PAID",
+] as const;
+
 export type CustomerOrderView = {
   id: string;
   orderNumber: string;
-  status: ImplementedOrderState;
+  status: (typeof customerOrderHistoryStates)[number];
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   deliveryDate: string | null;
   promisedAt: string | null;
@@ -19,6 +27,17 @@ export type CustomerOrderView = {
   totalMinor: number;
   currency: string;
   itemCount: number;
+};
+
+export type ListCustomerOrdersRequest = AuthenticatedRequest & {
+  cursor?: string;
+  limit?: number;
+  filter?: "all" | "active" | "completed";
+};
+
+export type CustomerOrdersPage = {
+  items: ReadonlyArray<CustomerOrderView>;
+  nextCursor: string | null;
 };
 
 export type CustomerOrderLineSnapshot = {
@@ -284,9 +303,7 @@ export type AdminOrderCommandRequest = AuthenticatedRequest & {
 };
 
 export type OrdersService = {
-  listCustomerOrders(
-    request: AuthenticatedRequest,
-  ): Promise<RpcResult<ReadonlyArray<CustomerOrderView>>>;
+  listCustomerOrders(request: ListCustomerOrdersRequest): Promise<RpcResult<CustomerOrdersPage>>;
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;

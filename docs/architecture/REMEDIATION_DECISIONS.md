@@ -1,6 +1,6 @@
 # Remediation Decisions
 
-Status: authoritative decisions for Remediation Pass 1.
+Status: historical decisions for Remediation Pass 1, not current engineering policy. For new work, use `AGENTS.md`, `CODING_STANDARDS.md`, and the current canonical domain documents.
 
 This record resolves implementation ambiguity without replacing the domain specifications. `AGENTS.md`, `ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, `DATA_MODEL.md`, and `API_CONTRACTS.md` remain authoritative for their respective subjects.
 
@@ -53,6 +53,6 @@ This record resolves implementation ambiguity without replacing the domain speci
 
 ## Migration Policy
 
-- **Decision:** Existing migrations are immutable historical records by default.
+- **Historical decision:** Pass 1 kept its applied migrations unchanged. Current pre-launch work may redesign/rebase the schema under `CODING_STANDARDS.md`; retained deployments still need a tested upgrade path.
 - **Authority:** `AGENTS.md`, `DATA_MODEL.md`, and the migration README.
 - **Migration strategy:** Corrective schema changes use new numbered migrations. `0005` and `0006` are not rewritten in Pass 1.

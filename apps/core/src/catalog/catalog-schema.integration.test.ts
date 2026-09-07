@@ -29,8 +29,8 @@ async function seedChiliSku(): Promise<void> {
   for (const statement of cleanup) await statement.run();
   const statements = [
     env.DB.prepare(
-      "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES ('schema-test-pool-chili', ?, 'unit-gram', 'PLANNED_PROCUREMENT', 'PLANNED', 0, 0)",
-    ).bind(CHILI_PRODUCT_ID),
+      "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES ('schema-test-pool-chili', 'unit-gram', 'PLANNED_PROCUREMENT', 'PLANNED', 0, 0)",
+    ),
     env.DB.prepare(
       "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, description, status, created_at, updated_at) VALUES (?, 'category-fresh-produce', 'schema-test-pool-chili', 'schema-test-chili', 'Siling Labuyo', 'Fresh local chili peppers.', 'active', 0, 0)",
     ).bind(CHILI_PRODUCT_ID),

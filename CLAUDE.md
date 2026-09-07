@@ -1,43 +1,27 @@
-# FreshMarkets — Claude Working Guide
+# FreshMarkets Agent Working Guide
 
-## Before any architectural or implementation work
+Read [AGENTS.md](AGENTS.md) first. It routes the repository's architecture, business, design, and engineering rules. This file is a tool-specific entry point, not a second policy authority or a model-specific coding style.
 
-Read `AGENTS.md` first. It is the enforcement and documentation router for this
-repository and points you to the canonical document(s) relevant to the change you
-are about to make. Follow its Documentation Router and Phase Execution Rules.
+Apply [AGENT_WORKFLOW.md](docs/architecture/AGENT_WORKFLOW.md) for execution and recovery. Its workflow is shared across hosts; Codex model settings do not select a Claude model or require delegation.
 
-## Canonical documentation
+## Before editing
 
-These directories are the source of truth. Do not contradict them, and update them
-in the same change when an approved decision changes (never silently):
+1. Read [coding standards](docs/architecture/CODING_STANDARDS.md), [testing guidance](docs/architecture/TESTING.md), and the canonical documents relevant to the task through AGENTS.md.
+2. Inspect the actual implementation, manifests, tests, and working-tree changes. Dated reports and implementation status are evidence to verify, not guarantees of correctness.
+3. Follow the owner's current instructions. Preserve unrelated work and avoid expanding the task into another business plan, feature phase, or dependency upgrade.
 
-- `docs/architecture/` — runtime, repository, ownership, layering, contracts, data
-  model, and state machines.
-- `docs/product/` — product scope, phased implementation plan, and implementation
-  status.
-- `docs/design/` — admin and marketplace design and component guidance.
+## Engineering defaults
 
-This file does not restate the architecture. Read the canonical documents; do not
-rely on a summary here.
+Use clear TypeScript, narrow validated contracts, Core-owned commands, capability/scope enforcement, atomic database effects, idempotent external operations, and meaningful failure-path tests. Prefer maintainable direct code over speculative abstraction. Never weaken checks or introduce fake success to make a task appear complete.
 
-## Use the architecture-reviewer subagent
+FreshMarkets is pre-launch. Schema/interface redesign and migration rebasing are permitted when useful, with consumers/tooling/tests updated together and disposable versus retained environments identified. Do not preserve obsolete schema solely for historical compatibility. Follow the lifecycle policy in CODING_STANDARDS.md.
 
-Delegate to the `architecture-reviewer` subagent (`.claude/agents/architecture-reviewer.md`)
-for:
+## Review tooling
 
-- **Phase readiness** — before starting a new implementation phase, to decide if the
-  prerequisites are actually met (returns READY / READY AFTER SMALL FIXES / BLOCKED).
-- **Architecture reviews** — to check that work respects boundaries, ownership,
-  layering, contracts, the D1 data model, and locked business invariants.
-- **Dependency reviews** — to check phase dependencies and cross-domain coupling.
-- **Implementation-drift reviews** — to find where code and canonical documentation
-  have diverged.
+The [architecture reviewer](.claude/agents/architecture-reviewer.md) and [phase-review skill](.claude/skills/phase-review/SKILL.md) are optional tools when the requested work calls for them and the host supports them. They are not required for every edit, do not replace direct validation, and do not authorize additional agents or implementation beyond the task.
 
-The reviewer is review-only: it inspects and reports, and does not implement fixes
-unless you explicitly instruct it to afterward.
+Reviews distinguish business intent, implementation defects, documentation drift, and technical debt. Cite concrete evidence and test the failure path where appropriate. Do not make a review-only task mutate application state.
 
-## Repository shape
+## Completion
 
-pnpm monorepo. `apps/web` (vinext presentation Worker), `apps/core` (authoritative
-Worker), and shared `packages/*`. Validate changes with `pnpm check`
-(format, lint, typecheck, test, build) as described in `README.md`.
+Use [TESTING.md](docs/architecture/TESTING.md) to select checks. Run the full aggregate gate at implementation-phase completion and the relevant browser/provider checks it does not include. For Markdown-only work, check documentation integrity and conventions. Follow [TRUNK.md](TRUNK.md) for Git workflow, and report exactly what was changed and verified.

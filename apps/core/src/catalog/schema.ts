@@ -50,27 +50,22 @@ export const unit = sqliteTable(
   (table) => ({ codeUnique: uniqueIndex("unit_code_unique").on(table.code) }),
 );
 
-export const inventoryPool = sqliteTable(
-  "inventory_pool",
-  {
-    id: text("id").primaryKey(),
-    productId: text("product_id").notNull(),
-    baseUnitId: text("base_unit_id")
-      .notNull()
-      .references(() => unit.id, { onDelete: "restrict" }),
-    legacySourcingMode: text("sourcing_mode", {
-      enum: ["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"],
-    }).notNull(),
-    legacyCanonicalSourcingMode: text("canonical_sourcing_mode", {
-      enum: ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"],
-    })
-      .notNull()
-      .default("STOCKED"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-  },
-  (table) => ({ productUnique: uniqueIndex("inventory_pool_product_unique").on(table.productId) }),
-);
+export const inventoryPool = sqliteTable("inventory_pool", {
+  id: text("id").primaryKey(),
+  baseUnitId: text("base_unit_id")
+    .notNull()
+    .references(() => unit.id, { onDelete: "restrict" }),
+  legacySourcingMode: text("sourcing_mode", {
+    enum: ["STOCKED", "PLANNED_PROCUREMENT", "HYBRID"],
+  }).notNull(),
+  legacyCanonicalSourcingMode: text("canonical_sourcing_mode", {
+    enum: ["STOCKED", "PLANNED", "ON_DEMAND", "MIXED"],
+  })
+    .notNull()
+    .default("STOCKED"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
 
 export const product = sqliteTable(
   "product",

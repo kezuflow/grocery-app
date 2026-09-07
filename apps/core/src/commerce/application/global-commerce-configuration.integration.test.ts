@@ -81,6 +81,37 @@ async function seedQuote(withPayment: boolean) {
 }
 
 describe("global commerce configuration", () => {
+  it.each([
+    ["SCHEDULED", "DAILY"],
+    ["SCHEDULED", null],
+    ["INSTANT", "WEEKLY"],
+  ])(
+    "rejects unsupported stored mode/cadence (%s, %s) without opening commerce",
+    async (mode, cadence) => {
+      await env.DB.prepare(
+        "UPDATE global_commerce_configuration SET fulfillment_mode=?,cadence=? WHERE id='global'",
+      )
+        .bind(mode, cadence)
+        .run();
+      expect(await getGlobalCommerceConfiguration(env.DB, { requestId: "read" })).toMatchObject({
+        ok: false,
+        error: { code: "CONFIGURATION_ERROR" },
+      });
+      expect(await requireSellingOpen(env.DB, "checkout")).toMatchObject({
+        ok: false,
+        error: { code: "CONFIGURATION_ERROR" },
+      });
+      expect(await openSelling(env.DB, command(1))).toMatchObject({
+        ok: false,
+        error: { code: "CONFIGURATION_ERROR" },
+      });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE scope LIKE 'commerce.%'",
+        ).first(),
+      ).toEqual({ count: 0 });
+    },
+  );
   beforeEach(async () => {
     const now = Date.now();
     await env.DB.batch([

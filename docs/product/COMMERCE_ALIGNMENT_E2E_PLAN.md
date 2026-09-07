@@ -176,6 +176,39 @@ These remain open until reproduced and fixed with regression evidence. The earli
 
 ## 5. Implementation sequence
 
+### Core policy and database enforcement boundary — owner update, 2026-09-07
+
+Keep changeable business eligibility and workflow rules in the owning Core policy/command. Migration 0069 no longer adds the Scheduled-only manual trigger, the manual-specific status subset, or the completion-status requirement for handover evidence. The business decisions remain unchanged: manual fallback is Scheduled-only, handover requires completed packing, and completion requires recorded handover/completion evidence. Manual commands and UI remain unavailable until Phase 6 implements and proves these rules.
+
+Storage retains structural integrity and concurrency defenses: required assignment reason/name/phone, valid method/provider representation, consistent timestamps when recorded, foreign keys, exact numeric values, operation uniqueness, immutable attempt history, one active/uncertain attempt and pending-cancellation exclusion. Do not replace those protections with a stale pre-read. Revalidate mutable policy with command-owned guarded SQL and make every effect, audit entry and idempotency result depend on the winning claim.
+
+| Policy owned by Core | Owning phase and required work |
+| --- | --- |
+| Manual mode eligibility and method-specific transitions | Phase 6: one Delivery policy used by assignment, handover, completion/failure and legal-action reads. Use the committed job/order mode, not the current global selling mode. Reject Instant and illegal/stale transitions through direct Core calls. |
+| Preparation readiness, packed handover and completion evidence | Phases 5–6: coordinate Fulfillment/Delivery through commands, validate current packing and recorded handover before completion, and update normalized state/audit atomically. Provider evidence conflicts enter reconciliation rather than fabricated packing. |
+| Global/local price-write authority and selling eligibility | Phases 2–3: authorize capabilities/scope and revalidate activation/exact price in Core; no SQL trigger should encode staff roles or current merchandising policy. |
+| Promotion eligibility/stacking, cutoff and cancellation rules | Phases 1, 3, 5–6: use owning policies and current guarded writes; preserve payment/snapshot integrity, unique effects and stock/demand accounting. |
+| Warehouse route eligibility and inspected-surplus eligibility | Phases 4–5: authorize source/destination and operational prerequisites in Core; keep balance conservation, receipt identity and exactly-once credit enforced atomically. |
+
+At each phase, inspect relevant existing CHECKs/triggers and their actual writers. Remove a policy gate from an implemented path only together with equivalent Core enforcement and rejection/race tests. Existing legacy guards are not removed wholesale by this decision; this inventory is follow-up work, not a claim that every schema rule has been migrated to Core. Do not add a generic configurable rules engine.
+
+**Phase 6 acceptance additions:** direct RPC rejects Instant manual operations, wrong scope, stale version, handover before packing, completion without handover, and illegal transitions with no partial effects or success-idempotency entry. A global mode switch does not change an existing job's eligibility. Authorized Scheduled assignment/handover/completion/failure is reachable through real commands and replay-safe. Concurrent external/manual assignments and unresolved create/cancel outcomes cannot produce a second active delivery. Keep storage tests separate: they prove method/mode flexibility and integrity, not business permission.
+
+### Additional policy placement — owner update, 2026-09-07
+
+The following schema removals are implemented in the working-tree 0069 baseline with their current Core enforcement. They do not approve new commercial behavior or accept a whole phase.
+
+| Rule | Storage change and Core responsibility | Remaining phase acceptance |
+| --- | --- | --- |
+| Promotion stacking | Replace Quote/component and Order/amendment/component uniqueness with individual promotion-benefit identity; keep one application per redemption. Core still selects and permits at most one merchandise benefit plus one delivery benefit, validates claims and guards the current claim set at payment commitment. Redemption idempotency identifies the individual claim. | Phase 3: exercise explicit/automatic selection, snapshots, direct command rejection and replay end to end. Any future stacking policy must update calculations, allocation/refunds, DTOs and UI together before activation. |
+| Promotion usage limits | Remove global/customer/grant count triggers. Core owns counting semantics and performs current limit checks in the same transaction as redemption and all Order effects. Targeted and system grants both receive the guard; the retained trial command also guards its grant limit. | Phases 1 and 3: competing paid commitments produce one winner at the last allowed use, no partial losing Order/redemption, and stable replay. Refund/cancellation does not restore usage unless an approved policy is implemented with the corresponding atomic accounting. |
+| Scheduled cadence | Remove mode/Weekly coupling CHECKs from current and historical global configuration storage. Current Core commands still allow only Scheduled/Weekly and Instant/no-cadence. Core reads reject unsupported stored combinations before publishing configuration or allowing selling. | Phases 2 and 5: shared contracts, setup UI and cycle/window commands must agree on supported cadence; an arbitrary stored value does not make another cadence supported. |
+| Retired service-fee configuration | Remove the obsolete active_for_new_commerce flag and its constant-zero CHECK. Keep historical configuration and immutable committed fee evidence. Core Quote creation/revalidation continues to exclude new service fees. | Phases 1 and 6: prove both-mode new quotes have no fee and retained Order rendering/cancellation/refunds remain accurate. Historical configuration never becomes a selectable fee engine. |
+
+Continue the phase-owned policy review for price-write permission and activation, minimum order/serviceability/hours/cutoffs/quote expiry, booking/provider/retry policy, cancellation/refund eligibility, transfer routes/receipt authorization/surplus eligibility, and media size/format/publication. These are Core responsibilities; this list is not evidence that each was previously a database trigger. Retain foreign keys, valid stored state vocabulary, exact numeric values, immutable financial/operational evidence, stock and price-window consistency, unique external effects, and duplicate/unresolved-attempt defenses. Keep legacy retirement guards until their consuming paths are removed or equivalent safety is proven.
+
+### Phase acceptance table
+
 Every phase includes the UI/Core/contract/storage tests for the capability it completes. Do not defer all integration until the last phase.
 
 | Phase                                          | Deliverable and exit condition                                                                                                                                                                                                                                                                                                            |

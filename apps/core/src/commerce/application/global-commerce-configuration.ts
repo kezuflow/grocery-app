@@ -115,12 +115,21 @@ async function readinessBlockers(
 }
 
 async function loadStored(database: D1Database): Promise<StoredConfiguration | null> {
-  return database
+  const row = await database
     .prepare(
       `SELECT selling_state, fulfillment_mode, cadence, version
          FROM global_commerce_configuration WHERE id='global'`,
     )
-    .first<StoredConfiguration>();
+    .first<Omit<StoredConfiguration, "cadence"> & { cadence: unknown }>();
+  // Stored cadence is flexible; only implemented mode/cadence combinations may
+  // become runtime authority. Unsupported retained configuration fails closed.
+  if (
+    !row ||
+    (row.fulfillment_mode === "SCHEDULED" ? row.cadence !== "WEEKLY" : row.cadence !== null)
+  )
+    return null;
+  if (row.cadence !== null && row.cadence !== "WEEKLY") return null;
+  return { ...row, cadence: row.cadence };
 }
 
 export async function getGlobalCommerceConfiguration(

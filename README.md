@@ -1,5 +1,11 @@
 # FreshMarkets
 
+## Engineering guide
+
+Start with [AGENTS.md](AGENTS.md), [coding standards](docs/architecture/CODING_STANDARDS.md), [testing](docs/architecture/TESTING.md), and [Git workflow](TRUNK.md). The engineering standards apply to all repository work; dated plans/reports do not override them. Business decisions remain in the canonical documents routed by AGENTS.md.
+
+FreshMarkets is pre-launch: improve schema/interfaces when appropriate instead of preserving unnecessary legacy structure. Coordinate consumers, seeds, migration tooling, and tests; follow the documented disposable/retained-environment policy. A standards change alone does not redesign the database.
+
 FreshMarkets is a pnpm monorepo targeting Cloudflare Workers.
 
 > **Non-authoritative README.** This file is setup guidance and contains historical phase summaries that may lag implementation. Architecture and scope are defined only by the canonical set named in `AGENTS.md`; current implementation state is described in `docs/product/IMPLEMENTATION_STATUS.md`.

@@ -18,29 +18,34 @@ Run focused checks while iterating. At implementation-phase completion, run the 
 
 Tests should fail when the intended observable behavior is broken, not when harmless implementation details change. Prefer a small useful test over coverage percentages or assertions that restate the implementation.
 
+For agent instructions or verification-tool changes, check the changed documentation/configuration, run `pnpm harness:test`, and execute the affected guards against the working tree. Add a negative fixture when changing enforcement. Do not run unrelated application suites solely because a harness file is executable. After sufficient checks pass, rerun only for a new edit, failure, or unresolved risk; phase-completion gates still apply.
+
 ## Existing commands and their limits
 
 Run from the repository root using the Node and pnpm versions declared in `package.json`.
 
-| Command                                        | What it establishes                                                                                                                                           |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm naming:check`                            | Repository path/package/migration naming conventions.                                                                                                         |
-| `pnpm terminology:check`                       | Configured product terminology scan; not business correctness.                                                                                                |
-| `pnpm architecture:check`                      | The dependency and transport/contract boundaries implemented by the static verifier; not every architectural invariant.                                       |
-| `pnpm readiness:check`                         | Configured source-level security/readiness guards; not external account activation.                                                                           |
-| `pnpm migration:check`                         | SQLite schema application and selected migration/invariant scenarios from the current verifier scripts.                                                       |
-| `pnpm catalog:check`                           | Generated catalog artifact matches its maintained source.                                                                                                     |
-| `pnpm format:check`                            | Formatter checks for the paths declared by the root script; it does not currently cover all repository Markdown.                                              |
-| `pnpm lint`                                    | Configured Oxlint checks in apps/packages.                                                                                                                    |
-| `pnpm typecheck`                               | Workspace TypeScript checks.                                                                                                                                  |
-| `pnpm test`                                    | Workspace Vitest suites. Core's configured suite runs with the Cloudflare Workers pool and D1 migrations.                                                     |
-| `pnpm --filter @freshmarkets/web check:vinext` | Installed vinext compatibility scan.                                                                                                                          |
-| `pnpm --filter @freshmarkets/core build`       | Wrangler deployment dry run; no production deployment.                                                                                                        |
-| `pnpm --filter @freshmarkets/web build`        | Web production build; not a browser journey or deployment.                                                                                                    |
-| `pnpm --filter @freshmarkets/web test:e2e`     | Playwright execution against the configured local/managed stack.                                                                                              |
-| `pnpm check`                                   | Root aggregate gate, including formatting, conventions, migrations, HEAD commit-message validation, architecture, readiness, lint, types, Vitest, and builds. |
+| Command                                        | What it establishes                                                                                                                                                                                      |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm naming:check`                            | Repository path/package/migration naming conventions.                                                                                                                                                    |
+| `pnpm terminology:check`                       | Configured product terminology scan; not business correctness.                                                                                                                                           |
+| `pnpm architecture:check`                      | The dependency and transport/contract boundaries implemented by the static verifier; not every architectural invariant.                                                                                  |
+| `pnpm readiness:check`                         | Configured source-level security/readiness guards; not external account activation.                                                                                                                      |
+| `pnpm migration:check`                         | SQLite schema application and selected migration/invariant scenarios from the current verifier scripts.                                                                                                  |
+| `pnpm catalog:check`                           | Generated catalog artifact matches its maintained source.                                                                                                                                                |
+| `pnpm format:check`                            | Formatter checks for the paths declared by the root script; it does not currently cover all repository Markdown.                                                                                         |
+| `pnpm lint`                                    | Configured Oxlint checks in apps/packages.                                                                                                                                                               |
+| `pnpm typecheck`                               | Workspace TypeScript checks.                                                                                                                                                                             |
+| `pnpm test`                                    | Workspace Vitest suites. Core's configured suite runs with the Cloudflare Workers pool and D1 migrations.                                                                                                |
+| `pnpm harness:test`                            | Node test suites under `scripts/*.test.mjs`, including architecture/security diagnostics, Git source discovery, naming, and readiness-tool regressions. These are distinct from workspace Vitest suites. |
+| `pnpm --filter @freshmarkets/web check:vinext` | Installed vinext compatibility scan.                                                                                                                                                                     |
+| `pnpm --filter @freshmarkets/core build`       | Wrangler deployment dry run; no production deployment.                                                                                                                                                   |
+| `pnpm --filter @freshmarkets/web build`        | Web production build; not a browser journey or deployment.                                                                                                                                               |
+| `pnpm --filter @freshmarkets/web test:e2e`     | Playwright execution against the configured local/managed stack.                                                                                                                                         |
+| `pnpm check`                                   | Root aggregate gate, including formatting, conventions, migrations, HEAD commit-message validation, architecture, readiness, lint, types, Vitest, and builds.                                            |
 
-`pnpm check` does not include `catalog:check`, `check:vinext`, binding freshness, provider sandbox acceptance, or Playwright. Add the relevant checks rather than treating the aggregate as universal proof. `pnpm commit:check` validates the existing HEAD; it does not validate uncommitted content or a future commit message.
+`pnpm check` also runs `harness:test`. It does not include `catalog:check`, `check:vinext`, binding freshness, provider sandbox acceptance, or Playwright. Add the relevant checks rather than treating the aggregate as universal proof. `pnpm commit:check` validates the existing HEAD; it does not validate uncommitted content or a future commit message.
+
+Architecture source discovery includes tracked and non-ignored untracked files under `apps` and `packages`; security source discovery covers `apps/core/src`. Both read working-tree content, exclude declaration files and local deletions, and fail if Git enumeration fails. Security telemetry analysis excludes test files. These static checks do not establish runtime authorization, alias resolution completeness, or end-to-end security. Their Node fixtures run in temporary Git repositories, never by staging test violations in the user's checkout.
 
 Local Git hooks enforce only their configured convention checks. There are no GitHub Actions checks. Hook success does not mean tests, types, builds, or business acceptance passed.
 

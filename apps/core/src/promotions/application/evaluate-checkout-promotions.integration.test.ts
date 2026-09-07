@@ -39,60 +39,8 @@ function checkoutContext(customerId: string, requestedCodes: readonly string[] =
 }
 
 describe("D1 checkout promotion evaluation", () => {
-  it("enforces global, customer, and grant usage limits at the write boundary", async () => {
-    const customerId = await seedCustomer();
-    const otherCustomerId = await seedCustomer();
-    const suffix = crypto.randomUUID();
-    const promotionId = `limited-${suffix}`;
-    const grantId = `limited-grant-${suffix}`;
-    const now = Date.now();
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO promotion
-         (id,code,name,description,status,benefit_type,discount_minor,minimum_minor,starts_at,
-          global_usage_limit,per_customer_usage_limit,automatic,priority,version,created_at,updated_at)
-         VALUES (?,?,'Limited','', 'ACTIVE','ORDER_FIXED_DISCOUNT',100,0,?,2,1,0,0,1,?,?)`,
-      ).bind(promotionId, `LIMIT_${suffix}`, now - 1, now, now),
-      env.DB.prepare(
-        `INSERT INTO promotion_grant
-         (id,benefit_code,benefit_type,max_redemptions,status,customer_id,parameters_json,created_at,updated_at)
-         VALUES (?,?,'ORDER_FIXED_DISCOUNT',3,'ACTIVE',NULL,'{}',?,?)`,
-      ).bind(grantId, `LIMIT_${suffix}`, now, now),
-    ]);
-    const redemption = (id: string, customer: string) =>
-      env.DB.prepare(
-        `INSERT INTO promotion_redemption
-           (id,grant_id,benefit_code,benefit_type,customer_id,subject_type,subject_id,redeemed_at,promotion_id)
-           VALUES (?,?,?,'ORDER_FIXED_DISCOUNT',?,'grocery_order',?, ?,?)`,
-      ).bind(id, grantId, `LIMIT_${suffix}`, customer, `subject-${id}`, now, promotionId);
-    await redemption(`redemption-1-${suffix}`, customerId).run();
-    await expect(redemption(`redemption-customer-${suffix}`, customerId).run()).rejects.toThrow(
-      "PROMOTION_CUSTOMER_USAGE_LIMIT_REACHED",
-    );
-    await redemption(`redemption-2-${suffix}`, otherCustomerId).run();
-    const thirdCustomer = await seedCustomer();
-    await expect(redemption(`redemption-global-${suffix}`, thirdCustomer).run()).rejects.toThrow(
-      "PROMOTION_GLOBAL_USAGE_LIMIT_REACHED",
-    );
-    const grantOnlyId = `grant-only-${suffix}`;
-    await env.DB.prepare(
-      `INSERT INTO promotion_grant
-       (id,benefit_code,benefit_type,max_redemptions,status,customer_id,parameters_json,created_at,updated_at)
-       VALUES (?,'GRANT_ONLY','ORDER_FIXED_DISCOUNT',1,'ACTIVE',NULL,'{}',?,?)`,
-    )
-      .bind(grantOnlyId, now, now)
-      .run();
-    const grantRedemption = (id: string, customer: string) =>
-      env.DB.prepare(
-        `INSERT INTO promotion_redemption
-           (id,grant_id,benefit_code,benefit_type,customer_id,subject_type,subject_id,redeemed_at)
-           VALUES (? ,?,'GRANT_ONLY','ORDER_FIXED_DISCOUNT',?,'grocery_order',?,?)`,
-      ).bind(id, grantOnlyId, customer, `subject-${id}`, now);
-    await grantRedemption(`grant-redemption-1-${suffix}`, customerId).run();
-    await expect(
-      grantRedemption(`grant-redemption-2-${suffix}`, otherCustomerId).run(),
-    ).rejects.toThrow("PROMOTION_GRANT_USAGE_LIMIT_REACHED");
-  });
+  // Redemption-limit races are exercised through actual payment commitment in
+  // orders/application/apply-checkout-payment-reaction.integration.test.ts.
   it("combines explicit, automatic, targeted, rule, and usage evidence without redemption", async () => {
     const customerId = await seedCustomer();
     const now = Date.now();

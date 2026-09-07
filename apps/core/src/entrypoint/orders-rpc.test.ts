@@ -4,6 +4,16 @@ import { createCoreRpcContext } from "./context";
 import { createOrdersRpc } from "./orders-rpc";
 
 describe("Orders RPC adapter", () => {
+  it("validates page bounds and preserves authentication", async () => {
+    const rpc = createOrdersRpc(createCoreRpcContext(env));
+    for (const limit of [0, 101, 0.5])
+      expect(
+        await rpc.listCustomerOrders({ requestId: "history", headers: {}, limit }),
+      ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await rpc.listCustomerOrders({ requestId: "history", headers: {}, limit: 25 }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
+  });
   it("preserves customer authorization failure", async () => {
     const rpc = createOrdersRpc(createCoreRpcContext(env));
     const result = await rpc.listCustomerOrders({ requestId: "orders-adapter", headers: {} });

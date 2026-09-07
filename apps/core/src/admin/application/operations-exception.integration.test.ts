@@ -21,7 +21,7 @@ describe("converged operational exceptions", () => {
       await env.DB.batch([
         env.DB.prepare(
           "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version, created_at, updated_at) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1, ?, ?)",
-        ).bind(requirementId, `cycle-${requirementId}`, at, at),
+        ).bind(requirementId, "cycle-next-cebu", at, at),
         env.DB.prepare(
           "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version, created_at, updated_at) VALUES (?, ?, 10, 8, 2, 'DISCREPANCY', 1, ?, ?)",
         ).bind(id, requirementId, at, at),
@@ -80,7 +80,7 @@ describe("converged operational exceptions", () => {
         `INSERT INTO procurement_requirement
           (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version)
          VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1)`,
-      ).bind(firstRequirementId, `cycle-first-${suffix}`),
+      ).bind(firstRequirementId, "cycle-next-cebu"),
       env.DB.prepare(
         `INSERT INTO supply_exception
           (id, requirement_id, kind, affected_quantity, status, created_at, version)
@@ -96,7 +96,7 @@ describe("converged operational exceptions", () => {
         `INSERT INTO procurement_requirement
           (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version)
          VALUES (?, ?, ?, 'pool-red-onion', 10, 'ORDERED', 1)`,
-      ).bind(secondRequirementId, `cycle-second-${suffix}`, secondLocationId),
+      ).bind(secondRequirementId, "cycle-next-cebu", secondLocationId),
       env.DB.prepare(
         `INSERT INTO supply_exception
           (id, requirement_id, kind, affected_quantity, status, created_at, version)
@@ -147,7 +147,7 @@ describe("converged operational exceptions", () => {
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1)",
-      ).bind(requirementId, `cycle-${suffix}`),
+      ).bind(requirementId, "cycle-next-cebu"),
       env.DB.prepare(
         "INSERT INTO supply_exception (id, requirement_id, kind, affected_quantity, status, created_at, version) VALUES (?, ?, 'SHORTAGE', 5, 'OPEN', ?, 1)",
       ).bind(`supply-${suffix}`, requirementId, Date.now()),

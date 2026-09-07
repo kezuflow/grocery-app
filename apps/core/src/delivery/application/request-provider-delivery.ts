@@ -87,7 +87,7 @@ async function sha256(value: string): Promise<string> {
 
 async function readDispatch(database: D1Database, id: string): Promise<DispatchRow | null> {
   return database
-    .prepare(`SELECT ${COLUMNS} FROM delivery_provider_dispatch WHERE id=?`)
+    .prepare(`SELECT ${COLUMNS} FROM delivery_provider_dispatch WHERE id=? AND method='EXTERNAL'`)
     .bind(id)
     .first<DispatchRow>();
 }
@@ -111,7 +111,13 @@ export async function requestProviderDelivery(
 ): Promise<RequestProviderDeliveryResult> {
   const requestSnapshot = JSON.stringify(command.request);
   const requestHash = await sha256(requestSnapshot);
-  const dispatchId = `dispatch:${provider.code}:${command.deliveryJobId}`;
+  const attemptIdentity = await sha256(
+    JSON.stringify([
+      command.deliveryJobId,
+      command.clientIdempotencyKey ?? command.request.merchantOrderId,
+    ]),
+  );
+  const dispatchId = `dispatch:${provider.code}:${attemptIdentity}`;
   const now = Date.now();
 
   await database
@@ -119,10 +125,16 @@ export async function requestProviderDelivery(
       `INSERT OR IGNORE INTO delivery_provider_dispatch
        (id, delivery_job_id, provider, merchant_order_id, request_hash,
         request_snapshot_json, status, attempt_count, version, created_at, updated_at,
-        client_idempotency_key)
-       SELECT ?, ?, ?, ?, ?, ?, 'PENDING', 0, 1, ?, ?, ?
+        client_idempotency_key,attempt_sequence)
+       SELECT ?, ?, ?, ?, ?, ?, 'PENDING', 0, 1, ?, ?, ?,
+         (SELECT COALESCE(MAX(previous.attempt_sequence),0)+1 FROM delivery_provider_dispatch previous WHERE previous.delivery_job_id=job.id)
        FROM delivery_job job
-       WHERE job.id=? AND (
+       WHERE job.id=? AND NOT EXISTS (
+         SELECT 1 FROM delivery_provider_command pending
+         JOIN delivery_provider_dispatch previous ON previous.id=pending.dispatch_id
+         WHERE previous.delivery_job_id=job.id AND pending.operation='CANCEL'
+           AND pending.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')
+       ) AND (
          ? IS NULL OR (
            job.version=? AND job.status IN ('UNASSIGNED','RETRY_SCHEDULED')
            AND job.batch_id IS NULL AND job.rider_id IS NULL

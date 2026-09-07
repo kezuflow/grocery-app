@@ -41,6 +41,9 @@ export default defineConfig({
     }),
   ],
   test: {
+    // Bound concurrent workerd instances: each integration file creates and
+    // upgrades the full D1 schema. Unbounded parallel runs can exhaust the host.
+    maxWorkers: 2,
     // Migration-heavy Worker/D1 integration fixtures can approach Vitest's
     // five-second default under full-suite parallel load; retain a bounded
     // timeout without making those checks scheduler-sensitive.

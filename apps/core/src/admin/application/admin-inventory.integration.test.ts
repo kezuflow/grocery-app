@@ -99,8 +99,8 @@ async function seedInventory(): Promise<{ productId: string; poolId: string }> {
       "INSERT INTO unit (id, code, name, dimension, symbol, created_at) VALUES (?, ?, 'Gram', 'MASS', 'g', ?)",
     ).bind(unitGramId, `GRAM_I_${crypto.randomUUID().slice(0, 12)}`, now),
     env.DB.prepare(
-      "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
-    ).bind(poolId, productId, unitGramId, now, now),
+      "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', ?, ?)",
+    ).bind(poolId, unitGramId, now, now),
     env.DB.prepare(
       "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
     ).bind(

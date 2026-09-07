@@ -233,10 +233,10 @@ describe("external delivery request", () => {
     };
     expect((await requestExternalDelivery(dependenciesWithProvider, booking)).ok).toBe(false);
     const dispatch = await env.DB.prepare(
-      "SELECT id,version FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      "SELECT id,version,merchant_order_id FROM delivery_provider_dispatch WHERE delivery_job_id=?",
     )
       .bind(delivery.jobId)
-      .first<{ id: string; version: number }>();
+      .first<{ id: string; version: number; merchant_order_id: string }>();
     expect(dispatch).not.toBeNull();
     if (!dispatch) return;
     const refresh = {
@@ -261,7 +261,7 @@ describe("external delivery request", () => {
         .bind(dispatch.id)
         .first(),
     ).toEqual({ provider_delivery_id: null });
-    observation.merchantOrderId = delivery.orderId;
+    observation.merchantOrderId = dispatch.merchant_order_id;
     const forbidden = await refreshExternalDelivery(
       { ...dependenciesWithProvider, accessContext: accessContext(["delivery.read"]) },
       { ...refresh, idempotencyKey: crypto.randomUUID() },
@@ -522,7 +522,7 @@ describe("external delivery request", () => {
         ok: true as const,
         value: {
           providerDeliveryId: "lala-order-1",
-          merchantOrderId: delivery.orderId,
+          merchantOrderId: create.mock.calls[0]?.[0].merchantOrderId ?? "missing-booking",
           status: "IN_DELIVERY" as const,
           trackingUrl: "https://share.example/lala-order-1",
           pickupPin: null,
@@ -557,7 +557,7 @@ describe("external delivery request", () => {
         .first(),
     ).resolves.toEqual({ status: "ASSIGNED", version: 2 });
     expect(create.mock.calls[0]?.[0]).toMatchObject({
-      merchantOrderId: delivery.orderId,
+      merchantOrderId: expect.stringMatching(/^fm-/),
       serviceType: "MOTORCYCLE",
       packages: [{ kind: "BAG", quantity: 1, weightGrams: 1000 }],
       sender: { name: "FreshMarkets Central Cebu", phoneE164: "+639171110000" },

@@ -116,8 +116,8 @@ async function seedProduct(): Promise<{
       "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Kilogram', 'MASS', 'kg', 'GRAM', 1000, 1, 'active', 1, ?, ?)",
     ).bind(unitKgId, `KG_T_${crypto.randomUUID().slice(0, 12)}`, now, now),
     env.DB.prepare(
-      "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
-    ).bind(poolId, productId, unitGramId, now, now),
+      "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', ?, ?)",
+    ).bind(poolId, unitGramId, now, now),
     env.DB.prepare(
       "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
     ).bind(
@@ -621,8 +621,8 @@ describe("catalog administration", () => {
       const poolId = crypto.randomUUID();
       productStatements.push(
         env.DB.prepare(
-          "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
-        ).bind(poolId, productId, seeded.unitGramId, now + index, now + index),
+          "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', ?, ?)",
+        ).bind(poolId, seeded.unitGramId, now + index, now + index),
         env.DB.prepare(
           "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         ).bind(
@@ -1173,8 +1173,8 @@ describe("catalog administration", () => {
         "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Piece', 'COUNT', 'pc', 'PIECE', 1, 1, 'active', 1, ?, ?)",
       ).bind(pieceUnitId, `PC_${crypto.randomUUID().slice(0, 12)}`, now, now),
       env.DB.prepare(
-        "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', ?, ?)",
-      ).bind(poolId, productId, pieceUnitId, now, now),
+        "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', ?, ?)",
+      ).bind(poolId, pieceUnitId, now, now),
       env.DB.prepare(
         "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Chili Pepper Pack', 'active', ?, ?)",
       ).bind(productId, categoryId, poolId, `chili-${crypto.randomUUID().slice(0, 12)}`, now, now),

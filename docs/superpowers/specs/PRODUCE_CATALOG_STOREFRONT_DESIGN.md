@@ -1,5 +1,7 @@
 # Produce Catalog Storefront Design
 
+> **Engineering policy update — 2026-09-07:** This dated document retains its original plan/review text. For any new coding work, [current coding standards](../../architecture/CODING_STANDARDS.md) supersede its migration-immutability or compatibility instructions. Pre-launch schema redesign/rebasing is allowed under that lifecycle policy; this notice changes no business scope or recorded verification result.
+
 ## Status and authority
 
 This specification defines the approved expansion of the FreshMarkets catalog from the current curated subset to every image in `apps/web/public/produce`, with D1-backed product identity, categories, fixed sellable variants, product and variant details, mock Metro Cebu prices, Cebu availability, and media metadata returned through Core.

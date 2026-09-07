@@ -1,3 +1,4 @@
+import { seedTestCycle } from "../../test-commerce-fixtures";
 import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
@@ -67,6 +68,12 @@ async function seedStaff(capability: string, scope: "global" | "location") {
 }
 
 async function seedProcurementRequirement(cycleId: string, suffix: string): Promise<string> {
+  await seedTestCycle(env.DB, cycleId);
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO inventory_pool(id,base_unit_id,sourcing_mode,created_at,updated_at) VALUES (?,'unit-gram','STOCKED',1,1)",
+  )
+    .bind(`pool-page-${suffix}`)
+    .run();
   const id = `requirement-page-${suffix}-${crypto.randomUUID().slice(0, 8)}`;
   await env.DB.prepare(
     "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, ?, 'location-cebu-central', ?, 100, 'ORDERED', 1)",

@@ -25,6 +25,39 @@ function command(customerId: string): StartPromotionalTrialCommand {
 }
 
 describe("promotions-owned introductory trial", () => {
+  it("retains an atomic grant limit on the legacy trial command without a usage trigger", async () => {
+    const customers = [await seedCustomer(), await seedCustomer()];
+    const original = await env.DB.prepare(
+      "SELECT max_redemptions FROM promotion_grant WHERE id='grant-introductory-trial'",
+    ).first<{ max_redemptions: number }>();
+    if (!original) throw new Error("Missing trial grant");
+    try {
+      await env.DB.prepare(
+        "UPDATE promotion_grant SET max_redemptions=1 WHERE id='grant-introductory-trial'",
+      ).run();
+      const outcomes = await Promise.all(
+        customers.map((customer) => startPromotionalTrial(env.DB, command(customer))),
+      );
+      expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+      const loser = customers[outcomes.findIndex((result) => !result.ok)];
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM subscription WHERE customer_id=?")
+          .bind(loser)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM promotion_redemption WHERE grant_id='grant-introductory-trial'",
+        ).first(),
+      ).toEqual({ count: 1 });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE promotion_grant SET max_redemptions=? WHERE id='grant-introductory-trial'",
+      )
+        .bind(original.max_redemptions)
+        .run();
+    }
+  });
   it("creates a trialing subscription with an exact calendar-month end", async () => {
     const customerId = await seedCustomer();
     const before = Date.now();

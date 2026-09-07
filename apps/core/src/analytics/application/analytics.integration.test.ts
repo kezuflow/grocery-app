@@ -430,8 +430,8 @@ describe("Core Analytics reads", () => {
           now,
         ),
         env.DB.prepare(
-          "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, ?, 'STOCKED', 'STOCKED', ?, ?)",
-        ).bind(poolId, productId, unitId, now, now),
+          "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', 'STOCKED', ?, ?)",
+        ).bind(poolId, unitId, now, now),
         env.DB.prepare(
           "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
         ).bind(

@@ -531,10 +531,10 @@ export async function createAdminProduct(
       deps.db
         .prepare(
           `INSERT INTO inventory_pool
-             (id, product_id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at)
-           VALUES (?, ?, ?, 'STOCKED', 'STOCKED', ?, ?)`,
+             (id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at)
+           VALUES (?, ?, 'STOCKED', 'STOCKED', ?, ?)`,
         )
-        .bind(inventoryPoolId, productId, request.inventoryBaseUnitId, now, now),
+        .bind(inventoryPoolId, request.inventoryBaseUnitId, now, now),
       deps.db
         .prepare(
           `INSERT INTO product

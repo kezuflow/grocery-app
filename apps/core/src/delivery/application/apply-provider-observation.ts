@@ -90,7 +90,7 @@ export async function applyProviderObservation(
 ): Promise<ApplyResult> {
   const dispatch = await database
     .prepare(`SELECT id,merchant_order_id,version,provider_observed_at,provider_status_rank,provider_status
-    FROM delivery_provider_dispatch WHERE id=?`)
+    FROM delivery_provider_dispatch WHERE id=? AND method='EXTERNAL'`)
     .bind(observation.dispatchId)
     .first<{
       id: string;
@@ -127,6 +127,13 @@ export async function applyProviderObservation(
     return { outcome: "RECONCILIATION_REQUIRED", reason };
   };
   if (!dispatch) return defer("DELIVERY_DISPATCH_NOT_FOUND");
+  const currentAttemptSql = `SELECT 1 FROM delivery_provider_dispatch current
+    WHERE current.id=? AND NOT EXISTS (
+      SELECT 1 FROM delivery_provider_dispatch newer
+      WHERE newer.delivery_job_id=current.delivery_job_id AND newer.attempt_sequence>current.attempt_sequence
+    )`;
+  if (!(await database.prepare(currentAttemptSql).bind(dispatch.id).first()))
+    return defer("DELIVERY_ATTEMPT_SUPERSEDED");
   if (options.inboxId) {
     const applied = await database
       .prepare(
@@ -183,6 +190,13 @@ export async function applyProviderObservation(
   if (orderStatus && !(await database.prepare(packedOrderSql).bind(dispatch.id).first()))
     return defer("DELIVERY_PACKING_NOT_COMPLETE");
   const statements: D1PreparedStatement[] = [];
+  statements.push(
+    database
+      .prepare(
+        `INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (${currentAttemptSql})`,
+      )
+      .bind(dispatch.id),
+  );
   if (options.inboxId)
     statements.push(
       database

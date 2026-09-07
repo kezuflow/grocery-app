@@ -279,7 +279,7 @@ fresh.close();
 const populated = database();
 apply(
   populated,
-  migrations.filter((migration) => migration.name <= "0020_email_auth.sql"),
+  migrations.filter((migration) => migration.name <= "0020_membership_renewal_dunning.sql"),
 );
 populated.exec(`
   INSERT INTO customer (id, auth_user_id, status, created_at, updated_at)

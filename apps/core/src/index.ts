@@ -2398,7 +2398,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.paymentsRpc.createPaymentIntent(input);
   }
 
-  async listCustomerOrders(input: AuthenticatedRequest) {
+  async listCustomerOrders(input: import("@freshmarkets/contracts").ListCustomerOrdersRequest) {
     return this.ordersRpc.listCustomerOrders(input);
   }
 

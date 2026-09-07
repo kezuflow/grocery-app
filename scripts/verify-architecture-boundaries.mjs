@@ -1,9 +1,9 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createScanner, LanguageVariant, SyntaxKind } from "typescript/unstable/ast";
+import { repositorySources } from "./repository-sources.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -19,8 +19,6 @@ const messages = {
   ENTRYPOINT_SQL: "Core entrypoint adapters must delegate instead of executing SQL",
   CONTRACT_EXPORTS_ROW: "Shared contracts must export DTOs and read models, not database row types",
 };
-
-const productionSourcePattern = /^(apps|packages)\/.*\.(?:[cm]?ts|tsx)$/;
 
 // Provider construction belongs only at Worker/scheduler composition roots.
 // Application and domain code consume the Payments-owned registry port.
@@ -183,7 +181,7 @@ export function analyzeSourceFile(fileNameInput, sourceText) {
         const token = tokens[index + offset];
         if (offset > 1 && token.kind === SyntaxKind.ExportKeyword) break;
         if (token.kind === SyntaxKind.SemicolonToken) break;
-        if (token.kind === SyntaxKind.Identifier && /Row$/u.test(token.text)) {
+        if (token.kind === SyntaxKind.Identifier && token.text.endsWith("Row")) {
           add("CONTRACT_EXPORTS_ROW", token.start);
           break;
         }
@@ -196,24 +194,9 @@ export function analyzeSourceFile(fileNameInput, sourceText) {
   );
 }
 
-export function trackedProductionSources() {
-  return execFileSync("git", ["ls-files", "-z", "--", "apps", "packages"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  })
-    .split("\0")
-    .map(normalizeFileName)
-    .filter(
-      (fileName) =>
-        productionSourcePattern.test(fileName) &&
-        !fileName.endsWith(".d.ts") &&
-        existsSync(path.join(repositoryRoot, fileName)),
-    );
-}
-
-export function verifyRepository() {
-  return trackedProductionSources().flatMap((fileName) =>
-    analyzeSourceFile(fileName, readFileSync(path.join(repositoryRoot, fileName), "utf8")),
+export function verifyRepository(root = repositoryRoot) {
+  return repositorySources(root, ["apps", "packages"]).flatMap((fileName) =>
+    analyzeSourceFile(fileName, readFileSync(path.join(root, fileName), "utf8")),
   );
 }
 
@@ -225,6 +208,6 @@ if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
     }
     process.exitCode = 1;
   } else {
-    console.log("Architecture boundaries verified for tracked TypeScript sources.");
+    console.log("Architecture boundaries verified for tracked and untracked TypeScript sources.");
   }
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { seedTestCycle } from "../../test-commerce-fixtures";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
@@ -99,6 +100,7 @@ describe("admin operations commands", () => {
   it("records accepted/rejected base-unit deltas through the guarded receiving command", async () => {
     const { cookie } = await manager(["procurement.manage"]),
       id = crypto.randomUUID();
+    await seedTestCycle(env.DB, "cycle-ops");
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, 'cycle-ops', 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1)",

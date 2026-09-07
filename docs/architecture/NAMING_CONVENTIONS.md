@@ -1,6 +1,8 @@
 # FreshMarkets Naming Conventions
 
-Repository path, migration, documentation, and workspace-package conventions are enforced locally by `pnpm naming:check`. The checker is intentionally structural and dependency-free so it can run early in CI. TypeScript identifier casing remains enforced through TypeScript, linting, and review.
+See [CODING_STANDARDS.md](CODING_STANDARDS.md) for code structure and [TESTING.md](TESTING.md) for validation. Naming checks enforce paths and package names, not correctness or arbitrary function/file-length limits.
+
+Repository path, migration, documentation, and workspace-package conventions are enforced locally by `pnpm naming:check`. The checker is intentionally structural and dependency-free so it can run early in local verification. TypeScript identifier casing remains enforced through TypeScript, linting, and review.
 
 ## Files And Directories
 
@@ -22,7 +24,7 @@ Repository path, migration, documentation, and workspace-package conventions are
 
 ## Verification Scope
 
-The local checker validates source/config/documentation paths and package manifests while ignoring generated output, dependencies, caches, and local runtime state. It reports every violation with the expected rule and exits non-zero so it can gate commits and GitHub Actions.
+The local checker validates source/config/documentation paths and package manifests while ignoring generated output, dependencies, caches, and local runtime state. It reports every violation with the expected rule and exits non-zero so it can gate local commits and pushes. There are no GitHub Actions checks; see `TRUNK.md`.
 
 ## Commit Messages
 

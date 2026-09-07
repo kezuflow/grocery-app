@@ -23,9 +23,16 @@ export function claimIntroductoryTrialRedemption(
 ): D1PreparedStatement {
   return database
     .prepare(
-      "INSERT INTO promotion_redemption (id, grant_id, benefit_code, benefit_type, customer_id, subject_type, subject_id, redeemed_at) VALUES (?, ?, ?, 'MEMBERSHIP_FEE_WAIVER', ?, ?, ?, ?)",
+      `INSERT INTO promotion_redemption (id, grant_id, benefit_code, benefit_type, customer_id, subject_type, subject_id, redeemed_at)
+       VALUES (CASE WHEN EXISTS (
+         SELECT 1 FROM promotion_grant g WHERE g.id=? AND g.status='ACTIVE'
+           AND (g.customer_id IS NULL OR g.customer_id=?)
+           AND (SELECT COUNT(*) FROM promotion_redemption r WHERE r.grant_id=g.id)<g.max_redemptions
+       ) THEN ? ELSE NULL END, ?, ?, 'MEMBERSHIP_FEE_WAIVER', ?, ?, ?, ?)`,
     )
     .bind(
+      INTRO_TRIAL_GRANT_ID,
+      input.customerId,
       input.redemptionId,
       INTRO_TRIAL_GRANT_ID,
       INTRO_TRIAL_BENEFIT_CODE,

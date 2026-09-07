@@ -175,6 +175,8 @@ is never treated as proof of serviceability.
 
 ## Global Commerce Configuration
 
+Core validates current mode/cadence policy on writes and rejects unsupported stored combinations on reads and new-commerce eligibility. Removing cadence CHECK coupling does not widen the public contract: Scheduled remains Weekly, Instant has no cadence. Promotion stacking and usage limits are likewise Core-owned; flexible benefit persistence does not widen current accepted stacks, and redemption guards share the commitment transaction. Historical service-fee configuration has no activation command or flag for new commerce.
+
 `getGlobalCommerceConfiguration`, `pauseSelling`, `activateGlobalFulfillmentMode`, and `openSelling` require global scope and the existing fulfillment read/manage capability. Mutations require expected version, reason and stable idempotency. Mode changes require PAUSED. Readiness evaluates customer-serving locations only; inventory-only warehouses neither serve customers nor block reopening for missing courier/packing settings.
 
 Membership, trial, subscription pricing, recurring authorization and membership payment contracts are retired from the active release. No checkout method requires a Subscription.
@@ -403,7 +405,7 @@ The Admin Order list exposes the committed Order number, immutable recipient lab
 
 Refund availability subtracts every reserved refund amount in `REQUESTED`, `PROCESSING`, `ESCALATED`, or `SUCCEEDED` before accepting another request. The guarded refund mutation, Audit event, and idempotency completion share one atomic D1 batch, so concurrent requests cannot over-refund or record a false success. Reconciliation resolution is an explicit confirmed Admin command; downstream payment-reaction redrive remains Core-owned scheduled work rather than a second Admin retry authority.
 
-Operational command/read contracts publish the canonical Fulfillment (`NOT_STARTED` through `COMPLETED`, with `SHORTED` resolution) and Delivery Job (`UNASSIGNED` through `DELIVERED`, with explicit failure/retry/escalation) states and command actions. Core derives `allowedActions`; the former `START|PACK|SHORTAGE` and `DISPATCH|DELIVER|FAIL` shortcuts are not accepted. Procurement aggregation computes exact paid Scheduled demand without physical-stock netting inside its version-guarded command and permits only one active requirement per cycle/location/pool. Order issues have no `REOPEN` action: `RESOLVED` is terminal and further work requires a new linked issue.
+Operational command/read contracts publish the canonical Fulfillment (`NOT_STARTED` through `COMPLETED`, with `SHORTED` resolution) and Delivery Job (`UNASSIGNED` through `DELIVERED`, with explicit failure/retry/escalation) states and command actions. Core derives `allowedActions`; the former `START|PACK|SHORTAGE` and `DISPATCH|DELIVER|FAIL` shortcuts are not accepted. Procurement aggregation computes exact paid Scheduled demand without physical-stock netting inside its version-guarded command and permits one requirement per exact procurement run/SKU, including closed requirements. Order issues have no `REOPEN` action: `RESOLVED` is terminal and further work requires a new linked issue.
 
 ## Admin Customers, Catalog, Promotions, and Fulfillment Configuration
 
@@ -726,6 +728,7 @@ These target contracts supersede conflicting historical implementation descripti
 - Global cycle/window authoring includes open/cutoff/purchase/preparation/pickup/arrival instants and participation. Procurement aggregate/approve/purchase/start receiving/record/resolve/complete form a reachable command sequence. Scheduled receipt/packing targets cycle goods; inspected surplus release is an explicit audited command.
 - Preparation start locks Order cancellation atomically. Booking requires Instant picked/checked + packing started, or Scheduled checked receipts + credible ready time. Packed completion consumes the appropriate stock/allocation exactly once. Normal handover rejects unpacked goods.
 - Scheduled manual assignment requires reason, person name/phone and definite closure of any prior attempt. Manual handover/completion/failure is versioned and audited; unknown cost remains unavailable. Core rejects every manual command for Instant.
+- Manual mode eligibility and lifecycle prerequisites are Core command policy, not schema enforcement. Before exposing these pending contracts, prove direct-RPC rejection, current-mode/state/version validation, packed handover, completion evidence, and atomic audit/idempotency behavior. Database acceptance of a manual row alone never authorizes the command.
 - Webhook, refresh and inbox redrive invoke one normalized Delivery application path. Searching is distinct from assigned, active/uncertain attempts are exclusive, prior-attempt observations cannot overwrite current work, and courier cancellation never cancels a grocery Order.
 
 See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseline and ownership design. Membership RPCs, membership navigation/errors/jobs, customer courier selection and local price writes described in historical slices are removal work, never active target authority.
@@ -733,3 +736,7 @@ See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseli
 ### Verified provider identity recovery
 
 `refreshExternalDelivery` accepts an optional bounded `providerDeliveryId` candidate only to recover a missing identity on a previously submitted uncertain booking. Core requires `delivery.manage` and the dispatch location scope, retrieves the candidate from the configured provider, and requires its returned merchant reference to match the saved booking. An existing identity cannot be replaced. Association, original booking idempotency completion, recovery audit and durable observation are atomic; observation projection uses the shared guarded application path. A mismatch or competing claim leaves no association or booking success. This recovery performs no new provider booking.
+
+### Bounded customer order history
+
+listCustomerOrders accepts an authenticated request plus optional limit (1–100, default 25), filter (all, active, completed), and cursor. It returns { items, nextCursor }. Core applies ownership and status filtering before keyset pagination on descending (COALESCE(committed_at,created_at),id); the cursor is versioned and bound to customer/filter. Invalid or cross-context cursors are rejected. The cursor is navigation data, never authorization. History preserves canonical and explicitly retained historical status vocabulary. Web loads subsequent pages, resets paging on filter changes, and renders loading, retryable error and unauthenticated states separately from empty results.

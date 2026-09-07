@@ -1,5 +1,5 @@
 import type {
-  AuthenticatedRequest,
+  ListCustomerOrdersRequest,
   CancelCustomerOrderRequest,
   CustomerOrderDetailRequest,
   CreateOrderAmendmentRequest,
@@ -31,14 +31,23 @@ import { validationFailure } from "./validation-errors";
 
 export function createOrdersRpc(context: CoreRpcContext) {
   return {
-    async listCustomerOrders(input: AuthenticatedRequest) {
-      const validation = authenticatedRequestSchema.safeParse(input);
+    async listCustomerOrders(input: ListCustomerOrdersRequest) {
+      const validation = authenticatedRequestSchema
+        .extend({
+          cursor: z.string().min(1).max(2048).optional(),
+          limit: z.number().int().min(1).max(100).optional(),
+          filter: z.enum(["all", "active", "completed"]).optional(),
+        })
+        .safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
       return listCustomerOrders(context.env.DB, {
         customerId: customer.value.customerId,
         requestId: input.requestId,
+        cursor: validation.data.cursor,
+        limit: validation.data.limit,
+        filter: validation.data.filter,
       });
     },
     async getCustomerOrderDetail(input: CustomerOrderDetailRequest) {

@@ -1,5 +1,7 @@
 # Location-Scoped Commerce Implementation
 
+> **Engineering policy update — 2026-09-07:** This dated document retains its original plan/review text. For any new coding work, [current coding standards](../../../architecture/CODING_STANDARDS.md) supersede its migration-immutability or compatibility instructions. Pre-launch schema redesign/rebasing is allowed under that lifecycle policy; this notice changes no business scope or recorded verification result.
+
 ## Goal
 
 Implement the approved location-scoped commerce model from persistence through Core, shared contracts, Admin, marketplace behavior, tests, and local runtime verification.

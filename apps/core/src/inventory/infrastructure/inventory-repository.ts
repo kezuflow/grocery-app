@@ -55,9 +55,12 @@ export function createInventoryRepository(database: D1Database): InventoryReposi
         // One guarded upsert owns the balance mutation: it inserts only when the
         // caller expects absence, and updates only when the observed version and
         // the resulting stock invariants hold. Any other case leaves it a no-op.
+        // SQLite checks the INSERT candidate before resolving its PK conflict.
+        // MAX keeps that candidate valid; the update uses the original signed
+        // delta, and a negative delta can never create a previously absent row.
         database
           .prepare(
-            "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) SELECT ?, ?, ?, 0, 1 WHERE (?=0 AND ?>=0 AND NOT EXISTS (SELECT 1 FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?)) OR EXISTS (SELECT 1 FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?) ON CONFLICT(location_id, inventory_pool_id) DO UPDATE SET on_hand=on_hand+?, version=version+1 WHERE inventory_balance.version=? AND on_hand+?>=0 AND on_hand+?-reserved >= COALESCE((SELECT SUM(quantity) FROM checkout_inventory_holds WHERE location_id=inventory_balance.location_id AND inventory_pool_id=inventory_balance.inventory_pool_id AND status='HELD'),0)",
+            "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved, version) SELECT ?, ?, MAX(?,0), 0, 1 WHERE (?=0 AND ?>=0 AND NOT EXISTS (SELECT 1 FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?)) OR EXISTS (SELECT 1 FROM inventory_balance WHERE location_id=? AND inventory_pool_id=?) ON CONFLICT(location_id, inventory_pool_id) DO UPDATE SET on_hand=on_hand+?, version=version+1 WHERE inventory_balance.version=? AND on_hand+?>=0 AND on_hand+?-reserved >= COALESCE((SELECT SUM(quantity) FROM checkout_inventory_holds WHERE location_id=inventory_balance.location_id AND inventory_pool_id=inventory_balance.inventory_pool_id AND status='HELD'),0)",
           )
           .bind(
             command.locationId,

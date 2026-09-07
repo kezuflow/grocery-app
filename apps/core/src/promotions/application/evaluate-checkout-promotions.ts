@@ -1,6 +1,7 @@
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import {
   evaluateCheckoutPromotionCandidates,
+  permitsPromotionStack,
   type CheckoutPromotionApplication,
   type CheckoutPromotionCandidate,
   type CheckoutPromotionRule,
@@ -182,6 +183,7 @@ export function promotionClaimStatements(
   applications: readonly CheckoutPromotionApplication[],
   now: number,
 ): D1PreparedStatement[] {
+  if (!permitsPromotionStack(applications)) throw new Error("PROMOTION_STACK_NOT_PERMITTED");
   return applications.map((application) =>
     database
       .prepare(

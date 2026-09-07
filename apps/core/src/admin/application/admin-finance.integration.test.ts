@@ -293,7 +293,7 @@ describe("finance administration", () => {
         "UPDATE payment_intent SET subject_type='checkout_quote', subject_id=? WHERE id=?",
       ).bind(quoteId, paymentIntentId),
       env.DB.prepare(
-        "UPDATE payment_attempt SET payment_intent_id=?, provider_reference='provider-secret' WHERE customer_id=?",
+        "UPDATE payment_attempt SET payment_intent_id=?, provider_reference='provider-secret-' || id WHERE customer_id=?",
       ).bind(paymentIntentId, customerId),
       env.DB.prepare(
         "INSERT INTO order_item (id, order_id, sku_id, product_name_snapshot, variant_name_snapshot, unit_snapshot, quantity, unit_price_minor, line_total_minor, base_quantity) VALUES (?, ?, 'sku-red-onion-500g', 'Red Onion', '500 g', 'GRAM', 2, 12000, 24000, 1000)",
@@ -367,11 +367,11 @@ describe("finance administration", () => {
       .first<{ id: string }>();
     await env.DB.batch([
       env.DB.prepare(
-        "UPDATE payment_attempt SET payment_intent_id=?, provider_reference='provider-secret' WHERE id=?",
+        "UPDATE payment_attempt SET payment_intent_id=?, provider_reference='provider-secret-' || id WHERE id=?",
       ).bind(paymentIntentId, attempt!.id),
       env.DB.prepare(
-        "INSERT INTO payment_events (id, provider, provider_event_id, provider_reference, event_type, payload_hash, received_at, processed_at, processing_status) VALUES (?, 'mock', 'event-secret', 'provider-secret', 'payment.succeeded', 'hash-secret', ?, ?, 'PROCESSED')",
-      ).bind(crypto.randomUUID(), now, now),
+        "INSERT INTO payment_events (id, provider, provider_event_id, provider_reference, event_type, payload_hash, received_at, processed_at, processing_status) VALUES (?, 'mock', 'event-secret', ?, 'payment.succeeded', 'hash-secret', ?, ?, 'PROCESSED')",
+      ).bind(crypto.randomUUID(), `provider-secret-${attempt?.id}`, now, now),
       env.DB.prepare(
         "INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at) VALUES (?, ?, 10000, 'PHP', 'SUCCEEDED', 'quality issue', ?, 1, ?, ?)",
       ).bind(crypto.randomUUID(), paymentIntentId, `refund-${crypto.randomUUID()}`, now, now),

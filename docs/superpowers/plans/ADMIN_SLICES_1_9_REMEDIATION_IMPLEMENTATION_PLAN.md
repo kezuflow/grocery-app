@@ -1,5 +1,7 @@
 # Admin Slices 1–9 Remediation Implementation Plan
 
+> **Engineering policy update — 2026-09-07:** This dated document retains its original plan/review text. For any new coding work, [current coding standards](../../architecture/CODING_STANDARDS.md) supersede its migration-immutability or compatibility instructions. Pre-launch schema redesign/rebasing is allowed under that lifecycle policy; this notice changes no business scope or recorded verification result.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix all 30 findings in `ADMIN_SLICES_1_9_REVIEW.md` and make Admin Slices 1–9 conform to the canonical architecture, domain model, state machines, contracts, and readiness gates.

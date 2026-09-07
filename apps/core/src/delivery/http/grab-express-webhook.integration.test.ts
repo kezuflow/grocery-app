@@ -1,3 +1,4 @@
+import { seedTestInstantOrder } from "../../test-commerce-fixtures";
 import { env } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import { handleGrabExpressWebhook } from "./grab-express-webhook";
@@ -39,6 +40,7 @@ function payload(options: { timestamp?: number; status?: string } = {}) {
 }
 
 async function seedDispatch(): Promise<void> {
+  await seedTestInstantOrder(env.DB, "order-grab-webhook-1");
   await env.DB.prepare(
     `INSERT OR IGNORE INTO delivery_job
      (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status,

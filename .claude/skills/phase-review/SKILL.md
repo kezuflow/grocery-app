@@ -16,12 +16,18 @@ $ARGUMENTS
 
 ## Interpret the argument
 
+First resolve the requested plan from the owner's current task and
+`docs/product/IMPLEMENTATION_PLAN.md`. Read its actual phase titles and numbers.
+Do not assume the historical twelve-phase plan is active. Record the chosen plan
+path in every report. If context cannot resolve two materially different plans,
+ask one focused question before issuing a verdict for the ambiguous phase.
+
 Accept:
 
 - `2` -> review Phase 2
 - `2 to 5` -> review Phases 2, 3, 4, and 5
 - `1 to 12` -> review Phases 1 through 12 inclusive
-- `all` -> review every phase defined in IMPLEMENTATION_PLAN.md
+- `all` -> review every phase in the resolved active plan
 
 If the requested range is invalid or refers to phases that do not exist,
 report that clearly and stop.
@@ -31,12 +37,15 @@ Do not ask the user to restate a valid range.
 
 Before reviewing phases:
 
-1. Read `/AGENTS.md`.
-2. Read `/CLAUDE.md`.
-3. Read `/docs/product/IMPLEMENTATION_STATUS.md`.
-4. Read `/docs/product/IMPLEMENTATION_PLAN.md`.
-5. Read the canonical architecture documents relevant to the requested phases.
-6. Inspect the actual repository implementation where necessary.
+1. Read repository-root `AGENTS.md`.
+2. Read repository-root `CLAUDE.md`.
+3. Read `docs/product/IMPLEMENTATION_STATUS.md`.
+4. Read `docs/product/IMPLEMENTATION_PLAN.md`.
+5. Read `docs/architecture/CODING_STANDARDS.md` and `docs/architecture/TESTING.md`.
+6. Read the canonical architecture documents relevant to the requested phases.
+7. Inspect the actual repository implementation where necessary.
+
+Apply the current pre-launch schema policy: useful schema redesign or rebasing is not a defect merely because old migrations changed. Require fresh initialization, coordinated consumers/tooling/tests, and a retained-data upgrade path where needed. Review-only execution still does not mutate schemas or application code.
 
 Do not assume a phase is implemented merely because it appears in the plan.
 Use IMPLEMENTATION_STATUS.md and the actual repository to establish reality.
@@ -181,66 +190,80 @@ For unimplemented phases:
 ## Output files
 
 Create one review artifact for each requested phase:
-`/docs/reviews/PHASE_XX_REVIEW.md`
+`docs/reviews/<PLAN_STEM>_PHASE_XX_REVIEW.md`
 
-Use zero-padded phase numbers.
+Use the source plan's uppercase filename stem and zero-padded phase numbers,
+including Phase 0 when the selected plan defines it. Paths are relative to the
+repository root, not the filesystem root. This prevents unrelated plans from
+overwriting each other's phase reports.
 Examples:
 
-- Phase 1 -> `PHASE_01_REVIEW.md`
-- Phase 8 -> `PHASE_08_REVIEW.md`
-- Phase 12 -> `PHASE_12_REVIEW.md`
+- Commerce alignment Phase 1 -> `COMMERCE_ALIGNMENT_E2E_PLAN_PHASE_01_REVIEW.md`
 
 Each phase review must contain:
 
 # Phase XX Review
 
 ## Status
+
 Current implementation status.
 
 ## Verdict
+
 The phase verdict.
 
 ## Purpose
+
 What this phase is supposed to establish.
 
 ## Dependencies
+
 Hard and soft dependencies.
 
 ## Findings
+
 Only meaningful findings with severity.
 For implementation findings include exact file paths and symbols where possible.
 
 ## Architecture Compliance
+
 Relevant canonical architecture checks.
 
 ## Data and Contract Review
+
 Relevant persistence and API-contract concerns.
 
 ## Authorization
+
 Relevant authentication/authorization requirements.
 
 ## Concurrency and Idempotency
+
 Only where applicable.
 
 ## Tests
+
 Existing tests for implemented phases or required tests for future phases.
 
 ## Required Before Proceeding
+
 Only actions actually required.
 
 ## Can Be Deferred
+
 Issues that should deliberately wait.
 
 ## Handoff Recommendation
+
 Whether this phase should receive an implementation handoff.
 
 ## Range summary
 
 When reviewing more than one phase, also create:
-`/docs/reviews/PHASE_<START>_TO_<END>_SUMMARY.md`
+`docs/reviews/<PLAN_STEM>_PHASE_<START>_TO_<END>_SUMMARY.md`
 
 Example:
-`/docs/reviews/PHASE_01_TO_12_SUMMARY.md`
+`docs/reviews/COMMERCE_ALIGNMENT_E2E_PLAN_PHASE_01_TO_07_SUMMARY.md`
 
 The summary must contain:
 
@@ -251,25 +274,30 @@ The summary must contain:
 ## Phase Matrix
 
 | Phase | Status | Verdict | Blocking Dependency |
-|---|---|---|---|
+| ----- | ------ | ------- | ------------------- |
 
 ## Cross-Phase Dependency Problems
 
 ## Architecture Drift
 
 ## Critical Path
+
 Show the dependency-aware implementation sequence.
 
 ## Must Fix Now
+
 Only issues blocking the next implementation phase.
 
 ## Fix Later
+
 Map each deferred issue to the phase before which it must be resolved.
 
 ## Unresolved Decisions
+
 Only decisions that materially affect implementation.
 
 ## Recommended Next Phase
+
 State exactly what should happen next.
 
 ## Important restrictions
@@ -288,7 +316,9 @@ Do NOT:
 - mark handoffs APPROVED
 - begin another phase
 
-You MAY create or replace only the requested files under `/docs/reviews/`.
+You MAY create or replace only the requested report files under repository-relative
+`docs/reviews/`. This explicit artifact permission also applies to the invoked
+architecture reviewer; it does not authorize changes to application files.
 
 End by reporting:
 

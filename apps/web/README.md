@@ -1,5 +1,11 @@
 # FreshMarkets Web
 
+## Engineering guidance
+
+Follow [AGENTS.md](../../AGENTS.md), [coding standards](../../docs/architecture/CODING_STANDARDS.md), and [testing guidance](../../docs/architecture/TESTING.md). Web is presentation over typed Core Service Bindings. Reuse shared DTOs/structural validation, keep business authorization in Core, and verify loading, error, permission, conflict, keyboard, and focus behavior for changed interactions.
+
+Use server reads for initial read-heavy pages, keep client state non-authoritative, and verify relied-on framework behavior against the installed vinext runtime. Do not silently introduce a second Core API or business implementation in route handlers.
+
 > **Non-authoritative README.** This file is operational/setup guidance and includes historical phase notes. It does not define architecture, domain ownership, lifecycle, or current implementation status; use the canonical set named in `AGENTS.md` and `docs/product/IMPLEMENTATION_STATUS.md`.
 
 vinext presentation Worker. Phase 1 contains browser auth screens and a thin Web -> Core auth proxy. Web does not own auth storage or interpret Better Auth identity.

@@ -4,6 +4,7 @@ import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
 import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import { recordFinancialEvent } from "../../payments/application/financial-observability";
+import { permitsPromotionStack } from "../../promotions/domain/checkout-promotion";
 
 export type ApplyCheckoutPaymentReactionInput = {
   reactionId: string;
@@ -107,7 +108,13 @@ export async function applyCheckoutPaymentReaction(
       grant_id: string | null;
       snapshot_json: string;
     }>();
-  if (promotionClaims.results.length !== quote.promotionApplications.length)
+  if (
+    !permitsPromotionStack(quote.promotionApplications) ||
+    !permitsPromotionStack(
+      promotionClaims.results.map((claim) => ({ component: claim.price_component })),
+    ) ||
+    promotionClaims.results.length !== quote.promotionApplications.length
+  )
     return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
   for (const claim of promotionClaims.results) {
     const application = quote.promotionApplications.find(
@@ -346,6 +353,18 @@ export async function applyCheckoutPaymentReaction(
     ),
   ];
 
+  // Revalidate the current claim set inside the transaction, not only its
+  // earlier read. Stacking is a Core policy, not a schema uniqueness limit.
+  statements.push(
+    database
+      .prepare(`INSERT INTO commitment_abort(id)
+    SELECT -8 WHERE
+      (SELECT COUNT(*) FROM checkout_promotion_claim WHERE checkout_quote_id=? AND status='UNCOMMITTED') != ?
+      OR EXISTS (SELECT price_component FROM checkout_promotion_claim
+        WHERE checkout_quote_id=? AND status='UNCOMMITTED'
+        GROUP BY price_component HAVING COUNT(*)>1)`)
+      .bind(quote.id, promotionClaims.results.length, quote.id),
+  );
   for (const claim of promotionClaims.results) {
     const systemGrantId = `order-promotion-${claim.promotion_id}`;
     const grantId = claim.grant_id ?? systemGrantId;
@@ -381,21 +400,22 @@ export async function applyCheckoutPaymentReaction(
           )
           .bind(systemGrantId, now, now, claim.promotion_id),
       );
-    } else {
-      statements.push(
-        database
-          .prepare(
-            `INSERT INTO commitment_abort (id)
+    }
+    // The grant limit applies to targeted and system grants. This claim shares
+    // the commitment transaction; a losing claim rolls back every effect.
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO commitment_abort (id)
              SELECT -9 WHERE NOT EXISTS (
                SELECT 1 FROM promotion_grant g
-               WHERE g.id=? AND g.customer_id=? AND g.status='ACTIVE'
+               WHERE g.id=? AND (g.customer_id IS NULL OR g.customer_id=?) AND g.status='ACTIVE'
                  AND (SELECT COUNT(*) FROM promotion_redemption pr WHERE pr.grant_id=g.id)
                      < g.max_redemptions
              )`,
-          )
-          .bind(claim.grant_id, quote.customerId),
-      );
-    }
+        )
+        .bind(grantId, quote.customerId),
+    );
     const redemptionId = crypto.randomUUID();
     statements.push(
       database
@@ -423,7 +443,7 @@ export async function applyCheckoutPaymentReaction(
             checkoutQuoteId: quote.id,
             definitionVersion: claim.definition_version,
           }),
-          `checkout-promotion:${quote.id}:${claim.price_component}`,
+          `checkout-promotion:${claim.id}`,
           claim.promotion_id,
         ),
       database

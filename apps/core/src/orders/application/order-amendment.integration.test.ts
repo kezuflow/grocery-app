@@ -35,9 +35,9 @@ async function committedOrder() {
   const productId = `product-amd-${n}`;
   const skuId = `sku-amd-${n}`;
   await env.DB.prepare(
-    "INSERT INTO inventory_pool (id, product_id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'unit-gram', 'STOCKED', 1, 1)",
+    "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, 'unit-gram', 'STOCKED', 1, 1)",
   )
-    .bind(poolId, productId)
+    .bind(poolId)
     .run();
   await env.DB.prepare(
     "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, description, status, created_at, updated_at) VALUES (?, (SELECT id FROM category LIMIT 1), ?, ?, 'Amd Product', NULL, 'active', 1, 1)",
