@@ -34,10 +34,12 @@ export async function startReceiving(
   if (!requirement)
     return failure("NOT_FOUND", "Procurement requirement not found", command.requestId);
 
-  const hash = await requestHash({ requirementId: command.requirementId });
-  const claim = await repository.startReceivingRecord(
-    record.id,
-    command.expectedVersion,
+  const hash = await requestHash({
+    requirementId: command.requirementId,
+    expectedVersion: command.expectedVersion,
+  });
+  const claim = await repository.claimIdempotency(
+    START_RECEIVING_SCOPE,
     command.idempotencyKey,
     hash,
   );
@@ -96,8 +98,20 @@ export async function startReceiving(
     );
   }
 
+  await repository.startReceivingRecord(
+    record.id,
+    command.expectedVersion,
+    requirement.id,
+    requirement.version,
+    command.idempotencyKey,
+  );
+
   const started = await repository.readRecord(record.id);
-  if (started?.status !== "IN_PROGRESS") {
+  const completion = await repository.readIdempotency(
+    START_RECEIVING_SCOPE,
+    command.idempotencyKey,
+  );
+  if (completion?.status !== "SUCCEEDED") {
     await repository.markFailed(START_RECEIVING_SCOPE, command.idempotencyKey);
     if (started && started.version !== command.expectedVersion)
       return failure(
@@ -107,6 +121,7 @@ export async function startReceiving(
       );
     return failure("ILLEGAL_TRANSITION", "Receiving record is not startable", command.requestId);
   }
+  if (!started) return failure("NOT_FOUND", "Receiving record not found", command.requestId);
   const balance = await repository.readInventoryBalance(
     requirement.locationId,
     requirement.inventoryPoolId,

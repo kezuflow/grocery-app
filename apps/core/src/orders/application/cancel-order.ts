@@ -68,6 +68,13 @@ export async function requestOrderCancellation(
   | { ok: false; error: { code: string; message: string; requestId: string } }
 > {
   const scope = "orders.cancel";
+  if (command.customerId !== undefined) {
+    const owned = await database
+      .prepare("SELECT id FROM grocery_order WHERE id=? AND customer_id=?")
+      .bind(command.orderId, command.customerId)
+      .first();
+    if (!owned) return failure("NOT_FOUND", "Order not found", command.requestId);
+  }
   const actor = command.actor ?? "CUSTOMER";
   const cause = command.cause ?? (actor === "CUSTOMER" ? "CUSTOMER_REQUEST" : "OTHER");
   const reason = (command.reason ?? command.reasonCode ?? "").trim();
@@ -115,15 +122,20 @@ export async function requestOrderCancellation(
     const initialSet = await buildCancellationRefundSet(database, order.id, 0);
     if (!initialSet) {
       assertLegalTransition(order.status, "CANCELED");
-      const updated = await database
-        .prepare(
-          "UPDATE grocery_order SET status='CANCELED',version=version+1 WHERE id=? AND status=? AND version=?",
-        )
-        .bind(order.id, order.status, order.version)
-        .run();
-      if ((updated.meta?.changes ?? 0) !== 1) throw appError("STALE_VERSION", "Order changed");
-      await database.batch(releaseOperationalEffectStatements(database, order.id));
-      await completeScope(database, scope, command.idempotencyKey, order.id);
+      await database.batch([
+        database
+          .prepare(
+            "UPDATE grocery_order SET status='CANCELED',version=version+1 WHERE id=? AND status=? AND version=?",
+          )
+          .bind(order.id, order.status, order.version),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -20 WHERE changes()!=1"),
+        ...releaseOperationalEffectStatements(database, order.id),
+        database
+          .prepare(
+            "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+          )
+          .bind(order.id, Date.now(), scope, command.idempotencyKey),
+      ]);
       return { ok: true, value: { state: "CANCELED" }, requestId: command.requestId };
     }
     const existingRefund = await database
@@ -169,7 +181,13 @@ export async function requestOrderCancellation(
       binds: [order.id, nextOrderState, order.version + (nextOrderState === order.status ? 0 : 1)],
       outcome: "CANCELLATION_REQUESTED" as const,
     };
-    const statements: D1PreparedStatement[] = [];
+    const statements: D1PreparedStatement[] = [
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
+        )
+        .bind(order.id, order.status, order.version),
+    ];
     if (nextOrderState !== order.status)
       statements.push(
         database
@@ -177,6 +195,7 @@ export async function requestOrderCancellation(
             "UPDATE grocery_order SET status=?,version=version+1 WHERE id=? AND status=? AND version=?",
           )
           .bind(nextOrderState, order.id, order.status, order.version),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -20 WHERE changes()!=1"),
       );
     statements.push(
       database
@@ -228,9 +247,7 @@ export async function requestOrderCancellation(
         )
         .bind(cancellationId, now, scope, command.idempotencyKey),
     );
-    const results = await database.batch(statements);
-    if (nextOrderState !== order.status && (results[0]?.meta?.changes ?? 0) !== 1)
-      throw appError("STALE_VERSION", "Order changed; refresh");
+    await database.batch(statements);
     await projectCancellationSafely(database, cancellationId, "REQUESTED");
 
     for (const member of refundSet.members) {
@@ -282,6 +299,19 @@ export async function requestOrderCancellation(
       )
       .bind(Date.now(), scope, command.idempotencyKey)
       .run();
+    const currentOrder = await database
+      .prepare("SELECT version FROM grocery_order WHERE id=?")
+      .bind(command.orderId)
+      .first<{ version: number }>();
+    if (
+      (currentOrder && currentOrder.version !== command.expectedVersion) ||
+      (error instanceof Error && error.message.includes("CHECK constraint failed: id = 0"))
+    )
+      return failure(
+        "STALE_VERSION",
+        "Order or operational commitments changed; refresh",
+        command.requestId,
+      );
     const detail = error as { code?: string; message?: string };
     return failure(
       detail.code ?? "INTERNAL_ERROR",
@@ -414,7 +444,27 @@ function releaseOperationalEffectStatements(
   return [
     database
       .prepare(
-        "UPDATE inventory_balance SET reserved=MAX(0,reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED')),version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND r.location_id=inventory_balance.location_id)",
+        `INSERT INTO commitment_abort(id) SELECT -21 WHERE EXISTS (
+          SELECT 1 FROM inventory_reservation r
+          LEFT JOIN inventory_balance b ON b.location_id=r.location_id AND b.inventory_pool_id=r.inventory_pool_id
+          WHERE r.order_id=? AND r.status='RESERVED'
+          GROUP BY r.location_id,r.inventory_pool_id
+          HAVING b.reserved IS NULL OR b.reserved<SUM(r.quantity))`,
+      )
+      .bind(orderId),
+    database
+      .prepare(
+        `INSERT INTO inventory_ledger_entries
+         (id,inventory_pool_id,location_id,movement_type,quantity_delta_base,reservation_delta_base,
+          reference_type,reference_id,actor_type,reason_code,metadata_json,created_at,idempotency_key)
+         SELECT 'cancel-release:'||r.id,r.inventory_pool_id,r.location_id,'RESERVATION_RELEASE',0,-r.quantity,
+                'grocery_order',r.order_id,'SYSTEM','ORDER_CANCELLATION','{}',?,'cancel-release:'||r.id
+         FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED'`,
+      )
+      .bind(Date.now(), orderId),
+    database
+      .prepare(
+        "UPDATE inventory_balance SET reserved=reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED'),version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id)",
       )
       .bind(orderId, orderId),
     database
@@ -439,20 +489,6 @@ function asOrderState(value: string): OrderLifecycleState {
 function assertLegalTransition(from: string, to: OrderLifecycleState) {
   if (!canTransitionOrder(asOrderState(from), to))
     throw appError("ILLEGAL_TRANSITION", `Order cannot transition from ${from} to ${to}`);
-}
-
-function completeScope(
-  database: D1Database,
-  scope: string,
-  key: string,
-  reference: string,
-): Promise<unknown> {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(reference, Date.now(), scope, key)
-    .run();
 }
 
 function throwPolicy(code: string): never {

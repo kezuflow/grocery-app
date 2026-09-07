@@ -175,17 +175,14 @@ describe("operational command authorization and integrity matrix", () => {
       idempotencyKey: `receive-${crypto.randomUUID()}`,
       expectedVersion: 999999, // deliberately wrong record-version guard
     });
-    // The guarded command must not accept a fabricated version blindly.
-    if (result.ok) {
-      const totals = await env.DB.prepare(
-        "SELECT accepted_quantity FROM receiving_record WHERE procurement_requirement_id=?",
+    expect(result).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(
+      await env.DB.prepare(
+        "SELECT accepted_quantity,version FROM receiving_record WHERE procurement_requirement_id=?",
       )
         .bind(requirementId)
-        .first<{ accepted_quantity: number }>();
-      expect(totals?.accepted_quantity ?? -1).toBeLessThanOrEqual(10);
-    } else {
-      expect(["STALE_VERSION", "ILLEGAL_TRANSITION"]).toContain(result.error.code);
-    }
+        .first(),
+    ).toEqual({ accepted_quantity: 0, version: 1 });
   });
 
   it("keeps fulfillment commands capability-gated", async () => {

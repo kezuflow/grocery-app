@@ -1,5 +1,9 @@
 # FreshMarkets State Machines
 
+The owner-authorized 2026-09-07 commerce alignment is the active target. Both modes are pay-as-you-go without membership; Lalamove prices both modes; Scheduled alone permits emergency manual delivery; Global owns exact-location price writes. See [Phase 0 design decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for ownership, capabilities, profiles/closure, warehouse transit, cycle goods, execution attempts, publication and the retained-baseline strategy. Implementation and migration descriptions below are evidence of the previous baseline where explicitly labeled historical, not acceptance of the target.
+
+Engineering enforcement follows [CODING_STANDARDS.md](CODING_STANDARDS.md#commands-state-and-authorization) and [TESTING.md](TESTING.md). Test reachable command paths, rejected-command atomicity, duplicate/reordered events, and cross-context effects; a transition table alone is not proof that implementation obeys it.
+
 ## Enforcement Rules
 
 States are changed only through named application commands. Client, application, and admin lifecycle commands check current state, actor capability/scope, business preconditions, a stable idempotency key where replay is possible, and the expected aggregate version where concurrent mutation is possible. Repositories must not expose generic status setters.
@@ -18,33 +22,9 @@ OPEN -> PAUSED -> OPEN
 
 `PauseSelling`, `ActivateGlobalFulfillmentMode`, and `OpenSelling` are audited, idempotent, expected-version commands. Mode change while `OPEN` is illegal. Reopening fails closed until mode-specific readiness is proven. None of these transitions mutates committed Order evidence.
 
-## Subscription
+## Retired Subscription
 
-```text
-PENDING -> TRIALING / ACTIVE / CANCELED / EXPIRED
-TRIALING -> CANCELED / EXPIRED
-ACTIVE -> PAST_DUE / UNPAID / CANCELED / EXPIRED
-PAST_DUE -> ACTIVE / UNPAID / CANCELED / EXPIRED
-UNPAID -> ACTIVE / CANCELED / EXPIRED
-
-CANCELED (terminal)
-EXPIRED (terminal)
-```
-
-Commands include `BeginMembershipEnrollment`, `StartPromotionalTrial`, `ApplyProviderSubscriptionObservation`, `RequestSubscriptionCancellation`, `ApplyScheduledSubscriptionCancellation`, and `ExpireSubscription` for a completed introductory trial. PayMongo creates paid invoices and owns renewal attempts; FreshMarkets has no command that retries a subscription charge.
-
-Rules:
-
-- `PENDING` is not eligible. A trial may enter `TRIALING` only when Promotions supplies a valid introductory-trial grant/redemption. A separately and explicitly enrolled paid Subscription may enter `ACTIVE` only after a provider-confirmed canonical Payments outcome satisfies the payment commitment policy.
-- Entering `TRIALING` requires no payment authorization and creates no Payment or scheduled charge. At `trialEndsAt`, `ExpireSubscription` performs `TRIALING -> EXPIRED`; the trial does not convert in place. A customer who later chooses paid membership creates a new `PENDING` Subscription, which snapshots the then-current paid price and requires provider-confirmed initial payment before activation.
-- Only `TRIALING`, `ACTIVE`, and `PAST_DUE` satisfy `SCHEDULED` checkout membership eligibility. `TRIALING` still observes its exact end instant. `PAST_DUE` remains eligible only while PayMongo's provider-owned retry lifecycle remains in that state; a verified `UNPAID` or `CANCELED` observation removes entitlement. `INSTANT` checkout is authenticated pay-as-you-go and does not consult Subscription state.
-- PayMongo Scheduled Subscriptions own invoice generation, charge initiation, and payment retry timing. Provider `active`, `past_due`, `unpaid`, and `cancelled` observations map to `ACTIVE`, `PAST_DUE`, `UNPAID`, and `CANCELED` through Payments-owned mapping and a guarded Membership command. FreshMarkets retries only technical event processing, idempotent uncertain API calls, and provider-state reconciliation; it never layers another charge attempt on PayMongo's retry behavior.
-- `PAUSED` is not a canonical state because PayMongo Scheduled Subscriptions do not expose it. Historical `PAUSED` rows are migrated to intentional terminal `CANCELED` history. Customer and Admin surfaces expose cancellation rather than pause/resume.
-- The introductory trial lasts exactly one calendar billing month as calculated in the Market's configured business timezone under `DOMAIN_MODEL.md`; persisted start/end values are UTC instants.
-- Immediate intentional termination transitions an allowed nonterminal state to `CANCELED`.
-- Cancel-at-period-end records `cancelAtPeriodEnd` and `scheduledCancellationAt`/`endsAt` without changing `TRIALING` or `ACTIVE`. At the effective instant, `ApplyScheduledSubscriptionCancellation` performs the guarded transition to `CANCELED`.
-- `EXPIRED` is used only when entitlement naturally ends without continuation, including a timed-out pending enrollment or an uncontinued trial/entitlement. It is not the successor of `CANCELED`.
-- `CANCELED` and `EXPIRED` are terminal. Neither may transition to the other or back to an entitled state; a later membership requires a new subscription aggregate subject to eligibility policy.
+Subscription, trial and recurring-billing lifecycles are not active release workflows. Neither commerce mode depends on them. Historical data does not authorize new membership commands/jobs.
 
 ## Delivery Cycle
 
@@ -116,7 +96,7 @@ SUCCEEDED -> PARTIALLY_REFUNDED -> REFUNDED
 SUCCEEDED -> REFUNDED
 ```
 
-Provider states map into stable application states behind the payment adapter. `SUCCEEDED` means funds reached the configured payment-commitment boundary (captured for the current release), not merely that a browser returned successfully or that payment was initiated. Membership and Order react through separate explicit idempotent application commands.
+Provider states map into stable application states behind the payment adapter. `SUCCEEDED` means funds reached the configured payment-commitment boundary (captured for the current release), not merely that a browser returned successfully or that payment was initiated. Orders react through explicit idempotent application commands.
 
 Commands/events include `InitiatePayment`, `RecordActionRequired`, `ProcessPaymentWebhook`, `ReconcilePayment`, and `MarkPaymentExpired`.
 
@@ -170,7 +150,7 @@ IN_PROGRESS / DISCREPANCY -> CANCELED (authorized exceptional case)
 
 Commands include `StartReceiving`, `RecordReceivedLine`, `RecordQualityRejection`, `RecordReceivingShortage`, `ResolveReceivingDiscrepancy`, and `CompleteReceiving`.
 
-Each receipt records expected, accepted, and rejected base-unit quantities. Accepted quantities create inventory ledger movements; rejected quantities do not become usable stock. Completion requires every expected line to be received or explicitly resolved.
+Each receipt records expected, accepted, and rejected base-unit quantities. Accepted Scheduled quantities create cycle/location allocation movements; rejected quantities do not become usable goods. Inspected surplus release is a separate atomic allocation-to-physical-stock command. Completion requires every expected line to be received or explicitly resolved.
 
 ## Fulfillment
 
@@ -184,7 +164,7 @@ SHORTED -> PICKING / READY_TO_PACK / CANCELED / ESCALATED
 
 Commands include `StartPicking`, `RecordPickedQuantity`, `RecordFulfillmentShortage`, `ResolveFulfillmentException`, `StartPacking`, `MarkPacked`, `HandOffToDelivery`, and `CompleteFulfillment`.
 
-Instant packed quantities consume reservations/stock through explicit ledger movements. Scheduled packing does not deduct the location inventory balance. `PACKED` does not imply dispatched or delivered.
+Instant packed quantities consume reservations/stock through explicit ledger movements. Scheduled packing consumes cycle/location allocation exactly once and never deducts the location inventory balance. Preparation start also locks customer Order cancellation atomically. `PACKED` does not imply dispatched or delivered.
 
 The lifecycle is shared by `INSTANT` and `SCHEDULED`; mode-specific differences live in Fulfillment policies that construct tasks, deadlines, queues, and allowed actions. Repeated mode conditionals must not be scattered across unrelated state machines.
 
@@ -194,9 +174,9 @@ Delivery Batch, Delivery Stop sequencing, Rider assignment, internal route previ
 
 ## External Delivery Provider Dispatch
 
-Execution selection precedes external dispatch. `INSTANT` snapshots the customer-selected external-provider option at Quote/Order commitment. `SCHEDULED` has no customer-selected courier; Lalamove supplies checkout pricing and scoped location operations later choose any enabled external provider. Once external creation begins, changing providers is an explicit exception/recovery decision rather than an automatic fallback.
+Lalamove prices and normally executes both modes. Customers select no courier. Instant booking is legal after all items are picked/checked and final packing starts. Scheduled future booking requires received/checked goods and a credible ready time. Normal handover requires `PACKED`; conflicting provider pickup evidence is retained and escalated.
 
-For Scheduled execution, the operator may request immediate pickup or an exact future pickup time supported by the selected provider and its currently verified horizon. Either choice remains bounded by the customer's committed Scheduled delivery window and does not change the Order mode or charge the customer again.
+One active/uncertain execution attempt is allowed per job. Scheduled manual fallback requires definite prior-attempt closure and reason/name/phone. Instant manual delivery is rejected in Core. Searching is distinct from rider assignment; refresh, webhook and inbox recovery share one normalized applying path. Provider cancellation never cancels a grocery Order.
 
 ```text
 PENDING -> CREATING -> ACTIVE -> COMPLETED
@@ -257,3 +237,7 @@ InvoiceReadiness: PENDING_TAX_CONFIGURATION -> READY_FOR_ISSUANCE -> ISSUED
 Issue submission is customer-owned, typed, idempotent, and version-safe; staff handling is a separate Admin authority and does not imply a financial action. Customer projection collapses `CLAIMED` and `INVESTIGATING` to `IN_REVIEW` while preserving `SUBMITTED`, `RESOLVED`, and `ESCALATED`. Notification Queue retries never replay the source transition; each message is handled independently with conditional D1 leasing, idempotent send evidence, explicit acknowledgement/retry, bounded backoff, and dead-letter visibility. Invoice readiness advances only when the required approved accounting evidence exists; `ISSUED` additionally requires an immutable identifier, issue instant, seller snapshot, and tax breakdown.
 
 The existing `OrderAmendment` lifecycle applies only to additive paid additions. A customer may draft one active amendment for a committed Scheduled Order before cutoff. Its dedicated `ORDER_AMENDMENT` Payment must reach canonical `SUCCEEDED` before the amendment commits. Failed/expired payment fails the amendment; duplicate provider reactions replay safely.
+
+## Warehouse Transfer
+
+`DRAFT -> IN_TRANSIT -> PARTIALLY_RECEIVED -> RECEIVED`; a full first receipt may move directly from `IN_TRANSIT` to `RECEIVED`. `DRAFT -> CANCELED` has no stock effects. Dispatched shortages/damage require explicit discrepancy resolution; no deletion reverses dispatch. Dispatch deducts available source stock and creates transit atomically. Receipt credits accepted destination quantities exactly once. Resolution separately records losses or verified returns, then closes all transit.

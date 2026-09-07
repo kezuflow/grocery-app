@@ -1,12 +1,14 @@
 # FreshMarkets Marketplace Design
 
+Engineering behavior follows [CODING_STANDARDS.md](../../architecture/CODING_STANDARDS.md) and [TESTING.md](../../architecture/TESTING.md): use validated Core DTOs/commands, accessible interaction states, and verification proportionate to the change. These implementation rules do not redefine the product/design choices below.
+
 ## Product Position
 
-The marketplace is a grocery commerce experience with serviceable external delivery: authenticated pay-as-you-go Instant commerce and membership-gated Scheduled preorder commerce. It uses mature DoorDash-inspired discovery and checkout patterns as a usability reference, but it is not a DoorDash clone and must not import restaurant assumptions or branding.
+The marketplace is a grocery commerce experience with authenticated pay-as-you-go Instant and Scheduled commerce. It uses mature DoorDash-inspired discovery and checkout patterns as a usability reference, but it is not a DoorDash clone and must not import restaurant assumptions or branding.
 
 ## Core Principles
 
-- Browsing is public where appropriate; purchasing requires authentication. Only Scheduled requires an eligible active/trialing/past-due-within-policy membership.
+- Browsing is public where appropriate; purchasing requires authentication. Neither mode requires membership.
 - The customer chooses products, quantities, address, and the allowed mode-specific delivery option—not a fulfillment hub or Scheduled execution method.
 - Grocery hierarchy is explicit: product -> fixed sellable variant -> base inventory consumption.
 - Availability messaging is honest but does not expose internal inventory/procurement complexity unnecessarily.
@@ -26,7 +28,7 @@ Primary customer destinations:
 - Checkout
 - Order history
 - Upcoming orders/delivery status
-- Subscription/account
+- Account
 
 Secondary/supporting surfaces:
 
@@ -42,7 +44,7 @@ Home should establish:
 - what FreshMarkets sells and how its fulfillment modes work — an explicit Instant promise or Scheduled delivery in windows;
 - current market/service context;
 - categories and seasonal/high-intent collections;
-- subscription/trial value without implying groceries are free;
+- currently eligible merchandise/delivery promotions;
 - fulfillment-mode context when an address is known.
 
 Use a strong search entry point, horizontally browsable category/collection groups on mobile, and product modules with clear fixed variant labels. Marketing content should remain useful without requiring login.
@@ -74,16 +76,9 @@ Show product story, image/media, fixed variant selector, current price, unit/qua
 
 Variant selection is fixed and deliberate in the current release. Arbitrary grams or final-weight settlement are not presented.
 
-## Subscription Gate
+## Authentication
 
-The gate is contextual and transparent:
-
-- Browsing/product inspection remains accessible.
-- Add-to-cart may be allowed before login according to the chosen UX, but checkout/payment/order creation must be blocked until Core confirms authentication and subscription eligibility.
-- Explain trial membership fee versus grocery/delivery charges.
-- Provide login, start trial, or activate membership paths without discarding cart state.
-
-UI gating is a convenience. Core repeats the rule at checkout and payment commitment.
+Preserve cart context through sign-in and registration. Both commerce modes require Core-authenticated enabled Customer access, without enrollment, trial or membership messaging.
 
 ## Cart
 
@@ -94,7 +89,6 @@ Cart shows:
 - current displayed price/subtotal;
 - availability warnings;
 - merchandise minimum progress;
-- mode-specific membership status prompt;
 - address/cycle context when selected;
 - provider-quoted delivery-fee/Promotion preview only when enough context exists.
 
@@ -122,7 +116,7 @@ Use recipient, phone, barangay, city, notes, and landmark/instructions fields. S
 
 ## Fulfillment Selection
 
-Present the one global active mode in customer language. For Instant, after address/serviceability and before payment, show one card per enabled quoteable external delivery partner with display name, service label, provider-quoted delivery fee, and supported promise/ETA. The customer selects one opaque option; do not expose quotation/order IDs or silently replace the partner. For Scheduled, show only the delivery date/window and Lalamove-priced delivery amount; do not show the eventual provider choice. Explain that store operations later choose an enabled external courier and pickup timing. Do not show capacity, internal fleet, Rider, batch, hub, or route-planning concepts. If selling is paused or a provider/window is unavailable, show an explicit recovery state.
+Present the global active mode in customer language: FreshMarkets Instant promise or Scheduled delivery date/window, with Lalamove-priced delivery. Customers select neither courier nor hub. Hide internal pickup planning and manual fallback mechanics; communicate customer-relevant exceptions and legal recovery actions without altering the accepted charge. Selling-paused, missing quotation and unavailable window states are explicit.
 
 At/after a Scheduled cutoff, show that ordinary procurement-affecting changes are closed. If an additive amendment is available before cutoff, show it as a separate add-on action rather than “edit paid order.”
 
@@ -130,9 +124,9 @@ At/after a Scheduled cutoff, show that ordinary procurement-affecting changes ar
 
 Checkout should make the commitment legible:
 
-1. Authentication plus mode-specific membership eligibility.
+1. Authentication and enabled Customer access.
 2. Delivery address and serviceability.
-3. Fulfillment commitment — Instant delivery-partner choice and promise, or Scheduled cycle/window with store-assigned delivery — and fee.
+3. Fulfillment commitment — Instant FreshMarkets promise or Scheduled delivery window, both priced by Lalamove — and fee.
 4. Items, fixed variants, price snapshots, discounts, minimum order.
 5. Payment method/provider handoff.
 6. Terms/commitment notice.
@@ -169,7 +163,7 @@ Do not rewrite historical details after catalog/address changes. Show amendments
 - Keep interactive cart/checkout/address controls client-side but keep writes in typed Core calls.
 - Use request-time image optimization only after vinext/R2 compatibility is verified.
 - Avoid relying on Cache Components/PPR or undocumented caching semantics in the current release.
-- Use explicit cache/revalidation policy for public catalog content; never cache personalized eligibility, prices, subscription, or order responses incorrectly.
+- Use explicit cache/revalidation policy for public catalog content; never cache personalized eligibility, prices or order responses incorrectly.
 
 ## Phase-0 Research And Proposal
 

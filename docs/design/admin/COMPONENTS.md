@@ -1,5 +1,7 @@
 # FreshMarkets Admin Component Guidance
 
+Engineering behavior follows [CODING_STANDARDS.md](../../architecture/CODING_STANDARDS.md) and [TESTING.md](../../architecture/TESTING.md): use validated Core DTOs/commands, accessible interaction states, and verification proportionate to the change. These implementation rules do not redefine the product/design choices below.
+
 ## Component Layers
 
 ### Layer 1: shadcn/ui primitives
@@ -19,7 +21,7 @@ Build these only once they appear across multiple workspaces:
 - `AdminDataTable`: server-side data, keyset pagination, row selection, responsive fallback, loading/empty/error states.
 - `AdminDashboardGrid`: responsive reference-aligned grid for operational cards, charts, queues, and recent activity.
 - `StatusBadge` / domain status components: stable label, tone, icon, accessible text.
-- `ProductScopeProjection`: renders catalog-definition fields in Global and exact price/local-active/shared-stock fields at a Location; it never fills absent local data from Market/global fallback.
+- `ProductScopeProjection`: renders catalog definition and dedicated exact-location price authoring in Global, and read-only price/local-active/shared-stock fields at a Location; it never fills absent local data from Market/global fallback.
 - `GlobalCommerceControl`: separate versioned Global-only `OPEN`/`PAUSED` selling and `SCHEDULED`/`INSTANT` mode controls with pause/switch/readiness/reopen guidance and committed-Order preservation copy.
 - `MetricCard` only for decision-relevant metrics; never as default dashboard filler.
 - `AdminChartCard`: accessible Recharts composition with an explicit title, definition/freshness context, non-visual summary, and unavailable state.
@@ -43,7 +45,7 @@ Build these only once they appear across multiple workspaces:
 - `StaffScopeEditor`, `CapabilityMatrix`, `AuditEventList`.
 - `ProductListTable`, `ProductEditor`, `ProductMediaManager`, `SkuVariantEditor`, `SkuPricePanel`, and `SkuAvailabilityPanel`.
 - `CategoryListTable`, `CategoryEditor`, `CategoryTree`, and `CategoryProductList`.
-- `CommerceConfigurationTabs`, `MembershipPriceEditor`, and `GlobalCommerceControl`.
+- `CommerceConfigurationTabs`, and `GlobalCommerceControl`.
 
 Domain compositions must consume purpose-built DTOs and call explicit Core commands. They must not infer legal transitions from arbitrary strings or modify data locally as if the mutation succeeded.
 

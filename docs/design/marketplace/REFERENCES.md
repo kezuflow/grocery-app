@@ -19,8 +19,8 @@ DoorDash is a usability reference for:
 Adaptation requirements:
 
 - grocery products, variants, units, and replenishment instead of restaurants/menus;
-- explicit mode-specific commitments — an Instant external-courier choice/promise or Scheduled delivery window with cutoff messaging — instead of generic instant ETA assumptions;
-- subscription membership gate without making merchandise free;
+- explicit mode-specific commitments — an Instant FreshMarkets promise or Scheduled delivery window with cutoff messaging — instead of generic instant ETA assumptions;
+- authenticated pay-as-you-go in both modes without membership;
 - serviceability by coordinates and zones;
 - internal fulfillment assignment hidden from customer hub choice;
 - procurement/availability exceptions expressed simply to customers.
@@ -41,7 +41,7 @@ Use mature grocery products and marketplaces as references for:
 When evaluating an external reference, ask:
 
 1. Does it improve a customer decision in the FreshMarkets lifecycle?
-2. Does it preserve subscription, serviceability, cycle/cutoff, and commitment semantics?
+2. Does it preserve authentication, serviceability, cycle/cutoff, and commitment semantics?
 3. Does it introduce restaurant assumptions or unbacked instant-delivery claims that should be rejected?
 4. Can it be implemented with the current vinext/Web/Core boundary?
 
@@ -60,7 +60,7 @@ FreshMarkets must develop its own brand, visual tokens, iconography, photography
 
 ## Evidence and Review
 
-For a future design decision, record the reference, the pattern adopted, the grocery-specific adaptation, and the reason it preserves FreshMarkets business invariants. Rejected patterns should be noted when they would incorrectly imply unbacked instant delivery, customer hub selection, free groceries during trial, arbitrary weight, or freely editable paid orders.
+For a future design decision, record the reference, the pattern adopted, the grocery-specific adaptation, and the reason it preserves FreshMarkets business invariants. Rejected patterns should be noted when they would incorrectly imply unbacked instant delivery, customer hub selection, free groceries, arbitrary weight, or freely editable paid orders.
 
 ## Mobbin Research Log (2026-08-25)
 

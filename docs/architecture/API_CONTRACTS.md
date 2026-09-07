@@ -1,12 +1,14 @@
 # Web to Core Application Contracts
 
+Implementation quality and evidence requirements are in [CODING_STANDARDS.md](CODING_STANDARDS.md) and [TESTING.md](TESTING.md). Boundary types require runtime validation of untrusted data; an assertion cannot replace it. Contract compatibility follows the actual deployment lifecycle, not an unconditional requirement to keep every old RPC.
+
 ## Contract Principles
 
 This document is authoritative for target Web/Core and provider-ingress application boundary semantics. Contracts live in `packages/contracts` and are shared as source/types within the monorepo. They define RPC method names, input validation, purpose-built DTOs, stable error codes, and pagination. They never export D1 row types, Better Auth table records, provider payloads, or infrastructure handles.
 
 Domain-oriented commands in this document are the contract. Removed broad compatibility RPCs must not be reintroduced as a second business implementation.
 
-Core owns implementation and authorization. Web owns presentation adapters. Contract changes are reviewed as application-interface changes and should prefer additive evolution while both deployments may be temporarily version-skewed during rollout.
+Core owns implementation and authorization. Web owns presentation adapters. Contract changes follow the pre-launch interface policy in `CODING_STANDARDS.md`. Update all consumers coherently and remove unused compatibility paths when safe; use additive evolution where retained deployments or temporary Web/Core version skew actually require it.
 
 ## Common Envelope and Context
 
@@ -32,7 +34,6 @@ type AppErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "STALE_VERSION"
-  | "SUBSCRIPTION_REQUIRED"
   | "ADDRESS_NOT_SERVICEABLE"
   | "SELLING_PAUSED"
   | "FULFILLMENT_MODE_UNAVAILABLE"
@@ -118,7 +119,7 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 
 `CategoryNavigationView` returns each active category's `code`, `name`, `slug`, and Core-resolved `iconSrc`. `iconSrc` is either a safe `/category-icons/<asset-key>.svg` Web path derived from database configuration or `null`; Web renders its local fallback for null and never reconstructs category taxonomy from hard-coded navigation metadata.
 
-`FulfillmentOptionView` exposes an opaque option ID, `fulfillmentMode: "INSTANT" | "SCHEDULED"`, customer-facing promise/window/ETA, and provider-priced delivery amount. Each eligible Instant option also exposes public-safe delivery-partner metadata (`code`, display name, service type, and service label) so the customer can compare enabled partners; the opaque option ID remains the only selection authority and no provider quotation/order identifier is exposed. A Scheduled option exposes its configured cadence and selectable cycle/window identity but no courier; Lalamove supplies its internal future quotation and location operations choose an enabled external provider later. `WEEKLY` may appear as Scheduled cadence but never as `fulfillmentMode`. Neither mode exposes a customer-selectable fulfillment location.
+`FulfillmentOptionView` exposes an opaque option ID, mode, FreshMarkets promise/window and Lalamove-priced delivery amount. Scheduled exposes its configured selectable window/cadence; Instant exposes its current promise. Neither exposes customer courier or hub selection. Internal quotation/provider evidence remains opaque.
 
 ## Serviceability
 
@@ -172,45 +173,11 @@ serviceability values are null
 only for legacy rows that have not yet been authoritatively re-resolved; code presence
 is never treated as proof of serviceability.
 
-## Subscription
+## Global Commerce Configuration
 
-- `subscriptions.getMine() -> SubscriptionSummary`
-- `subscriptions.getOffer() -> MembershipOfferView`
-- `subscriptions.startTrial({ idempotencyKey }) -> SubscriptionSummary`
-- `subscriptions.beginPaidEnrollment({ offerId, idempotencyKey }) -> SubscriptionSummary` with an optional bounded `paymentAction` while PayMongo's first invoice requires browser tokenization or 3DS
-- `subscriptions.cancel({ timing: "IMMEDIATE" | "PERIOD_END", reason?, idempotencyKey, expectedVersion }) -> SubscriptionSummary`
+`getGlobalCommerceConfiguration`, `pauseSelling`, `activateGlobalFulfillmentMode`, and `openSelling` require global scope and the existing fulfillment read/manage capability. Mutations require expected version, reason and stable idempotency. Mode changes require PAUSED. Readiness evaluates customer-serving locations only; inventory-only warehouses neither serve customers nor block reopening for missing courier/packing settings.
 
-- `checkout.getSubscriptionEligibility() -> { eligible, state, reasonCode?, effectiveUntil? }`
-
-`MembershipOfferView` describes the single paid calendar-month offer and its current global effective-dated `priceVersionId`, `priceVersion`, `amountMinor`, and `currency`; it contains no trial-entitlement field. `SubscriptionSummary` uses only `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `UNPAID`, `CANCELED`, and `EXPIRED`, and exposes `cancelAtPeriodEnd`, `scheduledCancellationAt`, exact UTC `trialStartsAt`/`trialEndsAt`, and aggregate `version`. Paid enrollment snapshots the current price on its new Subscription. Payments maps that price version to an immutable PayMongo scheduled Plan amount/currency; ordinary price changes create a new Plan for later enrollments and never silently reprice existing provider subscriptions. A free-trial Subscription has no agreed paid-price snapshot or PayMongo subscription.
-
-Capability-protected global commerce configuration uses these Core methods:
-
-- `getMembershipPriceConfiguration(request) -> MembershipPriceConfigurationView`
-- `updateMembershipPriceConfiguration({ expectedVersion, amountMinor, currency, effectiveFrom, reason, idempotencyKey }) -> MembershipPriceConfigurationView`
-- `getGlobalCommerceConfiguration(request) -> GlobalCommerceConfigurationView`
-- `pauseSelling({ expectedVersion, reason, idempotencyKey }) -> GlobalCommerceConfigurationView`
-- `activateGlobalFulfillmentMode({ fulfillmentMode, cadence?, expectedVersion, reason, idempotencyKey }) -> GlobalCommerceConfigurationView`
-- `openSelling({ expectedVersion, reason, idempotencyKey }) -> GlobalCommerceConfigurationView`
-
-Membership price reads/commands require `memberships.read`/`memberships.manage`; commerce-configuration reads/commands require `fulfillment.read`/`fulfillment.manage`; all require global scope. Mode changes require selling `PAUSED`; reopening fails closed until every active location passes mode-specific readiness. Commands are audited, idempotent, and version-guarded. Historical Service Fee configuration has no active command or Admin surface.
-
-`startTrial` resolves the current paid offer and introductory promotion server-side, then succeeds only after Promotions authorizes and atomically consumes the one-calendar-month grant/redemption. Calendar arithmetic follows `DOMAIN_MODEL.md`; an offer field such as `trial_days` is never accepted as authority. It requires no payment authorization, creates no Payment, and expires without automatic conversion. `beginPaidEnrollment` is the customer's separate explicit paid choice; after a trial expires it creates a new `PENDING` Subscription, snapshots the then-current paid price, provisions the matching PayMongo Customer, Plan, and Subscription idempotently, and returns only the safe first-invoice continuation required for direct browser tokenization. Only a signed or reconciled provider `active` observation can create `ACTIVE`. These contracts never imply grocery merchandise or delivery is free during a membership trial.
-
-## Recurring Authorization (Payments-owned)
-
-- `payments.beginRecurringAuthorization({ providerCode?, returnUrl, idempotencyKey }) -> { authorizationId, actionType: "REDIRECT" | "SDK" | "NONE", redirectUrl?, clientToken?, expiresAt? }` where Core selects only its explicitly configured provider and an optional `providerCode` is an equality assertion, never a registry-order fallback.
-- `payments.completeRecurringAuthorization({ authorizationId }) -> { authorizationId }`
-
-Establishing a mandate is paid-membership instrument collection, never payment success. A free trial neither calls these methods nor requires a mandate. For PayMongo Scheduled Subscriptions, the initial subscription flow owns instrument setup and the provider-confirmed first invoice; it must not be followed by a separate FreshMarkets renewal charge. These provider-neutral authorization DTOs are deprecated compatibility seams and are not used by Web's PayMongo enrollment flow. Production remains fail-closed until account capability activation and live end-to-end provider acceptance are complete.
-
-## Membership Payments
-
-- `payments.createMembershipPayment({ subscriptionId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
-- `payments.getMembershipPayment({ subscriptionId }) -> PaymentSummary`
-- `payments.recoverMembershipActivation({ subscriptionId, idempotencyKey }) -> SubscriptionActivationResult`
-
-These are Payments-owned operations. A provider-confirmed canonical outcome causes an internal idempotent `ActivateSubscriptionFromPayment`/`RecoverSubscriptionFromPayment` Membership command; the browser cannot request or assert an `ACTIVE` transition directly.
+Membership, trial, subscription pricing, recurring authorization and membership payment contracts are retired from the active release. No checkout method requires a Subscription.
 
 ## Cart
 
@@ -222,14 +189,14 @@ Cart `quantity` is an integer count of the configured SKU, never kilograms/liter
 ## Checkout Eligibility and Quote
 
 - `checkout.evaluate({ cartId, addressId, cycleId }) -> CheckoutEligibilityView` is a deprecated Scheduled-only compatibility read; current Web uses `listFulfillmentOptions` followed by authoritative `createQuote` and does not call it.
-- `checkout.createQuote({ cartId, cartVersion, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutQuoteView`; the opaque option binds address/cart versions, mode, internal routing, the customer-selected Instant external partner/service, or the Scheduled cycle/window. Web never submits a provider code, location, or cycle as fulfillment authority.
+- `checkout.createQuote({ cartId, cartVersion, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutQuoteView`; the opaque option binds address/cart versions, mode, internal routing, Lalamove quotation and the Instant promise or Scheduled cycle/window. Web never submits a provider code, location, or cycle as fulfillment authority.
 - `checkout.refreshQuote({ checkoutAttemptId }) -> CheckoutQuoteView`
 
 The view reports each eligibility dimension, explicit financial components, price/availability changes, resolved serviceability, selected `INSTANT`/`SCHEDULED` option, delivery promise, Instant hold status or Scheduled window/cutoff status, provider quotation status, applied/rejected Promotions by price component, and available alternatives. Sensitive location/provider-selection rules remain internal.
 
 `CheckoutQuoteView` contains `merchandiseSubtotalMinor`, `itemDiscountMinor`, `orderDiscountMinor`, `deliverySubtotalMinor`, `deliveryDiscountMinor`, `taxMinor`, `totalMinor`, and currency. `subtotalMinor`, `discountMinor`, and `deliveryFeeMinor` remain compatibility projections. Item lines snapshot SKU quantity/unit/base consumption, shipping grams, and allocated discount. The internal Quote snapshots provider/service, quotation identity, amount/currency, issue/expiry time, applicable future pickup time, and capability evidence. New Quotes contain no Service Fee or PayMongo processing fee; legacy fields may be returned only by an explicitly versioned historical-Order DTO. Percentage/fixed Order benefits use only merchandise; delivery waiver/percentage/fixed benefits use only delivery.
 
-The authoritative service validates selling `OPEN`; authenticated Customer; membership entitlement only for `SCHEDULED`; cart, exact location/SKU prices, minimum basket, address coordinates, service area, zone, resolved location and active mode; Instant inventory hold or Scheduled cycle/window/cutoff; Promotions eligibility/limits/stacking; provider capabilities and quotation; required store/customer contact, coordinate, and shipping-weight data; and payment readiness. Scheduled performs no stock or capacity query. Missing, invalid-currency, expired, or stale required evidence fails closed. For each Order Quote it selects at most one merchandise benefit and one delivery benefit; a valid explicit selection wins its component, otherwise highest computed value then stable Promotion ID determines the winner.
+The authoritative service validates selling `OPEN`; authenticated Customer; cart, exact location/SKU prices, minimum basket, address coordinates, service area, zone, resolved location and active mode; Instant inventory hold or Scheduled cycle/window/cutoff; Promotions eligibility/limits/stacking; provider capabilities and quotation; required store/customer contact, coordinate, and shipping-weight data; and payment readiness. Scheduled performs no stock or capacity query. Missing, invalid-currency, expired, or stale required evidence fails closed. For each Order Quote it selects at most one merchandise benefit and one delivery benefit; a valid explicit selection wins its component, otherwise highest computed value then stable Promotion ID determines the winner.
 
 Fulfillment-option reads require a Maps-confirmed, active, Core-serviceable Customer address and an owned nonempty active cart at the submitted versions. Exactly the one current global `INSTANT` or `SCHEDULED` mode is returned, with a controlled unavailability reason and provisional promise/fee context. The option ID is opaque and re-resolved by Core at Quote creation; address/cart/global-mode/routing/cycle changes fail closed. An identical Quote idempotency replay returns the original immutable Quote even when current routing later changes, while the same key with another option is `IDEMPOTENCY_CONFLICT`.
 
@@ -250,11 +217,11 @@ Core receives payment provider webhooks through a signed public webhook handler 
 - conditionally lease due `RECEIVED`/`RETRY_REQUIRED` rows so redelivery and scheduled redrive share one application path;
 - translate the vendor state into canonical Payments state under the configured payment commitment policy;
 - update Payments using handler-side legal-transition and compare-and-swap protection, safely retrying/reconciling concurrent aggregate changes;
-- invoke an explicit idempotent Membership or Order application command when the canonical outcome is sufficient;
-- commit/recover the Membership activation or Order exactly once;
+- invoke an explicit idempotent Order application command when the canonical outcome is sufficient;
+- commit/recover the Order exactly once;
 - enqueue non-critical follow-up.
 
-Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for the current release; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Membership or Order DTOs.
+Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for the current release; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Order DTOs.
 
 Verified provider events may include a provider-neutral settlement observation containing gross,
 processing-cost, withholding, adjustment, net, currency, and observation time. Core accepts the
@@ -267,19 +234,19 @@ Application-accessible mock payment providers, simulation RPCs/routes/pages, and
 
 Retry availability uses bounded backoff. Expired leases are reclaimable; competing Workers cannot both own an observation. Retry age/attempt exhaustion transitions the inbox row to `RECONCILIATION_REQUIRED` and creates one operationally visible case, so recovery does not depend on the provider sending the event again.
 
-The registered scheduler reclaims provider-inbox work and retrieves current provider Subscription truth every fifteen minutes, expires due provider redirect/SDK actions every minute, applies provider cancellation at a requested period end, and expires FreshMarkets-owned introductory trials. PayMongo owns scheduled-subscription invoice creation and payment retries. FreshMarkets redrives only technical event processing and provider-state reconciliation; it never schedules a renewal charge retry.
+The scheduler redrives provider inbox/reconciliation, expires provider actions and checkout holds, advances cycles and recovers notification delivery. Active membership/trial/recurring-billing jobs are removed.
 
-Immediately before a new payment creation, Core first resolves an exact idempotency replay, then recalculates selling state, exact store/SKU prices, discounts, Instant stock/hold or Scheduled window/cutoff, serviceability, provider quotation, mode-specific membership entitlement, and fulfillment eligibility without persisting or superseding another Quote. The accepted Quote version, price-acceptance version, currency, `expectedTotalMinor`, every explicit component, and provider quotation evidence must agree; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must request/present a replacement Quote for explicit acceptance. Identical replay retains the original accepted version and subject; a replay with changed accepted components is an idempotency conflict.
+Immediately before a new payment creation, Core first resolves an exact idempotency replay, then recalculates selling state, exact store/SKU prices, discounts, Instant stock/hold or Scheduled window/cutoff, serviceability, provider quotation, and fulfillment eligibility without persisting or superseding another Quote. The accepted Quote version, price-acceptance version, currency, `expectedTotalMinor`, every explicit component, and provider quotation evidence must agree; otherwise Core returns `PRICE_CHANGED` without creating a payment and the browser must request/present a replacement Quote for explicit acceptance. Identical replay retains the original accepted version and subject; a replay with changed accepted components is an idempotency conflict.
 
-Stable financial-safety failures include `SELLING_PAUSED`, `TRIAL_ENDED`, `SUBSCRIPTION_GRACE_ENDED`, `MINIMUM_ORDER_NOT_MET`, `DELIVERY_QUOTE_UNAVAILABLE`, `DELIVERY_QUOTE_EXPIRED`, `PAYMENT_OUTCOME_UNRESOLVED`, `AUTHORIZATION_OUTCOME_UNRESOLVED`, `PAYMENT_ACTION_EXPIRED`, `AUTHORIZATION_ACTION_EXPIRED`, and `REFUND_AMOUNT_UNAVAILABLE`. Ambiguous provider outcomes preserve their application identity and reconciliation state; clients must not retry under a new identity merely because a response was lost.
+Stable financial-safety failures include `SELLING_PAUSED`, `MINIMUM_ORDER_NOT_MET`, `DELIVERY_QUOTE_UNAVAILABLE`, `DELIVERY_QUOTE_EXPIRED`, `PAYMENT_OUTCOME_UNRESOLVED`, `AUTHORIZATION_OUTCOME_UNRESOLVED`, `PAYMENT_ACTION_EXPIRED`, `AUTHORIZATION_ACTION_EXPIRED`, and `REFUND_AMOUNT_UNAVAILABLE`. Ambiguous provider outcomes preserve their application identity and reconciliation state; clients must not retry under a new identity merely because a response was lost.
 
-`OrderCommitmentResult` is either the existing/new committed Order summary or a stable actionable exception. Duplicate requests return the same logical result. If Instant inventory or provider quotation is unavailable before charge, return valid fulfillment alternatives without exposing or asking the customer to select a location. If canonical payment commitment succeeds but the downstream Membership/Order command cannot complete, preserve the payment observation and retry the same idempotent commitment. Bounded failure creates a visible finance/reconciliation exception. A second payment/Order and automatic refund are forbidden unless a separately approved recovery command explicitly authorizes them.
+`OrderCommitmentResult` is either the existing/new committed Order summary or a stable actionable exception. Duplicate requests return the same logical result. If Instant inventory or provider quotation is unavailable before charge, return valid fulfillment alternatives without exposing or asking the customer to select a location. If canonical payment commitment succeeds but the downstream Order command cannot complete, preserve the payment observation and retry the same idempotent commitment. Bounded failure creates a visible finance/reconciliation exception. A second payment/Order and automatic refund are forbidden unless a separately approved recovery command explicitly authorizes them.
 
 `checkout.abandonCheckoutAttempt({ quoteId, expectedVersion, idempotencyKey })` is the sole customer pre-commit abandonment command. It ownership- and version-guards an active Quote, releases its held Instant inventory when applicable, and makes the Quote/attempt terminal without creating an Order, Payment outcome, Refund, or Promotion redemption. Exact replay returns the original result and changed replay fails. Quotes with a Payment that can still succeed fail closed; consumed Quotes are committed-Order territory and cannot be canceled through Checkout. Address, cart, Promotion, or fulfillment edits discard an accepted Quote through this command, with an explicit restart action as a retryable path; browser unload delivery is not relied upon.
 
-Notifications publish the closed launch vocabulary `ORDER_CONFIRMED`, `PAYMENT_ACTION_REQUIRED`, `PAYMENT_FAILED`, `SCHEDULED_CUTOFF_REMINDER`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`, `RENEWAL_PAYMENT_FAILED`, `RENEWAL_ACTION_REQUIRED`, `TRIAL_ENDING`, `FIRST_PAID_RENEWAL_UPCOMING`, `ORDER_CANCELLATION_REQUESTED`, `ORDER_REFUND_PROGRESSING`, `ORDER_REFUND_COMPLETED`, `ORDER_CANCELLATION_COMPLETED`, and `ORDER_REFUND_EXCEPTION`. Versioned templates consume bounded provider-neutral facts only. Stable event/type/recipient identity deduplicates transactional D1 outbox intents. A publisher sends only the outbox ID to Cloudflare Queues; the idempotent consumer conditionally leases D1, records immutable attempts, and explicitly acknowledges/retries each message. Bounded exhaustion is dead-letter visible and scheduled redrive repairs unpublished or stuck work. Notification handling never becomes evidence that the source domain transition succeeded or failed.
+Notifications publish the closed launch vocabulary `ORDER_CONFIRMED`, `PAYMENT_ACTION_REQUIRED`, `PAYMENT_FAILED`, `SCHEDULED_CUTOFF_REMINDER`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`, `ORDER_CANCELLATION_REQUESTED`, `ORDER_REFUND_PROGRESSING`, `ORDER_REFUND_COMPLETED`, `ORDER_CANCELLATION_COMPLETED`, and `ORDER_REFUND_EXCEPTION`. Versioned templates consume bounded provider-neutral facts only. Stable event/type/recipient identity deduplicates transactional D1 outbox intents. A publisher sends only the outbox ID to Cloudflare Queues; the idempotent consumer conditionally leases D1, records immutable attempts, and explicitly acknowledges/retries each message. Bounded exhaustion is dead-letter visible and scheduled redrive repairs unpublished or stuck work. Notification handling never becomes evidence that the source domain transition succeeded or failed.
 
-For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiring exact-base-unit inventory hold; the transaction-local availability guard prevents concurrent carts from holding the same final units, and commitment converts the winning hold into a committed reservation. Instant requires no membership. For `SCHEDULED`, commitment requires eligible membership and uses the selected cycle/window and cutoff, records exact paid purchase demand, and performs no stock or capacity mutation. The committed result snapshots fulfillment mode, resolved location/zone/service area, cutoff and delivery instants, promise/window/ETA, optional Scheduled cycle identifiers, SKU conversion and shipping grams, Promotions, all active monetary components, and accepted provider quotation evidence. New commerce has no FreshMarkets Service Fee or customer-facing processing fee.
+For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiring exact-base-unit inventory hold; the transaction-local availability guard prevents concurrent carts from holding the same final units, and commitment converts the winning hold into a committed reservation. Instant requires no membership. For `SCHEDULED`, commitment uses the selected cycle/window and cutoff, records exact paid purchase demand, and performs no stock or capacity mutation. The committed result snapshots fulfillment mode, resolved location/zone/service area, cutoff and delivery instants, promise/window/ETA, optional Scheduled cycle identifiers, SKU conversion and shipping grams, Promotions, all active monetary components, and accepted provider quotation evidence. New commerce has no FreshMarkets Service Fee or customer-facing processing fee.
 
 ## Customer Orders and Amendments
 
@@ -360,7 +327,7 @@ capability or scope checks, and the internal Staff evidence is not part of any p
 
 Audit queries require `audit.read`, enforce resource scope, use bounded keyset pagination, and return sanitized purpose-built DTOs rather than raw JSON rows. Credential, bearer-token, cookie, authorization, provider-payload, and secret values are redacted recursively. Staff invitations never accept a password; Better Auth retains credentials, verification, and session authority. Roles with active assignments cannot be silently deleted, and session revocation is an explicit audited operation.
 
-### Implemented Admin Foundation service (Slice 1, 2026-08-27)
+### Historical implementation — Admin Foundation service (Slice 1, 2026-08-27)
 
 `packages/contracts/src/admin-foundation.ts` publishes the closed canonical dot-form capability vocabulary (`adminCapabilityCodes`), the derived `Capability` type, `isAdminCapability`, and the `AdminFoundationService` surface implemented by Core:
 
@@ -371,7 +338,7 @@ Audit queries require `audit.read`, enforce resource scope, use bounded keyset p
 
 Migration `0026_admin_foundation.sql` seeds the canonical capability rows with stable `perm_<domain>_<action>_v1` ids and maps historical colon-form assignments additively. Historical colon-form permission rows and assignments remain compatibility data; new source and DTOs use canonical dot-form capabilities only.
 
-### Implemented Staff & Access service (Slice 2, 2026-08-27)
+### Historical implementation — Staff & Access service (Slice 2, 2026-08-27)
 
 `packages/contracts/src/admin-staff-access.ts` publishes `AdminStaffAccessService` — `listAdminStaff`, `getAdminStaff`, `listAdminStaffInvitations`, `inviteAdminStaff`, `revokeAdminStaffInvitation`, `updateAdminStaff`, `changeAdminStaffAccess`, `setAdminStaffRoles`, `setAdminStaffScopes`, `revokeAdminStaffSessions`, `listAdminRoles`, `getAdminRole`, `createAdminRole`, `updateAdminRole`, `setAdminRoleCapabilities`, `archiveAdminRole`, and `listCapabilityDefinitions`.
 
@@ -382,7 +349,7 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - `revokeAdminStaffSessions` deletes the authentication authority's own session rows for the linked user (the minimal Better Auth build exposes no administrative revoke API), leaving no application-side session state.
 - Invitation lifecycle for the current release: `inviteAdminStaff` creates one durable `PENDING` record per normalized email with 14-day expiry; acceptance/provisioning of a new identity is an explicitly deferred later flow.
 
-### Implemented Customer CRM service (Slice 3, 2026-08-27)
+### Historical implementation — Customer CRM service (Slice 3, 2026-08-27)
 
 `packages/contracts/src/admin-customers.ts` publishes `AdminCustomerService` (`listAdminCustomers`, `getAdminCustomer`, `listCustomerInvitations`, `inviteCustomer`, `changeCustomerAccess`, `revokeCustomerSessions`, `requestCustomerClosure`) and `AdminPrivacyService` (`listPrivacyRequests`, `applyPrivacyAction`).
 
@@ -394,7 +361,7 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - Customer invitations mirror the staff invitation lifecycle (one `PENDING` record per normalized email, 14-day expiry, no password input); acceptance/provisioning is deferred with the staff deferral.
 - Material commands are idempotent, version-guarded where concurrent mutation is possible, reason-gated, and audited (`CUSTOMER.*`/`PRIVACY.*` closed vocabulary).
 
-### Implemented Promotions service (Slice 4, 2026-08-27)
+### Historical implementation — Promotions service (Slice 4, 2026-08-27)
 
 `packages/contracts/src/admin-promotions.ts` publishes `AdminPromotionsService` (`listAdminPromotions`, `getAdminPromotion`, `createAdminPromotion`, `updateAdminPromotion`, `changeAdminPromotionStatus`, `previewAdminPromotion`, `grantAdminPromotion`, `listPromotionGrants`, `listPromotionRedemptions`).
 
@@ -404,7 +371,7 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - Grants create targeted `promotion_grant` rows (`benefit_code` = promotion code, `customer_id` persisted, `max_redemptions >= 1`) for ACTIVE promotions only. `INTRO_TRIAL` and `LEGACY_TRIAL_HISTORY` are reserved system membership codes and are excluded from this surface. Exactly one grant may exist for a promotion/customer: an identical idempotent retry replays the original grant, while a distinct command conflicts without creating a duplicate. Redemptions are read-only inspections joined by promotion code.
 - Material commands are idempotent, version-guarded, reason-gated, and audited (`PROMOTION.CREATED/UPDATED/ACTIVATED/DEACTIVATED/ARCHIVED/GRANTED`).
 
-### Implemented Catalog and Inventory services (Slice 5, 2026-08-27)
+### Historical implementation — Catalog and Inventory services (Slice 5, 2026-08-27)
 
 `packages/contracts/src/admin-catalog.ts` publishes `AdminCatalogService` (`listAdminCategories`, `createAdminCategory`, `getAdminCategory`, `updateAdminCategory`, `setAdminCategoryStatus`, `listAdminUnits`, `createAdminUnit`, `listAdminProducts`, `createAdminProduct`, `getAdminProduct`, `updateAdminProduct`, `setAdminProductStatus`, `uploadAdminProductMedia`, `updateAdminProductMedia`, `removeAdminProductMedia`, `createAdminSku`, `updateAdminSku`, `setAdminSkuAvailability`, `setAdminSkuPrice`) and `AdminInventoryReadService` (`listAdminInventory`, `getAdminInventoryLedger`).
 
@@ -436,7 +403,7 @@ The Admin Order list exposes the committed Order number, immutable recipient lab
 
 Refund availability subtracts every reserved refund amount in `REQUESTED`, `PROCESSING`, `ESCALATED`, or `SUCCEEDED` before accepting another request. The guarded refund mutation, Audit event, and idempotency completion share one atomic D1 batch, so concurrent requests cannot over-refund or record a false success. Reconciliation resolution is an explicit confirmed Admin command; downstream payment-reaction redrive remains Core-owned scheduled work rather than a second Admin retry authority.
 
-Operational command/read contracts publish the canonical Fulfillment (`NOT_STARTED` through `COMPLETED`, with `SHORTED` resolution) and Delivery Job (`UNASSIGNED` through `DELIVERED`, with explicit failure/retry/escalation) states and command actions. Core derives `allowedActions`; the former `START|PACK|SHORTAGE` and `DISPATCH|DELIVER|FAIL` shortcuts are not accepted. Procurement aggregation computes committed demand and usable inventory inside its version-guarded command and permits only one active requirement per cycle/location/pool. Order issues have no `REOPEN` action: `RESOLVED` is terminal and further work requires a new linked issue.
+Operational command/read contracts publish the canonical Fulfillment (`NOT_STARTED` through `COMPLETED`, with `SHORTED` resolution) and Delivery Job (`UNASSIGNED` through `DELIVERED`, with explicit failure/retry/escalation) states and command actions. Core derives `allowedActions`; the former `START|PACK|SHORTAGE` and `DISPATCH|DELIVER|FAIL` shortcuts are not accepted. Procurement aggregation computes exact paid Scheduled demand without physical-stock netting inside its version-guarded command and permits only one active requirement per cycle/location/pool. Order issues have no `REOPEN` action: `RESOLVED` is terminal and further work requires a new linked issue.
 
 ## Admin Customers, Catalog, Promotions, and Fulfillment Configuration
 
@@ -474,22 +441,17 @@ Operational command/read contracts publish the canonical Fulfillment (`NOT_START
 
 The commerce-configuration commands are Global-scope only. A mode switch requires selling `PAUSED`; reopening returns controlled readiness blockers until committed work is protected and active locations are ready. Location operational promises, exact prices, Instant stock readiness, and provider pickup/profile readiness are configured separately and never select another customer mode or define Scheduled capacity.
 
-`AdminCustomerSummary` contains only authorized Customer/profile display data plus location, Order count, last Order, lifetime-spend/AOV fields only when their canonical metric definitions are approved, Membership/trial state, and creation date. Detail composes scoped addresses, Orders, Membership, Promotion/redemption, Payments summary, delivery, support-visible, and audit read models. Better Auth rows are not the Customer contract. Customer "delete" is represented by the privacy/account-closure lifecycle: access may be disabled and eligible application fields may later be anonymized, but required Order, Payment, Refund, redemption, inventory-ledger, and Audit history is never hard-deleted by a generic Customer command.
+`AdminCustomerSummary` contains only authorized Customer/profile display data plus location, Order count, last Order, lifetime-spend/AOV fields only when their canonical metric definitions are approved, and creation date. Detail composes scoped addresses, Orders, Promotion/redemption, Payments summary, delivery, support-visible, and audit read models. Better Auth rows are not the Customer contract. Customer "delete" is represented by the privacy/account-closure lifecycle: access may be disabled and eligible application fields may later be anonymized, but required Order, Payment, Refund, redemption, inventory-ledger, and Audit history is never hard-deleted by a generic Customer command.
 
 Unit and SKU commands accept integer quantities only and validate dimension compatibility. `PACK`, `BUNCH`, and `TRAY` are labels, not universal conversion codes. Promotion definitions accept only the closed benefit/rule types and validated parameters from `DOMAIN_MODEL.md`; no code/expression payload exists. All Admin operations require the capability and resource scope named by Application IAM.
 
-## Admin Memberships and Customer Issues
+## Admin Customer Issues
 
-- `admin.memberships.list({ query?, cursor?, limit? }) -> AdminMembershipPage`; `query` is a bounded case-insensitive partial match over customer email or membership/subscription ID.
-- `admin.memberships.get({ subscriptionId }) -> AdminMembershipDetail`
-- `admin.memberships.cancel({ subscriptionId, timing: "IMMEDIATE" | "PERIOD_END", reason, expectedVersion, idempotencyKey }) -> AdminMembershipDetail`
-- `admin.memberships.recover({ subscriptionId, idempotencyKey }) -> AdminMembershipDetail`
-- `admin.memberships.listExceptions(filters, page) -> MembershipExceptionPage`
 - `admin.orderIssues.list(filters, page) -> OrderIssuePage`
 - `admin.orderIssues.get({ issueId }) -> OrderIssueDetail`
 - `admin.orderIssues.applyAction({ issueId, action, reason?, expectedVersion, idempotencyKey }) -> OrderIssueDetail`
 
-Membership Admin commands invoke the canonical Membership state machine and never patch a state, fabricate a trial, or assert payment success. Recovery consumes provider-confirmed canonical Payments truth. The Order Issue queue projects the committed Order number, immutable recipient label, customer email, category, report summary, owner, status, creation instant, and Core-derived legal next actions. Order-issue actions control intake/triage state only; they never implicitly authorize a Refund or Credit.
+The Order Issue queue projects the committed Order number, immutable recipient label, customer email, category, report summary, owner, status, creation instant, and Core-derived legal next actions. Order-issue actions control intake/triage state only; they never implicitly authorize a Refund or Credit.
 
 ## Inventory
 
@@ -502,6 +464,8 @@ Adjustments require capability, location scope, exact base-unit quantity, reason
 The Admin presentation maps the signed adjustment command to explicit **Add stock** and **Remove stock** actions and shows the server-recorded ledger date. This is the default manual inventory API path. Procurement, Receiving, and Fulfillment contracts remain separate because committed demand, accepted/rejected supply, and paid-order picking/packing cannot be safely collapsed into a stock setter; their Web routes are contextual/advanced rather than primary navigation.
 
 ## Procurement and Receiving
+
+Starting receiving is explicit. The retained `receiveProcurement` adapter only records quantities against an already-started receipt and forwards the caller's expected receipt version; it cannot silently start a receipt or substitute a fresh version. A rejected quantity command must not start preparation or persist success.
 
 - `admin.procurement.getRequirements({ cycleId, destinationLocationId }) -> ProcurementRequirementView`
 - `admin.procurement.aggregateDemand({ cycleId, idempotencyKey }) -> ProcurementRunView`
@@ -525,7 +489,7 @@ Every command validates location scope and legal transition.
 
 ## Delivery Operations
 
-Active delivery operations are external-provider only: location-scoped queue/detail, quote, book, get/refresh, cancel, webhook observation, normalized-status application, and reconciliation. The legacy map, batch, stop-ordering, eligible-Rider, assignment, route-preview, and Rider-task signatures recorded below are historical compatibility surfaces pending removal; they are not callable authority for new customer deliveries and must not appear in active navigation or readiness.
+Lalamove is default delivery and emergency manual fallback is Scheduled-only. Operations include location-scoped queue/detail, quote, book, get/refresh, cancel, webhook observation, normalized-status application, and reconciliation. The legacy map, batch, stop-ordering, eligible-Rider, assignment, route-preview, and Rider-task signatures recorded below are historical compatibility surfaces pending removal; they are not callable authority for new customer deliveries and must not appear in active navigation or readiness.
 
 - `admin.delivery.getOperationsSummary({ fulfillmentMode?, cycleId?, locationId? }) -> DeliveryOperationsSummary`
 - `admin.delivery.listExceptions(filters, page) -> DeliveryExceptionQueue`
@@ -668,15 +632,14 @@ sender/pickup profile or `profile: null`. `upsertLocationDeliveryProfile` requir
 a stable idempotency key, and `expectedVersion` (`0` for the first profile); it never accepts another
 coordinate. `requestExternalDelivery` requires one `jobId`, its expected Delivery Job version, the
 closed provider code, and either `IMMEDIATE` or an RFC 3339 `SCHEDULED` pickup. Core derives the
-service type for Scheduled work from provider configuration, while Instant must match the provider
-and service snapshotted from the customer's opaque checkout selection.
+service type for Scheduled work from provider configuration, and both modes use Lalamove by default without customer-selected provider authority.
 
-Checkout uses the same internal boundary: Instant quotes every enabled eligible adapter and returns opaque customer options; Scheduled selects Lalamove for a verified future `scheduleAt` while exposing only the delivery window. Before booking, Core re-quotes and records final courier payable and variance separately from the immutable customer delivery charge. No positive variance creates another customer payment and no negative variance creates an automatic customer credit.
+Checkout uses Lalamove quotation for both modes. Scheduled pickup must fit its verified horizon. Booking re-quotes and records actual courier cost/variance separately; it never charges the customer again.
 
 The request command loads the store profile, Order currency/amount and fulfillment snapshot,
 immutable customer stop/contact/instructions, and derived full-order weight. It rejects incomplete
 profiles or customer delivery facts, stale/assigned jobs, pickup after the committed promise/window,
-and providers that are not enabled. Active execution is always external; no internal-fleet assignment, Rider/batch command, or route preview is offered.
+and providers that are not enabled. Manual execution is a separately guarded Scheduled emergency command; no internal-fleet assignment, Rider/batch command, or route preview is offered.
 
 The GrabExpress adapter sends recipient identity/contact and delivery data rather than removing it.
 It strips only the leading `+` required by Grab's phone wire format, maps building/unit to
@@ -711,8 +674,7 @@ instruction visibility, credentials, and sandbox acceptance are confirmed.
 GrabExpress callbacks enter only through `POST /webhooks/delivery/grab-express`. Core compares both
 configured authorization headers in constant time before reading a bounded 64 KiB JSON body,
 validates the provider references and status, derives a deterministic event identity, and stores
-each authenticated event once in the protected provider-event inbox. Duplicate delivery is an
-acknowledged no-op. Unknown dispatches, compare-and-swap collisions, and ambiguous observations are
+each authenticated event once in the protected provider-event inbox. Duplicate delivery retries unapplied inbox work through the same normalized application service; already-applied effects are no-ops. Unknown dispatches, compare-and-swap collisions, and ambiguous observations are
 retained for reconciliation; older observations are retained without regressing current state.
 Webhook processing updates the external provider dispatch only. It does not directly fabricate a
 canonical DeliveryJob, DeliveryStop, arrival, or proof-of-delivery transition. Diagnostic events
@@ -747,7 +709,23 @@ Metric-definition lifecycle filters use `APPROVED|BLOCKED|SUPERSEDED`; unversion
 - Test provider ingress separately for signature failure, duplicate/out-of-order `(provider, providerEventId)`, canonical-state mapping, compare-and-swap conflict, safe retry, and reconciliation; do not fabricate webhook `expectedVersion` values.
 - Test fulfillment-mode DTOs so `INSTANT` never requires a cycle and `SCHEDULED` never treats `WEEKLY` as its mode; verify committed snapshots survive configuration changes.
 - Test active mass/count units, integer SKU consumption and shipping grams, absence of universal packaging conversion, exact-location nonzero pricing with no fallback, deterministic Promotion component stacking/usage limits, provider quotation snapshots, and complete Quote/Order financial components without Service Fee or processing-fee charges.
-- Test selling pause/mode-switch/reopen, Scheduled independence from stock/capacity, Instant provider choice, Scheduled window-only choice/Lalamove pricing, final courier variance absorption, and absence of active Rider/batch/map/mock-payment contracts.
+- Test selling pause/mode-switch/reopen, Scheduled independence from stock/capacity, absence of customer courier choice, both-mode Lalamove pricing, Scheduled-only manual fallback, final courier variance absorption, and absence of active Rider/batch/map/mock-payment contracts.
 - Test notification Queue duplicate delivery, per-message acknowledgement/retry, expired leases, bounded exhaustion/dead-letter handling, and scheduled redrive without source-domain mutation.
 - Test every Admin/Analytics query for capability/scope enforcement, no Better Auth/raw-row Customer leakage, definition-version consistency, and read-only source ownership.
 - During deployment, maintain compatibility for any interval in which Web and Core versions may differ.
+
+## 2026-09-07 Setup and Operations Contract Requirements
+
+These target contracts supersede conflicting historical implementation descriptions above. They require reachable Web adapters, runtime validators, Core authorization and atomic effects before acceptance; this list is not an implemented service manifest.
+
+- Global location create/update/deactivate, structured address/pin finalization, capability/schedule/closure setup, service-area/zone authoring and assignment preview use `locations.read`/`locations.manage`. Core supplies versions, legal actions and eligible scope choices. No operator types internal IDs manually.
+- Global exact-location pricing uses `prices.read`/`prices.manage`; price writes require global scope even for a location target. Local catalog activation retains scoped authority and read-only prices.
+- Staff/customer invitation acceptance derives verified identity from Better Auth and matches the invitation email, expiry and state atomically. Profile update accepts only preferred language/notification preferences; support notes are append-only. Closure records an audited request and access state; irreversible anonymization is unavailable until approved retention/field policy exists.
+- Product/campaign upload/update/remove and anonymous published-media reads use opaque identity/version, bounded bytes, MIME/signature/size validation, ETag and owner-publication checks. No caller object keys or private payloads are returned. Failed storage/metadata work has durable cleanup recovery.
+- Global transfer dispatch, destination receipt and Global discrepancy/return resolution require transfer capability plus scope. All use stable command identities and per-line effects; receipt cannot credit another location or overspend outstanding transit.
+- Global cycle/window authoring includes open/cutoff/purchase/preparation/pickup/arrival instants and participation. Procurement aggregate/approve/purchase/start receiving/record/resolve/complete form a reachable command sequence. Scheduled receipt/packing targets cycle goods; inspected surplus release is an explicit audited command.
+- Preparation start locks Order cancellation atomically. Booking requires Instant picked/checked + packing started, or Scheduled checked receipts + credible ready time. Packed completion consumes the appropriate stock/allocation exactly once. Normal handover rejects unpacked goods.
+- Scheduled manual assignment requires reason, person name/phone and definite closure of any prior attempt. Manual handover/completion/failure is versioned and audited; unknown cost remains unavailable. Core rejects every manual command for Instant.
+- Webhook, refresh and inbox redrive invoke one normalized Delivery application path. Searching is distinct from assigned, active/uncertain attempts are exclusive, prior-attempt observations cannot overwrite current work, and courier cancellation never cancels a grocery Order.
+
+See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseline and ownership design. Membership RPCs, membership navigation/errors/jobs, customer courier selection and local price writes described in historical slices are removal work, never active target authority.

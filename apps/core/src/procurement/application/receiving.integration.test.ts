@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { startReceiving, type StartReceivingCommand } from "./start-receiving";
 import { recordReceivedLine, type RecordReceivedLineCommand } from "./record-received-line";
+import {
+  createReceivingRepository,
+  RECORD_LINE_SCOPE,
+} from "../infrastructure/receiving-repository";
+import { completeReceiving } from "./complete-receiving";
 
 const locationId = "location-cebu-central";
 const inventoryPoolId = "pool-red-onion";
@@ -133,6 +138,19 @@ function lineCommand(
 }
 
 describe("start receiving", () => {
+  it("allows only one concurrent start and never records success for the loser", async () => {
+    const fx = await fixture({ recordStatus: "NOT_STARTED" });
+    const commands = [startCommand(fx), startCommand(fx)];
+    const results = await Promise.all(commands.map((command) => startReceiving(env.DB, command)));
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(await record(fx.receivingRecordId)).toMatchObject({ status: "IN_PROGRESS", version: 2 });
+    const evidence = await env.DB.prepare(
+      "SELECT COUNT(*) count FROM idempotency_records WHERE scope='procurement.startReceiving' AND idempotency_key IN (?,?) AND status='SUCCEEDED'",
+    )
+      .bind(commands[0]?.idempotencyKey, commands[1]?.idempotencyKey)
+      .first();
+    expect(evidence).toEqual({ count: 1 });
+  });
   it("transitions a pending record to in progress idempotently", async () => {
     const fx = await fixture({ recordStatus: "NOT_STARTED" });
     const attempt = startCommand(fx);
@@ -144,12 +162,81 @@ describe("start receiving", () => {
 
   it("rejects starting when the requirement is not orderable", async () => {
     const fx = await fixture({ requirementStatus: "AGGREGATED", recordStatus: "NOT_STARTED" });
-    const result = await startReceiving(env.DB, startCommand(fx));
+    const before = await record(fx.receivingRecordId);
+    const command = startCommand(fx);
+    const result = await startReceiving(env.DB, command);
     expect(result).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(await record(fx.receivingRecordId)).toEqual(before);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM idempotency_records WHERE scope='procurement.startReceiving' AND idempotency_key=? AND status='SUCCEEDED'",
+      )
+        .bind(command.idempotencyKey)
+        .first(),
+    ).toBeNull();
   });
 });
 
 describe("record received line", () => {
+  it("losing the requirement version leaves receipt, stock, events and success unchanged", async () => {
+    await cleanInventory();
+    const fx = await fixture();
+    const before = await record(fx.receivingRecordId);
+    const repository = createReceivingRepository(env.DB);
+    const key = crypto.randomUUID();
+    await repository.claimIdempotency(RECORD_LINE_SCOPE, key, "receiving-race");
+    // A competing requirement command wins after the application's preflight read.
+    await env.DB.prepare("UPDATE procurement_requirement SET version=version+1 WHERE id=?")
+      .bind(fx.requirementId)
+      .run();
+    await repository.recordReceivedLine({
+      receivingRecordId: fx.receivingRecordId,
+      procurementRequirementId: fx.requirementId,
+      locationId,
+      inventoryPoolId,
+      acceptedDelta: 4,
+      rejectedDelta: 0,
+      reason: "Receipt race",
+      actorId: "staff-receiving",
+      expectedRecordVersion: 1,
+      expectedRequirementVersion: 1,
+      nextRecordStatus: "IN_PROGRESS",
+      nextRequirementStatus: "PARTIALLY_RECEIVED",
+      idempotencyKey: key,
+      requestHash: "receiving-race",
+    });
+    expect(await record(fx.receivingRecordId)).toEqual(before);
+    expect(await balance()).toBeNull();
+    expect(await counts(fx.receivingRecordId)).toEqual({ events: 0, ledger: 0 });
+    expect(await repository.readIdempotency(RECORD_LINE_SCOPE, key)).toEqual({
+      status: "PROCESSING",
+    });
+  });
+
+  it("records completion success only for the winning concurrent command", async () => {
+    const fx = await fixture({ recordStatus: "DISCREPANCY", accepted: 7, rejected: 3 });
+    const first = {
+      receivingRecordId: fx.receivingRecordId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    const second = { ...first, idempotencyKey: crypto.randomUUID() };
+    const results = await Promise.all([
+      completeReceiving(env.DB, first),
+      completeReceiving(env.DB, second),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(await record(fx.receivingRecordId)).toMatchObject({ status: "COMPLETED", version: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM idempotency_records WHERE scope='procurement.completeReceiving' AND idempotency_key IN (?,?) AND status='SUCCEEDED'",
+      )
+        .bind(first.idempotencyKey, second.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
   it("rejects zero and negative deltas without mutation", async () => {
     const fx = await fixture();
     const zero = await recordReceivedLine(

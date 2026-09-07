@@ -183,7 +183,7 @@ describe("admin operations reads", () => {
         "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at, version) VALUES (?, ?, 100, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, 1)",
       ).bind(paymentId, customerId, `payment-${suffix}`, Date.now(), Date.now()),
       env.DB.prepare(
-        "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, 'cycle-next-cebu', '{}', 'PAID', 100, 'PHP', ?, ?, 1)",
+        "INSERT INTO grocery_order (id, customer_id, cycle_id, address_snapshot_json, status, total_minor, currency, payment_id, created_at, version) VALUES (?, ?, 'cycle-next-cebu', '{}', 'FULFILLMENT_PENDING', 100, 'PHP', ?, ?, 1)",
       ).bind(orderId, customerId, paymentId, Date.now()),
       env.DB.prepare(
         "INSERT INTO fulfillment_record (id, order_id, location_id, status, updated_at, version) VALUES (?, ?, 'location-cebu-central', 'SHORTED', ?, 1)",

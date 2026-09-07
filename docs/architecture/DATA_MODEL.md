@@ -1,8 +1,10 @@
 # Conceptual D1 Data Model
 
+The owner-authorized 2026-09-07 commerce alignment is the active target. Both modes are pay-as-you-go without membership; Lalamove prices both modes; Scheduled alone permits emergency manual delivery; Global owns exact-location price writes. See [Phase 0 design decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for ownership, capabilities, profiles/closure, warehouse transit, cycle goods, execution attempts, publication and the retained-baseline strategy. Implementation and migration descriptions below are evidence of the previous baseline where explicitly labeled historical, not acceptance of the target.
+
 ## Purpose and Conventions
 
-This document is authoritative for the implementation-ready conceptual relational model and persistence ownership; business meaning comes from `DOMAIN_MODEL.md` and lifecycle vocabulary from `STATE_MACHINES.md`. It is not a migration, does not accept draft migration `0015`, and does not rewrite migration history. Production schema changes begin only in an authorized implementation phase.
+This document is authoritative for the implementation-ready conceptual relational model and persistence ownership; business meaning comes from `DOMAIN_MODEL.md` and lifecycle vocabulary from `STATE_MACHINES.md`. This is a conceptual model, not a frozen implementation. FreshMarkets is pre-launch: better schema designs and migration-baseline revisions are permitted under `CODING_STANDARDS.md`, with repositories, contracts, seeds, generators, and tests updated together. Existing tables or migration numbers are not a reason to preserve a worse model.
 
 Conventions:
 
@@ -15,7 +17,7 @@ Conventions:
 - Provider inbox records are deduplicated by unique `(provider, provider_event_id)`; provider payloads do not supply aggregate versions.
 - JSON snapshots are versioned application data, not an excuse to omit queryable foreign keys.
 
-Scheduled commerce has no operational capacity key or allocation. Instant coordination uses location inventory-pool holds/reservations rather than a synthetic cycle. The canonical retail-price scope is exact SKU × fulfillment location × price type; Market remains currency/context, never fallback authority. Historical launch migrations may be narrower or contain retired capacity/fee/fleet data, but forward-only corrective migrations must preserve those rows without keeping them active.
+Scheduled commerce has no operational capacity key or allocation. Instant coordination uses location inventory-pool holds/reservations rather than a synthetic cycle. The canonical retail-price scope is exact SKU × fulfillment location × price type; Market remains currency/context, never fallback authority. Historical launch migrations may be narrower or contain retired capacity/fee/fleet data, and their treatment follows the pre-launch/retained-deployment lifecycle policy. Retained commercial evidence must remain truthful, but disposable compatibility schema need not be kept solely because it exists.
 
 ## Better Auth-Owned Tables
 
@@ -91,20 +93,9 @@ snapshots remain independent of subsequent address edits.
 
 Customer or Staff invitation records coordinate application provisioning but never store passwords, verification secrets, OAuth tokens, or session tokens. Privacy/closure completion may disable access and anonymize fields approved by retention policy; it never cascades deletion into Orders, Payments, Refunds, Promotion redemptions, inventory ledgers, or Audit events.
 
-## Subscriptions
+## Retired Subscription Storage
 
-- `membership_offers(id PK, code UNIQUE, name, membership_fee_minor compatibility seed, currency compatibility seed, billing_interval, status, version)`
-- `membership_price_versions(id PK, offer_id FK, amount_minor, currency, effective_from, effective_to NULL, version, created_by_staff_id NULL, created_at)`
-- `subscriptions(id PK, customer_id FK, offer_id FK, agreed_price_version_id FK, agreed_amount_minor, agreed_currency, state, trial_starts_at NULL, trial_ends_at NULL, billing_starts_at NULL, current_period_starts_at NULL, current_period_ends_at NULL, next_billing_at NULL, cancel_at_period_end, cancellation_requested_at NULL, scheduled_cancellation_at NULL, ended_at NULL, version, created_at, updated_at)`
-- `subscription_events(id PK, subscription_id FK, type, occurred_at, payment_id NULL, promotion_redemption_id NULL, metadata_json, idempotency_key UNIQUE NULL)`
-
-Exactly one global membership price version is current for the paid `CALENDAR_MONTH` offer. Price versions are effective-dated and non-overlapping. Paid enrollment copies the selected price-version ID, amount, and currency to the paid Subscription; Payments maps that immutable agreement to an exact PayMongo scheduled Plan. A new price version creates a new provider Plan for later enrollments without rewriting existing Subscriptions. A free-trial Subscription has no agreed paid-price snapshot or provider subscription. Offers do not contain `trial_days` or another field that grants trial eligibility. The subscription vocabulary is exactly `PENDING`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `UNPAID`, `CANCELED`, and `EXPIRED`; `CANCELED` and `EXPIRED` are terminal.
-
-`cancel_at_period_end` and `scheduled_cancellation_at` represent cancellation intent without prematurely changing an entitled state. When the scheduled instant arrives, a guarded command transitions the aggregate to `CANCELED`. `ended_at` records the actual terminal transition instant.
-
-Trial timestamps are calculated by adding one calendar month in the Market's configured business timezone, using the final valid day when the same day does not exist in the target month, then stored as UTC instants. The associated Promotions grant/redemption is mandatory authority for entering `TRIALING`. A trial stores no payment authorization or billing anchor and becomes terminal `EXPIRED` at its exact end. A later customer-selected paid enrollment inserts a separate `PENDING` Subscription and snapshots the then-current paid price.
-
-Indexes: customer/state, next billing, trial end, scheduled cancellation, and one open subscription per customer as defined by policy. Eligibility uses state plus effective timestamps. Provider customer/subscription references are Payments-owned mapping data, not Subscription columns.
+Membership prices, subscriptions, trials, provider subscription/plan/invoice mappings and membership promotion rules are absent from the target active model. Preserve only confirmed retained evidence through a tested upgrade; do not erase a shared baseline or invent live-subscription records. Legacy migration descriptions below are historical evidence only.
 
 ## Catalog, Units, and Prices
 
@@ -141,7 +132,7 @@ The Admin location Product read model joins, but never duplicates, `products`, `
 - `delivery_cycle_zones(cycle_id FK, zone_id FK, location_id FK, status, version, PRIMARY KEY(cycle_id, zone_id, location_id))` records eligibility/operational participation only and contains no capacity.
 - `delivery_provider_quotations(id PK, checkout_attempt_id FK NULL, delivery_job_id FK NULL, provider, provider_service, provider_quotation_id, amount_minor, currency, quoted_at, expires_at NULL, scheduled_pickup_at NULL, origin_snapshot_json, destination_snapshot_json, capability_snapshot_json, request_hash, status, created_at)` with exactly one checkout-attempt or dispatch owner.
 
-External-provider quotations are the only active customer-delivery price authority. Instant may retain multiple offers and snapshots the customer-selected one; Scheduled checkout stores the Lalamove future quotation while exposing only the window. Final courier payable and variance are recorded separately at booking. Legacy `delivery_fee_configuration`, `service_fee_configuration`, cycle-capacity, and allocation rows remain historical compatibility data and do not participate in new Quotes, payments, Orders, or readiness.
+Lalamove quotations are the checkout delivery-price authority in both modes. No customer courier selection is persisted. Actual external/manual cost is separate and nullable; unknown cost/variance is never zero. Legacy fee/capacity structures do not participate in new commerce.
 
 ## Cart and Checkout Attempts
 
@@ -177,22 +168,18 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 
 - `payment_intents(id PK, purpose, subject_type, subject_id, customer_id FK, amount_minor, currency, status, idempotency_key UNIQUE, version, created_at, updated_at)`
 - `payment_attempts(id PK, payment_intent_id FK, provider, provider_reference NULL, status, idempotency_key UNIQUE, version, created_at, updated_at)`
-- `payment_authorizations(id PK, customer_id FK, provider, provider_authorization_reference, provider_method_reference NULL, recurring_capable, status PENDING|ACTIVE|REVOKED, established_at NULL, revoked_at NULL, created_at, updated_at, UNIQUE(provider, provider_authorization_reference), UNIQUE(provider, provider_method_reference) among non-revoked rows)` — the Payments-owned recurring-capable mandate aggregate used only for paid enrollment/renewal where the approved provider flow requires it. Free trials never create or require this row. Membership may store its application ID on a paid Subscription but never stores provider references.
-- `payment_provider_actions(id PK, payment_intent_id FK NULL, authorization_id FK NULL, provider, provider_reference, action_type REDIRECT|SDK, redirect_url NULL, client_token NULL, expires_at, status ACTIVE|CONSUMED|EXPIRED, created_at, updated_at)` with exactly one payment/authorization owner, action-type-specific continuation data, and at most one active action per owner.
+- `payment_provider_actions(id PK, payment_intent_id FK, provider, provider_reference, action_type REDIRECT|SDK, redirect_url NULL, client_token NULL, expires_at, status ACTIVE|CONSUMED|EXPIRED, created_at, updated_at)` with one Payments owner, action-type-specific continuation data, and at most one active action per owner.
 - `payment_provider_methods(id PK, provider_customer_id FK, provider, provider_method_reference, status, metadata_json, created_at, updated_at, UNIQUE(provider, provider_method_reference))`
 - `payment_provider_event_inbox(id PK, provider, provider_event_id, provider_reference NULL, event_type NULL, payload_hash, normalized_observation_json NULL bounded to 16 KiB, raw_payload NULL bounded to 256 KiB, signature_verified_at NULL, processing_status, last_error_code NULL, attempts, received_at, processed_at NULL, available_at NULL, first_failed_at NULL, lease_owner NULL, lease_expires_at NULL, updated_at, UNIQUE(provider, provider_event_id))`
 - `payment_provider_webhook_receipt(id PK, provider, request_id, provider_event_id NULL, event_type NULL, payload_hash, raw_payload bounded to 256 KiB, parse_status, signature_verified_at, received_at)`
-- `payment_provider_membership_plan(id PK, provider, membership_price_version_id FK, provider_plan_reference, amount_minor, currency, interval, interval_count, status, created_at, updated_at, UNIQUE(provider, provider_plan_reference), UNIQUE(provider, membership_price_version_id))`
-- `payment_provider_subscription(id PK, provider, subscription_id FK UNIQUE, customer_id FK, provider_subscription_reference, provider_plan_reference, provider_customer_reference NULL, provider_status, latest_provider_event_id NULL, latest_invoice_reference NULL, next_billing_at NULL, provider_observed_at, created_at, updated_at, UNIQUE(provider, provider_subscription_reference))`
-- `payment_provider_subscription_invoice(id PK, provider, provider_invoice_reference, provider_subscription_reference, provider_payment_reference NULL, provider_status, amount_minor, currency, due_at NULL, paid_at NULL, latest_provider_event_id NULL, provider_observed_at, created_at, updated_at, UNIQUE(provider, provider_invoice_reference))`
 - `payment_settlement_observation(id PK, provider, provider_event_id, payment_intent_id FK, gross_minor, processing_cost_minor, withholding_minor, adjustment_minor, net_minor, currency, observed_at, created_at, UNIQUE(provider, provider_event_id, payment_intent_id))` — immutable verified provider evidence with exact `net = gross - processing cost - withholding + adjustment`; it is not the FreshMarkets Service Fee and does not own Payment state.
 - `refunds(id PK, payment_attempt_id FK, order_id FK NULL, amount_minor, currency, reason_code, reason, status REQUESTED|PROCESSING|SUCCEEDED|FAILED|ESCALATED, provider_reference NULL, idempotency_key UNIQUE, requested_by_staff_id FK NULL, version, created_at, updated_at)`
 
-`purpose` distinguishes at least membership enrollment/renewal, grocery checkout, order amendment, and other approved financial intents without coupling Payments to a provider's object model. Provider mappings and inbox payload metadata are Payments-owned. Membership and Orders store only stable application payment references needed for audit/reaction.
+`purpose` distinguishes grocery checkout, order amendment, and other approved financial intents without coupling Payments to a provider's object model. Provider mappings and inbox payload metadata are Payments-owned. Orders store only stable application payment references needed for audit/reaction.
 
-The receipt table is delivery history: every signature-verified delivery receives a row, including provider redeliveries and payloads rejected after authenticity verification. The inbox is event-processing identity: it deduplicates by `(provider, provider_event_id)` and owns application/reconciliation state. Indexes cover receipt event/time, provider/reference, provider subscription/status, provider invoice/subscription, payment intent/subject/status, refund/payment/status, and inbox processing status/time. Historical local renewal/dunning columns remain compatibility data only and are not billing authority. PayMongo owns scheduled invoice creation and charge retries. A provider event handler conditionally updates current aggregate versions and records retry/reconciliation state; no inbox payload field acts as `expectedVersion`.
+The receipt table is delivery history: every signature-verified delivery receives a row, including provider redeliveries and payloads rejected after authenticity verification. The inbox is event-processing identity: it deduplicates by `(provider, provider_event_id)` and owns application/reconciliation state. Indexes cover receipt event/time, provider/reference, provider subscription/status, provider invoice/subscription, payment intent/subject/status, refund/payment/status, and inbox processing status/time. Historical membership mapping/invoice/renewal rows are retained evidence only where required, not active billing authority. A provider event handler conditionally updates current aggregate versions and records retry/reconciliation state; no inbox payload field acts as `expectedVersion`.
 
-Historical migration `0044_financial_safety.sql` added explicit Quote/Order monetary components, accepted-Quote identity on Order reactions, and resumable provider actions. Historical migration `0045_finance_exception_taxonomy.sql` preserved finance exceptions while adding then-current post-payment capacity, consumed-Quote, Instant-mode, and sourcing categories. Its capacity/sourcing behavior is retained as migration history only and is superseded by the forward-only no-capacity exact-demand model; accepted-Quote consumption remains guarded.
+Historical migration `0044_financial_safety.sql` added explicit Quote/Order monetary components, accepted-Quote identity on Order reactions, and resumable provider actions. Historical migration `0045_finance_exception_taxonomy.sql` preserved finance exceptions while adding then-current post-payment capacity, consumed-Quote, Instant-mode, and sourcing categories. Its capacity/sourcing behavior is retained as migration history only and is superseded by the no-capacity exact-demand model; accepted-Quote consumption remains guarded.
 
 Migration `0046_cart_and_inbox_reliability.sql` reconciles historical duplicate `ACTIVE` carts before adding a partial unique customer index. The newest cart wins deterministically; its quantities remain authoritative and SKUs absent from it are copied from the newest older active cart that carries them. Superseded carts remain as history and a payload-safe domain event records the repair. The same migration adds bounded normalized-observation, retry-availability, and conditional-lease fields to the provider inbox. Migration `0054_paymongo_subscription_webhook_audit.sql` adds exact bounded payload retention after signature verification, provider plan/subscription/invoice mappings, and the canonical PayMongo-aligned `UNPAID` lifecycle projection. Raw payloads remain forbidden from diagnostic logs and ordinary Admin DTOs.
 
@@ -205,15 +192,15 @@ mismatch creates reconciliation evidence rather than changing financial state.
 ## Promotions
 
 - `promotions(id PK, code UNIQUE NULL, name, status, starts_at, ends_at, global_usage_limit NULL CHECK positive integer, per_customer_usage_limit NULL CHECK positive integer, automatic, priority, version)`
-- `promotion_benefits(id PK, promotion_id FK UNIQUE, benefit_type MEMBERSHIP_FEE_WAIVER|ORDER_PERCENT_DISCOUNT|ORDER_FIXED_DISCOUNT|DELIVERY_FEE_WAIVER|DELIVERY_PERCENT_DISCOUNT|DELIVERY_FIXED_DISCOUNT, parameters_json, version)`
-- `promotion_rules(id PK, promotion_id FK, rule_type FIRST_ORDER|NEW_CUSTOMER|MEMBER|NON_MEMBER|MINIMUM_SUBTOTAL|CUSTOMER_SEGMENT|SPECIFIC_CUSTOMERS, parameters_json, sort_order, version)`
+- `promotion_benefits(id PK, promotion_id FK UNIQUE, benefit_type ORDER_PERCENT_DISCOUNT|ORDER_FIXED_DISCOUNT|DELIVERY_FEE_WAIVER|DELIVERY_PERCENT_DISCOUNT|DELIVERY_FIXED_DISCOUNT, parameters_json, version)`
+- `promotion_rules(id PK, promotion_id FK, rule_type FIRST_ORDER|NEW_CUSTOMER|MINIMUM_SUBTOTAL|CUSTOMER_SEGMENT|SPECIFIC_CUSTOMERS, parameters_json, sort_order, version)`
 - `promotion_customer_targets(promotion_id FK, customer_id FK, PRIMARY KEY(promotion_id, customer_id))` for `SPECIFIC_CUSTOMERS` where required.
 - `promotion_grants(id PK, promotion_id FK, customer_id FK, status, granted_at, expires_at NULL, eligibility_snapshot_json, version, UNIQUE(promotion_id, customer_id))`
-- `promotion_redemptions(id PK, promotion_id FK, grant_id FK NULL, customer_id FK, order_id FK NULL, amendment_id FK NULL, subscription_id FK NULL, price_component MEMBERSHIP|MERCHANDISE|DELIVERY, amount_minor NULL, benefit_snapshot_json, eligibility_snapshot_json, redeemed_at, idempotency_key UNIQUE, CHECK exactly one supported target is populated)`
+- `promotion_redemptions(id PK, promotion_id FK, grant_id FK NULL, customer_id FK, order_id FK NULL, amendment_id FK NULL, price_component MERCHANDISE|DELIVERY, amount_minor NULL, benefit_snapshot_json, eligibility_snapshot_json, redeemed_at, idempotency_key UNIQUE, CHECK exactly one supported target is populated)`
 
-The introductory membership promotion uses `MEMBERSHIP_FEE_WAIVER` with validated duration `CALENDAR_MONTH` and a one-per-customer grant/redemption policy. Its redemption is the authority referenced when Membership enters `TRIALING`. Benefit/rule JSON is validated against closed type-specific schemas and contains no executable JavaScript, SQL, or expression language.
+Promotion benefit/rule JSON uses closed schemas and contains no executable expressions. Membership benefit/rule types are not active.
 
-Order quote/commitment enforces one unique `MERCHANDISE` application and one unique `DELIVERY` application. Explicitly selected valid code/campaign candidates take precedence for their component; otherwise selection orders eligible candidates by computed value descending and stable promotion ID ascending. Membership redemptions do not occupy either Order component.
+Order quote/commitment enforces one unique `MERCHANDISE` application and one unique `DELIVERY` application. Explicitly selected valid code/campaign candidates take precedence for their component; otherwise selection orders eligible candidates by computed value descending and stable promotion ID ascending.
 
 ## Inventory and Committed Demand
 
@@ -245,7 +232,7 @@ Indexes: run/cycle/location/status, requirements/status, POs/supplier/status, re
 - `delivery_events(id PK, delivery_job_id FK, event_type, provider_dispatch_id FK NULL, occurred_at, recorded_at, metadata_json, idempotency_key UNIQUE NULL)`
 - `delivery_proofs(id PK, delivery_job_id FK, provider_dispatch_id FK, delivered_at, r2_key NULL, recipient_name NULL, signature_r2_key NULL, metadata_json)`
 - `fulfillment_location_delivery_profiles(location_id PK/FK, sender_name, phone_e164, email NULL, formatted_address, address_line1, address_line2 NULL, barangay NULL, city, region NULL, postal_code NULL, country_code, pickup_instructions NULL, version, created_at, updated_at)`
-- `delivery_provider_dispatches(id PK, delivery_job_id FK UNIQUE, provider, merchant_order_id UNIQUE, provider_delivery_id UNIQUE NULL, checkout_quotation_id FK NULL, final_quotation_id FK, request_hash, request_snapshot_json, client_idempotency_key UNIQUE NULL, pickup_timing IMMEDIATE|SCHEDULED, scheduled_pickup_at NULL, status PENDING|CREATING|RETRY_REQUIRED|ACTIVE|COMPLETED|CANCELED|RETURNED|FAILED|OUTCOME_UNKNOWN|RECONCILIATION_REQUIRED, provider_status NULL, provider_observed_at NULL, provider_status_rank NULL, tracking_url NULL, pickup_pin NULL, final_payable_minor, customer_delivery_charge_minor, courier_variance_minor, currency, attempt_count, last_error_code NULL, version, created_at, updated_at)`
+- `delivery_provider_dispatches(id PK, delivery_job_id FK, execution_attempt_id FK UNIQUE, provider, merchant_order_id UNIQUE, provider_delivery_id UNIQUE NULL, checkout_quotation_id FK NULL, final_quotation_id FK, request_hash, request_snapshot_json, client_idempotency_key UNIQUE NULL, pickup_timing IMMEDIATE|SCHEDULED, scheduled_pickup_at NULL, status PENDING|CREATING|RETRY_REQUIRED|ACTIVE|COMPLETED|CANCELED|RETURNED|FAILED|OUTCOME_UNKNOWN|RECONCILIATION_REQUIRED, provider_status NULL, provider_observed_at NULL, provider_status_rank NULL, tracking_url NULL, pickup_pin NULL, final_payable_minor, customer_delivery_charge_minor, courier_variance_minor, currency, attempt_count, last_error_code NULL, version, created_at, updated_at)`
 - `delivery_provider_event_inbox(id PK, provider, provider_event_id, dispatch_id FK NULL, provider_delivery_id, merchant_order_id, observed_at, provider_status, payload_hash, raw_payload, processing_status RECEIVED|APPLIED|RECONCILIATION_REQUIRED, last_error_code NULL, received_at, processed_at NULL, UNIQUE(provider, provider_event_id))`
 
 Indexes support cycle/location/normalized-status/provider work queues and open delivery exceptions. Delivery status does not replace Order/Fulfillment state. Legacy batches, stops, Rider links, manual sequences, and route records remain read-only compatibility data and are never created by active delivery commands.
@@ -263,8 +250,7 @@ Lalamove order data. The customer-facing
 delivery fee remains in the Quote/Order monetary snapshot; the provider quotation amount retained
 on this dispatch is separate courier-cost evidence and not a second customer charge.
 
-The committed `INSTANT` fulfillment snapshot includes its customer-selected external provider and service type in `delivery_execution_snapshot_json`. A committed `SCHEDULED` snapshot records the Lalamove checkout-pricing evidence and that Operations remains the final external-provider selector, but intentionally contains no dispatch provider. Choosing the provider creates the one provider-dispatch record near dispatch. Migration `0057_order_delivery_execution_snapshot.sql` preserves this
-checkout-time decision across paid Order commitment.
+Both modes snapshot accepted Lalamove quotation and customer promise/window, without customer-selected execution provider. Execution-attempt identity is separate from commercial snapshots.
 
 GrabExpress supplies static webhook credentials but no provider event identifier. Core therefore
 derives `provider_event_id` from the authenticated delivery reference, merchant reference,
@@ -391,3 +377,21 @@ Migration `0047_customer_mvp_completion.sql` is historical implementation eviden
 Promotion claims are uncommitted Quote evidence until atomic Order commitment creates redemption/application history. `notification_outbox.idempotency_key` uniquely identifies one business notification intent, and due work is indexed by status/availability/schedule. `order_invoice_readiness` is one-to-one with Order and provider-confirmed Payment intent; its financial components must be nonnegative and reconcile exactly to the committed total before persistence.
 
 Customer-facing Order detail remains a purpose-built projection over immutable Order/item/address/fulfillment/financial snapshots plus bounded timeline, issue, amendment, Promotion, notification, and invoice-readiness state. Raw provider fields, internal location-assignment authority, staff-only issue notes, and tax/accounting internals are not returned.
+
+## Engineering guardrails for schema changes
+
+Follow [CODING_STANDARDS.md](CODING_STANDARDS.md#pre-launch-schema-and-interface-policy) and [TESTING.md](TESTING.md). Design keys, foreign keys, uniqueness, state checks, and indexes around real ownership, invariants, and read/write paths. Use queryable relational fields for constrained/filterable facts and bounded versioned JSON for immutable snapshots or intentionally flexible metadata. Avoid duplicate authoritative balances/states.
+
+Rebuild or squash a disposable pre-launch baseline when useful; preserve upgrade paths only for retained supported deployments. Validate initialization from empty, referential integrity, meaningful constraints, realistic multi-record fixtures, and Worker/D1 commands. A zero-row conditional write is not a failed SQL statement: every dependent effect must remain guarded, and a rejected command must leave business state unchanged. A schema revision must update the migration verifiers instead of removing checks that expose real integrity failures.
+
+## Commerce Alignment Storage Additions
+
+- `inventory_transfer`: source warehouse, destination, state/version, creator, dispatch instant and command identity. Immutable lines identify pool and dispatched quantity.
+- `inventory_transfer_receipt`: transfer/line, destination, accepted/damaged/short quantity, actor, reason, timestamp and unique command/effect identity. Outstanding transit is separately accountable; only accepted quantities credit the destination.
+- `cycle_goods_balance`: cycle/location/pool, accepted available quantity, allocated/packed quantity and version; never an Instant stock source.
+- `cycle_goods_movement`: receipt, packing, rejection/disposition or inspected-surplus release with integer deltas and a unique per-effect identity. Surplus release and physical ledger credit share one guarded batch.
+- `delivery_execution_attempt`: job, method EXTERNAL|MANUAL, attempt number, lifecycle/version, nullable actual cost/currency and closure evidence. A partial unique job index enforces one active or uncertain attempt. Manual method requires Scheduled plus reason/person name/phone; external records reference attempt-specific merchant identity.
+- `promotion_media`: owner, Core-generated unique object key, validated MIME/size, alt text, status, version and primary identity; at most one active primary per campaign. Product/promotion cleanup intents persist object disposition and bounded retry state.
+- Location capability/schedule/closure and serviceability writes are versioned. Inventory-only warehouse has no customer dispatch eligibility. Customer preference fields are explicit language/notification settings; support notes are append-only. Closure/anonymization completion requires an approved policy and preserves commercial/audit relationships.
+
+These are target ownership/constraint requirements, not an assertion that migrations have landed. Physical names must follow the repository conventions. Use the current chain as the supported starting baseline; verify forward changes and clean creation without resetting retained environments.

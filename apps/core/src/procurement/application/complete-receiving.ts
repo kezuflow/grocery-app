@@ -87,16 +87,9 @@ export async function completeReceiving(
       .bind(Date.now(), record.id, command.expectedVersion),
     database
       .prepare(
-        "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND EXISTS (SELECT 1 FROM receiving_record WHERE id=? AND status='COMPLETED' AND version=?)",
+        "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND changes()=1",
       )
-      .bind(
-        record.id,
-        Date.now(),
-        SCOPE,
-        command.idempotencyKey,
-        record.id,
-        command.expectedVersion + 1,
-      ),
+      .bind(record.id, Date.now(), SCOPE, command.idempotencyKey),
   ]);
   if ((result[0]?.meta?.changes ?? 0) !== 1) {
     await database

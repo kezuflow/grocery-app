@@ -5,6 +5,9 @@ import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-r
 import { startPromotionalTrial } from "../../membership/application/start-promotional-trial";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
+import { adjustInventory } from "../../inventory/application/adjust-inventory";
+import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
+import { requestOrderCancellation } from "./cancel-order";
 
 const LOCATION = "location-cebu-central";
 const deliveryProvider = createMockDeliveryProvider();
@@ -45,7 +48,10 @@ async function configureInstant(maxOrders = 25): Promise<void> {
   ]);
 }
 
-async function seededInstantQuote(member = true): Promise<{ quoteId: string; customerId: string }> {
+async function seededInstantQuote(
+  member = true,
+  secondPool = false,
+): Promise<{ quoteId: string; customerId: string }> {
   const customerId = `cust-cmt-${++counter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
   await env.DB.prepare(
@@ -91,6 +97,16 @@ async function seededInstantQuote(member = true): Promise<{ quoteId: string; cus
   )
     .bind(cartId)
     .run();
+  if (secondPool) {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-potato-500g', 2)",
+      ).bind(cartId),
+      env.DB.prepare(
+        "INSERT INTO inventory_balance (location_id, inventory_pool_id, on_hand, reserved) VALUES (?, 'pool-potato', 1000000, 0) ON CONFLICT(location_id, inventory_pool_id) DO UPDATE SET on_hand=1000000",
+      ).bind(LOCATION),
+    ]);
+  }
   await env.DB.prepare(
     "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
   ).run();
@@ -142,6 +158,413 @@ async function seedReaction(quoteId: string) {
 }
 
 describe("instant order commitment", () => {
+  it("allows only one winner between customer cancellation and preparation", async () => {
+    await configureInstant();
+    const { quoteId, customerId } = await seededInstantQuote(false);
+    const { reactionId, intentId } = await seedReaction(quoteId);
+    const committed = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    if (!committed.applied || !committed.orderId) throw new Error("Order did not commit");
+    const orderId = committed.orderId;
+    const cancellationKey = crypto.randomUUID();
+    const preparationKey = crypto.randomUUID();
+    const [canceled, prepared] = await Promise.all([
+      requestOrderCancellation(env.DB, {
+        orderId,
+        customerId,
+        expectedVersion: 1,
+        reason: "Cancel before preparation",
+        idempotencyKey: cancellationKey,
+        requestId: crypto.randomUUID(),
+      }),
+      advanceFulfillment(
+        env.DB,
+        {
+          orderId,
+          headers: {},
+          action: "START_PICKING",
+          expectedVersion: 1,
+          idempotencyKey: preparationKey,
+          requestId: crypto.randomUUID(),
+        },
+        { authorize: async () => true },
+      ),
+    ]);
+    expect([canceled, prepared].filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key IN (?,?) AND status='SUCCEEDED'",
+      )
+        .bind(cancellationKey, preparationKey)
+        .first(),
+    ).toEqual({ count: 1 });
+    if (prepared.ok) {
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(orderId).first(),
+      ).toEqual({ status: "FULFILLMENT_PENDING" });
+      expect(
+        await env.DB.prepare("SELECT status FROM inventory_reservation WHERE order_id=?")
+          .bind(orderId)
+          .first(),
+      ).toEqual({ status: "RESERVED" });
+      expect(
+        await env.DB.prepare("SELECT id FROM order_cancellation WHERE order_id=?")
+          .bind(orderId)
+          .first(),
+      ).toBeNull();
+    } else {
+      expect(
+        await env.DB.prepare("SELECT status FROM inventory_reservation WHERE order_id=?")
+          .bind(orderId)
+          .first(),
+      ).toEqual({ status: "RELEASED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT id FROM fulfillment_record WHERE order_id=? AND status='PICKING'",
+        )
+          .bind(orderId)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM inventory_ledger_entries WHERE reference_id=? AND reason_code='ORDER_CANCELLATION'",
+        )
+          .bind(orderId)
+          .first(),
+      ).toEqual({ count: 1 });
+    }
+  });
+
+  it("rejects packing an incomplete reservation set without consuming either pool", async () => {
+    await configureInstant();
+    const { quoteId } = await seededInstantQuote(false, true);
+    const { reactionId, intentId } = await seedReaction(quoteId);
+    const committed = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    if (!committed.applied || !committed.orderId) throw new Error("Order did not commit");
+    const orderId = committed.orderId;
+    for (const [index, action] of (
+      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+    ).entries()) {
+      expect(
+        await advanceFulfillment(
+          env.DB,
+          {
+            orderId,
+            headers: {},
+            action,
+            expectedVersion: index + 1,
+            idempotencyKey: crypto.randomUUID(),
+            requestId: crypto.randomUUID(),
+          },
+          { authorize: async () => true },
+        ),
+      ).toMatchObject({ ok: true });
+    }
+    await env.DB.prepare(
+      "UPDATE inventory_reservation SET status='RELEASED' WHERE order_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(orderId)
+      .run();
+    const before = await env.DB.prepare(
+      "SELECT inventory_pool_id,on_hand,reserved,version FROM inventory_balance WHERE location_id=? ORDER BY inventory_pool_id",
+    )
+      .bind(LOCATION)
+      .all();
+    const key = crypto.randomUUID();
+    expect(
+      await advanceFulfillment(
+        env.DB,
+        {
+          orderId,
+          headers: {},
+          action: "MARK_PACKED",
+          expectedVersion: 4,
+          idempotencyKey: key,
+          requestId: crypto.randomUUID(),
+        },
+        { authorize: async () => true },
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT inventory_pool_id,on_hand,reserved,version FROM inventory_balance WHERE location_id=? ORDER BY inventory_pool_id",
+        )
+          .bind(LOCATION)
+          .all()
+      ).results,
+    ).toEqual(before.results);
+    expect(
+      await env.DB.prepare("SELECT status,version FROM fulfillment_record WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ status: "PACKING", version: 4 });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(orderId).first(),
+    ).toEqual({ status: "FULFILLMENT_PENDING" });
+    expect(
+      await env.DB.prepare(
+        "SELECT id FROM inventory_ledger_entries WHERE reference_id=? AND reason_code='ORDER_PACKED'",
+      )
+        .bind(orderId)
+        .first(),
+    ).toBeNull();
+    expect(
+      await env.DB.prepare(
+        "SELECT idempotency_key FROM idempotency_records WHERE idempotency_key=? AND status='SUCCEEDED'",
+      )
+        .bind(key)
+        .first(),
+    ).toBeNull();
+  });
+
+  it("reaches packing through preparation, locks cancellation, and consumes both pools exactly once", async () => {
+    await configureInstant();
+    const { quoteId, customerId } = await seededInstantQuote(false, true);
+    const { reactionId, intentId } = await seedReaction(quoteId);
+    const committed = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    if (!committed.applied || !committed.orderId) throw new Error("Order did not commit");
+    const orderId = committed.orderId;
+    const request = {
+      orderId,
+      requestId: crypto.randomUUID(),
+      headers: {},
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: 1,
+      action: "START_PICKING" as const,
+    };
+    expect(
+      await advanceFulfillment(env.DB, request, { authorize: async () => false }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await advanceFulfillment(env.DB, request, { authorize: async () => true }),
+    ).toMatchObject({ ok: true, value: { status: "PICKING" } });
+    expect(
+      await requestOrderCancellation(env.DB, {
+        orderId,
+        customerId,
+        expectedVersion: 2,
+        reason: "Too late",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await advanceFulfillment(
+        env.DB,
+        { ...request, action: "HAND_OFF", expectedVersion: 2, idempotencyKey: crypto.randomUUID() },
+        { authorize: async () => true },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    for (const [index, action] of (
+      ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
+    ).entries()) {
+      const step = {
+        ...request,
+        action,
+        expectedVersion: index + 2,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      expect((await advanceFulfillment(env.DB, step, { authorize: async () => true })).ok).toBe(
+        true,
+      );
+      expect((await advanceFulfillment(env.DB, step, { authorize: async () => true })).ok).toBe(
+        true,
+      );
+    }
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(orderId).first(),
+    ).toEqual({ status: "FULFILLMENT_READY" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count,SUM(quantity_delta_base) consumed,SUM(reservation_delta_base) released FROM inventory_ledger_entries WHERE reference_id=? AND reason_code='ORDER_PACKED'",
+      )
+        .bind(orderId)
+        .first(),
+    ).toEqual({ count: 2, consumed: -3500, released: -3500 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM inventory_reservation WHERE order_id=? AND status='CONSUMED'",
+      )
+        .bind(orderId)
+        .first(),
+    ).toEqual({ count: 2 });
+  });
+
+  it("protects checkout-held stock from manual removal", async () => {
+    await configureInstant();
+    await seededInstantQuote(false);
+    const before = await env.DB.prepare(
+      "SELECT on_hand,reserved,version FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION)
+      .first<{ on_hand: number; reserved: number; version: number }>();
+    if (!before) throw new Error("Inventory fixture missing");
+    const key = crypto.randomUUID();
+    const result = await adjustInventory(env.DB, {
+      locationId: LOCATION,
+      inventoryPoolId: "pool-red-onion",
+      deltaBase: -(before.on_hand - before.reserved - 2000),
+      expectedVersion: before.version,
+      idempotencyKey: key,
+      actorId: "staff-adjustment",
+      reason: "Remove stock while held",
+      requestId: crypto.randomUUID(),
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "INSUFFICIENT_STOCK" } });
+    expect(
+      await env.DB.prepare(
+        "SELECT on_hand,reserved,version FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+      )
+        .bind(LOCATION)
+        .first(),
+    ).toEqual(before);
+    expect(
+      await env.DB.prepare("SELECT id FROM inventory_ledger_entries WHERE idempotency_key=?")
+        .bind(key)
+        .first(),
+    ).toBeNull();
+  });
+
+  it("commits an already-started payment after quote expiry and selling pause", async () => {
+    await configureInstant();
+    const { quoteId } = await seededInstantQuote(false);
+    const { reactionId, intentId } = await seedReaction(quoteId);
+    const expiredAt = Date.now() - 100;
+    await env.DB.batch([
+      env.DB.prepare("UPDATE payment_intent SET created_at=? WHERE id=?").bind(
+        expiredAt - 1000,
+        intentId,
+      ),
+      env.DB.prepare("UPDATE checkout_quote SET status='EXPIRED',expires_at=? WHERE id=?").bind(
+        expiredAt,
+        quoteId,
+      ),
+      env.DB.prepare(
+        "UPDATE global_commerce_configuration SET selling_state='PAUSED' WHERE id='global'",
+      ),
+    ]);
+    expect(
+      await applyCheckoutPaymentReaction(env.DB, {
+        reactionId,
+        paymentIntentId: intentId,
+        checkoutAttemptId: quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+    ).toMatchObject({ applied: true });
+  });
+
+  it("commits two pools with distinct ledger effects and replays without duplicate reservations", async () => {
+    await configureInstant();
+    const { quoteId } = await seededInstantQuote(false, true);
+    const { reactionId, intentId } = await seedReaction(quoteId);
+    const input = {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quoteId,
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    const result = await applyCheckoutPaymentReaction(env.DB, input);
+    expect(result).toMatchObject({ applied: true, reason: "APPLIED" });
+    expect(await applyCheckoutPaymentReaction(env.DB, input)).toMatchObject({
+      applied: true,
+      reason: "ALREADY_APPLIED",
+      orderId: result.orderId,
+    });
+    const ledger = await env.DB.prepare(
+      "SELECT COUNT(*) count, COUNT(DISTINCT idempotency_key) identities, SUM(reservation_delta_base) reserved FROM inventory_ledger_entries WHERE reference_id=? AND reason_code='CHECKOUT_COMMIT'",
+    )
+      .bind(result.orderId ?? "missing")
+      .first();
+    expect(ledger).toEqual({ count: 2, identities: 2, reserved: 3500 });
+  });
+
+  it.each(["missing", "released", "wrong quantity", "wrong location"])(
+    "preserves successful payment but refuses a %s hold without partial commitment",
+    async (defect) => {
+      await configureInstant();
+      const { quoteId } = await seededInstantQuote(false);
+      const { reactionId, intentId } = await seedReaction(quoteId);
+      if (defect === "missing") {
+        await env.DB.prepare("DELETE FROM checkout_inventory_holds WHERE checkout_attempt_id=?")
+          .bind(quoteId)
+          .run();
+      } else if (defect === "released") {
+        await env.DB.prepare(
+          "UPDATE checkout_inventory_holds SET status='RELEASED' WHERE checkout_attempt_id=?",
+        )
+          .bind(quoteId)
+          .run();
+      } else if (defect === "wrong quantity") {
+        await env.DB.prepare(
+          "UPDATE checkout_inventory_holds SET quantity=1 WHERE checkout_attempt_id=?",
+        )
+          .bind(quoteId)
+          .run();
+      } else {
+        await env.DB.prepare(
+          "INSERT INTO fulfillment_location (id,market_id,code,name,type,status,latitude,longitude,created_at,updated_at) SELECT 'wrong-hold-location',market_id,'WRONG_HOLD','Wrong hold','FULFILLMENT_CENTER','active',latitude,longitude,0,0 FROM fulfillment_location WHERE id=? ON CONFLICT(id) DO NOTHING",
+        )
+          .bind(LOCATION)
+          .run();
+        await env.DB.prepare(
+          "UPDATE checkout_inventory_holds SET location_id='wrong-hold-location' WHERE checkout_attempt_id=?",
+        )
+          .bind(quoteId)
+          .run();
+      }
+      const before = await env.DB.prepare(
+        "SELECT on_hand,reserved,version FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+      )
+        .bind(LOCATION)
+        .first();
+      expect(
+        await applyCheckoutPaymentReaction(env.DB, {
+          reactionId,
+          paymentIntentId: intentId,
+          checkoutAttemptId: quoteId,
+          canonicalPaymentState: "SUCCEEDED",
+        }),
+      ).toMatchObject({ applied: false });
+      expect(
+        await env.DB.prepare(
+          "SELECT on_hand,reserved,version FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+        )
+          .bind(LOCATION)
+          .first(),
+      ).toEqual(before);
+      expect(
+        await env.DB.prepare(
+          "SELECT order_id FROM order_payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(intentId).first(),
+      ).toEqual({ status: "SUCCEEDED" });
+      expect(
+        await env.DB.prepare("SELECT status FROM finance_exception WHERE payment_intent_id=?")
+          .bind(intentId)
+          .first(),
+      ).toEqual({ status: "OPEN" });
+    },
+  );
+
   it("commits a no-cycle order with promise snapshot, converted holds, and reservation", async () => {
     await configureInstant();
     const { quoteId } = await seededInstantQuote(false);
@@ -257,7 +680,7 @@ describe("instant order commitment", () => {
       `SELECT COUNT(*) AS count FROM grocery_order go
        JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=go.id
        WHERE snapshot.location_id=? AND snapshot.fulfillment_mode='INSTANT'
-         AND go.status NOT IN ('CANCELED','REFUNDED')`,
+         AND go.status NOT IN ('CANCELED','REFUNDED','DELIVERED')`,
     )
       .bind(LOCATION)
       .first<{ count: number }>();
@@ -283,9 +706,22 @@ describe("instant order commitment", () => {
     });
     expect(rejected).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
     const orders = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM grocery_order WHERE fulfillment_mode='INSTANT'",
-    ).first<{ count: number }>();
-    expect(orders?.count).toBe(initialCount + 1);
+      "SELECT COUNT(*) AS count FROM order_payment_reaction WHERE payment_intent_id IN (?,?)",
+    )
+      .bind(firstReaction.intentId, secondReaction.intentId)
+      .first<{ count: number }>();
+    expect(orders?.count).toBe(1);
+    await env.DB.prepare("UPDATE grocery_order SET status='DELIVERED',version=version+1 WHERE id=?")
+      .bind(ok.orderId ?? "missing")
+      .run();
+    expect(
+      await applyCheckoutPaymentReaction(env.DB, {
+        reactionId: secondReaction.reactionId,
+        paymentIntentId: secondReaction.intentId,
+        checkoutAttemptId: second.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+    ).toMatchObject({ applied: true, reason: "APPLIED" });
     await configureInstant(25);
   });
 });

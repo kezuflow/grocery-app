@@ -187,7 +187,6 @@ function deliveryJobStatus(status: ProviderDeliveryStatus): string | null {
     case "COMPLETED":
       return "DELIVERED";
     case "CANCELED":
-      return "CANCELED";
     case "FAILED":
     case "IN_RETURN":
     case "RETURNED":
@@ -204,9 +203,8 @@ function projectedOrderStatus(jobStatus: string): string | null {
     case "DELIVERED":
       return "DELIVERED";
     case "FAILED":
-      return "EXCEPTION";
     case "CANCELED":
-      return "CANCELED";
+      return null;
     default:
       return null;
   }
@@ -326,8 +324,33 @@ export async function handleLalamoveWebhook(
       receivedAt,
     )
     .run();
-  if ((inserted.meta?.changes ?? 0) !== 1)
-    return json(requestId, 200, { ok: true, duplicate: true, requestId });
+  if ((inserted.meta?.changes ?? 0) !== 1) {
+    const existing = await database
+      .prepare(`SELECT processing_status,provider_delivery_id,observed_at,provider_status
+      FROM delivery_provider_event_inbox WHERE id=?`)
+      .bind(inboxId)
+      .first<{
+        processing_status: string;
+        provider_delivery_id: string;
+        observed_at: number;
+        provider_status: string;
+      }>();
+    if (
+      !existing ||
+      existing.provider_delivery_id !== genericOrderId ||
+      existing.observed_at !== genericObservedAt ||
+      existing.provider_status !== (parsed?.status ?? genericType)
+    )
+      return json(requestId, 409, {
+        error: {
+          code: "WEBHOOK_EVENT_CONFLICT",
+          message: "Event identity was already used for different evidence",
+          requestId,
+        },
+      });
+    if (existing.processing_status === "APPLIED")
+      return json(requestId, 200, { ok: true, duplicate: true, requestId });
+  }
   if (!dispatch || !parsed) {
     log("warn", "delivery_provider_webhook", {
       requestId,
@@ -339,7 +362,20 @@ export async function handleLalamoveWebhook(
   }
 
   const rank = statusRank(parsed.status);
-  const updated = await database
+  const older =
+    dispatch.provider_observed_at !== null &&
+    (dispatch.provider_observed_at > parsed.observedAt ||
+      (dispatch.provider_observed_at === parsed.observedAt &&
+        (dispatch.provider_status_rank ?? 0) >= rank));
+  if (older) {
+    await database
+      .prepare(`UPDATE delivery_provider_event_inbox SET processing_status='APPLIED',processed_at=?,last_error_code=NULL,
+      dispatch_id=?,merchant_order_id=? WHERE id=?`)
+      .bind(receivedAt, dispatch.id, dispatch.merchant_order_id, inboxId)
+      .run();
+    return json(requestId, 200, { ok: true, ignoredAsOlder: true, requestId });
+  }
+  const updateDispatch = database
     .prepare(
       `UPDATE delivery_provider_dispatch
        SET status=?, provider_status=?, provider_observed_at=?, provider_status_rank=?,
@@ -364,52 +400,45 @@ export async function handleLalamoveWebhook(
       parsed.observedAt,
       parsed.observedAt,
       rank,
-    )
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
-    const latest = await database
-      .prepare(
-        `SELECT version, provider_observed_at, provider_status_rank
-         FROM delivery_provider_dispatch WHERE id=?`,
-      )
-      .bind(dispatch.id)
-      .first<Pick<DispatchRow, "version" | "provider_observed_at" | "provider_status_rank">>();
-    const older =
-      latest !== null &&
-      latest.version === dispatch.version &&
-      latest.provider_observed_at !== null &&
-      (latest.provider_observed_at > parsed.observedAt ||
-        (latest.provider_observed_at === parsed.observedAt &&
-          (latest.provider_status_rank ?? 0) >= rank));
-    await database
-      .prepare(
-        `UPDATE delivery_provider_event_inbox
-         SET processing_status=?, processed_at=?, last_error_code=? WHERE id=?`,
-      )
-      .bind(
-        older ? "APPLIED" : "RECONCILIATION_REQUIRED",
-        older ? Date.now() : null,
-        older ? null : "DELIVERY_DISPATCH_STALE",
-        inboxId,
-      )
-      .run();
-    return json(requestId, older ? 200 : 202, {
-      ok: true,
-      ...(older ? { ignoredAsOlder: true } : { reconciliationRequired: true }),
-      requestId,
-    });
-  }
+    );
   const normalizedStatus = deliveryJobStatus(parsed.status);
-  const orderStatus = normalizedStatus ? projectedOrderStatus(normalizedStatus) : null;
+  // Courier cancellation is a visible delivery failure, never authority to
+  // cancel or otherwise mutate the customer's paid grocery commitment.
+  const orderStatus =
+    normalizedStatus && parsed.status !== "CANCELED"
+      ? projectedOrderStatus(normalizedStatus)
+      : null;
   const appliedAt = Date.now();
+  const requiresPacked = normalizedStatus === "EN_ROUTE" || normalizedStatus === "DELIVERED";
+  const packedOrderSql = `SELECT 1 FROM delivery_provider_dispatch dispatch
+    JOIN delivery_job job ON job.id=dispatch.delivery_job_id
+    JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id
+    JOIN grocery_order grocery ON grocery.id=job.order_id
+    WHERE dispatch.id=? AND fulfillment.status IN ('PACKED','HANDED_OFF','COMPLETED')
+      AND grocery.status IN ('FULFILLMENT_READY','OUT_FOR_DELIVERY','DELIVERED')`;
+  if (requiresPacked && !(await database.prepare(packedOrderSql).bind(dispatch.id).first())) {
+    await database
+      .prepare(`UPDATE delivery_provider_event_inbox SET processing_status='RECONCILIATION_REQUIRED',
+      last_error_code='DELIVERY_PACKING_NOT_COMPLETE',dispatch_id=?,merchant_order_id=? WHERE id=? AND processing_status!='APPLIED'`)
+      .bind(dispatch.id, dispatch.merchant_order_id, inboxId)
+      .run();
+    return json(requestId, 202, { ok: true, reconciliationRequired: true, requestId });
+  }
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
-        `UPDATE delivery_provider_event_inbox
-         SET processing_status='APPLIED', processed_at=?, last_error_code=NULL WHERE id=?`,
+        "INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (SELECT 1 FROM delivery_provider_event_inbox WHERE id=? AND processing_status!='APPLIED')",
       )
-      .bind(appliedAt, inboxId),
+      .bind(inboxId),
+    updateDispatch,
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()!=1"),
   ];
+  if (requiresPacked)
+    statements.push(
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (${packedOrderSql})`)
+        .bind(dispatch.id),
+    );
   if (normalizedStatus) {
     statements.push(
       database
@@ -443,13 +472,37 @@ export async function handleLalamoveWebhook(
       database
         .prepare(
           `UPDATE grocery_order SET status=?,version=version+1
-           WHERE id=(SELECT merchant_order_id FROM delivery_provider_dispatch WHERE id=?)
-             AND status NOT IN ('DELIVERED','CANCELED','EXPIRED')`,
+           WHERE id=(SELECT job.order_id FROM delivery_provider_dispatch dispatch JOIN delivery_job job ON job.id=dispatch.delivery_job_id WHERE dispatch.id=?)
+             AND status IN ('FULFILLMENT_READY','OUT_FOR_DELIVERY') AND status!=?`,
         )
-        .bind(orderStatus, dispatch.id),
+        .bind(orderStatus, dispatch.id, orderStatus),
     );
   }
-  await database.batch(statements);
+  statements.push(
+    database
+      .prepare(`UPDATE delivery_provider_event_inbox
+    SET processing_status='APPLIED',processed_at=?,last_error_code=NULL,dispatch_id=?,merchant_order_id=? WHERE id=?`)
+      .bind(appliedAt, dispatch.id, dispatch.merchant_order_id, inboxId),
+  );
+  try {
+    await database.batch(statements);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed: id = 0"))
+      throw error;
+    const applied = await database
+      .prepare(
+        "SELECT id FROM delivery_provider_event_inbox WHERE id=? AND processing_status='APPLIED'",
+      )
+      .bind(inboxId)
+      .first();
+    if (applied) return json(requestId, 200, { ok: true, duplicate: true, requestId });
+    await database
+      .prepare(`UPDATE delivery_provider_event_inbox SET processing_status='RECONCILIATION_REQUIRED',last_error_code='DELIVERY_DISPATCH_STALE'
+      WHERE id=? AND processing_status!='APPLIED'`)
+      .bind(inboxId)
+      .run();
+    return json(requestId, 202, { ok: true, reconciliationRequired: true, requestId });
+  }
   log("info", "delivery_provider_webhook", {
     requestId,
     provider: "lalamove",

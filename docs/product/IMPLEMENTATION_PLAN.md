@@ -1,9 +1,15 @@
 # FreshMarkets Dependency-Aware Implementation Plan
 
-## 2026-09-05 Approved Commerce and External Delivery Realignment
+## 2026-09-07 Saved Commerce and End-to-End Completion Plan
+
+The latest saved owner decisions and expanded frontend-to-backend checklist are in [COMMERCE_ALIGNMENT_E2E_PLAN.md](COMMERCE_ALIGNMENT_E2E_PLAN.md). It includes R2 product/promotion publication, location creation and address/serviceability setup, Global prices, physical warehouse transfers, customer/staff onboarding, cycle/purchasing/receiving, checkout, preparation-stage booking, Scheduled-only manual fallback, and recovery/acceptance work.
+
+Status: implementation authorized; Phase 0 reconciliation in progress, no phase yet accepted. Use that plan's Phase 0 to reconcile the canonical business documents before code changes, then its dependency sequence for the new realignment. The prior plan below records the previous baseline and does not override the newly saved owner decisions. Existing engineering-guidance changes remain in force; saving this plan does not execute a schema or application change.
+
+## Historical Plan Record — 2026-09-05 Commerce and External Delivery Realignment
 
 The coordinated implementation in
-`docs/superpowers/plans/2026-09-05/COMMERCE_AND_EXTERNAL_DELIVERY_REALIGNMENT.md` is the current
+`docs/superpowers/plans/2026-09-05/COMMERCE_AND_EXTERNAL_DELIVERY_REALIGNMENT.md` was the prior
 authorized correction to the commerce loop. It separates the global `OPEN|PAUSED` selling gate
 from the global `INSTANT|SCHEDULED` mode; makes final customer retail price an exact manually
 managed store/SKU value; removes the FreshMarkets Service Fee and absorbs PayMongo processing
@@ -15,9 +21,9 @@ plans below. Phase 1 aligns the complete canonical set. The sections beginning w
 plan and the legacy numbered phases are preserved historical implementation records only; even when
 written in imperative or future tense, they do not authorize new Service Fee, Scheduled-capacity,
 Scheduled inventory-netting, internal Rider/fleet, internal customer-delivery-pricing, or runtime
-mock-payment work. Execution now follows Phases 1–12 of the 2026-09-05 plan exclusively.
+mock-payment work. That implementation followed Phases 1–12 of the 2026-09-05 plan; new realignment follows the 2026-09-07 saved plan above.
 
-The active sequence starts with canonical alignment, then forward-only persistence, selling/mode
+The prior sequence started with canonical alignment, then persistence under the current schema lifecycle policy, selling/mode
 control, exact retail pricing and Scheduled availability, verified provider capabilities/Lalamove,
 provider-priced Checkout, exact Scheduled commitment/purchasing, external-only dispatch, financial
 and Promotions cleanup, Cloudflare Queues notifications, compatibility removal, and full activation

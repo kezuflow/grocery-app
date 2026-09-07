@@ -2,6 +2,26 @@
 
 This file is the enforcement and documentation router for this repository. The canonical set is `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/STATE_MACHINES.md`, `docs/architecture/DATA_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, `docs/product/PRODUCT_SCOPE.md`, and `docs/product/IMPLEMENTATION_PLAN.md`. `IMPLEMENTATION_STATUS.md`, phase reviews, remediation notes, READMEs, code, and migration history describe implementation or historical compatibility; they do not override the canonical set. Read the relevant canonical documents before changing a domain or product surface.
 
+## Engineering Standards and Agent Conduct
+
+- Read [CODING_STANDARDS.md](docs/architecture/CODING_STANDARDS.md) for implementation rules, [TESTING.md](docs/architecture/TESTING.md) for verification, and [NAMING_CONVENTIONS.md](docs/architecture/NAMING_CONVENTIONS.md) for naming. These are authoritative engineering guides routed by this file and apply across the repository, including work resumed from dated plans.
+- Ground changes in the actual call path and owning context. Inspect the working tree first, preserve unrelated work, and complete the authorized task without unrelated refactors or phase expansion.
+- Use the owner's current instructions when older documents disagree. Resolve ordinary technical choices independently; flag material business-policy uncertainty instead of inventing a rule. A coding-standards update does not adopt a separate product plan.
+- Prefer cohesive modules, clear names, explicit commands, and a small number of useful abstractions. Do not add speculative frameworks or split files merely to meet arbitrary line-count limits.
+- Validate untrusted inputs as `unknown`; use precise contracts and narrowing. Do not silence defects with `any`, double assertions, broad suppressions, swallowed errors, placeholder success, or weakened tests/checks.
+- Validate authorization, scope, state, and mutable preconditions at the Core write boundary. A rejected command must not leave partial business effects or an idempotency-success result.
+- Guard the complete transaction, not just its first statement. A zero-row conditional D1 update does not fail a batch; detecting it after other writes committed is too late. Distinct effects within one command need distinct stable idempotency identities.
+- Await critical state changes. External side effects require durable intent, explicit unknown-outcome recovery, bounded retries, and provider-event deduplication; never treat a timeout as proof of failure or an inbox insert as proof of application.
+- Keep credentials, bearer URLs, provider payloads, and private contact/address snapshots out of logs in every environment. Use the existing redacting telemetry boundary and test-only integration fakes.
+- Test observable behavior and meaningful failures at the layer that owns them. Include real Worker/D1 evidence for transaction claims and a reachable end-to-end command path for changed critical workflows. Do not claim browser/provider acceptance from unit tests or test discovery.
+- Review the final diff and report actual checks, limitations, and remaining risks. Never mark application work complete from a Markdown change alone.
+
+## Schema Lifecycle — Pre-launch
+
+FreshMarkets has not launched. The owner permits better schema designs: within authorized implementation, revise tables, constraints, relationships, interfaces, and migration baselines when that simplifies the model. Do not preserve accidental pre-launch design solely because migrations already exist, and do not ask again merely to perform a routine schema improvement.
+
+Keep code, contracts, seeds, generators, migration verifiers, and tests consistent, and prove clean database creation. Identify which environments are disposable before resetting them; changing an applied migration file does not upgrade an existing database. Preserve retained/shared data or provide a tested upgrade path. Once production or another retained deployment requires compatibility, use forward migrations for that supported baseline. Full rules: [pre-launch schema and interface policy](docs/architecture/CODING_STANDARDS.md#pre-launch-schema-and-interface-policy).
+
 ## Mandatory Architecture
 
 - Maintain one monorepo with `apps/web` and `apps/core` as the initial deployments.
@@ -18,19 +38,17 @@ This file is the enforcement and documentation router for this repository. The c
 
 - Better Auth runs authoritatively in `apps/core` using Cloudflare D1.
 - Better Auth owns only authentication users/identities, credentials and linked accounts, sessions, email verification, password reset, OAuth, and other authentication infrastructure required by its configured plugins.
-- Customer profiles, addresses, subscriptions, staff identities, roles, permissions, and location scopes are application-owned domains linked to the Better Auth user ID.
+- Customer profiles, addresses, staff identities, roles, permissions, and location scopes are application-owned domains linked to the Better Auth user ID.
 - Authentication answers who the user is. Core authorization answers what the user may do.
 - Web provides the browser auth experience and proxies auth routes/callbacks to Core while preserving cookies, `Set-Cookie`, callback URLs, host/origin, OAuth redirects, and CSRF protections. Web must not become a second auth authority.
 - Verify Better Auth, vinext, Cloudflare Workers, Google OAuth, persistent cookies, and Service Binding behavior with integration tests before relying on them.
 
 ## Locked Business Invariants
 
-- `INSTANT` is authenticated pay-as-you-go commerce and does not require membership. `SCHEDULED` requires an active, trialing, or past-due-within-grace subscription at quote, payment revalidation, and commitment. The introductory trial requires no payment authorization, creates no Payment, and expires without automatic conversion. Paid membership begins only after a separate explicit customer enrollment and provider-confirmed initial payment; paid renewal uses the recurring-capable provider arrangement approved for that paid Subscription. Establishing authorization is never payment success, and no zero-value payment is synthesized.
-- Membership has one global effective-dated paid price and currency. A paid Subscription snapshots the price version, amount, and currency agreed at paid enrollment and retains that price until a separately authorized migration; ordinary price changes apply only to new paid Subscriptions. A free-trial Subscription carries no agreed paid-price snapshot. The introductory free trial is a Promotion grant over that paid membership for exactly one calendar billing month; it is not a zero-price offer or plan.
+- Both `INSTANT` and `SCHEDULED` are authenticated pay-as-you-go commerce without membership. Remove active subscription enrollment, trials, membership prices, recurring billing, membership eligibility, navigation, notifications, and jobs. The owner reports no live subscriptions; preserve only evidence actually required by retained environments.
 - New commerce has no FreshMarkets Service Fee and never passes PayMongo processing cost to the customer. Historical committed Orders retain immutable Service Fee snapshots only for accounting, rendering, cancellation, and refund accuracy.
-- Membership owns subscription state; Promotions owns trial eligibility/grant/redemption; Payments owns all provider interactions and canonical financial state. Better Auth owns none of these concepts.
-- `CANCELED` and `EXPIRED` are distinct terminal subscription states. Scheduled cancellation is intent metadata while the subscription remains in its entitled state until an explicit transition at the effective instant.
-- Paid membership activation and paid order commitment require a provider-confirmed canonical Payments outcome sufficient under the configured payment commitment policy. For the current release, provider captured/success states map to canonical `SUCCEEDED`; browser return state or payment initiation is never sufficient.
+- Promotions owns controlled merchandise and delivery benefits; Payments owns provider interactions and canonical financial state. Better Auth owns neither.
+- Paid order commitment requires a provider-confirmed canonical Payments outcome. Provider captured/success states map to canonical `SUCCEEDED`; browser return state or payment initiation is never sufficient.
 - Paid orders are locked and cannot be freely mutated after commitment.
 - Customer cancellation is one coordinated Order operation. Instant locks at `FULFILLMENT_PENDING`; Scheduled locks at the earlier of its cutoff or `FULFILLMENT_PENDING`, refunds the original payment plus every committed paid addition, and never permits an addition to be canceled independently. New commerce never retains a fabricated FreshMarkets fee. A customer-caused cancellation may retain only an actual documented non-refundable courier charge allowed by the approved stage policy. FreshMarkets-caused cancellation refunds the full remaining applicable set. Post-lock exception refunds require global `refunds.manage`, a reason, and immutable audit evidence without reopening customer cancellation.
 - Global selling state is exactly `OPEN` or `PAUSED` and is separate from the global fulfillment mode. `PAUSED` blocks new fulfillment options, Quotes, and payment initiation, but never blocks provider-event reconciliation, exactly-once commitment of a payment already started, committed-Order reads/operations, refunds, or delivery work.
@@ -38,21 +56,24 @@ This file is the enforcement and documentation router for this repository. The c
 - Sourcing mode is not configurable domain state. `INSTANT` uses exact-location physical stock and holds/reservations. `SCHEDULED` is exact-demand preorder commerce: it uses cycles/windows and cutoff, records paid demand exactly, and uses no stock check, stock deduction, incoming-stock netting, safety buffer, forecast, or order/cycle capacity.
 - Scheduled delivery-cycle cutoff is the operational/procurement commitment boundary for `SCHEDULED`. `INSTANT` checkout must not be forced through delivery-cycle semantics and instead uses current location inventory, an expiring checkout hold/reservation, and mode-specific fulfillment promises.
 - Post-payment additions use an additive amendment/supplemental transaction with independent price and payment history.
-- Catalog is global. Availability, sourcing behavior, and physical inventory are location-specific.
+- Global owns catalog, categories, variants, media, and all exact-location price writes. Price writes require global scope and `prices.manage`; local staff may read prices and manage authorized local selling activation, never change prices. Physical inventory remains location-specific.
+- A physical central warehouse distributes Product-pool stock through Global dispatch, tracked transit, and destination-authorized accepted receipts. Deduction and transit creation are atomic; only accepted quantities credit destination inventory. Holds and reservations protect source stock. Losses and verified returns require explicit audited resolution.
+- Scheduled receiving creates cycle/destination-allocated goods, separate from Instant inventory. Packing consumes that allocation; only an explicit inspected-surplus release may credit physical stock exactly once. Spoilage never becomes sellable stock.
 - Active catalog authoring and new commerce use integer canonical base units `GRAM` or `PIECE` and controlled sell units within `MASS` or `COUNT`; packaged liquids are pieces. Historical `VOLUME`, `MILLILITER`, and `LITER` data remains inactive compatibility history. Cross-dimension conversion and floating-point authoritative quantities are forbidden.
 - Sellable variants are persisted configuration and consume a SKU-specific integer quantity from a shared product inventory pool; variants do not own independent physical stock. Pack, bunch, tray, and similar labels never define global conversions.
 - Authoritative final retail price is manually set for a sellable SKU at one exact fulfillment location. Market/global fallback and automatic global markup engines are forbidden; missing or invalid exact-location price is unavailable, never silently zero.
 - Instant inventory reservation and Scheduled exact committed purchase demand are separate concepts; Scheduled demand is never netted against physical inventory.
 - Historical orders snapshot product, SKU/unit and base consumption, prices and explicit monetary components, discounts/promotions, address, fulfillment mode/location/zone/promise, and Scheduled cycle/window identifiers where applicable.
-- Promotions owns one controlled benefit/rule system for membership fee waivers, order discounts, and delivery discounts. Current-release stacking permits at most one merchandise/order benefit plus one delivery benefit; Membership benefits remain separate. Arbitrary executable promotion scripting is forbidden.
-- Core authoritatively validates selling state, coordinates, serviceability polygons, delivery zone, the one global fulfillment mode, resolved location/promise, Instant inventory or Scheduled cycle/window/cutoff, cart, exact-location SKU prices, promotions/stacking, minimum order, mode-specific membership entitlement, provider quotation evidence, and payment readiness. Overlapping eligible geofences resolve to the closest dispatch origin by exact Haversine distance with stable location-ID tie-break; route/driving-time providers never select the owning location.
-- Instant customers choose one enabled, currently quoteable external delivery partner through an opaque Core option. Scheduled customers choose only a delivery window; Lalamove initially supplies the checkout quotation, and store operators later choose an enabled external provider plus immediate or supported scheduled pickup. FreshMarkets absorbs any final courier increase and retains any decrease without charging the customer again.
-- Active customer delivery is external-provider only. Internal Rider assignment, delivery batches, route planning, live-driver maps, and internal-fleet capacity are retired compatibility concepts and cannot appear in active contracts, commands, navigation, or readiness policy.
+- Promotions owns one controlled benefit/rule system for order and delivery discounts. Current-release stacking permits at most one merchandise/order benefit plus one delivery benefit. Membership benefits and membership eligibility rules are retired; arbitrary executable promotion scripting is forbidden.
+- Core authoritatively validates selling state, coordinates, serviceability polygons, delivery zone, the one global fulfillment mode, resolved location/promise, Instant inventory or Scheduled cycle/window/cutoff, cart, exact-location SKU prices, promotions/stacking, minimum order, provider quotation evidence, and payment readiness. Overlapping eligible geofences resolve to the closest dispatch origin by exact Haversine distance with stable location-ID tie-break; route/driving-time providers never select the owning location.
+- Lalamove supplies checkout pricing in both modes. Customers accept FreshMarkets' promise and a Scheduled window where applicable; they choose neither courier nor hub. Preserve the accepted customer charge and separately record actual courier/manual cost and variance; unknown cost is unavailable, never zero.
+- Lalamove is default execution. Emergency manual delivery is permitted only for Scheduled, with reason, person's name/phone, assignment, packed handover, completion/failure, and actual cost where known. One active attempt spans external/manual methods; unknown create/cancel outcomes block replacement. Rider accounts, fleets, batches, routes, and driver maps remain excluded.
+- Preparation start coordinates the Order cancellation lock. Instant booking requires all items picked/checked and final packing started; Scheduled future booking requires received/checked goods and a credible ready time. Handover requires completed packing. Searching, assignment, pickup, and delivery are independent facts; conflicting provider pickup evidence creates an exception, never fabricated packing. Courier cancellation never directly cancels the grocery Order.
 - Every store location owns its courier pickup profile and authoritative coordinates. Customer delivery phone is required; provider email is optional. Provider adapters expose typed verified capabilities, never a general rules engine.
 - Each sold SKU preserves shipping grams per sold unit. The full paid Order, including committed additions, is internally `BAG` below 10,000 grams and `BOX` at or above 10,000 grams; that classification is not sent to Lalamove unless later official documentation requires it.
 - Customers buy from FreshMarkets and never select a fulfillment hub.
 - Preserve multi-market and multi-location support even while the the current release operates one Cebu location.
-- Maintain independent state machines for subscription, cycle, order, payment, refund, procurement, receiving, fulfillment, and delivery.
+- Maintain independent state machines for cycle, order, payment, refund, procurement, receiving, fulfillment, and delivery.
 - Client/application/admin lifecycle commands require stable idempotency keys and expected aggregate versions where concurrent mutation is possible. Provider events never invent or accept client `expectedVersion` values; they use unique `(provider, providerEventId)` inbox identity, handler-side compare-and-swap protection, and safe retry/reconciliation.
 - Admin uses purpose-built Core commands/read models and capability-based IAM, never raw tables, Better Auth user rows as Customer records, or a global `isAdmin` authority.
 - Analytics is a derived read-side concern inside the Core modular monolith for the current release. Every published named metric requires one versioned canonical definition; Analytics never owns Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state.
@@ -66,6 +87,8 @@ This file is the enforcement and documentation router for this repository. The c
 - Keep interfaces responsive, accessible, and explicit about loading, empty, error, unavailable, cutoff, and permission states.
 
 ## Documentation Router
+
+- The latest saved commerce realignment and full frontend-to-backend checklist is [COMMERCE_ALIGNMENT_E2E_PLAN.md](docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md). It records owner decisions and pending implementation work. Before implementing that realignment, reconcile the canonical business documents in its Phase 0; do not mistake the saved plan or older completion reports for implemented behavior.
 
 - Any architecture or Cloudflare change: read `docs/architecture/ARCHITECTURE.md` and `docs/architecture/API_CONTRACTS.md`.
 - Authentication/session change: read `docs/architecture/ARCHITECTURE.md`, the identity sections of `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, and `docs/architecture/DATA_MODEL.md`.
@@ -90,16 +113,16 @@ This file is the enforcement and documentation router for this repository. The c
 - Keep domain code in `apps/core` unless code is genuinely shared across deployments. Do not fragment packages by noun.
 - Shared contracts must not depend on D1 schemas or infrastructure types.
 - Store money as integer minor units, quantities as integer base units, timestamps as UTC instants, and operational timezone as explicit market data (`Asia/Manila` initially).
-- Use migrations for every schema change once implementation begins; never edit production data manually as part of application behavior.
+- Keep every schema change reproducible through the migration baseline. Pre-launch redesign/rebasing is allowed under the Schema Lifecycle policy; retained deployments require tested forward upgrades. Application behavior must never rely on manual database edits.
 - Tests must scale with risk and cover domain invariants, legal/illegal transitions, authorization and location scopes, snapshots, idempotency/replay, webhook verification, Queue duplicate/retry/DLQ behavior, and concurrent Instant inventory mutations.
-- Run type checks, focused unit/integration tests, Worker-local integration tests, and relevant Playwright flows before considering a phase complete.
+- Select iteration checks by risk using `TESTING.md`. Implementation-phase completion requires the aggregate checks plus relevant Worker/browser/provider acceptance. Markdown-only changes require document/convention verification, not an unrelated application test suite.
 - Update canonical documentation in the same change when an approved architecture, contract, state, data, scope, or design decision changes.
 - Update `IMPLEMENTATION_STATUS.md` and READMEs only as descriptive, non-authoritative records after the canonical documents agree.
 
 ## Phase Execution Rules
 
-- Before every implementation phase, read this file, `docs/product/IMPLEMENTATION_PLAN.md`, and every relevant canonical architecture/product/design document named by this router.
+- Before every implementation phase, read this file, the engineering guides, `docs/product/IMPLEMENTATION_PLAN.md`, and every relevant canonical architecture/product/design document named by this router.
 - Implement only the authorized phase. Do not silently begin a later phase or change locked business rules because another implementation is easier.
 - If implementation exposes a documentation gap, update the canonical document. Report any material business-rule change instead of assuming it.
 - Before completion, compare work against that phase's acceptance criteria and fix relevant type, lint, test, build, and runtime-validation failures.
-- The final report must state implemented work, important files/modules, database/schema changes, RPC/contracts, tests and validation, documentation updates, deviations/risks, and what the next phase can rely on.
+- The final report must state completed work, relevant file/module and schema/RPC changes, actual validation, deviations/risks, and remaining work. Scale detail to the task; do not imply a documentation-only task implemented application behavior.

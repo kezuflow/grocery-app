@@ -53,27 +53,270 @@ async function request(value: ReturnType<typeof payload>, suppliedSignature?: st
   });
 }
 
-async function seedDispatch() {
+async function seedDispatch(suffix = "1", providerId = "1900000000000000001") {
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',1,1)",
+    ).bind(`webhook-customer-${suffix}`, `webhook-auth-${suffix}`),
+    env.DB.prepare(
+      "INSERT INTO payment_attempt (id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at) VALUES (?,?,20000,'PHP','SUCCEEDED','canonical',?,1,1)",
+    ).bind(`webhook-payment-${suffix}`, `webhook-customer-${suffix}`, `webhook-payment-${suffix}`),
+    env.DB.prepare(
+      "INSERT INTO grocery_order (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,created_at) VALUES (?,?,NULL,'INSTANT','{}','FULFILLMENT_READY',20000,'PHP',?,1)",
+    ).bind(
+      `order-lalamove-webhook-${suffix}`,
+      `webhook-customer-${suffix}`,
+      `webhook-payment-${suffix}`,
+    ),
+    env.DB.prepare(
+      "INSERT INTO fulfillment_record (id,order_id,location_id,status,updated_at) VALUES (?,?,'location-cebu-central','PACKED',1)",
+    ).bind(`webhook-fulfillment-${suffix}`, `order-lalamove-webhook-${suffix}`),
+  ]);
   await env.DB.prepare(
     `INSERT OR IGNORE INTO delivery_job
      (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status,
       context_resolution_status, address_snapshot_json, version, created_at, updated_at)
-     VALUES ('job-lalamove-webhook-1', 'order-lalamove-webhook-1', NULL, 'INSTANT',
+     VALUES (?, ?, NULL, 'INSTANT',
              'location-cebu-central', 'zone-cebu-city-core', 'UNASSIGNED',
              'RESOLVED', '{}', 1, 1, 1)`,
-  ).run();
+  )
+    .bind(`job-lalamove-webhook-${suffix}`, `order-lalamove-webhook-${suffix}`)
+    .run();
   await env.DB.prepare(
     `INSERT OR IGNORE INTO delivery_provider_dispatch
      (id, delivery_job_id, provider, merchant_order_id, provider_delivery_id,
       request_hash, request_snapshot_json, status, provider_status,
       attempt_count, version, created_at, updated_at)
-     VALUES ('dispatch-lalamove-webhook-1', 'job-lalamove-webhook-1', 'lalamove',
-             'FM-LALAMOVE-WEBHOOK-1', '1900000000000000001', 'request-hash',
+     VALUES (?, ?, 'lalamove',
+             ?, ?, 'request-hash',
              '{"protected":true}', 'ACTIVE', 'ALLOCATING', 1, 1, 1, 1)`,
-  ).run();
+  )
+    .bind(
+      `dispatch-lalamove-webhook-${suffix}`,
+      `job-lalamove-webhook-${suffix}`,
+      `FM-LALAMOVE-WEBHOOK-${suffix}`,
+      providerId,
+    )
+    .run();
 }
 
 describe("Lalamove tracking webhook", () => {
+  it("retains early pickup for reconciliation and projects the owning Order only after packing", async () => {
+    await seedDispatch("early", "1900000000000000006");
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKING' WHERE id='webhook-fulfillment-early'",
+      ),
+      env.DB.prepare(
+        "UPDATE grocery_order SET status='FULFILLMENT_PENDING' WHERE id='order-lalamove-webhook-early'",
+      ),
+    ]);
+    const event = payload({ eventId: "early-provider-pickup" });
+    event.data.order.orderId = "1900000000000000006";
+    const first = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(event),
+      crypto.randomUUID(),
+    );
+    expect(first.status).toBe(202);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM grocery_order WHERE id='order-lalamove-webhook-early'",
+      ).first(),
+    ).toEqual({ status: "FULFILLMENT_PENDING", version: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM delivery_job WHERE id='job-lalamove-webhook-early'",
+      ).first(),
+    ).toEqual({ status: "UNASSIGNED", version: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT processing_status,last_error_code FROM delivery_provider_event_inbox WHERE provider_event_id=?",
+      )
+        .bind(event.eventId)
+        .first(),
+    ).toEqual({
+      processing_status: "RECONCILIATION_REQUIRED",
+      last_error_code: "DELIVERY_PACKING_NOT_COMPLETE",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKED' WHERE id='webhook-fulfillment-early'",
+      ),
+      env.DB.prepare(
+        "UPDATE grocery_order SET status='FULFILLMENT_READY' WHERE id='order-lalamove-webhook-early'",
+      ),
+    ]);
+    const retry = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(event),
+      crypto.randomUUID(),
+    );
+    expect(retry.status).toBe(200);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM grocery_order WHERE id='order-lalamove-webhook-early'",
+      ).first(),
+    ).toEqual({ status: "OUT_FOR_DELIVERY", version: 2 });
+  });
+  it("applies a concurrent duplicate once and ignores an older observation", async () => {
+    await seedDispatch("race", "1900000000000000005");
+    const event = payload({ eventId: "concurrent-delivery-event" });
+    event.data.order.orderId = "1900000000000000005";
+    const requests = await Promise.all([request(event), request(event)]);
+    const responses = await Promise.all(
+      requests.map((incoming) =>
+        handleLalamoveWebhook(env.DB, credentials, incoming, crypto.randomUUID()),
+      ),
+    );
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const older = payload({
+      eventId: "older-delivery-event",
+      status: "ON_GOING",
+      updatedAt: "2026-09-04T00:00:00.000Z",
+    });
+    older.data.order.orderId = event.data.order.orderId;
+    const ignored = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(older),
+      crypto.randomUUID(),
+    );
+    expect(await ignored.json()).toMatchObject({ ignoredAsOlder: true });
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM delivery_job WHERE id='job-lalamove-webhook-race'",
+      ).first(),
+    ).toEqual({ status: "EN_ROUTE", version: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT provider_status,version FROM delivery_provider_dispatch WHERE id='dispatch-lalamove-webhook-race'",
+      ).first(),
+    ).toEqual({ provider_status: "IN_DELIVERY", version: 2 });
+  });
+
+  it("rolls back every projection on failure and applies the persisted inbox event on retry", async () => {
+    await seedDispatch("retry", "1900000000000000003");
+    await env.DB.prepare(`CREATE TRIGGER reject_webhook_job_update BEFORE UPDATE ON delivery_job
+      WHEN NEW.id='job-lalamove-webhook-retry' BEGIN SELECT RAISE(ABORT,'test projection failure'); END`).run();
+    const event = payload({ eventId: "retry-after-projection-failure" });
+    event.data.order.orderId = "1900000000000000003";
+    try {
+      await expect(
+        handleLalamoveWebhook(env.DB, credentials, await request(event), crypto.randomUUID()),
+      ).rejects.toThrow("test projection failure");
+      expect(
+        await env.DB.prepare(
+          "SELECT provider_status,version FROM delivery_provider_dispatch WHERE id='dispatch-lalamove-webhook-retry'",
+        ).first(),
+      ).toEqual({ provider_status: "ALLOCATING", version: 1 });
+      expect(
+        await env.DB.prepare(
+          "SELECT processing_status FROM delivery_provider_event_inbox WHERE provider_event_id=?",
+        )
+          .bind(event.eventId)
+          .first(),
+      ).toEqual({ processing_status: "RECEIVED" });
+    } finally {
+      await env.DB.prepare("DROP TRIGGER reject_webhook_job_update").run();
+    }
+    const retried = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(event),
+      crypto.randomUUID(),
+    );
+    expect(retried.status).toBe(200);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM delivery_job WHERE id='job-lalamove-webhook-retry'",
+      ).first(),
+    ).toEqual({ status: "EN_ROUTE", version: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT processing_status FROM delivery_provider_event_inbox WHERE provider_event_id=?",
+      )
+        .bind(event.eventId)
+        .first(),
+    ).toEqual({ processing_status: "APPLIED" });
+  });
+
+  it("retries an event received before its dispatch exists", async () => {
+    const event = payload({ eventId: "dispatch-created-after-event" });
+    event.data.order.orderId = "1900000000000000004";
+    const first = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(event),
+      crypto.randomUUID(),
+    );
+    expect(await first.json()).toMatchObject({ reconciliationRequired: true });
+    await seedDispatch("late", "1900000000000000004");
+    const retried = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(event),
+      crypto.randomUUID(),
+    );
+    expect(retried.status).toBe(200);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM delivery_job WHERE id='job-lalamove-webhook-late'",
+      ).first(),
+    ).toEqual({ status: "EN_ROUTE", version: 2 });
+  });
+
+  it("does not cancel the paid grocery Order when the courier cancels", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES ('courier-cancel-customer','courier-cancel-auth','active',1,1)",
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_attempt (id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at) VALUES ('courier-cancel-payment','courier-cancel-customer',20000,'PHP','SUCCEEDED','canonical','courier-cancel-payment',1,1)",
+      ),
+      env.DB.prepare(
+        "INSERT INTO grocery_order (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,created_at) VALUES ('order-courier-cancellation','courier-cancel-customer',NULL,'INSTANT','{}','COMMITTED',20000,'PHP','courier-cancel-payment',1)",
+      ),
+      env.DB.prepare(
+        "INSERT INTO delivery_job (id,order_id,fulfillment_mode,location_id,zone_id,status,context_resolution_status,address_snapshot_json,created_at,updated_at) VALUES ('job-courier-cancellation','order-courier-cancellation','INSTANT','location-cebu-central','zone-cebu-city-core','UNASSIGNED','RESOLVED','{}',1,1)",
+      ),
+      env.DB.prepare(
+        "INSERT INTO delivery_provider_dispatch (id,delivery_job_id,provider,merchant_order_id,provider_delivery_id,request_hash,request_snapshot_json,status,provider_status,attempt_count,version,created_at,updated_at) VALUES ('dispatch-courier-cancellation','job-courier-cancellation','lalamove','order-courier-cancellation','1900000000000000002','cancel-hash','{}','ACTIVE','ALLOCATING',1,1,1,1)",
+      ),
+    ]);
+    const event = payload({ eventId: "courier-canceled", status: "CANCELED" });
+    event.data.order.orderId = "1900000000000000002";
+    const response = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      await request(event),
+      crypto.randomUUID(),
+    );
+    expect(response.status).toBe(200);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,version FROM grocery_order WHERE id='order-courier-cancellation'",
+      ).first(),
+    ).toEqual({ status: "COMMITTED", version: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM delivery_provider_dispatch WHERE id='dispatch-courier-cancellation'",
+      ).first(),
+    ).toEqual({ status: "CANCELED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM delivery_job WHERE id='job-courier-cancellation'",
+      ).first(),
+    ).toEqual({ status: "FAILED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT id FROM order_cancellation WHERE order_id='order-courier-cancellation'",
+      ).first(),
+    ).toBeNull();
+  });
+
   it("acknowledges Lalamove's empty registration probe", async () => {
     const response = await handleLalamoveWebhook(
       env.DB,
@@ -119,8 +362,10 @@ describe("Lalamove tracking webhook", () => {
     });
     const inbox = await env.DB.prepare(
       `SELECT provider_event_id, processing_status, raw_payload
-       FROM delivery_provider_event_inbox WHERE provider='lalamove'`,
-    ).first<{ provider_event_id: string; processing_status: string; raw_payload: string }>();
+       FROM delivery_provider_event_inbox WHERE provider='lalamove' AND provider_event_id=?`,
+    )
+      .bind(event.eventId)
+      .first<{ provider_event_id: string; processing_status: string; raw_payload: string }>();
     expect(inbox).toMatchObject({
       provider_event_id: event.eventId,
       processing_status: "APPLIED",
@@ -147,11 +392,12 @@ describe("Lalamove tracking webhook", () => {
   });
 
   it("retains authenticated non-status events for reconciliation and acknowledges them", async () => {
-    await seedDispatch();
+    await seedDispatch("driver", "1900000000000000007");
     const event = {
       ...payload({ eventId: "event-driver-assigned" }),
       eventType: "DRIVER_ASSIGNED",
     };
+    event.data.order.orderId = "1900000000000000007";
     const response = await handleLalamoveWebhook(
       env.DB,
       credentials,

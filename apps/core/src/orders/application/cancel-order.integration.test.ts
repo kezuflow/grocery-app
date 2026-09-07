@@ -106,6 +106,70 @@ function command(orderId: string): Parameters<typeof cancelOrder>[1] {
 }
 
 describe("explicit cancellation and refund orchestration", () => {
+  it("checks customer ownership even when replaying a successful cancellation", async () => {
+    const fixture = await paidOrderFixture();
+    const request = { ...command(fixture.orderId), customerId: fixture.customerId };
+    expect(await cancelOrder(env.DB, request)).toMatchObject({ ok: true });
+    expect(
+      await cancelOrder(env.DB, { ...request, customerId: "different-customer" }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(await cancelOrder(env.DB, request)).toMatchObject({ ok: true });
+  });
+
+  it("a lost Order claim cannot persist cancellation, release stock, or record success", async () => {
+    const fixture = await paidOrderFixture();
+    const request = command(fixture.orderId);
+    // Model a zero-row conditional claim in the real D1 batch.
+    await env.DB.exec(
+      "CREATE TRIGGER test_lost_cancellation_claim BEFORE UPDATE OF status ON grocery_order WHEN NEW.status='CANCELLATION_REQUESTED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      const result = await cancelOrder(env.DB, request);
+      expect(result.ok).toBe(false);
+      expect(
+        await env.DB.prepare("SELECT id FROM order_cancellation WHERE order_id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT status FROM inventory_reservation WHERE order_id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ status: "RESERVED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM idempotency_records WHERE scope='orders.cancel' AND idempotency_key=? AND status='SUCCEEDED'",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toBeNull();
+    } finally {
+      await env.DB.exec("DROP TRIGGER test_lost_cancellation_claim");
+    }
+  });
+
+  it("records each reservation release once without changing unrelated pools", async () => {
+    const fixture = await paidOrderFixture();
+    await env.DB.prepare(
+      "INSERT INTO inventory_balance (location_id,inventory_pool_id,on_hand,reserved,version) VALUES ('location-cebu-central','pool-potato',500,0,7) ON CONFLICT(location_id,inventory_pool_id) DO UPDATE SET version=7",
+    ).run();
+    const request = command(fixture.orderId);
+    expect((await cancelOrder(env.DB, request)).ok).toBe(true);
+    expect((await cancelOrder(env.DB, request)).ok).toBe(true);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count, SUM(reservation_delta_base) delta FROM inventory_ledger_entries WHERE reference_type='grocery_order' AND reference_id=? AND reason_code='ORDER_CANCELLATION'",
+      )
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ count: 1, delta: -1000 });
+    expect(
+      await env.DB.prepare(
+        "SELECT version FROM inventory_balance WHERE location_id='location-cebu-central' AND inventory_pool_id='pool-potato'",
+      ).first(),
+    ).toEqual({ version: 7 });
+  });
+
   it("coordinates the original payment and every committed addition before canceling", async () => {
     const fixture = await paidOrderFixture();
     const amendmentOne = await addCommittedAmendment(fixture, 5_000);

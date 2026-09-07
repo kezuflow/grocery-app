@@ -1,5 +1,7 @@
 # FreshMarkets Admin Design
 
+Engineering behavior follows [CODING_STANDARDS.md](../../architecture/CODING_STANDARDS.md) and [TESTING.md](../../architecture/TESTING.md): use validated Core DTOs/commands, accessible interaction states, and verification proportionate to the change. These implementation rules do not redefine the product/design choices below.
+
 ## Purpose
 
 The admin is an operational decision system. It should answer “What is happening, what is blocked, and what requires attention?” before it presents CRUD controls. The design optimizes dense scanning, safe bulk work, clear ownership, and auditable transitions.
@@ -18,21 +20,21 @@ The reproduction is clean-room: public rendered pages may be inspected for geome
 
 Admin styling is isolated beneath `.fm-admin` and must not alter marketplace/storefront tokens. Admin supports an explicit persisted light/dark appearance toggle in the header, uses a neutral operational canvas with orange as the controlled accent in both modes, and exposes a fixed five-step orange data-visualization palette through admin-scoped design tokens. This is a bounded appearance preference, not a runtime font, radius, or arbitrary theme customizer. Semantic success, warning, danger, information, and status colors retain their meanings and are not replaced with orange.
 
-Product administration uses two deliberately different projections. Global shows catalog identity, Category, media, and Variant definitions only. A selected operational location shows manually managed exact local retail prices, local Variant activation, and shared Product inventory. Global must not show resolved price, pricing context, local readiness, stock, or catalog-reference labels; location views must not show a sourcing-mode selector. Separate selling-state and fulfillment-mode controls are Global settings.
+Global owns catalog identity, Category, media, variants and exact-location price editing. Price commands require global prices.manage. Operational locations show read-only exact prices, local activation and shared inventory; no fallback or sourcing selector exists. Global setup includes warehouse/fulfillment sites, serviceability, staff access and cycles. Transfers and Scheduled cycle goods remain visibly separate from Instant stock.
 
 ## Information Architecture
 
 Primary navigation is organized around operational ownership:
 
 - Overview: Overview.
-- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List, Memberships), and Promotions. Categories are catalog organization within Products, and Memberships is customer lifecycle administration within Customers; neither is a separate top-level workspace. Privacy/account-closure handling has no standalone Admin destination in the current release.
+- Commerce: Products (Product List, Add Product, Categories, Add Category), Orders (Order List, Order Issues), Customers (Customer List), and Promotions. Categories are catalog organization within Products,; neither is a separate top-level workspace. Privacy/account-closure handling has no standalone Admin destination in the current release.
 - Operations: Inventory, External Delivery, and Operational Exceptions. Inventory is the primary Instant stock workspace and presents explicit Add stock and Remove stock actions with dated immutable activity. Exact Scheduled purchasing, Receiving, and Fulfillment remain distinct Core-owned workflows reached contextually from Orders or exceptions.
 - Finance: Payments (Overview, Transactions, Reconciliation) and Analytics.
 - Administration: Staff & Access (Staff, Roles), Audit Log, and Settings (Selling State and Fulfillment Mode).
 
-Resource-specific detail and edit screens are contextual destinations, not permanent navigation items. Product, category, order, customer, membership, promotion, payment, staff, role, issue, and audit detail routes open from their owning list and preserve breadcrumbs back to the filtered list. A stable create route may appear as a nested shortcut; a route requiring a resource ID may not.
+Resource-specific detail and edit screens are contextual destinations, not permanent navigation items. Product, category, order, customer, promotion, payment, staff, role, issue, and audit detail routes open from their owning list and preserve breadcrumbs back to the filtered list. A stable create route may appear as a nested shortcut; a route requiring a resource ID may not.
 
-Navigation items and actions are capability-aware and selected-scope aware. Core supplies both the authorized entries and their supported scope kinds; Web only narrows that set. The Admin selector exposes Global and reachable operational locations; it deliberately hides the internal market hierarchy. Global selection shows global administration and supported aggregate read sides, but not physical Inventory. Location selection (Central Cebu for the current release) shows Overview, Orders, Products, Inventory, External Delivery, Analytics, Audit, and location Settings when authorized. Its Products workspace is an operational projection of the global catalog focused on exact local retail price, selling status, and the shared Product inventory position; it does not transfer Product identity or Category ownership to the location. Customers, Memberships, Promotions, Payments/Pricing, Staff administration, and other global-only surfaces remain hidden. Unauthorized actions remain unavailable in Core regardless of visibility.
+Navigation items and actions are capability-aware and selected-scope aware. Core supplies both the authorized entries and their supported scope kinds; Web only narrows that set. The Admin selector exposes Global and reachable operational locations; it deliberately hides the internal market hierarchy. Global selection shows global administration and supported aggregate read sides, but not physical Inventory. Location selection (Central Cebu for the current release) shows Overview, Orders, Products, Inventory, External Delivery, Analytics, Audit, and location Settings when authorized. Its Products workspace is an operational projection of the global catalog focused on exact local retail price, selling status, and the shared Product inventory position; it does not transfer Product identity or Category ownership to the location. Customers, Promotions, Payments/Pricing, Staff administration, and other global-only surfaces remain hidden. Unauthorized actions remain unavailable in Core regardless of visibility.
 
 ## Global Shell
 
@@ -54,7 +56,7 @@ The overview is a prioritized operational briefing, not four generic statistic c
 - procurement requirements, shortages, and receiving discrepancies;
 - fulfillment workload and aging;
 - external-delivery workload, provider exceptions, and failed deliveries;
-- subscription billing failures;
+- transfer/receiving discrepancies and unknown delivery attempts;
 - attention/exceptions queue;
 - recent material operations.
 
@@ -64,7 +66,7 @@ The overview consumes one purpose-built, scope-aware Admin overview read model. 
 
 ## Commerce Configuration
 
-`/admin/commerce-configuration` is a global-scope workspace for Membership Price and the separate selling-state/fulfillment-mode controls. It explains pause/switch/readiness/reopen behavior and requires reason, confirmation, idempotency, and expected version for material changes. It exposes no Service Fee editor, internal delivery-fee formula, generic history editing, or committed-snapshot mutation.
+`/admin/commerce-configuration` is a global-scope workspace for the separate selling-state/fulfillment-mode controls. It explains pause/switch/readiness/reopen behavior and requires reason, confirmation, idempotency, and expected version for material changes. It exposes no Service Fee editor, internal delivery-fee formula, generic history editing, or committed-snapshot mutation.
 
 ## Page Archetypes
 
@@ -72,7 +74,7 @@ The overview consumes one purpose-built, scope-aware Admin overview read model. 
 
 - Catalog: Product List, Add Product, Product Detail, Edit Product, Category List, Add Category, Category Detail, and Edit Category. Product workspaces cover identity, categorization, customer-facing details, primary/ordered media, persisted SKU variants, exact base-unit consumption/shipping grams, exact-location retail prices, local selling status, and audit history. Category workspaces cover parent hierarchy, name/slug/code, icon, sort order, status, contained products, and audit history.
 - Orders: Order List, Order Detail, and Order Issues. Detail composes items, immutable financial snapshots, Payments, fulfillment, delivery, amendments, timeline, exceptions, allowed actions, and audit history.
-- Customers, Memberships, and Promotions: list/detail workspaces and the approved explicit commands for each domain. The privacy/account-closure lifecycle remains a Core capability and audit seam, but is intentionally omitted from the current Admin navigation and page inventory until an owner-approved intake and retention procedure exists.
+- Customers and Promotions: list/detail workspaces and the approved explicit commands for each domain. The privacy/account-closure lifecycle remains a Core capability and audit seam, but is intentionally omitted from the current Admin navigation and page inventory until an owner-approved intake and retention procedure exists.
 - Payments: Payment Overview, Transactions, Payment Detail, and Reconciliation. Refund and retry/reconcile actions are contextual commands from detail or exception states, not generic row edits.
 - Operations and administration: Inventory stock levels/activity, Delivery, Operational Exceptions, Analytics, Staff, Roles, Audit, and Fulfillment Mode settings. Procurement, Receiving, and Fulfillment screens remain available as contextual advanced workflows while the default operator path stays focused on stock in/out.
 
@@ -172,7 +174,6 @@ Every workspace designs:
 - Fulfillment: preserve paid-order picking/packing transitions behind Orders and exception handling; do not represent fulfillment as a generic inventory edit.
 - Delivery: quote/book enabled external providers, inspect normalized status, and reconcile/cancel/resolve failed delivery without an internal fleet or custom driver map.
 - Customers: support identity-linked customer context without editing auth records.
-- Subscriptions: manage membership state and billing failures, not grocery orders.
 - Payments: reconcile provider truth, attempts, refunds, and exceptions.
 - Staff/Roles: manage capabilities and location scope.
 - Audit: inspect immutable material operations.
@@ -180,3 +181,7 @@ Every workspace designs:
 ## Phase-0 Proposal
 
 The detailed admin IA, shell, table/filter standards, component inventory, responsive behavior, and approval gates live in `ADMIN_DESIGN.md`.
+
+## Commerce Alignment Workspaces
+
+The current release includes Global location/address/serviceability and cycle authoring, warehouse dispatch/destination receipts, R2 product/campaign publication, Global exact-location price editing, invitation acceptance, and Scheduled receiving/packing. Local price fields are read-only. Delivery shows searching separately from assigned, booking during eligible preparation, PACKED-only handover and Scheduled-only emergency manual name/phone/reason entry. Core supplies legal actions and actual cost availability. Active membership navigation/editors are removed. Closure intake/access disablement does not claim irreversible anonymization without approved policy.

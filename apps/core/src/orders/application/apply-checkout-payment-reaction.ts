@@ -45,8 +45,8 @@ export async function applyCheckoutPaymentReaction(
   if (!existing) return { applied: false, reason: "INSUFFICIENT_STATE" };
 
   const already = await database
-    .prepare("SELECT order_id FROM order_payment_reaction WHERE reaction_id=?")
-    .bind(input.reactionId)
+    .prepare("SELECT order_id FROM order_payment_reaction WHERE payment_intent_id=?")
+    .bind(input.paymentIntentId)
     .first<{ order_id: string }>();
   if (already) return { applied: true, reason: "ALREADY_APPLIED", orderId: already.order_id };
 
@@ -55,8 +55,26 @@ export async function applyCheckoutPaymentReaction(
 
   const repository = createCheckoutRepository(database);
   const quote = await repository.findQuoteById(input.checkoutAttemptId);
-  if (!quote || quote.status !== "ACTIVE" || quote.expiresAt <= now)
+  if (!quote || (quote.status !== "ACTIVE" && quote.status !== "EXPIRED"))
     return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
+  // Expiry prevents starting payment, not applying a payment already accepted
+  // against this Quote. Physical entitlement and cutoff still guard commitment.
+  const payment = await database
+    .prepare(
+      `SELECT 1 AS eligible FROM payment_intent
+       WHERE id=? AND subject_type='checkout_quote' AND subject_id=? AND customer_id=?
+         AND status='SUCCEEDED' AND amount_minor=? AND currency=? AND created_at<?`,
+    )
+    .bind(
+      input.paymentIntentId,
+      quote.id,
+      quote.customerId,
+      quote.totalMinor,
+      quote.currency,
+      quote.expiresAt,
+    )
+    .first<{ eligible: number }>();
+  if (!payment) return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
   const instant = quote.fulfillmentMode === "INSTANT";
 
   // Scheduled membership must still be entitled at commitment. Instant is
@@ -300,7 +318,7 @@ export async function applyCheckoutPaymentReaction(
       ),
     database
       .prepare(
-        "UPDATE checkout_quote SET status='CONSUMED', version=version+1, updated_at=? WHERE id=? AND version=? AND status='ACTIVE'",
+        "UPDATE checkout_quote SET status='CONSUMED', version=version+1, updated_at=? WHERE id=? AND version=? AND status IN ('ACTIVE','EXPIRED')",
       )
       .bind(now, quote.id, quote.version),
     // `changes()` is scoped to the immediately preceding statement. A lost
@@ -453,9 +471,9 @@ export async function applyCheckoutPaymentReaction(
     statements.push(
       database
         .prepare(
-          "UPDATE checkout_inventory_holds SET status='COMMITTED', updated_at=? WHERE checkout_attempt_id=? AND status='HELD'",
+          "INSERT INTO commitment_abort (id) SELECT -11 WHERE (SELECT COUNT(*) FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD') != ?",
         )
-        .bind(now, quote.id),
+        .bind(quote.id, pools.size),
     );
   }
 
@@ -463,6 +481,14 @@ export async function applyCheckoutPaymentReaction(
     const reservedBase = instant ? plan.requestedBase : 0;
     if (reservedBase > 0) {
       statements.push(
+        database
+          .prepare(
+            `UPDATE checkout_inventory_holds SET status='COMMITTED', updated_at=?
+             WHERE checkout_attempt_id=? AND inventory_pool_id=? AND location_id=?
+               AND quantity=? AND status='HELD'`,
+          )
+          .bind(now, quote.id, plan.poolId, cycleSnapshot.locationId, reservedBase),
+        database.prepare("INSERT INTO commitment_abort (id) SELECT -12 WHERE changes() != 1"),
         database
           .prepare(
             "UPDATE inventory_balance SET reserved=reserved+?, version=version+1 WHERE location_id=? AND inventory_pool_id=? AND on_hand-reserved>=?",
@@ -484,7 +510,7 @@ export async function applyCheckoutPaymentReaction(
             reservedBase,
             orderId,
             now,
-            input.reactionId,
+            `${input.reactionId}:reserve:${plan.poolId}`,
           ),
       );
     }
@@ -555,7 +581,7 @@ export async function applyCheckoutPaymentReaction(
           `INSERT INTO commitment_abort (id) SELECT -2 WHERE (
             SELECT COUNT(*) FROM grocery_order go
             JOIN order_fulfillment_snapshot s ON s.order_id = go.id
-            WHERE s.location_id=? AND s.fulfillment_mode='INSTANT' AND go.status NOT IN ('CANCELED','REFUNDED')
+            WHERE s.location_id=? AND s.fulfillment_mode='INSTANT' AND go.status NOT IN ('CANCELED','REFUNDED','DELIVERED')
           ) > ?`,
         )
         .bind(cycleSnapshot.locationId, maxConcurrentInstantOrders),
@@ -653,8 +679,7 @@ async function recordFinanceExceptionRow(
       errorCode.slice(0, 120),
       now,
     )
-    .run()
-    .catch(() => undefined);
+    .run();
 }
 
 async function recordException(

@@ -47,6 +47,12 @@ export type RecordLineBatchInput = {
 
 export function createReceivingRepository(database: D1Database) {
   return {
+    async readIdempotency(scope: string, idempotencyKey: string) {
+      return database
+        .prepare("SELECT status FROM idempotency_records WHERE scope=? AND idempotency_key=?")
+        .bind(scope, idempotencyKey)
+        .first<{ status: string }>();
+    },
     async readRecord(receivingRecordId: string): Promise<ReceivingRecordRow | null> {
       const row = await database
         .prepare(
@@ -176,25 +182,36 @@ export function createReceivingRepository(database: D1Database) {
     async startReceivingRecord(
       receivingRecordId: string,
       expectedVersion: number,
+      requirementId: string,
+      expectedRequirementVersion: number,
       idempotencyKey: string,
-      requestHash: string,
-    ): Promise<ClaimOutcome> {
-      const claim = await this.claimIdempotency(START_RECEIVING_SCOPE, idempotencyKey, requestHash);
-      if (!claim.claimed) return claim;
+    ): Promise<void> {
       const now = Date.now();
       await database.batch([
         database
           .prepare(
-            "UPDATE receiving_record SET status='IN_PROGRESS', updated_at=?, version=version+1 WHERE id=? AND status='NOT_STARTED' AND version=?",
+            `UPDATE receiving_record SET status='IN_PROGRESS', updated_at=?, version=version+1
+             WHERE id=? AND status='NOT_STARTED' AND version=? AND procurement_requirement_id=?
+             AND EXISTS (SELECT 1 FROM procurement_requirement WHERE id=? AND version=?
+                         AND status IN ('ORDERED','PARTIALLY_RECEIVED'))
+             AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND status='PROCESSING')`,
           )
-          .bind(now, receivingRecordId, expectedVersion),
+          .bind(
+            now,
+            receivingRecordId,
+            expectedVersion,
+            requirementId,
+            requirementId,
+            expectedRequirementVersion,
+            START_RECEIVING_SCOPE,
+            idempotencyKey,
+          ),
         database
           .prepare(
             "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND changes()=1",
           )
           .bind(receivingRecordId, now, START_RECEIVING_SCOPE, idempotencyKey),
       ]);
-      return claim;
     },
     async recordReceivedLine(input: RecordLineBatchInput): Promise<void> {
       const now = Date.now();
@@ -202,7 +219,13 @@ export function createReceivingRepository(database: D1Database) {
       await database.batch([
         database
           .prepare(
-            "UPDATE receiving_record SET accepted_quantity=accepted_quantity+?, rejected_quantity=rejected_quantity+?, status=?, updated_at=?, version=version+1 WHERE id=? AND version=? AND status IN ('IN_PROGRESS','DISCREPANCY') AND accepted_quantity+rejected_quantity+?<=expected_quantity",
+            `UPDATE receiving_record SET accepted_quantity=accepted_quantity+?, rejected_quantity=rejected_quantity+?, status=?, updated_at=?, version=version+1
+             WHERE id=? AND version=? AND status IN ('IN_PROGRESS','DISCREPANCY')
+             AND accepted_quantity+rejected_quantity+?<=expected_quantity
+             AND procurement_requirement_id=?
+             AND EXISTS (SELECT 1 FROM procurement_requirement WHERE id=? AND version=?
+                         AND location_id=? AND inventory_pool_id=? AND status IN ('ORDERED','PARTIALLY_RECEIVED'))
+             AND EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING')`,
           )
           .bind(
             input.acceptedDelta,
@@ -212,6 +235,14 @@ export function createReceivingRepository(database: D1Database) {
             input.receivingRecordId,
             input.expectedRecordVersion,
             input.acceptedDelta + input.rejectedDelta,
+            input.procurementRequirementId,
+            input.procurementRequirementId,
+            input.expectedRequirementVersion,
+            input.locationId,
+            input.inventoryPoolId,
+            RECORD_LINE_SCOPE,
+            input.idempotencyKey,
+            input.requestHash,
           ),
         database
           .prepare(
