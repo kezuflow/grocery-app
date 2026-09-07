@@ -56,6 +56,11 @@ export type ProcurementRequirementPage = {
 };
 
 export type ReceivingSessionView = {
+  productName?: string;
+  cycleName?: string;
+  baseUnit?: string;
+  allowedActions?: ReadonlyArray<"START" | "RECORD" | "COMPLETE">;
+  legacyAcceptedBase?: number;
   receivingSessionId: string;
   requirementId: string;
   cycleId: string;

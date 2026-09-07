@@ -489,9 +489,9 @@ VALUES
 
 INSERT OR IGNORE INTO receiving_record
   (id, procurement_requirement_id, expected_quantity, accepted_quantity,
-   rejected_quantity, legacy_accepted_base, status, version, created_at, updated_at)
+   rejected_quantity, status, version, created_at, updated_at)
 VALUES
-  ('seed-receiving-asparagus','seed-procurement-asparagus',12000,8000,500,8000,'IN_PROGRESS',3,1788304500000,1788328800000);
+  ('seed-receiving-asparagus','seed-procurement-asparagus',12000,8000,500,'IN_PROGRESS',3,1788304500000,1788328800000);
 
 INSERT OR IGNORE INTO receiving_event
   (id, receiving_record_id, procurement_requirement_id, location_id,

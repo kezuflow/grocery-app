@@ -7,6 +7,7 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
 }
 
 export type ReceiveProcurementPorts = {
+  actorAuthUserId?: string;
   /** Capability + location-scope authorization resolved by the caller. */
   authorize: (locationId: string) => Promise<boolean>;
 };
@@ -71,6 +72,9 @@ export async function receiveProcurement(
     expectedVersion: command.expectedVersion,
     idempotencyKey: command.idempotencyKey,
     actorId: command.actorId,
+    authority: ports.actorAuthUserId
+      ? { authUserId: ports.actorAuthUserId, locationId: requirement.location_id }
+      : undefined,
     requestId: command.requestId,
   });
   if (result.ok)
@@ -78,7 +82,7 @@ export async function receiveProcurement(
       ok: true as const,
       value: {
         receivingRecordId: result.value.receivingRecordId,
-        status: result.value.status as ReceivingRecordState,
+        status: result.value.status,
         acceptedBase: result.value.acceptedBase,
         rejectedBase: result.value.rejectedBase,
         remainingBase: result.value.remainingBase,

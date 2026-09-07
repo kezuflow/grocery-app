@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth, type AuthEnvironment } from "../../auth/service";
 import type { ResolvedApplicationContext } from "../../auth/authorization";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
+import { recordReceivedLine } from "../../procurement/application/record-received-line";
+import { startReceiving } from "../../procurement/application/start-receiving";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 import { reconcileProviderObservations } from "../../delivery/application/reconcile-provider-observations";
@@ -617,6 +619,41 @@ describe("external delivery request", () => {
         .bind(result.value.dispatchId)
         .first(),
     ).toEqual({ last_error_code: "DELIVERY_PACKING_NOT_COMPLETE" });
+    // This provider projection test uses seeded paid-order evidence; receive its goods
+    // through commands before packing. It does not establish payment acceptance.
+    const receiptId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at) SELECT ?,order_id,'cycle-next-cebu',?,'pool-red-onion',base_quantity,'OPEN','EXACT_PAID_LINE',id,sku_id,quantity,base_quantity,'GRAM',1000,? FROM order_item WHERE order_id=?",
+      ).bind(crypto.randomUUID(), LOCATION, now, delivery.orderId),
+      env.DB.prepare(
+        "INSERT INTO procurement_requirement(id,delivery_cycle_id,location_id,inventory_pool_id,required_quantity,status,version) VALUES (?,'cycle-next-cebu',?,'pool-red-onion',1000,'ORDERED',1)",
+      ).bind(receiptId, LOCATION),
+      env.DB.prepare(
+        "INSERT INTO receiving_record(id,procurement_requirement_id,expected_quantity,accepted_quantity,rejected_quantity,status,version) VALUES (?,?,1000,0,0,'NOT_STARTED',1)",
+      ).bind(receiptId, receiptId),
+    ]);
+    expect(
+      await startReceiving(env.DB, {
+        requirementId: receiptId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "test",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await recordReceivedLine(env.DB, {
+        receivingRecordId: receiptId,
+        acceptedDeltaBase: 1000,
+        rejectedDeltaBase: 0,
+        reason: "Inspected goods",
+        expectedVersion: 2,
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "test",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
     for (const [index, action] of (
       ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
     ).entries()) {

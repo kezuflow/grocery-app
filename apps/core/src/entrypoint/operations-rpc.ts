@@ -77,6 +77,7 @@ export function createOperationsRpc(context: CoreRpcContext) {
         context.env.DB,
         { ...input, actorId: actor.id },
         {
+          actorAuthUserId: actor.id,
           authorize: (locationId) =>
             context.access.requireOperationalAccess(input, "procurement.manage", locationId),
         },

@@ -1,7 +1,7 @@
 import { applyD1Migrations, env } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { z } from "@freshmarkets/validation";
-import seedSql from "../seeds/development.sql?raw";
+import seedSql from "../seeds/fixtures/retained-0068.sql?raw";
 
 it("rolls back an invalid retained D1 upgrade and then preserves the full valid commerce graph", async () => {
   if (!("TEST_MIGRATIONS" in env) || typeof env.TEST_MIGRATIONS !== "string")
@@ -76,4 +76,47 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
     expect(await env.DB.prepare(`PRAGMA quick_check(${quote(name)})`).first()).toEqual({
       quick_check: "ok",
     });
+  const retainedReceipts = (
+    await env.DB.prepare("SELECT id,accepted_quantity FROM receiving_record ORDER BY id").all<{
+      id: string;
+      accepted_quantity: number;
+    }>()
+  ).results;
+  const retainedStock = (
+    await env.DB.prepare(
+      "SELECT * FROM inventory_balance ORDER BY location_id,inventory_pool_id",
+    ).all()
+  ).results;
+  const retainedLedger = (
+    await env.DB.prepare("SELECT * FROM inventory_ledger_entries ORDER BY id").all()
+  ).results;
+  await applyD1Migrations(
+    env.DB,
+    migrations.filter((candidate) => candidate.name > migration.name),
+  );
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT id,legacy_accepted_base accepted_quantity FROM receiving_record ORDER BY id",
+      ).all()
+    ).results,
+  ).toEqual(retainedReceipts);
+  expect(retainedReceipts.some((receipt) => receipt.accepted_quantity > 0)).toBe(true);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT * FROM inventory_balance ORDER BY location_id,inventory_pool_id",
+      ).all()
+    ).results,
+  ).toEqual(retainedStock);
+  expect(
+    (await env.DB.prepare("SELECT * FROM inventory_ledger_entries ORDER BY id").all()).results,
+  ).toEqual(retainedLedger);
+  expect(await env.DB.prepare("SELECT COUNT(*) count FROM cycle_goods_balance").first()).toEqual({
+    count: 0,
+  });
+  expect(await env.DB.prepare("SELECT COUNT(*) count FROM cycle_goods_movement").first()).toEqual({
+    count: 0,
+  });
+  expect((await env.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
 }, 30_000);

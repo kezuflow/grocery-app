@@ -18,6 +18,7 @@ import type {
 import { appendAuditEvent } from "../../audit/application/append-audit-event";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { createProcurementRequirement } from "../../procurement/application/create-procurement-requirement";
+import type { ReceivingResult } from "../../procurement/application/execute-receiving-command";
 import { recordReceivedLine } from "../../procurement/application/record-received-line";
 import { startReceiving } from "../../procurement/application/start-receiving";
 import { completeReceiving } from "../../procurement/application/complete-receiving";
@@ -78,35 +79,21 @@ async function access(
   request: AuthenticatedRequest & { locationId: string },
   capability: "procurement.manage" | "fulfillment.manage" | "delivery.manage",
 ) {
-  return resolveOperationsAdministrationAccess(
-    deps,
-    request,
-    capability as never,
-    request.locationId,
-  );
+  return resolveOperationsAdministrationAccess(deps, request, capability, request.locationId);
 }
 
-function receivingView(row: {
-  id: string;
-  procurement_requirement_id: string;
-  delivery_cycle_id: string;
-  location_id: string;
-  expected_quantity: number;
-  accepted_quantity: number;
-  rejected_quantity: number;
-  status: string;
-  version: number;
-}): ReceivingSessionView {
+function receivingCommandView(result: ReceivingResult): ReceivingSessionView {
   return {
-    receivingSessionId: row.id,
-    requirementId: row.procurement_requirement_id,
-    cycleId: row.delivery_cycle_id,
-    locationId: row.location_id,
-    expectedBase: row.expected_quantity,
-    acceptedBase: row.accepted_quantity,
-    rejectedBase: row.rejected_quantity,
-    status: row.status,
-    version: row.version,
+    receivingSessionId: result.receivingRecordId,
+    requirementId: result.requirementId,
+    cycleId: result.cycleId,
+    locationId: result.locationId,
+    expectedBase: result.expectedBase,
+    acceptedBase: result.acceptedBase,
+    rejectedBase: result.rejectedBase,
+    status: result.status,
+    version: result.version,
+    legacyAcceptedBase: result.legacyAcceptedBase,
   };
 }
 
@@ -335,6 +322,8 @@ export async function startAdminReceiving(
     idempotencyKey: request.idempotencyKey,
     actorId: permitted.value.authUserId,
     requestId: request.requestId,
+    authority: { authUserId: permitted.value.authUserId, locationId: request.locationId },
+    reason: request.reason,
   });
   if (!result.ok)
     return {
@@ -345,19 +334,7 @@ export async function startAdminReceiving(
         requestId: request.requestId,
       },
     };
-  const row = await loadReceiving(deps.db, result.value.receivingRecordId);
-  if (!row) return failed("NOT_FOUND", "Receiving session not found", request.requestId);
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    "OPERATIONS.RECEIVING_STARTED",
-    "receiving_record",
-    row.id,
-    request.locationId,
-    { status: row.status, version: row.version },
-  );
-  return { ok: true, value: receivingView(row), requestId: request.requestId };
+  return { ok: true, requestId: request.requestId, value: receivingCommandView(result.value) };
 }
 
 export async function recordAdminReceivedLine(
@@ -378,6 +355,7 @@ export async function recordAdminReceivedLine(
     idempotencyKey: request.idempotencyKey,
     actorId: permitted.value.authUserId,
     requestId: request.requestId,
+    authority: { authUserId: permitted.value.authUserId, locationId: request.locationId },
   });
   if (!result.ok)
     return {
@@ -388,24 +366,7 @@ export async function recordAdminReceivedLine(
         requestId: request.requestId,
       },
     };
-  const row = await loadReceiving(deps.db, request.receivingSessionId);
-  if (!row) return failed("NOT_FOUND", "Receiving session not found", request.requestId);
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    "OPERATIONS.RECEIVING_LINE_RECORDED",
-    "receiving_record",
-    row.id,
-    request.locationId,
-    {
-      acceptedBase: row.accepted_quantity,
-      rejectedBase: row.rejected_quantity,
-      status: row.status,
-      version: row.version,
-    },
-  );
-  return { ok: true, value: receivingView(row), requestId: request.requestId };
+  return { ok: true, requestId: request.requestId, value: receivingCommandView(result.value) };
 }
 
 export async function completeAdminReceiving(
@@ -422,6 +383,8 @@ export async function completeAdminReceiving(
     expectedVersion: request.expectedVersion,
     idempotencyKey: request.idempotencyKey,
     requestId: request.requestId,
+    authority: { authUserId: permitted.value.authUserId, locationId: request.locationId },
+    reason: request.reason,
   });
   if (!result.ok)
     return {
@@ -432,19 +395,7 @@ export async function completeAdminReceiving(
         requestId: request.requestId,
       },
     };
-  const completed = await loadReceiving(deps.db, row.id);
-  if (!completed) return failed("NOT_FOUND", "Receiving session not found", request.requestId);
-  await audit(
-    deps,
-    request,
-    permitted.value.authUserId,
-    "OPERATIONS.RECEIVING_COMPLETED",
-    "receiving_record",
-    completed.id,
-    request.locationId,
-    { status: completed.status, version: completed.version },
-  );
-  return { ok: true, value: receivingView(completed), requestId: request.requestId };
+  return { ok: true, requestId: request.requestId, value: receivingCommandView(result.value) };
 }
 
 export async function advanceAdminFulfillment(

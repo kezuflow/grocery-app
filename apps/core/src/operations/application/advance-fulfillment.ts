@@ -5,6 +5,7 @@ import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { fulfillmentStates } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { consumeCycleGoodsStatements } from "../../fulfillment/application/consume-cycle-goods";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -269,6 +270,17 @@ export async function advanceFulfillment(
             "UPDATE inventory_reservation SET status='CONSUMED',version=version+1 WHERE order_id=? AND status='RESERVED'",
           )
           .bind(command.orderId),
+      );
+    }
+    if (command.action === "MARK_PACKED" && order.fulfillment_mode === "SCHEDULED") {
+      statements.push(
+        ...consumeCycleGoodsStatements(database, {
+          orderId: command.orderId,
+          cycleId,
+          locationId,
+          actorUserId: ports.actorAuthUserId ?? null,
+          now,
+        }),
       );
     }
     statements.push(

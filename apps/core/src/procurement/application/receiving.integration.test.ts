@@ -3,11 +3,8 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { startReceiving, type StartReceivingCommand } from "./start-receiving";
 import { recordReceivedLine, type RecordReceivedLineCommand } from "./record-received-line";
-import {
-  createReceivingRepository,
-  RECORD_LINE_SCOPE,
-} from "../infrastructure/receiving-repository";
 import { completeReceiving } from "./complete-receiving";
+import { requestHash } from "../../idempotency";
 
 const locationId = "location-cebu-central";
 const inventoryPoolId = "pool-red-onion";
@@ -83,6 +80,14 @@ async function balance() {
     .first<{ on_hand: number; version: number }>();
 }
 
+async function allocation(fx: Fixture) {
+  return env.DB.prepare(
+    "SELECT received_base,packed_base,surplus_released_base,disposed_base,version FROM cycle_goods_balance WHERE cycle_id=? AND location_id=? AND inventory_pool_id=?",
+  )
+    .bind(`cycle-${fx.requirementId}`, locationId, inventoryPoolId)
+    .first();
+}
+
 async function cleanInventory() {
   await env.DB.batch([
     env.DB.prepare(
@@ -95,7 +100,7 @@ async function cleanInventory() {
 }
 
 async function counts(receivingRecordId: string) {
-  const [events, ledger] = await Promise.all([
+  const [events, ledger, allocations] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS count FROM receiving_event WHERE receiving_record_id=?")
       .bind(receivingRecordId)
       .first<{ count: number }>(),
@@ -104,8 +109,17 @@ async function counts(receivingRecordId: string) {
     )
       .bind(locationId, inventoryPoolId)
       .first<{ count: number }>(),
+    env.DB.prepare(
+      "SELECT COUNT(*) count FROM cycle_goods_movement WHERE receiving_event_id IN (SELECT id FROM receiving_event WHERE receiving_record_id=?)",
+    )
+      .bind(receivingRecordId)
+      .first<{ count: number }>(),
   ]);
-  return { events: events?.count ?? 0, ledger: ledger?.count ?? 0 };
+  return {
+    events: events?.count ?? 0,
+    ledger: ledger?.count ?? 0,
+    allocations: allocations?.count ?? 0,
+  };
 }
 
 function startCommand(
@@ -180,43 +194,110 @@ describe("start receiving", () => {
 });
 
 describe("record received line", () => {
+  it("recovers an unapplied retained claim and never reposts a retained successful command", async () => {
+    const fx = await fixture();
+    const command = lineCommand(fx);
+    const hash = await requestHash({
+      receivingRecordId: command.receivingRecordId,
+      acceptedDeltaBase: command.acceptedDeltaBase,
+      rejectedDeltaBase: command.rejectedDeltaBase,
+      reason: command.reason,
+      expectedVersion: command.expectedVersion,
+    });
+    await env.DB.prepare(
+      "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES ('procurement.recordReceivedLine',?,?,'PROCESSING','receiving_record',1,1)",
+    )
+      .bind(command.idempotencyKey, hash)
+      .run();
+    expect(await recordReceivedLine(env.DB, command)).toMatchObject({
+      ok: true,
+      value: { acceptedBase: 4 },
+    });
+    await env.DB.prepare(
+      "UPDATE idempotency_records SET request_hash=?,result_reference=? WHERE scope='procurement.recordReceivedLine' AND idempotency_key=?",
+    )
+      .bind(hash, fx.receivingRecordId, command.idempotencyKey)
+      .run();
+    expect(await recordReceivedLine(env.DB, command)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT", message: expect.stringContaining("already applied") },
+    });
+    expect(await record(fx.receivingRecordId)).toMatchObject({ accepted_quantity: 4, version: 2 });
+    expect(await allocation(fx)).toMatchObject({ received_base: 4 });
+    expect(await counts(fx.receivingRecordId)).toEqual({ events: 1, ledger: 0, allocations: 1 });
+  });
+  it("does not resolve a receipt after its procurement requirement is closed", async () => {
+    const fx = await fixture({
+      recordStatus: "DISCREPANCY",
+      requirementStatus: "CLOSED",
+      accepted: 7,
+      rejected: 3,
+    });
+    const command = {
+      receivingRecordId: fx.receivingRecordId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    expect(await completeReceiving(env.DB, command)).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
+    expect(await record(fx.receivingRecordId)).toMatchObject({ status: "DISCREPANCY", version: 1 });
+    expect(
+      await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+        .bind(command.idempotencyKey)
+        .first(),
+    ).toBeNull();
+  });
   it("losing the requirement version leaves receipt, stock, events and success unchanged", async () => {
     await cleanInventory();
     const fx = await fixture();
     const before = await record(fx.receivingRecordId);
-    const repository = createReceivingRepository(env.DB);
-    const key = crypto.randomUUID();
-    await repository.claimIdempotency(RECORD_LINE_SCOPE, key, "receiving-race");
-    // A competing requirement command wins after the application's preflight read.
-    await env.DB.prepare("UPDATE procurement_requirement SET version=version+1 WHERE id=?")
-      .bind(fx.requirementId)
-      .run();
-    await repository.recordReceivedLine({
-      receivingRecordId: fx.receivingRecordId,
-      procurementRequirementId: fx.requirementId,
-      locationId,
-      inventoryPoolId,
-      acceptedDelta: 4,
-      rejectedDelta: 0,
-      reason: "Receipt race",
-      actorId: "staff-receiving",
-      expectedRecordVersion: 1,
-      expectedRequirementVersion: 1,
-      nextRecordStatus: "IN_PROGRESS",
-      nextRequirementStatus: "PARTIALLY_RECEIVED",
-      idempotencyKey: key,
-      requestHash: "receiving-race",
+    const command = lineCommand(fx);
+    let reached = false;
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            reached = true;
+            await env.DB.prepare("UPDATE procurement_requirement SET version=version+1 WHERE id=?")
+              .bind(fx.requirementId)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
     });
+    expect(await recordReceivedLine(database, command)).toMatchObject({
+      ok: false,
+      error: { code: "STALE_VERSION" },
+    });
+    expect(reached).toBe(true);
     expect(await record(fx.receivingRecordId)).toEqual(before);
     expect(await balance()).toBeNull();
-    expect(await counts(fx.receivingRecordId)).toEqual({ events: 0, ledger: 0 });
-    expect(await repository.readIdempotency(RECORD_LINE_SCOPE, key)).toEqual({
-      status: "PROCESSING",
-    });
+    expect(await allocation(fx)).toBeNull();
+    expect(await counts(fx.receivingRecordId)).toEqual({ events: 0, ledger: 0, allocations: 0 });
+    expect(
+      await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+        .bind(command.idempotencyKey)
+        .first(),
+    ).toBeNull();
+    expect(
+      await env.DB.prepare("SELECT id FROM audit_event WHERE idempotency_key=?")
+        .bind(command.idempotencyKey)
+        .first(),
+    ).toBeNull();
   });
 
   it("records completion success only for the winning concurrent command", async () => {
-    const fx = await fixture({ recordStatus: "DISCREPANCY", accepted: 7, rejected: 3 });
+    const fx = await fixture({
+      recordStatus: "DISCREPANCY",
+      requirementStatus: "RECEIVED",
+      accepted: 7,
+      rejected: 3,
+    });
     const first = {
       receivingRecordId: fx.receivingRecordId,
       expectedVersion: 1,
@@ -266,12 +347,12 @@ describe("record received line", () => {
     const stale = await fixture();
     const staleResult = await recordReceivedLine(
       env.DB,
-      lineCommand(stale, { expectedVersion: 0 }),
+      lineCommand(stale, { expectedVersion: 2 }),
     );
     expect(staleResult).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
   });
 
-  it("commits one event, one ledger row, and exact totals for an accepted line", async () => {
+  it("commits exact cycle allocation and immutable receipt evidence without physical stock", async () => {
     await cleanInventory();
     const fx = await fixture();
     const result = await recordReceivedLine(env.DB, lineCommand(fx, { acceptedDeltaBase: 4 }));
@@ -286,8 +367,16 @@ describe("record received line", () => {
     });
     const evidence = await counts(fx.receivingRecordId);
     expect(evidence.events).toBe(1);
-    expect(evidence.ledger).toBe(1);
-    expect(await balance()).toMatchObject({ on_hand: 4, version: 1 });
+    expect(evidence.ledger).toBe(0);
+    expect(evidence.allocations).toBe(1);
+    expect(await balance()).toBeNull();
+    expect(await allocation(fx)).toEqual({
+      received_base: 4,
+      packed_base: 0,
+      surplus_released_base: 0,
+      disposed_base: 0,
+      version: 1,
+    });
     const requirement = await env.DB.prepare(
       "SELECT status FROM procurement_requirement WHERE id=?",
     )
@@ -308,6 +397,8 @@ describe("record received line", () => {
     expect(evidence.events).toBe(1);
     expect(evidence.ledger).toBe(0);
     expect(await balance()).toBe(null);
+    expect(await allocation(fx)).toBeNull();
+    expect(evidence.allocations).toBe(0);
     expect(await record(fx.receivingRecordId)).toMatchObject({ status: "DISCREPANCY" });
   });
 
@@ -320,7 +411,7 @@ describe("record received line", () => {
     expect(replay).toEqual(first);
     const conflict = await recordReceivedLine(env.DB, { ...attempt, acceptedDeltaBase: 2 });
     expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
-    expect(await counts(fx.receivingRecordId)).toEqual({ events: 1, ledger: 1 });
+    expect(await counts(fx.receivingRecordId)).toEqual({ events: 1, ledger: 0, allocations: 1 });
   });
 
   it("allows exactly one winner for the last remaining quantity", async () => {
@@ -346,14 +437,15 @@ describe("record received line", () => {
       .bind(fx.requirementId)
       .first<{ status: string }>();
     expect(requirement?.status).toBe("RECEIVED");
-    // Inventory reflects only the single winning accepted event, never the
-    // pre-seeded record totals or the losing command.
-    expect(await balance()).toMatchObject({ on_hand: 4 });
+    // Only the winning new receipt contributes cycle goods; historical totals are not inferred.
+    expect(await balance()).toBeNull();
+    expect(await allocation(fx)).toMatchObject({ received_base: 4 });
+    expect(await counts(fx.receivingRecordId)).toEqual({ events: 1, ledger: 0, allocations: 1 });
     const ledgerRows = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM inventory_ledger_entries WHERE location_id=? AND inventory_pool_id=? AND movement_type='RECEIVING_ACCEPTED'",
     )
       .bind(locationId, inventoryPoolId)
       .first<{ count: number }>();
-    expect(ledgerRows?.count ?? 0).toBe(1);
+    expect(ledgerRows?.count ?? 0).toBe(0);
   });
 });

@@ -5,6 +5,10 @@
  */
 export type ProcurementWorkbenchItem = {
   requirementId: string;
+  productName: string;
+  cycleName: string;
+  baseUnit: string;
+  expectedQuantityBase: number;
   cycleId: string;
   locationId: string;
   inventoryPoolId: string;
@@ -13,6 +17,7 @@ export type ProcurementWorkbenchItem = {
   shippingWeightGrams: number | null;
   requiredQuantityBase: number;
   acceptedBase: number;
+  legacyAcceptedBase: number;
   rejectedBase: number;
   requirementStatus: string;
   requirementVersion: number;
@@ -45,17 +50,25 @@ export async function listProcurementQueue(
   if (query.receivingOnly) clauses.push("rr.id IS NOT NULL");
   const rows = await database
     .prepare(
-      `SELECT pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id,
+      `SELECT COALESCE(product.name,'Historical product') product_name,cycle.name cycle_name,unit.symbol base_unit,rr.expected_quantity,pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id,
        pr.sku_id,pr.committed_quantity_sellable,pr.shipping_weight_grams,
        pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version,
-       rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity,
+       rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity, rr.legacy_accepted_base,
        rr.status AS receiving_status, rr.version AS receiving_version
        FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id
+       JOIN delivery_cycle cycle ON cycle.id=pr.delivery_cycle_id
+       JOIN inventory_pool pool ON pool.id=pr.inventory_pool_id
+       JOIN unit ON unit.id=pool.base_unit_id
+       LEFT JOIN product ON product.inventory_pool_id=pool.id
        WHERE ${clauses.join(" AND ")} ORDER BY pr.id DESC LIMIT ?`,
     )
     .bind(...binds, limit)
     .all<{
       requirement_id: string;
+      product_name: string;
+      cycle_name: string;
+      base_unit: string;
+      expected_quantity: number | null;
       delivery_cycle_id: string;
       location_id: string;
       inventory_pool_id: string;
@@ -67,12 +80,17 @@ export async function listProcurementQueue(
       requirement_version: number;
       receiving_record_id: string | null;
       accepted_quantity: number | null;
+      legacy_accepted_base: number | null;
       rejected_quantity: number | null;
       receiving_status: string | null;
       receiving_version: number | null;
     }>();
   return rows.results.map((r) => ({
     requirementId: r.requirement_id,
+    productName: r.product_name,
+    cycleName: r.cycle_name,
+    baseUnit: r.base_unit,
+    expectedQuantityBase: r.expected_quantity ?? r.required_quantity,
     cycleId: r.delivery_cycle_id,
     locationId: r.location_id,
     inventoryPoolId: r.inventory_pool_id,
@@ -81,6 +99,7 @@ export async function listProcurementQueue(
     shippingWeightGrams: r.shipping_weight_grams,
     requiredQuantityBase: r.required_quantity,
     acceptedBase: r.accepted_quantity ?? 0,
+    legacyAcceptedBase: r.legacy_accepted_base ?? 0,
     rejectedBase: r.rejected_quantity ?? 0,
     requirementStatus: r.requirement_status,
     requirementVersion: r.requirement_version,

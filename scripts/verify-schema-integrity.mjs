@@ -28,7 +28,7 @@ function baseline() {
   );
   database.exec("BEGIN; PRAGMA defer_foreign_keys=ON;");
   database.exec(
-    readFileSync(new URL("../apps/core/seeds/development.sql", import.meta.url), "utf8"),
+    readFileSync(new URL("../apps/core/seeds/fixtures/retained-0068.sql", import.meta.url), "utf8"),
   );
   database.exec("COMMIT");
   return database;
@@ -75,6 +75,18 @@ const pricesBeforePricing = database
 const locationsBeforeSetup = database
   .prepare("SELECT rowid,* FROM fulfillment_location ORDER BY rowid")
   .all();
+const receiptsBeforeCycleGoods = database
+  .prepare("SELECT rowid,* FROM receiving_record ORDER BY rowid")
+  .all();
+const receiptEventsBeforeCycleGoods = database
+  .prepare("SELECT rowid,* FROM receiving_event ORDER BY rowid")
+  .all();
+const balancesBeforeCycleGoods = database
+  .prepare("SELECT rowid,* FROM inventory_balance ORDER BY rowid")
+  .all();
+const ledgerBeforeCycleGoods = database
+  .prepare("SELECT rowid,* FROM inventory_ledger_entries ORDER BY rowid")
+  .all();
 apply(
   database,
   migrations.filter((name) => name > "0069_schema_integrity.sql"),
@@ -115,6 +127,42 @@ assert.deepEqual(
   locationsBeforeSetup.map((row) => ({ ...row })),
 );
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+assert.ok(
+  receiptsBeforeCycleGoods.some((row) => row.accepted_quantity > 0),
+  "Upgrade exercises accepted retained receipts",
+);
+assert.deepEqual(
+  database
+    .prepare("SELECT rowid,* FROM receiving_record ORDER BY rowid")
+    .all()
+    .map(({ legacy_accepted_base, ...row }) => {
+      assert.equal(legacy_accepted_base, row.accepted_quantity);
+      return row;
+    }),
+  receiptsBeforeCycleGoods.map((row) => ({ ...row })),
+);
+assert.deepEqual(
+  database.prepare("SELECT rowid,* FROM receiving_event ORDER BY rowid").all(),
+  receiptEventsBeforeCycleGoods,
+);
+assert.deepEqual(
+  database.prepare("SELECT rowid,* FROM inventory_balance ORDER BY rowid").all(),
+  balancesBeforeCycleGoods,
+);
+assert.deepEqual(
+  database.prepare("SELECT rowid,* FROM inventory_ledger_entries ORDER BY rowid").all(),
+  ledgerBeforeCycleGoods,
+);
+assert.equal(database.prepare("SELECT COUNT(*) count FROM cycle_goods_balance").get().count, 0);
+assert.equal(database.prepare("SELECT COUNT(*) count FROM cycle_goods_movement").get().count, 0);
+const retainedReceipt = receiptsBeforeCycleGoods.find((row) => row.accepted_quantity > 0);
+assert.throws(
+  () =>
+    database
+      .prepare("UPDATE receiving_record SET legacy_accepted_base=0 WHERE id=?")
+      .run(retainedReceipt.id),
+  /IMMUTABLE_LEGACY_RECEIPT_EVIDENCE/,
+);
 assert.deepEqual(
   database
     .prepare("SELECT market_id,version,updated_at FROM geography_configuration ORDER BY market_id")

@@ -477,6 +477,10 @@ The Admin presentation maps the signed adjustment command to explicit **Add stoc
 
 Starting receiving is explicit. The retained `receiveProcurement` adapter only records quantities against an already-started receipt and forwards the caller's expected receipt version; it cannot silently start a receipt or substitute a fresh version. A rejected quantity command must not start preparation or persist success.
 
+The current `startAdminReceiving` transport accepts requirement ID and expected **receipt** version; `recordAdminReceivedLine` and `completeAdminReceiving` accept the session ID and that version. Core resolves and guards the requirement context, current procurement capability and requested location scope with the receipt, allocation, audit and frozen idempotency result. New replay returns the original response even after later receiving steps. Retained successful keys without a saved original result fail closed with an explicit already-applied/history-review conflict; they never post goods again. Matching unapplied legacy claims can recover under the original versions.
+
+Receiving read models include product/cycle names, base-unit label, Core-derived `START`/`RECORD`/`COMPLETE` actions and `legacyAcceptedBase`. The Web workbench selects a named receipt and uses its version; unknown responses retain the exact body, path and key until recovery. Accepted Scheduled goods are cycle/destination allocations, rejected goods are unavailable, and completed packing consumes the entire paid Order's exact pool demand, including committed additions, without physical stock writes. Purchase-order authoring below remains the target command sequence and is not implied by the retained requirement-based receiving adapter.
+
 - `admin.procurement.getRequirements({ cycleId, destinationLocationId }) -> ProcurementRequirementView`
 - `admin.procurement.aggregateDemand({ cycleId, idempotencyKey }) -> ProcurementRunView`
 - `admin.procurement.approveRequirement({ runId, expectedVersion, ... }) -> ProcurementRunView`

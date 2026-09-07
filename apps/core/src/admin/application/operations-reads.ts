@@ -1,3 +1,4 @@
+import { receivingActions } from "../../procurement/application/receiving-actions";
 import type {
   AdminDeliveryOperationsRequest,
   AdminFulfillmentQueueRequest,
@@ -156,7 +157,18 @@ export async function listAdminReceivingSessions(
         requirementId: row.requirementId,
         cycleId: row.cycleId,
         locationId: row.locationId,
-        expectedBase: row.requiredQuantityBase,
+        expectedBase: row.expectedQuantityBase,
+        productName: row.productName,
+        cycleName: row.cycleName,
+        baseUnit: row.baseUnit,
+        allowedActions: receivingActions({
+          status: row.receivingStatus ?? "",
+          requirementStatus: row.requirementStatus,
+          expected: row.expectedQuantityBase,
+          accepted: row.acceptedBase,
+          rejected: row.rejectedBase,
+        }),
+        legacyAcceptedBase: row.legacyAcceptedBase,
         acceptedBase: row.acceptedBase,
         rejectedBase: row.rejectedBase,
         status: row.receivingStatus!,
