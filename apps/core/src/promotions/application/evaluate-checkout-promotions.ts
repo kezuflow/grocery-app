@@ -1,4 +1,3 @@
-import { evaluateSubscriptionEntitlement } from "../../membership/application/evaluate-subscription-entitlement";
 import {
   evaluateCheckoutPromotionCandidates,
   permitsPromotionStack,
@@ -41,8 +40,6 @@ function safeRule(row: {
   const types = [
     "FIRST_ORDER",
     "NEW_CUSTOMER",
-    "MEMBER",
-    "NON_MEMBER",
     "MINIMUM_SUBTOTAL",
     "CUSTOMER_SEGMENT",
     "SPECIFIC_CUSTOMERS",
@@ -113,12 +110,11 @@ export async function evaluateCheckoutPromotions(
     }
   }
 
-  const [orderCount, entitlement, segments] = await Promise.all([
+  const [orderCount, segments] = await Promise.all([
     database
       .prepare("SELECT COUNT(*) AS count FROM grocery_order WHERE customer_id=?")
       .bind(context.customerId)
       .first<{ count: number }>(),
-    evaluateSubscriptionEntitlement(database, { customerId: context.customerId, at: context.at }),
     database
       .prepare(
         `SELECT csa.segment_id FROM customer_segment_assignment csa
@@ -169,7 +165,6 @@ export async function evaluateCheckoutPromotions(
     {
       firstOrder: (orderCount?.count ?? 0) === 0,
       newCustomer: (orderCount?.count ?? 0) === 0,
-      member: entitlement.eligible,
       segmentIds: segments.results.map((row) => row.segment_id),
     },
     candidates,

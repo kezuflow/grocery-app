@@ -24,7 +24,7 @@ const context = {
   requestedCodes: [] as string[],
   at,
 };
-const facts = { firstOrder: true, newCustomer: true, member: true, segmentIds: ["segment-1"] };
+const facts = { firstOrder: true, newCustomer: true, segmentIds: ["segment-1"] };
 
 function candidate(
   overrides: Partial<CheckoutPromotionCandidate> = {},
@@ -167,7 +167,6 @@ describe("checkout promotion selection", () => {
     const ruleTypes = [
       "FIRST_ORDER",
       "NEW_CUSTOMER",
-      "MEMBER",
       "MINIMUM_SUBTOTAL",
       "CUSTOMER_SEGMENT",
       "SPECIFIC_CUSTOMERS",
@@ -194,7 +193,9 @@ describe("checkout promotion selection", () => {
       candidate({ endsAt: at }),
       candidate({ globalUsageLimit: 1, globalUsageCount: 1 }),
       candidate({ perCustomerUsageLimit: 1, customerUsageCount: 1 }),
-      candidate({ rules: [{ type: "NON_MEMBER", parameters: {} }] }),
+      candidate({
+        rules: [{ type: "SPECIFIC_CUSTOMERS", parameters: { customerIds: ["other-customer"] } }],
+      }),
     ]) {
       expect(
         evaluateCheckoutPromotionCandidates(context, facts, [blocked]).applications,
@@ -208,7 +209,11 @@ describe("checkout promotion selection", () => {
       facts,
       [
         candidate({ id: "old", code: "OLD", endsAt: at }),
-        candidate({ id: "nope", code: "NOPE", rules: [{ type: "NON_MEMBER", parameters: {} }] }),
+        candidate({
+          id: "nope",
+          code: "NOPE",
+          rules: [{ type: "SPECIFIC_CUSTOMERS", parameters: { customerIds: ["other-customer"] } }],
+        }),
         candidate(),
         candidate({
           id: "second",

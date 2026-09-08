@@ -19,7 +19,6 @@ export type PromotionCheckoutContext = {
 export type PromotionEligibilityFacts = {
   firstOrder: boolean;
   newCustomer: boolean;
-  member: boolean;
   segmentIds: readonly string[];
 };
 
@@ -27,8 +26,6 @@ export type CheckoutPromotionRule = {
   type:
     | "FIRST_ORDER"
     | "NEW_CUSTOMER"
-    | "MEMBER"
-    | "NON_MEMBER"
     | "MINIMUM_SUBTOTAL"
     | "CUSTOMER_SEGMENT"
     | "SPECIFIC_CUSTOMERS";
@@ -99,10 +96,6 @@ function ruleMatches(
       return facts.firstOrder;
     case "NEW_CUSTOMER":
       return facts.newCustomer;
-    case "MEMBER":
-      return facts.member;
-    case "NON_MEMBER":
-      return !facts.member;
     case "MINIMUM_SUBTOTAL":
       return (
         Number.isSafeInteger(rule.parameters.minimumMinor) &&

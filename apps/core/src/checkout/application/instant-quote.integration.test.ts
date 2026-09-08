@@ -867,3 +867,65 @@ describe("instant checkout quotes", () => {
       .run();
   });
 });
+
+it("quotes pay-as-you-go commerce while rejecting retained membership promotion codes", async () => {
+  await configureInstant();
+  const basket = await seedBasket({ onHand: 100_000, member: false });
+  const id = crypto.randomUUID();
+  const codes = [`RETIRED_MEMBER_${id}`, `RETIRED_NON_MEMBER_${id}`].map((code) =>
+    code.toUpperCase(),
+  );
+  const now = Date.now();
+  for (const [index, rule] of ["MEMBER", "NON_MEMBER"].entries()) {
+    const promotionId = `retired-${index}-${id}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO promotion(id,code,name,description,status,benefit_type,discount_minor,minimum_minor,starts_at,automatic,priority,version,created_at,updated_at) VALUES (?,?,'Retained promotion','','ACTIVE','ORDER_FIXED_DISCOUNT',100,0,?,0,0,1,?,?)",
+      ).bind(promotionId, codes[index], now - 1, now, now),
+      env.DB.prepare(
+        "INSERT INTO promotion_rule(id,promotion_id,rule_type,parameters_json,sort_order,version,created_at,updated_at) VALUES (?,?,?,'{}',0,1,?,?)",
+      ).bind(crypto.randomUUID(), promotionId, rule, now, now),
+    ]);
+  }
+  const quote = await createCheckoutQuote(
+    env.DB,
+    { ...command(basket.customerId, basket.cartId, basket.addressId), promotionCodes: codes },
+    quoteDependencies,
+  );
+  if (!quote.ok) throw new Error(quote.error.message);
+  onTestFinished(async () => {
+    const current = await env.DB.prepare("SELECT version FROM checkout_quote WHERE id=?")
+      .bind(quote.value.quoteId)
+      .first<{ version: number }>();
+    if (current)
+      expect(
+        await abandonCheckoutAttempt(env.DB, {
+          customerId: basket.customerId,
+          quoteId: quote.value.quoteId,
+          expectedVersion: current.version,
+          idempotencyKey: crypto.randomUUID(),
+          requestId: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+  });
+  expect(quote.value.promotionFeedback).toEqual(
+    codes.map((code) => ({
+      code,
+      status: "INELIGIBLE",
+      message: "Promotion is not eligible for this order",
+    })),
+  );
+  expect(quote.value.promotionApplications).toHaveLength(0);
+  expect(
+    await env.DB.prepare("SELECT count(*) count FROM subscription WHERE customer_id=?")
+      .bind(basket.customerId)
+      .first(),
+  ).toEqual({ count: 0 });
+  expect(
+    await env.DB.prepare(
+      "SELECT count(*) count FROM checkout_promotion_claim WHERE checkout_quote_id=?",
+    )
+      .bind(quote.value.quoteId)
+      .first(),
+  ).toEqual({ count: 0 });
+});

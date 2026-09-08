@@ -1,6 +1,17 @@
 # Commerce alignment execution
 
-## Active execution - 2026-09-08 19:00 UTC
+## Active execution - 2026-09-08 19:04 UTC
+
+Main is d14de2c after the verified promotion transaction/draft UI slice; prior commits b8e32b2 and f7f17dc remain pushed. The owner still authorizes the full commerce plan, no routine approvals or subagents. Preserve .codex/config.toml. Append status only to docs/product/IMPLEMENTATION_STATUS.md.
+
+The current bounded slice removes subscription entitlement from new-commerce promotion evaluation. MEMBER and NON_MEMBER are absent from its closed domain types/parser; retained unsupported rules fail closed to an empty eligible-customer set. History is not changed. Two genuine failing Worker regressions were reproduced, then fixed. Normal evaluator fixtures no longer create subscriptions; dedicated retained-history cases still do. Added a reachable Instant quote with no subscription: both retired codes are INELIGIBLE and create no promotion claims.
+
+Executed: 52 tests across promotion domain/evaluator, Instant quote and actual payment-reaction integration files pass; Core types/lint pass. No schema, RPC signature, Web source or provider changes in this bounded slice. Existing browser evidence is from d14de2c and is not new browser acceptance for this rule. Logs promotion-membership-regression.log and promotion-payg-worker.log under C:/Users/reggi/.codex/visualizations/2026/09/08/01a0822b-3c98-76a1-8c9e-a2d5e223a182. No stack/Core test remains running. Save/push this slice then continue.
+
+Remaining dependency order: complete canonical delivery benefits and promotion targets/limits/preview, R2 campaign images/publication, central transfers, exact Scheduled purchasing/receiving/allocation, operational delivery/manual fallback, remaining onboarding and membership routes/jobs/notifications, full customer/operator acceptance. Current stored DELIVERY_FEE_DISCOUNT means percentage; canonical types require DELIVERY_PERCENT_DISCOUNT and DELIVERY_FIXED_DISCOUNT in addition to waiver. Schema currently ends at 0084. Retained/shared databases are unclassified and must be preserved; only apps/core/.wrangler/e2e-commerce-alignment-20260907 may be rebuilt. New schema work needs clean creation and a tested retained baseline upgrade. Do not overlap Core suites with managed browser stacks or change source during browser tests. Full aggregate last passed at b8e32b2; no full phase is accepted. No real provider/account operations or deployment performed.
+
+
+## Prior verified promotion transaction slice - 2026-09-08 19:00 UTC
 
 Main contains b8e32b2 transaction repairs, f7f17dc variant editor, and 17744d8 status-path correction. The owner still authorizes every remaining commerce workflow in dependency order, without routine approval or subagents. Preserve unrelated .codex/config.toml outside commits. Product status is docs/product/IMPLEMENTATION_STATUS.md; append bytes only.
 
