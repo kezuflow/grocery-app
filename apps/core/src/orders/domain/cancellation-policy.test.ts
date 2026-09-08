@@ -27,11 +27,46 @@ describe("order cancellation policy", () => {
     });
   });
 
-  it("locks customer cancellation when fulfillment starts", () => {
+  it("locks Instant customer cancellation when the location accepts the paid order", () => {
     expect(decideOrderCancellation({ ...base, orderState: "FULFILLMENT_PENDING" })).toMatchObject({
       allowed: false,
       code: "CANCELLATION_WINDOW_CLOSED",
     });
+  });
+
+  it("uses Scheduled cutoff regardless of earlier operational progress", () => {
+    for (const orderState of [
+      "COMMITTED",
+      "FULFILLMENT_PENDING",
+      "FULFILLMENT_READY",
+      "OUT_FOR_DELIVERY",
+      "EXCEPTION",
+    ] as const) {
+      for (const offset of [-1, 0, 1]) {
+        expect(
+          decideOrderCancellation({
+            ...base,
+            mode: "SCHEDULED",
+            orderState,
+            cutoffAt: now,
+            now: now + offset,
+            serviceFeeMinor: 0,
+          }),
+        ).toMatchObject(
+          offset < 0
+            ? { allowed: true, refundMinor: 100_000 }
+            : { allowed: false, code: "CANCELLATION_WINDOW_CLOSED" },
+        );
+      }
+    }
+    expect(
+      decideOrderCancellation({
+        ...base,
+        mode: "SCHEDULED",
+        orderState: "DELIVERED",
+        cutoffAt: now + 1,
+      }),
+    ).toMatchObject({ allowed: false, code: "ORDER_NOT_CANCELABLE" });
   });
 
   it("locks Scheduled cancellation at cutoff equality and requires cutoff evidence", () => {

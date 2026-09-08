@@ -154,7 +154,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("heading", { name: "Exact-location prices" })).toBeVisible();
     await expect(page.getByText("Current price: Unavailable", { exact: true })).toBeVisible();
     await page.getByLabel("Final retail price").fill("25.50");
-    await page.getByRole("button", { name: "Set exact price", exact: true }).click();
+    await page.getByRole("button", { name: "Save price", exact: true }).click();
     await expect(page.getByText("Exact-location price saved.", { exact: true })).toBeVisible();
     expect(command).toMatchObject({
       skuId: "sku-1",
@@ -163,6 +163,7 @@ for (const width of [1440, 390]) {
       amountMinor: 2550,
       expectedVersion: 0,
     });
+    await page.getByText("Price history", { exact: true }).click();
     await expect(page.getByRole("list", { name: "Price history" })).toContainText("25.50");
     const section = page
       .locator("section")

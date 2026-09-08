@@ -248,7 +248,9 @@ export default function NewProductPage() {
               sellableUnitId: normalized.variant.sellableUnitId,
               sellQuantity: normalized.sellQuantity,
               consumptionBaseQuantity: normalized.consumptionBaseQuantity,
-              estimatedShippingWeightGrams: normalized.estimatedShippingWeightGrams,
+              ...(normalized.estimatedShippingWeightGrams === null
+                ? {}
+                : { estimatedShippingWeightGrams: normalized.estimatedShippingWeightGrams }),
               merchandisingLabel: normalized.variant.merchandisingLabel.trim() || null,
               sortOrder: index,
             },

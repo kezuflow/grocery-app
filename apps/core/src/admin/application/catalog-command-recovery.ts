@@ -57,16 +57,28 @@ export async function executeCatalogCommand<T>(
   effects: D1PreparedStatement[],
   receipt: D1PreparedStatement,
   schema: z.ZodType<T>,
+  authority: { capability: "catalog.manage" | "prices.manage"; locationId?: string } = {
+    capability: "catalog.manage",
+  },
 ): Promise<RpcResult<T>> {
   const now = Date.now();
   try {
     await db.batch([
       db
         .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
-        SELECT 1 FROM staff_identity s JOIN staff_scope sc ON sc.staff_id=s.id AND sc.scope_kind='global'
+        SELECT 1 FROM staff_identity s JOIN staff_scope sc ON sc.staff_id=s.id
         JOIN staff_role sr ON sr.staff_id=s.id JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id
-        WHERE s.id=? AND s.auth_user_id=? AND s.status='active' AND p.code='catalog.manage')`)
-        .bind(actor.staffId, actor.authUserId),
+        WHERE s.id=? AND s.auth_user_id=? AND s.status='active' AND p.code=?
+        AND (sc.scope_kind='global' OR (? IS NOT NULL AND EXISTS (
+          SELECT 1 FROM fulfillment_location l WHERE l.id=? AND ((sc.scope_kind='location' AND sc.location_id=l.id) OR (sc.scope_kind='market' AND sc.market_id=l.market_id))
+        ))))`)
+        .bind(
+          actor.staffId,
+          actor.authUserId,
+          authority.capability,
+          authority.locationId ?? null,
+          authority.locationId ?? null,
+        ),
       db
         .prepare(
           "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM audit_event WHERE idempotency_key=? AND action=?)",

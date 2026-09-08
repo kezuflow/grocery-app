@@ -39,7 +39,7 @@ describe("CancelOrderAction", () => {
         refunds: [],
       },
     } satisfies RpcResult<OrderCancellationView>;
-    expect(cancellationResultMessage(processing)).toContain("Cancellation requested");
+    expect(cancellationResultMessage(processing)).toContain("refund is processing");
     expect(cancellationResultMessage(processing)).not.toContain("refund was confirmed");
     expect(
       cancellationResultMessage({

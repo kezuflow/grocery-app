@@ -33,7 +33,7 @@ export function cancellationResultMessage(result: RpcResult<OrderCancellationVie
       : result.error.message;
   return result.value.status === "COMPLETED"
     ? "Cancellation completed and the refund was confirmed."
-    : "Cancellation requested. Check order progress for refund updates.";
+    : "Order cancellation accepted. Your refund is processing; we will notify you when it is confirmed.";
 }
 
 export function CancelOrderAction({

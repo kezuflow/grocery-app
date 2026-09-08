@@ -197,6 +197,7 @@ describe("PayMongo refund outcome certainty", () => {
         attributes: {
           payment_id: "pay_refund",
           amount: 500,
+          reason: "others",
           metadata: { freshmarkets_refund_key: "stable-refund-key" },
         },
       },

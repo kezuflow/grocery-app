@@ -58,6 +58,45 @@ async function noEffects(key: string, orderId: string) {
   ).toEqual({ count: 0 });
 }
 describe("reachable fulfillment command recovery", () => {
+  it("rejects acceptance when payment evidence changes immediately before the transaction", async () => {
+    const { request } = await fixture();
+    const database = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare(
+                "UPDATE payment_attempt SET status='FAILED' WHERE id=(SELECT payment_id FROM grocery_order WHERE id=?)",
+              )
+              .bind(request.orderId)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(
+      await advanceAdminFulfillment({ db: database, auth: createAuth(env) }, request),
+    ).toMatchObject({ ok: false });
+    await noEffects(request.idempotencyKey, request.orderId);
+  });
+
+  it("does not treat a committed order label as successful canonical payment", async () => {
+    const { request } = await fixture();
+    const intentId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?, ?,100,'PHP','PROCESSING',?,1,1,1)",
+      ).bind(intentId, request.orderId, `customer-${request.orderId}`, intentId),
+      env.DB.prepare(
+        "UPDATE payment_attempt SET payment_intent_id=? WHERE id=(SELECT payment_id FROM grocery_order WHERE id=?)",
+      ).bind(intentId, request.orderId),
+    ]);
+    expect(await core.advanceAdminFulfillment(request)).toMatchObject({ ok: false });
+    await noEffects(request.idempotencyKey, request.orderId);
+  });
+
   it("recovers an interrupted retained pre-transaction claim through the original command", async () => {
     const { request } = await fixture();
     const hash = await requestHash({

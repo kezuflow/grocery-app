@@ -201,6 +201,26 @@ export async function advanceFulfillment(
         .bind(next, now, command.orderId, command.expectedVersion, row.status, row.location_id),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -30 WHERE changes()!=1"),
     ];
+    if (command.action === "START_PICKING") {
+      // Acceptance must still have paid evidence when it wins against cancellation.
+      // A retained pre-canonical Order may have only its successful Payment attempt.
+      statements.push(
+        database
+          .prepare(`INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS (
+          SELECT 1 FROM grocery_order grocery
+          JOIN payment_attempt attempt ON attempt.id=grocery.payment_id
+          LEFT JOIN payment_intent payment ON payment.id=attempt.payment_intent_id
+          WHERE grocery.id=? AND attempt.status='SUCCEEDED'
+            AND attempt.customer_id=grocery.customer_id
+            AND attempt.amount_minor=grocery.total_minor AND attempt.currency=grocery.currency
+            AND (attempt.payment_intent_id IS NULL OR (
+              payment.status='SUCCEEDED' AND payment.customer_id=grocery.customer_id
+              AND payment.amount_minor=grocery.total_minor AND payment.currency=grocery.currency
+            ))
+        )`)
+          .bind(command.orderId),
+      );
+    }
     if (command.action === "START_PICKING" || command.action === "MARK_PACKED") {
       statements.push(
         database
@@ -297,6 +317,7 @@ export async function advanceFulfillment(
         before: { status: row.status, version: row.version },
         after: { status: next, version: result.version },
       }),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -30 WHERE changes()<>1"),
       database
         .prepare(
           "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",

@@ -493,7 +493,7 @@ export function createPayMongoPaymentProvider(
                 attributes: {
                   amount: input.amountMinor,
                   payment_id: intent.paymentReference,
-                  reason: "requested_by_customer",
+                  reason: "others",
                   metadata: { freshmarkets_refund_key: input.refundProviderIdempotencyKey },
                 },
               },

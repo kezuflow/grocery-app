@@ -1,4 +1,5 @@
 import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
+import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
 import { setMockRefundObservation } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { describe, expect, it } from "vitest";
@@ -120,6 +121,72 @@ function command(orderId: string): Parameters<typeof cancelOrder>[1] {
 }
 
 describe("explicit cancellation and refund orchestration", () => {
+  it.each([-1, 0, 1])(
+    "uses the Scheduled cutoff with earlier preparation at offset %s",
+    async (offset) => {
+      const fixture = await paidOrderFixture();
+      const cutoffAt = Date.now() + 86_400_000;
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO fulfillment_record(id,order_id,location_id,status,version,updated_at) VALUES (?,?,'location-cebu-central','NOT_STARTED',1,?)",
+        ).bind(crypto.randomUUID(), fixture.orderId, Date.now()),
+        env.DB.prepare("UPDATE order_fulfillment_snapshot SET cutoff_at=? WHERE order_id=?").bind(
+          cutoffAt,
+          fixture.orderId,
+        ),
+      ]);
+      expect(
+        await advanceFulfillment(
+          env.DB,
+          {
+            orderId: fixture.orderId,
+            action: "START_PICKING",
+            headers: {},
+            expectedVersion: 1,
+            idempotencyKey: `accept-${fixture.orderId}`,
+            requestId: crypto.randomUUID(),
+          },
+          { authorize: async () => true },
+        ),
+      ).toMatchObject({ ok: true, value: { status: "PICKING" } });
+      const request = { ...command(fixture.orderId), expectedVersion: 2 };
+      const submitted: number[] = [];
+      const result = await cancelOrder(env.DB, request, {
+        now: () => cutoffAt + offset,
+        requestRefund: async (input) => {
+          submitted.push(input.amountMinor);
+          return { ok: true, refundState: "PROCESSING" };
+        },
+      });
+      if (offset < 0) {
+        expect(result).toMatchObject({
+          ok: true,
+          value: { status: "REQUESTED", requiredRefundMinor: 24_000 },
+        });
+        expect(submitted).toEqual([24_000]);
+        expect(await cancelOrder(env.DB, request)).toEqual(result);
+      } else {
+        expect(result).toMatchObject({ ok: false });
+        expect(submitted).toEqual([]);
+        expect(
+          await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+            .bind(fixture.orderId)
+            .first(),
+        ).toEqual({ status: "FULFILLMENT_PENDING", version: 2 });
+        expect(
+          await env.DB.prepare("SELECT id FROM order_cancellation WHERE order_id=?")
+            .bind(fixture.orderId)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toBeNull();
+      }
+    },
+  );
+
   it("rejects a customer cancellation without paid evidence before any effect", async () => {
     const fixture = await paidOrderFixture(),
       request = command(fixture.orderId);
@@ -868,16 +935,18 @@ describe("explicit cancellation and refund orchestration", () => {
   });
 
   it.each([
-    ["OUT_FOR_DELIVERY", "FINANCIAL_OPERATION_REQUIRES_REVIEW"],
-    ["DELIVERED", "ILLEGAL_TRANSITION"],
-    ["CANCELED", "ILLEGAL_TRANSITION"],
-    ["EXPIRED", "ILLEGAL_TRANSITION"],
+    ["INSTANT", "OUT_FOR_DELIVERY", "FINANCIAL_OPERATION_REQUIRES_REVIEW"],
+    ["SCHEDULED", "DELIVERED", "ILLEGAL_TRANSITION"],
+    ["SCHEDULED", "CANCELED", "ILLEGAL_TRANSITION"],
+    ["SCHEDULED", "EXPIRED", "ILLEGAL_TRANSITION"],
   ])(
-    "rejects cancellation from the terminal or late lifecycle state %s",
-    async (status, expectedCode) => {
+    "rejects %s cancellation from the terminal or late lifecycle state %s",
+    async (mode, status, expectedCode) => {
       const fixture = await paidOrderFixture();
-      await env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?")
-        .bind(status, fixture.orderId)
+      await env.DB.prepare(
+        "UPDATE grocery_order SET status=?,fulfillment_mode=?,cycle_id=CASE WHEN ?='INSTANT' THEN NULL ELSE cycle_id END WHERE id=?",
+      )
+        .bind(status, mode, mode, fixture.orderId)
         .run();
 
       const outcome = await cancelOrder(env.DB, command(fixture.orderId));

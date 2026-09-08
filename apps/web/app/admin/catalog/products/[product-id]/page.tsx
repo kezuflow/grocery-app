@@ -467,14 +467,17 @@ export default function ProductDetailPage({
                   newSku.code.trim() === "" ||
                   newSku.name.trim() === "" ||
                   !unit ||
-                  Number.isNaN(Number(newSku.sellQuantity))
+                  !Number.isSafeInteger(Number(newSku.sellQuantity)) ||
+                  Number(newSku.sellQuantity) < 1
                 ) {
                   setNotice("SKU code, display name, unit, and amount are required.");
                   return;
                 }
-                const convertedNumerator =
-                  Math.round(Number(newSku.sellQuantity)) * unit.conversionNumerator;
-                if (convertedNumerator % unit.conversionDenominator !== 0) {
+                const convertedNumerator = Number(newSku.sellQuantity) * unit.conversionNumerator;
+                if (
+                  !Number.isSafeInteger(convertedNumerator) ||
+                  convertedNumerator % unit.conversionDenominator !== 0
+                ) {
                   setNotice("This amount does not convert to an exact base inventory unit.");
                   return;
                 }
@@ -496,9 +499,11 @@ export default function ProductDetailPage({
                   code: newSku.code.trim().toUpperCase(),
                   name: newSku.name.trim(),
                   sellableUnitId: unit.unitId,
-                  sellQuantity: Math.round(Number(newSku.sellQuantity)),
+                  sellQuantity: Number(newSku.sellQuantity),
                   consumptionBaseQuantity: convertedNumerator / unit.conversionDenominator,
-                  estimatedShippingWeightGrams,
+                  ...(estimatedShippingWeightGrams === null
+                    ? {}
+                    : { estimatedShippingWeightGrams }),
                 });
               }}
             >
@@ -570,7 +575,12 @@ export default function ProductDetailPage({
                   >
                     <option value="">Select unit</option>
                     {units
-                      .filter((unit) => unit.status === "active" && unit.dimension !== "VOLUME")
+                      .filter(
+                        (unit) =>
+                          unit.status === "active" &&
+                          unit.canonicalBaseCode === product.inventoryPool.baseUnitCode &&
+                          unit.dimension !== "VOLUME",
+                      )
                       .map((unit) => (
                         <option key={unit.unitId} value={unit.unitId}>
                           {unit.displayName}
@@ -594,7 +604,12 @@ export default function ProductDetailPage({
                     onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
                   />
                 </label>
-                <Button type="submit" size="sm" className="sm:col-span-2 lg:col-span-1">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={commandIntent.pending}
+                  className="sm:col-span-2 lg:col-span-1"
+                >
                   Add variant
                 </Button>
               </div>

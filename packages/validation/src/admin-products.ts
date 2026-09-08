@@ -55,6 +55,60 @@ export const adminProductSummarySchema = z.object({
 const integer = z.number().int().safe();
 const status = z.enum(["active", "inactive"]);
 const baseCode = z.enum(["GRAM", "PIECE", "MILLILITER"]);
+export const adminUnitCreateBodySchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .regex(/^[A-Z][A-Z0-9_]*$/),
+  displayName: z.string().trim().min(1).max(60),
+  dimension: z.enum(["MASS", "COUNT", "VOLUME"]),
+  canonicalBaseCode: baseCode,
+  conversionNumerator: integer.positive(),
+  conversionDenominator: integer.positive(),
+});
+export const adminSkuCreateBodySchema = z.object({
+  productId: id,
+  code: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .transform((value) => value.toUpperCase()),
+  name: z.string().trim().min(1).max(120),
+  sellableUnitId: id,
+  sellQuantity: integer.positive(),
+  consumptionBaseQuantity: integer.positive(),
+  estimatedShippingWeightGrams: integer.positive().optional(),
+  merchandisingLabel: z.string().trim().max(60).nullable().optional(),
+  sortOrder: integer.min(0).max(10000).optional(),
+});
+export const adminSkuUpdateBodySchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  merchandisingLabel: z.string().trim().max(60).nullable().optional(),
+  status: status.optional(),
+  sortOrder: integer.min(0).max(10000).optional(),
+  estimatedShippingWeightGrams: integer.positive().optional(),
+  expectedVersion: integer.positive(),
+});
+export const adminSkuAvailabilityBodySchema = z.object({
+  locationId: id,
+  availabilityStatus: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+  expectedVersion: integer.nonnegative(),
+});
+export const adminSkuPriceBodySchema = z.object({
+  marketId: id,
+  locationId: id,
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/),
+  amountMinor: integer.positive(),
+  validFrom: integer.positive(),
+  expectedVersion: integer.nonnegative(),
+});
 export const adminUnitSummarySchema = z.object({
   unitId: id,
   code: z.string(),

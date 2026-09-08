@@ -8,7 +8,7 @@ The saved plan's **Core policy and database enforcement boundary** assigns chang
 
 The plan's **Additional policy placement** checklist also records removal of promotion stacking constraints, usage-count triggers, cadence coupling CHECKs and the retired fee-activation flag from the final 0069 schema. Individual benefit/redemption uniqueness and atomic Core limits remain; current stacking, Weekly cadence and zero new Service Fee decisions are unchanged. These changes do not complete the wider commerce phases.
 
-Status: implementation authorized; Phase 0 reconciliation in progress, no phase yet accepted. Use that plan's Phase 0 to reconcile the canonical business documents before code changes, then its dependency sequence for the new realignment. The prior plan below records the previous baseline and does not override the newly saved owner decisions. Existing engineering-guidance changes remain in force; saving this plan does not execute a schema or application change.
+Status: implementation resumed after the 2026-09-09 owner workflow review; normal CRUD simplification, automatic eligible customer refunds and FreshMarkets dashboard execution through PayMongo of reviewed post-delivery refunds are authorized; Phase 0 reconciliation in progress, no phase yet accepted. Use that plan's Phase 0 to reconcile the canonical business documents before code changes, then its dependency sequence for the new realignment. The prior plan below records the previous baseline and does not override the newly saved owner decisions. Existing engineering-guidance changes remain in force; saving this plan does not execute a schema or application change.
 
 ## Historical Plan Record — 2026-09-05 Commerce and External Delivery Realignment
 

@@ -104,7 +104,7 @@ async function seedProduct(): Promise<{
   const categoryId = crypto.randomUUID();
   const poolId = crypto.randomUUID();
   const productId = crypto.randomUUID();
-  const unitGramId = crypto.randomUUID();
+  const unitGramId = "unit-gram";
   const unitKgId = crypto.randomUUID();
   await env.DB.batch([
     env.DB.prepare(
@@ -116,9 +116,6 @@ async function seedProduct(): Promise<{
       now,
       now,
     ),
-    env.DB.prepare(
-      "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Gram', 'MASS', 'g', 'GRAM', 1, 1, 'active', 1, ?, ?)",
-    ).bind(unitGramId, `GRAM_T_${crypto.randomUUID().slice(0, 12)}`, now, now),
     env.DB.prepare(
       "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Kilogram', 'MASS', 'kg', 'GRAM', 1000, 1, 'active', 1, ?, ?)",
     ).bind(unitKgId, `KG_T_${crypto.randomUUID().slice(0, 12)}`, now, now),
@@ -1327,7 +1324,7 @@ describe("catalog administration", () => {
     const categoryId = crypto.randomUUID();
     const productId = crypto.randomUUID();
     const poolId = crypto.randomUUID();
-    const pieceUnitId = crypto.randomUUID();
+    const pieceUnitId = "unit-piece";
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO category (id, code, name, slug, status, sort_order, created_at, updated_at) VALUES (?, ?, 'Count products', ?, 'active', 90, ?, ?)",
@@ -1338,9 +1335,6 @@ describe("catalog administration", () => {
         now,
         now,
       ),
-      env.DB.prepare(
-        "INSERT INTO unit (id, code, name, dimension, symbol, canonical_base_code, conversion_numerator, conversion_denominator, status, version, created_at, updated_at) VALUES (?, ?, 'Piece', 'COUNT', 'pc', 'PIECE', 1, 1, 'active', 1, ?, ?)",
-      ).bind(pieceUnitId, `PC_${crypto.randomUUID().slice(0, 12)}`, now, now),
       env.DB.prepare(
         "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', ?, ?)",
       ).bind(poolId, pieceUnitId, now, now),

@@ -131,7 +131,7 @@ REQUESTED / PROCESSING -> FAILED -> PROCESSING / ESCALATED
 SUCCEEDED may represent partial or full amount
 ```
 
-Use one or more refund records so each provider operation has a stable identity. Aggregate payment/order projections derive `PARTIALLY_REFUNDED` or `REFUNDED` from successful refund amounts. Retrying a failed provider request preserves the same application idempotency identity where the provider permits it.
+Normal eligible customer cancellation automatically initiates PayMongo refunds. Post-delivery exception refunds are reviewed and confirmed by authorized staff in the FreshMarkets dashboard; Core executes them through PayMongo and verifies/synchronizes provider evidence. An accepted request means processing, never immediate bank credit or fabricated success. Use one or more refund records so each provider operation has a stable identity. Aggregate payment/order projections derive `PARTIALLY_REFUNDED` or `REFUNDED` from successful refund amounts. Retrying a failed provider request preserves the same application idempotency identity where the provider permits it.
 
 A verified Refund observation must resolve one Refund under the owning provider and match its exact amount/currency. Ambiguous legacy provider/reference mappings remain visible for reconciliation. `SUCCEEDED` is absorbing financial evidence: a delayed pending observation cannot downgrade it, and a conflicting failed observation opens reconciliation. Successful Refund mutation, settlement evidence and the derived Payment refunded-total state share one transaction. Duplicate successful observations repair retained incomplete projections without repeatedly incrementing the Payment version; the provider inbox is applied only after the Order cancellation projection also succeeds.
 
@@ -179,7 +179,7 @@ SHORTED -> PICKING / READY_TO_PACK / CANCELED / ESCALATED
 
 Commands include `StartPicking`, `RecordPickedQuantity`, `RecordFulfillmentShortage`, `ResolveFulfillmentException`, `StartPacking`, `MarkPacked`, `HandOffToDelivery`, and `CompleteFulfillment`.
 
-Instant packed quantities consume reservations/stock through explicit ledger movements. Scheduled packing consumes cycle/location allocation exactly once and never deducts the location inventory balance. Preparation start also locks customer Order cancellation atomically. `PACKED` does not imply dispatched or delivered.
+Instant packed quantities consume reservations/stock through explicit ledger movements. Scheduled packing consumes cycle/location allocation exactly once and never deducts the location inventory balance. For Instant, the staff acceptance/start-picking command requires successful payment evidence and atomically moves the Order from `COMMITTED` to `FULFILLMENT_PENDING`, closing customer cancellation. Scheduled customer cancellation closes strictly at the snapshotted cutoff; earlier preparation never shortens that window. `PACKED` does not imply dispatched or delivered.
 
 The lifecycle is shared by `INSTANT` and `SCHEDULED`; mode-specific differences live in Fulfillment policies that construct tasks, deadlines, queues, and allowed actions. Repeated mode conditionals must not be scattered across unrelated state machines.
 

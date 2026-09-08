@@ -1,61 +1,35 @@
+import { adminSkuPriceBodySchema, idempotencyKeySchema } from "@freshmarkets/validation";
+import { readBoundedJson } from "@/lib/http/bounded-body";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
-/** Versioned price insert. Transport only; Core authorizes and versions. */
 async function POSTHandler(request: Request, context: { params: Promise<{ "sku-id": string }> }) {
   const { "sku-id": skuId } = await context.params;
-  const idempotencyKey = request.headers.get("idempotency-key") ?? "";
-  if (idempotencyKey.trim() === "") {
+  const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
+  const body = await readBoundedJson(request, adminSkuPriceBodySchema, { maxBytes: 8192 });
+  if (!key.success || !body.ok)
     return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "An idempotency-key header is required",
+          message: !body.ok ? body.error.message : "An idempotency-key header is required",
           requestId: webRequestId(request),
         },
       },
-      { status: 400 },
+      { status: !body.ok ? body.error.status : 400 },
     );
-  }
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (
-    typeof body?.marketId !== "string" ||
-    typeof body?.locationId !== "string" ||
-    typeof body?.currency !== "string" ||
-    !Number.isInteger(body?.amountMinor) ||
-    !Number.isInteger(body?.validFrom) ||
-    !Number.isInteger(body?.expectedVersion)
-  ) {
-    return adminJson(
-      {
-        ok: false as const,
-        error: {
-          code: "VALIDATION_FAILED" as const,
-          message:
-            "marketId, locationId, currency, amountMinor, validFrom, and expectedVersion are required",
-          requestId: webRequestId(request),
-        },
-      },
-      { status: 400 },
-    );
-  }
-  const result = await coreClient(env.CORE).setAdminSkuPrice({
-    requestId: webRequestId(request),
-    headers: requestHeaders(request),
-    skuId,
-    marketId: body.marketId,
-    locationId: body.locationId,
-    currency: body.currency,
-    amountMinor: body.amountMinor as number,
-    validFrom: body.validFrom as number,
-    expectedVersion: body.expectedVersion as number,
-    idempotencyKey,
-  });
-  return adminJson(result);
+  return adminJson(
+    await coreClient(env.CORE).setAdminSkuPrice({
+      ...body.value,
+      skuId,
+      requestId: webRequestId(request),
+      headers: requestHeaders(request),
+      idempotencyKey: key.data,
+    }),
+  );
 }
-
 export const POST = observeAdminRoute("admin.catalog.skus.by_sku_id.price.post", POSTHandler);

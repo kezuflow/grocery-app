@@ -22,6 +22,20 @@ import {
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 
+const actionLabels: Record<string, string> = {
+  START_PICKING: "Accept order & start picking",
+  MARK_READY_TO_PACK: "Finish picking",
+  START_PACKING: "Start packing",
+  MARK_PACKED: "Finish packing",
+  HAND_OFF: "Hand over order",
+  COMPLETE: "Complete fulfillment",
+  RECORD_SHORTAGE: "Report shortage",
+  RESUME_PICKING: "Resume picking",
+  RESUME_READY_TO_PACK: "Resume packing preparation",
+  CANCEL: "Cancel fulfillment",
+  ESCALATE: "Escalate shortage",
+};
+
 export default function FulfillmentPage() {
   const { locationId, label } = useAdminLocation();
   const [page, setPage] = useState<FulfillmentQueuePage | null>(null);
@@ -82,9 +96,7 @@ export default function FulfillmentPage() {
       setNotice("Connection lost. Retry the same action to safely reuse its request key.");
       return;
     }
-    setNotice(
-      payload.ok ? `Fulfillment action ${action.toLowerCase()} completed.` : payload.error.message,
-    );
+    setNotice(payload.ok ? `${actionLabels[action] ?? action} completed.` : payload.error.message);
     if (
       payload.ok ||
       (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
@@ -95,7 +107,7 @@ export default function FulfillmentPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Fulfillment"
-        description="Location-scoped picking and packing work. Core exposes only legal next actions."
+        description="Accept paid orders, pick items and complete packing. Accepting an Instant order closes customer cancellation; Scheduled cancellation closes at cutoff."
       />
       {!locationId ? (
         <AdminPageState
@@ -126,15 +138,12 @@ export default function FulfillmentPage() {
         </Alert>
       ) : null}
       {state === "ready" && page ? (
-        <ListPageSection
-          title="Work queue"
-          description={`Current location: ${label}. Refresh after a stale-version response.`}
-        >
+        <ListPageSection title="Work queue" description={`Current location: ${label}.`}>
           {page.items.length > 0 ? (
             <div className="p-4">
               <Input
                 aria-label="Fulfillment action reason"
-                placeholder="Reason for a shortage (required by Core when applicable)"
+                placeholder="Describe a shortage when reporting one"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               />
@@ -179,7 +188,7 @@ export default function FulfillmentPage() {
                             disabled={actionIntent.pending}
                             onClick={() => void act(item.orderId, action, item.version)}
                           >
-                            {action}
+                            {actionLabels[action] ?? action}
                           </Button>
                         ))}
                       </TableCell>

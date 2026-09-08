@@ -804,6 +804,69 @@ describe("instant order commitment", () => {
     ).toBeNull();
   });
 
+  it("serializes paid Instant acceptance against customer cancellation", async () => {
+    await configureInstant();
+    const { quoteId, customerId } = await seededInstantQuote(false, true);
+    const { reactionId, intentId } = await seedReaction(quoteId);
+    const committed = await applyCheckoutPaymentReaction(env.DB, {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quoteId,
+      canonicalPaymentState: "SUCCEEDED",
+    });
+    if (!committed.applied || !committed.orderId) throw new Error("Order did not commit");
+    const orderId = committed.orderId;
+    const accept = {
+      orderId,
+      requestId: crypto.randomUUID(),
+      headers: {},
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: 1,
+      action: "START_PICKING" as const,
+    };
+    const cancel = {
+      orderId,
+      customerId,
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: 1,
+      reason: "Customer changed plans",
+    };
+    const outcomes = await Promise.all([
+      advanceFulfillment(env.DB, accept, { authorize: async () => true }),
+      requestOrderCancellation(env.DB, cancel),
+    ]);
+    expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+    const accepted = outcomes[0].ok;
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(orderId).first(),
+    ).toEqual({ status: accepted ? "FULFILLMENT_PENDING" : "CANCELLATION_REQUESTED" });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM order_cancellation WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ count: accepted ? 0 : 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM inventory_reservation WHERE order_id=? AND status='RESERVED'",
+      )
+        .bind(orderId)
+        .first(),
+    ).toEqual({ count: accepted ? 2 : 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key IN (?,?) AND status='SUCCEEDED'",
+      )
+        .bind(accept.idempotencyKey, cancel.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 1 });
+    if (accepted)
+      expect(await advanceFulfillment(env.DB, accept, { authorize: async () => true })).toEqual(
+        outcomes[0],
+      );
+    else expect(await requestOrderCancellation(env.DB, cancel)).toEqual(outcomes[1]);
+  });
+
   it("reaches packing through preparation, locks cancellation, and consumes both pools exactly once", async () => {
     await configureInstant();
     const { quoteId, customerId } = await seededInstantQuote(false, true);

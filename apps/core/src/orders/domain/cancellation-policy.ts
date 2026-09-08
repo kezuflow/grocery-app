@@ -49,12 +49,12 @@ export function decideOrderCancellation(input: OrderCancellationPolicyInput): Ca
     return { allowed: false, code: "ORDER_NOT_CANCELABLE" };
 
   if (input.actor === "CUSTOMER") {
-    if (input.orderState !== "COMMITTED")
+    if (!businessCancelableStates.has(input.orderState))
+      return { allowed: false, code: "ORDER_NOT_CANCELABLE" };
+    if (input.mode === "INSTANT" && input.orderState !== "COMMITTED")
       return {
         allowed: false,
-        code: businessCancelableStates.has(input.orderState)
-          ? "CANCELLATION_WINDOW_CLOSED"
-          : "ORDER_NOT_CANCELABLE",
+        code: "CANCELLATION_WINDOW_CLOSED",
       };
     if (input.mode === "SCHEDULED") {
       if (input.cutoffAt === null) return { allowed: false, code: "CUTOFF_EVIDENCE_MISSING" };

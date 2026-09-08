@@ -1,5 +1,68 @@
 # Commerce alignment execution
 
+## Active execution - 2026-09-08 18:32 UTC
+
+Owner request remains implementation of every remaining agreed commerce workflow in dependency order, without routine approval or subagents. Main was 4b611c5 at resume; the verified cancellation/catalog slice is ready to commit. Preserve the pre-existing .codex/config.toml change separately. Earlier handoff is retained below as context, not current failure status.
+
+Completed in this slice:
+- Scheduled cutoff cancellation survives real START_PICKING acceptance before/at/after cutoff; Instant late-state and delivered/terminal rejection remain. Paid acceptance and its required audit guard are verified. PayMongo refund reason uses `others`, supported by both official guide/reference; request-body test asserts it. Resource reference also allows the older reason, so this is documented compatibility alignment, not proven provider rejection. Canonical stale preparation/trial/media-cleanup wording and PayMongo runbook corrected.
+- Unit/SKU/update/local activation/Global price repair uses the existing catalog transaction helper, bounded shared input, mutable IAM/unit/location/currency rechecks, every required write/audit/receipt effect, frozen original results and exact target fields. Concurrent prices allocate distinct SKU-wide versions in the transaction. Eleven original failures reproduced; expanded 21 effect/race/replay tests pass. Fixtures use actual canonical Gram/Piece pools.
+- Web adapters validate bounded shared schemas; variant quantities no longer round; gram variant requests omit nonapplicable shipping estimates. Price choices show names, Save price defaults to now, scheduling/history are secondary. Product image CRUD remains ordinary; no operator cleanup/recovery workspace restored.
+
+Executed verification:
+- `pnpm check` passed: Core 1405 tests/185 files (356.45s), Web 396/98, contracts 68/19, shared/harness, clean/populated migrations, conventions, lint/types and both builds. `commerce-check.log`.
+- `pnpm catalog:check`, Web `check:vinext`, final format/naming/diff checks pass. New browser locator corrections are test-only and postdate the aggregate.
+- Managed browser first run: 7 passed, 2 new variant tests failed solely because the final locator expected raw AVAILABLE instead of displayed Selling. Corrected locator rerun passed both 1440/390 journeys with zero retries. `commerce-browser.log`, `catalog-variants-browser.log`.
+- Passed browser coverage: real Web/Core/D1 variant create, price and local activation after lost responses with identical key/body; product upload/local R2/cart/anonymous rendering/removal; staff refund submission/recheck with the test provider and lost-response recovery. Price presentation and customer cancellation messaging use controlled DTOs and are not complete payment journeys. Variant desktop/mobile screenshots inspected and copied outside test-results.
+
+All logs and saved screenshots: C:/Users/reggi/.codex/visualizations/2026/09/08/01a0822b-3c98-76a1-8c9e-a2d5e223a182.
+
+No schema change, retained DB reset/migration, deployment or actual provider action. Only apps/core/.wrangler/e2e-commerce-alignment-20260907 was rebuilt by managed tests. Browser/Core processes finished. No whole commerce phase or actual PayMongo/Lalamove/OAuth/email acceptance claimed. Account/retention/accounting facts remain external acceptance inputs.
+
+Next: commit/push this verified slice to main, then continue the active plan. Remaining catalog work includes normal variant editing, routine form simplification, promotion authoring/benefits and promotion images/publication. Warehouse transfers, complete Scheduled purchase/receiving/allocation/surplus, preparation-stage delivery/manual fallback, membership removal and full customer/operator/provider acceptance remain. Existing setup/media/financial work must not be restarted from old reports.
+
+## Previous handoff — 2026-09-09, owner moving to a new Astra High chat
+
+Implementation is authorized across all remaining phases of `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, in dependency order. The owner paused this execution only to obtain a prompt for the new chat. Do not treat the earlier workflow-review pause below as current authority. No whole commerce phase is accepted.
+
+Saved/pushed main: `4b611c5 fix(catalog): remove image recovery operator workflow`, after Product `587ca02`, Category `e51a2bd`, media `dc74065`. The working tree has unfinished changes; inspect and preserve them. No new commit or push was made during this resumed policy/acceptance slice.
+
+### Current owner decisions
+
+- Ordinary product images are CRUD: upload/preview/replace/remove, primary image, order and alt text. The operator recovery panel and storage/cleanup administration were removed in `4b611c5`; preserve that removal. Internal duplicate/publication/cleanup safeguards remain invisible.
+- Reviewed simplifications are authorized: normal Create/Save actions, named choices and sensible defaults for ordinary catalog/category/price/location/hour/cycle setup. Avoid technical versions/IDs, dedicated saved-command recovery workspaces or mandatory reasons merely for routine saves. Keep atomicity, authorization and stable internal request identity. Price scheduling/history and formal privacy workflows are secondary; unfinished irreversible anonymization waits on real policy. Do not replace every working module or restart completed setup.
+- Provider-confirmed successful payment precedes staff acceptance. Instant paid Orders are customer-cancelable while awaiting location acceptance; acceptance/start picking is the existing `COMMITTED -> FULFILLMENT_PENDING` boundary. Scheduled customer cancellation is allowed strictly before the snapshotted cutoff, regardless of earlier preparation; equality/after closes that window. Refund original payment plus every committed paid addition. FreshMarkets-caused full-refund obligations remain.
+- Eligible customer cancellation automatically initiates PayMongo refunds, without staff approval. Show processing until provider confirms success; do not promise immediate bank credit.
+- **Latest correction: staff-reviewed post-delivery refunds are issued from FreshMarkets' own admin dashboard through the PayMongo API.** The owner first requested PayMongo-dashboard execution, then explicitly changed to FreshMarkets-dashboard execution. Retain and finish the existing `requestAdminRefund -> requestStaffRefund -> PayMongo requestRefund` path; do not replace it with a separate dashboard-import workflow. Staff chooses the approved full/partial amount and reason, confirms, and Core enforces Global `refunds.manage`, current financial preconditions and immutable evidence. Keep detailed financial diagnostics, provider confirmation and reconciliation.
+- Order/payment/delivery/cancellation/refund transaction updates always send; promotions alone are optional. Email transport/retry internals remain internal; staff may see meaningful delivery failures and appropriate resend. Keep useful operational metrics and customer courier charge versus actual cost. Profit/contribution waits on reliable costs and an approved definition.
+
+### Uncommitted implementation and actual checks
+
+Canonical AGENTS/domain/state/data/API/product scope/plan documents were revised for these agreements; descriptive status below is historical. Review the current diff for consistency, especially other untouched cancellation/preparation wording. No schema change was made.
+
+New uncommitted cancellation/fulfillment work:
+- `orders/domain/cancellation-policy.ts` now applies Scheduled cutoff independently of earlier operational progress, while Instant still requires `COMMITTED` and delivered/terminal customer cancellation remains rejected.
+- `operations/application/advance-fulfillment.ts` now rechecks successful matching Payment evidence inside the acceptance transaction (canonical Payment when present, successful attempt for retained pre-canonical Orders), with a required audit-effect guard. No new Order state was added.
+- Admin fulfillment labels now include Accept order & start picking; customer cancellation acceptance says refund processing.
+- Added policy before/at/after cutoff cases, D1 cutoff with earlier preparation, current-payment rejection, and a paid Instant acceptance-versus-cancellation race through real commitment/commands.
+
+**Executed focused Worker run: 84 passed, 1 failed in 4 files (85 total).** Command: `pnpm --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/orders/domain/cancellation-policy.test.ts src/orders/application/cancel-order.integration.test.ts src/orders/application/instant-commitment.integration.test.ts src/operations/application/fulfillment-command-recovery.integration.test.ts`. Log: `C:/Users/reggi/.codex/visualizations/2026/09/07/01a07c32-22c4-78a3-b481-1267eb6aca38/cancellation-acceptance-worker.log`. The existing `rejects cancellation from the terminal or late lifecycle state OUT_FOR_DELIVERY` case expects rejection for a Scheduled fixture whose cutoff is still in the future; the revised policy permits it. Reconcile the test and reachable operational timing against the approved cutoff rule, preserving Instant/post-delivery/terminal rejection rather than blindly deleting coverage. The run has finished; no Core test or browser stack remains running. No post-edit type/lint/Web/browser/build or full-phase gate has run for this slice.
+
+Previously preserved unfinished Unit/SKU repair remains:
+- `admin/application/catalog-command-recovery.ts`: optional capability/location authority extension, currently no new callers.
+- `packages/validation/src/admin-products.ts`: Unit/SKU/price/availability body schemas, not yet wired.
+- untracked `admin/application/catalog-effects.integration.test.ts`: eleven genuine failing regressions for required effects/audit/receipt, replay and mutable IAM. Prior log `catalog-effects-regression.log` records 11 failures; commands in `catalog-commands.ts` are still unrepaired. Do not discard these or mistake schemas for completed implementation.
+
+The current PayMongo adapter and staff screen already submit refunds via `/v1/refunds`. Official documentation confirms API full/partial refunds: https://docs.paymongo.com/docs/payment-acceptance-refunds . Verify exact provider reason values and method/account restrictions while completing adapter acceptance: the current adapter uses `requested_by_customer`, while the current guide lists `duplicate`, `fraudulent`, `others`; this was observed, not yet resolved or tested against the real provider. An attempted further documentation/read call was interrupted before a result. No live refund, payment, email, booking, deployment or provider acceptance was performed.
+
+### Remaining authorized work and environment
+
+Complete canonical reconciliation and current correctness checks, then customer/staff/location/address/serviceability/pickup/cycle setup acceptance; catalog/categories/variants/promotion media/Global prices/local activation; warehouse dispatch/transit/accepted receipts/discrepancies; exact Scheduled purchase/receiving/allocation/packing/inspected surplus; preparation-stage Lalamove booking/normalized states/reconciliation/Scheduled-only emergency manual fallback; membership removal, complete customer/operator journeys, notifications/support/refunds and final acceptance. Inspect current code/tests before revisiting historical defects. Many setup, media and financial repairs are already committed; warehouse transfers and promotion media are absent, and downstream workflows remain incomplete.
+
+Preserve existing databases and all local changes. Only identified disposable `apps/core/.wrangler/e2e-commerce-alignment-20260907` may be rebuilt for managed browser acceptance. Do not reset `.wrangler/state`, `.wrangler/e2e-state` or retained/shared/remote data. No retained database was migrated/reset. Do not overlap Core suites with managed browser stacks; keep source fixed during browser runs. Run focused checks during iteration and full gates at actual phase completion. Commit directly to main and push origin main after coherent verified slices. No subagents unless the owner explicitly authorizes delegation. `IMPLEMENTATION_STATUS.md` has pre-existing invalid UTF-8 elsewhere; append bytes only rather than rewriting the file.
+
+## Historical checkpoint snapshot — superseded by the active handoff above
+
 ## Current recovery state — 2026-09-09
 
 Current saved main is `587ca02` (Product commands), following Category `e51a2bd` and media `dc74065`. Owner has paused broad implementation to review the 12 proposed business workflows. Only removal of the overcomplicated image-recovery feature is currently proceeding. Transaction updates always send; promotions alone are optional.

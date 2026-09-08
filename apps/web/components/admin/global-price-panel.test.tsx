@@ -97,7 +97,11 @@ describe("Global price editor", () => {
       if (options?.method === "POST") {
         writes.push(options);
         if (writes.length === 1) throw new Error("connection lost");
-        return response({ ok: true, value: {}, requestId: "test" });
+        return response({
+          ok: true,
+          value: { ...skus[0], priceMinor: 2550, currency: "PHP", priceVersion: 1 },
+          requestId: "test",
+        });
       }
       return response({ ok: true, value: prices, requestId: "test" });
     });

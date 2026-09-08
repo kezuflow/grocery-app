@@ -64,14 +64,14 @@ for (const width of [1440, 390]) {
     await page.getByRole("combobox", { name: "Price location", exact: true }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByLabel("Final retail price", { exact: true }).fill("29.50");
-    await page.getByRole("button", { name: "Set exact price", exact: true }).click();
+    await page.getByRole("button", { name: "Save price", exact: true }).click();
     await expect(page.getByText("Exact-location price saved.", { exact: true })).toBeVisible();
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByRole("button", { name: "Review start selling", exact: true }).click();
     await page.getByRole("button", { name: "Confirm selling status", exact: true }).click();
     await expect(page.getByText("Availability updated.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Set exact price", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
     await expect(page.getByLabel("Product media image")).toBeVisible();

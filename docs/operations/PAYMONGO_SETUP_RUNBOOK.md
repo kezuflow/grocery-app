@@ -5,18 +5,35 @@ has been completed against the owner-approved PayMongo account.
 
 ## Account capabilities
 
-Ask PayMongo to enable Scheduled Subscriptions and card payments/card vaulting for the account.
-The current FreshMarkets browser flow accepts cards. Maya subscription support can be added only
-after its customer flow is separately implemented and accepted; do not enable a method merely
-because the account exposes it.
+The implemented browser flow accepts one-time card payments. Confirm card acceptance, refunds,
+account activation and sufficient payout balance with the owner-approved account. Membership,
+subscription enrollment and recurring billing are retired and are not acceptance prerequisites.
+Do not enable additional payment methods merely because an account exposes them.
+
+The official [refund guide](https://docs.paymongo.com/docs/payment-acceptance-refunds) documents
+full/partial card refunds within 60 days (installments full-only). Other methods have distinct
+limits: Maya partial refunds begin the following day; UBP is not refundable through this API;
+Brankas requires merchant settlement to the customer. Method support in a guide does not establish
+account capability or a completed FreshMarkets integration.
+
+Core submits amount in centavos and captured `payment_id` to `/v1/refunds`, uses `reason: others`,
+and preserves its stable internal refund identity as string metadata. The guide lists three
+reasons while the [resource reference](https://docs.paymongo.com/reference/refund-resource) also
+lists `requested_by_customer`; `others` is supported by both. Detailed staff/customer reasons
+remain in protected FreshMarkets evidence.
+
+[Idempotency keys](https://docs.paymongo.com/reference/idempotent-requests) expire after 24 hours.
+Core preserves durable intent and uses read-only lookup/reconciliation for unknown outcomes;
+key reuse after expiry is not permission to resubmit an ambiguous refund. Accepted creation is
+processing. Only verified provider observations establish canonical success.
 
 ## Runtime configuration
 
-For local test-mode development, keep Core's source-controlled default on `mock` and place the
-test credentials and `LOCAL_PAYMENT_PROVIDER=paymongo` in the Git-ignored `apps/core/.dev.vars`. Put only
+For local test-mode development, keep Core's source-controlled default on `disabled` and place the
+test credentials and `PAYMENT_PROVIDER=paymongo` in the Git-ignored `apps/core/.dev.vars`. Put only
 browser-safe public keys in Web's local Worker variables, then start the stack with
-`pnpm dev:stack`. This runs real PayMongo test-sandbox API calls, so test Customers, Plans,
-Subscriptions, Payments, and Refunds appear in the PayMongo test dashboard. Automated Core tests
+`pnpm dev:stack`. This runs real PayMongo test-sandbox API calls, so test Customers, Payments and Refunds appear
+in the PayMongo test dashboard. Automated Core tests
 override the provider back to `mock` and never call PayMongo.
 
 Until a webhook endpoint has been registered, use the explicit `local-webhook-not-configured`
@@ -55,15 +72,6 @@ Register the public Core URL ending in `/webhooks/payments/paymongo`. Subscribe 
 - `payment.failed`
 - `payment.refunded`
 - `payment.refund.updated`
-- `subscription.activated`
-- `subscription.past_due`
-- `subscription.unpaid`
-- `subscription.updated`
-- `subscription.invoice.created`
-- `subscription.invoice.finalized`
-- `subscription.invoice.paid`
-- `subscription.invoice.payment_failed`
-- `subscription.invoice.updated`
 
 Copy the endpoint's signing secret into `PAYMONGO_WEBHOOK_SECRET`. Core verifies the `te` signature
 for test keys or `li` for live keys, enforces a five-minute timestamp tolerance, hashes the exact
@@ -76,17 +84,16 @@ Complete all cases in test mode, then repeat a controlled live smoke test:
 
 1. One-time order card payment, 3DS return, signed success, and exactly-once order commitment.
 2. Full and partial refund with signed refund observation and settlement reconciliation.
-3. New paid membership: Customer, exact-price monthly Plan, Subscription, first invoice, 3DS, and
-   signed `active` transition.
-4. Renewal success without any FreshMarkets charge attempt.
-5. Renewal failure to `past_due`, provider retry recovery to `active`, and exhausted retries to
-   non-entitled `unpaid`.
-6. Immediate cancellation and period-end cancellation. PayMongo cancellation is immediate when
-   invoked; FreshMarkets delays that API call until the requested effective period end. Confirm any
-   already-open invoice behavior with Finance because PayMongo documents it as still collectible.
-7. Duplicate delivery, out-of-order delivery, temporary endpoint outage, inbox redrive, and
+3. Eligible Instant-before-acceptance and Scheduled-before-cutoff customer cancellation, including
+   every committed paid addition, initiates coordinated refunds without staff approval.
+4. Global `refunds.manage` staff confirms an approved post-delivery full/partial amount and reason
+   in FreshMarkets; Core submits the refund and retains immutable audit. Missing capability,
+   stale version, active cancellation and insufficient refundable balance are rejected.
+5. Lost submission response and failed local observation remain recoverable without duplicate
+   refund. Delayed success and partial multi-payment completion do not fabricate final cancellation.
+6. Duplicate delivery, out-of-order delivery, temporary endpoint outage, inbox redrive, and
    provider-state reconciliation after a missed event.
-8. Secret rotation and signature-mode verification without exposing raw payloads or credentials.
+7. Secret rotation and signature-mode verification without exposing raw payloads or credentials.
 
 If any provider outcome is ambiguous, keep the local aggregate pending and resolve the visible
 reconciliation case. Never create a second charge under a new idempotency key merely because the

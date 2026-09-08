@@ -97,7 +97,7 @@ it("preserves the original customer reason, version and key after an invalid res
     expectedVersion: 3,
     reason: "Plans changed",
   });
-  expect(container.textContent).toContain("Check order progress for refund updates");
+  expect(container.textContent).toContain("Your refund is processing");
   expect(container.textContent).not.toContain("Cancellation completed");
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
     "View order progress",

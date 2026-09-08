@@ -126,8 +126,8 @@ Membership prices, subscriptions, trials, provider subscription/plan/invoice map
 - `prices(id PK, sku_id FK, market_id FK, location_id FK NOT NULL, price_type, amount_minor, currency, valid_from, valid_to NULL, version, created_at)`; Market remains validated context while location is the mandatory price target.
 - `product_media(id PK, product_id FK, object_key UNIQUE, mime_type, byte_size, content_digest nullable for retained associations, alt_text, is_primary, sort_order, status active|inactive, version, created_at, updated_at)`
 - `product_media_upload(id PK, product_id FK, object_key UNIQUE, command_scope + idempotency_key UNIQUE FK, request_json, content_digest, status PENDING|UNKNOWN|STORED|ATTACHED|ABANDONED, lease_token, lease_expires_at, version, created_at, updated_at)` preserves the object identity before external storage and supports observation after an unknown response.
-- `product_media_cleanup(id PK, product_id FK, object_key UNIQUE, status PENDING|PROCESSING|SUCCEEDED|FAILED, attempt_count, available_at, lease_token, lease_expires_at, last_error_code, version, created_at, updated_at)` records durable deletion after deactivation or abandonment. Each attempt guards against active publication; exhausted work remains visible for operator recovery. Forward migration retains existing associations and queues inactive retained objects for cleanup.
-- Upload and cleanup leases require paired token/expiry evidence. Cleanup makes at most five automatic attempts before explicit reasoned operator redrive; its audit preserves the prior attempt count and error. Recovery never invents object identities for historical unfinished claims. Successful legacy media-id receipts are reconstructed from their immutable audit rather than later mutable media captions or selection.
+- `product_media_cleanup(id PK, product_id FK, object_key UNIQUE, status PENDING|PROCESSING|SUCCEEDED|FAILED, attempt_count, available_at, lease_token, lease_expires_at, last_error_code, version, created_at, updated_at)` records durable deletion after deactivation or abandonment. Each attempt guards against active publication; exhaustion remains an internal storage failure. Forward migration retains existing associations and queues inactive retained objects for cleanup. Catalog operators do not manage cleanup or storage observations.
+- Upload and cleanup leases require paired token/expiry evidence. Cleanup makes at most five automatic attempts; technical investigation preserves the attempt/error evidence and cannot fabricate success. Recovery never invents object identities for historical unfinished claims. Successful legacy media-id receipts are reconstructed from their immutable audit rather than later mutable media captions or selection.
 
 Indexes: product/category/status, SKU/product/status, availability/location/status, active prices by SKU/location/time. Core prevents overlapping effective prices for the same exact SKU/location key; no fallback precedence exists.
 
@@ -222,6 +222,8 @@ evidence linked to the verified provider event and canonical Payment identity. I
 with the winning Payment/Refund compare-and-swap application; duplicate events replay without a
 second observation, invalid arithmetic is rejected before normalization, and amount/currency
 mismatch creates reconciliation evidence rather than changing financial state.
+
+Post-delivery exception refunds initiated in the FreshMarkets dashboard retain provider refund/payment identity, exact amount/currency and immutable staff review/audit evidence. Payments owns submission and verified observations; operator-entered success is never financial evidence. Automatic cancellation retains its existing coordinated member identities. Both paths share provider integration; no separate PayMongo-dashboard import workflow is required by the owner clarification.
 
 ## Promotions
 

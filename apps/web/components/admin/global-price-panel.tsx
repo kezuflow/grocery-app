@@ -14,6 +14,7 @@ import { ListPageSection } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { appErrorCodes } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { adminCatalogSkuSummarySchema } from "@freshmarkets/validation";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -46,7 +47,7 @@ const priceResultSchema = z.union([
 ]);
 const commandResultSchema = z.union([
   failureSchema,
-  z.object({ ok: z.literal(true), requestId: z.string(), value: z.unknown() }),
+  z.object({ ok: z.literal(true), requestId: z.string(), value: adminCatalogSkuSummarySchema }),
 ]);
 
 type PriceCommand = {
@@ -145,7 +146,7 @@ export function GlobalPricePanel({
             <SelectContent>
               {skus.map((sku) => (
                 <SelectItem key={sku.skuId} value={sku.skuId}>
-                  {sku.code}
+                  {sku.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -226,18 +227,21 @@ export function GlobalPricePanel({
                     required
                   />
                 </label>
-                <label className="space-y-1">
-                  Effective time (browser local; blank = now)
-                  <Input
-                    aria-label="Price effective time"
-                    type="datetime-local"
-                    value={effectiveAt}
-                    onChange={(event) => setEffectiveAt(event.target.value)}
-                    disabled={command !== null}
-                  />
-                </label>
+                <details>
+                  <summary className="cursor-pointer">Schedule a price change</summary>
+                  <label className="space-y-1">
+                    Effective time (your local time)
+                    <Input
+                      aria-label="Price effective time"
+                      type="datetime-local"
+                      value={effectiveAt}
+                      onChange={(event) => setEffectiveAt(event.target.value)}
+                      disabled={command !== null}
+                    />
+                  </label>
+                </details>
                 <Button type="submit" disabled={command !== null}>
-                  Set exact price
+                  Save price
                 </Button>
               </form>
             ) : (
@@ -248,19 +252,24 @@ export function GlobalPricePanel({
                 {intent.pending ? "Saving price…" : "Retry same price request"}
               </Button>
             ) : null}
-            <ul className="space-y-2" aria-label="Price history">
-              {view.history.map((price) => (
-                <li key={price.version}>
-                  {new Intl.NumberFormat(undefined, {
-                    style: "currency",
-                    currency: price.currency,
-                  }).format(price.amountMinor / 100)}{" "}
-                  · {new Date(price.validFrom).toLocaleString()} →{" "}
-                  {price.validTo === null ? "open end" : new Date(price.validTo).toLocaleString()}
-                </li>
-              ))}
-            </ul>
-            {view.history.length === 0 ? <p>No price has been recorded at this location.</p> : null}
+            <details>
+              <summary className="cursor-pointer">Price history</summary>
+              <ul className="space-y-2" aria-label="Price history">
+                {view.history.map((price) => (
+                  <li key={price.version}>
+                    {new Intl.NumberFormat(undefined, {
+                      style: "currency",
+                      currency: price.currency,
+                    }).format(price.amountMinor / 100)}{" "}
+                    · {new Date(price.validFrom).toLocaleString()} →{" "}
+                    {price.validTo === null ? "open end" : new Date(price.validTo).toLocaleString()}
+                  </li>
+                ))}
+              </ul>
+              {view.history.length === 0 ? (
+                <p>No price has been recorded at this location.</p>
+              ) : null}
+            </details>
           </>
         )}
       </div>
