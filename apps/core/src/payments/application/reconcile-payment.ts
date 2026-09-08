@@ -64,20 +64,36 @@ export async function reconcilePayment(
 
   const provider = registry.require(attempt.provider);
   const view = await provider.getPayment(attempt.provider_reference);
-  if (!view || view.canonicalState === intent.status) {
+  if (
+    !view ||
+    view.providerReference !== attempt.provider_reference ||
+    view.amountMinor !== intent.amountMinor ||
+    view.currency !== intent.currency
+  ) {
+    await repository.recordReconciliationCase({
+      intentId: intent.id,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({
+        reason: !view ? "PROVIDER_LOOKUP_UNAVAILABLE" : "PROVIDER_LOOKUP_IDENTITY_MISMATCH",
+      }),
+      now: Date.now(),
+    });
     return {
       ok: true,
       value: {
-        processingStatus: view ? "APPLIED" : "RECONCILIATION_REQUIRED",
+        processingStatus: "RECONCILIATION_REQUIRED",
         paymentIntentId: intent.id,
-        canonicalState: view?.canonicalState ?? toDomainState(intent.status),
-        source: view ? "PROVIDER_LOOKUP" : "ALREADY_CONSISTENT",
+        canonicalState: toDomainState(intent.status),
+        source: "PROVIDER_LOOKUP",
       },
       requestId: command.requestId,
     };
   }
 
-  const application = await applyObservationToIntents(database, [intent], view.canonicalState);
+  const application = await applyObservationToIntents(database, [intent], view.canonicalState, {
+    provider: attempt.provider,
+    ...view,
+  });
   await synchronizeOrderCancellationForPayment(database, intent.id);
   return {
     ok: true,

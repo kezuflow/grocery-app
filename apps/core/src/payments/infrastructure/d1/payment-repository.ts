@@ -1,3 +1,4 @@
+import type { PaymentObservationIdentity } from "../../ports/payment-provider";
 import type { ProviderSettlementObservation } from "../../ports/payment-provider";
 
 export type PaymentIntentRow = {
@@ -663,14 +664,21 @@ export function extendPaymentRepository(database: D1Database) {
       settlement: ProviderSettlementObservation;
       now: number;
     }): Promise<number> {
-      return this.recordSettlementObservationStatement(input)
-        .run()
-        .then((result) => result.meta?.changes ?? 0);
+      return database
+        .batch([
+          this.recordSettlementObservationStatement(input),
+          settlementEvidenceGuard(database, input),
+        ])
+        .then((results) => results[0]?.meta?.changes ?? 0);
     },
     applyObservationWithReaction(input: {
       intentId: string;
       expectedVersion: number;
       expectedStatus: string;
+      identity: PaymentObservationIdentity;
+      subjectType: string;
+      subjectId: string;
+      purpose: string;
       nextStatus: string;
       now: number;
       consumeProviderActions: boolean;
@@ -692,24 +700,46 @@ export function extendPaymentRepository(database: D1Database) {
       const statements: D1PreparedStatement[] = [
         database
           .prepare(
-            "UPDATE payment_intent SET status=?, version=version+1, updated_at=? WHERE id=? AND version=? AND status=?",
+            `UPDATE payment_intent SET status=?, version=version+?, updated_at=CASE WHEN ?=1 THEN ? ELSE updated_at END
+              WHERE id=? AND version=? AND status=? AND amount_minor=? AND currency=? AND subject_type=? AND subject_id=? AND purpose=?
+              AND EXISTS (SELECT 1 FROM payment_attempt WHERE payment_intent_id=payment_intent.id AND provider=? AND provider_reference=?)`,
           )
           .bind(
             input.nextStatus,
+            input.nextStatus === input.expectedStatus ? 0 : 1,
+            input.nextStatus === input.expectedStatus ? 0 : 1,
             input.now,
             input.intentId,
             input.expectedVersion,
             input.expectedStatus,
+            input.identity.amountMinor,
+            input.identity.currency,
+            input.subjectType,
+            input.subjectId,
+            input.purpose,
+            input.identity.provider,
+            input.identity.providerReference,
           ),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -41 WHERE changes()!=1"),
         database
-          .prepare("UPDATE payment_attempt SET status=?, updated_at=? WHERE payment_intent_id=?")
-          .bind(input.nextStatus, input.now, input.intentId),
+          .prepare(
+            "UPDATE payment_attempt SET status=?, updated_at=CASE WHEN status!=? THEN ? ELSE updated_at END WHERE payment_intent_id=? AND provider=? AND provider_reference=?",
+          )
+          .bind(
+            input.nextStatus,
+            input.nextStatus,
+            input.now,
+            input.intentId,
+            input.identity.provider,
+            input.identity.providerReference,
+          ),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -41 WHERE changes()!=1"),
       ];
       if (input.reaction)
         statements.push(
           database
             .prepare(
-              "INSERT OR IGNORE INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, 0, ?, ?)",
+              "INSERT OR IGNORE INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, created_at, updated_at) SELECT ?, ?, ?, ?, ?, 'PENDING', ?, 0, ?, ? WHERE NOT EXISTS (SELECT 1 FROM payment_reaction WHERE payment_intent_id=? AND reaction_type=?)",
             )
             .bind(
               crypto.randomUUID(),
@@ -720,24 +750,57 @@ export function extendPaymentRepository(database: D1Database) {
               input.reaction.idempotencyKey,
               input.reaction.now,
               input.reaction.now,
+              input.intentId,
+              input.reaction.reactionType,
+            ),
+        );
+      if (input.reaction)
+        statements.push(
+          database
+            .prepare(
+              "INSERT INTO commitment_abort(id) SELECT -41 WHERE NOT EXISTS (SELECT 1 FROM payment_reaction WHERE payment_intent_id=? AND reaction_type=? AND subject_type=? AND subject_id=?) OR (SELECT COUNT(*) FROM payment_reaction WHERE payment_intent_id=? AND reaction_type=?)!=1",
+            )
+            .bind(
+              input.intentId,
+              input.reaction.reactionType,
+              input.reaction.subjectType,
+              input.reaction.subjectId,
+              input.intentId,
+              input.reaction.reactionType,
             ),
         );
       if (input.consumeProviderActions)
-        statements.push(base.consumeProviderActionsStatement(input.intentId, input.now));
+        statements.push(
+          base.consumeProviderActionsStatement(input.intentId, input.now),
+          database
+            .prepare(
+              "INSERT INTO commitment_abort(id) SELECT -41 WHERE EXISTS (SELECT 1 FROM payment_provider_action WHERE payment_intent_id=? AND status='ACTIVE')",
+            )
+            .bind(input.intentId),
+        );
       if (input.settlementObservation)
         statements.push(
           this.recordSettlementObservationStatement({
             ...input.settlementObservation,
             paymentGuard: {
-              version: input.expectedVersion + 1,
+              version: input.expectedVersion + (input.nextStatus === input.expectedStatus ? 0 : 1),
               status: input.nextStatus,
             },
           }),
         );
+      if (input.settlementObservation)
+        statements.push(settlementEvidenceGuard(database, input.settlementObservation));
       return database
         .batch(statements)
         .then((results) => (results[0]?.meta?.changes ?? 0) === 1)
-        .catch(() => false);
+        .catch((error: unknown) => {
+          if (
+            error instanceof Error &&
+            /CHECK constraint failed|UNIQUE constraint failed/.test(error.message)
+          )
+            return false;
+          throw error;
+        });
     },
   };
 }
@@ -753,6 +816,34 @@ export type RefundRow = {
   providerRefundReference: string | null;
   version: number;
 };
+
+function settlementEvidenceGuard(
+  database: D1Database,
+  input: {
+    provider: string;
+    providerEventId: string;
+    paymentIntentId: string;
+    settlement: ProviderSettlementObservation;
+  },
+): D1PreparedStatement {
+  const evidence = input.settlement;
+  return database
+    .prepare(
+      "INSERT INTO commitment_abort(id) SELECT -43 WHERE NOT EXISTS (SELECT 1 FROM payment_settlement_observation WHERE provider=? AND provider_event_id=? AND payment_intent_id=? AND gross_minor=? AND processing_cost_minor=? AND withholding_minor=? AND adjustment_minor=? AND net_minor=? AND currency=? AND observed_at=?)",
+    )
+    .bind(
+      input.provider,
+      input.providerEventId,
+      input.paymentIntentId,
+      evidence.grossMinor,
+      evidence.processingCostMinor,
+      evidence.withholdingMinor,
+      evidence.adjustmentMinor,
+      evidence.netMinor,
+      evidence.currency,
+      evidence.observedAt,
+    );
+}
 
 export type RefundBudgetClaim = {
   refundId: string;
@@ -800,6 +891,28 @@ export function refundBudgetStatement(
     );
 }
 
+function refundIntentProjectionStatements(
+  database: D1Database,
+  intentId: string,
+  now: number,
+): D1PreparedStatement[] {
+  const refunded =
+    "(SELECT COALESCE(SUM(amount_minor),0) FROM payment_refund WHERE payment_intent_id=payment_intent.id AND status='SUCCEEDED')";
+  const projected = `CASE WHEN ${refunded}=amount_minor THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END`;
+  return [
+    database
+      .prepare(
+        `UPDATE payment_intent SET status=${projected},version=version+1,updated_at=? WHERE id=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND ${refunded}>0 AND ${refunded}<=amount_minor AND status!=${projected}`,
+      )
+      .bind(now, intentId),
+    database
+      .prepare(
+        `INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT EXISTS (SELECT 1 FROM payment_intent WHERE id=? AND ${refunded}>0 AND ${refunded}<=amount_minor AND status=${projected})`,
+      )
+      .bind(intentId),
+  ];
+}
+
 export function extendPaymentRepositoryForRefunds(database: D1Database) {
   const base = extendPaymentRepository(database);
   return {
@@ -838,6 +951,13 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
     },
     updateRefundStatusCas(input: {
       refundId: string;
+      paymentIntentId: string;
+      observation?: {
+        provider: string;
+        providerReference: string;
+        amountMinor: number;
+        currency: string;
+      };
       expectedVersion: number;
       fromStatus: string;
       toStatus: string;
@@ -853,35 +973,72 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
     }): Promise<number> {
       const update = database
         .prepare(
-          "UPDATE payment_refund SET status=?, provider_refund_reference=COALESCE(?, provider_refund_reference), version=version+1, updated_at=? WHERE id=? AND version=? AND status=?",
+          "UPDATE payment_refund SET status=?, provider_refund_reference=COALESCE(?, provider_refund_reference), version=version+1, updated_at=? WHERE id=? AND payment_intent_id=? AND version=? AND status=? AND (? IS NULL OR (payment_intent_id=? AND provider_refund_reference=? AND amount_minor=? AND currency=? AND EXISTS (SELECT 1 FROM payment_attempt WHERE payment_intent_id=payment_refund.payment_intent_id AND provider=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')) AND NOT EXISTS (SELECT 1 FROM payment_attempt WHERE payment_intent_id=payment_refund.payment_intent_id AND provider!=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')) AND NOT EXISTS (SELECT 1 FROM payment_refund other JOIN payment_attempt other_attempt ON other_attempt.payment_intent_id=other.payment_intent_id AND other_attempt.provider=? AND other_attempt.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') WHERE other.provider_refund_reference=payment_refund.provider_refund_reference AND other.id!=payment_refund.id))) AND (? NOT IN ('PROCESSING','APPROVED','ESCALATED','SUCCEEDED') OR amount_minor <= (SELECT amount_minor FROM payment_intent WHERE id=payment_refund.payment_intent_id) - (SELECT COALESCE(SUM(other.amount_minor),0) FROM payment_refund other WHERE other.payment_intent_id=payment_refund.payment_intent_id AND other.id!=payment_refund.id AND other.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')))",
         )
         .bind(
           input.toStatus,
           input.providerRefundReference ?? null,
           input.now,
           input.refundId,
+          input.paymentIntentId,
           input.expectedVersion,
           input.fromStatus,
+          input.observation ? 1 : null,
+          input.paymentIntentId ?? null,
+          input.observation?.providerReference ?? null,
+          input.observation?.amountMinor ?? null,
+          input.observation?.currency ?? null,
+          input.observation?.provider ?? null,
+          input.observation?.provider ?? null,
+          input.observation?.provider ?? null,
+          input.toStatus,
         );
-      if (!input.settlementObservation)
-        return update.run().then((result) => result.meta?.changes ?? 0);
-      const settlement = base.recordSettlementObservationStatement({
-        ...input.settlementObservation,
-        refundGuard: {
-          refundId: input.refundId,
-          version: input.expectedVersion + 1,
-          status: input.toStatus,
-        },
-      });
-      return database.batch([update, settlement]).then((results) => results[0]?.meta?.changes ?? 0);
+      const statements = [
+        update,
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+      ];
+      if (input.settlementObservation)
+        statements.push(
+          base.recordSettlementObservationStatement({
+            ...input.settlementObservation,
+            refundGuard: {
+              refundId: input.refundId,
+              version: input.expectedVersion + 1,
+              status: input.toStatus,
+            },
+          }),
+        );
+      if (input.settlementObservation)
+        statements.push(settlementEvidenceGuard(database, input.settlementObservation));
+      if (input.toStatus === "SUCCEEDED") {
+        statements.push(
+          ...refundIntentProjectionStatements(database, input.paymentIntentId, input.now),
+        );
+      }
+      return database
+        .batch(statements)
+        .then((results) => results[0]?.meta?.changes ?? 0)
+        .catch((error: unknown) => {
+          if (
+            error instanceof Error &&
+            /CHECK constraint failed|UNIQUE constraint failed/.test(error.message)
+          )
+            return 0;
+          throw error;
+        });
     },
-    findRefundByProviderReference(refundReference: string): Promise<RefundRow | null> {
+    findRefundByProviderReference(
+      refundReference: string,
+      provider: string,
+    ): Promise<RefundRow | null> {
       return database
         .prepare(
-          "SELECT id, payment_intent_id, amount_minor, currency, status, provider_refund_reference, version FROM payment_refund WHERE provider_refund_reference=?",
+          `SELECT id, payment_intent_id, amount_minor, currency, status, provider_refund_reference, version FROM payment_refund WHERE provider_refund_reference=?
+              AND EXISTS (SELECT 1 FROM payment_attempt WHERE payment_intent_id=payment_refund.payment_intent_id AND provider=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED'))
+              AND NOT EXISTS (SELECT 1 FROM payment_attempt WHERE payment_intent_id=payment_refund.payment_intent_id AND provider!=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')) LIMIT 2`,
         )
-        .bind(refundReference)
-        .first<{
+        .bind(refundReference, provider, provider)
+        .all<{
           id: string;
           payment_intent_id: string;
           amount_minor: number;
@@ -890,8 +1047,9 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
           provider_refund_reference: string;
           version: number;
         }>()
-        .then((row) =>
-          row
+        .then(({ results }) => {
+          const row = results.length === 1 ? results[0] : null;
+          return row
             ? {
                 id: row.id,
                 paymentIntentId: row.payment_intent_id,
@@ -901,25 +1059,13 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
                 providerRefundReference: row.provider_refund_reference,
                 version: row.version,
               }
-            : null,
-        );
+            : null;
+        });
     },
     refreshIntentRefundState(intentId: string, now: number): Promise<number> {
       return database
-        .prepare(
-          `UPDATE payment_intent
-           SET status=CASE
-                 WHEN (SELECT COALESCE(SUM(amount_minor),0) FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED') >= amount_minor
-                   THEN 'REFUNDED'
-                 ELSE 'PARTIALLY_REFUNDED'
-               END,
-               version=version+1,
-               updated_at=?
-           WHERE id=? AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED')`,
-        )
-        .bind(intentId, now, intentId)
-        .run()
-        .then((result) => result.meta?.changes ?? 0);
+        .batch(refundIntentProjectionStatements(database, intentId, now))
+        .then((results) => results[0]?.meta?.changes ?? 0);
     },
   };
 }

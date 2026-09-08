@@ -12,7 +12,7 @@ Eligibility and transition prerequisites belong to Core policy and guarded comma
 
 External provider events are not client commands and never supply or invent an `expectedVersion`. Ingestion requires unique `(provider, providerEventId)` identity and a durable inbox. The handler loads current aggregate state, applies legal-transition and compare-and-swap protection, and safely retries or reconciles if another command changed the aggregate concurrently.
 
-A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid membership and paid orders. For the current release, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, delivery-cycle cutoff is the later operational/procurement commitment boundary. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate. Global `OPEN|PAUSED` selling state is a separate versioned lifecycle: `PAUSED` blocks new options, Quotes, and payment initiation but does not prevent reconciliation or exactly-once commitment of an already-started payment.
+A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid Orders and paid additions. For the current release, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, delivery-cycle cutoff is the later operational/procurement commitment boundary. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate. Global `OPEN|PAUSED` selling state is a separate versioned lifecycle: `PAUSED` blocks new options, Quotes, and payment initiation but does not prevent reconciliation or exactly-once commitment of an already-started payment.
 
 ## Global Commerce Configuration
 
@@ -108,6 +108,8 @@ Rules:
 - Duplicate webhooks return the previously recorded inbox outcome. Provider events do not carry `expectedVersion`; the handler uses current-state validation, conditional aggregate updates, and safe retry/reconciliation on concurrent change.
 - If canonical Payments reaches `SUCCEEDED` but commitment initially fails or the response is lost, recovery must either commit the same order exactly once or create a visible refund/finance exception. Money must never become an invisible orphan.
 - A payment state is never inferred solely from client state.
+- Provider lookup and signed-event application validate provider/reference, amount, currency and the current Payment subject. The Payment compare-and-swap, observed attempt, required downstream reaction, continuation consumption and settlement evidence share a guarded transaction. A zero-row claim or ignored dependent write aborts that transition. Replaying a consistent captured state repairs a missing historical reaction without incrementing its Payment version.
+
 - Identical payment-command replay is resolved before quote state/expiry validation and returns the original unexpired continuation. New payment readiness recalculates without persisting or superseding the accepted Quote; the Payment subject remains that accepted Quote ID.
 - Provider redirect/SDK actions are durable while `ACTIVE`, become `CONSUMED` on a terminal provider observation, and become `EXPIRED` at their exact expiry through both access-time checks and the every-minute scheduler sweep. Missing/expired continuation data never produces `REQUIRES_ACTION` with null action data.
 - A thrown provider call is ambiguous, not a legal transition to `FAILED`; Core preserves the processing claim and opens reconciliation. Provider-declared rejection may transition to `FAILED`.
@@ -121,6 +123,8 @@ SUCCEEDED may represent partial or full amount
 ```
 
 Use one or more refund records so each provider operation has a stable identity. Aggregate payment/order projections derive `PARTIALLY_REFUNDED` or `REFUNDED` from successful refund amounts. Retrying a failed provider request preserves the same application idempotency identity where the provider permits it.
+
+A verified Refund observation must resolve one Refund under the owning provider and match its exact amount/currency. Ambiguous legacy provider/reference mappings remain visible for reconciliation. `SUCCEEDED` is absorbing financial evidence: a delayed pending observation cannot downgrade it, and a conflicting failed observation opens reconciliation. Successful Refund mutation, settlement evidence and the derived Payment refunded-total state share one transaction. Duplicate successful observations repair retained incomplete projections without repeatedly incrementing the Payment version; the provider inbox is applied only after the Order cancellation projection also succeeds.
 
 The refundable captured amount is claimed with one guarded insert. Outstanding `REQUESTED`, `APPROVED`, `PROCESSING`, and `ESCALATED` amounts remain reserved alongside `SUCCEEDED`; definitive `FAILED` releases its reservation. Concurrent claims cannot collectively exceed the captured amount.
 

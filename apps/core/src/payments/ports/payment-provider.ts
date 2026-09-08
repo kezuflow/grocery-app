@@ -1,3 +1,10 @@
+export type PaymentObservationIdentity = {
+  provider: string;
+  providerReference: string;
+  amountMinor: number;
+  currency: string;
+};
+
 import type { PaymentDomainState } from "../domain/payment";
 
 export type ProviderSettlementObservation = {

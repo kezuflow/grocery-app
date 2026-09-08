@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { createPayment } from "./create-payment";
 import { reconcilePayment } from "./reconcile-payment";
@@ -146,4 +146,208 @@ describe("payment reconciliation", () => {
       .first<{ status: string }>();
     expect(row?.status).toBe("EXPIRED");
   });
+});
+
+function recoveryCommand(intentId: string) {
+  return {
+    paymentIntentId: intentId,
+    idempotencyKey: crypto.randomUUID(),
+    actorId: "system:recovery",
+    requestId: crypto.randomUUID(),
+  };
+}
+
+describe("payment lookup evidence and transaction guards", () => {
+  it.each(["reference", "amount", "currency"] as const)(
+    "rejects mismatched %s before financial effects",
+    async (kind) => {
+      const { intentId, reference } = await seededIntent();
+      const lookup = vi.spyOn(mock(), "getPayment").mockResolvedValueOnce({
+        providerReference: kind === "reference" ? "unrelated" : reference,
+        amountMinor: kind === "amount" ? 1 : 15000,
+        currency: kind === "currency" ? "USD" : "PHP",
+        canonicalState: "SUCCEEDED",
+      });
+      try {
+        expect(
+          await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId)),
+        ).toMatchObject({ ok: true, value: { processingStatus: "RECONCILIATION_REQUIRED" } });
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+            .bind(intentId)
+            .first(),
+        ).toEqual({ status: "REQUIRES_ACTION" });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM payment_reaction WHERE payment_intent_id=?",
+          )
+            .bind(intentId)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        lookup.mockRestore();
+      }
+    },
+  );
+
+  it.each(["version", "reference", "subject", "late-failure"] as const)(
+    "rolls back dependent effects after %s changes",
+    async (kind) => {
+      const { intentId, reference } = await seededIntent();
+      setMockObservedState(mock(), reference, "SUCCEEDED");
+      let reached = false;
+      const database = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              reached = true;
+              if (kind === "version")
+                await target
+                  .prepare("UPDATE payment_intent SET version=version+1 WHERE id=?")
+                  .bind(intentId)
+                  .run();
+              if (kind === "reference")
+                await target
+                  .prepare(
+                    "UPDATE payment_attempt SET provider_reference='changed-reference' WHERE payment_intent_id=?",
+                  )
+                  .bind(intentId)
+                  .run();
+              if (kind === "subject")
+                await target
+                  .prepare("UPDATE payment_intent SET subject_id='changed-subject' WHERE id=?")
+                  .bind(intentId)
+                  .run();
+              return target.batch(
+                kind === "late-failure"
+                  ? [...statements, target.prepare("INSERT INTO commitment_abort(id) VALUES (-41)")]
+                  : statements,
+              );
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect(
+        await reconcilePayment(database, testRegistry(), recoveryCommand(intentId)),
+      ).toMatchObject({ ok: true, value: { processingStatus: "RETRY_REQUIRED" } });
+      expect(reached).toBe(true);
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(intentId).first(),
+      ).toEqual({ status: "REQUIRES_ACTION" });
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_attempt WHERE payment_intent_id=?")
+          .bind(intentId)
+          .first(),
+      ).toEqual({ status: "REQUIRES_ACTION" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_provider_action WHERE payment_intent_id=?")
+          .bind(intentId)
+          .first(),
+      ).toEqual({ status: "ACTIVE" });
+    },
+  );
+
+  it("repairs a historical missing paid reaction without incrementing the payment on replay", async () => {
+    const { intentId, reference } = await seededIntent();
+    setMockObservedState(mock(), reference, "SUCCEEDED");
+    expect(await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId))).toMatchObject(
+      { ok: true, value: { processingStatus: "APPLIED" } },
+    );
+    const payment = await env.DB.prepare(
+      "SELECT status,version,updated_at FROM payment_intent WHERE id=?",
+    )
+      .bind(intentId)
+      .first();
+    // Model retained evidence from the old unguarded projection, after reaching capture through the command.
+    await env.DB.prepare("DELETE FROM payment_reaction WHERE payment_intent_id=?")
+      .bind(intentId)
+      .run();
+    for (let index = 0; index < 2; index++)
+      expect(
+        await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId)),
+      ).toMatchObject({ ok: true, value: { processingStatus: "APPLIED" } });
+    expect(
+      await env.DB.prepare("SELECT status,version,updated_at FROM payment_intent WHERE id=?")
+        .bind(intentId)
+        .first(),
+    ).toEqual(payment);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM payment_reaction WHERE payment_intent_id=?")
+        .bind(intentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+});
+
+it("does not commit paid state when a dependent reaction insert is ignored", async () => {
+  const { intentId, reference } = await seededIntent();
+  setMockObservedState(mock(), reference, "SUCCEEDED");
+  await env.DB.prepare(
+    `CREATE TRIGGER test_ignore_paid_reaction BEFORE INSERT ON payment_reaction WHEN NEW.payment_intent_id='${intentId}' BEGIN SELECT RAISE(IGNORE); END`,
+  ).run();
+  try {
+    expect(await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId))).toMatchObject(
+      { ok: true, value: { processingStatus: "RETRY_REQUIRED" } },
+    );
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(intentId).first(),
+    ).toEqual({ status: "PROCESSING" });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_attempt WHERE payment_intent_id=?")
+        .bind(intentId)
+        .first(),
+    ).toEqual({ status: "PROCESSING" });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_provider_action WHERE payment_intent_id=?")
+        .bind(intentId)
+        .first(),
+    ).toEqual({ status: "ACTIVE" });
+    await env.DB.prepare("DROP TRIGGER test_ignore_paid_reaction").run();
+    expect(await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId))).toMatchObject(
+      { ok: true, value: { processingStatus: "APPLIED" } },
+    );
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM payment_reaction WHERE payment_intent_id=?")
+        .bind(intentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  } finally {
+    await env.DB.prepare("DROP TRIGGER IF EXISTS test_ignore_paid_reaction").run();
+  }
+});
+
+it("preserves an existing paid reaction with a retained idempotency identity", async () => {
+  const { intentId, reference } = await seededIntent();
+  setMockObservedState(mock(), reference, "SUCCEEDED");
+  await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId));
+  const retainedKey = `retained-${crypto.randomUUID()}`;
+  await env.DB.prepare("UPDATE payment_reaction SET idempotency_key=? WHERE payment_intent_id=?")
+    .bind(retainedKey, intentId)
+    .run();
+  const before = await env.DB.prepare(
+    "SELECT id,idempotency_key,status FROM payment_reaction WHERE payment_intent_id=?",
+  )
+    .bind(intentId)
+    .all();
+  expect(await reconcilePayment(env.DB, testRegistry(), recoveryCommand(intentId))).toMatchObject({
+    ok: true,
+    value: { processingStatus: "APPLIED" },
+  });
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT id,idempotency_key,status FROM payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(intentId)
+        .all()
+    ).results,
+  ).toEqual(before.results);
 });

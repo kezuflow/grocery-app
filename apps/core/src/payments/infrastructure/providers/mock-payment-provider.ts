@@ -82,6 +82,7 @@ function mapVendorState(vendorState: string): PaymentDomainState | null {
  */
 export function createMockPaymentProvider(): PaymentProvider {
   const observedStates = new Map<string, PaymentDomainState>();
+  const createdPayments = new Map<string, { amountMinor: number; currency: string }>();
   const failingRefunds = new Set<string>();
   const authorizationOutcomes = new Map<string, ProviderAuthorizationView>();
   const provider: PaymentProvider = {
@@ -116,6 +117,10 @@ export function createMockPaymentProvider(): PaymentProvider {
     },
     async createPayment(input) {
       const providerReference = `mock_pay_${input.idempotencyKey}`;
+      createdPayments.set(providerReference, {
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+      });
       const returnUrl = new URL(input.returnUrl);
       const browserReturn = returnUrl.protocol === "http:" || returnUrl.protocol === "https:";
       const simulatorUrl = browserReturn
@@ -252,12 +257,12 @@ export function createMockPaymentProvider(): PaymentProvider {
       } satisfies ProviderEventVerificationSuccess;
     },
     async getPayment(providerReference): Promise<ProviderPaymentView | null> {
-      if (!providerReference.startsWith("mock_pay_")) return null;
+      const payment = createdPayments.get(providerReference);
+      if (!payment) return null;
       return {
         providerReference,
         canonicalState: observedStates.get(providerReference) ?? "PROCESSING",
-        amountMinor: 0,
-        currency: "PHP",
+        ...payment,
       };
     },
     async requestRefund(input) {

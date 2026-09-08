@@ -249,6 +249,7 @@ describe("non-synthetic refunds", () => {
     const repository = extendPaymentRepositoryForRefunds(env.DB);
     const changed = await repository.updateRefundStatusCas({
       refundId: created.value.refundId,
+      paymentIntentId: intentId,
       expectedVersion: 999,
       fromStatus: "PROCESSING",
       toStatus: "SUCCEEDED",
@@ -863,4 +864,223 @@ describe("staff refund admission and external execution", () => {
       ).toEqual({ count: 0 });
     },
   );
+});
+
+async function observableRefund() {
+  const { intentId } = await succeededIntent();
+  const created = await requestRefund(env.DB, testRegistry(), refundCommand(intentId));
+  if (!created.ok) throw new Error("Refund fixture failed");
+  const row = await env.DB.prepare(
+    "SELECT provider_refund_reference FROM payment_refund WHERE id=?",
+  )
+    .bind(created.value.refundId)
+    .first<{ provider_refund_reference: string }>();
+  if (!row) throw new Error("Refund reference missing");
+  function body(state = "paid", eventId = crypto.randomUUID()) {
+    return JSON.stringify({
+      eventId,
+      kind: "refund",
+      refundReference: row!.provider_refund_reference,
+      vendorState: state,
+      amountMinor: 5000,
+      currency: "PHP",
+      settlement:
+        state === "paid"
+          ? {
+              grossMinor: 5000,
+              processingCostMinor: 0,
+              withholdingMinor: 0,
+              adjustmentMinor: 0,
+              netMinor: 5000,
+            }
+          : undefined,
+    });
+  }
+  async function send(raw = body(), registry = testRegistry(), code = "mock") {
+    return ingestProviderEvent(
+      env.DB,
+      registry,
+      code,
+      new Headers({
+        "x-mock-signature": await mockSignatureFor(raw),
+        "x-mock-timestamp": String(Date.now()),
+      }),
+      raw,
+    );
+  }
+  return {
+    intentId,
+    refundId: created.value.refundId,
+    reference: row.provider_refund_reference,
+    body,
+    send,
+  };
+}
+
+describe("refund observation recovery and terminal evidence", () => {
+  it("keeps successful money immutable under delayed pending and conflicting failure", async () => {
+    const fixture = await observableRefund();
+    expect(await fixture.send()).toMatchObject({
+      ok: true,
+      value: { processingStatus: "APPLIED" },
+    });
+    const before = await env.DB.prepare("SELECT status,version FROM payment_refund WHERE id=?")
+      .bind(fixture.refundId)
+      .first();
+    expect(await fixture.send(fixture.body("pending"))).toMatchObject({
+      ok: true,
+      value: { processingStatus: "DUPLICATE", canonicalState: "SUCCEEDED" },
+    });
+    expect(await fixture.send(fixture.body("failed"))).toMatchObject({
+      ok: true,
+      value: { processingStatus: "RECONCILIATION_REQUIRED", canonicalState: "SUCCEEDED" },
+    });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM payment_refund WHERE id=?")
+        .bind(fixture.refundId)
+        .first(),
+    ).toEqual(before);
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual({ status: "PARTIALLY_REFUNDED" });
+  });
+
+  it("rejects a refund identity observed by a different verified provider", async () => {
+    const fixture = await observableRefund();
+    const delegate = createMockPaymentProvider();
+    const other = {
+      ...delegate,
+      code: "other",
+      async verifyAndParseEvent(headers: Headers, raw: string) {
+        const result = await delegate.verifyAndParseEvent(headers, raw);
+        return result.ok ? { ...result, event: { ...result.event, provider: "other" } } : result;
+      },
+    };
+    expect(
+      await fixture.send(fixture.body(), new ProviderRegistry("test", [other]), "other"),
+    ).toMatchObject({ ok: true, value: { processingStatus: "RECONCILIATION_REQUIRED" } });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_refund WHERE id=?")
+        .bind(fixture.refundId)
+        .first(),
+    ).toEqual({ status: "PROCESSING" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM payment_settlement_observation WHERE payment_intent_id=?",
+      )
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("does not pick one of two refunds sharing a provider reference", async () => {
+    const fixture = await observableRefund();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,provider_refund_reference,version,created_at,updated_at) VALUES (?,?,5000,'PHP','PROCESSING','Retained ambiguous mapping',?,?,1,?,?)",
+    )
+      .bind(
+        crypto.randomUUID(),
+        fixture.intentId,
+        crypto.randomUUID(),
+        fixture.reference,
+        Date.now(),
+        Date.now(),
+      )
+      .run();
+    expect(await fixture.send()).toMatchObject({
+      ok: true,
+      value: { processingStatus: "RECONCILIATION_REQUIRED" },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED'",
+      )
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+
+  it.each(["payment-projection", "settlement"] as const)(
+    "recovers an ignored %s without premature application",
+    async (kind) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const fixture = await observableRefund();
+      const trigger =
+        kind === "payment-projection"
+          ? `CREATE TRIGGER test_ignored_financial_effect BEFORE UPDATE OF status ON payment_intent WHEN NEW.id='${fixture.intentId}' AND NEW.status='PARTIALLY_REFUNDED' BEGIN SELECT RAISE(IGNORE); END`
+          : `CREATE TRIGGER test_ignored_financial_effect BEFORE INSERT ON payment_settlement_observation WHEN NEW.payment_intent_id='${fixture.intentId}' BEGIN SELECT RAISE(IGNORE); END`;
+      await env.DB.prepare(trigger).run();
+      try {
+        const raw = fixture.body();
+        expect(await fixture.send(raw)).toMatchObject({
+          ok: true,
+          value: { processingStatus: "RETRY_REQUIRED" },
+        });
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_refund WHERE id=?")
+            .bind(fixture.refundId)
+            .first(),
+        ).toEqual({ status: "PROCESSING" });
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+            .bind(fixture.intentId)
+            .first(),
+        ).toEqual({ status: "SUCCEEDED" });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM payment_settlement_observation WHERE payment_intent_id=?",
+          )
+            .bind(fixture.intentId)
+            .first(),
+        ).toEqual({ count: 0 });
+        await env.DB.prepare("DROP TRIGGER test_ignored_financial_effect").run();
+        vi.setSystemTime(Date.now() + 31_000);
+        expect(await fixture.send(raw)).toMatchObject({
+          ok: true,
+          value: { processingStatus: "APPLIED" },
+        });
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+            .bind(fixture.intentId)
+            .first(),
+        ).toEqual({ status: "PARTIALLY_REFUNDED" });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM payment_settlement_observation WHERE payment_intent_id=?",
+          )
+            .bind(fixture.intentId)
+            .first(),
+        ).toEqual({ count: 1 });
+      } finally {
+        await env.DB.prepare("DROP TRIGGER IF EXISTS test_ignored_financial_effect").run();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("repairs a retained successful Refund projection on a repeated observation", async () => {
+    const fixture = await observableRefund();
+    await fixture.send();
+    await env.DB.prepare(
+      "UPDATE payment_intent SET status='SUCCEEDED',version=version+1 WHERE id=?",
+    )
+      .bind(fixture.intentId)
+      .run();
+    expect(await fixture.send()).toMatchObject({
+      ok: true,
+      value: { processingStatus: "DUPLICATE" },
+    });
+    const after = await env.DB.prepare("SELECT status,version FROM payment_intent WHERE id=?")
+      .bind(fixture.intentId)
+      .first();
+    expect(after).toMatchObject({ status: "PARTIALLY_REFUNDED" });
+    await fixture.send();
+    expect(
+      await env.DB.prepare("SELECT status,version FROM payment_intent WHERE id=?")
+        .bind(fixture.intentId)
+        .first(),
+    ).toEqual(after);
+  });
 });

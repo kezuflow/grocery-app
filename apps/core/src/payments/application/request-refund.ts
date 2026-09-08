@@ -199,6 +199,7 @@ export async function submitClaimedRefund(
     if (!outcome.ok) {
       await repository.updateRefundStatusCas({
         refundId,
+        paymentIntentId: input.paymentIntentId,
         expectedVersion: requestedVersion,
         fromStatus: "REQUESTED",
         toStatus: "REJECTED",
@@ -212,6 +213,7 @@ export async function submitClaimedRefund(
     }
     const processing = await repository.updateRefundStatusCas({
       refundId,
+      paymentIntentId: input.paymentIntentId,
       expectedVersion: requestedVersion,
       fromStatus: "REQUESTED",
       toStatus: "PROCESSING",
@@ -231,6 +233,7 @@ export async function submitClaimedRefund(
     // retrying with a new identity.
     await repository.updateRefundStatusCas({
       refundId,
+      paymentIntentId: input.paymentIntentId,
       expectedVersion: requestedVersion,
       fromStatus: "REQUESTED",
       toStatus: "ESCALATED",
@@ -272,6 +275,7 @@ async function escalateRequestedRefund(
 ): Promise<void> {
   await repository.updateRefundStatusCas({
     refundId,
+    paymentIntentId: intentId,
     expectedVersion,
     fromStatus: "REQUESTED",
     toStatus: "ESCALATED",

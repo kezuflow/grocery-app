@@ -5,7 +5,10 @@ import {
 } from "../domain/payment";
 import { extendPaymentRepository } from "../infrastructure/d1/payment-repository";
 import type { PaymentIntentRow } from "../infrastructure/d1/payment-repository";
-import type { ProviderSettlementObservation } from "../ports/payment-provider";
+import type {
+  PaymentObservationIdentity,
+  ProviderSettlementObservation,
+} from "../ports/payment-provider";
 import { recordFinancialEvent } from "./financial-observability";
 
 export type ObservationApplication = {
@@ -38,6 +41,7 @@ export async function applyObservationToIntents(
   database: D1Database,
   intents: readonly PaymentIntentRow[],
   canonicalState: PaymentDomainState,
+  identity: PaymentObservationIdentity,
   settlementContext?: {
     provider: string;
     providerEventId: string;
@@ -64,25 +68,26 @@ export async function applyObservationToIntents(
   }
 
   const intent = intents[0];
-  if (intent.status === canonicalState) {
-    if (settlementContext)
-      await repository.recordSettlementObservation({
-        ...settlementContext,
-        paymentIntentId: intent.id,
-        now,
-      });
-    recordFinancialEvent({
-      event: "provider_observation_replayed",
-      scope: "payments.observe",
-      aggregateId: intent.id,
-      outcomeCode: canonicalState,
+  if (intent.amountMinor !== identity.amountMinor || intent.currency !== identity.currency) {
+    await repository.recordReconciliationCase({
+      intentId: intent.id,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({ reason: "AMOUNT_OR_CURRENCY_MISMATCH" }),
+      now,
     });
-    return { processingStatus: "APPLIED", paymentIntentId: intent.id, canonicalState };
+    return {
+      processingStatus: "RECONCILIATION_REQUIRED",
+      paymentIntentId: intent.id,
+      canonicalState,
+    };
   }
 
   // Reconciliation may need to walk a lagging stored state forward through the
   // canonical machine (e.g. REQUIRES_ACTION -> PROCESSING -> SUCCEEDED).
-  const path = findPaymentTransitionPath(intent.status as PaymentDomainState, canonicalState);
+  const path =
+    intent.status === canonicalState
+      ? [canonicalState, canonicalState]
+      : findPaymentTransitionPath(intent.status as PaymentDomainState, canonicalState);
   if (!path) {
     await repository.recordReconciliationCase({
       intentId: intent.id,
@@ -107,6 +112,10 @@ export async function applyObservationToIntents(
       intentId: intent.id,
       expectedVersion: version,
       expectedStatus: currentStatus,
+      identity,
+      subjectType: intent.subjectType,
+      subjectId: intent.subjectId,
+      purpose: intent.purpose,
       nextStatus,
       now,
       consumeProviderActions:
@@ -142,7 +151,7 @@ export async function applyObservationToIntents(
       });
       return { processingStatus: "RETRY_REQUIRED", paymentIntentId: intent.id, canonicalState };
     }
-    version += 1;
+    if (nextStatus !== currentStatus) version += 1;
     currentStatus = nextStatus;
   }
 

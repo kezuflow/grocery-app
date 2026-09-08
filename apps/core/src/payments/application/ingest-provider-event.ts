@@ -99,7 +99,10 @@ export async function applyVerifiedProviderEvent(
 
   if (event.kind === "refund" && event.refundReference) {
     const refunds = extendPaymentRepositoryForRefunds(database);
-    const refund = await refunds.findRefundByProviderReference(event.refundReference);
+    const refund = await refunds.findRefundByProviderReference(
+      event.refundReference,
+      event.provider,
+    );
     if (!refund) {
       await repository.recordReconciliationCase({
         intentId: null,
@@ -127,7 +130,38 @@ export async function applyVerifiedProviderEvent(
       await finish("RECONCILIATION_REQUIRED", "AMOUNT_OR_CURRENCY_MISMATCH");
       return result(event, "RECONCILIATION_REQUIRED", refund.paymentIntentId, event.canonicalState);
     }
+    if (refund.status === "SUCCEEDED" && event.canonicalState === "PROCESSING") {
+      await refunds.refreshIntentRefundState(refund.paymentIntentId, now);
+      await advanceOrderCancellation(database, {
+        paymentIntentId: refund.paymentIntentId,
+        refundId: refund.id,
+        refundState: "SUCCEEDED",
+      });
+      await finish("APPLIED");
+      return result(event, "DUPLICATE", refund.paymentIntentId, "SUCCEEDED");
+    }
+    if (
+      refund.status !== event.canonicalState &&
+      (!["REQUESTED", "APPROVED", "PROCESSING", "ESCALATED", "FAILED"].includes(refund.status) ||
+        !["PROCESSING", "SUCCEEDED", "FAILED"].includes(event.canonicalState))
+    ) {
+      await repository.recordReconciliationCase({
+        intentId: refund.paymentIntentId,
+        category: "AMBIGUOUS_OUTCOME",
+        detailsJson: JSON.stringify({
+          reason: "ILLEGAL_REFUND_OBSERVATION",
+          refundId: refund.id,
+          from: refund.status,
+          to: event.canonicalState,
+        }),
+        now,
+      });
+      await finish("RECONCILIATION_REQUIRED", "ILLEGAL_REFUND_OBSERVATION");
+      return result(event, "RECONCILIATION_REQUIRED", refund.paymentIntentId, refund.status);
+    }
     if (refund.status === event.canonicalState) {
+      if (refund.status === "SUCCEEDED")
+        await refunds.refreshIntentRefundState(refund.paymentIntentId, now);
       if (event.settlement)
         await repository.recordSettlementObservation({
           provider: event.provider,
@@ -146,6 +180,13 @@ export async function applyVerifiedProviderEvent(
     }
     const changed = await refunds.updateRefundStatusCas({
       refundId: refund.id,
+      paymentIntentId: refund.paymentIntentId,
+      observation: {
+        provider: event.provider,
+        providerReference: event.refundReference,
+        amountMinor: event.amountMinor,
+        currency: event.currency,
+      },
       expectedVersion: refund.version,
       fromStatus: refund.status,
       toStatus: event.canonicalState,
@@ -163,12 +204,6 @@ export async function applyVerifiedProviderEvent(
     if (changed !== 1) {
       await finish("RETRY_REQUIRED", "VERSION_CONFLICT");
       return result(event, "RETRY_REQUIRED", refund.paymentIntentId, event.canonicalState);
-    }
-    if (event.canonicalState === "SUCCEEDED") {
-      // Recompute from canonical SUCCEEDED refund rows in one guarded SQL
-      // statement. Each concurrent refund completion performs this after its
-      // own refund CAS, so the last writer necessarily sees the final sum.
-      await refunds.refreshIntentRefundState(refund.paymentIntentId, now);
     }
     await advanceOrderCancellation(database, {
       paymentIntentId: refund.paymentIntentId,
@@ -217,6 +252,7 @@ export async function applyVerifiedProviderEvent(
     database,
     intents,
     event.canonicalState,
+    event,
     event.settlement
       ? {
           provider: event.provider,

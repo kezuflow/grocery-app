@@ -181,7 +181,18 @@ describe("payment intent creation", () => {
     );
     if (!intent) throw new Error("intent not found");
 
-    const applied = await applyObservationToIntents(env.DB, [intent], "SUCCEEDED");
+    const providerAttempt = await env.DB.prepare(
+      "SELECT provider, provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(intent.id)
+      .first<{ provider: string; provider_reference: string }>();
+    if (!providerAttempt) throw new Error("Attempt missing");
+    const applied = await applyObservationToIntents(env.DB, [intent], "SUCCEEDED", {
+      provider: providerAttempt.provider,
+      providerReference: providerAttempt.provider_reference,
+      amountMinor: intent.amountMinor,
+      currency: intent.currency,
+    });
 
     expect(applied.processingStatus).toBe("APPLIED");
     const action = await env.DB.prepare(
