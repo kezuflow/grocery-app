@@ -1,8 +1,18 @@
 # Commerce alignment execution
 
-## Active execution - 2026-09-08 18:32 UTC
+## Active execution - 2026-09-08 18:45 UTC
 
-Owner request remains implementation of every remaining agreed commerce workflow in dependency order, without routine approval or subagents. Main was 4b611c5 at resume; the verified cancellation/catalog slice is ready to commit. Preserve the pre-existing .codex/config.toml change separately. Earlier handoff is retained below as context, not current failure status.
+The owner still authorizes every remaining commerce workflow in dependency order, without routine approval or subagents. Transaction repairs are committed and pushed as b8e32b2. The next verified slice adds the Global variant editor; preserve the unrelated .codex/config.toml change outside commits.
+
+Variant editing now exposes display name, optional label, display order, active/inactive status and Piece shipping estimates through the existing guarded Core PATCH command. Consumption stays fixed. Local views show catalog status and retain separate local selling controls. One automatic response-loss retry and subsequent Save preserve the complete original body/key; unconfirmed fields remain frozen. There is no extra recovery panel.
+
+Executed evidence: 22 catalog Worker/D1 tests, 2 editor Web tests, Web typecheck, lint and naming pass. The new Worker case verifies label omission versus explicit null, original receipt replay and stale/different-payload rejection (initial expected generic error codes corrected to the specific existing IDEMPOTENCY_CONFLICT/STALE_VERSION results). Desktop/mobile browser journeys both pass with zero retries: real product/variant create, variant edit, price and local activation, with lost-response replay for each write. Managed Web build and disposable clean D1 setup pass; browser setup took about two minutes. Mobile result inspected. Logs and screenshots are under C:/Users/reggi/.codex/visualizations/2026/09/08/01a0822b-3c98-76a1-8c9e-a2d5e223a182/variant-editor-*. Full aggregate passed at b8e32b2; not rerun for this bounded UI slice. No schema/RPC signature changes or real provider operations.
+
+Next: promotion commands need atomic complete effects and original-result replay before extending authoring/media. Inspection found split update/audit writes, post-commit effect checks, lifecycle validation before replay, and missing transaction-time IAM rechecks. These are observations awaiting regression evidence. Promotion delivery benefits/campaign media and later transfer/Scheduled/delivery workflows remain incomplete. Keep browser stacks and Core suites separate. Only apps/core/.wrangler/e2e-commerce-alignment-20260907 is disposable. Preserve retained state. Commit this verified variant slice directly to main and push origin main, then continue.
+
+## Prior verified transaction slice - 2026-09-08 18:32 UTC
+
+Owner request remains implementation of every remaining agreed commerce workflow in dependency order, without routine approval or subagents. Main was 4b611c5 at resume; the verified cancellation/catalog slice was committed and pushed as b8e32b2. Preserve the pre-existing .codex/config.toml change separately. Earlier handoff is retained below as context, not current failure status.
 
 Completed in this slice:
 - Scheduled cutoff cancellation survives real START_PICKING acceptance before/at/after cutoff; Instant late-state and delivered/terminal rejection remain. Paid acceptance and its required audit guard are verified. PayMongo refund reason uses `others`, supported by both official guide/reference; request-body test asserts it. Resource reference also allows the older reason, so this is documented compatibility alignment, not proven provider rejection. Canonical stale preparation/trial/media-cleanup wording and PayMongo runbook corrected.

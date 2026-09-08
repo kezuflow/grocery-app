@@ -30,6 +30,7 @@ import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
 import { ProductMediaUpload } from "@/components/admin/product-media-upload";
 import { GlobalPricePanel } from "../../../../../components/admin/global-price-panel";
+import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
 
@@ -629,6 +630,8 @@ export default function ProductDetailPage({
                   <TableHead>Display name</TableHead>
                   <TableHead>Inventory consumed</TableHead>
                   <TableHead>Shipping weight</TableHead>
+                  <TableHead>Catalog status</TableHead>
+                  {canManageProduct ? <TableHead>Actions</TableHead> : null}
                   {product.scope.kind === "LOCATION" ? <TableHead>Price</TableHead> : null}
                   {product.scope.kind === "LOCATION" ? <TableHead>Selling status</TableHead> : null}
                   {product.scope.kind === "LOCATION" ? <TableHead>Stock status</TableHead> : null}
@@ -654,52 +657,30 @@ export default function ProductDetailPage({
                       {product.inventoryPool.baseUnitSymbol}
                     </TableCell>
                     <TableCell>
-                      {product.inventoryPool.baseUnitCode === "GRAM" ? (
-                        `${sku.consumptionBaseQuantity.toLocaleString()} g`
-                      ) : canManageProduct ? (
-                        <form
-                          className="flex min-w-44 items-center gap-1"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const fields = new FormData(event.currentTarget);
-                            const weight = Number(fields.get("estimatedShippingWeightGrams"));
-                            if (!Number.isSafeInteger(weight) || weight < 1) {
-                              setNotice("Shipping weight must be a positive integer in grams.");
-                              return;
-                            }
-                            void run(
-                              `${BASE}/skus/${encodeURIComponent(sku.skuId)}`,
-                              "PATCH",
-                              {
-                                estimatedShippingWeightGrams: weight,
-                                expectedVersion: sku.version,
-                              },
-                              "Shipping weight updated.",
-                            );
-                          }}
-                        >
-                          <Input
-                            name="estimatedShippingWeightGrams"
-                            aria-label={`Shipping weight for ${sku.code}`}
-                            type="number"
-                            inputMode="numeric"
-                            min={1}
-                            step={1}
-                            defaultValue={sku.estimatedShippingWeightGrams ?? ""}
-                            placeholder="grams"
-                            className="w-24"
-                            required
-                          />
-                          <Button type="submit" size="sm" variant="outline">
-                            Save
-                          </Button>
-                        </form>
-                      ) : sku.estimatedShippingWeightGrams === null ? (
-                        "Not configured"
-                      ) : (
-                        `${sku.estimatedShippingWeightGrams.toLocaleString()} g each`
-                      )}
+                      {product.inventoryPool.baseUnitCode === "GRAM"
+                        ? `${sku.consumptionBaseQuantity.toLocaleString()} g`
+                        : sku.estimatedShippingWeightGrams === null
+                          ? "Not configured"
+                          : `${sku.estimatedShippingWeightGrams.toLocaleString()} g each`}
                     </TableCell>
+                    <TableCell>
+                      <StatusBadge tone={sku.status === "active" ? "success" : "neutral"}>
+                        {sku.status === "active" ? "Active" : "Inactive"}
+                      </StatusBadge>
+                    </TableCell>
+                    {canManageProduct ? (
+                      <TableCell>
+                        <SkuVariantEditor
+                          sku={sku}
+                          baseUnitCode={product.inventoryPool.baseUnitCode}
+                          disabled={commandIntent.pending}
+                          onSaved={() => {
+                            setNotice("Variant saved.");
+                            load();
+                          }}
+                        />
+                      </TableCell>
+                    ) : null}
                     {product.scope.kind === "LOCATION" ? (
                       <TableCell className="text-xs">
                         {sku.priceMinor === null || !sku.currency

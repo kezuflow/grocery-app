@@ -48,6 +48,37 @@ for (const width of [1440, 390]) {
       consumptionBaseQuantity: 500,
     });
 
+    const edits: { body: string | null; key: string | undefined }[] = [];
+    await page.route("**/api/admin/catalog/skus/*", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      edits.push({
+        body: route.request().postData(),
+        key: route.request().headers()["idempotency-key"],
+      });
+      if (edits.length > 1) return route.continue();
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      await route.abort("failed");
+    });
+    await page.getByRole("button", { name: "Edit variant 500 g", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Edit variant", exact: true });
+    await editor.getByLabel("Variant display name", { exact: true }).fill("Family bag");
+    await editor.getByLabel("Variant merchandising label", { exact: true }).fill("500 g");
+    await editor.getByLabel("Variant display order", { exact: true }).fill("2");
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Edit variant Family bag", exact: true }),
+    ).toBeVisible();
+    expect(edits).toHaveLength(2);
+    expect(edits[1]).toEqual(edits[0]);
+    expect(JSON.parse(edits[0].body ?? "{}")).toMatchObject({
+      name: "Family bag",
+      merchandisingLabel: "500 g",
+      sortOrder: 2,
+      expectedVersion: 1,
+    });
+
     const prices: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/catalog/skus/*/price", async (route) => {
       prices.push({
@@ -60,7 +91,7 @@ for (const width of [1440, 390]) {
       await route.abort("failed");
     });
     await page.getByRole("combobox", { name: "Price variant", exact: true }).click();
-    await page.getByRole("option", { name: "500 g", exact: true }).click();
+    await page.getByRole("option", { name: "Family bag", exact: true }).click();
     await page.getByRole("combobox", { name: "Price location", exact: true }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByLabel("Final retail price", { exact: true }).fill("29.50");
@@ -79,7 +110,8 @@ for (const width of [1440, 390]) {
     });
     await row.getByRole("button", { name: "Review start selling", exact: true }).click();
     await page.getByRole("button", { name: "Confirm selling status", exact: true }).click();
-    await expect(row.getByRole("status")).toHaveText("Selling");
+    await expect(row.getByRole("status").filter({ hasText: /^Selling$/ })).toBeVisible();
+    await expect(row.getByRole("button", { name: /^Edit variant/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("catalog-variant.png"), fullPage: true });
   });

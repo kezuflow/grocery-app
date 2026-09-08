@@ -159,6 +159,57 @@ describe("Complete catalog command effects", () => {
           await env.DB.exec("DROP TRIGGER suppress_catalog_effect");
         }
       });
+  it("preserves omitted labels, clears explicit null, and replays the original edit", async () => {
+    const { meta, skuRequest } = await fixture();
+    const sku = await exports.default.createAdminSku({
+      ...skuRequest,
+      merchandisingLabel: "Small bag",
+    });
+    if (!sku.ok) throw new Error(sku.error.message);
+    const edit = {
+      ...meta,
+      idempotencyKey: crypto.randomUUID(),
+      skuId: sku.value.skuId,
+      name: "Family bag",
+      sortOrder: 4,
+      status: "inactive" as const,
+      expectedVersion: 1,
+    };
+    const edited = await exports.default.updateAdminSku(edit);
+    expect(edited).toMatchObject({
+      ok: true,
+      value: {
+        name: "Family bag",
+        merchandisingLabel: "Small bag",
+        sortOrder: 4,
+        status: "inactive",
+        version: 2,
+      },
+    });
+    const clear = {
+      ...meta,
+      idempotencyKey: crypto.randomUUID(),
+      skuId: sku.value.skuId,
+      merchandisingLabel: null,
+      expectedVersion: 2,
+    };
+    expect(await exports.default.updateAdminSku(clear)).toMatchObject({
+      ok: true,
+      value: { merchandisingLabel: null, version: 3 },
+    });
+    expect(await exports.default.updateAdminSku(edit)).toEqual(edited);
+    expect(
+      await exports.default.updateAdminSku({ ...clear, merchandisingLabel: undefined }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await exports.default.updateAdminSku({ ...edit, idempotencyKey: crypto.randomUUID() }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(
+      await env.DB.prepare("SELECT merchandising_label,version FROM sku WHERE id=?")
+        .bind(sku.value.skuId)
+        .first(),
+    ).toEqual({ merchandising_label: null, version: 3 });
+  });
   it("replays the original SKU and exact-location effects after later changes", async () => {
     const { meta, skuRequest } = await fixture();
     const sku = await exports.default.createAdminSku(skuRequest);
