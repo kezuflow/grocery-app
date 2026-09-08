@@ -99,12 +99,27 @@ database
     1700000000000,
     1700000001000,
   );
+const paymentsBeforeLookupRecovery = database
+  .prepare("SELECT rowid,* FROM payment_intent ORDER BY rowid")
+  .all();
 const casesBeforeVersion = database
   .prepare("SELECT rowid,* FROM payment_reconciliation_case ORDER BY rowid")
   .all();
 apply(
   database,
   migrations.filter((name) => name > "0069_schema_integrity.sql"),
+);
+assert.deepEqual(
+  database.prepare("SELECT rowid,* FROM payment_intent ORDER BY rowid").all(),
+  paymentsBeforeLookupRecovery,
+);
+assert.equal(database.prepare("SELECT COUNT(*) count FROM payment_lookup_recovery").get().count, 0);
+assert.throws(
+  () =>
+    database.exec(
+      "INSERT INTO payment_lookup_recovery(payment_intent_id,status,available_at,created_at,updated_at) VALUES ('missing-payment','PENDING',1,1,1)",
+    ),
+  /FOREIGN KEY constraint failed/,
 );
 assert.deepEqual(
   database

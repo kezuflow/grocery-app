@@ -1,3 +1,4 @@
+import { recheckStaffPayment } from "../../payments/application/recheck-staff-payment";
 import { resolveReconciliationCase } from "../../payments/application/resolve-reconciliation-case";
 import { recheckStaffRefund } from "../../payments/application/recheck-staff-refund";
 import type {
@@ -528,4 +529,13 @@ export async function recheckAdminRefund(
   const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
   if (!access.ok) return access;
   return recheckStaffRefund(deps.db, { ...request, actorAuthUserId: access.value.authUserId });
+}
+
+export async function recheckAdminPayment(
+  deps: FinanceAdministrationDeps,
+  request: import("@freshmarkets/contracts").AdminPaymentRecheckRequest,
+): Promise<RpcResult<import("@freshmarkets/contracts").AdminPaymentRecheckResult>> {
+  const access = await resolveFinanceAdministrationAccess(deps, request, "payments.manage");
+  if (!access.ok) return access;
+  return recheckStaffPayment(deps.db, { ...request, actorAuthUserId: access.value.authUserId });
 }

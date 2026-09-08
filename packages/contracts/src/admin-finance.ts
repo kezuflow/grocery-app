@@ -259,6 +259,7 @@ export type AdminPaymentDetail = AdminPaymentSummary & {
   subjectId: string;
   remainingRefundableMinor: number;
   refundUnavailableReason: string | null;
+  lookupRecovery: AdminPaymentLookupRecovery;
   version: number;
   updatedAt: string;
   allowedActions: ReadonlyArray<"REQUEST_REFUND">;
@@ -457,6 +458,9 @@ export type AdminPaymentsService = {
   getAdminPaymentOverview(request: AuthenticatedRequest): Promise<RpcResult<AdminPaymentOverview>>;
   listAdminPayments(request: AdminPaymentListRequest): Promise<RpcResult<AdminPaymentPage>>;
   getAdminPayment(request: AdminPaymentDetailRequest): Promise<RpcResult<AdminPaymentDetail>>;
+  recheckAdminPayment(
+    request: AdminPaymentRecheckRequest,
+  ): Promise<RpcResult<AdminPaymentRecheckResult>>;
   recheckAdminRefund(
     request: AdminRefundRecheckRequest,
   ): Promise<RpcResult<AdminRefundRecheckResult>>;
@@ -491,4 +495,26 @@ export type AdminOrderIssuesService = {
   applyAdminOrderIssueAction(
     request: AdminOrderIssueActionRequest,
   ): Promise<RpcResult<AdminOrderIssueView>>;
+};
+
+export type AdminPaymentRecheckRequest = AuthenticatedRequest & {
+  paymentIntentId: string;
+  expectedVersion: number;
+  expectedRecoveryVersion: number;
+  reason: string;
+  idempotencyKey: string;
+};
+export type AdminPaymentRecheckResult = {
+  paymentIntentId: string;
+  state: "QUEUED";
+  version: number;
+  acceptedAt: string;
+};
+export type AdminPaymentLookupRecovery = {
+  version: number;
+  status: "NOT_STARTED" | "PENDING" | "COMPLETED" | "EXHAUSTED";
+  attempts: number;
+  nextCheckAt: string | null;
+  lastErrorCode: string | null;
+  canRecheck: boolean;
 };

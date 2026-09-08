@@ -172,6 +172,8 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 
 ## Payments and Refunds
 
+`payment_lookup_recovery(payment_intent_id PK/FK, status PENDING|COMPLETED|EXHAUSTED, attempts, available_at, lease_token NULL, last_error_code NULL, version, created_at, updated_at)` owns bounded read-only lookup scheduling separately from canonical Payment versions. Migration 0075 adds it without changing retained payment evidence. Its lease token fences late workers; a fresh operator recheck uses expected Payment and recovery versions (zero means no recovery record yet). Exhaustion and its review case/audit commit together. Lookup recovery never authorizes another charge or fabricates a terminal payment outcome.
+
 Forward migration `0074_reconciliation_case_versions.sql` adds a positive safe-integer version to retained `payment_reconciliation_case` rows, defaulting to one without rewriting their identity, financial linkage, status, protected evidence or timestamps. Resolution and reopening advance that version. Apply the forward migration before the updated Core, then publish the Web consumer that sends expected versions; older unversioned resolution requests fail validation. No retained deployment has been migrated by this implementation work.
 
 

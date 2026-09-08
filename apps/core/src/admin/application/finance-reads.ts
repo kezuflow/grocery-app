@@ -913,6 +913,30 @@ export async function getAdminPayment(
     )
     .bind(request.paymentIntentId)
     .first<{ provider: string; provider_reference: string | null }>();
+  const lookup = await deps.db
+    .prepare(
+      "SELECT status,attempts,available_at,lease_token,last_error_code,version FROM payment_lookup_recovery WHERE payment_intent_id=?",
+    )
+    .bind(request.paymentIntentId)
+    .first<{
+      status: "PENDING" | "COMPLETED" | "EXHAUSTED";
+      attempts: number;
+      available_at: number;
+      lease_token: string | null;
+      last_error_code: string | null;
+      version: number;
+    }>();
+  const lookupRecovery: import("@freshmarkets/contracts").AdminPaymentLookupRecovery = {
+    version: lookup?.version ?? 0,
+    status: lookup?.status ?? "NOT_STARTED",
+    attempts: lookup?.attempts ?? 0,
+    nextCheckAt: lookup?.status === "PENDING" ? new Date(lookup.available_at).toISOString() : null,
+    lastErrorCode: lookup?.last_error_code ?? null,
+    canRecheck:
+      access.value.capabilities.includes("payments.manage") &&
+      ["INITIATED", "REQUIRES_ACTION", "PROCESSING"].includes(row.status) &&
+      (!lookup?.lease_token || lookup.available_at <= Date.now()),
+  };
   const refundUnavailableReason = !access.value.capabilities.includes("refunds.manage")
     ? "Global refund permission is required."
     : !refundable
@@ -941,6 +965,7 @@ export async function getAdminPayment(
       refundedMinor: row.refundedMinor,
       remainingRefundableMinor,
       refundUnavailableReason,
+      lookupRecovery,
       version: intent.version,
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(intent.updatedAt).toISOString(),

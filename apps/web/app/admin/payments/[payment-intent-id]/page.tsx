@@ -1,4 +1,5 @@
 "use client";
+import { PaymentRecovery } from "../../../../components/admin/payment-recovery";
 import { RefundRecovery } from "../../../../components/admin/refund-recovery";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -154,6 +155,9 @@ export default function PaymentDetailPage({
               </AlertDescription>
             </Alert>
           ) : null}
+          <ListPageSection title="Payment status recovery">
+            <PaymentRecovery payment={payment} onAccepted={() => load(paymentId)} />
+          </ListPageSection>
           <ListPageSection title="Summary">
             <AdminDetailGrid>
               <div>
