@@ -97,12 +97,24 @@ export async function acceptInvitationRecord(
     email: string;
     staffId: string;
     idempotencyKey: string;
+    requestHash: string;
     requestId: string;
     now: number;
   },
 ): Promise<void> {
   const c = command;
   await database.batch([
+    database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -35 WHERE NOT EXISTS (SELECT 1 FROM user WHERE id=? AND lower(trim(email))=? AND email_verified=1)",
+      )
+      .bind(c.userId, c.email),
+    database
+      .prepare(
+        "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES ('iam.acceptInvitation',?,?,'PROCESSING','staff_identity',?,?) ON CONFLICT(scope,idempotency_key) DO UPDATE SET status='PROCESSING',updated_at=excluded.updated_at WHERE idempotency_records.request_hash=excluded.request_hash AND idempotency_records.status IN ('PROCESSING','FAILED')",
+      )
+      .bind(c.idempotencyKey, c.requestHash, c.now, c.now),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=1"),
     database
       .prepare(`UPDATE staff_invitation SET status='ACCEPTED',accepted_auth_user_id=?,version=version+1,updated_at=?
       WHERE id=? AND email_normalized=? AND status='PENDING' AND version=? AND expires_at>?
@@ -120,23 +132,35 @@ export async function acceptInvitationRecord(
       .prepare(`INSERT INTO staff_identity(id,auth_user_id,display_name,status,version,created_at,updated_at)
       SELECT ?,?,display_name,'active',1,?,? FROM staff_invitation WHERE id=?`)
       .bind(c.staffId, c.userId, c.now, c.now, c.invitationId),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=1"),
     database
       .prepare(
         "INSERT INTO staff_role(staff_id,role_id) SELECT ?,role_id FROM staff_invitation_role WHERE invitation_id=?",
       )
       .bind(c.staffId, c.invitationId),
     database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=(SELECT COUNT(*) FROM staff_invitation_role WHERE invitation_id=?)",
+      )
+      .bind(c.invitationId),
+    database
       .prepare(`INSERT INTO staff_scope(id,staff_id,scope_kind,market_id,location_id)
       SELECT ?||':'||id,?,scope_kind,market_id,location_id FROM staff_invitation_scope WHERE invitation_id=?`)
       .bind(c.staffId, c.staffId, c.invitationId),
     database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=(SELECT COUNT(*) FROM staff_invitation_scope WHERE invitation_id=?)",
+      )
+      .bind(c.invitationId),
+    database
       .prepare(`INSERT INTO audit_event(id,actor_user_id,action,aggregate_type,aggregate_id,details_json,correlation_id,occurred_at)
       VALUES (?,?,'STAFF.INVITATION_ACCEPTED','staff_identity',?,'{}',?,?)`)
       .bind(`staff-invitation:${c.invitationId}`, c.userId, c.staffId, c.requestId, c.now),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=1"),
     database
       .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=?
-      WHERE scope='iam.acceptInvitation' AND idempotency_key=? AND status='PROCESSING'`)
-      .bind(c.staffId, c.now, c.idempotencyKey),
+      WHERE scope='iam.acceptInvitation' AND idempotency_key=? AND request_hash=? AND status='PROCESSING'`)
+      .bind(c.staffId, c.now, c.idempotencyKey, c.requestHash),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=1"),
   ]);
 }

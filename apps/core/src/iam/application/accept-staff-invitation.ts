@@ -14,7 +14,7 @@ type StaffInvitationDeps = {
   db: D1Database;
   accessContext?: ResolvedApplicationContext;
 };
-import { claimCommandIdempotency } from "../../idempotency";
+import { requestHash, findIdempotencyRecord } from "../../idempotency";
 import { iamSchema } from "../schema";
 import {
   acceptInvitationRecord,
@@ -67,44 +67,39 @@ export async function acceptStaffInvitation(
     .bind(request.invitationId, email)
     .first();
   if (!invitation) return failure("NOT_FOUND", "Staff invitation not found", request.requestId);
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    Date.now,
-    "iam.acceptInvitation",
-    request.idempotencyKey,
-    {
-      invitationId: request.invitationId,
-      expectedVersion: request.expectedVersion,
-      userId: access.value.userId,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing?.requestHash !== claim.hash)
+  const hash = await requestHash({
+    invitationId: request.invitationId,
+    expectedVersion: request.expectedVersion,
+    userId: access.value.userId,
+  });
+  async function replay(): Promise<RpcResult<{ staffId: string }> | null> {
+    const saved = await findIdempotencyRecord(
+      deps.db,
+      "iam.acceptInvitation",
+      request.idempotencyKey,
+    );
+    if (!saved) return null;
+    if (saved.requestHash !== hash)
       return failure("IDEMPOTENCY_CONFLICT", "Idempotency key conflict", request.requestId);
-    if (claim.existing.status === "SUCCEEDED" && claim.existing.resultReference)
-      return {
-        ok: true,
-        value: { staffId: claim.existing.resultReference },
-        requestId: request.requestId,
-      };
-    return failure("CONFLICT", "Invitation acceptance is processing", request.requestId);
+    if (saved.status === "SUCCEEDED" && saved.resultReference)
+      return { ok: true, value: { staffId: saved.resultReference }, requestId: request.requestId };
+    return null;
   }
+  const prior = await replay();
+  if (prior) return prior;
   const staffId = crypto.randomUUID();
   try {
     await acceptInvitationRecord(deps.db, {
       ...request,
       userId: access.value.userId,
+      requestHash: hash,
       email,
       staffId,
       now: Date.now(),
     });
   } catch {
-    await deps.db
-      .prepare(
-        "UPDATE idempotency_records SET status='FAILED',updated_at=? WHERE scope='iam.acceptInvitation' AND idempotency_key=? AND status='PROCESSING'",
-      )
-      .bind(Date.now(), request.idempotencyKey)
-      .run();
+    const completed = await replay();
+    if (completed) return completed;
     return failure(
       "CONFLICT",
       "Invitation changed, expired, or its access grants are unavailable; ask your administrator to review it",

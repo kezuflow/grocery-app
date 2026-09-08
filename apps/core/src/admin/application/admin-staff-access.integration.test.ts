@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { acceptStaffInvitation } from "../../iam/application/accept-staff-invitation";
+import { createAuth } from "../../auth/service";
+import { requestHash } from "../../idempotency";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -778,6 +781,48 @@ describe("staff invitation acceptance", () => {
     if (!invitation.ok) throw new Error("Invitation creation failed");
     return { manager, principal, invitation: invitation.value, role: role.value };
   }
+  it.each(["PROCESSING", "FAILED"])(
+    "recovers a retained %s acceptance claim without widening its intent",
+    async (status) => {
+      const fixture = await offered();
+      const offer = await core.getMyStaffInvitation({
+        headers: { cookie: fixture.principal.cookie },
+        requestId: crypto.randomUUID(),
+      });
+      if (!offer.ok || !offer.value) throw new Error("Offer missing");
+      const command = {
+        headers: { cookie: fixture.principal.cookie },
+        requestId: crypto.randomUUID(),
+        invitationId: fixture.invitation.invitationId,
+        expectedVersion: offer.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const hash = await requestHash({
+        invitationId: command.invitationId,
+        expectedVersion: command.expectedVersion,
+        userId: fixture.principal.userId,
+      });
+      await env.DB.prepare(
+        "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES ('iam.acceptInvitation',?,?,?,'iam.acceptInvitation',?,?)",
+      )
+        .bind(command.idempotencyKey, hash, status, Date.now(), Date.now())
+        .run();
+      expect(
+        await core.acceptStaffInvitation({
+          ...command,
+          expectedVersion: command.expectedVersion + 1,
+        }),
+      ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+      const accepted = await core.acceptStaffInvitation(command);
+      expect(accepted).toMatchObject({ ok: true });
+      expect(await core.acceptStaffInvitation(command)).toEqual(accepted);
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) AS count FROM staff_identity WHERE auth_user_id=?")
+          .bind(fixture.principal.userId)
+          .first(),
+      ).toEqual({ count: 1 });
+    },
+  );
   it("accepts the saved grants once through Core and cannot escalate or cross identities", async () => {
     const fixture = await offered();
     const own = { headers: { cookie: fixture.principal.cookie }, requestId: crypto.randomUUID() };
@@ -872,6 +917,108 @@ describe("staff invitation acceptance", () => {
     }
     expect(await core.acceptStaffInvitation(command)).toMatchObject({ ok: true });
   });
+  it.each(["staff", "role", "scope", "audit", "receipt"] as const)(
+    "rejects an ignored required %s without granting partial access or success",
+    async (effect) => {
+      const fixture = await offered();
+      const command = {
+        headers: { cookie: fixture.principal.cookie },
+        requestId: crypto.randomUUID(),
+        invitationId: fixture.invitation.invitationId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const target =
+        effect === "staff"
+          ? "BEFORE INSERT ON staff_identity"
+          : effect === "role"
+            ? "BEFORE INSERT ON staff_role"
+            : effect === "scope"
+              ? "BEFORE INSERT ON staff_scope"
+              : effect === "audit"
+                ? "BEFORE INSERT ON audit_event WHEN NEW.action='STAFF.INVITATION_ACCEPTED'"
+                : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='iam.acceptInvitation' AND NEW.status='SUCCEEDED'";
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_invitation_effect ${target} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await core.acceptStaffInvitation(command)).toMatchObject({
+          ok: false,
+          error: { code: "CONFLICT" },
+        });
+        expect(
+          await env.DB.prepare("SELECT status,version FROM staff_invitation WHERE id=?")
+            .bind(command.invitationId)
+            .first(),
+        ).toEqual({ status: "PENDING", version: 1 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) n FROM staff_identity WHERE auth_user_id=?")
+            .bind(fixture.principal.userId)
+            .first(),
+        ).toEqual({ n: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM idempotency_records WHERE scope='iam.acceptInvitation' AND idempotency_key=?",
+          )
+            .bind(command.idempotencyKey)
+            .first(),
+        ).toEqual({ n: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_invitation_effect");
+      }
+      const accepted = await core.acceptStaffInvitation(command);
+      expect(accepted.ok).toBe(true);
+      expect(await core.acceptStaffInvitation(command)).toEqual(accepted);
+    },
+  );
+  it.each(["email", "verification"] as const)(
+    "rechecks current %s after authentication before accepting access",
+    async (change) => {
+      const fixture = await offered();
+      const command = {
+        headers: { cookie: fixture.principal.cookie },
+        requestId: crypto.randomUUID(),
+        invitationId: fixture.invitation.invitationId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const db = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await target
+                .prepare(
+                  change === "email"
+                    ? "UPDATE user SET email=? WHERE id=?"
+                    : "UPDATE user SET email_verified=? WHERE id=?",
+                )
+                .bind(
+                  change === "email" ? `${crypto.randomUUID()}@example.com` : 0,
+                  fixture.principal.userId,
+                )
+                .run();
+              return target.batch(statements);
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect(await acceptStaffInvitation({ auth: createAuth(env), db }, command)).toMatchObject({
+        ok: false,
+        error: { code: "CONFLICT" },
+      });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) n FROM staff_identity WHERE auth_user_id=?")
+          .bind(fixture.principal.userId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM staff_invitation WHERE id=?")
+          .bind(command.invitationId)
+          .first(),
+      ).toEqual({ status: "PENDING", version: 1 });
+    },
+  );
   it("rejects unverified identity, expired invitations and archived roles without access", async () => {
     const fixture = await offered();
     const command = {
