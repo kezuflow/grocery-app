@@ -2,6 +2,7 @@ import { readPaymentReactionRecovery } from "../../payments/application/read-pay
 import { readProviderEventRecovery } from "../../payments/application/read-provider-event-recovery";
 import {
   reconciliationResolutionEvidence,
+  refundedCommitmentResolutionEvidence,
   unresolvedReconciliationReason,
 } from "../../payments/infrastructure/d1/reconciliation-resolution";
 import type {
@@ -880,7 +881,7 @@ export async function getAdminPayment(
     }>();
   const cases = await deps.db
     .prepare(
-      `SELECT id, category, status, created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible
+      `SELECT id, category, status, created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible,(${refundedCommitmentResolutionEvidence}) refundedCommitment
        FROM payment_reconciliation_case WHERE payment_intent_id=? ORDER BY created_at DESC`,
     )
     .bind(request.paymentIntentId)
@@ -888,6 +889,7 @@ export async function getAdminPayment(
       id: string;
       version: number;
       eligible: number;
+      refundedCommitment: number;
       category: import("@freshmarkets/contracts").ReconciliationCaseCategory;
       status: "OPEN" | "RESOLVED";
       createdAt: number;
@@ -1024,6 +1026,7 @@ export async function getAdminPayment(
       })),
       reconciliationCases: cases.results.map((item) => ({
         caseId: item.id,
+        resolutionAction: item.refundedCommitment ? "CONFIRM_REFUNDED_COMMITMENT" : "RESOLVE",
         version: item.version,
         resolutionUnavailableReason:
           item.status !== "OPEN"
@@ -1098,7 +1101,7 @@ export async function listAdminReconciliationCases(
   const rows = await deps.db
     .prepare(
       `SELECT id, payment_intent_id AS paymentIntentId, category, status,
-              created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible
+              created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible,(${refundedCommitmentResolutionEvidence}) refundedCommitment
        FROM payment_reconciliation_case ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)
@@ -1106,6 +1109,7 @@ export async function listAdminReconciliationCases(
       id: string;
       version: number;
       eligible: number;
+      refundedCommitment: number;
       paymentIntentId: string | null;
       category: AdminReconciliationCaseView["category"];
       status: "OPEN" | "RESOLVED";
@@ -1127,6 +1131,7 @@ export async function listAdminReconciliationCases(
     paymentReactionRecovery: reactionRecoveries.get(row.id),
     providerEventRecovery: recoveries.get(row.id),
     caseId: row.id,
+    resolutionAction: row.refundedCommitment ? "CONFIRM_REFUNDED_COMMITMENT" : "RESOLVE",
     version: row.version,
     resolutionUnavailableReason:
       row.status !== "OPEN"

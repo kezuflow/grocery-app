@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
+import { locationManager } from "../../test-location-fixtures";
+import { requestRefund } from "../../payments/application/request-refund";
+import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
+import { redrivePaymentReactions } from "../../payments/application/redrive-payment-reactions";
 import { createOrderAmendment } from "./create-order-amendment";
 import { applyAmendmentPaymentReaction } from "./apply-amendment-payment-reaction";
 import { createAmendmentPaymentIntent } from "../../payments/application/create-amendment-payment-intent";
@@ -7,6 +11,7 @@ import { reconcilePayment } from "../../payments/application/reconcile-payment";
 import {
   createMockPaymentProvider,
   setMockObservedState,
+  setMockRefundObservation,
 } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
@@ -108,6 +113,119 @@ async function committedOrder() {
 }
 
 describe("paid-order amendments", () => {
+  it("closes a fully refunded uncommitted addition without changing the original Order or demand", async () => {
+    const f = await committedOrder();
+    const addition = await createOrderAmendment(env.DB, {
+      customerId: f.customerId,
+      orderId: f.orderId,
+      expectedOrderVersion: 5,
+      additions: [{ skuId: f.skuId, quantity: 2 }],
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    });
+    if (!addition.ok) throw new Error("Missing addition");
+    const provider = createMockPaymentProvider(),
+      registry = new ProviderRegistry("test", [provider]);
+    const payment = await createAmendmentPaymentIntent(env.DB, registry, "mock", {
+      customerId: f.customerId,
+      amendmentId: addition.value.amendmentId,
+      expectedAmendmentVersion: addition.value.version,
+      expectedCurrency: "PHP",
+      expectedTotalMinor: addition.value.financial.totalMinor,
+      returnUrl: "https://app.example/orders",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+      headers: {},
+    });
+    if (!payment.ok) throw new Error("Missing payment");
+    const paymentId = payment.value.paymentIntentId;
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(paymentId)
+      .first<{ provider_reference: string }>();
+    if (!attempt) throw new Error("Missing attempt");
+    setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+    await reconcilePayment(env.DB, registry, {
+      paymentIntentId: paymentId,
+      idempotencyKey: crypto.randomUUID(),
+      actorId: "test",
+      requestId: crypto.randomUUID(),
+    });
+    const reaction = await env.DB.prepare(
+      "SELECT id FROM payment_reaction WHERE payment_intent_id=?",
+    )
+      .bind(paymentId)
+      .first<{ id: string }>();
+    if (!reaction) throw new Error("Missing reaction");
+    // Retained exhausted-attempt seam; the scheduler creates the actual review case.
+    await env.DB.prepare("UPDATE payment_reaction SET attempts=5,available_at=0 WHERE id=?")
+      .bind(reaction.id)
+      .run();
+    await redrivePaymentReactions(env.DB, registry, Date.now());
+    const refundKey = crypto.randomUUID();
+    expect(
+      await requestRefund(env.DB, registry, {
+        paymentIntentId: paymentId,
+        amountMinor: addition.value.financial.totalMinor,
+        reason: "Addition could not be committed",
+        idempotencyKey: refundKey,
+        actorId: "finance-test",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    if (!provider.lookupRefund) throw new Error("Missing provider lookup");
+    const observation = await provider.lookupRefund({
+      providerReference: attempt.provider_reference,
+      providerRefundReference: null,
+      refundProviderIdempotencyKey: refundKey,
+    });
+    if (observation.outcome !== "FOUND") throw new Error("Missing provider refund acceptance");
+    setMockRefundObservation(provider, refundKey, {
+      outcome: "FOUND",
+      refund: { ...observation.refund, canonicalState: "SUCCEEDED", observedAt: Date.now() },
+    });
+    await reconcileRefunds(env.DB, registry, Date.now() + 120000);
+    const record = await env.DB.prepare(
+      "SELECT id,version FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REACTION_FAILURE'",
+    )
+      .bind(paymentId)
+      .first<{ id: string; version: number }>();
+    if (!record) throw new Error("Missing case");
+    const manager = await locationManager("global");
+    await env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='refunds.manage'",
+    )
+      .bind(manager.id)
+      .run();
+    expect(
+      await exports.default.resolveAdminReconciliationCase({
+        headers: manager.headers,
+        caseId: record.id,
+        expectedVersion: record.version,
+        reason: "Confirmed the full addition refund",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" } });
+    expect(
+      await env.DB.prepare("SELECT status,total_minor FROM grocery_order WHERE id=?")
+        .bind(f.orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED", total_minor: 16000 });
+    expect(
+      await env.DB.prepare("SELECT status FROM paid_order_amendment WHERE id=?")
+        .bind(addition.value.amendmentId)
+        .first(),
+    ).toEqual({ status: "FAILED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM committed_demand WHERE amendment_line_id IN (SELECT id FROM paid_order_amendment_line WHERE amendment_id=?)",
+      )
+        .bind(addition.value.amendmentId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
   it.each(["paymentVersion", "refund"] as const)(
     "rejects a transaction-time %s change without committing paid additions",
     async (kind) => {

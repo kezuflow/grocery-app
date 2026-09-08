@@ -218,6 +218,8 @@ Provider-side payment creation are resumable commands. Core claims application i
 
 Refundable value is reserved atomically when a refund identity enters `REQUESTED`. `REQUESTED`, `PROCESSING`, `ESCALATED`, and `SUCCEEDED` consume the captured refund budget; only a definitive `FAILED` releases it. Aggregate payment refund state is derived from canonical `SUCCEEDED` refund totals only.
 
+When paid commitment never completed, Global financial review can acknowledge a verified full refund and complete the failed commitment's remaining cleanup. Payments proves the canonical refund and records the failed reaction; Checkout and Orders own entitlement and uncommitted-addition cleanup. A committed Order/addition is excluded, another payment's entitlements remain owned by that payment, and no successful Order is invented to close the case. The reviewed outcome and every dependent effect share one guarded transaction and immutable audit evidence.
+
 A `Refund` is an explicit financial adjustment with amount, reason, state, provider identity, and links to affected order/payment/lines where applicable. Refunds never erase the original transaction.
 
 ### Promotion

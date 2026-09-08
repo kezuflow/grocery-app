@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { createPayment } from "../../payments/application/create-payment";
 import { redrivePaymentReactions } from "../../payments/application/redrive-payment-reactions";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
+import {
+  createMockPaymentProvider,
+  setMockRefundObservation,
+} from "../../payments/infrastructure/providers/mock-payment-provider";
+import { requestRefund } from "../../payments/application/request-refund";
+import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
@@ -160,7 +167,235 @@ async function seedReaction(quoteId: string) {
   return { intentId, reactionId };
 }
 
+async function refundedUncommittedFixture(partial = false) {
+  await configureInstant();
+  const { quoteId, customerId } = await seededInstantQuote(false, true);
+  const { intentId, reactionId } = await seedReaction(quoteId);
+  await env.DB.exec(
+    "CREATE TRIGGER fail_refunded_commit BEFORE INSERT ON grocery_order BEGIN SELECT RAISE(ABORT,'TEST_COMMIT_FAILURE'); END",
+  );
+  try {
+    expect(
+      await applyCheckoutPaymentReaction(env.DB, {
+        reactionId,
+        paymentIntentId: intentId,
+        checkoutAttemptId: quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      }),
+    ).toMatchObject({ applied: false });
+  } finally {
+    await env.DB.exec("DROP TRIGGER fail_refunded_commit");
+  }
+  await env.DB.prepare("UPDATE payment_reaction SET attempts=5,available_at=0 WHERE id=?")
+    .bind(reactionId)
+    .run();
+  const provider = createMockPaymentProvider(),
+    registry = new ProviderRegistry("test", [provider]);
+  await redrivePaymentReactions(env.DB, registry, Date.now());
+  const record = await env.DB.prepare(
+    "SELECT id,version FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REACTION_FAILURE'",
+  )
+    .bind(intentId)
+    .first<{ id: string; version: number }>();
+  const payment = await env.DB.prepare("SELECT amount_minor FROM payment_intent WHERE id=?")
+    .bind(intentId)
+    .first<{ amount_minor: number }>();
+  if (!record || !payment) throw new Error("Missing failed commitment evidence");
+  async function refund(amountMinor: number) {
+    const key = crypto.randomUUID();
+    const accepted = await requestRefund(env.DB, registry, {
+      paymentIntentId: intentId,
+      amountMinor,
+      reason: "Unable to commit paid groceries",
+      idempotencyKey: key,
+      actorId: "finance-test",
+      requestId: crypto.randomUUID(),
+    });
+    expect(accepted).toMatchObject({ ok: true });
+    if (!provider.lookupRefund) throw new Error("Missing mock refund lookup");
+    const observation = await provider.lookupRefund({
+      providerReference: `mock_pay_${intentId}`,
+      providerRefundReference: null,
+      refundProviderIdempotencyKey: key,
+    });
+    if (observation.outcome !== "FOUND")
+      throw new Error("Missing actual test-provider refund acceptance");
+    setMockRefundObservation(provider, key, {
+      outcome: "FOUND",
+      refund: { ...observation.refund, canonicalState: "SUCCEEDED", observedAt: Date.now() },
+    });
+    await reconcileRefunds(env.DB, registry, Date.now() + 120000);
+  }
+  await refund(payment.amount_minor - (partial ? 1 : 0));
+  const manager = await locationManager("global");
+  await env.DB.prepare(
+    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='refunds.manage'",
+  )
+    .bind(manager.id)
+    .run();
+  return {
+    quoteId,
+    customerId,
+    intentId,
+    reactionId,
+    refund,
+    command: {
+      headers: manager.headers,
+      caseId: record.id,
+      expectedVersion: record.version,
+      reason: "Confirmed the original payment was fully refunded without an Order",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    },
+  };
+}
+
 describe("instant order commitment", () => {
+  it("cleans retained failed commitment work only after verified full refund", async () => {
+    const f = await refundedUncommittedFixture();
+    await env.DB.prepare("UPDATE payment_reaction SET status='FAILED' WHERE id=?")
+      .bind(f.reactionId)
+      .run();
+    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+      ok: true,
+      value: { resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+      )
+        .bind(f.quoteId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+  it("preserves checkout entitlements owned by another active payment for the same quote", async () => {
+    const f = await refundedUncommittedFixture();
+    const quote = await env.DB.prepare("SELECT total_minor FROM checkout_quote WHERE id=?")
+      .bind(f.quoteId)
+      .first<{ total_minor: number }>();
+    if (!quote) throw new Error("Missing quote");
+    const other = await createPayment(
+      env.DB,
+      new ProviderRegistry("test", [createMockPaymentProvider()]),
+      {
+        purpose: "GROCERY_CHECKOUT",
+        subjectType: "checkout_quote",
+        subjectId: f.quoteId,
+        customerId: f.customerId,
+        amountMinor: quote.total_minor,
+        currency: "PHP",
+        providerCode: "mock",
+        returnUrl: "https://app.example/checkout",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      },
+    );
+    expect(other).toMatchObject({ ok: true });
+    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?").bind(f.quoteId).first(),
+    ).toEqual({ status: "ACTIVE" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+      )
+        .bind(f.quoteId)
+        .first(),
+    ).toEqual({ n: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(f.intentId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+  it.each(["none", "hold", "orderAudit", "paymentAudit", "reaction"] as const)(
+    "closes a fully refunded uncommitted checkout with guarded %s cleanup",
+    async (fault) => {
+      const f = await refundedUncommittedFixture();
+      const trigger =
+        fault === "hold"
+          ? "CREATE TRIGGER ignore_refunded_cleanup BEFORE UPDATE ON checkout_inventory_holds WHEN NEW.status='RELEASED' BEGIN SELECT RAISE(IGNORE); END"
+          : fault === "reaction"
+            ? "CREATE TRIGGER ignore_refunded_cleanup BEFORE UPDATE ON payment_reaction WHEN NEW.status='FAILED' BEGIN SELECT RAISE(IGNORE); END"
+            : `CREATE TRIGGER ignore_refunded_cleanup BEFORE INSERT ON audit_event WHEN NEW.action='${fault === "orderAudit" ? "ORDER.REFUNDED_COMMITMENT_CLOSED" : "PAYMENT.REFUNDED_COMMITMENT_CONFIRMED"}' BEGIN SELECT RAISE(IGNORE); END`;
+      if (fault !== "none") {
+        await env.DB.exec(trigger);
+        try {
+          expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+            ok: false,
+            error: { code: "CONFLICT" },
+          });
+          expect(
+            await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
+              .bind(f.reactionId)
+              .first(),
+          ).toEqual({ status: "ESCALATED" });
+          expect(
+            await env.DB.prepare(
+              "SELECT COUNT(*) n FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+            )
+              .bind(f.quoteId)
+              .first(),
+          ).toEqual({ n: 2 });
+          expect(
+            await env.DB.prepare(
+              "SELECT COUNT(*) n FROM idempotency_records WHERE scope='admin.payments.reconcile' AND idempotency_key=?",
+            )
+              .bind(f.command.idempotencyKey)
+              .first(),
+          ).toEqual({ n: 0 });
+        } finally {
+          await env.DB.exec("DROP TRIGGER ignore_refunded_cleanup");
+        }
+      }
+      const accepted = await exports.default.resolveAdminReconciliationCase(f.command);
+      expect(accepted).toMatchObject({
+        ok: true,
+        value: { status: "RESOLVED", resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" },
+      });
+      expect(await exports.default.resolveAdminReconciliationCase(f.command)).toEqual(accepted);
+      expect(
+        await env.DB.prepare("SELECT status,last_error_code FROM payment_reaction WHERE id=?")
+          .bind(f.reactionId)
+          .first(),
+      ).toEqual({ status: "FAILED", last_error_code: "REFUNDED_WITHOUT_COMMITMENT" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='RELEASED'",
+        )
+          .bind(f.quoteId)
+          .first(),
+      ).toEqual({ n: 2 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(f.intentId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM finance_exception WHERE payment_intent_id=? AND status='OPEN'",
+        )
+          .bind(f.intentId)
+          .first(),
+      ).toEqual({ n: 0 });
+    },
+  );
+  it("requires the entire captured amount to be refunded before completing the failed commitment", async () => {
+    const f = await refundedUncommittedFixture(true);
+    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+      ok: false,
+    });
+    await f.refund(1);
+    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+      ok: true,
+    });
+  });
   it.each(["payment", "reaction", "refund"] as const)(
     "rejects a transaction-time %s change before all commitment effects",
     async (kind) => {

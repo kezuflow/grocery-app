@@ -18,6 +18,7 @@ export const reconciliationCaseSchema = z.object({
       unavailableReason: z.string().nullable(),
     })
     .optional(),
+  resolutionAction: z.enum(["RESOLVE", "CONFIRM_REFUNDED_COMMITMENT"]).optional(),
   caseId: z.string(),
   paymentIntentId: z.string().nullable(),
   category: z.enum(reconciliationCaseCategories),

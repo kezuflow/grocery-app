@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { abandonCheckoutAttempt } from "./abandon-checkout-attempt";
+import { releaseRefundedCheckoutStatements } from "./release-refunded-checkout";
 
 async function fixture(mode: "INSTANT" | "SCHEDULED") {
   const suffix = crypto.randomUUID();
@@ -94,6 +95,76 @@ function command(data: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("abandonCheckoutAttempt", () => {
+  it.each(["none", "ignoredBalance", "underflow"] as const)(
+    "releases retained Scheduled capacity atomically with %s evidence",
+    async (fault) => {
+      // Retained compatibility fixture only: current Scheduled checkout allocates no capacity.
+      const data = await fixture("SCHEDULED");
+      const balanceSql =
+        "SELECT allocated,version FROM cycle_zone_capacity WHERE cycle_id='cycle-next-cebu' AND zone_id='zone-cebu-city-core' AND location_id='location-cebu-central'";
+      if (fault === "underflow")
+        await env.DB.prepare(
+          "UPDATE cycle_zone_capacity SET allocated=0 WHERE cycle_id='cycle-next-cebu' AND zone_id='zone-cebu-city-core' AND location_id='location-cebu-central'",
+        ).run();
+      const before = await env.DB.prepare(balanceSql).first<{
+        allocated: number;
+        version: number;
+      }>();
+      if (!before) throw new Error("Missing retained capacity balance");
+      if (fault === "ignoredBalance")
+        await env.DB.exec(
+          "CREATE TRIGGER ignore_refunded_capacity BEFORE UPDATE ON cycle_zone_capacity BEGIN SELECT RAISE(IGNORE); END",
+        );
+      try {
+        const execute = () =>
+          env.DB.batch(
+            releaseRefundedCheckoutStatements(env.DB, {
+              quoteId: data.quoteId,
+              customerId: data.customerId,
+              paymentIntentId: "retained-refunded-payment",
+              now: Date.now(),
+            }),
+          );
+        if (fault !== "none") {
+          await expect(execute()).rejects.toThrow();
+          expect(await env.DB.prepare(balanceSql).first()).toEqual(before);
+          expect(
+            await env.DB.prepare(
+              "SELECT status FROM capacity_allocations WHERE checkout_attempt_id=?",
+            )
+              .bind(data.quoteId)
+              .first(),
+          ).toEqual({ status: "HELD" });
+          expect(
+            await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+              .bind(data.quoteId)
+              .first(),
+          ).toEqual({ status: "ACTIVE" });
+        } else {
+          await execute();
+          await execute();
+          expect(await env.DB.prepare(balanceSql).first()).toEqual({
+            allocated: before.allocated - 1,
+            version: before.version + 1,
+          });
+          expect(
+            await env.DB.prepare(
+              "SELECT status FROM capacity_allocations WHERE checkout_attempt_id=?",
+            )
+              .bind(data.quoteId)
+              .first(),
+          ).toEqual({ status: "RELEASED" });
+          expect(
+            await env.DB.prepare("SELECT status FROM checkout_attempts WHERE id=?")
+              .bind(data.quoteId)
+              .first(),
+          ).toEqual({ status: "FAILED" });
+        }
+      } finally {
+        if (fault === "ignoredBalance") await env.DB.exec("DROP TRIGGER ignore_refunded_capacity");
+      }
+    },
+  );
   it.each(["INSTANT", "SCHEDULED"] as const)(
     "releases %s provisional resources once and creates no financial outcome",
     async (mode) => {

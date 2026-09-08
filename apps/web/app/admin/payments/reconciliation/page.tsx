@@ -148,7 +148,9 @@ export default function PaymentReconciliationPage() {
                       }
                       onClick={() => setSelected(item)}
                     >
-                      Review resolution
+                      {item.resolutionAction === "CONFIRM_REFUNDED_COMMITMENT"
+                        ? "Review refunded outcome"
+                        : "Review resolution"}
                     </Button>
                   </div>
                 </li>
@@ -165,10 +167,18 @@ export default function PaymentReconciliationPage() {
       )}
       <ConfirmCommandDialog
         open={selected !== null}
-        title="Resolve reconciliation case?"
+        title={
+          selected?.resolutionAction === "CONFIRM_REFUNDED_COMMITMENT"
+            ? "Confirm refunded commitment?"
+            : "Resolve reconciliation case?"
+        }
         resource={selected?.category.replaceAll("_", " ") ?? "Financial exception"}
         scope="Global financial review"
-        consequence="Core verifies completed financial recovery and records your resolution with an immutable audit event."
+        consequence={
+          selected?.resolutionAction === "CONFIRM_REFUNDED_COMMITMENT"
+            ? "Verify the full refund, release unused checkout entitlements, and record the failed commitment without creating an Order or paid addition. The financial case will close with an audit record."
+            : "Core verifies completed financial recovery and records your resolution with an immutable audit event."
+        }
         confirmLabel="Confirm resolution"
         pending={pending}
         onCancel={() => setSelected(null)}

@@ -3,11 +3,15 @@ import { z } from "@freshmarkets/validation";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import {
+  completedReconciliationResolutionEvidence,
+  refundedCommitmentResolutionEvidence,
   reconciliationResolutionEvidence,
   unresolvedReconciliationReason,
 } from "../infrastructure/d1/reconciliation-resolution";
+import { prepareRefundedCommitmentResolution } from "./prepare-refunded-commitment-resolution";
 const scope = "admin.payments.reconcile";
 const receipt = z.object({
+  resolutionAction: z.enum(["RESOLVE", "CONFIRM_REFUNDED_COMMITMENT"]).optional(),
   caseId: z.string(),
   paymentIntentId: z.string().nullable(),
   category: z.enum([
@@ -83,7 +87,7 @@ export async function resolveReconciliationCase(
   if (prior) return prior;
   const row = await database
     .prepare(
-      `SELECT id,payment_intent_id,category,status,created_at,version,(${reconciliationResolutionEvidence}) eligible FROM payment_reconciliation_case WHERE id=?`,
+      `SELECT id,payment_intent_id,category,status,created_at,version,(${reconciliationResolutionEvidence}) eligible,(${refundedCommitmentResolutionEvidence}) refunded_commitment FROM payment_reconciliation_case WHERE id=?`,
     )
     .bind(command.caseId)
     .first<{
@@ -94,6 +98,7 @@ export async function resolveReconciliationCase(
       created_at: number;
       version: number;
       eligible: number;
+      refunded_commitment: number;
     }>();
   if (!row) return fail("NOT_FOUND", "Reconciliation case not found");
   if (row.version !== command.expectedVersion)
@@ -102,6 +107,7 @@ export async function resolveReconciliationCase(
   if (!row.eligible) return fail("CONFLICT", unresolvedReconciliationReason);
   const now = Date.now();
   const accepted: AdminReconciliationCaseView = {
+    resolutionAction: row.refunded_commitment ? "CONFIRM_REFUNDED_COMMITMENT" : "RESOLVE",
     caseId: row.id,
     paymentIntentId: row.payment_intent_id,
     category: row.category,
@@ -112,6 +118,9 @@ export async function resolveReconciliationCase(
     resolutionUnavailableReason: null,
   };
   try {
+    const refundedCleanup = row.refunded_commitment
+      ? await prepareRefundedCommitmentResolution(database, { ...command, reason, now })
+      : [];
     await database.batch([
       database
         .prepare(`INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT ${authority}`)
@@ -122,9 +131,10 @@ export async function resolveReconciliationCase(
         )
         .bind(scope, command.idempotencyKey, hash, now, now, hash, legacyHash),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+      ...refundedCleanup,
       database
         .prepare(
-          `UPDATE payment_reconciliation_case SET status='RESOLVED',resolved_at=?,version=version+1 WHERE id=? AND version=? AND status='OPEN' AND payment_intent_id IS ? AND category=? AND created_at=? AND ${reconciliationResolutionEvidence}`,
+          `UPDATE payment_reconciliation_case SET status='RESOLVED',resolved_at=?,version=version+1 WHERE id=? AND version=? AND status='OPEN' AND payment_intent_id IS ? AND category=? AND created_at=? AND ${completedReconciliationResolutionEvidence}`,
         )
         .bind(now, row.id, row.version, row.payment_intent_id, row.category, row.created_at),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),

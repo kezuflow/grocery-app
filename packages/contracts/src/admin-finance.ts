@@ -335,6 +335,7 @@ export type AdminRefundRecheckResult = {
 };
 
 export type AdminReconciliationCaseView = {
+  resolutionAction?: "RESOLVE" | "CONFIRM_REFUNDED_COMMITMENT";
   paymentReactionRecovery?: {
     canRetry: boolean;
     attempts: number;
