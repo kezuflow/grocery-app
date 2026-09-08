@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useStaffCommand } from "../../../components/admin/use-staff-command";
+import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import type {
   AdminStaffInvitationPage,
   AdminStaffPage,
@@ -47,7 +47,7 @@ export default function StaffPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
-  const { notice, setNotice, run, retry, busy, uncertain } = useStaffCommand();
+  const { notice, setNotice, run, retry, busy, uncertain } = useAdminCommand();
 
   const load = useCallback(() => {
     setState({ phase: "loading" });

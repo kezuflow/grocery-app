@@ -1,3 +1,5 @@
+import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
+import { revokeCustomerInvitation } from "./admin/application/customer-invitations";
 import {
   getInitialAdministratorSetup,
   completeInitialAdministratorSetup,
@@ -1490,6 +1492,58 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return inviteCustomerCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getMyCustomerInvitation(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getMyCustomerInvitation(
+      {
+        database: this.env.DB,
+        session: (request) => this.context.session(request),
+        now: () => this.context.now(),
+      },
+      validation.data,
+    );
+  }
+  async acceptCustomerInvitation(
+    input: import("@freshmarkets/contracts").AcceptCustomerInvitationRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({
+        invitationId: validationSchema.string().trim().min(1).max(200),
+        expectedVersion: validationSchema.number().int().positive(),
+        idempotencyKey: idempotencyKeySchema,
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return acceptCustomerInvitation(
+      {
+        database: this.env.DB,
+        session: (request) => this.context.session(request),
+        now: () => this.context.now(),
+      },
+      validation.data,
+    );
+  }
+  async revokeCustomerInvitation(
+    input: import("@freshmarkets/contracts").RevokeCustomerInvitationRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({
+        invitationId: validationSchema.string().trim().min(1).max(200),
+        expectedVersion: validationSchema.number().int().positive(),
+        reason: validationSchema.string().trim().min(1).max(500),
+        idempotencyKey: idempotencyKeySchema,
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return revokeCustomerInvitation(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

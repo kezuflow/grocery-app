@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import { z } from "@freshmarkets/validation";
-type PendingStaffCommand = {
+type PendingAdminCommand = {
   operationId: string;
   url: string;
   body: string;
@@ -12,13 +12,13 @@ const commandResultSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: z.unknown() }),
   z.object({ ok: z.literal(false), error: z.object({ message: z.string() }) }),
 ]);
-export function useStaffCommand() {
+export function useAdminCommand() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
-  const pending = useRef<PendingStaffCommand | null>(null);
+  const pending = useRef<PendingAdminCommand | null>(null);
   const inFlight = useRef(false);
-  const execute = useCallback(async (command: PendingStaffCommand) => {
+  const execute = useCallback(async (command: PendingAdminCommand) => {
     if (inFlight.current) return false;
     inFlight.current = true;
     setBusy(true);
@@ -29,7 +29,7 @@ export function useStaffCommand() {
         body: command.body,
       });
       const parsed = commandResultSchema.safeParse(await response.json());
-      if (!parsed.success) throw new Error("Invalid staff command result");
+      if (!parsed.success) throw new Error("Invalid command result");
       pending.current = null;
       setUncertain(false);
       setNotice(parsed.data.ok ? "Done." : parsed.data.error.message);

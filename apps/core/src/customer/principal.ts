@@ -72,54 +72,9 @@ export async function resolveAuthenticatedCustomer(
     };
   }
 
-  const customerId = crypto.randomUUID();
-  const occurredAt = now();
   try {
     const result = await database.batch<CustomerRow>([
-      database
-        .prepare(`INSERT INTO customer_principal(id,auth_user_id,status,created_at,updated_at)
-        SELECT ?,id,'active',?,? FROM user WHERE id=? AND NOT EXISTS(SELECT 1 FROM customer_principal WHERE auth_user_id=?)`)
-        .bind(crypto.randomUUID(), occurredAt, occurredAt, user.id, user.id),
-      database
-        .prepare(
-          "INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(SELECT 1 FROM customer_principal WHERE auth_user_id=? AND status='active')",
-        )
-        .bind(user.id),
-      database
-        .prepare(`UPDATE customer SET principal_id=(SELECT id FROM customer_principal WHERE auth_user_id=?)
-        WHERE auth_user_id=? AND principal_id IS NULL AND status='active'`)
-        .bind(user.id, user.id),
-      database
-        .prepare(`INSERT INTO customer(id,auth_user_id,principal_id,status,created_at,updated_at)
-        SELECT ?,auth_user_id,id,'active',?,? FROM customer_principal WHERE auth_user_id=? AND status='active'
-        AND NOT EXISTS(SELECT 1 FROM customer WHERE auth_user_id=?)`)
-        .bind(customerId, occurredAt, occurredAt, user.id, user.id),
-      database
-        .prepare(`INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(
-        SELECT 1 FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id
-        WHERE c.auth_user_id=? AND c.status='active' AND cp.status='active')`)
-        .bind(user.id),
-      auditEventStatement(
-        database,
-        {
-          actorUserId: user.id,
-          action: "CUSTOMER.PROVISIONED",
-          resourceType: "customer",
-          resourceId: customerId,
-          correlationId: input.requestId,
-          idempotencyKey: `provision:${customerId}`,
-          occurredAt,
-        },
-        {
-          clause: "EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=?)",
-          binds: [customerId, user.id],
-        },
-      ),
-      database
-        .prepare(
-          "INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()!=1 AND EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=?)",
-        )
-        .bind(customerId, user.id),
+      ...provisionCustomerStatements(database, user.id, input.requestId, now()),
       database.prepare(readSql).bind(user.id),
     ]);
     const customer = result.at(-1)?.results[0];
@@ -146,6 +101,62 @@ export async function resolveAuthenticatedCustomer(
       input.requestId,
     );
   }
+}
+
+/** Compose onboarding with an owning command's other guards and effects. */
+export function provisionCustomerStatements(
+  database: D1Database,
+  authUserId: string,
+  requestId: string,
+  occurredAt: number,
+): D1PreparedStatement[] {
+  const customerId = crypto.randomUUID();
+  return [
+    database
+      .prepare(`INSERT INTO customer_principal(id,auth_user_id,status,created_at,updated_at)
+        SELECT ?,id,'active',?,? FROM user WHERE id=? AND NOT EXISTS(SELECT 1 FROM customer_principal WHERE auth_user_id=?)`)
+      .bind(crypto.randomUUID(), occurredAt, occurredAt, authUserId, authUserId),
+    database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(SELECT 1 FROM customer_principal WHERE auth_user_id=? AND status='active')",
+      )
+      .bind(authUserId),
+    database
+      .prepare(`UPDATE customer SET principal_id=(SELECT id FROM customer_principal WHERE auth_user_id=?)
+        WHERE auth_user_id=? AND principal_id IS NULL AND status='active'`)
+      .bind(authUserId, authUserId),
+    database
+      .prepare(`INSERT INTO customer(id,auth_user_id,principal_id,status,created_at,updated_at)
+        SELECT ?,auth_user_id,id,'active',?,? FROM customer_principal WHERE auth_user_id=? AND status='active'
+        AND NOT EXISTS(SELECT 1 FROM customer WHERE auth_user_id=?)`)
+      .bind(customerId, occurredAt, occurredAt, authUserId, authUserId),
+    database
+      .prepare(`INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(
+        SELECT 1 FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id
+        WHERE c.auth_user_id=? AND c.status='active' AND cp.status='active')`)
+      .bind(authUserId),
+    auditEventStatement(
+      database,
+      {
+        actorUserId: authUserId,
+        action: "CUSTOMER.PROVISIONED",
+        resourceType: "customer",
+        resourceId: customerId,
+        correlationId: requestId,
+        idempotencyKey: `provision:${customerId}`,
+        occurredAt,
+      },
+      {
+        clause: "EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=?)",
+        binds: [customerId, authUserId],
+      },
+    ),
+    database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()!=1 AND EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=?)",
+      )
+      .bind(customerId, authUserId),
+  ];
 }
 
 function failure(

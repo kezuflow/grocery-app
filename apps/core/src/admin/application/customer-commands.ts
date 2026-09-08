@@ -1,7 +1,6 @@
 import type {
   AdminCustomerAccessChangeRequest,
   AdminCustomerInvitationListRequest,
-  AdminCustomerInviteRequest,
   AdminCustomerSessionRevocationRequest,
   AdminClosureRequestCommand,
   AdminPrivacyActionRequest,
@@ -25,12 +24,10 @@ import {
   type CustomerAdministrationDeps,
 } from "./customer-administration-access";
 
-const INVITE_SCOPE = "admin.customers.invite";
 const ACCESS_SCOPE = "admin.customers.access";
 const SESSIONS_SCOPE = "admin.customers.sessions.revoke";
 const CLOSURE_SCOPE = "admin.customers.closure";
 const PRIVACY_ACTION_SCOPE = "admin.privacy.action";
-const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 async function readCustomerIdentity(
   database: D1Database,
@@ -82,6 +79,7 @@ function idempotencyFailed(database: D1Database, scope: string, key: string): Pr
 
 type InvitationRow = {
   id: string;
+  version: number;
   email_normalized: string;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
   invited_by_staff_id: string | null;
@@ -92,6 +90,7 @@ type InvitationRow = {
 function toInvitationView(row: InvitationRow): CustomerInvitationView {
   return {
     invitationId: row.id,
+    version: row.version,
     email: row.email_normalized,
     status: row.status,
     invitedByStaffId: row.invited_by_staff_id,
@@ -136,7 +135,7 @@ export async function listCustomerInvitations(
   const binds = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : [];
   const rows = await deps.db
     .prepare(
-      `SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at
+      `SELECT id, version, email_normalized, status, invited_by_staff_id, expires_at, created_at
        FROM customer_invitation ${clause} ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)
@@ -150,134 +149,7 @@ export async function listCustomerInvitations(
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
 }
 
-/** Create a durable customer invitation: one PENDING record per email. */
-export async function inviteCustomer(
-  deps: CustomerAdministrationDeps,
-  request: AdminCustomerInviteRequest,
-): Promise<RpcResult<CustomerInvitationView>> {
-  const access = await resolveCustomerAdministrationAccess(deps, request, "customers.manage");
-  if (!access.ok) return access;
-  const email = request.email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return {
-      ok: false,
-      error: {
-        code: "VALIDATION_FAILED",
-        message: "A valid email is required",
-        requestId: request.requestId,
-      },
-    };
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    INVITE_SCOPE,
-    request.idempotencyKey,
-    { email },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return {
-        ok: false,
-        error: {
-          code: "IDEMPOTENCY_CONFLICT",
-          message: "Idempotency key was used with a different request",
-          requestId: request.requestId,
-        },
-      };
-    }
-    if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
-      const row = await deps.db
-        .prepare(
-          "SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at FROM customer_invitation WHERE id = ?",
-        )
-        .bind(claim.existing.resultReference)
-        .first<InvitationRow>();
-      if (row) return { ok: true, value: toInvitationView(row), requestId: request.requestId };
-    }
-    return {
-      ok: false,
-      error: {
-        code: "CONFLICT",
-        message: "The invite command is still processing",
-        requestId: request.requestId,
-      },
-    };
-  }
-
-  const invitationId = crypto.randomUUID();
-  try {
-    await deps.db.batch([
-      deps.db
-        .prepare(
-          "INSERT INTO customer_invitation (id, email_normalized, status, invited_by_staff_id, expires_at, version, idempotency_key, created_at, updated_at) VALUES (?, ?, 'PENDING', ?, ?, 1, ?, ?, ?)",
-        )
-        .bind(
-          invitationId,
-          email,
-          access.value.staffId,
-          now + INVITATION_TTL_MS,
-          request.idempotencyKey,
-          now,
-          now,
-        ),
-      auditEventStatement(deps.db, {
-        actorUserId: access.value.authUserId,
-        action: "CUSTOMER.INVITED",
-        resourceType: "customer_invitation",
-        resourceId: invitationId,
-        details: { email },
-        correlationId: request.requestId,
-        occurredAt: now,
-      }),
-      idempotencyComplete(deps.db, INVITE_SCOPE, request.idempotencyKey, invitationId, now),
-    ]);
-  } catch (error) {
-    log("error", "admin.customers.invite_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, INVITE_SCOPE, request.idempotencyKey);
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("UNIQUE")) {
-      return {
-        ok: false,
-        error: {
-          code: "CONFLICT",
-          message: "A pending invitation for this email already exists",
-          requestId: request.requestId,
-        },
-      };
-    }
-    return {
-      ok: false,
-      error: {
-        code: "CONFLICT",
-        message: "The invitation could not be created",
-        requestId: request.requestId,
-      },
-    };
-  }
-
-  const created = await deps.db
-    .prepare(
-      "SELECT id, email_normalized, status, invited_by_staff_id, expires_at, created_at FROM customer_invitation WHERE id = ?",
-    )
-    .bind(invitationId)
-    .first<InvitationRow>();
-  if (!created) {
-    return {
-      ok: false,
-      error: {
-        code: "INTERNAL_ERROR",
-        message: "The invitation could not be read back",
-        requestId: request.requestId,
-      },
-    };
-  }
-  return { ok: true, value: toInvitationView(created), requestId: request.requestId };
-}
+export { inviteCustomer } from "./customer-invitations";
 
 /** Disable or restore commerce access through the customer_principal gate. */
 export async function changeCustomerAccess(

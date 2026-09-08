@@ -2,8 +2,401 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { acceptCustomerInvitation } from "../../customer/invitations";
+import { createAuth } from "../../auth/service";
+import { inviteCustomer, revokeCustomerInvitation } from "./customer-invitations";
 
 const core = exports.default as unknown as CoreServiceBinding;
+
+describe("verified customer invitation acceptance", () => {
+  it("acceptance and revocation cannot both win", async () => {
+    const { account, manager, request } = await invitation();
+    const responses = await Promise.all([
+      core.acceptCustomerInvitation(request),
+      core.revokeCustomerInvitation({
+        ...request,
+        headers: { cookie: manager.cookie },
+        reason: "Withdraw invitation",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(responses.filter((result) => result.ok)).toHaveLength(1);
+    const row = await env.DB.prepare(
+      "SELECT status,version,accepted_customer_id FROM customer_invitation WHERE id=?",
+    )
+      .bind(request.invitationId)
+      .first<{ status: string; version: number; accepted_customer_id: string | null }>();
+    expect(row?.version).toBe(2);
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: row?.status === "ACCEPTED" ? 1 : 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action IN ('CUSTOMER.INVITATION_ACCEPTED','CUSTOMER.INVITATION_REVOKED')",
+      )
+        .bind(request.invitationId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it("rejects unauthenticated acceptance and offer reads", async () => {
+    expect(
+      await core.getMyCustomerInvitation({ headers: {}, requestId: "unauth-offer" }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
+    expect(
+      await core.acceptCustomerInvitation({
+        headers: {},
+        requestId: "unauth-accept",
+        invitationId: "unknown",
+        expectedVersion: 1,
+        idempotencyKey: "unauth-accept",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
+  });
+  it("lets only one distinct acceptance decision win", async () => {
+    const { account, request } = await invitation();
+    const responses = await Promise.all([
+      core.acceptCustomerInvitation(request),
+      core.acceptCustomerInvitation({ ...request, idempotencyKey: crypto.randomUUID() }),
+    ]);
+    expect(responses.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.INVITATION_ACCEPTED'",
+      )
+        .bind(request.invitationId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it("preserves creation and revocation receipts after later transitions", async () => {
+    const manager = await seedManager();
+    const creation = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      email: `receipt-${crypto.randomUUID()}@example.com`,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const created = await core.inviteCustomer(creation);
+    if (!created.ok) throw new Error("Creation failed");
+    const revocation = {
+      ...creation,
+      invitationId: created.value.invitationId,
+      expectedVersion: 1,
+      reason: "Incorrect invitee",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const revoked = await core.revokeCustomerInvitation(revocation);
+    expect(revoked).toMatchObject({ ok: true, value: { status: "REVOKED", version: 2 } });
+    expect(await core.revokeCustomerInvitation(revocation)).toEqual(revoked);
+    expect(await core.inviteCustomer(creation)).toEqual(created);
+    expect(
+      await core.revokeCustomerInvitation({ ...revocation, reason: "Changed reason" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await core.inviteCustomer({ ...creation, idempotencyKey: crypto.randomUUID() }),
+    ).toMatchObject({ ok: true });
+  });
+  it.each([
+    "create:invitation",
+    "create:audit",
+    "create:receipt",
+    "revoke:invitation",
+    "revoke:audit",
+    "revoke:receipt",
+  ])("rolls back %s and recovers the same key", async (scenario) => {
+    const manager = await seedManager();
+    const creation = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      email: `rollback-${crypto.randomUUID()}@example.com`,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const revoke = scenario.startsWith("revoke");
+    const created = revoke ? await core.inviteCustomer(creation) : null;
+    const invitationId = created?.ok ? created.value.invitationId : "unused";
+    const revocation = {
+      ...creation,
+      invitationId,
+      expectedVersion: 1,
+      reason: "Withdraw invitation",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const command = () =>
+      revoke ? core.revokeCustomerInvitation(revocation) : core.inviteCustomer(creation);
+    const trigger = scenario.endsWith("invitation")
+      ? revoke
+        ? "BEFORE UPDATE ON customer_invitation"
+        : "BEFORE INSERT ON customer_invitation"
+      : scenario.endsWith("audit")
+        ? `BEFORE INSERT ON audit_event WHEN NEW.action='${revoke ? "CUSTOMER.INVITATION_REVOKED" : "CUSTOMER.INVITED"}'`
+        : "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'";
+    await env.DB.exec(
+      `CREATE TRIGGER test_ignore_invitation_admin ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+    );
+    try {
+      expect(await command()).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM customer_invitation WHERE email_normalized=? AND status='PENDING'",
+        )
+          .bind(creation.email)
+          .first(),
+      ).toEqual({ count: revoke ? 1 : 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(revoke ? revocation.idempotencyKey : creation.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER test_ignore_invitation_admin");
+    }
+    expect(await command()).toMatchObject({ ok: true });
+  });
+  it.each(["create", "revoke"])(
+    "rechecks Global customer authority for %s inside the transaction",
+    async (operation) => {
+      const manager = await seedManager();
+      const request = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        email: `authority-${crypto.randomUUID()}@example.com`,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const created = operation === "revoke" ? await core.inviteCustomer(request) : null;
+      const database = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await target
+                .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                .bind(manager.staffId)
+                .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const deps = { auth: createAuth(env), db: database };
+      const result =
+        operation === "create"
+          ? await inviteCustomer(deps, request)
+          : await revokeCustomerInvitation(deps, {
+              ...request,
+              idempotencyKey: crypto.randomUUID(),
+              invitationId: created?.ok ? created.value.invitationId : "missing",
+              expectedVersion: 1,
+              reason: "Withdraw",
+            });
+      expect(result).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM customer_invitation WHERE email_normalized=? AND status='PENDING'",
+        )
+          .bind(request.email)
+          .first(),
+      ).toEqual({ count: operation === "revoke" ? 1 : 0 });
+    },
+  );
+  async function invitation() {
+    const manager = await seedManager();
+    const account = await signUp();
+    const user = await env.DB.prepare("SELECT email FROM user WHERE id=?")
+      .bind(account.userId)
+      .first<{ email: string }>();
+    if (!user) throw new Error("Missing test identity");
+    const created = await core.inviteCustomer({
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      email: user.email,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error("Invitation creation failed");
+    const offer = await core.getMyCustomerInvitation({
+      headers: { cookie: account.cookie },
+      requestId: crypto.randomUUID(),
+    });
+    expect(offer.ok && offer.value?.invitationId).toBe(created.value.invitationId);
+    return {
+      account,
+      manager,
+      request: {
+        headers: { cookie: account.cookie },
+        requestId: crypto.randomUUID(),
+        invitationId: created.value.invitationId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    };
+  }
+  it("provisions through the reachable invitation command and replays the original acceptance", async () => {
+    const { account, request } = await invitation();
+    const responses = await Promise.all([
+      core.acceptCustomerInvitation(request),
+      core.acceptCustomerInvitation(request),
+    ]);
+    expect(responses[0]).toMatchObject({ ok: true });
+    expect(responses[1]).toEqual(responses[0]);
+    await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+      .bind(account.userId)
+      .run();
+    expect(await core.acceptCustomerInvitation(request)).toEqual(responses[0]);
+    expect(await core.acceptCustomerInvitation({ ...request, expectedVersion: 2 })).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.INVITATION_ACCEPTED'",
+      )
+        .bind(request.invitationId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it.each(["customer", "acceptance", "audit", "receipt"])(
+    "rolls back all effects when the required %s write is ignored, then retries",
+    async (effect) => {
+      const { account, request } = await invitation();
+      const trigger =
+        effect === "customer"
+          ? "BEFORE INSERT ON customer"
+          : effect === "acceptance"
+            ? "BEFORE UPDATE ON customer_invitation WHEN NEW.status='ACCEPTED'"
+            : effect === "audit"
+              ? "BEFORE INSERT ON audit_event WHEN NEW.action='CUSTOMER.INVITATION_ACCEPTED'"
+              : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='customer.invitation.accept' AND NEW.status='SUCCEEDED'";
+      await env.DB.exec(
+        `CREATE TRIGGER test_ignore_customer_acceptance ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await core.acceptCustomerInvitation(request)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+            .bind(account.userId)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT status,version,accepted_customer_id FROM customer_invitation WHERE id=?",
+          )
+            .bind(request.invitationId)
+            .first(),
+        ).toEqual({ status: "PENDING", version: 1, accepted_customer_id: null });
+        expect(
+          await env.DB.prepare(
+            "SELECT count(*) AS count FROM audit_event WHERE actor_user_id=? AND action IN ('CUSTOMER.PROVISIONED','CUSTOMER.INVITATION_ACCEPTED')",
+          )
+            .bind(account.userId)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT count(*) AS count FROM idempotency_records WHERE scope='customer.invitation.accept' AND idempotency_key=?",
+          )
+            .bind(`${account.userId}:${request.idempotencyKey}`)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER test_ignore_customer_acceptance");
+      }
+      expect(await core.acceptCustomerInvitation(request)).toMatchObject({ ok: true });
+    },
+  );
+  it.each(["unverified", "wrong-account", "stale", "revoked", "disabled"])(
+    "rejects %s without provisioning",
+    async (reason) => {
+      const { account, request } = await invitation();
+      if (reason === "unverified")
+        await env.DB.prepare("UPDATE user SET email_verified=0 WHERE id=?")
+          .bind(account.userId)
+          .run();
+      if (reason === "wrong-account") request.headers.cookie = (await signUp()).cookie;
+      if (reason === "stale") request.expectedVersion = 2;
+      if (reason === "revoked")
+        await env.DB.prepare(
+          "UPDATE customer_invitation SET status='REVOKED',version=version+1 WHERE id=?",
+        )
+          .bind(request.invitationId)
+          .run();
+      if (reason === "disabled")
+        await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+          .bind(account.userId)
+          .run();
+      expect(await core.acceptCustomerInvitation(request)).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
+  it.each([-1, 0, 1])("enforces expiry at the exact boundary (%s ms)", async (offset) => {
+    const { request } = await invitation();
+    const expires = await env.DB.prepare("SELECT expires_at FROM customer_invitation WHERE id=?")
+      .bind(request.invitationId)
+      .first<{ expires_at: number }>();
+    if (!expires) throw new Error("Missing invitation");
+    const result = await acceptCustomerInvitation(
+      {
+        database: env.DB,
+        session: async (input) =>
+          (await createAuth(env).api.getSession({ headers: new Headers(input.headers) }))?.user ??
+          null,
+        now: () => expires.expires_at + offset,
+      },
+      request,
+    );
+    expect(result.ok).toBe(offset < 0);
+  });
+  it("rejects identity verification withdrawn between the read and transaction", async () => {
+    const { account, request } = await invitation();
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare("UPDATE user SET email_verified=0 WHERE id=?")
+              .bind(account.userId)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(
+      await acceptCustomerInvitation(
+        {
+          database,
+          session: async (input) =>
+            (await createAuth(env).api.getSession({ headers: new Headers(input.headers) }))?.user ??
+            null,
+          now: Date.now,
+        },
+        request,
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+});
 
 let counter = 0;
 

@@ -14,7 +14,7 @@ import {
   ListPageSection,
   StatusBadge,
 } from "../../../../../components/admin/admin-shell";
-import { useStaffCommand } from "../../../../../components/admin/use-staff-command";
+import { useAdminCommand } from "../../../../../components/admin/use-admin-command";
 
 type LoadState =
   | { phase: "loading" }
@@ -31,7 +31,7 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
-  const command = useStaffCommand();
+  const command = useAdminCommand();
   const { notice, setNotice, busy, uncertain } = command;
 
   const load = useCallback(() => {

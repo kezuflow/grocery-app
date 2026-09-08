@@ -16,7 +16,7 @@ import {
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
-import { useStaffCommand } from "../../../../components/admin/use-staff-command";
+import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -31,7 +31,7 @@ export default function RolesPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const command = useStaffCommand();
+  const command = useAdminCommand();
   const { notice, setNotice, busy, uncertain } = command;
   const pagination = useAdminPagination();
 

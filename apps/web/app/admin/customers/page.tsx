@@ -6,6 +6,7 @@ import type {
   CustomerInvitationPage,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
 import { Clipboard, EllipsisVertical, Eye, MailPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -13,7 +14,7 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
-import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import { CustomerAccessStatusBadge } from "../../../components/admin/customer-status-badges";
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../components/admin/admin-shell";
@@ -40,6 +41,27 @@ type LoadState =
   | { phase: "error"; message: string; requestId?: string }
   | { phase: "ready" };
 
+const invitationResultSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      items: z.array(
+        z.object({
+          invitationId: z.string(),
+          version: z.number().int().positive(),
+          email: z.string(),
+          status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
+          invitedByStaffId: z.string().nullable(),
+          expiresAt: z.string(),
+          createdAt: z.string(),
+        }),
+      ),
+      nextCursor: z.string().nullable(),
+    }),
+  }),
+  z.object({ ok: z.literal(false), error: z.object({ message: z.string() }) }),
+]);
+
 function date(value: string | null): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-PH", {
@@ -57,6 +79,7 @@ export default function CustomersPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [customers, setCustomers] = useState<AdminCustomerPage | null>(null);
   const [invitations, setInvitations] = useState<CustomerInvitationPage | null>(null);
+  const [invitationLoading, setInvitationLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -64,7 +87,8 @@ export default function CustomersPage() {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const inviteIntent = useAdminCommandIntent();
+  const invitationCommand = useAdminCommand();
+  const [revokeReasons, setRevokeReasons] = useState<Record<string, string>>({});
   const pagination = useAdminPagination(appliedQuery);
 
   const load = useCallback(async (search: string, cursor: string | null) => {
@@ -89,10 +113,10 @@ export default function CustomersPage() {
         });
         return;
       }
-      const invitationPayload =
-        (await invitationResponse.json()) as RpcResult<CustomerInvitationPage>;
+      const invitationPayload = invitationResultSchema.parse(await invitationResponse.json());
       setCustomers(customerPayload.value);
       setInvitations(invitationPayload.ok ? invitationPayload.value : null);
+      if (!invitationPayload.ok) setNotice(invitationPayload.error.message);
       setSelectedIds(new Set());
       setState({ phase: "ready" });
     } catch {
@@ -110,23 +134,13 @@ export default function CustomersPage() {
       setNotice("An email is required.");
       return;
     }
-    try {
-      const payload = await inviteIntent.submit(async (idempotencyKey) => {
-        const response = await fetch("/api/admin/customers/invitations", {
-          method: "POST",
-          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-          body: JSON.stringify({ email: inviteEmail.trim() }),
-        });
-        return (await response.json()) as RpcResult<unknown>;
-      });
-      setNotice(payload.ok ? "Invitation created." : payload.error.message);
-      if (payload.ok) {
-        setInviteEmail("");
-        setInviteOpen(false);
-        await load(appliedQuery, pagination.cursor);
-      }
-    } catch {
-      setNotice("Connection lost. Retry to safely reuse the same invitation request.");
+    if (
+      await invitationCommand.run("create-invitation", "/api/admin/customers/invitations", {
+        email: inviteEmail.trim(),
+      })
+    ) {
+      setInviteEmail("");
+      await load(appliedQuery, pagination.cursor);
     }
   }
 
@@ -137,6 +151,34 @@ export default function CustomersPage() {
       else next.delete(customerId);
       return next;
     });
+  }
+
+  async function loadMoreInvitations() {
+    const cursor = invitations?.nextCursor;
+    if (!cursor || invitationLoading) return;
+    setInvitationLoading(true);
+    try {
+      const response = await fetch(
+        `/api/admin/customers/invitations?cursor=${encodeURIComponent(cursor)}`,
+      );
+      const result = invitationResultSchema.parse(await response.json());
+      if (!result.ok) {
+        setNotice(result.error.message);
+        return;
+      }
+      setInvitations((previous) =>
+        previous?.nextCursor === cursor
+          ? {
+              items: [...previous.items, ...result.value.items],
+              nextCursor: result.value.nextCursor,
+            }
+          : previous,
+      );
+    } catch {
+      setNotice("More invitations could not be loaded. Please retry.");
+    } finally {
+      setInvitationLoading(false);
+    }
   }
 
   async function copyCustomerId(customer: AdminCustomerSummary) {
@@ -168,6 +210,17 @@ export default function CustomersPage() {
         }
       />
       <AdminLiveRegion message={notice} />
+      <AdminLiveRegion message={invitationCommand.notice} />
+      {invitationCommand.uncertain ? (
+        <Button
+          disabled={invitationCommand.busy}
+          onClick={async () => {
+            if (await invitationCommand.retry()) await load(appliedQuery, pagination.cursor);
+          }}
+        >
+          Retry unconfirmed action
+        </Button>
+      ) : null}
 
       {inviteOpen ? (
         <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 shadow-[var(--fm-shadow-card)]">
@@ -177,6 +230,7 @@ export default function CustomersPage() {
               <Input
                 placeholder="customer@example.com"
                 type="email"
+                disabled={invitationCommand.busy || invitationCommand.uncertain}
                 value={inviteEmail}
                 onChange={(event) => setInviteEmail(event.target.value)}
               />
@@ -185,19 +239,81 @@ export default function CustomersPage() {
               type="submit"
               size="sm"
               className="fm-admin-reference-primary"
-              disabled={inviteIntent.pending}
+              disabled={invitationCommand.busy || invitationCommand.uncertain}
             >
-              {inviteIntent.pending ? "Sending…" : "Send invitation"}
+              {invitationCommand.busy ? "Creating…" : "Create invitation"}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setInviteOpen(false)}>
               Cancel
             </Button>
           </form>
           {invitations && invitations.items.length > 0 ? (
-            <p className="mt-3 text-xs text-[var(--fm-text-muted)]">
-              {invitations.items.length} pending invitation
-              {invitations.items.length === 1 ? "" : "s"} on this page
-            </p>
+            <section className="mt-4 space-y-3" aria-label="Customer invitations">
+              <h2 className="font-semibold">Customer invitations</h2>
+              <p className="text-sm">
+                Invitees sign in with their verified email at{" "}
+                <Link className="underline" href="/customer-invitation">
+                  Customer invitation
+                </Link>
+                . Email delivery is not yet available.
+              </p>
+              {invitations.items.map((invitation) => (
+                <article key={invitation.invitationId} className="space-y-2 rounded border p-3">
+                  <p className="break-all">{invitation.email}</p>
+                  <p>
+                    {invitation.status} · Expires {date(invitation.expiresAt)}
+                  </p>
+                  {invitation.status === "PENDING" ? (
+                    <fieldset
+                      disabled={invitationCommand.busy || invitationCommand.uncertain}
+                      className="flex flex-col gap-2 sm:flex-row"
+                    >
+                      <Input
+                        aria-label={`Revocation reason for ${invitation.email}`}
+                        placeholder="Reason for revocation"
+                        maxLength={500}
+                        value={revokeReasons[invitation.invitationId] ?? ""}
+                        onChange={(event) =>
+                          setRevokeReasons((previous) => ({
+                            ...previous,
+                            [invitation.invitationId]: event.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        variant="outline"
+                        disabled={!revokeReasons[invitation.invitationId]?.trim()}
+                        onClick={async () => {
+                          if (
+                            await invitationCommand.run(
+                              `revoke:${invitation.invitationId}`,
+                              "/api/admin/customers/invitations/revoke",
+                              {
+                                invitationId: invitation.invitationId,
+                                expectedVersion: invitation.version,
+                                reason: revokeReasons[invitation.invitationId]?.trim(),
+                              },
+                            )
+                          )
+                            await load(appliedQuery, pagination.cursor);
+                        }}
+                      >
+                        Revoke invitation
+                      </Button>
+                    </fieldset>
+                  ) : null}
+                </article>
+              ))}
+              {invitations.nextCursor ? (
+                <Button
+                  variant="outline"
+                  disabled={invitationLoading}
+                  onClick={() => void loadMoreInvitations()}
+                >
+                  {invitationLoading ? "Loading invitations…" : "Load more invitations"}
+                </Button>
+              ) : null}
+            </section>
           ) : null}
         </section>
       ) : null}

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState, use } from "react";
-import { useStaffCommand } from "../../../../components/admin/use-staff-command";
+import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import Link from "next/link";
 import type { AdminRolePage, AdminStaffDetail, RpcResult } from "@freshmarkets/contracts";
 import { Button } from "../../../../components/ui/button";
@@ -22,7 +22,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
   const { "staff-id": staffId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
-  const command = useStaffCommand();
+  const command = useAdminCommand();
   const { notice, setNotice, busy, uncertain } = command;
   const [displayName, setDisplayName] = useState("");
   const [marketId, setMarketId] = useState("");

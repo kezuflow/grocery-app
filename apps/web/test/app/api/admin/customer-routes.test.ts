@@ -5,6 +5,8 @@ const coreMocks = vi.hoisted(() => ({
   getAdminCustomer: vi.fn(),
   listCustomerInvitations: vi.fn(),
   inviteCustomer: vi.fn(),
+  acceptCustomerInvitation: vi.fn(),
+  revokeCustomerInvitation: vi.fn(),
   changeCustomerAccess: vi.fn(),
   revokeCustomerSessions: vi.fn(),
   requestCustomerClosure: vi.fn(),
@@ -23,6 +25,8 @@ import {
   POST as invite,
 } from "@/app/api/admin/customers/invitations/route";
 import { POST as changeAccess } from "@/app/api/admin/customers/[customer-id]/access/route";
+import { POST as acceptInvitation } from "@/app/api/customer-invitation/route";
+import { POST as revokeInvitation } from "@/app/api/admin/customers/invitations/revoke/route";
 import { POST as revokeSessions } from "@/app/api/admin/customers/[customer-id]/sessions/revoke/route";
 import { POST as closureRequest } from "@/app/api/admin/customers/[customer-id]/closure-requests/route";
 import { GET as listPrivacy } from "@/app/api/admin/privacy-requests/route";
@@ -45,6 +49,45 @@ function jsonRequest(url: string, body: unknown): Request {
 }
 
 describe("customer crm BFF routes", () => {
+  it("validates and forwards reviewed invitation decisions", async () => {
+    const body = { invitationId: "invitation-1", expectedVersion: 2 };
+    coreMocks.acceptCustomerInvitation.mockResolvedValue({
+      ok: true,
+      value: { customerId: "customer-1", invitationId: "invitation-1" },
+    });
+    await acceptInvitation(jsonRequest("https://freshmarkets.ph/api/customer-invitation", body));
+    expect(coreMocks.acceptCustomerInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ...body,
+        idempotencyKey: "idem-1",
+        headers: expect.objectContaining(COOKIE),
+      }),
+    );
+    coreMocks.revokeCustomerInvitation.mockResolvedValue({
+      ok: false,
+      error: { code: "CONFLICT", message: "Changed" },
+    });
+    await revokeInvitation(
+      jsonRequest("https://freshmarkets.ph/api/admin/customers/invitations/revoke", {
+        ...body,
+        reason: "Withdraw",
+      }),
+    );
+    expect(coreMocks.revokeCustomerInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({ ...body, reason: "Withdraw", idempotencyKey: "idem-1" }),
+    );
+  });
+  it.each([
+    {},
+    { invitationId: "invitation-1", expectedVersion: 0 },
+    { invitationId: "invitation-1", expectedVersion: "1" },
+  ])("rejects malformed invitation decisions without calling Core", async (body) => {
+    expect(
+      (await acceptInvitation(jsonRequest("https://freshmarkets.ph/api/customer-invitation", body)))
+        .status,
+    ).toBe(400);
+    expect(coreMocks.acceptCustomerInvitation).not.toHaveBeenCalled();
+  });
   it("delegates the customer list with query parameters and cookies", async () => {
     coreMocks.listAdminCustomers.mockResolvedValue({
       ok: true,

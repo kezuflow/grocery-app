@@ -64,6 +64,7 @@ export type AdminCustomerPage = {
 
 export type CustomerInvitationView = {
   invitationId: string;
+  version: number;
   email: string;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
   invitedByStaffId: string | null;
@@ -115,6 +116,20 @@ export type AdminCustomerInvitationListRequest = AuthenticatedRequest & {
   limit?: number;
 };
 
+export type CustomerInvitationOffer = {
+  invitationId: string;
+  expectedVersion: number;
+  expiresAt: string;
+};
+
+export type AcceptCustomerInvitationRequest = AuthenticatedRequest & {
+  invitationId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type RevokeCustomerInvitationRequest = AcceptCustomerInvitationRequest & { reason: string };
+
 export type AdminCustomerAccessChangeRequest = AuthenticatedRequest & {
   customerId: string;
   action: "DISABLE" | "RESTORE";
@@ -151,11 +166,20 @@ export type AdminPrivacyActionRequest = AuthenticatedRequest & {
 };
 
 /**
- * Customer CRM administration. Every method derives the caller from the
- * forwarded session and requires the named capability plus a global scope in
- * Core. There is no update, delete, or credential surface here.
+ * Customer CRM and invitation onboarding. Administrative methods require the
+ * named capability and Global scope. Invitation review/acceptance instead use
+ * the invitee's verified session identity. No credential surface is exposed.
  */
 export type AdminCustomerService = {
+  revokeCustomerInvitation(
+    request: RevokeCustomerInvitationRequest,
+  ): Promise<RpcResult<CustomerInvitationView>>;
+  getMyCustomerInvitation(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<CustomerInvitationOffer | null>>;
+  acceptCustomerInvitation(
+    request: AcceptCustomerInvitationRequest,
+  ): Promise<RpcResult<{ customerId: string; invitationId: string }>>;
   listAdminCustomers(request: AdminCustomerListRequest): Promise<RpcResult<AdminCustomerPage>>;
   getAdminCustomer(request: AdminCustomerDetailRequest): Promise<RpcResult<AdminCustomerDetail>>;
   listCustomerInvitations(
