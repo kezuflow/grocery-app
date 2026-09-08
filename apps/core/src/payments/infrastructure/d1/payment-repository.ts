@@ -340,9 +340,18 @@ export function createPaymentRepository(database: D1Database) {
     }): Promise<void> {
       return database
         .prepare(
-          "INSERT INTO payment_reconciliation_case (id, payment_intent_id, category, status, details_json, created_at) VALUES (?, ?, ?, 'OPEN', ?, ?)",
+          "INSERT INTO payment_reconciliation_case (id, payment_intent_id, category, status, details_json, created_at) SELECT ?, ?, ?, 'OPEN', ?, ? WHERE NOT EXISTS (SELECT 1 FROM payment_reconciliation_case WHERE payment_intent_id IS ? AND category=? AND details_json=? AND status='OPEN')",
         )
-        .bind(crypto.randomUUID(), input.intentId, input.category, input.detailsJson, input.now)
+        .bind(
+          crypto.randomUUID(),
+          input.intentId,
+          input.category,
+          input.detailsJson,
+          input.now,
+          input.intentId,
+          input.category,
+          input.detailsJson,
+        )
         .run()
         .then(() => undefined);
     },

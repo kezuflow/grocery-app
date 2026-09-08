@@ -1,3 +1,7 @@
+import {
+  reconciliationResolutionEvidence,
+  unresolvedReconciliationReason,
+} from "../../payments/infrastructure/d1/reconciliation-resolution";
 import type {
   AdminMembershipDetailRequest,
   AdminMembershipListRequest,
@@ -874,12 +878,14 @@ export async function getAdminPayment(
     }>();
   const cases = await deps.db
     .prepare(
-      `SELECT id, category, status, created_at AS createdAt, resolved_at AS resolvedAt
+      `SELECT id, category, status, created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible
        FROM payment_reconciliation_case WHERE payment_intent_id=? ORDER BY created_at DESC`,
     )
     .bind(request.paymentIntentId)
     .all<{
       id: string;
+      version: number;
+      eligible: number;
       category: import("@freshmarkets/contracts").ReconciliationCaseCategory;
       status: "OPEN" | "RESOLVED";
       createdAt: number;
@@ -991,6 +997,15 @@ export async function getAdminPayment(
       })),
       reconciliationCases: cases.results.map((item) => ({
         caseId: item.id,
+        version: item.version,
+        resolutionUnavailableReason:
+          item.status !== "OPEN"
+            ? "Case is already resolved."
+            : !access.value.capabilities.includes("refunds.manage")
+              ? "Global refund permission is required."
+              : item.eligible
+                ? null
+                : unresolvedReconciliationReason,
         paymentIntentId: request.paymentIntentId,
         category: item.category,
         status: item.status,
@@ -1056,12 +1071,14 @@ export async function listAdminReconciliationCases(
   const rows = await deps.db
     .prepare(
       `SELECT id, payment_intent_id AS paymentIntentId, category, status,
-              created_at AS createdAt, resolved_at AS resolvedAt
+              created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible
        FROM payment_reconciliation_case ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)
     .all<{
       id: string;
+      version: number;
+      eligible: number;
       paymentIntentId: string | null;
       category: AdminReconciliationCaseView["category"];
       status: "OPEN" | "RESOLVED";
@@ -1071,6 +1088,15 @@ export async function listAdminReconciliationCases(
   const hasMore = rows.results.length > limit;
   const items: AdminReconciliationCaseView[] = rows.results.slice(0, limit).map((row) => ({
     caseId: row.id,
+    version: row.version,
+    resolutionUnavailableReason:
+      row.status !== "OPEN"
+        ? "Case is already resolved."
+        : !access.value.capabilities.includes("refunds.manage")
+          ? "Global refund permission is required."
+          : row.eligible
+            ? null
+            : unresolvedReconciliationReason,
     paymentIntentId: row.paymentIntentId,
     category: row.category,
     status: row.status,

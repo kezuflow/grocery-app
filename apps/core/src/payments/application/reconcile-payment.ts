@@ -62,8 +62,14 @@ export async function reconcilePayment(
     };
   }
 
-  const provider = registry.require(attempt.provider);
-  const view = await provider.getPayment(attempt.provider_reference);
+  const provider = registry.get(attempt.provider);
+  let view: Awaited<ReturnType<NonNullable<typeof provider>["getPayment"]>> = null;
+  try {
+    view = provider ? await provider.getPayment(attempt.provider_reference) : null;
+  } catch {
+    /* Provider availability is a recoverable observation failure, never financial failure. */
+  }
+
   if (
     !view ||
     view.providerReference !== attempt.provider_reference ||

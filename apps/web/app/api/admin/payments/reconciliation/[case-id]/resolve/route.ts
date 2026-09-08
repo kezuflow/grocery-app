@@ -1,3 +1,4 @@
+import { z } from "@freshmarkets/validation";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
@@ -21,8 +22,13 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "case-
       { status: 400 },
     );
   }
-  const body = (await request.json().catch(() => null)) as { reason?: unknown } | null;
-  if (typeof body?.reason !== "string" || body.reason.trim() === "") {
+  const parsed = z
+    .object({
+      reason: z.string().trim().min(1).max(500),
+      expectedVersion: z.number().int().safe().positive(),
+    })
+    .safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
     return adminJson(
       {
         ok: false as const,
@@ -39,7 +45,8 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "case-
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     caseId,
-    reason: body.reason,
+    reason: parsed.data.reason,
+    expectedVersion: parsed.data.expectedVersion,
     idempotencyKey,
   });
   return adminJson(result);

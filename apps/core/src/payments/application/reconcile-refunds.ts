@@ -188,7 +188,7 @@ async function finishProjection(
     database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
     database
       .prepare(
-        "UPDATE payment_reconciliation_case SET status='RESOLVED',resolved_at=? WHERE id=(SELECT reconciliation_case_id FROM payment_refund WHERE id=?) AND status='OPEN' AND category='REFUND_UNRESOLVED' AND ?='SUCCEEDED'",
+        "UPDATE payment_reconciliation_case SET status='RESOLVED',resolved_at=?,version=version+1 WHERE id=(SELECT reconciliation_case_id FROM payment_refund WHERE id=?) AND status='OPEN' AND category='REFUND_UNRESOLVED' AND ?='SUCCEEDED'",
       )
       .bind(now, row.id, row.status),
     auditEventStatement(database, {
@@ -216,6 +216,7 @@ async function recordUnresolved(
   now: number,
 ): Promise<void> {
   const caseId = `refund-recovery:${row.id}`;
+  const auditKey = `refund-unresolved:${row.id}:${row.version}`;
   const next = now + Math.min(60 * 60_000, 60_000 * 2 ** Math.min(row.attempt_count, 6));
   await database.batch([
     database
@@ -225,7 +226,7 @@ async function recordUnresolved(
       .bind(caseId, JSON.stringify({ refundId: row.id, reason }), now, row.id, row.version),
     database
       .prepare(
-        "UPDATE payment_reconciliation_case SET status='OPEN',resolved_at=NULL WHERE id=? AND EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND version=?)",
+        "UPDATE payment_reconciliation_case SET status='OPEN',resolved_at=NULL,version=version+1 WHERE status='RESOLVED' AND id=? AND EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND version=?)",
       )
       .bind(caseId, row.id, row.version),
     database
@@ -233,6 +234,30 @@ async function recordUnresolved(
         "UPDATE payment_refund SET next_retry_at=?,processing_started_at=NULL,last_error_code=?,reconciliation_case_id=? WHERE id=? AND version=?",
       )
       .bind(next, reason, caseId, row.id, row.version),
+    auditEventStatement(
+      database,
+      {
+        actorUserId: null,
+        action: "payments.refund.recovery-unresolved",
+        resourceType: "payment_refund",
+        resourceId: row.id,
+        reason,
+        details: { attempts: row.attempt_count, caseId },
+        idempotencyKey: auditKey,
+        correlationId: auditKey,
+        occurredAt: now,
+      },
+      {
+        clause:
+          "EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND version=?) AND NOT EXISTS (SELECT 1 FROM audit_event WHERE aggregate_id=? AND action='payments.refund.recovery-unresolved' AND idempotency_key=?)",
+        binds: [row.id, row.version, row.id, auditKey],
+      },
+    ),
+    database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -42 WHERE EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND version=?) AND NOT EXISTS (SELECT 1 FROM audit_event WHERE aggregate_id=? AND action='payments.refund.recovery-unresolved' AND idempotency_key=?)",
+      )
+      .bind(row.id, row.version, row.id, auditKey),
     database
       .prepare(
         "INSERT INTO commitment_abort(id) SELECT -42 WHERE EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND version=? AND (reconciliation_case_id IS NOT ? OR last_error_code IS NOT ? OR next_retry_at IS NOT ?))",

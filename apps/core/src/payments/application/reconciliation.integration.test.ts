@@ -351,3 +351,42 @@ it("preserves an existing paid reaction with a retained idempotency identity", a
     ).results,
   ).toEqual(before.results);
 });
+
+it("records one open lookup exception when provider calls throw or configuration is unavailable", async () => {
+  const { intentId } = await seededIntent();
+  const command = {
+    paymentIntentId: intentId,
+    idempotencyKey: crypto.randomUUID(),
+    actorId: "system:scheduler",
+    requestId: crypto.randomUUID(),
+  };
+  const lookup = vi
+    .spyOn(sharedMock, "getPayment")
+    .mockRejectedValue(new Error("unavailable-provider-private-content"));
+  try {
+    for (let i = 0; i < 3; i++)
+      expect(await reconcilePayment(env.DB, testRegistry(), command)).toMatchObject({
+        ok: true,
+        value: { processingStatus: "RECONCILIATION_REQUIRED" },
+      });
+  } finally {
+    lookup.mockRestore();
+  }
+  expect(await reconcilePayment(env.DB, new ProviderRegistry("test", []), command)).toMatchObject({
+    ok: true,
+    value: { processingStatus: "RECONCILIATION_REQUIRED" },
+  });
+  expect(
+    await env.DB.prepare(
+      "SELECT COUNT(*) n FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='AMBIGUOUS_OUTCOME'",
+    )
+      .bind(intentId)
+      .first(),
+  ).toEqual({ n: 1 });
+  const cases = await env.DB.prepare(
+    "SELECT details_json FROM payment_reconciliation_case WHERE payment_intent_id=?",
+  )
+    .bind(intentId)
+    .all();
+  expect(JSON.stringify(cases)).not.toContain("private-content");
+});

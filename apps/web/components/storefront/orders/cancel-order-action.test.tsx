@@ -39,7 +39,14 @@ describe("CancelOrderAction", () => {
         refunds: [],
       },
     } satisfies RpcResult<OrderCancellationView>;
-    expect(cancellationResultMessage(processing)).toContain("not marked canceled yet");
+    expect(cancellationResultMessage(processing)).toContain("Cancellation requested");
+    expect(cancellationResultMessage(processing)).not.toContain("refund was confirmed");
+    expect(
+      cancellationResultMessage({
+        ...processing,
+        value: { ...processing.value, status: "COMPLETED" },
+      }),
+    ).toContain("refund was confirmed");
   });
 
   it("tells the customer to refresh after a stale version", () => {

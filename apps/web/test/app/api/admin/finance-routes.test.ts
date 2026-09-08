@@ -96,9 +96,12 @@ describe("finance BFF routes", () => {
       }),
     );
     await listCases(new Request("https://x/reconciliation?status=OPEN", { headers: COOKIE }));
-    await resolveCase(jsonRequest("https://x/reconciliation/c1/resolve", { reason: "matched" }), {
-      params: Promise.resolve({ "case-id": "c1" }),
-    });
+    await resolveCase(
+      jsonRequest("https://x/reconciliation/c1/resolve", { reason: "matched", expectedVersion: 1 }),
+      {
+        params: Promise.resolve({ "case-id": "c1" }),
+      },
+    );
 
     expect(coreMocks.requestAdminRefund.mock.calls[0][0]).toMatchObject({
       paymentIntentId: "pi-1",

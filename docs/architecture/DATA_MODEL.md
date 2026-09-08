@@ -172,6 +172,9 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 
 ## Payments and Refunds
 
+Forward migration `0074_reconciliation_case_versions.sql` adds a positive safe-integer version to retained `payment_reconciliation_case` rows, defaulting to one without rewriting their identity, financial linkage, status, protected evidence or timestamps. Resolution and reopening advance that version. Apply the forward migration before the updated Core, then publish the Web consumer that sends expected versions; older unversioned resolution requests fail validation. No retained deployment has been migrated by this implementation work.
+
+
 Refund recovery uses the existing `payment_refund` version, `attempt_count`, `processing_started_at`, `next_retry_at`, `provider_observed_at`, controlled `last_error_code`, and linked `reconciliation_case_id`. Claiming due work advances the version and leases the identity. A lookup may atomically bind an absent provider refund reference only to exact application-key/captured-payment evidence; it cannot overwrite a different reference. The successful Refund and derived Payment total commit together with required audit. Due terminal rows retain unfinished dependent projection work until explicitly completed; bounded exhaustion remains linked to a review case. Recheck command receipts are immutable JSON in the existing idempotency store. No new table or migration is required for this recovery path.
 
 

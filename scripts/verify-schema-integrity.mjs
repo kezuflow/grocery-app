@@ -87,10 +87,47 @@ const balancesBeforeCycleGoods = database
 const ledgerBeforeCycleGoods = database
   .prepare("SELECT rowid,* FROM inventory_ledger_entries ORDER BY rowid")
   .all();
+database
+  .prepare(
+    "INSERT INTO payment_reconciliation_case(id,category,status,details_json,created_at,resolved_at) VALUES (?,?,?,?,?,?)",
+  )
+  .run(
+    "retained-review-evidence",
+    "AMBIGUOUS_OUTCOME",
+    "RESOLVED",
+    JSON.stringify({ retained: true }),
+    1700000000000,
+    1700000001000,
+  );
+const casesBeforeVersion = database
+  .prepare("SELECT rowid,* FROM payment_reconciliation_case ORDER BY rowid")
+  .all();
 apply(
   database,
   migrations.filter((name) => name > "0069_schema_integrity.sql"),
 );
+assert.deepEqual(
+  database
+    .prepare(
+      "SELECT rowid,id,payment_intent_id,category,status,details_json,created_at,resolved_at FROM payment_reconciliation_case ORDER BY rowid",
+    )
+    .all(),
+  casesBeforeVersion,
+);
+assert.equal(
+  database
+    .prepare("SELECT version FROM payment_reconciliation_case WHERE id='retained-review-evidence'")
+    .get().version,
+  1,
+);
+assert.throws(
+  () =>
+    database.exec(
+      "UPDATE payment_reconciliation_case SET version=0 WHERE id='retained-review-evidence'",
+    ),
+  /CHECK constraint failed/,
+);
+
 assert.deepEqual(
   database
     .prepare(

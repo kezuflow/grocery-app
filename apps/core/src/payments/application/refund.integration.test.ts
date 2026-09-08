@@ -802,7 +802,7 @@ describe("staff refund admission and external execution", () => {
                   .run();
               if (kind === "staff")
                 await target
-                  .prepare("UPDATE staff_identity SET status='inactive' WHERE id=?")
+                  .prepare("UPDATE staff_identity SET status='suspended' WHERE id=?")
                   .bind(manager.id)
                   .run();
               if (kind === "payment")

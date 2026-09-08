@@ -170,13 +170,24 @@ export async function redrivePaymentReactions(
     // The canonical state is still insufficient: ask the provider once so a
     // lost webhook cannot strand the reaction. The next sweep re-applies.
     try {
-      await reconcilePayment(database, registry, {
+      const reconciliation = await reconcilePayment(database, registry, {
         paymentIntentId: reaction.payment_intent_id,
         idempotencyKey: `redrive:${reaction.id}:${reaction.attempts}`,
         actorId: "system:scheduler",
         requestId: crypto.randomUUID(),
       });
-      reconciled += 1;
+      if (
+        !reconciliation.ok ||
+        reconciliation.value.processingStatus === "RECONCILIATION_REQUIRED"
+      ) {
+        await database
+          .prepare(
+            "UPDATE payment_reaction SET last_error_code='PROVIDER_LOOKUP_FAILED',updated_at=? WHERE id=? AND status='PENDING' AND attempts=?",
+          )
+          .bind(now, reaction.id, reaction.attempts + 1)
+          .run();
+        retried += 1;
+      } else reconciled += 1;
     } catch {
       await database
         .prepare(

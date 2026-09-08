@@ -269,13 +269,34 @@ describe("redrivePaymentReactions", () => {
   });
 
   it("routes an insufficient-state order commitment through one provider lookup", async () => {
-    const { reactionId } = await seedReaction({
+    const { reactionId, intentId } = await seedReaction({
       intentStatus: "PROCESSING",
       reactionType: "COMMIT_ORDER",
       subjectId: "attempt-1",
       availableAt: null,
     });
-    const summary = await redrivePaymentReactions(env.DB, registry, NOW);
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO customer(id,auth_user_id,status,created_at,updated_at) VALUES ('cust-x','auth-cust-x','active',1,1)",
+    ).run();
+    const reference = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO payment_attempt(id,customer_id,payment_intent_id,amount_minor,currency,status,provider,provider_reference,idempotency_key,created_at,updated_at) VALUES (?,'cust-x',?,29900,'PHP','PROCESSING','mock',?,?,?,?)",
+    )
+      .bind(crypto.randomUUID(), intentId, reference, crypto.randomUUID(), NOW, NOW)
+      .run();
+    const provider = createMockPaymentProvider();
+    provider.getPayment = vi.fn(async () => ({
+      providerReference: reference,
+      canonicalState: "PROCESSING" as const,
+      amountMinor: 29900,
+      currency: "PHP",
+    }));
+    const summary = await redrivePaymentReactions(
+      env.DB,
+      new ProviderRegistry("test", [provider]),
+      NOW,
+    );
+    expect(provider.getPayment).toHaveBeenCalledOnce();
     expect(summary.reconciled).toBeGreaterThanOrEqual(1);
     const reaction = await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
       .bind(reactionId)

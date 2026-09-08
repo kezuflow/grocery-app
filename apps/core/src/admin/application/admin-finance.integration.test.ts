@@ -706,34 +706,28 @@ describe("finance administration", () => {
     expect(request).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
-  it("resolves an open reconciliation case once", async () => {
+  it("does not close an unlinked financial exception without evidence", async () => {
     const manager = await seedManager();
     const caseId = crypto.randomUUID();
     await env.DB.prepare(
-      "INSERT INTO payment_reconciliation_case (id, category, status, details_json, created_at) VALUES (?, 'REACTION_FAILURE', 'OPEN', '{}', ?)",
+      "INSERT INTO payment_reconciliation_case(id,category,status,details_json,created_at) VALUES (?,'REACTION_FAILURE','OPEN','{}',?)",
     )
       .bind(caseId, Date.now())
       .run();
-
-    const resolved = await core.resolveAdminReconciliationCase({
-      requestId: crypto.randomUUID(),
+    const result = await core.resolveAdminReconciliationCase({
       headers: { cookie: manager.cookie },
       caseId,
-      reason: "manually matched",
-      idempotencyKey: `rec-${crypto.randomUUID()}`,
-    });
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    expect(resolved.value.status).toBe("RESOLVED");
-
-    const again = await core.resolveAdminReconciliationCase({
+      expectedVersion: 1,
+      reason: "Manually reviewed",
+      idempotencyKey: crypto.randomUUID(),
       requestId: crypto.randomUUID(),
-      headers: { cookie: manager.cookie },
-      caseId,
-      reason: "again",
-      idempotencyKey: `rec-${crypto.randomUUID()}`,
     });
-    expect(again).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM payment_reconciliation_case WHERE id=?")
+        .bind(caseId)
+        .first(),
+    ).toEqual({ status: "OPEN", version: 1 });
   });
 
   it("lists searchable memberships and cancels through the canonical command", async () => {

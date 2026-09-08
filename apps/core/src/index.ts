@@ -966,6 +966,7 @@ const reconciliationListSchema = authenticatedRequestSchema.extend({
 });
 
 const reconciliationResolveSchema = authenticatedRequestSchema.extend({
+  expectedVersion: validationSchema.number().int().safe().positive(),
   caseId: validationSchema.string().trim().min(1).max(200),
   reason: validationSchema.string().trim().min(1).max(500),
   idempotencyKey: idempotencyKeySchema,

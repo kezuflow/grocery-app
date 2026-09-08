@@ -1,3 +1,4 @@
+import { resolveReconciliationCase } from "../../payments/application/resolve-reconciliation-case";
 import { recheckStaffRefund } from "../../payments/application/recheck-staff-refund";
 import type {
   AdminMembershipLifecycleRequest,
@@ -174,140 +175,17 @@ export async function requestAdminRefund(
   });
 }
 
-/** Resolve an open reconciliation case with a required reason; audited. */
+/** Payments owns guarded resolution; Admin supplies the trusted Global actor. */
 export async function resolveAdminReconciliationCase(
   deps: FinanceAdministrationDeps,
   request: import("@freshmarkets/contracts").AdminReconciliationResolveRequest,
 ): Promise<RpcResult<AdminReconciliationCaseView>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
   if (!access.ok) return access;
-  const reason = request.reason.trim();
-  if (reason === "") {
-    return failure("VALIDATION_FAILED", "A resolution reason is required", request.requestId);
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    "admin.payments.reconcile",
-    request.idempotencyKey,
-    {
-      caseId: request.caseId,
-      reason,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      const existing = await deps.db
-        .prepare(
-          "SELECT id, payment_intent_id, category, status, created_at, resolved_at FROM payment_reconciliation_case WHERE id = ?",
-        )
-        .bind(request.caseId)
-        .first<{
-          id: string;
-          payment_intent_id: string | null;
-          category: AdminReconciliationCaseView["category"];
-          status: "OPEN" | "RESOLVED";
-          created_at: number;
-          resolved_at: number | null;
-        }>();
-      if (existing) {
-        return {
-          ok: true,
-          value: {
-            caseId: existing.id,
-            paymentIntentId: existing.payment_intent_id,
-            category: existing.category,
-            status: existing.status,
-            createdAt: new Date(existing.created_at).toISOString(),
-            resolvedAt:
-              existing.resolved_at === null ? null : new Date(existing.resolved_at).toISOString(),
-          },
-          requestId: request.requestId,
-        };
-      }
-    }
-    return failure("CONFLICT", "The resolve command is still processing", request.requestId);
-  }
-
-  const reconciliationGuard =
-    "EXISTS (SELECT 1 FROM payment_reconciliation_case WHERE id = ? AND status = 'RESOLVED' AND resolved_at = ?)";
-  const batchResult = await deps.db.batch([
-    deps.db
-      .prepare(
-        "UPDATE payment_reconciliation_case SET status='RESOLVED', resolved_at=?, details_json=details_json WHERE id=? AND status='OPEN'",
-      )
-      .bind(now, request.caseId),
-    auditEventStatement(
-      deps.db,
-      {
-        actorUserId: access.value.authUserId,
-        action: "PAYMENT.RECONCILIATION_RESOLVED",
-        resourceType: "payment_reconciliation_case",
-        resourceId: request.caseId,
-        reason,
-        before: { status: "OPEN" },
-        after: { status: "RESOLVED" },
-        correlationId: request.requestId,
-        occurredAt: now,
-      },
-      { clause: reconciliationGuard, binds: [request.caseId, now] },
-    ),
-    deps.db
-      .prepare(
-        `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-       WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${reconciliationGuard}`,
-      )
-      .bind(
-        request.caseId,
-        now,
-        "admin.payments.reconcile",
-        request.idempotencyKey,
-        request.caseId,
-        now,
-      ),
-  ]);
-  if ((batchResult[0]?.meta?.changes ?? 0) !== 1) {
-    await idempotencyFailed(deps.db, "admin.payments.reconcile", request.idempotencyKey);
-    return failure("VALIDATION_FAILED", "Only open cases can be resolved", request.requestId);
-  }
-
-  const resolved = await deps.db
-    .prepare(
-      "SELECT id, payment_intent_id, category, status, created_at, resolved_at FROM payment_reconciliation_case WHERE id = ?",
-    )
-    .bind(request.caseId)
-    .first<{
-      id: string;
-      payment_intent_id: string | null;
-      category: AdminReconciliationCaseView["category"];
-      status: "OPEN" | "RESOLVED";
-      created_at: number;
-      resolved_at: number | null;
-    }>();
-  if (!resolved)
-    return failure("INTERNAL_ERROR", "The case could not be read back", request.requestId);
-  return {
-    ok: true,
-    value: {
-      caseId: resolved.id,
-      paymentIntentId: resolved.payment_intent_id,
-      category: resolved.category,
-      status: resolved.status,
-      createdAt: new Date(resolved.created_at).toISOString(),
-      resolvedAt:
-        resolved.resolved_at === null ? null : new Date(resolved.resolved_at).toISOString(),
-    },
-    requestId: request.requestId,
-  };
+  return resolveReconciliationCase(deps.db, {
+    ...request,
+    actorAuthUserId: access.value.authUserId,
+  });
 }
 
 /**

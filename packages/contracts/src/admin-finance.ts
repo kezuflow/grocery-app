@@ -334,6 +334,8 @@ export type AdminRefundRecheckResult = {
 };
 
 export type AdminReconciliationCaseView = {
+  version: number;
+  resolutionUnavailableReason: string | null;
   caseId: string;
   paymentIntentId: string | null;
   category: ReconciliationCaseCategory;
@@ -354,6 +356,7 @@ export type AdminReconciliationListRequest = AuthenticatedRequest & {
 };
 
 export type AdminReconciliationResolveRequest = AuthenticatedRequest & {
+  expectedVersion: number;
   caseId: string;
   reason: string;
   idempotencyKey: string;
