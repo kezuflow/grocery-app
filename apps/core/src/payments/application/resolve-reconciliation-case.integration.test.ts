@@ -94,6 +94,53 @@ async function reviewFixture() {
   };
 }
 describe("guarded financial exception resolution", () => {
+  it("keeps financial review open until a related verified provider event is applied", async () => {
+    const f = await reviewFixture();
+    const { extendPaymentRepository } = await import("../infrastructure/d1/payment-repository");
+    const repository = extendPaymentRepository(env.DB);
+    const eventId = crypto.randomUUID();
+    const now = Date.now();
+    // Explicit retained-inbox seam: the preceding real lookup has confirmed FAILED,
+    // but delivery of that same provider outcome still has unapplied local work.
+    await repository.insertInbox({
+      provider: "mock",
+      providerEventId: eventId,
+      providerReference: f.reference,
+      eventType: "payment",
+      payloadHash: "retained-observation",
+      rawPayload: "retained-test-receipt",
+      now,
+      signatureVerifiedAt: now,
+      normalizedObservationJson: JSON.stringify({
+        kind: "payment",
+        provider: "mock",
+        providerEventId: eventId,
+        providerReference: f.reference,
+        canonicalState: "FAILED",
+        amountMinor: 15000,
+        currency: "PHP",
+        refundReference: null,
+        observedAt: now,
+        payloadHash: "retained-observation",
+      }),
+    });
+    expect(await resolveReconciliationCase(env.DB, f.command)).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM payment_reconciliation_case WHERE id=?")
+        .bind(f.command.caseId)
+        .first(),
+    ).toEqual({ status: "OPEN", version: f.command.expectedVersion });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='PAYMENT.RECONCILIATION_RESOLVED'",
+      )
+        .bind(f.command.caseId)
+        .first(),
+    ).toEqual({ n: 0 });
+    const { redriveProviderInbox } = await import("./redrive-provider-inbox");
+    expect(await redriveProviderInbox(env.DB, { now: now + 1 })).toMatchObject({ applied: 1 });
+    expect(await resolveReconciliationCase(env.DB, f.command)).toMatchObject({ ok: true });
+  });
   it("resolves only after real provider recovery and preserves the original receipt after a later reopening", async () => {
     const f = await reviewFixture();
     const accepted = await resolveReconciliationCase(env.DB, f.command);
@@ -118,7 +165,7 @@ describe("guarded financial exception resolution", () => {
         .first(),
     ).toEqual({ n: 1 });
   });
-  it.each(["scope", "version", "financial", "audit"] as const)(
+  it.each(["scope", "version", "financial", "inbox", "audit"] as const)(
     "rejects a transaction-time %s change with no partial closure",
     async (kind) => {
       const f = await reviewFixture();
@@ -143,6 +190,21 @@ describe("guarded financial exception resolution", () => {
                   )
                   .bind(f.intentId)
                   .run();
+              if (kind === "inbox") {
+                const { extendPaymentRepository } =
+                  await import("../infrastructure/d1/payment-repository");
+                await extendPaymentRepository(target).insertInbox({
+                  provider: "mock",
+                  providerEventId: crypto.randomUUID(),
+                  providerReference: f.reference,
+                  eventType: "payment",
+                  payloadHash: "concurrent-inbox",
+                  normalizedObservationJson: "{}",
+                  rawPayload: "explicit-concurrent-receipt",
+                  signatureVerifiedAt: Date.now(),
+                  now: Date.now(),
+                });
+              }
               return target.batch(
                 kind === "audit"
                   ? [...statements, target.prepare("INSERT INTO commitment_abort(id) VALUES (-42)")]

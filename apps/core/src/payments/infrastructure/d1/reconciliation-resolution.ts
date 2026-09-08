@@ -4,6 +4,15 @@
 export const reconciliationResolutionEvidence = `EXISTS (
  SELECT 1 FROM payment_intent resolved_payment
  WHERE resolved_payment.id=payment_reconciliation_case.payment_intent_id
+ AND NOT EXISTS (
+   SELECT 1 FROM payment_provider_event_inbox inbox
+   WHERE inbox.processing_status IN ('RECEIVED','RETRY_REQUIRED','RECONCILIATION_REQUIRED')
+   AND (
+     EXISTS (SELECT 1 FROM payment_attempt attempt WHERE attempt.payment_intent_id=resolved_payment.id AND attempt.provider=inbox.provider AND attempt.provider_reference=inbox.provider_reference)
+     OR (inbox.provider=CASE WHEN json_valid(payment_reconciliation_case.details_json) THEN json_extract(payment_reconciliation_case.details_json,'$.provider') END
+       AND inbox.provider_event_id=CASE WHEN json_valid(payment_reconciliation_case.details_json) THEN json_extract(payment_reconciliation_case.details_json,'$.providerEventId') END)
+   )
+ )
  AND (payment_reconciliation_case.category!='REFUND_UNRESOLVED' OR EXISTS (SELECT 1 FROM payment_refund r WHERE r.payment_intent_id=resolved_payment.id AND (r.reconciliation_case_id=payment_reconciliation_case.id OR r.id=CASE WHEN json_valid(payment_reconciliation_case.details_json) THEN json_extract(payment_reconciliation_case.details_json,'$.refundId') END) AND r.status='SUCCEEDED' AND r.next_retry_at IS NULL))
  AND NOT EXISTS (SELECT 1 FROM payment_creation_observation creation WHERE creation.payment_intent_id=resolved_payment.id AND creation.applied_at IS NULL)
  AND resolved_payment.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED','FAILED','EXPIRED')
