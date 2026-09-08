@@ -121,7 +121,35 @@ const inboxBeforeRecovery = database
   .all();
 apply(
   database,
-  migrations.filter((name) => name > "0069_schema_integrity.sql"),
+  migrations.filter((name) => name > "0069_schema_integrity.sql" && name < "0078_"),
+);
+const beforeInitialSetup = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => ({
+    name,
+    rows: database.prepare(`SELECT rowid,* FROM ${quote(name)} ORDER BY rowid`).all(),
+  }));
+apply(
+  database,
+  migrations.filter((name) => name >= "0078_"),
+);
+for (const snapshot of beforeInitialSetup)
+  assert.deepEqual(
+    database.prepare(`SELECT rowid,* FROM ${quote(snapshot.name)} ORDER BY rowid`).all(),
+    snapshot.rows,
+    `${snapshot.name}: initial setup migration preserves every retained row and grant`,
+  );
+assert.equal(
+  database.prepare("SELECT COUNT(*) count FROM initial_administrator_setup").get().count,
+  0,
+);
+assert.throws(
+  () =>
+    database.exec(
+      "INSERT INTO initial_administrator_setup(id,auth_user_id,staff_id,role_id,capability_codes_json,completed_at) VALUES (1,'missing','missing','missing','[]',1)",
+    ),
+  /FOREIGN KEY constraint failed/,
 );
 assert.deepEqual(
   database.prepare("SELECT rowid,* FROM payment_intent ORDER BY rowid").all(),

@@ -1,4 +1,8 @@
 import {
+  getInitialAdministratorSetup,
+  completeInitialAdministratorSetup,
+} from "./iam/application/initial-administrator";
+import {
   getAdminServiceability,
   publishAdminServiceArea,
   previewAdminServiceability,
@@ -1253,6 +1257,41 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminStaffInvitationsQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async getInitialAdministratorSetup(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getInitialAdministratorSetup(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        configuredEmail: this.env.INITIAL_GLOBAL_ADMIN_EMAIL,
+      },
+      validation.data,
+    );
+  }
+  async completeInitialAdministratorSetup(
+    input: import("@freshmarkets/contracts").CompleteInitialAdministratorSetupRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({
+        expectedVersion: validationSchema.literal(0),
+        idempotencyKey: idempotencyKeySchema,
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return completeInitialAdministratorSetup(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        configuredEmail: this.env.INITIAL_GLOBAL_ADMIN_EMAIL,
+      },
       validation.data,
     );
   }

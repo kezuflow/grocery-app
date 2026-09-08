@@ -24,6 +24,8 @@
   },
   "vars": {
     "ENVIRONMENT": "development",
+    // One-use setup is disabled until an explicitly chosen email is configured.
+    "INITIAL_GLOBAL_ADMIN_EMAIL": "",
     // Browser auth is always exposed through Web, including when Core runs
     // separately on Wrangler's default http://127.0.0.1:8787 listener.
     "BETTER_AUTH_URL": "http://localhost:3000",
@@ -80,6 +82,7 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
+        "INITIAL_GLOBAL_ADMIN_EMAIL": "",
         "BETTER_AUTH_URL": "https://freshmarkets.ph",
         "TRUSTED_ORIGINS": "https://freshmarkets.ph,https://freshmarkets-web-staging.ilyreggie.workers.dev",
         "PAYMENT_PROVIDER": "paymongo",

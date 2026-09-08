@@ -26,6 +26,7 @@ export default defineConfig({
           TEST_MIGRATIONS: JSON.stringify(migrations),
           PRODUCE_ASSET_KEYS: JSON.stringify(produceAssetKeys),
           ENVIRONMENT: "test",
+          INITIAL_GLOBAL_ADMIN_EMAIL: "initial-admin@example.com",
           PAYMENT_PROVIDER: "mock",
           DELIVERY_PROVIDERS: "lalamove",
           LOCAL_DELIVERY_PROVIDER: "mock",

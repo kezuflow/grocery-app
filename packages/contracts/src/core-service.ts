@@ -8,6 +8,7 @@ import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminLocationsService } from "./admin-locations";
 import type { AdminServiceabilityService } from "./admin-serviceability";
 import type { AdminStaffAccessService } from "./admin-staff-access";
+import type { InitialAdministratorService } from "./initial-administrator";
 import type { AdminCustomerService, AdminPrivacyService } from "./admin-customers";
 import type { AdminPromotionsService } from "./admin-promotions";
 import type { AdminCatalogService, AdminInventoryReadService } from "./admin-catalog";
@@ -65,6 +66,7 @@ export interface ImplementedCoreService
     AdminLocationsService,
     AdminServiceabilityService,
     AdminStaffAccessService,
+    InitialAdministratorService,
     AdminCustomerService,
     AdminPrivacyService,
     AdminPromotionsService,
@@ -133,6 +135,8 @@ export const coreServiceMethodNames = [
   "listAdminStaffInvitations",
   "inviteAdminStaff",
   "getMyStaffInvitation",
+  "getInitialAdministratorSetup",
+  "completeInitialAdministratorSetup",
   "acceptStaffInvitation",
   "revokeAdminStaffInvitation",
   "updateAdminStaff",

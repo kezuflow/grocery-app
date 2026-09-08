@@ -10,6 +10,7 @@
   },
   "vars": {
     "ENVIRONMENT": "test",
+    "INITIAL_GLOBAL_ADMIN_EMAIL": "initial-admin-e2e@example.com",
     "BETTER_AUTH_URL": "http://localhost:3100",
     "TRUSTED_ORIGINS": "http://localhost:3100",
     "PAYMENT_PROVIDER": "mock",

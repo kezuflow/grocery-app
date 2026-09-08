@@ -60,6 +60,7 @@ Location address JSON stores validated structured fields plus protected `confirm
 - `customers(id PK, principal_id UNIQUE FK customer_principal, auth_user_id UNIQUE legacy compatibility column, status, version, created_at, updated_at)`
 - `staff_principals(id PK, auth_user_id UNIQUE, display_name, status, version)`
 - `staff_invitations(id PK, email_normalized, display_name, status PENDING|ACCEPTED|EXPIRED|REVOKED, invited_by_staff_id FK, expires_at, accepted_auth_user_id NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
+- `initial_administrator_setup(id singleton PK, auth_user_id FK, staff_id FK, role_id FK, capability_codes_json, completed_at)` records immutable one-use installation setup evidence. Migration 0078 creates only this empty table and integrity triggers, preserving every prior row and grant. Core owns matching verified-email eligibility and existing-Global-access rejection; the database enforces singleton identity, valid evidence and restricted references.
 - legacy `riders(...)` rows remain read-only compatibility evidence until retention/migration safety permits removal; they grant no active delivery authority.
 - `roles(id PK, code UNIQUE, name, description, status ACTIVE|ARCHIVED, version)`
 - `capabilities(id PK, code UNIQUE, description)` seeded/configured from the closed capability vocabulary in `DOMAIN_MODEL.md`, including customer, order, catalog, inventory, promotion, membership, payment/refund, fulfillment, delivery, procurement, analytics, and staff read/manage capabilities.

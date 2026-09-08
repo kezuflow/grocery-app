@@ -781,6 +781,10 @@ Implemented staff acceptance rechecks the current authentication user's normaliz
 
 See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseline and ownership design. Membership RPCs, membership navigation/errors/jobs, customer courier selection and local price writes described in historical slices are removal work, never active target authority.
 
+### Initial administrator setup
+
+`getInitialAdministratorSetup` is an authenticated Core query with `UNAVAILABLE`, `VERIFY_EMAIL`, `READY` (expected version zero), or the caller's `COMPLETED` receipt. It never exposes the configured email or another account's setup identity. `completeInitialAdministratorSetup` accepts only an idempotency key and expected version zero; identity comes from Better Auth. Core requires the configured verified email, no prior setup, no Global staff scope and no existing Staff identity for the caller. Current identity, all explicit grants, immutable setup evidence, audit and command receipt are one guarded transaction. Identical completed replay remains available after setup configuration is removed. Web exposes this documented one-time workflow at `/setup`; see [setup operations](../operations/INITIAL_ADMINISTRATOR_SETUP.md).
+
 ### Verified provider identity recovery
 
 `refreshExternalDelivery` accepts an optional bounded `providerDeliveryId` candidate only to recover a missing identity on a previously submitted uncertain booking. Core requires `delivery.manage` and the dispatch location scope, retrieves the candidate from the configured provider, and requires its returned merchant reference to match the saved booking. An existing identity cannot be replaced. Association, original booking idempotency completion, recovery audit and durable observation are atomic; observation projection uses the shared guarded application path. A mismatch or competing claim leaves no association or booking success. This recovery performs no new provider booking.

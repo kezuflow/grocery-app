@@ -9,6 +9,7 @@ describe("Core Worker foundation", () => {
       DB: {} as D1Database,
       PRODUCT_MEDIA: {} as R2Bucket,
       ENVIRONMENT: "development",
+      INITIAL_GLOBAL_ADMIN_EMAIL: "",
       BETTER_AUTH_URL: "http://localhost:3000",
       TRUSTED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,https://core.example.invalid",
       PAYMENT_PROVIDER: "disabled",

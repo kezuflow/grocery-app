@@ -3,6 +3,7 @@ export * from "./admin-foundation";
 export * from "./admin-locations";
 export * from "./admin-serviceability";
 export * from "./admin-staff-access";
+export * from "./initial-administrator";
 export * from "./admin-customers";
 export * from "./admin-promotions";
 export * from "./admin-catalog";
