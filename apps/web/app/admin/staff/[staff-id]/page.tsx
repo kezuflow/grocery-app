@@ -50,6 +50,14 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
             return;
           }
           const rolesPayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
+          if (!rolesPayload.ok) {
+            setState({
+              phase: "error",
+              message: rolesPayload.error.message,
+              requestId: rolesPayload.error.requestId,
+            });
+            return;
+          }
           setDisplayName(staffPayload.value.displayName);
           setMarketId(
             staffPayload.value.scopes.find((scope) => scope.kind === "market")?.marketId ?? "",
@@ -60,7 +68,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
           setState({
             phase: "ready",
             staff: staffPayload.value,
-            roles: rolesPayload.ok ? rolesPayload.value : { items: [], nextCursor: null },
+            roles: rolesPayload.value,
           });
         } catch {
           setState({ phase: "error", message: "Network error loading staff.", requestId: null });
@@ -110,11 +118,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
 
   const { staff, roles } = state;
   const activeRoles = roles.items.filter((role) => role.status === "ACTIVE");
-  const assignedRoleIds = new Set(
-    staff.roleCodes
-      .map((code) => activeRoles.find((role) => role.code === code)?.roleId)
-      .filter((roleId): roleId is string => Boolean(roleId)),
-  );
+  const assignedRoleIds = new Set(staff.roleIds);
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">

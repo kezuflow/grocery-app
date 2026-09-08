@@ -8,6 +8,8 @@ import { requestHash } from "../../idempotency";
 import { inviteAdminStaff, revokeAdminStaffInvitation } from "./invite-admin-staff";
 import { createAdminRole } from "./create-admin-role";
 import { updateAdminStaff, changeAdminStaffAccess } from "./update-admin-staff";
+import { setAdminStaffRoles } from "./set-admin-staff-roles";
+import { setAdminStaffScopes } from "./set-admin-staff-scopes";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -232,6 +234,169 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
 }
 
 describe("staff administration commands", () => {
+  it.each(["roles", "scopes"] as const)(
+    "rejects %s replacement after current authority or assignment eligibility changes",
+    async (kind) => {
+      for (const boundary of ["authority", "eligibility"] as const) {
+        const manager = await seedManager();
+        const target = await seedStaff({
+          principal: await signUp(),
+          permissionCodes: [],
+          scope: { kind: "global" },
+        });
+        const role = await core.createAdminRole({
+          headers: { cookie: manager.cookie },
+          requestId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          code: `grant-${crypto.randomUUID()}`,
+          name: "Assignment",
+          description: "Race",
+          capabilityCodes: ["inventory.read"],
+        });
+        if (!role.ok) throw new Error("Role missing");
+        const own = {
+          headers: { cookie: manager.cookie },
+          requestId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          staffId: target.staffId,
+          expectedVersion: 1,
+        };
+        const db = new Proxy(env.DB, {
+          get(database, property) {
+            if (property === "batch")
+              return async (statements: D1PreparedStatement[]) => {
+                if (boundary === "authority")
+                  await database
+                    .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                    .bind(manager.staffId)
+                    .run();
+                else if (kind === "roles")
+                  await database
+                    .prepare("UPDATE role SET status='ARCHIVED',version=version+1 WHERE id=?")
+                    .bind(role.value.roleId)
+                    .run();
+                else
+                  await database
+                    .prepare(
+                      "UPDATE fulfillment_location SET status='inactive' WHERE id='location-cebu-central'",
+                    )
+                    .run();
+                return database.batch(statements);
+              };
+            const value = Reflect.get(database, property, database);
+            return typeof value === "function" ? value.bind(database) : value;
+          },
+        });
+        try {
+          const deps = { auth: createAuth(env), db };
+          const result =
+            kind === "roles"
+              ? await setAdminStaffRoles(deps, { ...own, roleIds: [role.value.roleId] })
+              : await setAdminStaffScopes(deps, {
+                  ...own,
+                  scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+                });
+          expect(result).toMatchObject({ ok: false });
+          expect(
+            await env.DB.prepare("SELECT version FROM staff_identity WHERE id=?")
+              .bind(target.staffId)
+              .first(),
+          ).toEqual({ version: 1 });
+          expect(
+            await env.DB.prepare(
+              "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+            )
+              .bind(own.idempotencyKey)
+              .first(),
+          ).toEqual({ count: 0 });
+          expect(
+            await env.DB.prepare("SELECT scope_kind FROM staff_scope WHERE staff_id=?")
+              .bind(target.staffId)
+              .first(),
+          ).toEqual({ scope_kind: "global" });
+        } finally {
+          if (kind === "scopes" && boundary === "eligibility")
+            await env.DB.prepare(
+              "UPDATE fulfillment_location SET status='active' WHERE id='location-cebu-central'",
+            ).run();
+        }
+      }
+    },
+  );
+  it.each(["roles", "scopes"] as const)(
+    "requires every %s replacement effect and preserves the original receipt",
+    async (kind) => {
+      for (const effect of ["version", "delete", "insert", "audit", "receipt"] as const) {
+        const manager = await seedManager();
+        const target = await seedStaff({
+          principal: await signUp(),
+          permissionCodes: [],
+          scope: { kind: "global" },
+        });
+        const own = {
+          headers: { cookie: manager.cookie },
+          requestId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          staffId: target.staffId,
+          expectedVersion: 1,
+        };
+        const run = () =>
+          kind === "roles"
+            ? core.setAdminStaffRoles({ ...own, roleIds: ["role_operations_viewer"] })
+            : core.setAdminStaffScopes({
+                ...own,
+                scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+              });
+        const table = kind === "roles" ? "staff_role" : "staff_scope";
+        const trigger =
+          effect === "version"
+            ? "BEFORE UPDATE ON staff_identity"
+            : effect === "delete"
+              ? `BEFORE DELETE ON ${table}`
+              : effect === "insert"
+                ? `BEFORE INSERT ON ${table}`
+                : effect === "audit"
+                  ? `BEFORE INSERT ON audit_event WHEN NEW.action='STAFF.${kind === "roles" ? "ROLES" : "SCOPES"}_SET'`
+                  : `BEFORE UPDATE ON idempotency_records WHEN NEW.scope='admin.staff.${kind}' AND NEW.status='SUCCEEDED'`;
+        await env.DB.prepare(
+          `CREATE TRIGGER test_ignore_staff_grant ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+        ).run();
+        try {
+          expect(await run()).toMatchObject({ ok: false });
+          expect(
+            await env.DB.prepare("SELECT version FROM staff_identity WHERE id=?")
+              .bind(target.staffId)
+              .first(),
+          ).toEqual({ version: 1 });
+          expect(
+            await env.DB.prepare(
+              "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+            )
+              .bind(own.idempotencyKey)
+              .first(),
+          ).toEqual({ count: 0 });
+          expect(
+            await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=?")
+              .bind(target.staffId)
+              .first(),
+          ).toEqual({ count: 0 });
+        } finally {
+          await env.DB.prepare("DROP TRIGGER test_ignore_staff_grant").run();
+        }
+        const result = await run();
+        expect(result).toMatchObject({ ok: true, value: { version: 2 } });
+        expect(
+          await core.updateAdminStaff({
+            ...own,
+            idempotencyKey: crypto.randomUUID(),
+            expectedVersion: 2,
+            displayName: "Later name",
+          }),
+        ).toMatchObject({ ok: true });
+        expect(await run()).toEqual(result);
+      }
+    },
+  );
   it.each(["rename", "access"] as const)(
     "rejects %s after current manager scope is revoked",
     async (kind) => {
@@ -366,6 +531,11 @@ describe("staff administration commands", () => {
       ok: true,
       value: { displayName: "Reviewed name", version: 2, roleCodes: ["operations_viewer"] },
     });
+    await env.DB.prepare(
+      "UPDATE idempotency_records SET result_reference=json_remove(result_reference,'$.roleIds') WHERE scope='admin.staff.update' AND idempotency_key=?",
+    )
+      .bind(rename.idempotencyKey)
+      .run();
     const suspend = {
       ...own,
       action: "SUSPEND" as const,

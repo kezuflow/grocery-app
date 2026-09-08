@@ -25,6 +25,7 @@ describe("staff access contracts", () => {
       email: "ops@example.com",
       status: "active",
       roleCodes: ["operations_admin"],
+      roleIds: ["role_operations_admin"],
       capabilityCodes: ["audit.read", "staff.manage"],
       scopes: [{ kind: "global" }],
       version: 3,

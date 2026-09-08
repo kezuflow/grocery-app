@@ -103,6 +103,7 @@ function toScope(row: StaffRelationRow): Scope | null {
 }
 
 export type StaffRelations = {
+  roleIds: Set<string>;
   roleCodes: Set<string>;
   capabilityCodes: Set<Capability>;
   scopes: Scope[];
@@ -120,11 +121,11 @@ export async function loadStaffRelations(
 
   const roles = await deps.db
     .prepare(
-      `SELECT sr.staff_id AS staffId, r.code AS code FROM staff_role sr
+      `SELECT sr.staff_id AS staffId, r.id AS roleId, r.code AS code FROM staff_role sr
        JOIN role r ON r.id = sr.role_id WHERE sr.staff_id IN (${placeholders})`,
     )
     .bind(...binds)
-    .all<{ staffId: string; code: string }>();
+    .all<{ staffId: string; roleId: string; code: string }>();
   const capabilities = await deps.db
     .prepare(
       `SELECT sr.staff_id AS staffId, p.code AS code FROM staff_role sr
@@ -143,9 +144,17 @@ export async function loadStaffRelations(
     .all<{ staffId: string } & StaffRelationRow>();
 
   for (const staffId of staffIds) {
-    relations.set(staffId, { roleCodes: new Set(), capabilityCodes: new Set(), scopes: [] });
+    relations.set(staffId, {
+      roleIds: new Set(),
+      roleCodes: new Set(),
+      capabilityCodes: new Set(),
+      scopes: [],
+    });
   }
-  for (const row of roles.results) relations.get(row.staffId)?.roleCodes.add(row.code);
+  for (const row of roles.results) {
+    relations.get(row.staffId)?.roleCodes.add(row.code);
+    relations.get(row.staffId)?.roleIds.add(row.roleId);
+  }
   for (const row of capabilities.results) {
     if (isAdminCapability(row.code)) relations.get(row.staffId)?.capabilityCodes.add(row.code);
   }
@@ -195,6 +204,7 @@ export async function readStaffDetail(
       email: row.email,
       status: row.status,
       roleCodes: [...relations.roleCodes].sort(),
+      roleIds: [...relations.roleIds].sort(),
       capabilityCodes: [...relations.capabilityCodes].sort(),
       scopes: relations.scopes,
       version: row.version,

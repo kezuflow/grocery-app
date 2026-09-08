@@ -5,11 +5,16 @@ import type {
   RpcResult,
   Scope,
 } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { requestHash } from "../../idempotency";
+import { replayStaffCommand } from "./staff-command-replay";
+import {
+  beginStaffAdministrationWrite,
+  requireStaffWrite,
+} from "../../iam/infrastructure/staff-administration-write";
+import { completeStaffCommandReceipt } from "../../iam/infrastructure/staff-command-receipt";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
   loadStaffRelations,
-  readStaffDetail,
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
@@ -79,25 +84,13 @@ async function validateActiveGeography(
   return null;
 }
 
-/**
- * Atomically replace a staff member's scope assignments. Like role
- * replacement, every batch statement carries the caller's version predicate,
- * so a concurrent identity change makes the whole batch read back as
- * STALE_VERSION instead of partially applying.
- */
+/** Replace scopes only while all referenced geography remains active. */
 export async function setAdminStaffScopes(
   deps: StaffAdministrationDeps,
   request: AdminStaffScopesRequest,
 ): Promise<RpcResult<AdminStaffDetail>> {
   const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
   if (!access.ok) return access;
-
-  const target = await deps.db
-    .prepare("SELECT id, version FROM staff_identity WHERE id = ?")
-    .bind(request.staffId)
-    .first<{ id: string; version: number }>();
-  if (!target) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
-
   const uniqueScopes: Scope[] = [];
   const seen = new Set<string>();
   for (const scope of request.scopes) {
@@ -109,42 +102,52 @@ export async function setAdminStaffScopes(
       uniqueScopes.push(scope);
     }
   }
-  const invalidGeography = await validateActiveGeography(deps.db, uniqueScopes);
-  if (invalidGeography) return failure("VALIDATION_FAILED", invalidGeography, request.requestId);
-
-  const before = (await loadStaffRelations(deps, [request.staffId])).get(request.staffId)!;
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, SCOPE, request.idempotencyKey, {
+  const hash = await requestHash({
     staffId: request.staffId,
     scopes: uniqueScopes,
     expectedVersion: request.expectedVersion,
   });
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      return readStaffDetail(deps, request.staffId, request.requestId);
-    }
-    return failure("CONFLICT", "The scope command is still processing", request.requestId);
-  }
-
-  const guard = "EXISTS (SELECT 1 FROM staff_identity WHERE id = ? AND version = ?)";
-  const guardBinds = [request.staffId, request.expectedVersion];
-  const statements: D1PreparedStatement[] = [
-    deps.db
-      .prepare(`DELETE FROM staff_scope WHERE staff_id = ? AND ${guard}`)
-      .bind(request.staffId, ...guardBinds),
-    ...uniqueScopes.map((scope) =>
+  const receipt = {
+    scope: SCOPE,
+    key: request.idempotencyKey,
+    hash,
+    staffId: request.staffId,
+    requestId: request.requestId,
+  };
+  const prior = await replayStaffCommand(deps, receipt);
+  if (prior) return prior;
+  const target = await deps.db
+    .prepare("SELECT version FROM staff_identity WHERE id=?")
+    .bind(request.staffId)
+    .first<{ version: number }>();
+  if (!target) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
+  if (target.version !== request.expectedVersion)
+    return failure("STALE_VERSION", "Staff changed; refresh before retrying", request.requestId);
+  const invalidGeography = await validateActiveGeography(deps.db, uniqueScopes);
+  if (invalidGeography) return failure("VALIDATION_FAILED", invalidGeography, request.requestId);
+  const before = (await loadStaffRelations(deps, [request.staffId])).get(request.staffId);
+  if (!before) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
+  const marketIds = uniqueScopes.flatMap((scope) =>
+    scope.kind === "market" ? [scope.marketId] : [],
+  );
+  const now = Date.now();
+  const inserts = uniqueScopes.flatMap((scope) => {
+    const guard =
+      scope.kind === "global"
+        ? "1=1"
+        : scope.kind === "market"
+          ? "EXISTS(SELECT 1 FROM market WHERE id=? AND status='active')"
+          : "EXISTS(SELECT 1 FROM fulfillment_location l JOIN market m ON m.id=l.market_id WHERE l.id=? AND l.status='active' AND m.status='active' AND (?=0 OR l.market_id IN(SELECT value FROM json_each(?))))";
+    const binds =
+      scope.kind === "global"
+        ? []
+        : scope.kind === "market"
+          ? [scope.marketId]
+          : [scope.locationId, marketIds.length, JSON.stringify(marketIds)];
+    return [
       deps.db
         .prepare(
-          `INSERT INTO staff_scope (id, staff_id, scope_kind, market_id, location_id)
-           SELECT ?, ?, ?, ?, ? WHERE ${guard}`,
+          `INSERT INTO staff_scope(id,staff_id,scope_kind,market_id,location_id) SELECT ?,?,?,?,? WHERE ${guard}`,
         )
         .bind(
           crypto.randomUUID(),
@@ -152,44 +155,57 @@ export async function setAdminStaffScopes(
           scope.kind,
           scope.kind === "market" ? scope.marketId : null,
           scope.kind === "location" ? scope.locationId : null,
-          ...guardBinds,
+          ...binds,
         ),
-    ),
-
-    auditEventStatement(
-      deps.db,
-      {
+      requireStaffWrite(deps.db),
+    ];
+  });
+  try {
+    await deps.db.batch([
+      ...beginStaffAdministrationWrite(deps.db, {
+        ...receipt,
+        ...access.value,
+        resultType: "staff_change_snapshot",
+        now,
+      }),
+      deps.db
+        .prepare(
+          "UPDATE staff_identity SET updated_at=?,version=version+1 WHERE id=? AND version=?",
+        )
+        .bind(now, request.staffId, request.expectedVersion),
+      requireStaffWrite(deps.db),
+      deps.db.prepare("DELETE FROM staff_scope WHERE staff_id=?").bind(request.staffId),
+      deps.db
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -35 WHERE EXISTS(SELECT 1 FROM staff_scope WHERE staff_id=?)",
+        )
+        .bind(request.staffId),
+      ...inserts,
+      auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "STAFF.SCOPES_SET",
         resourceType: "staff_identity",
         resourceId: request.staffId,
-        before: { scopes: [...before.scopes].map((scope) => JSON.stringify(scope)).sort() },
+        before: { scopes: before.scopes.map((scope) => JSON.stringify(scope)).sort() },
         after: { scopes: uniqueScopes.map((scope) => JSON.stringify(scope)).sort() },
         correlationId: request.requestId,
         occurredAt: now,
-      },
-      { clause: guard, binds: guardBinds },
-    ),
-    deps.db
-      .prepare(
-        `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-         WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard}`,
+      }),
+      requireStaffWrite(deps.db),
+      ...completeStaffCommandReceipt(deps.db, { ...receipt, now }),
+    ]);
+  } catch {
+    return (
+      (await replayStaffCommand(deps, receipt)) ??
+      failure(
+        "CONFLICT",
+        "Staff or geography changed; refresh and retry the same request",
+        request.requestId,
       )
-      .bind(request.staffId, now, SCOPE, request.idempotencyKey, ...guardBinds),
-    deps.db
-      .prepare(
-        "UPDATE staff_identity SET updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
-      )
-      .bind(now, request.staffId, request.expectedVersion),
-  ];
-
-  await deps.db.batch(statements);
-  const after = await deps.db
-    .prepare("SELECT version FROM staff_identity WHERE id = ?")
-    .bind(request.staffId)
-    .first<{ version: number }>();
-  if (after?.version !== request.expectedVersion + 1) {
-    return failure("STALE_VERSION", "Staff changed; refresh before retrying", request.requestId);
+    );
   }
-  return readStaffDetail(deps, request.staffId, request.requestId);
+  return (
+    (await replayStaffCommand(deps, receipt)) ??
+    failure("INTERNAL_ERROR", "Saved staff result is unavailable", request.requestId)
+  );
 }

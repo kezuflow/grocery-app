@@ -253,6 +253,42 @@ for (const width of [1440, 390]) {
       .fill("Returned to work");
     await adminPage.getByRole("button", { name: "Activate", exact: true }).click();
     await expect(adminPage.getByRole("button", { name: "Suspend", exact: true })).toBeVisible();
+    // Keep a real bounded role page so the previously assigned role is off-page.
+    await adminPage.route("**/api/admin/roles?*", async (route) => {
+      const url = new URL(route.request().url());
+      url.searchParams.set("limit", "1");
+      await route.fulfill({ response: await route.fetch({ url: url.toString() }) });
+    });
+    await adminPage.reload();
+    const roleRequests: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(`**/api/admin/staff/${acceptedStaffId}/roles`, async (route) => {
+      roleRequests.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      const result = await response.json();
+      expect(result).toMatchObject({ ok: true });
+      expect(result.value.roleIds).toContain(role.value.roleId);
+      expect(result.value.roleIds).toHaveLength(2);
+      if (roleRequests.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await adminPage.getByRole("checkbox").first().click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(adminPage.getByRole("checkbox").first()).toBeChecked();
+    expect(roleRequests).toHaveLength(2);
+    expect(roleRequests[1]).toEqual(roleRequests[0]);
+    await adminPage.getByRole("button", { name: "Set global", exact: true }).click();
+    await expect(adminPage.getByRole("textbox", { name: "Location ID" })).toHaveValue("");
+    await adminPage.getByRole("textbox", { name: "Location ID" }).fill("location-cebu-central");
+    await adminPage.getByRole("button", { name: "Set location", exact: true }).click();
+    await expect(
+      adminPage.getByText('Current: {"kind":"location","locationId":"location-cebu-central"}', {
+        exact: true,
+      }),
+    ).toBeVisible();
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

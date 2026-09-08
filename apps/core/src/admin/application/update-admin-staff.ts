@@ -5,18 +5,15 @@ import type {
   AppErrorCode,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { requestHash } from "../../idempotency";
+import { replayStaffCommand } from "./staff-command-replay";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
   beginStaffAdministrationWrite,
   requireStaffWrite,
 } from "../../iam/infrastructure/staff-administration-write";
+import { completeStaffCommandReceipt } from "../../iam/infrastructure/staff-command-receipt";
 import {
-  completeStaffCommandReceipt,
-  staffCommandReceiptSchema,
-} from "../../iam/infrastructure/staff-command-receipt";
-import {
-  readStaffDetail,
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
@@ -52,30 +49,14 @@ async function changeStaff(
       ? { displayName: change.displayName }
       : { action: change.action, reason: change.reason }),
   });
-  async function replay(): Promise<RpcResult<AdminStaffDetail> | null> {
-    const saved = await findIdempotencyRecord(deps.db, scope, request.idempotencyKey);
-    if (!saved) return null;
-    if (saved.requestHash !== hash)
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    if (saved.status !== "SUCCEEDED") return null;
-    if (saved.resultType === scope && saved.resultReference === request.staffId)
-      return readStaffDetail(deps, request.staffId, request.requestId);
-    if (saved.resultType === "staff_change_snapshot" && saved.resultReference) {
-      try {
-        const value: unknown = JSON.parse(saved.resultReference);
-        const parsed = staffCommandReceiptSchema.safeParse(value);
-        if (parsed.success && parsed.data.staffId === request.staffId)
-          return { ok: true, value: parsed.data, requestId: request.requestId };
-      } catch {
-        /* Malformed retained evidence must not cause another mutation. */
-      }
-    }
-    return failure("INTERNAL_ERROR", "Saved staff result is unavailable", request.requestId);
-  }
+  const replay = () =>
+    replayStaffCommand(deps, {
+      scope,
+      key: request.idempotencyKey,
+      hash,
+      staffId: request.staffId,
+      requestId: request.requestId,
+    });
   const prior = await replay();
   if (prior) return prior;
   const current = await deps.db

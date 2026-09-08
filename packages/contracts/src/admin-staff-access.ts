@@ -31,7 +31,10 @@ export type AdminStaffSummary = {
   createdAt: string;
 };
 
-export type AdminStaffDetail = AdminStaffSummary;
+export type AdminStaffDetail = AdminStaffSummary & {
+  /** Complete assignment identity, independent of the paginated role picker. */
+  roleIds: ReadonlyArray<string>;
+};
 
 export type AdminStaffPage = {
   items: ReadonlyArray<AdminStaffSummary>;

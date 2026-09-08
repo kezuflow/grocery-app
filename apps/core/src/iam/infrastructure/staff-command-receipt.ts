@@ -11,6 +11,7 @@ export const staffCommandReceiptSchema = z.object({
   version: z.number().int().positive(),
   createdAt: z.string(),
   roleCodes: z.array(z.string()),
+  roleIds: z.array(z.string()).optional(),
   capabilityCodes: z.array(z.enum(adminCapabilityCodes)),
   scopes: z.array(
     z.discriminatedUnion("kind", [
@@ -39,6 +40,7 @@ export function completeStaffCommandReceipt(
       'staffId',s.id,'authUserId',s.auth_user_id,'displayName',s.display_name,'email',u.email,
       'status',s.status,'version',s.version,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',s.created_at/1000.0,'unixepoch'),
       'roleCodes',json((SELECT json_group_array(code) FROM (SELECT r.code FROM staff_role sr JOIN role r ON r.id=sr.role_id WHERE sr.staff_id=s.id ORDER BY r.code))),
+      'roleIds',json((SELECT json_group_array(role_id) FROM (SELECT sr.role_id FROM staff_role sr WHERE sr.staff_id=s.id ORDER BY sr.role_id))),
       'capabilityCodes',json((SELECT json_group_array(code) FROM (SELECT DISTINCT p.code FROM staff_role sr JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id WHERE sr.staff_id=s.id AND p.code IN (SELECT value FROM json_each(?)) ORDER BY p.code))),
       'scopes',json((SELECT json_group_array(json(scope)) FROM (SELECT CASE sc.scope_kind WHEN 'global' THEN json_object('kind','global') WHEN 'market' THEN json_object('kind','market','marketId',sc.market_id) ELSE json_object('kind','location','locationId',sc.location_id) END scope FROM staff_scope sc WHERE sc.staff_id=s.id ORDER BY sc.scope_kind,sc.market_id,sc.location_id)))
     ) FROM staff_identity s JOIN user u ON u.id=s.auth_user_id WHERE s.id=?)
