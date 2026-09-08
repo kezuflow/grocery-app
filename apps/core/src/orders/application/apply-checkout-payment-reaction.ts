@@ -477,21 +477,9 @@ export async function applyCheckoutPaymentReaction(
     );
   }
 
-  // Instant commitments convert their expiring holds and respect the
-  // location's concurrent-order capacity instead of cycle capacity.
-  let maxConcurrentInstantOrders: number | null = null;
+  // Paid Instant commitment converts the accepted holds; later selling/readiness
+  // changes and retired order-count settings cannot strand a confirmed payment.
   if (instant) {
-    const mode = await database
-      .prepare(
-        `SELECT readiness.max_concurrent_instant_orders
-           FROM fulfillment_location_readiness readiness
-          WHERE readiness.location_id=? AND readiness.dispatch_ready=1`,
-      )
-      .bind(cycleSnapshot.locationId)
-      .first<{ max_concurrent_instant_orders: number | null }>();
-    if (!mode || mode.max_concurrent_instant_orders === null)
-      return recordException(database, input, "INSTANT_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
-    maxConcurrentInstantOrders = mode.max_concurrent_instant_orders;
     statements.push(
       database
         .prepare(
@@ -596,21 +584,6 @@ export async function applyCheckoutPaymentReaction(
       )
       .bind(expectedReservationRows, orderId, expectedReservationRows),
   );
-  if (instant && maxConcurrentInstantOrders !== null) {
-    // Capacity abort sentinel: too many open instant orders rolls the whole
-    // commitment back into a finance exception.
-    statements.push(
-      database
-        .prepare(
-          `INSERT INTO commitment_abort (id) SELECT -2 WHERE (
-            SELECT COUNT(*) FROM grocery_order go
-            JOIN order_fulfillment_snapshot s ON s.order_id = go.id
-            WHERE s.location_id=? AND s.fulfillment_mode='INSTANT' AND go.status NOT IN ('CANCELED','REFUNDED','DELIVERED')
-          ) > ?`,
-        )
-        .bind(cycleSnapshot.locationId, maxConcurrentInstantOrders),
-    );
-  }
   if (!instant && cycleSnapshot.deliveryWindow !== undefined) {
     const window = scheduledWindowSnapshotSchema.safeParse(cycleSnapshot.deliveryWindow);
     if (!window.success) return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");

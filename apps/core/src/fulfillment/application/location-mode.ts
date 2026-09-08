@@ -40,13 +40,12 @@ export async function resolveCheckoutMode(
   database: D1Database,
   locationId: string,
 ): Promise<
-  | { ok: true; mode: "SCHEDULED" }
-  | { ok: true; mode: "INSTANT"; promiseMinutes: number; maxConcurrentInstantOrders: number }
+  { ok: true; mode: "SCHEDULED" } | { ok: true; mode: "INSTANT"; promiseMinutes: number }
 > {
   const row = await database
     .prepare(
       `SELECT mode.fulfillment_mode, readiness.instant_promise_minutes,
-              readiness.max_concurrent_instant_orders, readiness.dispatch_ready
+              readiness.dispatch_ready
          FROM global_commerce_configuration mode
          LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=?
         WHERE mode.id='global'`,
@@ -55,22 +54,16 @@ export async function resolveCheckoutMode(
     .first<{
       fulfillment_mode: "INSTANT" | "SCHEDULED";
       instant_promise_minutes: number | null;
-      max_concurrent_instant_orders: number | null;
       dispatch_ready: number | null;
     }>();
   if (!row) throw new Error("GLOBAL_FULFILLMENT_MODE_NOT_CONFIGURED");
   if (row.fulfillment_mode === "SCHEDULED") return { ok: true, mode: "SCHEDULED" };
-  if (
-    row.dispatch_ready !== 1 ||
-    row.instant_promise_minutes === null ||
-    row.max_concurrent_instant_orders === null
-  )
+  if (row.dispatch_ready !== 1 || row.instant_promise_minutes === null)
     throw new Error("INSTANT_LOCATION_NOT_READY");
   return {
     ok: true,
     mode: "INSTANT",
     promiseMinutes: row.instant_promise_minutes,
-    maxConcurrentInstantOrders: row.max_concurrent_instant_orders,
   };
 }
 

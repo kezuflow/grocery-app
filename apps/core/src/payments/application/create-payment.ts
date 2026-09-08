@@ -187,6 +187,8 @@ export async function createPayment(
         AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND area.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (area.active_to IS NULL OR area.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
+        AND EXISTS (SELECT 1 FROM fulfillment_location_readiness readiness WHERE readiness.location_id=l.id AND readiness.dispatch_ready=1
+          AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version))
         AND ((q.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness readiness WHERE readiness.location_id=l.id AND readiness.dispatch_ready=1
           AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version)))
           OR (q.fulfillment_mode='SCHEDULED' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id

@@ -93,6 +93,16 @@ async function readinessBlockers(
       code: "LOCATION_HOURS_NOT_CONFIGURED",
       message: `${missingHours.name} requires configured operating hours`,
     });
+  const dispatchNotReady = await database
+    .prepare(`SELECT l.name FROM fulfillment_location l
+    LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
+    WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND COALESCE(r.dispatch_ready,0)!=1 ORDER BY l.id LIMIT 1`)
+    .first<{ name: string }>();
+  if (dispatchNotReady)
+    blockers.push({
+      code: "LOCATION_DISPATCH_NOT_READY",
+      message: `${dispatchNotReady.name} is not ready to dispatch customer orders`,
+    });
   if (mode === "INSTANT") {
     const unready = await database
       .prepare(
@@ -366,6 +376,9 @@ async function execute(
   if (input.action === "OPEN") {
     // These predicates guard every effect, including the version, audit and replay result.
     statements.push(
+      database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE EXISTS (
+        SELECT 1 FROM fulfillment_location l LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
+        WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND COALESCE(r.dispatch_ready,0)!=1)`),
       database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE EXISTS (
         SELECT 1 FROM fulfillment_location l JOIN market m ON m.id=l.market_id LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
         WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND (hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0))`),

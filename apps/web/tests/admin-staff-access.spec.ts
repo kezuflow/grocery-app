@@ -305,11 +305,14 @@ for (const width of [1440, 390]) {
     expect(roleRequests).toHaveLength(2);
     expect(roleRequests[1]).toEqual(roleRequests[0]);
     await adminPage.getByRole("button", { name: "Set global", exact: true }).click();
-    await expect(adminPage.getByRole("textbox", { name: "Location ID" })).toHaveValue("");
-    await adminPage.getByRole("textbox", { name: "Location ID" }).fill("location-cebu-central");
+    await expect(adminPage.getByRole("combobox", { name: "Staff location" })).toContainText(
+      "Choose a location",
+    );
+    await adminPage.getByRole("combobox", { name: "Staff location" }).click();
+    await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await adminPage.getByRole("button", { name: "Set location", exact: true }).click();
     await expect(
-      adminPage.getByText('Current: {"kind":"location","locationId":"location-cebu-central"}', {
+      adminPage.getByText("Current: Central Cebu", {
         exact: true,
       }),
     ).toBeVisible();

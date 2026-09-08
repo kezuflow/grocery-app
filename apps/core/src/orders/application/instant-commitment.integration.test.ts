@@ -1206,9 +1206,8 @@ describe("instant order commitment", () => {
     expect(reservation?.count).toBe(1);
   });
 
-  it("enforces the location concurrent-order capacity", async () => {
-    // Capacity is asserted relative to shared test state; never delete another
-    // aggregate merely to isolate this fixture.
+  it("commits both paid orders beyond a retired order-count setting", async () => {
+    // Retained capacity values have no authority over confirmed payments.
     const prior = await env.DB.prepare(
       `SELECT COUNT(*) AS count FROM grocery_order go
        JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=go.id
@@ -1231,30 +1230,31 @@ describe("instant order commitment", () => {
 
     const second = await seededInstantQuote();
     const secondReaction = await seedReaction(second.quoteId);
-    const rejected = await applyCheckoutPaymentReaction(env.DB, {
+    const secondInput = {
       reactionId: secondReaction.reactionId,
       paymentIntentId: secondReaction.intentId,
       checkoutAttemptId: second.quoteId,
-      canonicalPaymentState: "SUCCEEDED",
-    });
-    expect(rejected).toMatchObject({ applied: false, reason: "CAS_CONFLICT" });
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    const committed = await applyCheckoutPaymentReaction(env.DB, secondInput);
+    expect(committed).toMatchObject({ applied: true, reason: "APPLIED" });
     const orders = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM order_payment_reaction WHERE payment_intent_id IN (?,?)",
     )
       .bind(firstReaction.intentId, secondReaction.intentId)
       .first<{ count: number }>();
-    expect(orders?.count).toBe(1);
-    await env.DB.prepare("UPDATE grocery_order SET status='DELIVERED',version=version+1 WHERE id=?")
-      .bind(ok.orderId ?? "missing")
-      .run();
+    expect(orders?.count).toBe(2);
     expect(
-      await applyCheckoutPaymentReaction(env.DB, {
-        reactionId: secondReaction.reactionId,
-        paymentIntentId: secondReaction.intentId,
-        checkoutAttemptId: second.quoteId,
-        canonicalPaymentState: "SUCCEEDED",
-      }),
-    ).toMatchObject({ applied: true, reason: "APPLIED" });
+      await env.DB.prepare(
+        "SELECT count(*) count FROM inventory_reservation WHERE order_id IN (?,?)",
+      )
+        .bind(ok.orderId, committed.orderId)
+        .first(),
+    ).toEqual({ count: 2 });
+    expect(await applyCheckoutPaymentReaction(env.DB, secondInput)).toMatchObject({
+      applied: true,
+      orderId: committed.orderId,
+    });
     await configureInstant(25);
   });
 });

@@ -2,7 +2,20 @@
 import { useCallback, useEffect, useState, use } from "react";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import Link from "next/link";
-import type { AdminRolePage, AdminStaffDetail, RpcResult } from "@freshmarkets/contracts";
+import {
+  adminCapabilityCodes,
+  adminRoleStatuses,
+  type AdminRolePage,
+  type AdminStaffDetail,
+} from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../../components/ui/select";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
@@ -18,6 +31,83 @@ type LoadState =
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready"; staff: AdminStaffDetail; roles: AdminRolePage };
 
+const scopeResultSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    value: z.array(
+      z.discriminatedUnion("kind", [
+        z.object({
+          kind: z.literal("location"),
+          marketId: z.string(),
+          marketCode: z.string(),
+          locationId: z.string(),
+          locationName: z.string(),
+        }),
+        z.object({
+          kind: z.literal("market"),
+          marketId: z.string(),
+          marketCode: z.string(),
+          marketName: z.string(),
+        }),
+      ]),
+    ),
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ message: z.string(), requestId: z.string() }),
+  }),
+]);
+type ScopeOption = Extract<z.infer<typeof scopeResultSchema>, { ok: true }>["value"][number];
+const errorResultSchema = z.object({
+  ok: z.literal(false),
+  error: z.object({ message: z.string(), requestId: z.string() }),
+});
+const staffResultSchema = z.discriminatedUnion("ok", [
+  errorResultSchema,
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      staffId: z.string(),
+      authUserId: z.string(),
+      displayName: z.string(),
+      email: z.string(),
+      status: z.enum(["active", "suspended"]),
+      roleCodes: z.array(z.string()),
+      roleIds: z.array(z.string()),
+      capabilityCodes: z.array(z.enum(adminCapabilityCodes)),
+      version: z.number().int().positive(),
+      createdAt: z.string(),
+      scopes: z.array(
+        z.discriminatedUnion("kind", [
+          z.object({ kind: z.literal("global") }),
+          z.object({ kind: z.literal("market"), marketId: z.string() }),
+          z.object({ kind: z.literal("location"), locationId: z.string() }),
+        ]),
+      ),
+    }),
+  }),
+]);
+const rolesResultSchema = z.discriminatedUnion("ok", [
+  errorResultSchema,
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      nextCursor: z.string().nullable(),
+      items: z.array(
+        z.object({
+          roleId: z.string(),
+          code: z.string(),
+          name: z.string(),
+          description: z.string(),
+          status: z.enum(adminRoleStatuses),
+          capabilityCodes: z.array(z.enum(adminCapabilityCodes)),
+          version: z.number().int().positive(),
+        }),
+      ),
+    }),
+  }),
+]);
+
 export default function StaffDetailPage({ params }: { params: Promise<{ "staff-id": string }> }) {
   const { "staff-id": staffId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
@@ -25,7 +115,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
   const command = useAdminCommand();
   const { notice, setNotice, busy, uncertain } = command;
   const [displayName, setDisplayName] = useState("");
-  const [marketId, setMarketId] = useState("");
+  const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([]);
   const [locationId, setLocationId] = useState("");
   const rolePagination = useAdminPagination();
 
@@ -34,13 +124,14 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
       setState({ phase: "loading" });
       void (async () => {
         try {
-          const [staffResponse, rolesResponse] = await Promise.all([
+          const [staffResponse, rolesResponse, scopesResponse] = await Promise.all([
             fetch(`/api/admin/staff/${encodeURIComponent(staffId)}`),
             fetch(
               `/api/admin/roles?limit=100${roleCursor ? `&cursor=${encodeURIComponent(roleCursor)}` : ""}`,
             ),
+            fetch("/api/admin/scopes"),
           ]);
-          const staffPayload = (await staffResponse.json()) as RpcResult<AdminStaffDetail>;
+          const staffPayload = staffResultSchema.parse(await staffResponse.json());
           if (!staffPayload.ok) {
             setState({
               phase: "error",
@@ -49,7 +140,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
             });
             return;
           }
-          const rolesPayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
+          const rolesPayload = rolesResultSchema.parse(await rolesResponse.json());
           if (!rolesPayload.ok) {
             setState({
               phase: "error",
@@ -58,10 +149,17 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
             });
             return;
           }
+          const scopesPayload = scopeResultSchema.parse(await scopesResponse.json());
+          if (!scopesPayload.ok) {
+            setState({
+              phase: "error",
+              message: scopesPayload.error.message,
+              requestId: scopesPayload.error.requestId,
+            });
+            return;
+          }
+          setScopeOptions(scopesPayload.value);
           setDisplayName(staffPayload.value.displayName);
-          setMarketId(
-            staffPayload.value.scopes.find((scope) => scope.kind === "market")?.marketId ?? "",
-          );
           setLocationId(
             staffPayload.value.scopes.find((scope) => scope.kind === "location")?.locationId ?? "",
           );
@@ -281,21 +379,23 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
 
         <ListPageSection
           title="Scopes"
-          description="Replace authority with a global scope, a market, or a location. Core validates active geography."
+          description="Replace authority with Global access or a named operational location."
         >
           <div className="grid gap-3 p-4 sm:grid-cols-2">
-            <Input
-              aria-label="Market ID"
-              placeholder="market ID"
-              value={marketId}
-              onChange={(event) => setMarketId(event.target.value)}
-            />
-            <Input
-              aria-label="Location ID"
-              placeholder="location ID"
-              value={locationId}
-              onChange={(event) => setLocationId(event.target.value)}
-            />
+            <Select value={locationId} onValueChange={setLocationId} disabled={busy || uncertain}>
+              <SelectTrigger aria-label="Staff location">
+                <SelectValue placeholder="Choose a location" />
+              </SelectTrigger>
+              <SelectContent>
+                {scopeOptions
+                  .filter((scope) => scope.kind === "location")
+                  .map((scope) => (
+                    <SelectItem key={scope.locationId} value={scope.locationId}>
+                      {scope.locationName}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
             <div className="flex flex-wrap gap-2 sm:col-span-2">
               <Button
                 size="sm"
@@ -317,24 +417,6 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
               <Button
                 size="sm"
                 variant="outline"
-                disabled={marketId.trim() === ""}
-                onClick={() =>
-                  void run(
-                    "scopes",
-                    `/api/admin/staff/${encodeURIComponent(staffId)}/scopes`,
-                    "PUT",
-                    {
-                      scopes: [{ kind: "market", marketId: marketId.trim() }],
-                      expectedVersion: staff.version,
-                    },
-                  )
-                }
-              >
-                Set market
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
                 disabled={locationId.trim() === ""}
                 onClick={() =>
                   void run(
@@ -352,7 +434,25 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
               </Button>
             </div>
             <p className="text-xs text-[var(--fm-text-muted)] sm:col-span-2">
-              Current: {staff.scopes.map((scope) => JSON.stringify(scope)).join(", ") || "none"}
+              Current:{" "}
+              {staff.scopes
+                .map((scope) => {
+                  if (scope.kind === "global") return "Global";
+                  if (scope.kind === "location") {
+                    const option = scopeOptions.find(
+                      (option) =>
+                        option.kind === "location" && option.locationId === scope.locationId,
+                    );
+                    return option?.kind === "location"
+                      ? option.locationName
+                      : "Unavailable location (retained assignment)";
+                  }
+                  return (
+                    scopeOptions.find((option) => option.marketId === scope.marketId)?.marketCode ??
+                    "Retained market assignment"
+                  );
+                })
+                .join(", ") || "No assigned scope"}
             </p>
           </div>
         </ListPageSection>

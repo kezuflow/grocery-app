@@ -58,11 +58,11 @@ export async function operationalCandidates(
     LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
     JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
     WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
+      AND r.dispatch_ready=1
       AND (? IS NULL OR m.id=?) AND (? IS NULL OR g.fulfillment_mode=?)
       AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1
         AND capability IN ('PICKING','PACKING','DISPATCH'))=3
-      AND ((g.fulfillment_mode='INSTANT' AND r.dispatch_ready=1 AND r.instant_promise_minutes IS NOT NULL
-          AND r.max_concurrent_instant_orders IS NOT NULL)
+      AND ((g.fulfillment_mode='INSTANT' AND r.dispatch_ready=1 AND r.instant_promise_minutes IS NOT NULL)
         OR (g.fulfillment_mode='SCHEDULED' AND g.cadence='WEEKLY' AND EXISTS (
           SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
           WHERE cycle.market_id=m.id AND cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
@@ -162,7 +162,8 @@ export function geographyQuoteGuard(
         AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND a.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (a.active_to IS NULL OR a.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
-        AND ((g.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness WHERE location_id=l.id AND version=? AND dispatch_ready=1 AND instant_promise_minutes IS NOT NULL AND max_concurrent_instant_orders IS NOT NULL))
+        AND EXISTS (SELECT 1 FROM fulfillment_location_readiness WHERE location_id=l.id AND version=? AND dispatch_ready=1)
+        AND ((g.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness WHERE location_id=l.id AND version=? AND dispatch_ready=1 AND instant_promise_minutes IS NOT NULL))
           OR (g.fulfillment_mode='SCHEDULED' AND g.cadence='WEEKLY' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
             WHERE cycle.id=? AND cycle.version=? AND cycle.status='OPEN' AND cycle.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
               AND cycle.order_opens_at<=CAST(unixepoch('subsec')*1000 AS INTEGER)
@@ -175,6 +176,7 @@ export function geographyQuoteGuard(
       candidate.modeVersion,
       candidate.marketId,
       candidate.geographyVersion,
+      candidate.readinessVersion,
       candidate.readinessVersion,
       cycle?.id ?? null,
       cycle?.version ?? null,

@@ -26,7 +26,10 @@ beforeEach(async () => {
     seedSql
       .split(/;\s*(?:\r?\n|$)/)
       .map((sql) => sql.trim())
-      .filter(Boolean)
+      // A trailing documentation comment is not an executable D1 statement.
+      .filter((sql) =>
+        sql.split(/\r?\n/).some((line) => line.trim() && !line.trimStart().startsWith("--")),
+      )
       .map((sql) => env.DB.prepare(sql)),
   );
 });

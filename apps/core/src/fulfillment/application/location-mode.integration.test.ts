@@ -67,7 +67,6 @@ describe("global fulfillment mode configuration", () => {
       ok: true,
       mode: "INSTANT",
       promiseMinutes: 90,
-      maxConcurrentInstantOrders: 20,
     });
   });
 

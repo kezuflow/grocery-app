@@ -1221,3 +1221,87 @@ describe("order commitment from canonical payment reactions", () => {
     expect(counts).toEqual({ intents: 1, attempts: 1, orders: 1 });
   });
 });
+
+describe("paid Instant commitment readiness independence", () => {
+  it.each(["dispatch readiness", "retired capacity"])(
+    "commits a confirmed payment after %s changes",
+    async (change) => {
+      const fixture = await seededCheckout({ fulfillmentMode: "INSTANT", onHand: 100000 });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const provider = createMockPaymentProvider(),
+        registry = new ProviderRegistry("test", [provider]);
+      const payment = await createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommandForQuote(fixture.customerId, quote.value),
+        quoteDependencies.deliveryProviders,
+      );
+      if (!payment.ok) throw new Error(payment.error.message);
+      const attempt = await env.DB.prepare(
+        "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+      )
+        .bind(payment.value.paymentIntentId)
+        .first<{ provider_reference: string }>();
+      if (!attempt) throw new Error("Missing payment attempt");
+      setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+      expect(
+        await reconcilePayment(env.DB, registry, {
+          paymentIntentId: payment.value.paymentIntentId,
+          idempotencyKey: crypto.randomUUID(),
+          actorId: "test",
+          requestId: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+      const reaction = await env.DB.prepare(
+        "SELECT id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER'",
+      )
+        .bind(payment.value.paymentIntentId)
+        .first<{ id: string }>();
+      if (!reaction) throw new Error("Missing commitment reaction");
+      const held = await env.DB.prepare(
+        "SELECT SUM(quantity) quantity FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+      )
+        .bind(quote.value.quoteId)
+        .first<{ quantity: number }>();
+      expect(held?.quantity).toBeGreaterThan(0);
+      onTestFinished(async () => {
+        await env.DB.prepare(
+          "UPDATE fulfillment_location_readiness SET dispatch_ready=1,max_concurrent_instant_orders=20 WHERE location_id='location-cebu-central'",
+        ).run();
+      });
+      await env.DB.prepare(
+        change === "dispatch readiness"
+          ? "UPDATE fulfillment_location_readiness SET dispatch_ready=0 WHERE location_id='location-cebu-central'"
+          : "UPDATE fulfillment_location_readiness SET max_concurrent_instant_orders=NULL WHERE location_id='location-cebu-central'",
+      ).run();
+      const command = {
+        reactionId: reaction.id,
+        paymentIntentId: payment.value.paymentIntentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED" as const,
+      };
+      const committed = await applyCheckoutPaymentReaction(env.DB, command);
+      expect(committed).toMatchObject({ applied: true });
+      if (!committed.orderId) throw new Error("No committed order");
+      expect(
+        await env.DB.prepare(
+          "SELECT SUM(quantity) quantity FROM inventory_reservation WHERE order_id=? AND status='RESERVED'",
+        )
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ quantity: held?.quantity });
+      expect(await applyCheckoutPaymentReaction(env.DB, command)).toEqual({
+        ...committed,
+        reason: "ALREADY_APPLIED",
+      });
+      expect(
+        await env.DB.prepare("SELECT count(*) count FROM grocery_order WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 1 });
+    },
+  );
+});

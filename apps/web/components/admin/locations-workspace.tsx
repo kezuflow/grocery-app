@@ -216,6 +216,14 @@ export function LocationsWorkspace({
                     >
                       Operating hours for {location.name}
                     </Link>
+                    {location.purpose === "CUSTOMER_FULFILLMENT" && (
+                      <Link
+                        href={`/admin/locations/${encodeURIComponent(location.locationId)}/fulfillment`}
+                        className="block text-sm underline"
+                      >
+                        Fulfillment readiness for {location.name}
+                      </Link>
+                    )}
                     <p className="text-sm">
                       {location.purpose === "CENTRAL_WAREHOUSE"
                         ? "Central warehouse"

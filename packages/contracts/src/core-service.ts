@@ -8,6 +8,7 @@ import type {
 import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminLocationsService } from "./admin-locations";
 import type { LocationScheduleService } from "./location-operating-schedule";
+import type { LocationFulfillmentService } from "./location-fulfillment-readiness";
 import type { AdminDeliveryCyclesService } from "./admin-delivery-cycles";
 import type { AdminServiceabilityService } from "./admin-serviceability";
 import type { AdminStaffAccessService } from "./admin-staff-access";
@@ -68,6 +69,7 @@ export interface ImplementedCoreService
     AdminFoundationService,
     AdminLocationsService,
     LocationScheduleService,
+    LocationFulfillmentService,
     AdminDeliveryCyclesService,
     AdminServiceabilityService,
     AdminStaffAccessService,
@@ -214,6 +216,8 @@ export const coreServiceMethodNames = [
   "createAdminLocation",
   "getAdminLocationSchedule",
   "saveAdminLocationSchedule",
+  "getAdminLocationFulfillment",
+  "configureAdminLocationFulfillment",
   "updateAdminLocation",
   "transitionAdminLocation",
   "getAdminServiceability",

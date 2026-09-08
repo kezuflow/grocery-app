@@ -1,5 +1,9 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
 import {
+  getAdminLocationFulfillment,
+  configureAdminLocationFulfillment,
+} from "./admin/application/location-fulfillment-readiness";
+import {
   getAdminLocationSchedule,
   saveAdminLocationSchedule,
 } from "./admin/application/location-schedule-administration";
@@ -2127,6 +2131,22 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     input: import("@freshmarkets/contracts").AuthenticatedRequest & { locationId: string },
   ) {
     return getAdminLocationSchedule(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async getAdminLocationFulfillment(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & { locationId: string },
+  ) {
+    return getAdminLocationFulfillment(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async configureAdminLocationFulfillment(
+    input: import("@freshmarkets/contracts").ConfigureAdminLocationFulfillmentRequest,
+  ) {
+    return configureAdminLocationFulfillment(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

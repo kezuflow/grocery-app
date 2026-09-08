@@ -86,6 +86,11 @@ beforeEach(async (context) => {
       (migration) => migration.name === "0083_location_operating_schedule.sql",
     )
   ) {
+    // The disposable commerce fixture is an explicitly staffed dispatch site.
+    // Retained migrations leave readiness unconfigured until an operator confirms it.
+    await env.DB.prepare(
+      "UPDATE fulfillment_location_readiness SET dispatch_ready=1 WHERE location_id='location-cebu-central'",
+    ).run();
     // Synthetic commerce fixtures explicitly operate all week. No retained migration invents hours.
     await env.DB.prepare(`INSERT OR IGNORE INTO location_operating_schedule(location_id,timezone,definition_json,updated_at)
       SELECT l.id,m.timezone,?,0 FROM fulfillment_location l JOIN market m ON m.id=l.market_id`)
