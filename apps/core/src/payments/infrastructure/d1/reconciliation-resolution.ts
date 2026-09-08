@@ -5,6 +5,7 @@ export const reconciliationResolutionEvidence = `EXISTS (
  SELECT 1 FROM payment_intent resolved_payment
  WHERE resolved_payment.id=payment_reconciliation_case.payment_intent_id
  AND (payment_reconciliation_case.category!='REFUND_UNRESOLVED' OR EXISTS (SELECT 1 FROM payment_refund r WHERE r.payment_intent_id=resolved_payment.id AND (r.reconciliation_case_id=payment_reconciliation_case.id OR r.id=CASE WHEN json_valid(payment_reconciliation_case.details_json) THEN json_extract(payment_reconciliation_case.details_json,'$.refundId') END) AND r.status='SUCCEEDED' AND r.next_retry_at IS NULL))
+ AND NOT EXISTS (SELECT 1 FROM payment_creation_observation creation WHERE creation.payment_intent_id=resolved_payment.id AND creation.applied_at IS NULL)
  AND resolved_payment.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED','FAILED','EXPIRED')
  AND NOT EXISTS (SELECT 1 FROM payment_refund r WHERE r.payment_intent_id=resolved_payment.id AND (r.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED') OR r.next_retry_at IS NOT NULL OR (r.status='FAILED' AND resolved_payment.status!='REFUNDED')))
  AND NOT EXISTS (SELECT 1 FROM payment_reaction r WHERE r.payment_intent_id=resolved_payment.id AND r.status IN ('PENDING','ESCALATED'))

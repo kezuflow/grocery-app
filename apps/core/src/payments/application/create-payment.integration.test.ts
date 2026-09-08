@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { getJobsForCron } from "../../scheduling/job-registry";
+import { setMockObservedState } from "../infrastructure/providers/mock-payment-provider";
+import { describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { createPayment, type CreatePaymentCommand } from "./create-payment";
 import { createMockPaymentProvider } from "../infrastructure/providers/mock-payment-provider";
@@ -235,4 +237,156 @@ describe("payment intent creation", () => {
       new ProviderRegistry("development", [createMockPaymentProvider()]).get("mock"),
     ).not.toBeNull();
   });
+  it("does not publish an attempt or continuation when the initial Payment transition loses", async () => {
+    const input = await command({ purpose: "GROCERY_CHECKOUT", subjectType: "checkout_attempt" });
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_creation_transition BEFORE UPDATE ON payment_intent WHEN OLD.status='INITIATED' AND NEW.status IN ('REQUIRES_ACTION','PROCESSING') BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await createPayment(env.DB, testRegistry(), input)).toMatchObject({
+        ok: false,
+        error: { code: "PAYMENT_OUTCOME_UNRESOLVED" },
+      });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_creation_transition");
+    }
+    const intent = await env.DB.prepare(
+      "SELECT id,status FROM payment_intent WHERE idempotency_key=?",
+    )
+      .bind(input.idempotencyKey)
+      .first<{ id: string; status: string }>();
+    if (!intent) throw new Error("Missing retained payment identity");
+    expect(intent.status).toBe("INITIATED");
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) n FROM payment_attempt WHERE payment_intent_id=?")
+        .bind(intent.id)
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM payment_provider_action WHERE payment_intent_id=?",
+      )
+        .bind(intent.id)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+  it.each(["replay", "registered lookup"])(
+    "recovers retained creation through %s without another provider submission",
+    async (recovery) => {
+      const provider = createMockPaymentProvider(),
+        registry = new ProviderRegistry("test", [provider]);
+      const submission = vi.spyOn(provider, "createPayment");
+      const input = await command({ purpose: "GROCERY_CHECKOUT", subjectType: "checkout_attempt" });
+      await env.DB.exec(
+        "CREATE TRIGGER ignore_creation_audit BEFORE INSERT ON audit_event WHEN NEW.action='PAYMENT.CREATION_APPLIED' BEGIN SELECT RAISE(IGNORE); END",
+      );
+      try {
+        expect(await createPayment(env.DB, registry, input)).toMatchObject({
+          ok: false,
+          error: { code: "PAYMENT_OUTCOME_UNRESOLVED" },
+        });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_creation_audit");
+      }
+      const saved = await env.DB.prepare(
+        "SELECT payment_intent_id,provider_reference,applied_at FROM payment_creation_observation WHERE payment_intent_id=(SELECT id FROM payment_intent WHERE idempotency_key=?)",
+      )
+        .bind(input.idempotencyKey)
+        .first<{
+          payment_intent_id: string;
+          provider_reference: string;
+          applied_at: number | null;
+        }>();
+      if (!saved) throw new Error("Missing durable creation response");
+      expect(saved.applied_at).toBeNull();
+      if (recovery === "replay") {
+        const concurrent = await Promise.all([
+          createPayment(env.DB, registry, input),
+          createPayment(env.DB, registry, input),
+        ]);
+        const recovered = concurrent[0];
+        expect(concurrent[1]).toEqual(recovered);
+        expect(recovered).toMatchObject({
+          ok: true,
+          value: {
+            paymentIntentId: saved.payment_intent_id,
+            state: "REQUIRES_ACTION",
+            actionType: "REDIRECT",
+          },
+        });
+        expect(await createPayment(env.DB, registry, input)).toEqual(recovered);
+      } else {
+        setMockObservedState(provider, saved.provider_reference, "FAILED");
+        const job = getJobsForCron("*/15 * * * *").find(
+          (job) => job.name === "payments.reconciliation-redrive",
+        );
+        if (!job) throw new Error("Missing registered lookup");
+        await job.run({
+          database: env.DB,
+          registry,
+          now: Date.now() + 20 * 60000,
+          emailDelivery: { send: async () => ({ ok: false, code: "TEST_DISABLED" }) },
+        });
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+            .bind(saved.payment_intent_id)
+            .first(),
+        ).toEqual({ status: "FAILED" });
+      }
+      expect(submission).toHaveBeenCalledTimes(1);
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) n FROM payment_attempt WHERE payment_intent_id=?")
+          .bind(saved.payment_intent_id)
+          .first(),
+      ).toEqual({ n: 1 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='PAYMENT.CREATION_APPLIED'",
+        )
+          .bind(saved.payment_intent_id)
+          .first(),
+      ).toEqual({ n: 1 });
+      expect(
+        await env.DB.prepare(
+          "SELECT applied_at FROM payment_creation_observation WHERE payment_intent_id=?",
+        )
+          .bind(saved.payment_intent_id)
+          .first(),
+      ).toMatchObject({ applied_at: expect.any(Number) });
+    },
+  );
+  it.each(["payment_attempt", "payment_provider_action"])(
+    "rolls back ignored %s and recovers the saved provider response",
+    async (table) => {
+      const provider = createMockPaymentProvider(),
+        registry = new ProviderRegistry("test", [provider]);
+      const submit = vi.spyOn(provider, "createPayment");
+      const input = await command({ purpose: "GROCERY_CHECKOUT", subjectType: "checkout_attempt" });
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_creation_effect BEFORE INSERT ON ${table} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await createPayment(env.DB, registry, input)).toMatchObject({ ok: false });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_creation_effect");
+      }
+      const before = await intentRows(input.idempotencyKey);
+      expect(before.row?.status).toBe("INITIATED");
+      expect(before.attempts).toBe(0);
+      expect(await createPayment(env.DB, registry, input)).toMatchObject({
+        ok: true,
+        value: { state: "REQUIRES_ACTION" },
+      });
+      expect(submit).toHaveBeenCalledTimes(1);
+      const after = await intentRows(input.idempotencyKey);
+      expect(after.attempts).toBe(1);
+      await expect(
+        env.DB.prepare(
+          "UPDATE payment_creation_observation SET amount_minor=amount_minor+1 WHERE payment_intent_id=?",
+        )
+          .bind(after.row?.id ?? "")
+          .run(),
+      ).rejects.toThrow(/immutable/);
+    },
+  );
 });

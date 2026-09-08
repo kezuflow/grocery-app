@@ -1,3 +1,4 @@
+import { recoverPaymentCreation } from "./recover-payment-creation";
 import { applyObservationToIntents, type ObservationApplication } from "./apply-observation";
 import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
@@ -28,6 +29,7 @@ export async function reconcilePayment(
   | { ok: true; value: ReconciliationOutcome; requestId: string }
   | { ok: false; error: { code: string; message: string } }
 > {
+  await recoverPaymentCreation(database, command.paymentIntentId);
   const repository = extendPaymentRepositoryForRefunds(database);
   const intent = await repository.findIntentById(command.paymentIntentId);
   if (!intent)

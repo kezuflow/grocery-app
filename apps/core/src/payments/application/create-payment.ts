@@ -1,3 +1,4 @@
+import { recordPaymentCreation, recoverPaymentCreation } from "./recover-payment-creation";
 import { requestHash } from "../../idempotency";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { PaymentPurpose } from "../domain/payment";
@@ -40,8 +41,8 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
  * Create (or replay) one payment intent for a purpose. The application intent
  * persists before the provider is contacted; a provider response never maps to
  * canonical `SUCCEEDED`. If the provider accepts but local persistence fails,
- * a reconciliation case records the provider reference for manual/automatic
- * recovery instead of losing the linkage.
+ * its durable private creation observation permits guarded local adoption without
+ * another provider submission. Unknown external responses remain reconciliation cases.
  */
 export async function createPayment(
   database: D1Database,
@@ -69,7 +70,7 @@ export async function createPayment(
     currency: command.currency,
   });
 
-  const existing = await repository.findIntentByIdempotencyKey(command.idempotencyKey);
+  let existing = await repository.findIntentByIdempotencyKey(command.idempotencyKey);
   if (existing) {
     if (
       existing.purpose !== command.purpose ||
@@ -82,6 +83,14 @@ export async function createPayment(
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different payment",
+        command.requestId,
+      );
+    await recoverPaymentCreation(database, existing.id);
+    existing = await repository.findIntentByIdempotencyKey(command.idempotencyKey);
+    if (!existing)
+      return failure(
+        "PAYMENT_OUTCOME_UNRESOLVED",
+        "Payment identity needs reconciliation",
         command.requestId,
       );
     const state = toActionState(existing.status);
@@ -255,13 +264,13 @@ export async function createPayment(
       returnUrl: command.returnUrl,
       idempotencyKey: command.idempotencyKey,
     });
-  } catch (error) {
+  } catch {
     await repository.recordReconciliationCase({
       intentId,
       category: "AMBIGUOUS_OUTCOME",
       detailsJson: JSON.stringify({
         provider: provider.code,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: "PAYMENT_CREATION_OUTCOME_UNRESOLVED",
       }),
       now: Date.now(),
     });
@@ -295,6 +304,50 @@ export async function createPayment(
   }
 
   const nextState = providerResult.actionType === "NONE" ? "PROCESSING" : "REQUIRES_ACTION";
+  try {
+    await recordPaymentCreation(
+      database,
+      {
+        intentId,
+        provider: provider.code,
+        purpose: command.purpose,
+        subjectType: command.subjectType,
+        subjectId: command.subjectId,
+        customerId: command.customerId,
+        amountMinor: command.amountMinor,
+        currency: command.currency,
+      },
+      providerResult,
+      Date.now(),
+    );
+    if (!(await recoverPaymentCreation(database, intentId)))
+      throw new Error("PAYMENT_CREATION_ADOPTION_INCOMPLETE");
+  } catch {
+    await repository.recordReconciliationCase({
+      intentId,
+      category: "AMBIGUOUS_OUTCOME",
+      detailsJson: JSON.stringify({
+        provider: provider.code,
+        providerReference: providerResult.providerReference,
+        reason: "PAYMENT_CREATION_OUTCOME_UNRESOLVED",
+      }),
+      now: Date.now(),
+    });
+    recordFinancialEvent({
+      event: "payment_outcome_unresolved",
+      requestId: command.requestId,
+      scope: "payments.persist",
+      provider: provider.code,
+      aggregateId: intentId,
+      outcomeCode: "PAYMENT_OUTCOME_UNRESOLVED",
+    });
+    return failure(
+      "PAYMENT_OUTCOME_UNRESOLVED",
+      "Payment created but persistence is unresolved; reconciliation is required",
+      command.requestId,
+    );
+  }
+
   if (
     providerResult.actionType !== "NONE" &&
     (!providerResult.expiresAt ||
@@ -318,68 +371,6 @@ export async function createPayment(
       command.requestId,
     );
   }
-  try {
-    const persistedAt = Date.now();
-    const statements = [
-      repository.recordAttempt({
-        attemptId: crypto.randomUUID(),
-        intentId,
-        customerId: command.customerId,
-        amountMinor: command.amountMinor,
-        currency: command.currency,
-        status: nextState,
-        provider: provider.code,
-        providerReference: providerResult.providerReference,
-        now: persistedAt,
-      }),
-      repository.updateIntentStatusCas({
-        intentId,
-        expectedVersion: 1,
-        fromStatus: "INITIATED",
-        toStatus: nextState,
-        now: persistedAt,
-      }),
-    ];
-    if (providerResult.actionType !== "NONE")
-      statements.push(
-        repository.recordProviderActionStatement({
-          paymentIntentId: intentId,
-          provider: provider.code,
-          providerReference: providerResult.providerReference,
-          actionType: providerResult.actionType,
-          redirectUrl: providerResult.redirectUrl,
-          clientToken: providerResult.clientToken,
-          expiresAt: providerResult.expiresAt!,
-          now: persistedAt,
-        }),
-      );
-    await database.batch(statements);
-  } catch (error) {
-    await repository.recordReconciliationCase({
-      intentId,
-      category: "AMBIGUOUS_OUTCOME",
-      detailsJson: JSON.stringify({
-        provider: provider.code,
-        providerReference: providerResult.providerReference,
-        reason: error instanceof Error ? error.message : String(error),
-      }),
-      now: Date.now(),
-    });
-    recordFinancialEvent({
-      event: "payment_outcome_unresolved",
-      requestId: command.requestId,
-      scope: "payments.persist",
-      provider: provider.code,
-      aggregateId: intentId,
-      outcomeCode: "PAYMENT_OUTCOME_UNRESOLVED",
-    });
-    return failure(
-      "PAYMENT_OUTCOME_UNRESOLVED",
-      "Payment created but persistence is unresolved; reconciliation is required",
-      command.requestId,
-    );
-  }
-
   void hash;
   return {
     ok: true,
