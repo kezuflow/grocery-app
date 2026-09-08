@@ -6,7 +6,13 @@ import type {
   AppErrorCode,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
+import { z } from "@freshmarkets/validation";
+import {
+  beginStaffAdministrationWrite,
+  completeStaffAdministrationWrite,
+  requireStaffWrite,
+} from "../../iam/infrastructure/staff-administration-write";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { log } from "../../observability";
 import {
@@ -17,6 +23,15 @@ import {
 const INVITE_SCOPE = "admin.staff.invite";
 const INVITATION_REVOKE_SCOPE = "admin.staff.invitation.revoke";
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const invitationResultSchema = z.object({
+  invitationId: z.string(),
+  email: z.string(),
+  displayName: z.string(),
+  status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
+  invitedByStaffId: z.string().nullable(),
+  expiresAt: z.string(),
+  createdAt: z.string(),
+});
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -57,20 +72,6 @@ async function readInvitation(
     .first<InvitationRow>();
 }
 
-function idempotencyComplete(
-  database: D1Database,
-  scope: string,
-  key: string,
-  reference: string | null,
-  now: number,
-): D1PreparedStatement {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(reference, now, scope, key);
-}
-
 function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
   return database
     .prepare(
@@ -91,48 +92,79 @@ export async function inviteAdminStaff(
 ): Promise<RpcResult<AdminStaffInvitationView>> {
   const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
   if (!access.ok) return access;
-
-  const email = request.email.trim().toLowerCase();
-  const displayName = request.displayName.trim();
-  if (displayName === "" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  const email = request.email.trim().toLowerCase(),
+    displayName = request.displayName.trim();
+  if (!displayName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return failure(
       "VALIDATION_FAILED",
       "A display name and valid email are required",
       request.requestId,
     );
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    INVITE_SCOPE,
-    request.idempotencyKey,
-    { email, displayName, roleIds: request.roleIds, scopes: request.scopes },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
+  const hash = await requestHash({
+    email,
+    displayName,
+    roleIds: request.roleIds,
+    scopes: request.scopes,
+  });
+  async function replay(): Promise<RpcResult<AdminStaffInvitationView> | null> {
+    const saved = await findIdempotencyRecord(deps.db, INVITE_SCOPE, request.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different request",
         request.requestId,
       );
+    if (saved.status === "SUCCEEDED" && saved.resultReference) {
+      if (saved.resultType !== "staff_invitation_snapshot") {
+        const row = await readInvitation(deps.db, saved.resultReference);
+        return row
+          ? { ok: true, value: toView(row), requestId: request.requestId }
+          : failure("INTERNAL_ERROR", "Saved invitation result is unavailable", request.requestId);
+      }
+      let value: unknown;
+      try {
+        value = JSON.parse(saved.resultReference);
+      } catch {
+        return failure(
+          "INTERNAL_ERROR",
+          "Saved invitation result is unavailable",
+          request.requestId,
+        );
+      }
+      const parsed = invitationResultSchema.safeParse(value);
+      return parsed.success
+        ? { ok: true, value: parsed.data, requestId: request.requestId }
+        : failure("INTERNAL_ERROR", "Saved invitation result is unavailable", request.requestId);
     }
-    if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
-      const existing = await readInvitation(deps.db, claim.existing.resultReference);
-      if (existing) return { ok: true, value: toView(existing), requestId: request.requestId };
-    }
-    return failure("CONFLICT", "The invitation command is still processing", request.requestId);
+    return null;
   }
-
-  const invitationId = crypto.randomUUID();
+  const prior = await replay();
+  if (prior) return prior;
+  const now = Date.now(),
+    invitationId = crypto.randomUUID();
+  const value: AdminStaffInvitationView = {
+    invitationId,
+    email,
+    displayName,
+    status: "PENDING",
+    invitedByStaffId: access.value.staffId,
+    expiresAt: new Date(now + INVITATION_TTL_MS).toISOString(),
+    createdAt: new Date(now).toISOString(),
+  };
   try {
     await deps.db.batch([
+      ...beginStaffAdministrationWrite(deps.db, {
+        ...access.value,
+        scope: INVITE_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        resultType: "staff_invitation_snapshot",
+        now,
+      }),
       deps.db
         .prepare(
-          `INSERT INTO staff_invitation (id, email_normalized, display_name, status, invited_by_staff_id,
-                                         expires_at, version, idempotency_key, created_at, updated_at)
-           VALUES (?, ?, ?, 'PENDING', ?, ?, 1, ?, ?, ?)`,
+          "INSERT INTO staff_invitation(id,email_normalized,display_name,status,invited_by_staff_id,expires_at,version,idempotency_key,created_at,updated_at) VALUES (?,?,?,'PENDING',?,?,1,?,?,?)",
         )
         .bind(
           invitationId,
@@ -144,6 +176,7 @@ export async function inviteAdminStaff(
           now,
           now,
         ),
+      requireStaffWrite(deps.db),
       ...invitationGrantStatements(deps.db, invitationId, request.roleIds, request.scopes),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
@@ -154,29 +187,26 @@ export async function inviteAdminStaff(
         correlationId: request.requestId,
         occurredAt: now,
       }),
-      idempotencyComplete(deps.db, INVITE_SCOPE, request.idempotencyKey, invitationId, now),
+      requireStaffWrite(deps.db),
+      ...completeStaffAdministrationWrite(deps.db, {
+        scope: INVITE_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        result: value,
+        now,
+      }),
     ]);
-  } catch (error) {
-    log("error", "admin.staff.invite_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, INVITE_SCOPE, request.idempotencyKey);
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("UNIQUE")) {
-      return failure(
+  } catch {
+    return (
+      (await replay()) ??
+      failure(
         "CONFLICT",
-        "A pending invitation for this email already exists",
+        "The invitation could not be created; refresh access and retry the same request",
         request.requestId,
-      );
-    }
-    return failure("CONFLICT", "The invitation could not be created", request.requestId);
+      )
+    );
   }
-
-  const created = await readInvitation(deps.db, invitationId);
-  if (!created) {
-    return failure("INTERNAL_ERROR", "The invitation could not be read back", request.requestId);
-  }
-  return { ok: true, value: toView(created), requestId: request.requestId };
+  return { ok: true, value, requestId: request.requestId };
 }
 
 /** Revoke a PENDING invitation with a required reason; audited and idempotent. */

@@ -1,13 +1,19 @@
-import type {
-  AdminRoleCreateRequest,
-  AdminRoleSummary,
-  AppErrorCode,
-  RpcResult,
+import {
+  adminCapabilityCodes,
+  isAdminCapability,
+  type AdminRoleCreateRequest,
+  type AdminRoleSummary,
+  type AppErrorCode,
+  type RpcResult,
 } from "@freshmarkets/contracts";
-import { isAdminCapability } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { z } from "@freshmarkets/validation";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { log } from "../../observability";
+import {
+  beginStaffAdministrationWrite,
+  completeStaffAdministrationWrite,
+  requireStaffWrite,
+} from "../../iam/infrastructure/staff-administration-write";
 import { readRoleDetail } from "./list-admin-roles";
 import {
   resolveStaffAdministrationAccess,
@@ -15,102 +21,132 @@ import {
 } from "./staff-administration-access";
 
 const SCOPE = "admin.roles.create";
-
-function failure(code: AppErrorCode, message: string, requestId: string) {
-  return { ok: false as const, error: { code, message, requestId } };
+const RESULT_TYPE = "created_role_snapshot";
+const roleResultSchema = z.object({
+  roleId: z.string(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string(),
+  status: z.enum(["ACTIVE", "ARCHIVED"]),
+  capabilityCodes: z.array(z.enum(adminCapabilityCodes)),
+  version: z.number().int().positive(),
+});
+function failure(code: AppErrorCode, message: string, requestId: string): RpcResult<never> {
+  return { ok: false, error: { code, message, requestId } };
 }
 
-/** Create an application role restricted to the canonical capability set. */
 export async function createAdminRole(
   deps: StaffAdministrationDeps,
   request: AdminRoleCreateRequest,
 ): Promise<RpcResult<AdminRoleSummary>> {
   const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
   if (!access.ok) return access;
-
-  const code = request.code.trim();
-  const name = request.name.trim();
-  const description = request.description.trim();
-  const capabilityCodes = [...new Set(request.capabilityCodes)];
-  if (!/^[a-z][a-z0-9_.-]*$/.test(code) || name === "") {
+  const code = request.code.trim(),
+    name = request.name.trim(),
+    description = request.description.trim();
+  const capabilityCodes = [...new Set(request.capabilityCodes)].sort();
+  if (!/^[a-z][a-z0-9_.-]*$/.test(code) || !name)
     return failure("VALIDATION_FAILED", "A code and name are required", request.requestId);
-  }
-  if (!capabilityCodes.every((capability) => isAdminCapability(capability))) {
+  if (!capabilityCodes.every(isAdminCapability))
     return failure(
       "VALIDATION_FAILED",
       "Capabilities must come from the canonical vocabulary",
       request.requestId,
     );
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, SCOPE, request.idempotencyKey, {
-    code,
-    name,
-    description,
-    capabilityCodes: [...capabilityCodes].sort(),
-  });
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
+  const hash = await requestHash({ code, name, description, capabilityCodes });
+  async function replay(): Promise<RpcResult<AdminRoleSummary> | null> {
+    const saved = await findIdempotencyRecord(deps.db, SCOPE, request.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different request",
         request.requestId,
       );
+    if (saved.status === "SUCCEEDED" && saved.resultReference) {
+      if (saved.resultType !== RESULT_TYPE)
+        return readRoleDetail(deps, saved.resultReference, request.requestId);
+      let value: unknown;
+      try {
+        value = JSON.parse(saved.resultReference);
+      } catch {
+        return failure("INTERNAL_ERROR", "Saved role result is unavailable", request.requestId);
+      }
+      const parsed = roleResultSchema.safeParse(value);
+      return parsed.success
+        ? { ok: true, value: parsed.data, requestId: request.requestId }
+        : failure("INTERNAL_ERROR", "Saved role result is unavailable", request.requestId);
     }
-    if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
-      return readRoleDetail(deps, claim.existing.resultReference, request.requestId);
-    }
-    return failure("CONFLICT", "The create command is still processing", request.requestId);
+    return null;
   }
-
-  const roleId = crypto.randomUUID();
-  const statements: D1PreparedStatement[] = [
+  const prior = await replay();
+  if (prior) return prior;
+  const now = Date.now(),
+    roleId = crypto.randomUUID();
+  const value: AdminRoleSummary = {
+    roleId,
+    code,
+    name,
+    description,
+    status: "ACTIVE",
+    capabilityCodes,
+    version: 1,
+  };
+  const statements = [
+    ...beginStaffAdministrationWrite(deps.db, {
+      ...access.value,
+      scope: SCOPE,
+      key: request.idempotencyKey,
+      hash,
+      resultType: RESULT_TYPE,
+      now,
+    }),
     deps.db
       .prepare(
-        "INSERT INTO role (id, code, name, description, status, version, created_at) VALUES (?, ?, ?, ?, 'ACTIVE', 1, ?)",
+        "INSERT INTO role(id,code,name,description,status,version,created_at) VALUES (?,?,?,?,'ACTIVE',1,?)",
       )
       .bind(roleId, code, name, description, now),
-    ...capabilityCodes.map((capability) =>
+    requireStaffWrite(deps.db),
+  ];
+  for (const capability of capabilityCodes)
+    statements.push(
       deps.db
         .prepare(
-          "INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code = ?",
+          "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code=?",
         )
         .bind(roleId, capability),
-    ),
+      requireStaffWrite(deps.db),
+    );
+  statements.push(
     auditEventStatement(deps.db, {
       actorUserId: access.value.authUserId,
       action: "ROLE.CREATED",
       resourceType: "role",
       resourceId: roleId,
-      details: { code, capabilityCodes: [...capabilityCodes].sort() },
+      details: { code, capabilityCodes },
       correlationId: request.requestId,
       occurredAt: now,
     }),
-    deps.db
-      .prepare(
-        "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-      )
-      .bind(roleId, now, SCOPE, request.idempotencyKey),
-  ];
+    requireStaffWrite(deps.db),
+    ...completeStaffAdministrationWrite(deps.db, {
+      scope: SCOPE,
+      key: request.idempotencyKey,
+      hash,
+      result: value,
+      now,
+    }),
+  );
   try {
     await deps.db.batch(statements);
-  } catch (error) {
-    log("error", "admin.roles.create_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await deps.db
-      .prepare(
-        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+  } catch {
+    return (
+      (await replay()) ??
+      failure(
+        "CONFLICT",
+        "The role could not be created; refresh access and retry the same request",
+        request.requestId,
       )
-      .bind(Date.now(), SCOPE, request.idempotencyKey)
-      .run();
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("UNIQUE")) {
-      return failure("CONFLICT", "A role with this code already exists", request.requestId);
-    }
-    return failure("CONFLICT", "The role could not be created", request.requestId);
+    );
   }
-
-  return readRoleDetail(deps, roleId, request.requestId);
+  return { ok: true, value, requestId: request.requestId };
 }

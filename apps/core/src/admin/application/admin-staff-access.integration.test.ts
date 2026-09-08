@@ -5,6 +5,8 @@ import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { acceptStaffInvitation } from "../../iam/application/accept-staff-invitation";
 import { createAuth } from "../../auth/service";
 import { requestHash } from "../../idempotency";
+import { inviteAdminStaff } from "./invite-admin-staff";
+import { createAdminRole } from "./create-admin-role";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -229,6 +231,194 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
 }
 
 describe("staff administration commands", () => {
+  it.each(["role", "grant", "invitation", "audit", "receipt"])(
+    "rolls back suppressed %s creation effects and safely retries",
+    async (effect) => {
+      const manager = await seedManager();
+      const roleCommand = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        code: `guarded-${crypto.randomUUID()}`,
+        name: "Guarded role",
+        description: "Required effects",
+        capabilityCodes: ["inventory.read", "orders.read"] as const,
+      };
+      const inviteCommand = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        email: `guarded-${crypto.randomUUID()}@example.com`,
+        displayName: "Guarded invitation",
+        roleIds: ["role_operations_viewer"],
+        scopes: [{ kind: "location", locationId: "location-cebu-central" }] as const,
+      };
+      const roleEffect = effect === "role" || effect === "grant";
+      const command = roleEffect ? roleCommand : inviteCommand;
+      const trigger =
+        effect === "role"
+          ? "BEFORE INSERT ON role"
+          : effect === "grant"
+            ? "BEFORE INSERT ON role_permission WHEN NEW.permission_id IN (SELECT id FROM permission WHERE code='orders.read')"
+            : effect === "invitation"
+              ? "BEFORE INSERT ON staff_invitation"
+              : effect === "audit"
+                ? "BEFORE INSERT ON audit_event WHEN NEW.action='STAFF.INVITED'"
+                : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='admin.staff.invite' AND NEW.status='SUCCEEDED'";
+      await env.DB.prepare(
+        `CREATE TRIGGER test_ignore_staff_creation ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      ).run();
+      try {
+        expect(
+          roleEffect
+            ? await core.createAdminRole(roleCommand)
+            : await core.inviteAdminStaff(inviteCommand),
+        ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM role WHERE code=?")
+            .bind(roleCommand.code)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM staff_invitation WHERE email_normalized=?",
+          )
+            .bind(inviteCommand.email)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE correlation_id=?")
+            .bind(command.requestId)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+          )
+            .bind(command.idempotencyKey)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.prepare("DROP TRIGGER test_ignore_staff_creation").run();
+      }
+      const result = roleEffect
+        ? await core.createAdminRole(roleCommand)
+        : await core.inviteAdminStaff(inviteCommand);
+      expect(result).toMatchObject({ ok: true });
+      expect(
+        roleEffect
+          ? await core.createAdminRole(roleCommand)
+          : await core.inviteAdminStaff(inviteCommand),
+      ).toEqual(result);
+    },
+  );
+  it("preserves the original creation receipts after later role and invitation changes", async () => {
+    const manager = await seedManager();
+    const own = { headers: { cookie: manager.cookie }, requestId: crypto.randomUUID() };
+    const roleCommand = {
+      ...own,
+      idempotencyKey: crypto.randomUUID(),
+      code: `snapshot-${crypto.randomUUID()}`,
+      name: "Original role",
+      description: "Original",
+      capabilityCodes: ["inventory.read"] as const,
+    };
+    const created = await core.createAdminRole(roleCommand);
+    if (!created.ok) throw new Error("Missing created role");
+    expect(
+      await core.updateAdminRole({
+        ...own,
+        roleId: created.value.roleId,
+        expectedVersion: created.value.version,
+        name: "Renamed role",
+        description: "Changed",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await core.createAdminRole(roleCommand)).toEqual(created);
+    const inviteCommand = {
+      ...own,
+      idempotencyKey: crypto.randomUUID(),
+      email: `snapshot-${crypto.randomUUID()}@example.com`,
+      displayName: "Original invitation",
+      roleIds: [created.value.roleId],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }] as const,
+    };
+    const invited = await core.inviteAdminStaff(inviteCommand);
+    if (!invited.ok) throw new Error("Missing invitation");
+    expect(
+      await core.revokeAdminStaffInvitation({
+        ...own,
+        invitationId: invited.value.invitationId,
+        reason: "Superseded",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await core.inviteAdminStaff(inviteCommand)).toEqual(invited);
+  });
+  it.each(["role", "invitation"])(
+    "rejects %s creation when the manager loses Global scope before the batch",
+    async (kind) => {
+      const manager = await seedManager();
+      const key = crypto.randomUUID();
+      const requestId = crypto.randomUUID();
+      const code = `revoked-${crypto.randomUUID()}`;
+      const email = `revoked-${crypto.randomUUID()}@example.com`;
+      const database = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await target
+                .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                .bind(manager.staffId)
+                .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const deps = { auth: createAuth(env), db: database };
+      const own = { headers: { cookie: manager.cookie }, idempotencyKey: key, requestId };
+      const result =
+        kind === "role"
+          ? await createAdminRole(deps, {
+              ...own,
+              code,
+              name: "Revoked creator",
+              description: "Guard test",
+              capabilityCodes: ["inventory.read"],
+            })
+          : await inviteAdminStaff(deps, {
+              ...own,
+              email,
+              displayName: "Revoked invitation",
+              roleIds: ["role_operations_viewer"],
+              scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+            });
+      expect(result).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM role WHERE code=?").bind(code).first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM staff_invitation WHERE email_normalized=?")
+          .bind(email)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(key)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE correlation_id=?")
+          .bind(requestId)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
   it("requires staff.manage with a global scope for invitations", async () => {
     const reader = await seedStaff({
       principal: await signUp(),

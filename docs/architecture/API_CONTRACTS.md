@@ -781,6 +781,10 @@ Implemented staff acceptance rechecks the current authentication user's normaliz
 
 See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseline and ownership design. Membership RPCs, membership navigation/errors/jobs, customer courier selection and local price writes described in historical slices are removal work, never active target authority.
 
+### Staff creation atomicity
+
+Staff role creation and invitation creation recheck current active Staff identity, `staff.manage` and Global scope in the same Core transaction as every required grant, audit and command receipt. Rejection leaves no newly claimed receipt or partial access. New creation receipts preserve the original DTO when the role or invitation later changes; preexisting success records that saved only a resource identity retain their historical read-back compatibility. Unfinished same-intent claims may be reclaimed atomically. This does not accept the remaining staff lifecycle commands, which need their own current-authority, state/version and required-effect verification.
+
 ### Initial administrator setup
 
 `getInitialAdministratorSetup` is an authenticated Core query with `UNAVAILABLE`, `VERIFY_EMAIL`, `READY` (expected version zero), or the caller's `COMPLETED` receipt. It never exposes the configured email or another account's setup identity. `completeInitialAdministratorSetup` accepts only an idempotency key and expected version zero; identity comes from Better Auth. Core requires the configured verified email, no prior setup, no Global staff scope and no existing Staff identity for the caller. Current identity, all explicit grants, immutable setup evidence, audit and command receipt are one guarded transaction. Identical completed replay remains available after setup configuration is removed. Web exposes this documented one-time workflow at `/setup`; see [setup operations](../operations/INITIAL_ADMINISTRATOR_SETUP.md).
