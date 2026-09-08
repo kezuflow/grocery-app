@@ -68,14 +68,16 @@ export function CheckoutTotalReview({
           currency={quote.currency}
         />
         {merchandisePromotion ? (
-          <p className="text-xs text-[var(--fm-text-muted)]">
+          <p className="text-xs text-[var(--fm-text-muted)] [overflow-wrap:anywhere]">
             {merchandisePromotion.name}
             {merchandisePromotion.automatic
               ? " (automatically applied)"
               : ` (${merchandisePromotion.code})`}
           </p>
         ) : (
-          <p className="text-xs text-[var(--fm-text-muted)]">No merchandise promotion applied.</p>
+          <p className="text-xs text-[var(--fm-text-muted)] [overflow-wrap:anywhere]">
+            No merchandise promotion applied.
+          </p>
         )}
         <div className="flex justify-between gap-4">
           <dt>Delivery subtotal</dt>
@@ -87,14 +89,16 @@ export function CheckoutTotalReview({
           currency={quote.currency}
         />
         {deliveryPromotion ? (
-          <p className="text-xs text-[var(--fm-text-muted)]">
+          <p className="text-xs text-[var(--fm-text-muted)] [overflow-wrap:anywhere]">
             {deliveryPromotion.name}
             {deliveryPromotion.automatic
               ? " (automatically applied)"
               : ` (${deliveryPromotion.code})`}
           </p>
         ) : (
-          <p className="text-xs text-[var(--fm-text-muted)]">No delivery promotion applied.</p>
+          <p className="text-xs text-[var(--fm-text-muted)] [overflow-wrap:anywhere]">
+            No delivery promotion applied.
+          </p>
         )}
         <div className="flex justify-between gap-4">
           <dt>Tax</dt>

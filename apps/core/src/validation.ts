@@ -6,6 +6,7 @@ import {
   identifierSchema,
   nonZeroIntegerSchema,
   positiveIntegerSchema,
+  promotionCodeMaxLength,
   reasonSchema,
   z,
 } from "@freshmarkets/validation";
@@ -295,7 +296,7 @@ export const createCheckoutQuoteSchema = headersRequest.extend({
   cartVersion: positiveIntegerSchema,
   addressId: identifierSchema,
   fulfillmentOptionId: identifierSchema,
-  promotionCodes: z.array(z.string().trim().min(1).max(64)).max(5).optional(),
+  promotionCodes: z.array(z.string().trim().min(1).max(promotionCodeMaxLength)).max(5).optional(),
   idempotencyKey: idempotencyKeySchema,
 });
 

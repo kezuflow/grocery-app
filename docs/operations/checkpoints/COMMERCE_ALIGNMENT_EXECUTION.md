@@ -1,7 +1,7 @@
 # Commerce alignment execution
 
-Updated: 2026-09-08 20:55 UTC / 2026-09-09 Asia/Manila.
-Status: implementation active. CA-3.1 committed/pushed as `27889d4`; CA-3.2a locally verified; CA-3.2b evidence audit next. No whole phase or provider acceptance is claimed.
+Updated: 2026-09-08 21:24 UTC / 2026-09-09 Asia/Manila.
+Status: implementation active. CA-3.1 committed/pushed as `27889d4`; CA-3.2a committed/pushed as `60f348d`; CA-3.2b locally verified; CA-3.2c phase gate next. No whole phase or provider acceptance is claimed.
 
 ## Scope and resume source
 
@@ -11,20 +11,26 @@ Previous checkpoint content is preserved byte-for-byte in [execution history](CO
 
 ## Observed workspace and preservation
 
-- Branch: `main`. Last confirmed pushed implementation HEAD: `27889d4`, `feat(promotions): publish managed campaign images`. CA-3.2a is the only intended uncommitted application slice at this milestone. Initial resume HEAD was `0b55737`; its partial media scaffold was preserved and completed.
+- Branch: `main`. Last confirmed pushed implementation HEAD: `60f348d`, `fix(catalog): recover interrupted product image uploads`. CA-3.2b is the only intended uncommitted application slice at this milestone. Initial resume HEAD was `0b55737`; its partial media scaffold was preserved and completed.
 - User-owned modified `.codex/config.toml` and untracked `docs/product/SIMPLIFICATION_DISCUSSION.md`: leave untouched, do not stage, do not adopt the discussion as scope.
 - `docs/product/IMPLEMENTATION_STATUS.md`: pre-existing invalid UTF-8 elsewhere; append bytes only if needed.
 - Only disposable database state: `apps/core/.wrangler/e2e-commerce-alignment-20260907`. No retained/shared/remote database was reset or upgraded. Migration 0086 was applied only to isolated test databases and the designated disposable browser state.
 - Prior application checks/stacks finished; no running application test process is recorded. Recheck processes before testing. Never overlap Core suites and managed browser stacks; keep source fixed during browser acceptance.
 - No actual PayMongo/Lalamove/OAuth/email acceptance, real provider action or deployment was performed. No subagents are authorized.
 
-## Active slice: CA-3.2b promotion authoring-to-quote browser acceptance
+## Active slice: CA-3.2c Phase 3 acceptance gate
 
-Owning phase: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 3 — Catalog, images, promotions and pricing; section B and promotion application in F, within parent CA-3.2.
+Owning phase: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 3 — Catalog, images, promotions and pricing, sections B-C and promotion application in F. No new implementation is assumed. Observable acceptance: reconcile each source criterion against current reachable code and real Worker/browser evidence; run current aggregate and catalog/category/variant/price/promotion browser matrix; fix reproduced gaps before accepting this phase. Earlier CA-0-2 and later CA-4/5/6/7 obligations remain open.
 
-Implementation/evidence audit: next. Observable acceptance: an Admin-authored/activated campaign reaches a customer cart and real Core Quote through Web, displaying Core's discount/total and preserving eligibility/stacking. Test-only provider adapters are local evidence, not provider sandbox acceptance. Reuse existing workflows; repair only reproduced gaps. Keep remaining catalog/category/Global-price/local-activation/phase-gate obligations under parent CA-3.2.
+Immediate next action after CA-3.2b commit/push: run `pnpm check` with no browser stack; then the managed browser matrix `tests/admin-catalog.spec.ts tests/category-recovery.spec.ts tests/catalog-variants.spec.ts tests/admin-promotions.spec.ts tests/product-media-recovery.spec.ts tests/promotion-media.spec.ts tests/authored-promotion-quote.spec.ts --retries=0` on the designated disposable state. Audit explicit/automatic promotion selection and claim/snapshot/replay coverage, published media across catalog/cart, and Global-only price writes with local activation. `global-pricing.spec.ts` uses response mocks and remains presentation-only; real variant/product-media journeys already exercise price/local activation through actual Core. Do not count test discovery as execution.
 
-Reconciliation: `customer-checkout-promotions.spec.ts` uses browser response mocks and proves presentation only. Existing `instant-quote.integration.test.ts` already contains `uses a saved Admin audience when producing a real Instant quote` through Admin RPC -> real createCheckoutQuote, with seeded basket/readiness and test provider. Preserve this evidence; the missing layer is browser-to-real-Core acceptance, not another promotion evaluator. Immediate next action: inspect existing customer address/cart, location readiness and cycle test setup to compose one real Web journey; map any missing prerequisites to their owning phase. No CA-3.2b source edits yet.
+## Completed in this continuation: CA-3.2b
+
+Verified working tree based on `60f348d`: new `apps/web/tests/authored-promotion-quote.spec.ts`; shared validation bound, Core RPC validator and existing Instant quote test; Web promotion entry/total review, quote route and route test; API contract/checkpoint. Admin permits 80-character codes while Web and Core RPC rejected over 64. All three now share the validation package's existing 80-character bound; no package dependency, schema or RPC shape added.
+
+Actual evidence: `pnpm typecheck`, `pnpm lint`, `pnpm naming:check`, `pnpm format:check` and `git diff --check` passed after formatting correction. Focused Web `vitest run --config vitest.config.ts test/app/api/checkout/quote/route.test.ts components/storefront/checkout/promotion-entry.test.tsx`: 7 passed/2 files (80 accepted/81 rejected). Core `vitest run --config vitest.config.ts src/checkout/application/instant-quote.integration.test.ts src/promotions/application/evaluate-checkout-promotions.integration.test.ts`: 27 passed/2 files, authored audience code now 80 characters. Browser command below passed once (1 test/2.0 minutes), proving real Admin create/activate -> customer Quote, applied 500 minor discount / 133500 minor total, and discard/release. Screenshot review found long-code overflow; wrapping and desktop/mobile overflow assertion added. Final identical browser command passed 1 test in 2.0 minutes with zero retries; 1280/390 screenshots inspected, no horizontal overflow, Quote discarded successfully. Evidence copied to `C:/Users/reggi/.codex/visualizations/2026/09/08/01a082ba-d1a3-7ce3-985b-99ed446e7347/commerce-authored-promotion-quote`. Visible legacy trial banner remains open CA-6 work, not accepted new-commerce UX.
+
+Corrected failures: first browser test configured dispatch before pickup (Core correctly rejected); second parsed cartId rather than CartView.id; third reached Core and reproduced its 64-character rejection. A temporary contracts import in validation failed typecheck; removed without adding a dependency. Two formatter failures corrected. No current test stack at that milestone; next run must not overlap Core tests.
 
 ## Completed in this continuation: CA-3.2a
 
@@ -33,7 +39,7 @@ Product missing-object retry and abandoned confirmed-object cleanup repaired in 
 - Reproduction: `pnpm --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/admin/application/product-media-recovery.integration.test.ts`: 2 failed/13 passed (missing-object retry and authority-revoked cleanup).
 - After repair: `pnpm --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/admin/application/product-media-recovery.integration.test.ts src/admin/application/promotion-media.integration.test.ts`: 27 passed/2 files. `pnpm typecheck` and `pnpm lint` passed.
 - `$env:E2E_START_STACK='1'; $env:E2E_STATE_NAME='e2e-commerce-alignment-20260907'; pnpm --filter @freshmarkets/web exec playwright test tests/product-media-recovery.spec.ts --retries=0`: 2 passed in 2.0 minutes (desktop/mobile native upload lost-response replay, price/local activation, cart/public image, removal and stale ETag rejection), including managed build and disposable migration setup. Screenshots copied under `C:/Users/reggi/.codex/visualizations/2026/09/08/01a082ba-d1a3-7ce3-985b-99ed446e7347/commerce-product-recovery`.
-- Tested working tree: based on `27889d4`, only recovery implementation/test plus canonical Architecture/checkpoint changes. Source remained fixed during browser tests and no Core suite overlapped. No test stack remains running. Final naming/format/diff review and commit/push are next for this slice.
+- Tested working tree: based on `27889d4`, only recovery implementation/test plus canonical Architecture/checkpoint changes. Source remained fixed during browser tests and no Core suite overlapped. No test stack remains running. Final naming/format/diff checks passed. Committed as `60f348d`; `git push origin main` confirmed `27889d4..60f348d`.
 
 ## Completed in this continuation: CA-3.1
 
@@ -58,8 +64,9 @@ Five major phase blocks remain (Phases 3-7), plus earlier-phase acceptance oblig
 | --- | --- | --- | --- |
 | CA-0-2 | Phases 0-2; sections A, E, F, relevant audit defects | Substantial existing work / partial evidence | Reconcile canonical and retained-baseline decisions; verify no-SQL site/address/serviceability/pickup/cycle setup, onboarding/scoped access and financial recovery. Register concrete missing evidence; fix any prerequisite before dependent work. Real account/provider inputs remain explicit. |
 | CA-3.1 | Phase 3, section B: campaign media | Implemented / locally verified | Evidence above; no real provider/deployment acceptance implied. |
-| CA-3.2a | Child of CA-3.2, section B: product upload recovery | Implemented / locally verified | Evidence above; pending final commit/push. |
-| CA-3.2b | Child of CA-3.2, sections B/F: authored promotion to real Quote | Active / browser acceptance missing | Existing Core journey is implemented; browser test currently mocks Core responses. |
+| CA-3.2a | Child of CA-3.2, section B: product upload recovery | Implemented / locally verified | Evidence above; committed/pushed `60f348d`. |
+| CA-3.2b | Child of CA-3.2, sections B/F: authored promotion to real Quote | Implemented / locally verified | Real Admin-to-Quote browser and focused Core evidence above. Final commit/push pending. |
+| CA-3.2c | Child of CA-3.2: Phase 3 acceptance gate | Active / current aggregate and matrix pending | Reconcile complete source criteria; fix reproduced gaps. |
 | CA-3.2 | Phase 3, sections B-C and promotion application in F | Implemented portions / partially verified | Check complete catalog/category/variant/product-media/publication/Global-price/local-activation/promotion authoring-to-checkout acceptance. Reuse existing evidence by revision; close actual gaps and phase gates. |
 | CA-4 | Phase 4, section D | Pending completion / not verified | Initial physical stock receipt, Global dispatch, tracked transit, destination-authorized accepted receipt, discrepancies/losses/returns, ledger conservation and races; reachable operator journey. Inspect existing code before decomposition. |
 | CA-5 | Phase 5, section G | Existing primitives / not verified as a journey | Cutoff exact paid demand, paid additions, purchase confirmation, receiving and cycle allocation, shortage resolution, picking/packing, inspected surplus; separate from Instant inventory. |

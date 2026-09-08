@@ -944,7 +944,7 @@ it("uses a saved Admin audience when producing a real Instant quote", async () =
     .bind(manager.id, manager.id, basket.customerId)
     .run();
   const meta = { headers: manager.headers, requestId: crypto.randomUUID() };
-  const code = `AUTHORED_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
+  const code = `AUTHORED_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`.padEnd(80, "X");
   const created = await exports.default.createAdminPromotion({
     ...meta,
     code,

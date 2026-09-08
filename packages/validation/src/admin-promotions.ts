@@ -1,4 +1,6 @@
 import { z } from "zod";
+export const promotionCodeMaxLength = 80;
+
 const manageableBenefitTypes = [
   "ORDER_FIXED_DISCOUNT",
   "ORDER_PERCENT_DISCOUNT",
@@ -27,7 +29,8 @@ export const adminPromotionCreateBodySchema = z.object({
   code: z
     .string()
     .trim()
-    .regex(/^[A-Z][A-Z0-9_]{0,79}$/),
+    .max(promotionCodeMaxLength)
+    .regex(/^[A-Z][A-Z0-9_]*$/),
   benefitType: z.enum(manageableBenefitTypes),
   globalUsageLimit: integer.positive().nullable().optional(),
   perCustomerUsageLimit: integer.positive().nullable().optional(),

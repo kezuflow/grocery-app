@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { z } from "@freshmarkets/validation";
+import { z, promotionCodeMaxLength } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
 import { requireIdempotencyKey } from "@/lib/core-client/commands";
 import { readBoundedJson } from "@/lib/http/bounded-body";
@@ -15,7 +15,7 @@ const bodySchema = z.object({
   cartVersion: z.coerce.number().int().positive(),
   addressId: z.string().trim().min(1),
   fulfillmentOptionId: z.string().trim().min(1).max(128),
-  promotionCodes: z.array(z.string().trim().min(1).max(64)).max(5).optional(),
+  promotionCodes: z.array(z.string().trim().min(1).max(promotionCodeMaxLength)).max(5).optional(),
 });
 
 export async function POST(request: Request) {

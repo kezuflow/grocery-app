@@ -77,12 +77,12 @@ describe("checkout quote route", () => {
       cartVersion: 2,
       addressId: "a1",
       fulfillmentOptionId: "fulfillment-1",
-      promotionCodes: [" save10 ", "Delivery-Free"],
+      promotionCodes: [" save10 ", "Delivery-Free", "a".repeat(80)],
     });
 
     expect(response.status).toBe(200);
     expect(createCheckoutQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ promotionCodes: ["SAVE10", "DELIVERY-FREE"] }),
+      expect.objectContaining({ promotionCodes: ["SAVE10", "DELIVERY-FREE", "A".repeat(80)] }),
     );
   });
 
@@ -101,7 +101,7 @@ describe("checkout quote route", () => {
       cartVersion: 2,
       addressId: "a1",
       fulfillmentOptionId: "fulfillment-1",
-      promotionCodes: ["X".repeat(65)],
+      promotionCodes: ["X".repeat(81)],
     });
 
     expect(tooMany.status).toBe(400);

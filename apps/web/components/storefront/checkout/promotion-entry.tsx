@@ -2,9 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 import type { PromotionCodeFeedback } from "@freshmarkets/contracts";
+import { promotionCodeMaxLength } from "@freshmarkets/validation";
 
 const MAX_PROMOTION_CODES = 5;
-const MAX_PROMOTION_CODE_LENGTH = 64;
 
 export function PromotionEntry({
   codes,
@@ -29,10 +29,8 @@ export function PromotionEntry({
       setLocalStatus("Enter a promotion code first.");
       return;
     }
-    if (normalized.length > MAX_PROMOTION_CODE_LENGTH) {
-      setLocalStatus(
-        `Promotion codes can contain at most ${MAX_PROMOTION_CODE_LENGTH} characters.`,
-      );
+    if (normalized.length > promotionCodeMaxLength) {
+      setLocalStatus(`Promotion codes can contain at most ${promotionCodeMaxLength} characters.`);
       return;
     }
     if (codes.includes(normalized)) {
@@ -76,7 +74,7 @@ export function PromotionEntry({
           name="promotionCode"
           aria-label="Promotion code"
           disabled={disabled}
-          maxLength={MAX_PROMOTION_CODE_LENGTH}
+          maxLength={promotionCodeMaxLength}
           autoComplete="off"
           className="min-h-11 flex-1 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 text-sm uppercase"
           placeholder="Enter code"
@@ -94,9 +92,9 @@ export function PromotionEntry({
           {codes.map((code) => (
             <li
               key={code}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--fm-surface-soft)] px-3 py-2 text-xs font-semibold"
+              className="inline-flex max-w-full items-center gap-2 rounded-full bg-[var(--fm-surface-soft)] px-3 py-2 text-xs font-semibold"
             >
-              <span>{code}</span>
+              <span className="min-w-0 break-all">{code}</span>
               <button
                 type="button"
                 aria-label={`Remove ${code} promotion code`}
@@ -110,7 +108,11 @@ export function PromotionEntry({
           ))}
         </ul>
       ) : null}
-      <div aria-live="polite" aria-atomic="true" className="mt-3 space-y-1 text-sm">
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="mt-3 space-y-1 text-sm [overflow-wrap:anywhere]"
+      >
         {localStatus ? <p>{localStatus}</p> : null}
         {feedback.map((entry) => (
           <p
