@@ -1,14 +1,12 @@
 "use client";
+import { adminProductSummarySchema, adminProductDetailSchema } from "@freshmarkets/validation";
+import { Button } from "@/components/ui/button";
 
-import type {
-  AdminCategoryPage,
-  AdminProductDetail,
-  AdminProductSummary,
-  RpcResult,
-} from "@freshmarkets/contracts";
+import type { AdminProductDetail } from "@freshmarkets/contracts";
+import { useCategoryOptions } from "@/components/admin/category-authoring-state";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
+import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,12 +17,12 @@ export default function EditProductPage() {
   const productId = useParams<{ "product-id": string }>()?.["product-id"];
   const router = useRouter();
   const searchParams = useSearchParams();
-  const intent = useAdminCommandIntent();
+  const intent = useCatalogCommand(adminProductSummarySchema);
   const adminContext = useAdminContext();
   const selectedScope =
     adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
   const [detail, setDetail] = useState<AdminProductDetail | null>(null);
-  const [categories, setCategories] = useState<AdminCategoryPage["items"]>([]);
+  const categories = useCategoryOptions();
   const [value, setValue] = useState<ProductFormValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -39,46 +37,61 @@ export default function EditProductPage() {
           }
         : { scopeKind: "GLOBAL" },
     );
-    void Promise.all([
-      fetch(`/api/admin/catalog/products/${productId}?${scopeParams}`).then(
-        (r) => r.json() as Promise<RpcResult<AdminProductDetail>>,
-      ),
-      fetch("/api/admin/catalog/categories").then(
-        (r) => r.json() as Promise<RpcResult<AdminCategoryPage>>,
-      ),
-    ]).then(([product, categoryResult]) => {
-      if (!product.ok) {
-        setError(`${product.error.message} Request reference: ${product.error.requestId}`);
-        return;
-      }
-      setDetail(product.value);
-      setValue({
-        name: product.value.name,
-        slug: product.value.slug,
-        description: product.value.description,
-        categoryId: product.value.categoryId,
-        customerDetails: product.value.customerDetails.map(
-          ({ label, value: detailValue, sortOrder }) => ({ label, value: detailValue, sortOrder }),
-        ),
+    let current = true;
+    setError(null);
+    setDetail(null);
+    setValue(null);
+    void fetch(`/api/admin/catalog/products/${productId}?${scopeParams}`)
+      .then(async (r) => catalogResultSchema(adminProductDetailSchema).parse(await r.json()))
+      .then((product) => {
+        if (!current) return;
+        if (!product.ok) {
+          setError(`${product.error.message} Request reference: ${product.error.requestId}`);
+          return;
+        }
+        if (
+          !product.value.allowedActions.includes("UPDATE") ||
+          product.value.scope.kind !== "GLOBAL"
+        ) {
+          setError("Global catalog management is required to edit this product.");
+          return;
+        }
+        setDetail(product.value);
+        setValue({
+          name: product.value.name,
+          slug: product.value.slug,
+          description: product.value.description,
+          categoryId: product.value.categoryId,
+          customerDetails: product.value.customerDetails.map(
+            ({ label, value: detailValue, sortOrder }) => ({
+              label,
+              value: detailValue,
+              sortOrder,
+            }),
+          ),
+        });
+      })
+      .catch(() => {
+        if (current) setError("Product could not be loaded. Refresh to retry.");
       });
-      if (categoryResult.ok) setCategories(categoryResult.value.items);
-    });
+    return () => {
+      current = false;
+    };
   }, [productId, selectedScope]);
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!detail || !value) return;
+  async function save(retry = false) {
+    if (!retry && (!detail || !value)) return;
     setError(null);
     try {
-      const result = await intent.submit(
-        async (idempotencyKey) =>
-          (
-            await fetch(`/api/admin/catalog/products/${productId}`, {
-              method: "PATCH",
-              headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-              body: JSON.stringify({ ...value, expectedVersion: detail.version }),
-            })
-          ).json() as Promise<RpcResult<AdminProductSummary>>,
-      );
+      const result = retry
+        ? await intent.retry()
+        : detail && value
+          ? await intent.submit(
+              `/api/admin/catalog/products/${productId}`,
+              { ...value, expectedVersion: detail.version },
+              "PATCH",
+            )
+          : null;
+      if (!result) return;
       if (!result.ok) {
         setError(
           result.error.code === "STALE_VERSION"
@@ -89,12 +102,29 @@ export default function EditProductPage() {
       }
       const from = searchParams.get("from");
       router.push(
-        `/admin/catalog/products/${productId}?updated=1${from ? `&from=${encodeURIComponent(from)}` : ""}`,
+        `/admin/catalog/products/${result.value.productId}?updated=1${from ? `&from=${encodeURIComponent(from)}` : ""}`,
       );
     } catch {
       setError("Connection lost. Retry to safely reuse this request.");
     }
   }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    await save();
+  }
+  if (intent.uncertain && !value)
+    return (
+      <div className="space-y-4">
+        <Alert>
+          <AlertDescription>
+            {error ?? "The previous response was lost. Recover the saved product request."}
+          </AlertDescription>
+        </Alert>
+        <Button disabled={intent.pending} onClick={() => void save(true)}>
+          Retry saved product
+        </Button>
+      </div>
+    );
   if (error && !value)
     return (
       <Alert variant="destructive">
@@ -108,20 +138,33 @@ export default function EditProductPage() {
         title="Edit product"
         description="Identity and customer details are version-guarded and audited; variants remain separate commands."
       />
-      {error ? (
+      {error || categories.error ? (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error ?? categories.error}</AlertDescription>
         </Alert>
       ) : null}
       <section className="max-w-3xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6">
-        <ProductForm
-          value={value}
-          categories={categories}
-          pending={intent.pending}
-          submitLabel="Save product"
-          onChange={setValue}
-          onSubmit={submit}
-        />
+        <fieldset disabled={intent.pending || intent.uncertain}>
+          <ProductForm
+            value={value}
+            categories={categories.items}
+            currentCategoryName={detail.categoryName}
+            pending={intent.pending}
+            submitLabel="Save product"
+            onChange={setValue}
+            onSubmit={submit}
+          />
+        </fieldset>
+        {intent.uncertain ? (
+          <Button disabled={intent.pending} onClick={() => void save(true)}>
+            Retry saved product
+          </Button>
+        ) : null}
+        {categories.hasMore || categories.error ? (
+          <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
+            {categories.error ? "Retry categories" : "More categories"}
+          </Button>
+        ) : null}
       </section>
     </div>
   );

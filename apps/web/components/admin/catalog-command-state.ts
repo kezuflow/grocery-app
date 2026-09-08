@@ -1,9 +1,9 @@
 "use client";
 import { useRef, useState } from "react";
 import { appErrorCodes } from "@freshmarkets/contracts";
-import { z, adminCategorySummarySchema } from "@freshmarkets/validation";
+import { z } from "@freshmarkets/validation";
 
-export const categoryErrorSchema = z.object({
+export const catalogErrorSchema = z.object({
   ok: z.literal(false),
   error: z.object({
     code: z.enum(appErrorCodes),
@@ -11,26 +11,24 @@ export const categoryErrorSchema = z.object({
     requestId: z.string(),
   }),
 });
-const resultSchema = z.union([
-  z.object({ ok: z.literal(true), value: adminCategorySummarySchema, requestId: z.string() }),
-  categoryErrorSchema,
-]);
 type Intent = { url: string; body: string; method: "POST" | "PATCH"; key: string };
+export function catalogResultSchema<T>(schema: z.ZodType<T>) {
+  return z.union([
+    z.object({ ok: z.literal(true), value: schema, requestId: z.string() }),
+    catalogErrorSchema,
+  ]);
+}
 
-/** Category create, edit and status retries retain the complete accepted browser intent. */
-export function useCategoryCommand() {
+/** Catalog create, edit and status retries retain the complete accepted browser intent. */
+export function useCatalogCommand<T>(schema: z.ZodType<T>) {
+  const resultSchema = catalogResultSchema(schema);
+
   const saved = useRef<Intent | null>(null);
   const active = useRef(false);
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
-  async function submit(url: string, body: unknown, method: Intent["method"] = "POST") {
+  async function execute(command: Intent) {
     if (active.current) return null;
-    const command = saved.current ?? {
-      url,
-      body: JSON.stringify(body),
-      method,
-      key: crypto.randomUUID(),
-    };
     saved.current = command;
     active.current = true;
     setPending(true);
@@ -52,5 +50,13 @@ export function useCategoryCommand() {
       setPending(false);
     }
   }
-  return { submit, pending, uncertain };
+  function submit(url: string, body: unknown, method: Intent["method"] = "POST") {
+    return execute(
+      saved.current ?? { url, body: JSON.stringify(body), method, key: crypto.randomUUID() },
+    );
+  }
+  function retry() {
+    return saved.current ? execute(saved.current) : Promise.resolve(null);
+  }
+  return { submit, retry, pending, uncertain };
 }

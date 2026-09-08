@@ -1,3 +1,5 @@
+import { adminProductCreateBodySchema, idempotencyKeySchema } from "@freshmarkets/validation";
+import { readBoundedJson } from "@/lib/http/bounded-body";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
@@ -78,60 +80,29 @@ async function GETHandler(request: Request) {
 
 /** Whitelisted Product creation adapter; Core remains authoritative for validation and writes. */
 async function POSTHandler(request: Request) {
-  const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const customerDetails = body?.customerDetails;
-  if (
-    !idempotencyKey ||
-    typeof body?.categoryId !== "string" ||
-    typeof body.slug !== "string" ||
-    typeof body.name !== "string" ||
-    !(body.description === null || typeof body.description === "string") ||
-    !Array.isArray(customerDetails) ||
-    typeof body.inventoryBaseUnitId !== "string" ||
-    !customerDetails.every(
-      (detail) =>
-        typeof detail === "object" &&
-        detail !== null &&
-        typeof (detail as Record<string, unknown>).label === "string" &&
-        typeof (detail as Record<string, unknown>).value === "string" &&
-        Number.isInteger((detail as Record<string, unknown>).sortOrder),
-    )
-  ) {
+  const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
+  const body = await readBoundedJson(request, adminProductCreateBodySchema, { maxBytes: 32768 });
+  if (!key.success || !body.ok)
     return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "Valid Product fields and an idempotency-key are required",
+          message: !body.ok ? body.error.message : "An idempotency-key header is required",
           requestId: webRequestId(request),
         },
       },
-      { status: 400 },
+      { status: !body.ok ? body.error.status : 400 },
     );
-  }
   return adminJson(
     await coreClient(env.CORE).createAdminProduct({
+      ...body.value,
       requestId: webRequestId(request),
       headers: requestHeaders(request),
-      categoryId: body.categoryId,
-      slug: body.slug,
-      name: body.name,
-      description: body.description,
-      customerDetails: customerDetails.map((detail) => {
-        const record = detail as Record<string, unknown>;
-        return {
-          label: record.label as string,
-          value: record.value as string,
-          sortOrder: record.sortOrder as number,
-        };
-      }),
-      inventoryBaseUnitId: body.inventoryBaseUnitId,
-      idempotencyKey,
+      idempotencyKey: key.data,
     }),
   );
 }
-
 export const GET = observeAdminRoute("admin.catalog.products.get", GETHandler);
 
 export const POST = observeAdminRoute("admin.catalog.products.post", POSTHandler);

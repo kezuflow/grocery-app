@@ -1,17 +1,18 @@
 "use client";
+import { adminCategorySummarySchema } from "@freshmarkets/validation";
 
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CategoryForm, type CategoryFormValue } from "@/components/admin/category-form";
-import { useCategoryCommand } from "@/components/admin/category-command-state";
+import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function NewCategoryPage() {
   const router = useRouter();
-  const intent = useCategoryCommand();
+  const intent = useCatalogCommand(adminCategorySummarySchema);
   const parents = useCategoryOptions();
   const [error, setError] = useState<{ message: string; requestId?: string } | null>(null);
   const [value, setValue] = useState<CategoryFormValue>({

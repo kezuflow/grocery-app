@@ -1,11 +1,12 @@
 "use client";
+import { adminCategorySummarySchema } from "@freshmarkets/validation";
 import { categoryDetailResultSchema } from "@/components/admin/category-authoring-state";
 
 import type { AdminCategoryDetail, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useCategoryCommand } from "@/components/admin/category-command-state";
+import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
 import { ListPageSection, PageHeader, StatusBadge } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function CategoryDetailPage() {
   const categoryId = useParams<{ "category-id": string }>()?.["category-id"];
   const searchParams = useSearchParams();
-  const intent = useCategoryCommand();
+  const intent = useCatalogCommand(adminCategorySummarySchema);
   const [result, setResult] = useState<RpcResult<AdminCategoryDetail> | null>(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);

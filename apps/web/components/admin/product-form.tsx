@@ -46,6 +46,7 @@ export function ProductForm({
   hideSubmit = false,
   value,
   categories,
+  currentCategoryName,
   units,
   pending,
   submitLabel,
@@ -56,6 +57,7 @@ export function ProductForm({
   hideSubmit?: boolean;
   value: ProductFormValue;
   categories: ReadonlyArray<AdminCategorySummary>;
+  currentCategoryName?: string;
   units?: ReadonlyArray<AdminUnitSummary>;
   pending: boolean;
   submitLabel: string;
@@ -460,6 +462,12 @@ export function ProductForm({
                     onChange={(event) => onChange({ ...value, categoryId: event.target.value })}
                   >
                     <option value="">Select a category</option>
+                    {value.categoryId &&
+                    !categories.some((category) => category.categoryId === value.categoryId) ? (
+                      <option value={value.categoryId}>
+                        {currentCategoryName ?? "Selected category"}
+                      </option>
+                    ) : null}
                     {categories
                       .filter(
                         (category) =>

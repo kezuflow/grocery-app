@@ -2,14 +2,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z, adminCategoryPageSchema, adminCategoryDetailSchema } from "@freshmarkets/validation";
 import type { AdminCategorySummary } from "@freshmarkets/contracts";
-import { categoryErrorSchema } from "./category-command-state";
+import { catalogErrorSchema } from "./catalog-command-state";
 export const categoryDetailResultSchema = z.union([
   z.object({ ok: z.literal(true), value: adminCategoryDetailSchema, requestId: z.string() }),
-  categoryErrorSchema,
+  catalogErrorSchema,
 ]);
 const pageSchema = z.union([
   z.object({ ok: z.literal(true), value: adminCategoryPageSchema }),
-  categoryErrorSchema,
+  catalogErrorSchema,
 ]);
 export function useCategoryOptions(excludedId?: string) {
   const [items, setItems] = useState<AdminCategorySummary[]>([]);
@@ -45,7 +45,7 @@ export function useCategoryOptions(excludedId?: string) {
         setCursor(result.value.nextCursor);
       } catch {
         if (current === generation.current)
-          setError("Parent categories could not be loaded. Retry to review available parents.");
+          setError("Categories could not be loaded. Retry to review available categories.");
       } finally {
         if (current === generation.current) {
           active.current = false;

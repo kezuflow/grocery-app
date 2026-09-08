@@ -1,9 +1,15 @@
 "use client";
+import {
+  z,
+  adminProductSummarySchema,
+  adminCatalogSkuSummarySchema,
+  adminProductMediaViewSchema,
+  adminUnitSummarySchema,
+} from "@freshmarkets/validation";
+import { catalogResultSchema } from "@/components/admin/catalog-command-state";
 
 import type {
   AdminCatalogSkuSummary,
-  AdminCategoryPage,
-  AdminProductMediaView,
   AdminProductSummary,
   AdminUnitSummary,
   RpcResult,
@@ -16,6 +22,7 @@ import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useCategoryOptions } from "@/components/admin/category-authoring-state";
 
 const CREATE_PRODUCT_FORM_ID = "create-product-form";
 
@@ -52,13 +59,14 @@ async function jsonCommand<T>(
   method: "POST" | "PUT",
   body: unknown,
   idempotencyKey: string,
+  schema: z.ZodType<T>,
 ): Promise<RpcResult<T>> {
   const response = await fetch(url, {
     method,
     headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
     body: JSON.stringify(body),
   });
-  return (await response.json()) as RpcResult<T>;
+  return catalogResultSchema(schema).parse(await response.json());
 }
 
 export default function NewProductPage() {
@@ -66,8 +74,11 @@ export default function NewProductPage() {
   const intent = useAdminCommandIntent();
   const savedSetup = useRef<ProductFormValue | null>(null);
   const [recovering, setRecovering] = useState(false);
-  const [categories, setCategories] = useState<AdminCategoryPage["items"]>([]);
+  const categories = useCategoryOptions();
   const [units, setUnits] = useState<AdminUnitSummary[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
+  const [unitsError, setUnitsError] = useState<string | null>(null);
+  const [unitsAttempt, setUnitsAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [value, setValue] = useState<ProductFormValue>({
     name: "",
@@ -92,18 +103,26 @@ export default function NewProductPage() {
     ],
   });
   useEffect(() => {
-    void Promise.all([
-      fetch("/api/admin/catalog/categories").then(
-        (r) => r.json() as Promise<RpcResult<AdminCategoryPage>>,
-      ),
-      fetch("/api/admin/catalog/units").then(
-        (r) => r.json() as Promise<RpcResult<AdminUnitSummary[]>>,
-      ),
-    ]).then(([categoryResult, unitResult]) => {
-      if (categoryResult.ok) setCategories(categoryResult.value.items);
-      if (unitResult.ok) setUnits(unitResult.value);
-    });
-  }, []);
+    let current = true;
+    setUnitsLoading(true);
+    setUnitsError(null);
+    void fetch("/api/admin/catalog/units")
+      .then(async (r) => catalogResultSchema(z.array(adminUnitSummarySchema)).parse(await r.json()))
+      .then((result) => {
+        if (!current) return;
+        if (result.ok) setUnits(result.value);
+        else setUnitsError(result.error.message);
+      })
+      .catch(() => {
+        if (current) setUnitsError("Units could not be loaded. Retry to continue product setup.");
+      })
+      .finally(() => {
+        if (current) setUnitsLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [unitsAttempt]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (intent.pending) return;
@@ -190,6 +209,7 @@ export default function NewProductPage() {
             customerDetails,
           },
           idempotencyKey,
+          adminProductSummarySchema,
         );
         if (!productResult.ok) return productResult;
         const productId = productResult.value.productId;
@@ -209,7 +229,9 @@ export default function NewProductPage() {
               body: fields,
             },
           );
-          const mediaResult = (await response.json()) as RpcResult<AdminProductMediaView>;
+          const mediaResult = catalogResultSchema(adminProductMediaViewSchema).parse(
+            await response.json(),
+          );
           if (!mediaResult.ok) {
             throw new ProductSetupError(`Image ${index + 1}: ${mediaResult.error.message}`);
           }
@@ -231,6 +253,7 @@ export default function NewProductPage() {
               sortOrder: index,
             },
             `${idempotencyKey}:variant:${index}`,
+            adminCatalogSkuSummarySchema,
           );
           if (!skuResult.ok) {
             throw new ProductSetupError(`Variant ${index + 1}: ${skuResult.error.message}`);
@@ -246,6 +269,7 @@ export default function NewProductPage() {
               expectedVersion: 1 + media.length,
             },
             `${idempotencyKey}:status`,
+            adminProductSummarySchema,
           );
           if (!statusResult.ok) {
             throw new ProductSetupError(`Status: ${statusResult.error.message}`);
@@ -284,24 +308,32 @@ export default function NewProductPage() {
               form={CREATE_PRODUCT_FORM_ID}
               size="sm"
               className="fm-admin-reference-primary"
-              disabled={intent.pending}
+              disabled={intent.pending || unitsLoading || !!unitsError}
             >
               {intent.pending ? "Saving…" : recovering ? "Retry saved setup" : "Create product"}
             </Button>
           </div>
         }
       />
-      {error ? (
+      {error || categories.error || unitsError ? (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error ?? categories.error ?? unitsError}</AlertDescription>
         </Alert>
       ) : null}
-      <fieldset disabled={intent.pending || recovering}>
+      {unitsError ? (
+        <Button onClick={() => setUnitsAttempt((attempt) => attempt + 1)}>Retry units</Button>
+      ) : null}
+      {categories.hasMore || categories.error ? (
+        <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
+          {categories.error ? "Retry categories" : "More categories"}
+        </Button>
+      ) : null}
+      <fieldset disabled={intent.pending || recovering || unitsLoading}>
         <ProductForm
           formId={CREATE_PRODUCT_FORM_ID}
           hideSubmit
           value={value}
-          categories={categories}
+          categories={categories.items}
           units={units}
           pending={intent.pending || recovering}
           submitLabel="Create product"

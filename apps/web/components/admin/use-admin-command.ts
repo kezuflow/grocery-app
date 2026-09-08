@@ -6,7 +6,7 @@ type PendingAdminCommand = {
   url: string;
   body: string;
   key: string;
-  method: "POST" | "PUT" | "PATCH";
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
 };
 const commandResultSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: z.unknown() }),
@@ -50,7 +50,7 @@ export function useAdminCommand() {
       operationId: string,
       url: string,
       body: unknown,
-      method: "POST" | "PUT" | "PATCH" = "POST",
+      method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST",
     ) => {
       const serialized = JSON.stringify(body);
       const previous = pending.current;

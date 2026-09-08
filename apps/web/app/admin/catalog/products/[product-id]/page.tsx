@@ -1,4 +1,6 @@
 "use client";
+import { z, adminProductDetailSchema, adminUnitSummarySchema } from "@freshmarkets/validation";
+import { catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -6,7 +8,6 @@ import type {
   AdminProductDetail,
   AdminProductMediaView,
   AdminUnitSummary,
-  RpcResult,
 } from "@freshmarkets/contracts";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
@@ -25,7 +26,7 @@ import {
   ListPageSection,
   StatusBadge,
 } from "../../../../../components/admin/admin-shell";
-import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
+import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
 import { ProductMediaUpload } from "@/components/admin/product-media-upload";
 import { ProductMediaRecoveryPanel } from "@/components/admin/product-media-recovery-panel";
@@ -80,7 +81,8 @@ export default function ProductDetailPage({
         ? "Product updated."
         : null,
   );
-  const commandIntent = useAdminCommandIntent();
+  const command = useAdminCommand();
+  const commandIntent = { pending: command.busy || command.uncertain };
   const targetOptions = adminContext.state.phase === "ready" ? adminContext.state.scopes : [];
   const selectedScope =
     adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
@@ -112,7 +114,9 @@ export default function ProductDetailPage({
           ),
           fetch(`${BASE}/units`),
         ]);
-        const productPayload = (await productResponse.json()) as RpcResult<AdminProductDetail>;
+        const productPayload = catalogResultSchema(adminProductDetailSchema).parse(
+          await productResponse.json(),
+        );
         if (loadRequest.current !== requestNumber) return;
         if (!productPayload.ok) {
           setState({
@@ -122,7 +126,18 @@ export default function ProductDetailPage({
           });
           return;
         }
-        const unitsPayload = (await unitsResponse.json()) as RpcResult<AdminUnitSummary[]>;
+        const unitsPayload = catalogResultSchema(z.array(adminUnitSummarySchema)).parse(
+          await unitsResponse.json(),
+        );
+        if (loadRequest.current !== requestNumber) return;
+        if (!unitsPayload.ok && productPayload.value.scope.kind === "GLOBAL") {
+          setState({
+            phase: "error",
+            message: unitsPayload.error.message,
+            requestId: unitsPayload.error.requestId,
+          });
+          return;
+        }
         setState({
           phase: "ready",
           product: productPayload.value,
@@ -147,19 +162,11 @@ export default function ProductDetailPage({
     body: unknown,
     successMessage = "Applied.",
   ) {
-    const payload = await commandIntent.submit(async (idempotencyKey) => {
-      const response = await fetch(url, {
-        method,
-        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-        body: JSON.stringify(body),
-      });
-      return (await response.json()) as RpcResult<unknown>;
-    });
-    setNotice(payload.ok ? successMessage : (payload.error?.message ?? "The command failed."));
-    if (payload.ok || payload.error?.code === "STALE_VERSION") load();
-    return payload.ok;
+    const applied = await command.run(url, url, body, method);
+    setNotice(applied ? successMessage : null);
+    if (applied) load();
+    return applied;
   }
-
   if (state.phase === "loading") {
     return (
       <div className="space-y-3" role="status" aria-label="Loading product">
@@ -231,12 +238,12 @@ export default function ProductDetailPage({
         }
       />
 
-      {notice ? (
+      {(notice ?? command.notice) ? (
         <p
           role="status"
           className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-3 text-sm"
         >
-          {notice}
+          {notice ?? command.notice}
         </p>
       ) : null}
 
@@ -258,6 +265,19 @@ export default function ProductDetailPage({
       </div>
 
       <div id="product-overview" className="scroll-mt-32">
+        {command.uncertain ? (
+          <Button
+            disabled={command.busy}
+            onClick={async () => {
+              if (await command.retry()) {
+                setNotice("Applied.");
+                load();
+              }
+            }}
+          >
+            Retry saved command
+          </Button>
+        ) : null}
         <ProductDetailSummary product={product} />
       </div>
 
@@ -406,6 +426,7 @@ export default function ProductDetailPage({
             <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
               <Input
                 aria-label="Reason"
+                disabled={commandIntent.pending}
                 placeholder="reason (required)"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
@@ -413,6 +434,7 @@ export default function ProductDetailPage({
               />
               <Button
                 ref={statusTrigger}
+                disabled={commandIntent.pending}
                 size="sm"
                 variant={product.status === "active" ? "destructive" : "default"}
                 onClick={() => {

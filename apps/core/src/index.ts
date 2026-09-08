@@ -4,6 +4,9 @@ import {
   adminCategoryCreateBodySchema,
   adminCategoryUpdateBodySchema,
   adminCategoryStatusBodySchema,
+  adminProductCreateBodySchema,
+  adminProductUpdateBodySchema,
+  adminProductStatusBodySchema,
 } from "@freshmarkets/validation";
 import {
   getAdminProductMediaRecovery,
@@ -655,32 +658,14 @@ const adminBootstrapSchema = authenticatedRequestSchema.extend({
   timezone: validationSchema.string().trim().min(1).max(100),
 });
 
-const catalogProductCustomerDetailSchema = validationSchema.object({
-  label: validationSchema.string().trim().min(1).max(80),
-  value: validationSchema.string().trim().min(1).max(1000),
-  sortOrder: validationSchema.number().int().min(0).max(10000),
-});
-
-const catalogProductCreateSchema = authenticatedRequestSchema.extend({
-  categoryId: validationSchema.string().trim().min(1).max(200),
-  slug: validationSchema
-    .string()
-    .trim()
-    .min(1)
-    .max(160)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug"),
-  name: validationSchema.string().trim().min(1).max(160),
-  description: validationSchema.string().trim().max(2000).nullable(),
-  customerDetails: validationSchema.array(catalogProductCustomerDetailSchema).max(20),
-  inventoryBaseUnitId: validationSchema.string().trim().min(1).max(200),
-  idempotencyKey: idempotencyKeySchema,
-});
-
-const catalogProductUpdateSchema = catalogProductCreateSchema
-  .omit({ inventoryBaseUnitId: true })
+const catalogProductCreateSchema = authenticatedRequestSchema
+  .extend(adminProductCreateBodySchema.shape)
+  .extend({ idempotencyKey: idempotencyKeySchema });
+const catalogProductUpdateSchema = authenticatedRequestSchema
+  .extend(adminProductUpdateBodySchema.shape)
   .extend({
     productId: validationSchema.string().trim().min(1).max(200),
-    expectedVersion: validationSchema.number().int().min(1),
+    idempotencyKey: idempotencyKeySchema,
   });
 
 const catalogProductDetailSchema = validationSchema.discriminatedUnion("scopeKind", [
@@ -696,13 +681,12 @@ const catalogProductDetailSchema = validationSchema.discriminatedUnion("scopeKin
   }),
 ]);
 
-const catalogProductStatusSchema = authenticatedRequestSchema.extend({
-  productId: validationSchema.string().trim().min(1).max(200),
-  status: validationSchema.enum(["active", "inactive"]),
-  reason: validationSchema.string().trim().min(1).max(500),
-  expectedVersion: validationSchema.number().int().min(0),
-  idempotencyKey: idempotencyKeySchema,
-});
+const catalogProductStatusSchema = authenticatedRequestSchema
+  .extend(adminProductStatusBodySchema.shape)
+  .extend({
+    productId: validationSchema.string().trim().min(1).max(200),
+    idempotencyKey: idempotencyKeySchema,
+  });
 
 const catalogProductMediaMetadataSchema = authenticatedRequestSchema.extend({
   productId: validationSchema.string().trim().min(1).max(200),

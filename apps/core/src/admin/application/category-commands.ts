@@ -1,3 +1,4 @@
+import { catalogCommandReceipt, executeCatalogCommand } from "./catalog-command-recovery";
 import type { AdminCategorySummary, RpcResult } from "@freshmarkets/contracts";
 import {
   z,
@@ -9,7 +10,7 @@ import {
   adminCategoryUpdateBodySchema,
   adminCategoryStatusBodySchema,
 } from "@freshmarkets/validation";
-import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
   resolveCatalogAdministrationAccess,
@@ -47,38 +48,14 @@ function invalid(input: unknown) {
     request.success ? request.data.requestId : "unavailable",
   );
 }
-async function replay(
-  deps: CatalogAdministrationDeps,
-  request: Command,
-  scope: string,
-  hash: string,
-): Promise<RpcResult<AdminCategorySummary> | null> {
-  const record = await findIdempotencyRecord(deps.db, scope, request.idempotencyKey);
-  if (!record) return null;
-  if (record.requestHash !== hash)
-    return failure(
-      "IDEMPOTENCY_CONFLICT",
-      "Key belongs to different category details",
-      request.requestId,
-    );
-  if (record.status !== "SUCCEEDED") return null;
-  if (!record.resultReference?.startsWith("{"))
-    return failure(
-      "CONFLICT",
-      "This historical category command already applied; review the category history",
-      request.requestId,
-    );
-  try {
-    return {
-      ok: true,
-      requestId: request.requestId,
-      value: adminCategorySummarySchema.parse(JSON.parse(record.resultReference)),
-    };
-  } catch {
-    return failure("CONFLICT", "Saved category evidence needs recovery review", request.requestId);
-  }
+function replay(deps: CatalogAdministrationDeps, request: Command, scope: string, hash: string) {
+  return catalogCommandReceipt(
+    deps.db,
+    { scope, key: request.idempotencyKey, hash, requestId: request.requestId },
+    adminCategorySummarySchema,
+  );
 }
-async function execute(
+function execute(
   deps: CatalogAdministrationDeps,
   request: Command,
   scope: string,
@@ -86,61 +63,27 @@ async function execute(
   actor: CatalogAdministrationAccess,
   id: string,
   effects: D1PreparedStatement[],
-): Promise<RpcResult<AdminCategorySummary>> {
-  const now = Date.now();
+) {
   const auditAction =
     scope === "admin.catalog.category"
       ? "CATALOG.CATEGORY_CREATED"
       : scope === "admin.catalog.category.update"
         ? "CATALOG.CATEGORY_UPDATED"
         : "CATALOG.CATEGORY_STATUS_CHANGED";
-  try {
-    await deps.db.batch([
-      deps.db
-        .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
-        SELECT 1 FROM staff_identity s JOIN staff_scope sc ON sc.staff_id=s.id AND sc.scope_kind='global'
-        JOIN staff_role sr ON sr.staff_id=s.id JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id
-        WHERE s.id=? AND s.auth_user_id=? AND s.status='active' AND p.code='catalog.manage')`)
-        .bind(actor.staffId, actor.authUserId),
-      // New claims and every business effect share one transaction. Historical
-      // interrupted claims are recoverable only when no applied audit exists.
-      deps.db
-        .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (
-        SELECT 1 FROM audit_event WHERE idempotency_key=? AND action=?)`)
-        .bind(request.idempotencyKey, auditAction),
-      deps.db
-        .prepare(`INSERT INTO idempotency_records(scope,idempotency_key,request_hash,result_type,status,created_at,updated_at)
-        VALUES (?,?,?,?,'PROCESSING',?,?) ON CONFLICT(scope,idempotency_key) DO UPDATE SET status='PROCESSING',updated_at=excluded.updated_at
-        WHERE idempotency_records.request_hash=excluded.request_hash AND idempotency_records.status IN ('PROCESSING','FAILED') AND idempotency_records.result_reference IS NULL`)
-        .bind(scope, request.idempotencyKey, hash, scope, now, now),
-      required(deps.db),
-      ...effects,
-      deps.db
-        .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(
-        SELECT json_object('categoryId',c.id,'code',c.code,'name',c.name,'slug',c.slug,'status',c.status,'sortOrder',c.sort_order,'iconAssetKey',c.icon_asset_key,
-          'parentCategoryId',c.parent_id,'parentName',parent.name,'productCount',(SELECT count(*) FROM product p WHERE p.category_id=c.id),'version',c.version)
-        FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?) ,updated_at=?
-        WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'`)
-        .bind(id, now, scope, request.idempotencyKey, hash),
-      required(deps.db),
-    ]);
-  } catch {
-    return (
-      (await replay(deps, request, scope, hash)) ??
-      failure(
-        "CONFLICT",
-        "Category, hierarchy or access changed; refresh and review",
-        request.requestId,
-      )
-    );
-  }
-  return (
-    (await replay(deps, request, scope, hash)) ??
-    failure(
-      "CONFLICT",
-      "Category result could not be confirmed; retry the saved request",
-      request.requestId,
-    )
+  return executeCatalogCommand(
+    deps.db,
+    { scope, key: request.idempotencyKey, hash, requestId: request.requestId },
+    actor,
+    auditAction,
+    effects,
+    deps.db
+      .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(
+      SELECT json_object('categoryId',c.id,'code',c.code,'name',c.name,'slug',c.slug,'status',c.status,'sortOrder',c.sort_order,'iconAssetKey',c.icon_asset_key,
+        'parentCategoryId',c.parent_id,'parentName',parent.name,'productCount',(SELECT count(*) FROM product p WHERE p.category_id=c.id),'version',c.version)
+      FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?),updated_at=?
+      WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'`)
+      .bind(id, Date.now(), scope, request.idempotencyKey, hash),
+    adminCategorySummarySchema,
   );
 }
 export async function createAdminCategory(
