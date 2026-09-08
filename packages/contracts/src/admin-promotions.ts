@@ -22,6 +22,8 @@ export const previewReasonCodes = [
   "PROMOTION_NOT_STARTED",
   "PROMOTION_EXPIRED",
   "MINIMUM_ORDER_NOT_MET",
+  "CUSTOMER_INELIGIBLE",
+  "CUSTOMER_UNAVAILABLE",
 ] as const;
 export type PreviewReasonCode = (typeof previewReasonCodes)[number];
 
@@ -110,9 +112,12 @@ export type AdminPromotionPreviewRequest = AuthenticatedRequest & {
   promotionId: string;
   subtotalMinor: number;
   deliverySubtotalMinor?: number;
+  customerId?: string;
 };
 
 export type AdminPromotionPreviewView = {
+  /** False means amount estimate only; checkout remains authoritative in both cases. */
+  eligibilityChecked: boolean;
   eligible: boolean;
   reasonCode: PreviewReasonCode | null;
   discountMinor: number | null;

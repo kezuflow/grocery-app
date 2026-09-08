@@ -4,7 +4,7 @@ import {
   type CheckoutPromotionApplication,
   type CheckoutPromotionCandidate,
   type CheckoutPromotionRule,
-  type PromotionCheckoutContext,
+  type PromotionEvaluationContext,
   type PromotionCodeFeedback,
 } from "../domain/checkout-promotion";
 
@@ -62,9 +62,9 @@ export type CheckoutPromotionEvaluation = {
   feedback: PromotionCodeFeedback[];
 };
 
-export async function evaluateCheckoutPromotions(
+export async function evaluateCheckoutPromotions<T extends PromotionEvaluationContext>(
   database: D1Database,
-  context: PromotionCheckoutContext,
+  context: T,
 ): Promise<CheckoutPromotionEvaluation> {
   const requestedCodes = [
     ...new Set(context.requestedCodes.map((code) => code.trim().toUpperCase())),

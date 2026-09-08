@@ -1,6 +1,14 @@
 # Commerce alignment execution
 
-## Active execution - 2026-09-08 19:31 UTC
+## Active execution - 2026-09-08 19:44 UTC
+
+Main is f6f8c88 (canonical delivery benefits). Current verified slice: named Customer search/selection for promotion preview and grants, customer-aware preview through the existing checkout evaluator, explicit amount-only estimate semantics, and transactional grant validation against active Customer plus matching active commerce principal. Three preview regressions and the separate disabled-principal grant race reproduced before repair. Full customer-preview check requires Global customers.read as well as promotions.read; no new claims/redemptions are written. No schema or new RPC method; preview adds optional customerId and returns eligibilityChecked.
+
+Executed: 66 focused Core tests (six files, including Instant quote and grant races), 400 Web tests/100 files, 68 contracts/19, types/lint/format/naming/architecture/readiness and both builds pass. Nine real Admin promotion browser journeys pass zero retries, including mobile Customer profile -> named selection -> eligible preview -> lost-response grant/replay. Screenshot inspected. Test-iteration failures were an extra DTO field in an old exact assertion, a malformed fixture permission SQL replacement, and missing mandatory grant_id in seeded retained usage; corrected without weakening business assertions. No tests or stack remain running. Logs/screenshots promotion-preview-* under the existing visualization directory. Save/push then continue.
+
+Next: closed audience-rule authoring and R2 campaign media/publication, then warehouse transfers, Scheduled exact-demand procurement/receiving/allocation, delivery/manual fallback and remaining onboarding/membership removal/full acceptance. Full aggregate last passed for the f6f8c88 slice, not rerun for this bounded slice. No whole phase/provider acceptance or retained database operation. Only apps/core/.wrangler/e2e-commerce-alignment-20260907 is disposable. Preserve .codex/config.toml, append docs/product/IMPLEMENTATION_STATUS.md, never overlap Core suites with managed browser stacks or edit source during browser runs. Owner authorizes continuation without routine approvals/subagents.
+
+## Prior delivery-benefit slice - 2026-09-08 19:31 UTC
 
 Main was 762a18e after promotion transaction, variant and membership-eligibility repairs. Current verified slice adds canonical delivery waiver/percentage/fixed authoring, caps, total/customer redemption limits and automatic selection; draft saves and all RPC boundaries share bounded schemas. Checkout and amount preview share integer discount calculation; unsupported retained benefit types/parameters fail closed. Web exposes all benefits and active configuration. New 0085 forward migration preserves the complete retained six-table promotion graph/rowids/paid snapshots and translates only legacy definition types with a version increment. Generator uses an in-memory 0084 baseline. No retained database was reset or upgraded.
 

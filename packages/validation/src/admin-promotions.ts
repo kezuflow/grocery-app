@@ -85,4 +85,21 @@ export const adminPromotionPageSchema = z.object({
 export const adminPromotionPreviewBodySchema = z.object({
   subtotalMinor: integer.nonnegative(),
   deliverySubtotalMinor: integer.nonnegative().optional(),
+  customerId: id.optional(),
+});
+
+export const adminPromotionPreviewViewSchema = z.object({
+  eligibilityChecked: z.boolean(),
+  eligible: z.boolean(),
+  discountMinor: integer.nonnegative().nullable(),
+  reasonCode: z
+    .enum([
+      "PROMOTION_INACTIVE",
+      "PROMOTION_NOT_STARTED",
+      "PROMOTION_EXPIRED",
+      "MINIMUM_ORDER_NOT_MET",
+      "CUSTOMER_INELIGIBLE",
+      "CUSTOMER_UNAVAILABLE",
+    ])
+    .nullable(),
 });

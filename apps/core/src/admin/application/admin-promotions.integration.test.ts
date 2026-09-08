@@ -294,6 +294,7 @@ describe("promotion administration", () => {
     expect(draftPreview.ok).toBe(true);
     if (!draftPreview.ok) return;
     expect(draftPreview.value).toEqual({
+      eligibilityChecked: false,
       eligible: false,
       reasonCode: "PROMOTION_INACTIVE",
       discountMinor: null,
@@ -383,7 +384,12 @@ describe("promotion administration", () => {
     });
     expect(eligible.ok).toBe(true);
     if (!eligible.ok) return;
-    expect(eligible.value).toEqual({ eligible: true, reasonCode: null, discountMinor: 2500 });
+    expect(eligible.value).toEqual({
+      eligibilityChecked: false,
+      eligible: true,
+      reasonCode: null,
+      discountMinor: 2500,
+    });
 
     const belowMinimum = await core.previewAdminPromotion({
       requestId: crypto.randomUUID(),

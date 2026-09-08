@@ -154,3 +154,58 @@ for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amo
     ).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("delivery-promotion.png"), fullPage: true });
   });
+
+test("selects a customer for preview and safely retries a customer grant", async ({
+  adminPage: page,
+  signedInPage,
+}, testInfo) => {
+  await signedInPage.goto("/account/profile");
+  await expect(signedInPage.getByRole("heading", { name: "Your preferences" })).toBeVisible();
+  const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
+  const email = session.user.email;
+  const code = `CUSTOMER_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto("/admin/promotions");
+  await page.getByLabel("Promotion code", { exact: true }).fill(code);
+  await page.getByLabel("Promotion name", { exact: true }).fill("Customer preview campaign");
+  await page.getByLabel("Fixed discount in pesos", { exact: true }).fill("25.50");
+  await page.getByRole("button", { name: "Create draft", exact: true }).click();
+  await page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: code, exact: true }) })
+    .getByRole("link", { name: "Manage", exact: true })
+    .click();
+  await page.getByLabel("Reason", { exact: true }).fill("Launch customer campaign");
+  await page.getByRole("button", { name: "Activate", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
+  await page.getByLabel("Preview customer", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Search preview customer", exact: true }).click();
+  await page.getByRole("button", { name: email, exact: true }).click();
+  await page.getByLabel("Subtotal in pesos", { exact: true }).fill("200");
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Eligible discount" })).toContainText(
+    "25.50",
+  );
+  await page.getByLabel("Grant customer", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Search grant customer", exact: true }).click();
+  await page.getByRole("button", { name: email, exact: true }).click();
+  const sent: { body: string | null; key: string | undefined }[] = [];
+  await page.route("**/api/admin/promotions/*/grants", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    sent.push({
+      body: route.request().postData(),
+      key: route.request().headers()["idempotency-key"],
+    });
+    const response = await route.fetch();
+    expect(await response.json()).toMatchObject({ ok: true });
+    if (sent.length === 1) await route.abort("failed");
+    else await route.fulfill({ response });
+  });
+  await page.getByRole("button", { name: "Grant to customer", exact: true }).click();
+  await expect(page.getByRole("link", { name: "View customer", exact: true })).toHaveCount(1);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[0]?.key).toBeTruthy();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("customer-promotion.png"), fullPage: true });
+});

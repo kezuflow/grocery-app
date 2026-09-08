@@ -16,6 +16,12 @@ export type PromotionCheckoutContext = {
   at: number;
 };
 
+/** Fields used by the current closed eligibility rules; no invented fulfillment facts in Admin previews. */
+export type PromotionEvaluationContext = Pick<
+  PromotionCheckoutContext,
+  "customerId" | "merchandiseSubtotalMinor" | "deliverySubtotalMinor" | "requestedCodes" | "at"
+>;
+
 export type PromotionEligibilityFacts = {
   firstOrder: boolean;
   newCustomer: boolean;
@@ -89,7 +95,7 @@ type Evaluated = {
 
 function ruleMatches(
   rule: CheckoutPromotionRule,
-  context: PromotionCheckoutContext,
+  context: PromotionEvaluationContext,
   facts: PromotionEligibilityFacts,
 ): boolean {
   switch (rule.type) {
@@ -152,7 +158,7 @@ export function calculatePromotionDiscount(
 
 function evaluate(
   candidate: CheckoutPromotionCandidate,
-  context: PromotionCheckoutContext,
+  context: PromotionEvaluationContext,
   facts: PromotionEligibilityFacts,
 ): Evaluated {
   if (!isPromotionBenefitValid(candidate.benefit))
@@ -220,7 +226,7 @@ export function permitsPromotionStack(
 }
 
 export function evaluateCheckoutPromotionCandidates(
-  context: PromotionCheckoutContext,
+  context: PromotionEvaluationContext,
   facts: PromotionEligibilityFacts,
   candidates: readonly CheckoutPromotionCandidate[],
 ): { applications: CheckoutPromotionApplication[]; feedback: PromotionCodeFeedback[] } {

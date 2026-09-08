@@ -1,3 +1,5 @@
+import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
+import { resolveCustomerAdministrationAccess } from "./customer-administration-access";
 import { manageableBenefitTypes } from "@freshmarkets/contracts";
 import {
   calculatePromotionDiscount,
@@ -190,32 +192,111 @@ export async function previewAdminPromotion(
     };
   }
 
+  if (request.customerId !== undefined) {
+    const customerAccess = await resolveCustomerAdministrationAccess(
+      deps,
+      request,
+      "customers.read",
+    );
+    if (!customerAccess.ok) return customerAccess;
+    const available = await deps.db
+      .prepare(
+        "SELECT c.id FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.id=? AND c.status='active' AND cp.status='active'",
+      )
+      .bind(request.customerId)
+      .first();
+    if (!available)
+      return {
+        ok: true,
+        value: {
+          eligible: false,
+          discountMinor: null,
+          reasonCode: "CUSTOMER_UNAVAILABLE",
+          eligibilityChecked: true,
+        },
+        requestId: request.requestId,
+      };
+    if (row.benefitType.startsWith("DELIVERY") && request.deliverySubtotalMinor === undefined)
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "A delivery subtotal is required for delivery benefits",
+          requestId: request.requestId,
+        },
+      };
+    const evaluation = await evaluateCheckoutPromotions(deps.db, {
+      customerId: request.customerId,
+      merchandiseSubtotalMinor: request.subtotalMinor,
+      deliverySubtotalMinor: request.deliverySubtotalMinor ?? 0,
+      requestedCodes: [row.code],
+      at: Date.now(),
+    });
+    const application = evaluation.applications.find(
+      (item) => item.promotionId === row.promotionId,
+    );
+    const feedback = evaluation.feedback.find((item) => item.code === row.code.toUpperCase());
+    return {
+      ok: true,
+      value: {
+        eligible: application !== undefined,
+        discountMinor: application?.amountMinor ?? null,
+        reasonCode: application
+          ? null
+          : feedback?.status === "EXPIRED"
+            ? "PROMOTION_EXPIRED"
+            : "CUSTOMER_INELIGIBLE",
+        eligibilityChecked: true,
+      },
+      requestId: request.requestId,
+    };
+  }
   const now = Date.now();
   if (row.status !== "ACTIVE") {
     return {
       ok: true,
-      value: { eligible: false, reasonCode: "PROMOTION_INACTIVE", discountMinor: null },
+      value: {
+        eligibilityChecked: false,
+        eligible: false,
+        reasonCode: "PROMOTION_INACTIVE",
+        discountMinor: null,
+      },
       requestId: request.requestId,
     };
   }
   if (row.startsAt > now) {
     return {
       ok: true,
-      value: { eligible: false, reasonCode: "PROMOTION_NOT_STARTED", discountMinor: null },
+      value: {
+        eligibilityChecked: false,
+        eligible: false,
+        reasonCode: "PROMOTION_NOT_STARTED",
+        discountMinor: null,
+      },
       requestId: request.requestId,
     };
   }
   if (row.endsAt !== null && row.endsAt <= now) {
     return {
       ok: true,
-      value: { eligible: false, reasonCode: "PROMOTION_EXPIRED", discountMinor: null },
+      value: {
+        eligibilityChecked: false,
+        eligible: false,
+        reasonCode: "PROMOTION_EXPIRED",
+        discountMinor: null,
+      },
       requestId: request.requestId,
     };
   }
   if (request.subtotalMinor < row.minimumMinor) {
     return {
       ok: true,
-      value: { eligible: false, reasonCode: "MINIMUM_ORDER_NOT_MET", discountMinor: null },
+      value: {
+        eligibilityChecked: false,
+        eligible: false,
+        reasonCode: "MINIMUM_ORDER_NOT_MET",
+        discountMinor: null,
+      },
       requestId: request.requestId,
     };
   }
@@ -262,7 +343,7 @@ export async function previewAdminPromotion(
   );
   return {
     ok: true,
-    value: { eligible: true, reasonCode: null, discountMinor },
+    value: { eligibilityChecked: false, eligible: true, reasonCode: null, discountMinor },
     requestId: request.requestId,
   };
 }

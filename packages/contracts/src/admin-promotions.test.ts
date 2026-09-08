@@ -24,6 +24,8 @@ describe("promotions contracts", () => {
       "PROMOTION_NOT_STARTED",
       "PROMOTION_EXPIRED",
       "MINIMUM_ORDER_NOT_MET",
+      "CUSTOMER_INELIGIBLE",
+      "CUSTOMER_UNAVAILABLE",
     ]);
   });
 
@@ -50,6 +52,7 @@ describe("promotions contracts", () => {
     } satisfies AdminPromotionDetail);
     void ({
       eligible: true,
+      eligibilityChecked: false,
       reasonCode: null,
       discountMinor: 5000,
     } satisfies AdminPromotionPreviewView);

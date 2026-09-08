@@ -370,7 +370,9 @@ export async function grantAdminPromotion(
       request.requestId,
     );
   const customer = await db
-    .prepare("SELECT id FROM customer WHERE id=? AND status='active'")
+    .prepare(
+      "SELECT c.id FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.id=? AND c.status='active' AND cp.status='active'",
+    )
     .bind(request.customerId)
     .first();
   if (!customer)
@@ -396,7 +398,7 @@ export async function grantAdminPromotion(
     [
       db
         .prepare(
-          `INSERT INTO promotion_grant(id,benefit_code,benefit_type,max_redemptions,status,customer_id,parameters_json,created_at,updated_at) SELECT ?,p.code,p.benefit_type,?,'ACTIVE',?,?,?,? FROM promotion p WHERE p.id=? AND p.version=? AND p.status='ACTIVE' AND EXISTS(SELECT 1 FROM customer WHERE id=? AND status='active') AND NOT EXISTS(SELECT 1 FROM promotion_grant WHERE benefit_code=p.code AND customer_id=?)`,
+          `INSERT INTO promotion_grant(id,benefit_code,benefit_type,max_redemptions,status,customer_id,parameters_json,created_at,updated_at) SELECT ?,p.code,p.benefit_type,?,'ACTIVE',?,?,?,? FROM promotion p WHERE p.id=? AND p.version=? AND p.status='ACTIVE' AND EXISTS(SELECT 1 FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.id=? AND c.status='active' AND cp.status='active') AND NOT EXISTS(SELECT 1 FROM promotion_grant WHERE benefit_code=p.code AND customer_id=?)`,
         )
         .bind(
           id,

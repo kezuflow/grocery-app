@@ -12,7 +12,9 @@ import {
   z,
   adminPromotionSummarySchema,
   adminPromotionGrantViewSchema,
+  adminPromotionPreviewViewSchema,
 } from "@freshmarkets/validation";
+import { CustomerPicker, type CustomerChoice } from "@/components/admin/customer-picker";
 import { PromotionDefinitionForm } from "@/components/admin/promotion-definition-form";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
@@ -43,7 +45,9 @@ export default function PromotionDetailPage({
   const [deliverySubtotal, setDeliverySubtotal] = useState("");
   const [previewSubtotal, setPreviewSubtotal] = useState("");
   const [previewResult, setPreviewResult] = useState<AdminPromotionPreviewView | null>(null);
-  const [grantCustomerId, setGrantCustomerId] = useState("");
+  const [grantCustomer, setGrantCustomer] = useState<CustomerChoice | null>(null);
+  const [previewCustomer, setPreviewCustomer] = useState<CustomerChoice | null>(null);
+  const [previewPending, setPreviewPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const command = useCatalogCommand(
     z.union([adminPromotionSummarySchema, adminPromotionGrantViewSchema]),
@@ -51,6 +55,7 @@ export default function PromotionDetailPage({
   const frozen = command.pending || command.uncertain;
 
   const load = useCallback(() => {
+    setPreviewResult(null);
     setState({ phase: "loading" });
     void (async () => {
       try {
@@ -99,7 +104,7 @@ export default function PromotionDetailPage({
       if (!payload) return false;
       setNotice(payload.ok ? "Applied." : payload.error.message);
       if (payload.ok) {
-        setGrantCustomerId("");
+        setGrantCustomer(null);
         load();
       }
       return payload.ok;
@@ -324,14 +329,27 @@ export default function PromotionDetailPage({
 
       <ListPageSection
         title="Preview"
-        description="Preview the discount amount before checkout eligibility and usage are confirmed."
+        description="Select a customer to check eligibility and current usage. Without a customer, this is an amount estimate. Checkout confirms the final result."
       >
-        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+        <div className="space-y-3 p-4">
+          <CustomerPicker
+            label="Preview customer"
+            value={previewCustomer}
+            disabled={previewPending}
+            onChange={(value) => {
+              setPreviewCustomer(value);
+              setPreviewResult(null);
+            }}
+          />
           <Input
             aria-label="Subtotal in pesos"
             placeholder="subtotal ₱"
             value={previewSubtotal}
-            onChange={(event) => setPreviewSubtotal(event.target.value)}
+            onChange={(event) => {
+              setPreviewSubtotal(event.target.value);
+              setPreviewResult(null);
+            }}
+            disabled={previewPending}
             className="sm:w-44"
           />
           {promotion.benefitType.startsWith("DELIVERY") ? (
@@ -339,12 +357,17 @@ export default function PromotionDetailPage({
               aria-label="Delivery fee in pesos"
               placeholder="delivery fee PHP"
               value={deliverySubtotal}
-              onChange={(event) => setDeliverySubtotal(event.target.value)}
+              onChange={(event) => {
+                setDeliverySubtotal(event.target.value);
+                setPreviewResult(null);
+              }}
+              disabled={previewPending}
             />
           ) : null}
           <Button
             size="sm"
             variant="outline"
+            disabled={previewPending}
             onClick={() => {
               const pesos = Number(previewSubtotal);
               if (
@@ -357,30 +380,48 @@ export default function PromotionDetailPage({
                 );
                 return;
               }
+              setPreviewPending(true);
+              setPreviewResult(null);
               void (async () => {
-                const response = await fetch(`${BASE}/${encodeURIComponent(promotionId)}/preview`, {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({
-                    subtotalMinor: Math.round(pesos * 100),
-                    ...(promotion.benefitType.startsWith("DELIVERY")
-                      ? { deliverySubtotalMinor: Math.round(Number(deliverySubtotal) * 100) }
-                      : {}),
-                  }),
-                });
-                const payload = (await response.json()) as RpcResult<AdminPromotionPreviewView>;
-                setPreviewResult(payload.ok ? payload.value : null);
-                setNotice(payload.ok ? null : payload.error.message);
+                try {
+                  const response = await fetch(
+                    `${BASE}/${encodeURIComponent(promotionId)}/preview`,
+                    {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        subtotalMinor: Math.round(pesos * 100),
+                        ...(previewCustomer ? { customerId: previewCustomer.customerId } : {}),
+                        ...(promotion.benefitType.startsWith("DELIVERY")
+                          ? { deliverySubtotalMinor: Math.round(Number(deliverySubtotal) * 100) }
+                          : {}),
+                      }),
+                    },
+                  );
+                  const payload = catalogResultSchema(adminPromotionPreviewViewSchema).parse(
+                    await response.json(),
+                  );
+                  setPreviewResult(payload.ok ? payload.value : null);
+                  setNotice(payload.ok ? null : payload.error.message);
+                } catch {
+                  setNotice("Preview could not be loaded. Try again.");
+                } finally {
+                  setPreviewPending(false);
+                }
               })();
             }}
           >
-            Preview
+            {previewPending ? "Checking..." : "Preview"}
           </Button>
           {previewResult ? (
             <span className="text-sm" role="status">
               {previewResult.eligible
-                ? `Estimated discount ₱${((previewResult.discountMinor ?? 0) / 100).toFixed(2)}`
-                : `Not eligible (${previewResult.reasonCode})`}
+                ? `${previewResult.eligibilityChecked ? "Eligible discount" : "Estimated discount"} ₱${((previewResult.discountMinor ?? 0) / 100).toFixed(2)}`
+                : previewResult.reasonCode === "CUSTOMER_UNAVAILABLE"
+                  ? "Customer is unavailable for new commerce."
+                  : previewResult.reasonCode === "CUSTOMER_INELIGIBLE"
+                    ? "Customer is not eligible under the campaign rules or current usage limits."
+                    : "Campaign is unavailable for these totals or dates."}
             </span>
           ) : null}
         </div>
@@ -388,28 +429,26 @@ export default function PromotionDetailPage({
 
       <ListPageSection
         title="Grants"
-        description="Targeted grants through the canonical grant table. Redemption happens at checkout."
+        description="Offer this campaign to a customer. Eligibility and redemption limits still apply at checkout."
       >
         {promotion.status === "ACTIVE" ? (
           <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-            <Input
-              aria-label="Customer ID"
+            <CustomerPicker
+              label="Grant customer"
+              value={grantCustomer}
+              onChange={setGrantCustomer}
               disabled={frozen}
-              placeholder="customer ID"
-              value={grantCustomerId}
-              onChange={(event) => setGrantCustomerId(event.target.value)}
-              className="sm:w-72"
             />
             <Button
               size="sm"
               disabled={frozen}
               onClick={() => {
-                if (grantCustomerId.trim() === "") {
-                  setNotice("A customer ID is required.");
+                if (!grantCustomer) {
+                  setNotice("Choose a customer first.");
                   return;
                 }
                 void run(`${BASE}/${encodeURIComponent(promotionId)}/grants`, "POST", {
-                  customerId: grantCustomerId.trim(),
+                  customerId: grantCustomer.customerId,
                   maxRedemptions: 1,
                 });
               }}
@@ -427,7 +466,12 @@ export default function PromotionDetailPage({
                 key={grant.grantId}
                 className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
               >
-                <span className="font-mono text-xs">{grant.customerId}</span>
+                <a
+                  className="text-sm underline"
+                  href={`/admin/customers/${encodeURIComponent(grant.customerId)}`}
+                >
+                  View customer
+                </a>
                 <StatusBadge tone={grant.status === "ACTIVE" ? "success" : "neutral"}>
                   {grant.status}
                 </StatusBadge>

@@ -358,3 +358,50 @@ for (const benefitType of [
       await exports.default.previewAdminPromotion({ ...meta, promotionId, subtotalMinor: 2001 }),
     ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
+
+it("rejects a grant when customer commerce access is disabled before its transaction", async () => {
+  const { manager, meta, create } = await fixture();
+  const initial = await exports.default.createAdminPromotion(create);
+  if (!initial.ok) throw new Error(initial.error.message);
+  const promotionId = initial.value.promotionId;
+  expect(
+    await exports.default.changeAdminPromotionStatus({
+      ...meta,
+      promotionId,
+      idempotencyKey: crypto.randomUUID(),
+      action: "ACTIVATE",
+      reason: "Launch",
+      expectedVersion: 1,
+    }),
+  ).toMatchObject({ ok: true });
+  const customerId = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO customer(id,auth_user_id,principal_id,status,version,created_at,updated_at) SELECT ?,auth_user_id,id,'active',1,?,? FROM customer_principal WHERE auth_user_id=(SELECT auth_user_id FROM staff_identity WHERE id=?)",
+  )
+    .bind(customerId, Date.now(), Date.now(), manager.id)
+    .run();
+  const db = interceptBatch(async () => {
+    await env.DB.prepare(
+      "UPDATE customer_principal SET status='disabled' WHERE id=(SELECT principal_id FROM customer WHERE id=?)",
+    )
+      .bind(customerId)
+      .run();
+  });
+  const key = crypto.randomUUID();
+  expect(
+    await grantAdminPromotion(
+      { db, auth: createAuth(env) },
+      { ...meta, promotionId, customerId, maxRedemptions: 1, idempotencyKey: key },
+    ),
+  ).toMatchObject({ ok: false });
+  expect(
+    await env.DB.prepare("SELECT id FROM promotion_grant WHERE customer_id=?")
+      .bind(customerId)
+      .first(),
+  ).toBeNull();
+  expect(
+    await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+      .bind(key)
+      .first(),
+  ).toBeNull();
+});
