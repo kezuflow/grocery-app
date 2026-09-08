@@ -1,6 +1,8 @@
 "use client";
 
-import type { LocationDeliveryProfileView, RpcResult } from "@freshmarkets/contracts";
+import type { LocationDeliveryProfileView } from "@freshmarkets/contracts";
+import { appErrorCodes } from "@freshmarkets/contracts";
+import { z, locationDeliveryProfileViewSchema } from "@freshmarkets/validation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAdminContext } from "../../../app/admin/admin-context-provider";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
@@ -25,8 +27,19 @@ const fields = [
   ["postalCode", "Postal code", false],
 ] as const;
 
-async function readResult<T>(response: Response | Promise<Response>): Promise<RpcResult<T>> {
-  return (await (await response).json()) as RpcResult<T>;
+const resultSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    requestId: z.string(),
+    value: locationDeliveryProfileViewSchema,
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ code: z.enum(appErrorCodes), message: z.string(), requestId: z.string() }),
+  }),
+]);
+async function readResult(response: Response | Promise<Response>) {
+  return resultSchema.parse(await (await response).json());
 }
 
 export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?: FetchLike }) {
@@ -36,11 +49,13 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
   const [view, setView] = useState<LocationDeliveryProfileView | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
   const loadGeneration = useRef(0);
   const canManage =
     admin.state.phase === "ready" && admin.state.context.capabilities.includes("delivery.manage");
 
   useEffect(() => {
+    if (pendingPayload) return;
     const locationId = location.locationId;
     const generation = ++loadGeneration.current;
     setView(null);
@@ -49,7 +64,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
     if (!locationId) return;
     const controller = new AbortController();
     setLoading(true);
-    void readResult<LocationDeliveryProfileView>(
+    void readResult(
       fetchImpl(
         `/api/admin/delivery-location-profile?locationId=${encodeURIComponent(locationId)}`,
         {
@@ -75,14 +90,14 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
       loadGeneration.current += 1;
       controller.abort();
     };
-  }, [fetchImpl, location.locationId]);
+  }, [fetchImpl, location.locationId, pendingPayload]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!view || !canManage || command.pending) return;
     const data = new FormData(event.currentTarget);
     const optional = (name: string) => String(data.get(name) ?? "").trim() || null;
-    const payload = {
+    const payload = pendingPayload ?? {
       locationId: view.locationId,
       senderName: String(data.get("senderName") ?? ""),
       phoneE164: String(data.get("phoneE164") ?? ""),
@@ -98,10 +113,16 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
       pickupInstructions: optional("pickupInstructions"),
       expectedVersion: view.profile?.version ?? 0,
     };
+    await save(payload);
+  }
+
+  async function save(payload: Record<string, unknown>) {
+    if (command.pending) return;
+    setPendingPayload(payload);
     setMessage(null);
     try {
       const result = await command.submit((idempotencyKey) =>
-        readResult<LocationDeliveryProfileView>(
+        readResult(
           fetchImpl("/api/admin/delivery-location-profile", {
             method: "PUT",
             credentials: "same-origin",
@@ -110,6 +131,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
           }),
         ),
       );
+      setPendingPayload(null);
       if (result.ok) {
         setView(result.value);
         setMessage("Store pickup profile saved.");
@@ -121,13 +143,13 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
     }
   }
 
-  if (!location.locationId) return null;
+  if (!location.locationId && !pendingPayload) return null;
   return (
     <details className="rounded border border-[var(--fm-border)] bg-white p-4">
       <summary className="cursor-pointer font-semibold">Store courier pickup profile</summary>
       <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
-        {location.label}. Coordinates come from the store location record; these fields identify the
-        sender and pickup address sent to the courier.
+        {view?.locationName ?? location.label}. Coordinates come from the store location record;
+        these fields identify the sender and pickup address sent to the courier.
       </p>
       {loading ? <p className="mt-3 text-sm">Loading pickup profile…</p> : null}
       {message ? (
@@ -137,7 +159,11 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
         </Alert>
       ) : null}
       {view ? (
-        <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+        <form
+          key={`${view.locationId}:${view.profile?.version ?? 0}`}
+          className="mt-4 grid gap-4 sm:grid-cols-2"
+          onSubmit={submit}
+        >
           {fields.map(([name, label, required]) => (
             <div className={name === "formattedAddress" ? "sm:col-span-2" : ""} key={name}>
               <Label htmlFor={`delivery-profile-${name}`}>{label}</Label>
@@ -146,7 +172,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
                 name={name}
                 type={name === "email" ? "email" : "text"}
                 required={required}
-                disabled={!canManage}
+                disabled={!canManage || command.pending || pendingPayload !== null}
                 defaultValue={view.profile?.[name] ?? ""}
                 className="mt-1"
               />
@@ -158,7 +184,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
               id="delivery-profile-country"
               name="countryCode"
               required
-              disabled={!canManage}
+              disabled={!canManage || command.pending || pendingPayload !== null}
               maxLength={2}
               defaultValue={view.profile?.countryCode ?? "PH"}
               className="mt-1"
@@ -170,7 +196,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
               id="delivery-profile-instructions"
               name="pickupInstructions"
               maxLength={1000}
-              disabled={!canManage}
+              disabled={!canManage || command.pending || pendingPayload !== null}
               defaultValue={view.profile?.pickupInstructions ?? ""}
               className="mt-1 min-h-24 w-full rounded border border-[var(--fm-border)] px-3 py-2 text-sm"
             />
@@ -180,12 +206,18 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
               Store coordinate: {view.coordinate.latitude}, {view.coordinate.longitude}
             </span>
             {canManage ? (
-              <Button type="submit" disabled={command.pending}>
+              <Button
+                type={pendingPayload ? "button" : "submit"}
+                onClick={pendingPayload ? () => void save(pendingPayload) : undefined}
+                disabled={command.pending}
+              >
                 {command.pending
                   ? "Saving…"
-                  : view.profile
-                    ? "Update pickup profile"
-                    : "Save pickup profile"}
+                  : pendingPayload
+                    ? "Retry unconfirmed save"
+                    : view.profile
+                      ? "Update pickup profile"
+                      : "Save pickup profile"}
               </Button>
             ) : (
               <span className="text-xs text-[var(--fm-text-muted)]">Read-only access</span>

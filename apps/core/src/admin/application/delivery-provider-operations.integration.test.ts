@@ -19,6 +19,26 @@ import {
 const LOCATION = "location-cebu-central";
 
 beforeEach(async () => {
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO user(id,name,email,email_verified,created_at,updated_at) VALUES ('auth-delivery-operator','Delivery operator','delivery-operator@example.com',1,1,1)",
+    ),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO staff_identity(id,auth_user_id,display_name,status,created_at,updated_at) VALUES ('staff-delivery-operator','auth-delivery-operator','Delivery operator','active',1,1)",
+    ),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role(id,code,name,created_at) VALUES ('role-delivery-test','delivery-test','Delivery test',1)",
+    ),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO staff_role(staff_id,role_id) VALUES ('staff-delivery-operator','role-delivery-test')",
+    ),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO staff_scope(id,staff_id,scope_kind,location_id) VALUES ('scope-delivery-test','staff-delivery-operator','location',?)",
+    ).bind(LOCATION),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission(role_id,permission_id) SELECT 'role-delivery-test',id FROM permission WHERE code IN ('delivery.read','delivery.manage')",
+    ),
+  ]);
   await env.DB.prepare("DELETE FROM fulfillment_location_delivery_profile WHERE location_id=?")
     .bind(LOCATION)
     .run();

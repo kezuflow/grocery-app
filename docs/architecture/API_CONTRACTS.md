@@ -692,6 +692,8 @@ coordinate. `requestExternalDelivery` requires one `jobId`, its expected Deliver
 closed provider code, and either `IMMEDIATE` or an RFC 3339 `SCHEDULED` pickup. Core derives the
 service type for Scheduled work from provider configuration, and both modes use Lalamove by default without customer-selected provider authority.
 
+Pickup-profile writes recheck current Staff identity, `delivery.manage`, Global/market/exact-location scope, the observed location coordinate/name, and profile version inside the same transaction as the claim, profile, required audit and frozen result. Rejection leaves no new receipt. Same-intent unfinished historical claims may recover; old identity-only successful receipts retain read-back compatibility, while new receipts always replay the original profile. The Web form validates the response DTO and retains both original payload and key after an unknown response, including a scope change, with explicit retry and locked editing.
+
 Checkout uses Lalamove quotation for both modes. Scheduled pickup must fit its verified horizon. Booking re-quotes and records actual courier cost/variance separately; it never charges the customer again.
 
 The request command loads the store profile, Order currency/amount and fulfillment snapshot,

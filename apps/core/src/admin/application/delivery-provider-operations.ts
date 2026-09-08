@@ -12,7 +12,8 @@ import type {
   UpsertLocationDeliveryProfileRequest,
 } from "@freshmarkets/contracts";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { claimCommandIdempotency, requestHash } from "../../idempotency";
+import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
+import { locationDeliveryProfileViewSchema } from "@freshmarkets/validation";
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
 import {
   requestProviderDelivery,
@@ -221,37 +222,62 @@ export async function upsertLocationDeliveryProfile(
     pickupInstructions: cleanOptional(request.pickupInstructions),
   };
   const scope = "admin.delivery.locationProfile";
-  const claim = await claimCommandIdempotency(deps.db, Date.now, scope, request.idempotencyKey, {
+  const legacyHash = await requestHash({
     locationId: request.locationId,
     expectedVersion: request.expectedVersion,
     ...normalized,
   });
-  if (!claim.claimed) {
-    if (claim.existing?.requestHash !== claim.hash)
+  const hash = await requestHash({
+    actorAuthUserId: access.value.authUserId,
+    locationId: request.locationId,
+    expectedVersion: request.expectedVersion,
+    ...normalized,
+  });
+  async function replay(): Promise<RpcResult<LocationDeliveryProfileView> | null> {
+    const saved = await findIdempotencyRecord(deps.db, scope, request.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash && saved.requestHash !== legacyHash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different store profile",
+        "Key belongs to a different pickup profile command",
         request.requestId,
       );
-    if (claim.existing?.status === "SUCCEEDED") {
-      const replay = await loadProfile(deps.db, request.locationId);
-      if (replay) return { ok: true, value: replay, requestId: request.requestId };
+    if (saved.status !== "SUCCEEDED") return null;
+    if (saved.resultReference === request.locationId && saved.requestHash === legacyHash) {
+      const historical = await loadProfile(deps.db, request.locationId);
+      return historical
+        ? { ok: true, value: historical, requestId: request.requestId }
+        : failure("CONFLICT", "Historical profile result is unavailable", request.requestId);
     }
-    return failure("CONFLICT", "The store profile update is still processing", request.requestId);
+    let raw: unknown;
+    try {
+      raw = JSON.parse(saved.resultReference ?? "null");
+    } catch {
+      raw = null;
+    }
+    const parsed = locationDeliveryProfileViewSchema.safeParse(raw);
+    return parsed.success
+      ? { ok: true, value: parsed.data, requestId: request.requestId }
+      : failure("CONFLICT", "Saved profile result needs recovery", request.requestId);
   }
-  const current = await deps.db
-    .prepare("SELECT version FROM fulfillment_location_delivery_profile WHERE location_id=?")
-    .bind(request.locationId)
-    .first<{ version: number }>();
-  if ((current?.version ?? 0) !== request.expectedVersion) {
-    await failIdempotency(deps.db, scope, request.idempotencyKey);
+  const prior = await replay();
+  if (prior) return prior;
+  const before = await loadProfile(deps.db, request.locationId);
+  if (!before) return failure("NOT_FOUND", "Fulfillment location not found", request.requestId);
+  const current = before.profile;
+  if ((current?.version ?? 0) !== request.expectedVersion)
     return failure(
       "STALE_VERSION",
       "Store pickup profile changed; refresh first",
       request.requestId,
     );
-  }
+  const next = locationDeliveryProfileViewSchema.parse({
+    ...before,
+    profile: { ...normalized, version: request.expectedVersion + 1 },
+  });
   const now = Date.now();
+  const required = () =>
+    deps.db.prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=1");
   try {
     const mutation = current
       ? deps.db
@@ -305,8 +331,31 @@ export async function upsertLocationDeliveryProfile(
             now,
           );
     await deps.db.batch([
+      deps.db
+        .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
+        SELECT 1 FROM staff_identity s JOIN staff_role sr ON sr.staff_id=s.id
+        JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id
+        JOIN staff_scope sc ON sc.staff_id=s.id JOIN fulfillment_location l ON l.id=?
+        WHERE s.id=? AND s.auth_user_id=? AND s.status='active' AND p.code='delivery.manage'
+        AND (sc.scope_kind='global' OR (sc.scope_kind='location' AND sc.location_id=l.id) OR (sc.scope_kind='market' AND sc.market_id=l.market_id))
+        AND l.name=? AND l.latitude=? AND l.longitude=?)`)
+        .bind(
+          request.locationId,
+          access.value.staffId,
+          access.value.authUserId,
+          before.locationName,
+          before.coordinate.latitude,
+          before.coordinate.longitude,
+        ),
+      deps.db
+        .prepare(`INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at)
+        VALUES (?,?,?,'PROCESSING','location_delivery_profile',?,?)
+        ON CONFLICT(scope,idempotency_key) DO UPDATE SET request_hash=excluded.request_hash,status='PROCESSING',result_reference=NULL,updated_at=excluded.updated_at
+        WHERE idempotency_records.status IN ('PROCESSING','FAILED') AND idempotency_records.request_hash IN (?,?) AND idempotency_records.result_reference IS NULL`)
+        .bind(scope, request.idempotencyKey, hash, now, now, hash, legacyHash),
+      required(),
       mutation,
-      deps.db.prepare("INSERT INTO admin_command_abort(id) SELECT 1 WHERE changes()=0"),
+      required(),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "DELIVERY.LOCATION_PROFILE_UPDATED",
@@ -318,16 +367,18 @@ export async function upsertLocationDeliveryProfile(
         correlationId: request.requestId,
         occurredAt: now,
       }),
-      completeIdempotency(deps.db, scope, request.idempotencyKey, request.locationId, now),
+      required(),
+      completeIdempotency(deps.db, scope, request.idempotencyKey, JSON.stringify(next), now),
+      required(),
     ]);
   } catch {
-    await failIdempotency(deps.db, scope, request.idempotencyKey);
-    return failure("CONFLICT", "Store pickup profile could not be updated", request.requestId);
+    const raced = await replay();
+    return (
+      raced ??
+      failure("CONFLICT", "Store profile or access changed; refresh and review", request.requestId)
+    );
   }
-  const saved = await loadProfile(deps.db, request.locationId);
-  return saved
-    ? { ok: true, value: saved, requestId: request.requestId }
-    : failure("INTERNAL_ERROR", "Saved store pickup profile is unavailable", request.requestId);
+  return { ok: true, value: next, requestId: request.requestId };
 }
 
 function parseObject(value: string | null): Record<string, unknown> | null {
