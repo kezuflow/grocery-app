@@ -5,12 +5,17 @@ import type {
   ProviderEventVerificationSuccess,
   PaymentProvider,
   ProviderPaymentView,
+  ProviderRefundLookupResult,
   ProviderSettlementObservation,
 } from "../../ports/payment-provider";
 import type { PaymentDomainState } from "../../domain/payment";
 import { validateSettlement } from "../../domain/settlement";
 
 const mockObservedStates = new WeakMap<PaymentProvider, Map<string, PaymentDomainState>>();
+const mockRefundObservations = new WeakMap<
+  PaymentProvider,
+  Map<string, ProviderRefundLookupResult>
+>();
 const mockFailingRefunds = new WeakMap<PaymentProvider, Set<string>>();
 const mockAuthorizationOutcomes = new WeakMap<
   PaymentProvider,
@@ -44,6 +49,17 @@ export function setMockRefundFailure(provider: PaymentProvider, reference: strin
   const failures = mockFailingRefunds.get(provider);
   if (!failures) throw new Error("Not the mock provider");
   failures.add(reference);
+}
+
+/** Test-only evidence control; never infers a provider result from application rows. */
+export function setMockRefundObservation(
+  provider: PaymentProvider,
+  key: string,
+  result: ProviderRefundLookupResult,
+): void {
+  const observations = mockRefundObservations.get(provider);
+  if (!observations) throw new Error("Not the mock provider");
+  observations.set(key, result);
 }
 
 const MOCK_SHARED_SECRET = "mock-provider-test-secret";
@@ -84,6 +100,7 @@ export function createMockPaymentProvider(): PaymentProvider {
   const observedStates = new Map<string, PaymentDomainState>();
   const createdPayments = new Map<string, { amountMinor: number; currency: string }>();
   const failingRefunds = new Set<string>();
+  const refundObservations = new Map<string, ProviderRefundLookupResult>();
   const authorizationOutcomes = new Map<string, ProviderAuthorizationView>();
   const provider: PaymentProvider = {
     code: "mock",
@@ -269,10 +286,29 @@ export function createMockPaymentProvider(): PaymentProvider {
       if (failingRefunds.has(input.providerReference)) {
         return { ok: false, errorCode: "PROVIDER_REFUND_REJECTED" };
       }
-      return {
-        ok: true,
-        providerRefundReference: `mock_refund_${input.refundProviderIdempotencyKey}`,
-      };
+      const providerRefundReference = `mock_refund_${input.refundProviderIdempotencyKey}`;
+      if (!refundObservations.has(input.refundProviderIdempotencyKey))
+        refundObservations.set(input.refundProviderIdempotencyKey, {
+          outcome: "FOUND",
+          refund: {
+            providerReference: input.providerReference,
+            providerRefundReference,
+            idempotencyKey: input.refundProviderIdempotencyKey,
+            canonicalState: "PROCESSING",
+            amountMinor: input.amountMinor,
+            currency: input.currency,
+            observedAt: Date.now(),
+          },
+        });
+      return { ok: true, providerRefundReference };
+    },
+    async lookupRefund(input) {
+      return (
+        refundObservations.get(input.refundProviderIdempotencyKey) ?? {
+          outcome: "UNRESOLVED",
+          reason: "NOT_FOUND",
+        }
+      );
     },
     async createTestEvent(input) {
       const rawBody = JSON.stringify({
@@ -309,6 +345,7 @@ export function createMockPaymentProvider(): PaymentProvider {
     },
   };
   mockObservedStates.set(provider, observedStates);
+  mockRefundObservations.set(provider, refundObservations);
   mockFailingRefunds.set(provider, failingRefunds);
   mockAuthorizationOutcomes.set(provider, authorizationOutcomes);
   return provider;

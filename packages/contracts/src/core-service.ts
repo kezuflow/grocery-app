@@ -222,6 +222,7 @@ export const coreServiceMethodNames = [
   "getAdminPaymentOverview",
   "getAdminPayment",
   "requestAdminRefund",
+  "recheckAdminRefund",
   "listAdminReconciliationCases",
   "resolveAdminReconciliationCase",
   "listAdminMemberships",

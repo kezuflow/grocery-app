@@ -172,6 +172,9 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 
 ## Payments and Refunds
 
+Refund recovery uses the existing `payment_refund` version, `attempt_count`, `processing_started_at`, `next_retry_at`, `provider_observed_at`, controlled `last_error_code`, and linked `reconciliation_case_id`. Claiming due work advances the version and leases the identity. A lookup may atomically bind an absent provider refund reference only to exact application-key/captured-payment evidence; it cannot overwrite a different reference. The successful Refund and derived Payment total commit together with required audit. Due terminal rows retain unfinished dependent projection work until explicitly completed; bounded exhaustion remains linked to a review case. Recheck command receipts are immutable JSON in the existing idempotency store. No new table or migration is required for this recovery path.
+
+
 - `payment_intents(id PK, purpose, subject_type, subject_id, customer_id FK, amount_minor, currency, status, idempotency_key UNIQUE, version, created_at, updated_at)`
 - `payment_attempts(id PK, payment_intent_id FK, provider, provider_reference NULL, status, idempotency_key UNIQUE, version, created_at, updated_at)`
 - `payment_provider_actions(id PK, payment_intent_id FK, provider, provider_reference, action_type REDIRECT|SDK, redirect_url NULL, client_token NULL, expires_at, status ACTIVE|CONSUMED|EXPIRED, created_at, updated_at)` with one Payments owner, action-type-specific continuation data, and at most one active action per owner.

@@ -228,7 +228,7 @@ export async function submitClaimedRefund(
       value: toView({ ...stored, status: stored.status as RefundView["state"] }),
       requestId: input.requestId,
     };
-  } catch (error) {
+  } catch {
     // Ambiguous failure: keep the identity and record reconciliation instead of
     // retrying with a new identity.
     await repository.updateRefundStatusCas({
@@ -244,7 +244,7 @@ export async function submitClaimedRefund(
       category: "REFUND_UNRESOLVED",
       detailsJson: JSON.stringify({
         refundId,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: "REFUND_SUBMISSION_OUTCOME_UNKNOWN",
       }),
       now,
     });

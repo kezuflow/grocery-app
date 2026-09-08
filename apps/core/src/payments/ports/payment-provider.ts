@@ -7,6 +7,35 @@ export type PaymentObservationIdentity = {
 
 import type { PaymentDomainState } from "../domain/payment";
 
+export type ProviderRefundLookupInput = {
+  providerReference: string;
+  providerRefundReference: string | null;
+  refundProviderIdempotencyKey: string;
+};
+export type ProviderRefundLookupResult =
+  | {
+      outcome: "FOUND";
+      refund: {
+        providerReference: string;
+        providerRefundReference: string;
+        idempotencyKey: string | null;
+        canonicalState: "PROCESSING" | "SUCCEEDED" | "FAILED";
+        amountMinor: number;
+        currency: string;
+        observedAt: number;
+      };
+    }
+  | {
+      outcome: "UNRESOLVED";
+      reason:
+        | "UNAVAILABLE"
+        | "NOT_FOUND"
+        | "AMBIGUOUS"
+        | "MISMATCH"
+        | "SEARCH_LIMIT"
+        | "UNSUPPORTED";
+    };
+
 export type ProviderSettlementObservation = {
   grossMinor: number;
   processingCostMinor: number;
@@ -179,6 +208,9 @@ export interface PaymentProvider {
     amountMinor: number;
     currency: string;
   }): Promise<{ ok: true; providerRefundReference: string } | { ok: false; errorCode: string }>;
+
+  /** Read-only recovery; absence never authorizes another refund submission. */
+  lookupRefund?(input: ProviderRefundLookupInput): Promise<ProviderRefundLookupResult>;
 
   /** Ensure one provider customer identity for an application customer. */
   ensureCustomer?(input: {

@@ -2,6 +2,7 @@ import type { PaymentDomainState } from "../../domain/payment";
 import type {
   PaymentProvider,
   ProviderPaymentView,
+  ProviderRefundLookupResult,
   ProviderSubscriptionStatus,
   ProviderSubscriptionView,
   VerifiedProviderEvent,
@@ -512,6 +513,102 @@ export function createPayMongoPaymentProvider(
           ok: false,
           errorCode: error instanceof PayMongoApiError ? error.code : "PAYMONGO_UNAVAILABLE",
         };
+      }
+    },
+    async lookupRefund(input): Promise<ProviderRefundLookupResult> {
+      try {
+        const intent = await getPaymentIntent(input.providerReference);
+        if (!intent?.paymentReference) return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+        const paymentReference = intent.paymentReference;
+        if (intent.view.providerReference !== input.providerReference)
+          return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+        function found(item: ReturnType<typeof resource>): ProviderRefundLookupResult {
+          if (!item || item.type !== "refund" || item.attributes.payment_id !== paymentReference)
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          const key = string(object(item.attributes.metadata)?.freshmarkets_refund_key);
+          if (
+            (key !== null && key !== input.refundProviderIdempotencyKey) ||
+            (!input.providerRefundReference && key !== input.refundProviderIdempotencyKey)
+          )
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          const amountMinor = integer(item.attributes.amount),
+            currency = string(item.attributes.currency)?.toUpperCase();
+          const state = item.attributes.status;
+          if (
+            amountMinor === null ||
+            !Number.isSafeInteger(amountMinor) ||
+            amountMinor <= 0 ||
+            !currency ||
+            !["pending", "processing", "succeeded", "failed"].includes(String(state))
+          )
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          return {
+            outcome: "FOUND",
+            refund: {
+              providerReference: input.providerReference,
+              providerRefundReference: item.id,
+              idempotencyKey: key,
+              amountMinor,
+              currency,
+              canonicalState:
+                state === "succeeded" ? "SUCCEEDED" : state === "failed" ? "FAILED" : "PROCESSING",
+              observedAt: now(),
+            },
+          };
+        }
+        if (input.providerRefundReference) {
+          const item = resource(
+            await api(`/v1/refunds/${encodeURIComponent(input.providerRefundReference)}`),
+          );
+          if (item?.id !== input.providerRefundReference)
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          return found(item);
+        }
+        const matches = new Map<string, NonNullable<ReturnType<typeof resource>>>();
+        const seenCursors = new Set<string>();
+        let cursor: string | null = null;
+        const limit = 20;
+        for (let page = 0; page < 3; page++) {
+          const query = new URLSearchParams({
+            "data.attributes.payment_id": paymentReference,
+            "data.attributes.limit": String(limit),
+          });
+          if (cursor) query.set("data.attributes.after", cursor);
+          const payload = object(await api(`/v1/refunds?${query}`));
+          if (
+            !Array.isArray(payload?.data) ||
+            payload.data.length > limit ||
+            (payload.has_more !== undefined && typeof payload.has_more !== "boolean")
+          )
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          const items = payload.data.map((value) => resource({ data: value }));
+          if (
+            items.some(
+              (item) =>
+                !item || item.type !== "refund" || item.attributes.payment_id !== paymentReference,
+            )
+          )
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          for (const item of items)
+            if (
+              item &&
+              object(item.attributes.metadata)?.freshmarkets_refund_key ===
+                input.refundProviderIdempotencyKey
+            )
+              matches.set(item.id, item);
+          if (matches.size > 1) return { outcome: "UNRESOLVED", reason: "AMBIGUOUS" };
+          if (payload.has_more === false || (payload.has_more !== true && items.length < limit))
+            return matches.size === 1
+              ? found([...matches.values()][0])
+              : { outcome: "UNRESOLVED", reason: "NOT_FOUND" };
+          cursor = items.at(-1)?.id ?? null;
+          if (!cursor || seenCursors.has(cursor))
+            return { outcome: "UNRESOLVED", reason: "SEARCH_LIMIT" };
+          seenCursors.add(cursor);
+        }
+        return { outcome: "UNRESOLVED", reason: "SEARCH_LIMIT" };
+      } catch {
+        return { outcome: "UNRESOLVED", reason: "UNAVAILABLE" };
       }
     },
     async ensureCustomer(input) {

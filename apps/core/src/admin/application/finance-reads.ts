@@ -817,7 +817,7 @@ export async function getAdminPayment(
     }>();
   const refunds = await deps.db
     .prepare(
-      `SELECT id, amount_minor AS amountMinor, currency, status, reason, created_at AS createdAt
+      `SELECT id, amount_minor AS amountMinor, currency, status, reason, created_at AS createdAt,version,attempt_count,next_retry_at,last_error_code,processing_started_at
        FROM payment_refund WHERE payment_intent_id=? ORDER BY created_at DESC`,
     )
     .bind(request.paymentIntentId)
@@ -828,6 +828,11 @@ export async function getAdminPayment(
       status: string;
       reason: string | null;
       createdAt: number;
+      version: number;
+      attempt_count: number;
+      next_retry_at: number | null;
+      last_error_code: string | null;
+      processing_started_at: number | null;
     }>();
   const events = await deps.db
     .prepare(
@@ -945,6 +950,18 @@ export async function getAdminPayment(
       })),
       refunds: refunds.results.map((refund) => ({
         refundId: refund.id,
+        version: refund.version,
+        recovery: {
+          attempts: refund.attempt_count,
+          nextCheckAt: refund.attempt_count >= 5 ? null : toOptionalIso(refund.next_retry_at),
+          lastErrorCode: refund.last_error_code,
+          canRecheck:
+            access.value.capabilities.includes("refunds.manage") &&
+            (refund.processing_started_at === null ||
+              (refund.next_retry_at !== null && refund.next_retry_at <= Date.now())) &&
+            (["REQUESTED", "APPROVED", "PROCESSING", "ESCALATED"].includes(refund.status) ||
+              (["SUCCEEDED", "FAILED"].includes(refund.status) && refund.next_retry_at !== null)),
+        },
         paymentIntentId: request.paymentIntentId,
         amountMinor: refund.amountMinor,
         currency: refund.currency,

@@ -1,3 +1,4 @@
+import { recheckStaffRefund } from "../../payments/application/recheck-staff-refund";
 import type {
   AdminMembershipLifecycleRequest,
   AdminMembershipSummary,
@@ -640,4 +641,13 @@ export async function applyAdminOrderIssueAction(
     createdAt: new Date(updated.createdAt).toISOString(),
   };
   return { ok: true, value: view, requestId: request.requestId };
+}
+
+export async function recheckAdminRefund(
+  deps: FinanceAdministrationDeps,
+  request: import("@freshmarkets/contracts").AdminRefundRecheckRequest,
+): Promise<RpcResult<import("@freshmarkets/contracts").AdminRefundRecheckResult>> {
+  const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
+  if (!access.ok) return access;
+  return recheckStaffRefund(deps.db, { ...request, actorAuthUserId: access.value.authUserId });
 }

@@ -69,6 +69,26 @@ for (const width of [1440, 390])
       .locator("section")
       .filter({ has: page.getByRole("heading", { name: "Refund history", exact: true }) });
     await expect(refundSection.getByText("PROCESSING", { exact: true })).toHaveCount(1);
+
+    const checks: { body: string | null; key: string | undefined }[] = [];
+    await page.route("**/api/admin/payments/refunds/recheck", async (route) => {
+      checks.push({
+        body: route.request().postData(),
+        key: route.request().headers()["idempotency-key"],
+      });
+      if (checks.length > 1) return route.continue();
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      await route.abort("failed");
+    });
+    await refundSection.getByLabel("Provider check reason").fill("Verify provider progress");
+    await refundSection.getByRole("button", { name: "Check provider status", exact: true }).click();
+    await expect(refundSection.getByText(/The response is unknown/)).toBeVisible();
+    await expect(refundSection.getByLabel("Provider check reason")).toBeDisabled();
+    await refundSection.getByRole("button", { name: "Retry saved provider check" }).click();
+    await expect(refundSection.getByText(/Provider check queued/)).toBeVisible();
+    expect(checks).toHaveLength(2);
+    expect(checks[1]).toEqual(checks[0]);
     await page.reload();
     await expect(
       page.getByRole("heading", { level: 1, name: `Payment ${paymentIntentId}` }),
@@ -76,6 +96,9 @@ for (const width of [1440, 390])
     await expect(refundSection.getByText("PROCESSING", { exact: true })).toHaveCount(1);
     await expect(refundSection.getByText(/Inspected quality issue/)).toHaveCount(1);
     await expect(page.getByText("PAYMENT.REFUND_REQUESTED", { exact: false })).toHaveCount(1);
+    await expect(page.getByText("PAYMENT.REFUND_RECHECK_REQUESTED", { exact: false })).toHaveCount(
+      1,
+    );
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);

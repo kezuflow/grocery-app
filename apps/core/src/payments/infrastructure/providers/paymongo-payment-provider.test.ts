@@ -203,3 +203,147 @@ describe("PayMongo refund outcome certainty", () => {
     });
   });
 });
+
+describe("PayMongo read-only Refund lookup", () => {
+  const input = {
+    providerReference: "pi_lookup",
+    providerRefundReference: null,
+    refundProviderIdempotencyKey: "lookup-key",
+  };
+  function payment() {
+    return Response.json({
+      data: {
+        id: "pi_lookup",
+        type: "payment_intent",
+        attributes: {
+          status: "succeeded",
+          amount: 20000,
+          currency: "PHP",
+          payments: [{ id: "pay_lookup", attributes: { status: "paid" } }],
+        },
+      },
+    });
+  }
+  function refund(
+    id = "ref_lookup",
+    status = "succeeded",
+    key = "lookup-key",
+    paymentId = "pay_lookup",
+  ) {
+    return {
+      id,
+      type: "refund",
+      attributes: {
+        payment_id: paymentId,
+        amount: 5000,
+        currency: "PHP",
+        status,
+        metadata: { freshmarkets_refund_key: key },
+      },
+    };
+  }
+  it.each(["pending", "processing", "succeeded", "failed"])(
+    "normalizes known %s evidence with payment identity",
+    async (state) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(payment())
+        .mockResolvedValueOnce(Response.json({ data: refund("ref_lookup", state) }));
+      expect(
+        await provider(fetcher).lookupRefund?.({ ...input, providerRefundReference: "ref_lookup" }),
+      ).toMatchObject({
+        outcome: "FOUND",
+        refund: {
+          providerReference: "pi_lookup",
+          providerRefundReference: "ref_lookup",
+          amountMinor: 5000,
+          currency: "PHP",
+          canonicalState:
+            state === "succeeded" ? "SUCCEEDED" : state === "failed" ? "FAILED" : "PROCESSING",
+        },
+      });
+      expect(String(fetcher.mock.calls[1][0])).toBe(
+        "https://api.paymongo.com/v1/refunds/ref_lookup",
+      );
+      for (const call of fetcher.mock.calls) expect(call[1]?.method ?? "GET").toBe("GET");
+    },
+  );
+  it("finds a lost response by exact metadata through bounded payment-scoped pages", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(payment())
+      .mockResolvedValueOnce(
+        Response.json({
+          data: Array.from({ length: 20 }, (_, index) =>
+            refund(`ref_${index}`, "succeeded", `unrelated-${index}`),
+          ),
+          has_more: true,
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ data: [refund()], has_more: false }));
+    expect(await provider(fetcher).lookupRefund?.(input)).toMatchObject({
+      outcome: "FOUND",
+      refund: { providerRefundReference: "ref_lookup", idempotencyKey: "lookup-key" },
+    });
+    const url = new URL(String(fetcher.mock.calls[2][0]));
+    expect(url.searchParams.get("data.attributes.payment_id")).toBe("pay_lookup");
+    expect(url.searchParams.get("data.attributes.after")).toBe("ref_19");
+    expect(url.searchParams.get("data.attributes.limit")).toBe("20");
+  });
+  it.each(["missing", "duplicate", "wrong-payment", "wrong-key", "unavailable"])(
+    "keeps %s evidence unresolved without posting",
+    async (kind) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(payment());
+      if (kind === "unavailable") fetcher.mockRejectedValueOnce(new Error("TEST_LOOKUP_TIMEOUT"));
+      else if (kind === "wrong-key")
+        fetcher.mockResolvedValueOnce(
+          Response.json({ data: refund("ref_lookup", "succeeded", "different-key") }),
+        );
+      else
+        fetcher.mockResolvedValueOnce(
+          Response.json({
+            data:
+              kind === "missing"
+                ? []
+                : kind === "duplicate"
+                  ? [refund(), refund("second-ref")]
+                  : [refund("ref_lookup", "succeeded", "lookup-key", "different-payment")],
+            has_more: false,
+          }),
+        );
+      const result = await provider(fetcher).lookupRefund?.({
+        ...input,
+        providerRefundReference: kind === "wrong-key" ? "ref_lookup" : null,
+      });
+      expect(result).toEqual({
+        outcome: "UNRESOLVED",
+        reason:
+          kind === "missing"
+            ? "NOT_FOUND"
+            : kind === "duplicate"
+              ? "AMBIGUOUS"
+              : kind === "unavailable"
+                ? "UNAVAILABLE"
+                : "MISMATCH",
+      });
+      for (const call of fetcher.mock.calls) expect(call[1]?.method ?? "GET").toBe("GET");
+    },
+  );
+  it("stops after three pages and does not infer absence from truncation", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(payment());
+    for (let page = 0; page < 3; page++)
+      fetcher.mockResolvedValueOnce(
+        Response.json({
+          data: Array.from({ length: 20 }, (_, index) =>
+            refund(`ref_${page}_${index}`, "succeeded", `other-${page}-${index}`),
+          ),
+          has_more: true,
+        }),
+      );
+    expect(await provider(fetcher).lookupRefund?.(input)).toEqual({
+      outcome: "UNRESOLVED",
+      reason: "SEARCH_LIMIT",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+});

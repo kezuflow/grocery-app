@@ -1,4 +1,5 @@
 "use client";
+import { RefundRecovery } from "../../../../components/admin/refund-recovery";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { AdminPaymentDetail, RpcResult } from "@freshmarkets/contracts";
@@ -205,12 +206,15 @@ export default function PaymentDetailPage({
             ) : (
               <ul className="divide-y text-sm">
                 {payment.refunds.map((item) => (
-                  <li className="flex justify-between gap-3 p-4" key={item.refundId}>
-                    <span>
-                      {money(item.amountMinor, item.currency)}
-                      {item.reason ? ` · ${item.reason}` : ""}
-                    </span>
-                    <StatusBadge>{item.status}</StatusBadge>
+                  <li className="min-w-0 p-4" key={item.refundId}>
+                    <div className="flex justify-between gap-3">
+                      <span className="min-w-0 break-words">
+                        {money(item.amountMinor, item.currency)}
+                        {item.reason ? ` · ${item.reason}` : ""}
+                      </span>
+                      <StatusBadge>{item.status}</StatusBadge>
+                    </div>
+                    <RefundRecovery refund={item} onAccepted={() => load(paymentId)} />
                   </li>
                 ))}
               </ul>

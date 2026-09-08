@@ -263,7 +263,7 @@ export type AdminPaymentDetail = AdminPaymentSummary & {
   updatedAt: string;
   allowedActions: ReadonlyArray<"REQUEST_REFUND">;
   attempts: ReadonlyArray<AdminPaymentAttemptView>;
-  refunds: ReadonlyArray<AdminRefundView>;
+  refunds: ReadonlyArray<AdminRefundProgress>;
   events: ReadonlyArray<AdminPaymentEventView>;
   reactions: ReadonlyArray<AdminPaymentReactionView>;
   reconciliationCases: ReadonlyArray<AdminPaymentReconciliationView>;
@@ -309,6 +309,28 @@ export type AdminRefundView = {
   status: string;
   reason: string | null;
   createdAt: string;
+};
+
+export type AdminRefundProgress = AdminRefundView & {
+  version: number;
+  recovery: {
+    attempts: number;
+    nextCheckAt: string | null;
+    lastErrorCode: string | null;
+    canRecheck: boolean;
+  };
+};
+export type AdminRefundRecheckRequest = AuthenticatedRequest & {
+  refundId: string;
+  expectedVersion: number;
+  reason: string;
+  idempotencyKey: string;
+};
+export type AdminRefundRecheckResult = {
+  refundId: string;
+  state: "QUEUED";
+  version: number;
+  acceptedAt: string;
 };
 
 export type AdminReconciliationCaseView = {
@@ -432,6 +454,9 @@ export type AdminPaymentsService = {
   getAdminPaymentOverview(request: AuthenticatedRequest): Promise<RpcResult<AdminPaymentOverview>>;
   listAdminPayments(request: AdminPaymentListRequest): Promise<RpcResult<AdminPaymentPage>>;
   getAdminPayment(request: AdminPaymentDetailRequest): Promise<RpcResult<AdminPaymentDetail>>;
+  recheckAdminRefund(
+    request: AdminRefundRecheckRequest,
+  ): Promise<RpcResult<AdminRefundRecheckResult>>;
   requestAdminRefund(request: AdminRefundRequest): Promise<RpcResult<AdminRefundView>>;
   listAdminReconciliationCases(
     request: AdminReconciliationListRequest,

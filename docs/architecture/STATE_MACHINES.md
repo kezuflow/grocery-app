@@ -116,6 +116,9 @@ Rules:
 
 ## Refund
 
+Provider lookup and verified event ingress apply the same guarded financial status persistence. Read-only lookup never interprets absence as rejection and never retries a provider submission. A provider-confirmed terminal observation may precede completion of dependent Order projections; a durable bounded recovery lease preserves that unfinished work without downgrading the financial state. Operator recheck is a versioned, audited queue action against the same Refund identity, not a new Refund or a financial status override.
+
+
 ```text
 REQUESTED -> PROCESSING -> SUCCEEDED
 REQUESTED / PROCESSING -> FAILED -> PROCESSING / ESCALATED

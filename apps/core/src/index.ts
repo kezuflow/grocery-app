@@ -185,6 +185,7 @@ import {
 import {
   cancelAdminOrder as cancelAdminOrderCommand,
   requestAdminRefund as requestAdminRefundCommand,
+  recheckAdminRefund as recheckAdminRefundCommand,
   resolveAdminReconciliationCase as resolveAdminReconciliationCaseCommand,
   changeAdminMembership as changeAdminMembershipCommand,
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
@@ -947,6 +948,13 @@ const refundRequestSchema = authenticatedRequestSchema.extend({
   expectedVersion: validationSchema.number().int().safe().positive(),
   paymentIntentId: validationSchema.string().trim().min(1).max(200),
   amountMinor: validationSchema.number().int().safe().min(1),
+  reason: validationSchema.string().trim().min(1).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+const refundRecheckSchema = authenticatedRequestSchema.extend({
+  refundId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().safe().positive(),
   reason: validationSchema.string().trim().min(1).max(500),
   idempotencyKey: idempotencyKeySchema,
 });
@@ -2207,6 +2215,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         payments: buildProviderRegistry(this.runtimeConfiguration()),
       },
       validation.data,
+    );
+  }
+  async recheckAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRecheckRequest) {
+    const parsed = refundRecheckSchema.safeParse(input);
+    if (!parsed.success)
+      return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
+    return recheckAdminRefundCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      parsed.data,
     );
   }
   async requestAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRequest) {
