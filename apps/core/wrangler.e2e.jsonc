@@ -14,6 +14,9 @@
     "TRUSTED_ORIGINS": "http://localhost:3100",
     "PAYMENT_PROVIDER": "mock",
     "ROUTE_DISTANCE_PROVIDER": "mock",
+    "DELIVERY_PROVIDERS": "lalamove",
+    "LOCAL_DELIVERY_PROVIDER": "mock",
+    "LALAMOVE_SERVICE_TYPE": "MOTORCYCLE",
   },
   "r2_buckets": [
     {

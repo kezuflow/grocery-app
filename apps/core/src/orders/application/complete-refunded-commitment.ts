@@ -1,4 +1,4 @@
-import { releaseRefundedCheckoutStatements } from "../../checkout/application/release-refunded-checkout";
+import { releaseUncommittedCheckoutStatements } from "../../checkout/application/release-uncommitted-checkout";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 
 /** Orders owns the non-committed outcome; Payments supplies guarded full-refund authority. */
@@ -26,7 +26,7 @@ export function completeRefundedCommitmentStatements(
   ];
   if (input.subjectType === "checkout_quote")
     statements.push(
-      ...releaseRefundedCheckoutStatements(database, {
+      ...releaseUncommittedCheckoutStatements(database, {
         quoteId: input.subjectId,
         paymentIntentId: input.paymentIntentId,
         customerId: input.customerId,

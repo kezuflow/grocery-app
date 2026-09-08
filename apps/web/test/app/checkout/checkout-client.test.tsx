@@ -222,6 +222,8 @@ function successfulFetch(options?: {
         }),
       );
     }
+    if (path.endsWith("/abandon"))
+      return Promise.resolve(json({ ok: true, value: { outcome: "ABANDONED" } }));
     if (path === "/api/checkout/payment") return Promise.resolve(json({ ok: true }));
     throw new Error(`Unexpected request ${path}`);
   });
@@ -345,6 +347,68 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.textContent).toContain("PHP 330.00");
   });
 
+  it("loads delivery options when the cart arrives after address selection", async () => {
+    const cart = await fetchCartMock();
+    const pendingCart = deferred<typeof cart>();
+    fetchCartMock.mockReturnValue(pendingCart.promise);
+    const base = successfulFetch();
+    vi.stubGlobal("fetch", base);
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    expect(
+      base.mock.calls.filter(([url]) => String(url).includes("fulfillment-options")),
+    ).toHaveLength(0);
+    await act(async () => pendingCart.resolve(cart));
+    await flush();
+    expect(
+      base.mock.calls.filter(([url]) => String(url).includes("fulfillment-options")),
+    ).toHaveLength(1);
+    click(container, "Instant delivery");
+    await flush();
+    expect(container.textContent).toContain("Payment review");
+  });
+  it("retains a quote after an unknown release response and retries the identical request before replacement", async () => {
+    const quotes: string[] = [],
+      releases: Array<{ key: string; body: string }> = [];
+    const base = successfulFetch({ onQuote: (init) => quotes.push(String(init?.body)) });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith("/abandon")) {
+          releases.push({
+            key: new Headers(init?.headers).get("idempotency-key") ?? "",
+            body: String(init?.body),
+          });
+          if (releases.length === 1)
+            return Promise.reject(new Error("Response lost after acceptance"));
+        }
+        return base(url, init);
+      }),
+    );
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    click(container, "Instant delivery");
+    await flush();
+    choose(container, "Office");
+    await flush();
+    expect(container.textContent).toContain("could not be released safely");
+    expect(container.textContent).toContain("Payment review");
+    expect(quotes).toHaveLength(1);
+    click(container, "Discard current total and start again");
+    await flush();
+    expect(releases).toHaveLength(2);
+    expect(releases[1]).toEqual(releases[0]);
+    expect(container.textContent).not.toContain("Payment review");
+    choose(container, "Office");
+    await flush();
+    click(container, "Instant delivery");
+    await flush();
+    expect(quotes).toHaveLength(2);
+  });
   it("normalizes promotion input and invalidates an accepted quote when codes change", async () => {
     const quoteBodies: Array<{ promotionCodes?: string[] }> = [];
     vi.stubGlobal(
@@ -382,6 +446,7 @@ describe("CheckoutClient delivery inputs", () => {
     expect(quoteBodies.at(-1)?.promotionCodes).toEqual(["SAVE10"]);
 
     click(container, "Remove SAVE10 promotion code");
+    await flush();
     expect(container.textContent).not.toContain("Payment review");
   });
 

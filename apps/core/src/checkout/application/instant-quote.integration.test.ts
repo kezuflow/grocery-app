@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished } from "vitest";
 import { env } from "cloudflare:workers";
 import { createCheckoutQuote } from "./create-checkout-quote";
+import { abandonCheckoutAttempt } from "./abandon-checkout-attempt";
 import { startPromotionalTrial } from ".././../membership/application/start-promotional-trial";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { createCheckoutRepository } from "../infrastructure/d1-checkout-repository";
@@ -233,6 +234,37 @@ describe("instant checkout quotes", () => {
     expect(holds?.count).toBe(0);
   });
 
+  it("abandons a newly quoted Instant checkout through the owning commands", async () => {
+    await configureInstant();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const quoted = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+    expect(quoted.ok).toBe(true);
+    if (!quoted.ok) throw new Error("Quote was not created");
+    const input = {
+      customerId: basket.customerId,
+      quoteId: quoted.value.quoteId,
+      expectedVersion: quoted.value.attemptVersion,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    const result = await abandonCheckoutAttempt(env.DB, input);
+    expect(result).toMatchObject({
+      ok: true,
+      value: { outcome: "ABANDONED", releasedInventoryHolds: 1 },
+    });
+    expect(await abandonCheckoutAttempt(env.DB, input)).toEqual(result);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM checkout_inventory_holds WHERE checkout_attempt_id=?",
+      )
+        .bind(input.quoteId)
+        .first(),
+    ).toEqual({ status: "RELEASED" });
+  });
   it("creates a provider-priced no-fee Instant quote with promise and expiring holds", async () => {
     await seedBasket({ onHand: 100_000 });
     await configureInstant();

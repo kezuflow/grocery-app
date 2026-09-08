@@ -43,20 +43,43 @@ async function seedReaction(input: {
   availableAt?: number | null;
 }): Promise<{ reactionId: string; intentId: string }> {
   const intentId = `pi-${++fixtureCounter}-${crypto.randomUUID().slice(0, 8)}`;
+  const subjectType =
+    input.reactionType === "COMMIT_ORDER"
+      ? "checkout_quote"
+      : input.reactionType === "COMMIT_AMENDMENT"
+        ? "paid_order_amendment"
+        : "subscription";
+  const purpose =
+    input.reactionType === "COMMIT_ORDER"
+      ? "GROCERY_CHECKOUT"
+      : input.reactionType === "COMMIT_AMENDMENT"
+        ? "ORDER_AMENDMENT"
+        : "MEMBERSHIP_ENROLLMENT";
+  const subjectId = input.subjectId ?? "subj";
   await env.DB.prepare(
-    "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'MEMBERSHIP_ENROLLMENT', 'subscription', 'subj', 'cust-x', 29900, 'PHP', ?, ?, 1, ?, ?)",
+    "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, 'cust-x', 29900, 'PHP', ?, ?, 1, ?, ?)",
   )
-    .bind(intentId, input.intentStatus, `${intentId}-key`, NOW - MINUTE, NOW - MINUTE)
+    .bind(
+      intentId,
+      purpose,
+      subjectType,
+      subjectId,
+      input.intentStatus,
+      `${intentId}-key`,
+      NOW - MINUTE,
+      NOW - MINUTE,
+    )
     .run();
   const reactionId = `react-${fixtureCounter}-${crypto.randomUUID().slice(0, 8)}`;
   await env.DB.prepare(
-    "INSERT INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, available_at, created_at, updated_at) VALUES (?, ?, ?, 'subscription', ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, available_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
     .bind(
       reactionId,
       intentId,
       input.reactionType,
-      input.subjectId ?? "subj",
+      subjectType,
+      subjectId,
       input.status ?? "PENDING",
       `${reactionId}-key`,
       input.attempts ?? 1,

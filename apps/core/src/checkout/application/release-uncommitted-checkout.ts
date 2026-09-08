@@ -1,11 +1,17 @@
-/** Checkout-owned cleanup composed into the reviewed full-refund transaction. */
-export function releaseRefundedCheckoutStatements(
+/** Checkout-owned entitlement release; the composing command supplies financial authority. */
+export function releaseUncommittedCheckoutStatements(
   database: D1Database,
-  input: { quoteId: string; paymentIntentId: string; customerId: string; now: number },
+  input: {
+    quoteId: string;
+    paymentIntentId: string | null;
+    customerId: string;
+    now: number;
+    attemptStatus?: "FAILED" | "EXPIRED";
+  },
 ): D1PreparedStatement[] {
   const { quoteId, paymentIntentId, customerId, now } = input;
   // Another paid/startable attempt or a committed winning Order still owns shared entitlements.
-  const eligible = `NOT EXISTS (SELECT 1 FROM order_payment_reaction WHERE checkout_quote_id=?) AND NOT EXISTS (SELECT 1 FROM payment_intent WHERE subject_type='checkout_quote' AND subject_id=? AND id!=? AND status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED','PARTIALLY_REFUNDED'))`;
+  const eligible = `NOT EXISTS (SELECT 1 FROM order_payment_reaction WHERE checkout_quote_id=?) AND NOT EXISTS (SELECT 1 FROM payment_intent WHERE subject_type='checkout_quote' AND subject_id=? AND id IS NOT ? AND status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED','PARTIALLY_REFUNDED'))`;
   const binds = [quoteId, quoteId, paymentIntentId];
   return [
     database
@@ -15,7 +21,7 @@ export function releaseRefundedCheckoutStatements(
       .bind(...binds, quoteId),
     database
       .prepare(
-        "INSERT INTO commitment_abort(id) SELECT -42 WHERE EXISTS (SELECT 1 FROM checkout_quote WHERE id=? AND customer_id!=?) OR EXISTS (SELECT 1 FROM checkout_attempts WHERE id=? AND customer_id!=?)",
+        "INSERT INTO commitment_abort(id) SELECT -42 WHERE EXISTS (SELECT 1 FROM checkout_quote WHERE id=? AND customer_id IS NOT ?) OR EXISTS (SELECT 1 FROM checkout_attempts WHERE id=? AND customer_id IS NOT ?)",
       )
       .bind(quoteId, customerId, quoteId, customerId),
     database
@@ -45,9 +51,9 @@ export function releaseRefundedCheckoutStatements(
       .bind(now, quoteId, ...binds),
     database
       .prepare(
-        `UPDATE checkout_attempts SET status='FAILED',version=version+1,updated_at=? WHERE id=? AND status='PROCESSING' AND ${eligible}`,
+        `UPDATE checkout_attempts SET status=?,version=version+1,updated_at=? WHERE id=? AND status='PROCESSING' AND ${eligible}`,
       )
-      .bind(now, quoteId, ...binds),
+      .bind(input.attemptStatus ?? "FAILED", now, quoteId, ...binds),
     database
       .prepare(
         `UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=? WHERE id=? AND status='ACTIVE' AND ${eligible}`,

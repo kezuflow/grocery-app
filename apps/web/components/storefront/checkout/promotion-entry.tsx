@@ -16,12 +16,12 @@ export function PromotionEntry({
   codes: readonly string[];
   feedback: readonly PromotionCodeFeedback[];
   disabled: boolean;
-  onAdd: (code: string) => void;
+  onAdd: (code: string) => void | boolean | Promise<void | boolean>;
   onRemove: (code: string) => void;
 }) {
   const [localStatus, setLocalStatus] = useState("");
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const input = event.currentTarget.elements.namedItem("promotionCode") as HTMLInputElement;
     const normalized = input.value.trim().toUpperCase();
@@ -43,7 +43,15 @@ export function PromotionEntry({
       setLocalStatus(`You can review at most ${MAX_PROMOTION_CODES} promotion codes at once.`);
       return;
     }
-    onAdd(normalized);
+    try {
+      if ((await onAdd(normalized)) === false) {
+        setLocalStatus("The code was not added. Release the current checkout and try again.");
+        return;
+      }
+    } catch {
+      setLocalStatus("The code could not be added. Try again.");
+      return;
+    }
     input.value = "";
     setLocalStatus(`${normalized} added. Review the total to check eligibility.`);
   }

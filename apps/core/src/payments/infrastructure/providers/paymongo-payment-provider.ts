@@ -291,7 +291,7 @@ export function createPayMongoPaymentProvider(
         const item = resource(payload);
         const clientToken = string(item?.attributes.client_key);
         if (!item || item.type !== "payment_intent" || !clientToken)
-          return { ok: false, errorCode: "PAYMONGO_INVALID_RESPONSE" };
+          throw new Error("PAYMONGO_INVALID_RESPONSE");
         return {
           ok: true,
           providerReference: item.id,
@@ -301,6 +301,10 @@ export function createPayMongoPaymentProvider(
           expiresAt: now() + PROVIDER_ACTION_TTL_MS,
         };
       } catch (error) {
+        if (
+          !(error instanceof PayMongoApiError && [400, 401, 403, 404, 422].includes(error.status))
+        )
+          throw new Error("PAYMONGO_PAYMENT_OUTCOME_UNKNOWN");
         return {
           ok: false,
           errorCode: error instanceof PayMongoApiError ? error.code : "PAYMONGO_UNAVAILABLE",

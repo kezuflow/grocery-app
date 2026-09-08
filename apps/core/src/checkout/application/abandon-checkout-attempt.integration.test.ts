@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { abandonCheckoutAttempt } from "./abandon-checkout-attempt";
-import { releaseRefundedCheckoutStatements } from "./release-refunded-checkout";
+import { releaseUncommittedCheckoutStatements } from "./release-uncommitted-checkout";
 
 async function fixture(mode: "INSTANT" | "SCHEDULED") {
   const suffix = crypto.randomUUID();
@@ -95,6 +95,51 @@ function command(data: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("abandonCheckoutAttempt", () => {
+  it("rejects payment admission between abandonment validation and its transaction", async () => {
+    const data = await fixture("INSTANT"),
+      input = command(data);
+    const db = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare(
+                "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','INITIATED',?,1,?,?)",
+              )
+              .bind(
+                crypto.randomUUID(),
+                data.quoteId,
+                data.customerId,
+                crypto.randomUUID(),
+                Date.now(),
+                Date.now(),
+              )
+              .run();
+            return target.batch(statements);
+          };
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(await abandonCheckoutAttempt(db, input)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM checkout_inventory_holds WHERE checkout_attempt_id=?",
+      )
+        .bind(data.quoteId)
+        .first(),
+    ).toEqual({ status: "HELD" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM idempotency_records WHERE scope='checkout.abandon' AND idempotency_key=? AND status='SUCCEEDED'",
+      )
+        .bind(input.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
   it.each(["none", "ignoredBalance", "underflow"] as const)(
     "releases retained Scheduled capacity atomically with %s evidence",
     async (fault) => {
@@ -118,7 +163,7 @@ describe("abandonCheckoutAttempt", () => {
       try {
         const execute = () =>
           env.DB.batch(
-            releaseRefundedCheckoutStatements(env.DB, {
+            releaseUncommittedCheckoutStatements(env.DB, {
               quoteId: data.quoteId,
               customerId: data.customerId,
               paymentIntentId: "retained-refunded-payment",
@@ -243,7 +288,7 @@ describe("abandonCheckoutAttempt", () => {
     ).toEqual({ status: "ACTIVE" });
   });
 
-  it("returns a safe no-op for an already expired quote", async () => {
+  it("cleans residual holds for an already expired quote", async () => {
     const data = await fixture("INSTANT");
     await env.DB.prepare("UPDATE checkout_quote SET status='EXPIRED' WHERE id=?")
       .bind(data.quoteId)
@@ -251,7 +296,76 @@ describe("abandonCheckoutAttempt", () => {
     const result = await abandonCheckoutAttempt(env.DB, command(data));
     expect(result).toMatchObject({
       ok: true,
-      value: { outcome: "ALREADY_TERMINAL", quoteStatus: "EXPIRED" },
+      value: { outcome: "ALREADY_TERMINAL", quoteStatus: "EXPIRED", releasedInventoryHolds: 1 },
     });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM checkout_inventory_holds WHERE checkout_attempt_id=?",
+      )
+        .bind(data.quoteId)
+        .first(),
+    ).toEqual({ status: "RELEASED" });
+  });
+  it.each(["audit", "hold", "receipt"] as const)(
+    "rolls back an ignored required %s and permits the same request to retry",
+    async (fault) => {
+      const data = await fixture("INSTANT"),
+        input = command(data);
+      const trigger =
+        fault === "audit"
+          ? "BEFORE INSERT ON audit_event WHEN NEW.action='CHECKOUT.ABANDONED'"
+          : fault === "hold"
+            ? "BEFORE UPDATE ON checkout_inventory_holds WHEN NEW.status='RELEASED'"
+            : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='checkout.abandon' AND NEW.status='SUCCEEDED'";
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_abandon_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await abandonCheckoutAttempt(env.DB, input)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+            .bind(data.quoteId)
+            .first(),
+        ).toEqual({ status: "ACTIVE" });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM idempotency_records WHERE scope='checkout.abandon' AND idempotency_key=?",
+          )
+            .bind(input.idempotencyKey)
+            .first(),
+        ).toEqual({ n: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM audit_event WHERE action='CHECKOUT.ABANDONED' AND idempotency_key=?",
+          )
+            .bind(input.idempotencyKey)
+            .first(),
+        ).toEqual({ n: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_abandon_effect");
+      }
+      const accepted = await abandonCheckoutAttempt(env.DB, input);
+      expect(accepted.ok).toBe(true);
+      expect(await abandonCheckoutAttempt(env.DB, input)).toEqual(accepted);
+    },
+  );
+  it("serializes competing abandonment requests and blocks stale terminal cleanup", async () => {
+    const data = await fixture("INSTANT");
+    const results = await Promise.all([
+      abandonCheckoutAttempt(env.DB, command(data)),
+      abandonCheckoutAttempt(env.DB, command(data)),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(await abandonCheckoutAttempt(env.DB, command(data))).toMatchObject({
+      ok: false,
+      error: { code: "STALE_VERSION" },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM audit_event WHERE action='CHECKOUT.ABANDONED' AND aggregate_id=?",
+      )
+        .bind(data.quoteId)
+        .first(),
+    ).toEqual({ n: 1 });
   });
 });

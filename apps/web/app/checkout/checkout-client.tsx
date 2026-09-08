@@ -47,8 +47,20 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       })
     | null
   >(null);
+  const pendingQuoteRef = useRef(pendingQuote);
+  pendingQuoteRef.current = pendingQuote;
+  const releaseInFlight = useRef<Promise<boolean> | null>(null);
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const addressLoadGeneration = useRef(0);
+  const fulfillmentLoadGeneration = useRef(0);
+  useEffect(() => {
+    const address = addresses.find((entry) => entry.id === addressId && entry.serviceable);
+    if (address && cart) void loadFulfillmentOptions(address);
+    else setFulfillmentOptions([]);
+    return () => {
+      fulfillmentLoadGeneration.current += 1;
+    };
+  }, [cart, addressId, addresses]);
   useEffect(() => {
     void fetchCart().then((value) => {
       setCart(value ?? null);
@@ -81,8 +93,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       const requestedAddressId = preferredAddressId ?? selectedAddressId.current;
       const confirmed = result.value.find((address) => address.id === requestedAddressId);
       setCurrentAddress(confirmed?.serviceable === true ? confirmed.id : "");
-      invalidatePendingQuote();
-      if (confirmed?.serviceable === true) void loadFulfillmentOptions(confirmed);
+      if (!(await invalidatePendingQuote())) return;
       if (preferredAddressId) {
         if (confirmed?.serviceable === true) {
           setStatus("Address confirmed for delivery.");
@@ -123,46 +134,69 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     }
   }
 
-  function invalidatePendingQuote() {
-    if (pendingQuote) void abandonQuote(pendingQuote);
-    setPendingQuote(null);
-    attemptKey.current = `checkout-${crypto.randomUUID()}`;
+  async function invalidatePendingQuote(): Promise<boolean> {
+    if (releaseInFlight.current) return releaseInFlight.current;
+    const quote = pendingQuoteRef.current;
+    if (!quote) {
+      attemptKey.current = `checkout-${crypto.randomUUID()}`;
+      return true;
+    }
+    setStatus("Releasing the current checkout reservation…");
+    const operation = (async () => {
+      if (!(await abandonQuote(quote))) {
+        setStatus(
+          "The current checkout could not be released safely. Try again before restarting.",
+        );
+        return false;
+      }
+      pendingQuoteRef.current = null;
+      setPendingQuote(null);
+      attemptKey.current = `checkout-${crypto.randomUUID()}`;
+      return true;
+    })();
+    releaseInFlight.current = operation;
+    try {
+      return await operation;
+    } finally {
+      releaseInFlight.current = null;
+    }
   }
 
   async function loadFulfillmentOptions(address: CustomerAddressView) {
+    const generation = ++fulfillmentLoadGeneration.current;
     if (!cart || cart.id === "guest-cart" || !cart.items.length) {
       setFulfillmentOptions([]);
       return;
     }
-    const response = await fetch("/api/checkout/fulfillment-options", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        addressId: address.id,
-        addressVersion: address.version,
-        cartId: cart.id,
-        cartVersion: cart.version,
-      }),
-    });
-    const result = (await response.json()) as RpcResult<readonly FulfillmentOptionView[]>;
-    if (result.ok) {
-      setFulfillmentOptions(result.value);
-      return;
+    try {
+      const response = await fetch("/api/checkout/fulfillment-options", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          addressId: address.id,
+          addressVersion: address.version,
+          cartId: cart.id,
+          cartVersion: cart.version,
+        }),
+      });
+      const result = (await response.json()) as RpcResult<readonly FulfillmentOptionView[]>;
+      if (generation !== fulfillmentLoadGeneration.current) return;
+      if (result.ok) {
+        setFulfillmentOptions(result.value);
+        return;
+      }
+      setFulfillmentOptions([]);
+      setStatus(result.error.message);
+    } catch {
+      if (generation !== fulfillmentLoadGeneration.current) return;
+      setFulfillmentOptions([]);
+      setStatus("Delivery options could not be loaded. Select the address again to retry.");
     }
-    setFulfillmentOptions([]);
-    setStatus(result.error.message);
   }
 
   async function discardPendingQuote() {
-    if (!pendingQuote) return;
-    setStatus("Releasing the current checkout reservation…");
-    if (!(await abandonQuote(pendingQuote))) {
-      setStatus("The current checkout could not be released safely. Try again before restarting.");
-      return;
-    }
-    setPendingQuote(null);
-    attemptKey.current = `checkout-${crypto.randomUUID()}`;
-    setStatus("Current checkout released. You can choose new delivery details.");
+    if (await invalidatePendingQuote())
+      setStatus("Current checkout released. You can choose new delivery details.");
   }
 
   function quoteInputIsCurrent(input: {
@@ -179,20 +213,18 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     );
   }
 
-  function selectAddress(nextAddressId: string) {
+  async function selectAddress(nextAddressId: string) {
+    if (!(await invalidatePendingQuote())) return;
     const selected = addresses.find((address) => address.id === nextAddressId);
     if (selected?.serviceable !== true) {
       setCurrentAddress("");
-      invalidatePendingQuote();
       setStatus("Only a serviceable saved address can be selected for checkout.");
       return;
     }
     const changed = selected.id !== selectedAddressId.current;
     if (changed) {
       setCurrentAddress(selected.id);
-      invalidatePendingQuote();
       selectedFulfillmentOptionId.current = "";
-      void loadFulfillmentOptions(selected);
     }
     if (!changed) void loadFulfillmentOptions(selected);
     setStatus("Serviceable delivery address selected. Core will recheck it before payment.");
@@ -206,9 +238,9 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
       setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
       return;
     }
-    if (option.optionId !== selectedFulfillmentOptionId.current) {
+    if (pendingQuoteRef.current || option.optionId !== selectedFulfillmentOptionId.current) {
+      if (!(await invalidatePendingQuote())) return;
       selectedFulfillmentOptionId.current = option.optionId;
-      invalidatePendingQuote();
       setStatus("Checking the selected delivery window and current total.");
     }
     const quoteInput = {
@@ -250,12 +282,16 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
   }
 
   async function confirmPayment() {
+    if (releaseInFlight.current) {
+      setStatus("Wait for the current checkout reservation to be released.");
+      return;
+    }
     if (!pendingQuote) return;
     if (
       !quoteInputIsCurrent(pendingQuote.input) ||
       pendingQuote.attemptKey !== attemptKey.current
     ) {
-      invalidatePendingQuote();
+      if (!(await invalidatePendingQuote())) return;
       setStatus("Delivery details changed. Review the current total again before payment.");
       return;
     }
@@ -399,9 +435,9 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                       key={editingAddress?.id ?? "checkout-new-address"}
                       publicAccessToken={publicAccessToken}
                       initialAddress={editingAddress}
-                      onConfirmed={(confirmedAddressId) => {
-                        invalidatePendingQuote();
-                        void loadAddresses(confirmedAddressId);
+                      onConfirmed={async (confirmedAddressId) => {
+                        if (!(await invalidatePendingQuote())) return;
+                        await loadAddresses(confirmedAddressId);
                       }}
                     />
                   </div>
@@ -413,20 +449,20 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
               codes={promotionCodes}
               feedback={pendingQuote?.promotionFeedback ?? []}
               disabled={guest || acceptingPayment}
-              onAdd={(code) => {
+              onAdd={async (code) => {
+                if (!(await invalidatePendingQuote())) return false;
                 const next = [...promotionCodesRef.current, code];
                 promotionCodesRef.current = next;
                 setPromotionCodes(next);
-                invalidatePendingQuote();
                 setStatus(`${code} added. Review the total again to check the promotion.`);
               }}
-              onRemove={(code) => {
+              onRemove={async (code) => {
+                if (!(await invalidatePendingQuote())) return;
                 const next = promotionCodesRef.current.filter(
                   (currentCode) => currentCode !== code,
                 );
                 promotionCodesRef.current = next;
                 setPromotionCodes(next);
-                invalidatePendingQuote();
                 setStatus(`${code} removed. Review the total again.`);
               }}
             />
