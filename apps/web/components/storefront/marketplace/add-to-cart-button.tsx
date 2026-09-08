@@ -10,7 +10,7 @@ import {
   cachedCart,
   quantityForSku,
 } from "../../../lib/storefront/cart-client";
-import type { CartView } from "@freshmarkets/contracts";
+import type { CartView, CatalogMedia } from "@freshmarkets/contracts";
 
 /**
  * Compact add control that becomes a quantity stepper in the same stable
@@ -20,12 +20,14 @@ import type { CartView } from "@freshmarkets/contracts";
 export function AddToCartButton({
   skuId,
   productName,
+  media,
   unitPriceMinor,
   currency = "PHP",
   className,
 }: {
   skuId: string;
   productName: string;
+  media?: CatalogMedia | null;
   unitPriceMinor?: number | null;
   currency?: string;
   className?: string;
@@ -49,6 +51,7 @@ export function AddToCartButton({
     setPending(true);
     const result = await addToCart(skuId, next, {
       name: productName,
+      media,
       unitPriceMinor: unitPriceMinor ?? null,
       currency,
     });

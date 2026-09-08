@@ -9,6 +9,7 @@ import type {
   MarketplaceHomeView,
   MarketplaceProductView,
 } from "@freshmarkets/contracts";
+import { productMediaProjectionSql, publishedProductMediaView } from "./published-product-media";
 
 /**
  * Minimal raw D1 surface used by catalog reads; catalog queries bypass ORM
@@ -193,7 +194,7 @@ const PRODUCT_SELECT_COLUMNS = `
   p.slug AS slug,
   p.name AS productName,
   p.description AS description,
-  p.image_metadata_json AS imageMetadataJson,
+  ${productMediaProjectionSql} AS publishedMediaJson,
   c.code AS categoryCode,
   c.name AS categoryName,
   c.slug AS categorySlug,
@@ -204,7 +205,7 @@ type ProductListRow = {
   slug: string;
   productName: string;
   description: string | null;
-  imageMetadataJson: string | null;
+  publishedMediaJson: string | null;
   categoryCode: string;
   categoryName: string;
   categorySlug: string;
@@ -451,7 +452,7 @@ async function hydrateProducts(
   }
 
   for (const row of rows) {
-    const media = parseProduceMedia(row.imageMetadataJson);
+    const media = publishedProductMediaView(row.publishedMediaJson);
     const variants: CatalogVariant[] = (skusByProduct.get(row.productId) ?? [])
       .filter((sku) => !context || availableSkuIds.has(sku.id))
       .map((sku) => {

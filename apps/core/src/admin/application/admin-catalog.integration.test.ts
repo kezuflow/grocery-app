@@ -1596,12 +1596,12 @@ describe("Product media administration", () => {
       requestId: crypto.randomUUID(),
       bytes: jpeg(),
     });
-    expect(missingMetadataReplay).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
-    expect(await bucket.head(metadata!.objectKey)).toBeNull();
+    expect(missingMetadataReplay).toMatchObject({ ok: true, value: uploaded.value });
+    expect(await bucket.head(metadata!.objectKey)).not.toBeNull();
   });
 
-  it("deletes a just-uploaded object when authoritative D1 attachment fails", async () => {
-    const bucket = (env as unknown as { PRODUCT_MEDIA: R2Bucket }).PRODUCT_MEDIA;
+  it("retains a durable stored upload for retry when authoritative D1 attachment fails", async () => {
+    const bucket = env.PRODUCT_MEDIA;
     const manager = await seedManager();
     const { productId } = await seedProduct();
     const triggerName = `reject_media_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -1609,22 +1609,28 @@ describe("Product media administration", () => {
       `CREATE TRIGGER ${triggerName} BEFORE INSERT ON product_media
        WHEN NEW.product_id='${productId}' BEGIN SELECT RAISE(ABORT, 'forced attachment failure'); END`,
     ).run();
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId,
+      bytes: jpeg(),
+      mimeType: "image/jpeg" as const,
+      altText: "Cleanup test",
+      isPrimary: false,
+      sortOrder: 0,
+      expectedProductVersion: 1,
+      idempotencyKey: `media-${crypto.randomUUID()}`,
+    };
     try {
-      const result = await core.uploadAdminProductMedia({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: manager.cookie },
-        productId,
-        bytes: jpeg(),
-        mimeType: "image/jpeg",
-        altText: "Cleanup test",
-        isPrimary: false,
-        sortOrder: 0,
-        expectedProductVersion: 1,
-        idempotencyKey: `media-${crypto.randomUUID()}`,
-      });
+      const result = await core.uploadAdminProductMedia(request);
       expect(result).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
       const objects = await bucket.list({ prefix: `products/${productId}/` });
-      expect(objects.objects).toHaveLength(0);
+      expect(objects.objects).toHaveLength(1);
+      expect(
+        await env.DB.prepare("SELECT status FROM product_media_upload WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "STORED" });
       const metadata = await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM product_media WHERE product_id=?",
       )
@@ -1634,6 +1640,8 @@ describe("Product media administration", () => {
     } finally {
       await env.DB.prepare(`DROP TRIGGER ${triggerName}`).run();
     }
+    expect(await core.uploadAdminProductMedia(request)).toMatchObject({ ok: true });
+    expect((await bucket.list({ prefix: `products/${productId}/` })).objects).toHaveLength(1);
   });
 
   it("enforces Product versions and one primary while updating and removing media", async () => {

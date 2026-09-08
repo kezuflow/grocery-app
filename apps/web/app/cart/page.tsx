@@ -7,6 +7,7 @@ import { addToCart, cartCountFromView, fetchCart } from "../../lib/storefront/ca
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 import { OrderSummary } from "../../components/storefront/marketplace/order-summary";
 import { CheckoutAuthDialog } from "../../components/storefront/marketplace/checkout-auth-dialog";
+import { ProductMedia } from "../../components/storefront/product-media";
 
 const money = (value: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
@@ -31,6 +32,7 @@ export default function CartPage() {
   async function update(item: CartView["items"][number], quantity: number) {
     const result = await addToCart(item.skuId, quantity, {
       name: item.name,
+      media: item.media,
       unitPriceMinor: item.unitPriceMinor,
       currency: cart?.currency ?? "PHP",
     });
@@ -104,7 +106,11 @@ export default function CartPage() {
                     className="flex gap-4 border-b border-[var(--fm-border)] p-4 last:border-b-0 sm:p-5"
                   >
                     <div className="flex size-20 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
-                      <ShoppingBasket className="size-7" aria-hidden="true" />
+                      <ProductMedia
+                        media={item.media ?? null}
+                        name={item.name}
+                        className="size-20 rounded-[var(--fm-radius-surface)]"
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 font-semibold">{item.name}</p>

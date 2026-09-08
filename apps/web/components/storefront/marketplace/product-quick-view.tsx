@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Leaf, Minus, Plus, X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
+import { ProductMedia } from "../product-media";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { formatMoney, toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../../lib/storefront/catalog-presentation";
@@ -91,6 +92,7 @@ export function ProductQuickView({
     setPending(true);
     const result = await addToCart(selected.id, quantity, {
       name: presentation.name,
+      media: presentation.media,
       unitPriceMinor: selected.priceMinor,
       currency: selected.currency ?? "PHP",
     });
@@ -167,21 +169,7 @@ export function ProductQuickView({
           </div>
           <div className="grid gap-6 p-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:p-6">
             <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
-              {presentation.media ? (
-                <img
-                  src={presentation.media.src}
-                  alt={presentation.media.alt}
-                  className="aspect-square w-full object-contain"
-                />
-              ) : (
-                <div
-                  role="img"
-                  aria-label={`${presentation.name} product image`}
-                  className="flex aspect-square w-full items-center justify-center text-[var(--fm-primary-dark)]"
-                >
-                  <Leaf className="size-16 stroke-[1.25]" aria-hidden="true" />
-                </div>
-              )}
+              <ProductMedia media={presentation.media} name={presentation.name} />
             </div>
             <div>
               <h2 className="text-[32px] leading-[42px] font-semibold">{presentation.name}</h2>
@@ -271,17 +259,13 @@ export function ProductQuickView({
                         onClick={() => onNavigate(product.slug)}
                         className="w-24 shrink-0 rounded-[var(--fm-radius-surface)] p-1 text-left hover:bg-[var(--fm-hover)]"
                       >
-                        {product.media ? (
-                          <img
-                            src={product.media.src}
-                            alt=""
-                            className="aspect-square w-full rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] object-contain"
+                        <div aria-hidden="true">
+                          <ProductMedia
+                            media={product.media}
+                            name={product.name}
+                            className="rounded-[var(--fm-radius-control)]"
                           />
-                        ) : (
-                          <div className="flex aspect-square w-full items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
-                            <Leaf className="size-6 stroke-[1.25]" aria-hidden="true" />
-                          </div>
-                        )}
+                        </div>
                         <span className="mt-1 block line-clamp-2 text-xs font-semibold">
                           {product.name}
                         </span>

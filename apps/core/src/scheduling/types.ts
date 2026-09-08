@@ -18,6 +18,7 @@ export interface ScheduledJobContext {
   readonly emailDelivery: EmailDeliveryPort;
   readonly notificationQueue?: NotificationQueueProducer;
   readonly applicationOrigin?: string;
+  readonly productMedia?: R2Bucket;
   readonly now: number;
 }
 

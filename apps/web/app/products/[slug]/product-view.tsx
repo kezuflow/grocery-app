@@ -79,6 +79,7 @@ export function ProductView({ slug }: { slug: string }) {
     setStatus("");
     const result = await addToCart(selectedVariant.id, quantity, {
       name: product.name,
+      media: product.media,
       unitPriceMinor: selectedPrice,
       currency: selectedVariant.currency ?? "PHP",
     });

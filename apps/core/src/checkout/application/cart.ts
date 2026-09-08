@@ -8,6 +8,10 @@ import type {
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import {
+  productMediaProjectionSql,
+  publishedProductMediaView,
+} from "../../catalog/published-product-media";
 
 const CART_SET_SCOPE = "cart.setItem";
 const CART_BATCH_SCOPE = "cart.addBatch";
@@ -79,6 +83,7 @@ export async function getCart(
   const rows = await database
     .prepare(
       `SELECT ci.sku_id, ci.quantity, s.name,
+         ${productMediaProjectionSql} AS media_json,
          s.status AS sku_status, p.status AS product_status, sla.availability_status,
          (
            SELECT pv.amount_minor
@@ -104,6 +109,7 @@ export async function getCart(
       sku_id: string;
       quantity: number;
       name: string;
+      media_json: string | null;
       sku_status: string;
       product_status: string;
       availability_status: string | null;
@@ -124,6 +130,7 @@ export async function getCart(
       skuId: row.sku_id,
       quantity: row.quantity,
       name: row.name,
+      media: publishedProductMediaView(row.media_json),
       availability,
       unitPriceMinor,
       lineTotalMinor: unitPriceMinor === null ? null : row.quantity * unitPriceMinor,

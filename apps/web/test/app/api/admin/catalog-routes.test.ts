@@ -80,6 +80,37 @@ function jsonRequest(url: string, body: unknown, method = "POST"): Request {
 }
 
 describe("catalog and inventory BFF routes", () => {
+  it("accepts parsed multipart files across runtime File constructors", async () => {
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([new Uint8Array([255, 216, 255])], "image.jpg", { type: "image/jpeg" }),
+    );
+    form.set("altText", "Product image");
+    form.set("isPrimary", "true");
+    form.set("sortOrder", "0");
+    form.set("expectedProductVersion", "1");
+    const request = new Request("https://x/media", {
+      method: "POST",
+      headers: { "idempotency-key": "media-cross-runtime", ...COOKIE },
+      body: form,
+    });
+    coreMocks.uploadAdminProductMedia.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    const OriginalFile = globalThis.File;
+    vi.stubGlobal("File", class extends OriginalFile {});
+    try {
+      expect((await uploadProductMedia(request, productParams)).status).toBe(200);
+      expect(coreMocks.uploadAdminProductMedia).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mimeType: "image/jpeg",
+          altText: "Product image",
+          expectedProductVersion: 1,
+        }),
+      );
+    } finally {
+      vi.stubGlobal("File", OriginalFile);
+    }
+  });
   it("delegates category and unit reads/creates", async () => {
     coreMocks.listAdminCategories.mockResolvedValue({
       ok: true,

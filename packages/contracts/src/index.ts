@@ -21,6 +21,7 @@ export * from "./states";
 export type * from "./geography";
 export type * from "./auth";
 export type * from "./catalog";
+export type * from "./product-media-recovery";
 export type * from "./membership";
 export type * from "./payments";
 export type * from "./checkout";

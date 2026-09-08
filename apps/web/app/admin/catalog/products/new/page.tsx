@@ -10,7 +10,7 @@ import type {
 } from "@freshmarkets/contracts";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
@@ -64,6 +64,8 @@ async function jsonCommand<T>(
 export default function NewProductPage() {
   const router = useRouter();
   const intent = useAdminCommandIntent();
+  const savedSetup = useRef<ProductFormValue | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [categories, setCategories] = useState<AdminCategoryPage["items"]>([]);
   const [units, setUnits] = useState<AdminUnitSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -104,17 +106,19 @@ export default function NewProductPage() {
   }, []);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (intent.pending) return;
     setError(null);
-    const media = value.media ?? [];
-    const variants = value.variants ?? [];
-    const customerDetails = value.customerDetails.filter(
+    const submitted = savedSetup.current ?? value;
+    const media = submitted.media ?? [];
+    const variants = submitted.variants ?? [];
+    const customerDetails = submitted.customerDetails.filter(
       (detail) => detail.label.trim() || detail.value.trim(),
     );
     if (customerDetails.some((detail) => !detail.label.trim() || !detail.value.trim())) {
       setError("Each customer-facing detail needs both a label and a value.");
       return;
     }
-    if (value.status === "inactive" && !value.statusReason?.trim()) {
+    if (submitted.status === "inactive" && !submitted.statusReason?.trim()) {
       setError("A reason is required when creating an inactive product.");
       return;
     }
@@ -170,17 +174,19 @@ export default function NewProductPage() {
         estimatedShippingWeightGrams,
       });
     }
+    savedSetup.current = submitted;
+    setRecovering(true);
     try {
       const result = await intent.submit(async (idempotencyKey) => {
         const productResult = await jsonCommand<AdminProductSummary>(
           "/api/admin/catalog/products",
           "POST",
           {
-            categoryId: value.categoryId,
-            slug: value.slug,
-            name: value.name,
-            description: value.description,
-            inventoryBaseUnitId: value.inventoryBaseUnitId,
+            categoryId: submitted.categoryId,
+            slug: submitted.slug,
+            name: submitted.name,
+            description: submitted.description,
+            inventoryBaseUnitId: submitted.inventoryBaseUnitId,
             customerDetails,
           },
           idempotencyKey,
@@ -230,13 +236,13 @@ export default function NewProductPage() {
             throw new ProductSetupError(`Variant ${index + 1}: ${skuResult.error.message}`);
           }
         }
-        if (value.status === "inactive") {
+        if (submitted.status === "inactive") {
           const statusResult = await jsonCommand<AdminProductSummary>(
             `/api/admin/catalog/products/${encodeURIComponent(productId)}/status`,
             "POST",
             {
               status: "inactive",
-              reason: value.statusReason?.trim(),
+              reason: submitted.statusReason?.trim(),
               expectedVersion: 1 + media.length,
             },
             `${idempotencyKey}:status`,
@@ -248,6 +254,8 @@ export default function NewProductPage() {
         return productResult;
       });
       if (!result.ok) {
+        savedSetup.current = null;
+        setRecovering(false);
         setError(`${result.error.message} Request reference: ${result.error.requestId}`);
         return;
       }
@@ -278,7 +286,7 @@ export default function NewProductPage() {
               className="fm-admin-reference-primary"
               disabled={intent.pending}
             >
-              {intent.pending ? "Saving…" : "Create product"}
+              {intent.pending ? "Saving…" : recovering ? "Retry saved setup" : "Create product"}
             </Button>
           </div>
         }
@@ -288,17 +296,19 @@ export default function NewProductPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      <ProductForm
-        formId={CREATE_PRODUCT_FORM_ID}
-        hideSubmit
-        value={value}
-        categories={categories}
-        units={units}
-        pending={intent.pending}
-        submitLabel="Create product"
-        onChange={setValue}
-        onSubmit={submit}
-      />
+      <fieldset disabled={intent.pending || recovering}>
+        <ProductForm
+          formId={CREATE_PRODUCT_FORM_ID}
+          hideSubmit
+          value={value}
+          categories={categories}
+          units={units}
+          pending={intent.pending || recovering}
+          submitLabel="Create product"
+          onChange={setValue}
+          onSubmit={submit}
+        />
+      </fieldset>
     </div>
   );
 }

@@ -1,4 +1,13 @@
-import type { CartView } from "@freshmarkets/contracts";
+import type { CartView, CatalogMedia } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+const cartMediaSchema = z.object({
+  src: z.string().regex(/^\/media\/products\/[A-Za-z0-9_-]+\/[1-9]\d*$/),
+  alt: z.string().trim().min(1).max(300),
+});
+function cartMedia(value: unknown): CatalogMedia | null {
+  const parsed = cartMediaSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 /**
  * Browser-side cart plumbing for storefront surfaces. All mutations go through
@@ -25,13 +34,17 @@ export type GuestCartItem = {
   skuId: string;
   quantity: number;
   name: string;
+  media?: CatalogMedia | null;
   availability: "AVAILABLE" | "UNAVAILABLE" | "PRICE_UNAVAILABLE";
   unitPriceMinor: number | null;
   currency: string;
   lineTotalMinor: number | null;
 };
 
-export type CartItemMetadata = Pick<GuestCartItem, "name" | "unitPriceMinor" | "currency">;
+export type CartItemMetadata = Pick<
+  GuestCartItem,
+  "name" | "unitPriceMinor" | "currency" | "media"
+>;
 
 const GUEST_CART_KEY = "freshmarkets.guest-cart.v1";
 
@@ -84,6 +97,7 @@ function guestCartView(): CartView | null {
       )
       .map((item) => ({
         ...item,
+        media: cartMedia(item.media),
         availability:
           item.availability ?? (item.unitPriceMinor === null ? "PRICE_UNAVAILABLE" : "AVAILABLE"),
         lineTotalMinor: item.unitPriceMinor === null ? null : item.quantity * item.unitPriceMinor,
@@ -125,6 +139,7 @@ function rememberGuestItem(skuId: string, quantity: number, metadata?: CartItemM
       skuId,
       quantity,
       name: metadata?.name ?? previous?.name ?? "Fresh grocery",
+      media: cartMedia(metadata?.media ?? previous?.media),
       availability: unitPriceMinor === null ? "PRICE_UNAVAILABLE" : "AVAILABLE",
       unitPriceMinor,
       currency: metadata?.currency ?? previous?.currency ?? "PHP",

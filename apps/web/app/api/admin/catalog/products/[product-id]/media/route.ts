@@ -1,11 +1,9 @@
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
-import {
-  adminProductMediaMaxBytes,
-  adminProductMediaMimeTypes,
-  type AdminProductMediaMimeType,
-} from "@freshmarkets/contracts";
+import { adminProductMediaMaxBytes, adminProductMediaMimeTypes } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+import { readBoundedBytes } from "@/lib/http/bounded-body";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 
@@ -26,24 +24,54 @@ async function POSTHandler(
 ) {
   const { "product-id": productId } = await context.params;
   const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
-  const form = await request.formData().catch(() => null);
+  const body = await readBoundedBytes(request, {
+    maxBytes: adminProductMediaMaxBytes + 16384,
+    contentTypes: ["multipart/form-data"],
+  });
+  if (!body.ok)
+    return adminJson(
+      {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: body.error.message,
+          requestId: webRequestId(request),
+        },
+      },
+      { status: body.error.status },
+    );
+  const form = await new Response(body.value, {
+    headers: { "content-type": request.headers.get("content-type") ?? "" },
+  })
+    .formData()
+    .catch(() => null);
   const file = form?.get("file");
+  // Native multipart parsers may construct File in a different runtime realm.
+  // FormData's non-string entries are Files; do not compare constructor identity.
+  const mime = z
+    .enum(adminProductMediaMimeTypes)
+    .safeParse(file && typeof file !== "string" ? file.type : null);
   const altText = form?.get("altText");
   const isPrimary = form?.get("isPrimary");
   const sortOrder = Number(form?.get("sortOrder"));
   const expectedProductVersion = Number(form?.get("expectedProductVersion"));
+  if (!form) return invalid("The multipart image could not be parsed", webRequestId(request));
+  if (!file || typeof file === "string")
+    return invalid("Choose an image file", webRequestId(request));
+  if (!mime.success) return invalid("Choose a JPEG, PNG or WebP image", webRequestId(request));
+  if (!idempotencyKey)
+    return invalid("An upload idempotency key is required", webRequestId(request));
+  if (file.size === 0 || file.size > adminProductMediaMaxBytes)
+    return invalid("Image size must be between 1 byte and 5 MiB", webRequestId(request));
   if (
-    !idempotencyKey ||
-    !(file instanceof File) ||
-    file.size === 0 ||
-    file.size > adminProductMediaMaxBytes ||
-    !adminProductMediaMimeTypes.includes(file.type as AdminProductMediaMimeType) ||
     typeof altText !== "string" ||
     altText.trim() === "" ||
+    altText.trim().length > 300 ||
     !(isPrimary === "true" || isPrimary === "false") ||
-    !Number.isInteger(sortOrder) ||
+    !Number.isSafeInteger(sortOrder) ||
     sortOrder < 0 ||
-    !Number.isInteger(expectedProductVersion) ||
+    sortOrder > 10000 ||
+    !Number.isSafeInteger(expectedProductVersion) ||
     expectedProductVersion < 1
   ) {
     return invalid(
@@ -56,7 +84,7 @@ async function POSTHandler(
     headers: requestHeaders(request),
     productId,
     bytes: await file.arrayBuffer(),
-    mimeType: file.type as AdminProductMediaMimeType,
+    mimeType: mime.data,
     altText: altText.trim(),
     isPrimary: isPrimary === "true",
     sortOrder,

@@ -202,6 +202,8 @@ export type CartView = {
     skuId: string;
     quantity: number;
     name: string;
+    /** New Core reads include media; retained browser carts may omit it. */
+    media?: import("./catalog").CatalogMedia | null;
     availability: "AVAILABLE" | "UNAVAILABLE" | "PRICE_UNAVAILABLE";
     unitPriceMinor: number | null;
     lineTotalMinor: number | null;

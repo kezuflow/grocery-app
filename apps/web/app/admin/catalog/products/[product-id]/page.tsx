@@ -27,6 +27,8 @@ import {
 } from "../../../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
+import { ProductMediaUpload } from "@/components/admin/product-media-upload";
+import { ProductMediaRecoveryPanel } from "@/components/admin/product-media-recovery-panel";
 import { GlobalPricePanel } from "../../../../../components/admin/global-price-panel";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
@@ -158,35 +160,6 @@ export default function ProductDetailPage({
     return payload.ok;
   }
 
-  async function uploadMedia(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const fields = new FormData(form);
-    const file = fields.get("file");
-    const altText = fields.get("altText");
-    if (
-      !(file instanceof File) ||
-      file.size === 0 ||
-      typeof altText !== "string" ||
-      !altText.trim()
-    ) {
-      setNotice("An image and alt text are required.");
-      return;
-    }
-    fields.set("expectedProductVersion", String(product.version));
-    const payload = await commandIntent.submit(async (idempotencyKey) => {
-      const response = await fetch(`${BASE}/products/${encodeURIComponent(productId)}/media`, {
-        method: "POST",
-        headers: { "idempotency-key": idempotencyKey },
-        body: fields,
-      });
-      return (await response.json()) as RpcResult<AdminProductMediaView>;
-    });
-    setNotice(payload.ok ? "Media uploaded." : payload.error.message);
-    if (payload.ok) form.reset();
-    if (payload.ok || payload.error.code === "STALE_VERSION") load();
-  }
-
   if (state.phase === "loading") {
     return (
       <div className="space-y-3" role="status" aria-label="Loading product">
@@ -291,41 +264,20 @@ export default function ProductDetailPage({
       <div id="product-media" className="scroll-mt-32">
         <ListPageSection
           title="Product media"
-          description="Canonical images are validated in Core, stored in R2, and attached through guarded Product versions."
+          description="Manage product images, descriptions and display order."
         >
           {canManageProduct ? (
-            <form
-              className="grid gap-3 border-b border-[var(--fm-border)] p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_7rem_8rem_auto] md:items-end"
-              onSubmit={uploadMedia}
-            >
-              <label className="grid gap-1 text-sm font-medium">
-                Product media image
-                <Input name="file" type="file" accept="image/jpeg,image/png,image/webp" required />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Media alt text
-                <Input name="altText" maxLength={300} required />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Media sort order
-                <Input
-                  name="sortOrder"
-                  type="number"
-                  min={0}
-                  max={10000}
-                  defaultValue={0}
-                  required
-                />
-              </label>
-              <label className="flex h-10 items-center gap-2 text-sm font-medium">
-                <input name="isPrimary" type="checkbox" value="true" />
-                Primary image
-              </label>
-              <input name="isPrimary" type="hidden" value="false" />
-              <Button type="submit" disabled={commandIntent.pending}>
-                Upload media
-              </Button>
-            </form>
+            <ProductMediaUpload
+              productId={productId}
+              productVersion={product.version}
+              onComplete={() => {
+                setNotice("Media uploaded.");
+                load();
+              }}
+            />
+          ) : null}
+          {product.scope.kind === "GLOBAL" ? (
+            <ProductMediaRecoveryPanel productId={productId} />
           ) : null}
           {product.media.length ? (
             <ul className="divide-y divide-[var(--fm-border)]">

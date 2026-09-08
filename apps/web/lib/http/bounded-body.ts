@@ -41,10 +41,10 @@ function normalizedContentType(request: Request): string | null {
   return value?.split(";", 1)[0]?.trim().toLowerCase() || null;
 }
 
-export async function readBoundedText(
+export async function readBoundedBytes(
   request: Request,
   options: BoundedTextOptions,
-): Promise<BoundedBodyResult<string>> {
+): Promise<BoundedBodyResult<ArrayBuffer>> {
   if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0) {
     throw new TypeError("maxBytes must be a non-negative safe integer");
   }
@@ -70,7 +70,7 @@ export async function readBoundedText(
   }
 
   const reader = request.body?.getReader();
-  if (!reader) return { ok: true, value: "" };
+  if (!reader) return { ok: true, value: new ArrayBuffer(0) };
 
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
@@ -98,8 +98,17 @@ export async function readBoundedText(
     offset += chunk.byteLength;
   }
 
+  return { ok: true, value: bytes.buffer };
+}
+
+export async function readBoundedText(
+  request: Request,
+  options: BoundedTextOptions,
+): Promise<BoundedBodyResult<string>> {
+  const bytes = await readBoundedBytes(request, options);
+  if (!bytes.ok) return bytes;
   try {
-    return { ok: true, value: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+    return { ok: true, value: new TextDecoder("utf-8", { fatal: true }).decode(bytes.value) };
   } catch {
     return rejected(400, "BODY_READ_FAILED", "Request body is not valid UTF-8");
   }

@@ -72,6 +72,7 @@ export async function runRegisteredJobs(
   emailDelivery: EmailDeliveryPort = disabledEmailDeliveryPort,
   notificationQueue?: NotificationQueueProducer,
   applicationOrigin?: string,
+  productMedia?: R2Bucket,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
@@ -84,6 +85,7 @@ export async function runRegisteredJobs(
         emailDelivery,
         notificationQueue,
         applicationOrigin,
+        productMedia,
       });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
@@ -100,6 +102,7 @@ export async function runScheduledJobs(
     EmailDeliveryEnvironment & {
       DB: D1Database;
       NOTIFICATION_QUEUE?: NotificationQueueProducer;
+      PRODUCT_MEDIA?: R2Bucket;
     },
   cronExpression: string,
   now: number,
@@ -114,5 +117,6 @@ export async function runScheduledJobs(
     createCloudflareEmailDeliveryPort(env),
     env.NOTIFICATION_QUEUE,
     runtime.auth.baseUrl,
+    env.PRODUCT_MEDIA,
   );
 }

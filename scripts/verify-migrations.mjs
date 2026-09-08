@@ -276,6 +276,38 @@ assertFinalSchema(fresh);
 assertProduceLaunch(fresh);
 fresh.close();
 
+const mediaUpgrade = database();
+apply(
+  mediaUpgrade,
+  migrations.filter((migration) => migration.name < "0084_"),
+);
+mediaUpgrade.exec(`
+  INSERT INTO product_media(id,product_id,object_key,mime_type,byte_size,alt_text,is_primary,sort_order,status,version,created_at,updated_at)
+  SELECT 'retained-media-' || status,p.id,'retained/' || status,'image/jpeg',6,'Retained image',0,0,status,3,1,1
+  FROM (SELECT product_id id FROM sku WHERE id='sku-red-onion-500g') p
+  CROSS JOIN (SELECT 'active' status UNION ALL SELECT 'inactive');
+`);
+const retainedMedia = mediaUpgrade.prepare("SELECT * FROM product_media ORDER BY id").all();
+apply(
+  mediaUpgrade,
+  migrations.filter((migration) => migration.name >= "0084_"),
+);
+for (const before of retainedMedia) {
+  const after = mediaUpgrade.prepare("SELECT * FROM product_media WHERE id=?").get(before.id);
+  assert.equal(after.content_digest, null);
+  delete after.content_digest;
+  assert.deepEqual(after, before);
+}
+assert.deepEqual(
+  mediaUpgrade
+    .prepare("SELECT object_key,status,attempt_count FROM product_media_cleanup")
+    .all()
+    .map((row) => ({ ...row })),
+  [{ object_key: "retained/inactive", status: "PENDING", attempt_count: 0 }],
+);
+assert.deepEqual(mediaUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
+mediaUpgrade.close();
+
 const populated = database();
 apply(
   populated,

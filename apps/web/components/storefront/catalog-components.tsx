@@ -3,49 +3,12 @@
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight, Leaf } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "../../lib/utils";
 import { formatMoney } from "../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../lib/storefront/catalog-presentation";
-import type { CatalogMedia } from "@freshmarkets/contracts";
+import { ProductMedia } from "./product-media";
+export { ProductMedia } from "./product-media";
 import { AddToCartButton } from "./marketplace/add-to-cart-button";
 import { useQuickView } from "./marketplace/quick-view-provider";
-
-/**
- * Canonical product media: Core/D1 provides the asset path and alt text.
- * Unknown or invalid media renders the stable accessible leaf placeholder —
- * Web never guesses an image path from a slug.
- */
-export function ProductMedia({
-  media,
-  name,
-  className,
-}: {
-  media: CatalogMedia | null;
-  name: string;
-  className?: string;
-}) {
-  if (media) {
-    return (
-      <img
-        src={media.src}
-        alt={media.alt}
-        className={cn("aspect-square w-full object-contain", className)}
-      />
-    );
-  }
-  return (
-    <div
-      role="img"
-      aria-label={`${name} product image`}
-      className={cn(
-        "flex aspect-square w-full items-center justify-center bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]",
-        className,
-      )}
-    >
-      <Leaf className="size-12 stroke-[1.25]" aria-hidden="true" />
-    </div>
-  );
-}
 
 /**
  * Low-chrome product card: media tile, price, name, and a compact add control
@@ -73,6 +36,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
         {variant?.availability === "AVAILABLE" ? (
           <div className="absolute right-2 bottom-2">
             <AddToCartButton
+              media={product.media}
               skuId={variant.id}
               productName={product.name}
               unitPriceMinor={variant.priceMinor}

@@ -57,6 +57,51 @@ describe("cart view helpers", () => {
 });
 
 describe("addToCart", () => {
+  it("retains canonical image URLs in guest carts and rejects tampered remote image URLs", async () => {
+    let saved: string | null = null;
+    const storage = {
+      getItem: () => saved,
+      setItem: (_key: string, value: string) => {
+        saved = value;
+      },
+      removeItem: () => {
+        saved = null;
+      },
+    };
+    vi.stubGlobal("window", { dispatchEvent: vi.fn(), localStorage: storage });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ ok: false, error: { code: "UNAUTHENTICATED" } }), {
+            status: 401,
+          }),
+      ),
+    );
+    const media = { src: "/media/products/image-1/2", alt: "Fresh avocado" };
+    expect(
+      await addToCart("sku-media", 1, {
+        name: "Avocado",
+        unitPriceMinor: 100,
+        currency: "PHP",
+        media,
+      }),
+    ).toMatchObject({ ok: true });
+    expect((await fetchCart())?.items[0]?.media).toEqual(media);
+    saved = JSON.stringify({
+      items: [
+        {
+          skuId: "sku-media",
+          quantity: 1,
+          name: "Avocado",
+          unitPriceMinor: 100,
+          currency: "PHP",
+          media: { src: "https://outside.invalid/tracker", alt: "Unsafe saved image" },
+        },
+      ],
+    });
+    expect((await fetchCart())?.items[0]?.media).toBeNull();
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });

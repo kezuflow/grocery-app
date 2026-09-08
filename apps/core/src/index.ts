@@ -1,4 +1,9 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
+import { getPublishedProductMedia } from "./catalog/published-product-media";
+import {
+  getAdminProductMediaRecovery,
+  recoverAdminProductMedia,
+} from "./admin/application/product-media-recovery-administration";
 import {
   getAdminLocationFulfillment,
   configureAdminLocationFulfillment,
@@ -1952,6 +1957,38 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         bucket: this.env.PRODUCT_MEDIA,
       },
       validation.data,
+    );
+  }
+  async getPublishedProductMedia(
+    input: import("@freshmarkets/contracts").PublishedProductMediaRequest,
+  ) {
+    return getPublishedProductMedia(this.env.DB, this.env.PRODUCT_MEDIA, input);
+  }
+  async getAdminProductMediaRecovery(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & {
+      productId: string;
+      cursor?: string;
+    },
+  ) {
+    return getAdminProductMediaRecovery(
+      {
+        db: this.env.DB,
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async recoverAdminProductMedia(
+    input: import("@freshmarkets/contracts").RecoverProductMediaRequest,
+  ) {
+    return recoverAdminProductMedia(
+      {
+        db: this.env.DB,
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
     );
   }
   async getAdminProductMediaContent(

@@ -186,7 +186,7 @@ describe("catalog read models (integration)", () => {
     expect(serialized.toLowerCase()).not.toContain("packinginstruction");
     expect(view?.product.variants[0]?.merchandisingLabel).toBe("Pack");
     expect(view?.product.variants[0]?.sellUnitCode).toBe("G");
-    expect(view?.product.media?.src).toBe("/produce/chili-pepper-fruit-siling-labuyo.webp");
+    expect(view?.product.media).toBeNull(); // Retained bundled assets no longer publish catalog images.
     expect(view?.product.details.map((detail) => detail.label)).toEqual(
       expect.arrayContaining(["Contents", "Storage"]),
     );
@@ -310,7 +310,7 @@ describe("catalog read models (integration)", () => {
       expect(rail.items.length).toBeGreaterThan(0);
       expect(rail.items.length).toBeLessThanOrEqual(8);
       for (const product of rail.items) {
-        expect(product.media?.src).toBeTruthy();
+        expect(product.media).toBeNull(); // Development fixtures have no authored R2 attachments.
         expect(product.variants.some((variant) => variant.priceMinor !== null)).toBe(true);
       }
     }

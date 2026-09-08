@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, ShoppingBasket, X } from "lucide-react";
 import type { CartView } from "@freshmarkets/contracts";
+import { ProductMedia } from "../product-media";
 import {
   CART_DRAWER_REQUEST_EVENT,
   addToCart,
@@ -48,6 +49,7 @@ export function CartDrawer() {
   async function update(item: CartView["items"][number], quantity: number) {
     const result = await addToCart(item.skuId, quantity, {
       name: item.name,
+      media: item.media,
       unitPriceMinor: item.unitPriceMinor,
       currency: cart?.currency ?? "PHP",
     });
@@ -134,7 +136,11 @@ export function CartDrawer() {
                     className="flex gap-3 border-b border-[var(--fm-border)] pb-4"
                   >
                     <div className="flex size-16 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
-                      <ShoppingBasket className="size-6" aria-hidden="true" />
+                      <ProductMedia
+                        media={item.media ?? null}
+                        name={item.name}
+                        className="size-16 rounded-[var(--fm-radius-surface)]"
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 text-sm font-semibold">{item.name}</p>

@@ -21,6 +21,12 @@ export type CatalogVariant = {
 };
 
 export type CatalogMedia = { src: string; alt: string };
+export type PublishedProductMediaRequest = RequestMeta & { mediaId: string; version: number };
+export type PublishedProductMediaContent = {
+  bytes: ArrayBuffer;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  etag: string;
+};
 export type CatalogDetail = { label: string; value: string; sortOrder: number };
 
 export type CatalogProduct = {
@@ -90,6 +96,9 @@ export type DeliveryCycleView = {
 };
 
 export type CatalogService = {
+  getPublishedProductMedia(
+    request: PublishedProductMediaRequest,
+  ): Promise<RpcResult<PublishedProductMediaContent>>;
   resolveServiceability(request: ServiceabilityRequest): Promise<RpcResult<ServiceabilityResult>>;
   searchCatalog(request: CatalogSearchRequest): Promise<RpcResult<CatalogSearchPage>>;
   /** Bounded home discovery; rails never materialize the whole catalog. */

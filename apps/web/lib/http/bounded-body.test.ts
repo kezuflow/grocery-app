@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "@freshmarkets/validation";
-import { readBoundedJson, readBoundedText } from "./bounded-body";
+import { readBoundedBytes, readBoundedJson, readBoundedText } from "./bounded-body";
 
 function streamedRequest(chunks: Array<Uint8Array | Error>, contentType = "application/json") {
   const stream = new ReadableStream<Uint8Array>({
@@ -20,6 +20,19 @@ function streamedRequest(chunks: Array<Uint8Array | Error>, contentType = "appli
 }
 
 describe("bounded Web request bodies", () => {
+  it("preserves binary multipart bytes and rejects streamed overflow without Content-Length", async () => {
+    const binary = new Uint8Array([255, 216, 255, 0]);
+    const allowed = await readBoundedBytes(
+      streamedRequest([binary], "multipart/form-data; boundary=test"),
+      { maxBytes: 4, contentTypes: ["multipart/form-data"] },
+    );
+    expect(allowed).toEqual({ ok: true, value: binary.buffer });
+    const rejected = await readBoundedBytes(
+      streamedRequest([binary, binary], "multipart/form-data; boundary=test"),
+      { maxBytes: 4, contentTypes: ["multipart/form-data"] },
+    );
+    expect(rejected).toMatchObject({ ok: false, error: { status: 413, code: "BODY_TOO_LARGE" } });
+  });
   it("preserves exact bounded text and accepts charset parameters", async () => {
     const body = '{"name":"Café"}';
     const result = await readBoundedText(
