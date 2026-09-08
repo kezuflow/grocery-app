@@ -1,4 +1,11 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
+import {
+  listAdminDeliveryCycles,
+  listAdminCycleDestinations,
+  saveAdminDeliveryCycleDraft,
+  scheduleAdminDeliveryCycle,
+  cancelAdminDeliveryCycle,
+} from "./admin/application/delivery-cycle-administration";
 import { readCustomerProfile, updateMyCustomerProfile } from "./customer/profile";
 import {
   getAdminCustomerProfile,
@@ -2055,6 +2062,49 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
   async listAdminLocations(input: import("@freshmarkets/contracts").AdminLocationsRequest) {
     return listAdminLocations(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminDeliveryCycles(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & { cursor?: string },
+  ) {
+    return listAdminDeliveryCycles(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async listAdminCycleDestinations(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & {
+      marketId: string;
+      cursor?: string;
+    },
+  ) {
+    return listAdminCycleDestinations(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async saveAdminDeliveryCycleDraft(
+    input: import("@freshmarkets/contracts").SaveAdminDeliveryCycleRequest,
+  ) {
+    return saveAdminDeliveryCycleDraft(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async scheduleAdminDeliveryCycle(
+    input: import("@freshmarkets/contracts").ScheduleAdminDeliveryCycleRequest,
+  ) {
+    return scheduleAdminDeliveryCycle(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async cancelAdminDeliveryCycle(
+    input: import("@freshmarkets/contracts").CancelAdminDeliveryCycleRequest,
+  ) {
+    return cancelAdminDeliveryCycle(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

@@ -142,6 +142,8 @@ The Admin location Product read model joins, but never duplicates, `products`, `
 
 ## Provider Delivery Pricing and Scheduled Cycles
 
+The retained-baseline implementation adds `delivery_cycle_schedule` (one timezone/procurement/preparation/pickup plan per cycle), `delivery_cycle_window` (named, integer-instant intervals) and immutable `order_delivery_window_snapshot` evidence through migration 0082. Existing cycle, Order and payment rows remain untouched; no schedule/window facts are backfilled. A new draft writes zero to retained capacity/allocation columns without using them as policy. Window names are unique within a cycle; composite foreign keys require the committed Order and selected window to belong to the same cycle. These relationships and immutable Order evidence are storage integrity. Core owns temporal ordering, draft lifecycle and destination eligibility. Existing databases require the forward migration; changing source files does not migrate them.
+
 - `delivery_cycles(id PK, market_id FK, code, order_open_at, cutoff_at, procurement_start_at, packing_start_at, dispatch_at, delivery_start_at, delivery_end_at, status, version, UNIQUE(market_id, code))`
 - `delivery_cycle_zones(cycle_id FK, zone_id FK, location_id FK, status, version, PRIMARY KEY(cycle_id, zone_id, location_id))` records eligibility/operational participation only and contains no capacity.
 - `delivery_provider_quotations(id PK, checkout_attempt_id FK NULL, delivery_job_id FK NULL, provider, provider_service, provider_quotation_id, amount_minor, currency, quoted_at, expires_at NULL, scheduled_pickup_at NULL, origin_snapshot_json, destination_snapshot_json, capability_snapshot_json, request_hash, status, created_at)` with exactly one checkout-attempt or dispatch owner.

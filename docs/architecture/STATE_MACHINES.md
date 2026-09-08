@@ -48,7 +48,9 @@ Rules:
 - Customer Orders/amendments enter only while the cycle is `OPEN` and current time is before cutoff. A cycle has no order, customer, zone, seat, or other capacity.
 - Reaching cutoff prevents normal procurement-affecting customer modifications.
 - Time-based advancement is still an explicit idempotent command invoked by a request or scheduled trigger.
+- Draft save and `DRAFT -> SCHEDULED` require Global fulfillment authority, the reviewed version, complete ordered timing and eligible destination participation. Every required relation, audit and original command receipt shares the guarded transaction. Published schedules are not editable through draft save. `SCHEDULED -> OPEN` occurs no earlier than `order_opens_at`; `OPEN -> CUTOFF_REACHED` occurs at cutoff, each with stable transition identity and atomic audit/receipt. After scheduler downtime, opening followed by cutoff remains safe because checkout independently enforces the opening/cutoff interval.
 - Cancelling a cycle with commitments requires an operational compensation plan; a raw transition is forbidden.
+- Unpaid `DRAFT / SCHEDULED / OPEN -> CANCELED` requires Global fulfillment authority, a reason and current version. Orders, Payments other than definitive failure/cancellation, or retained checkout holds block it. The command atomically invalidates unstarted Quotes/attempts and persists audit/original receipt; deactivated destinations do not block recovery. A concurrent payment initiation must either win and block cancellation, or lose against the canceled cycle and invalidated Quote.
 - No `INSTANT` Order is assigned a synthetic cycle merely to reuse these transitions.
 
 ## Order

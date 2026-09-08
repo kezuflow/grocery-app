@@ -24,6 +24,11 @@ import {
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 import { quoteProviderDelivery, type ProviderCheckoutAddress } from "./quote-provider-delivery";
+import {
+  selectScheduledWindow,
+  scheduledWindowGuard,
+  scheduledWindowSnapshotSchema,
+} from "../../commerce/application/scheduled-window";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -32,6 +37,8 @@ export type CreateCheckoutQuoteCommand = {
   addressId: string;
   /** Null selects the INSTANT path; a cycle id selects SCHEDULED. */
   deliveryCycleId: string | null;
+  /** Server-resolved configured window. A sole window is unambiguous for internal callers. */
+  deliveryWindowId?: string;
   /** Opaque customer selection resolved by the RPC adapter. */
   fulfillmentOptionId?: string;
   /** Server-resolved Instant partner metadata; never accepted as client authority. */
@@ -91,6 +98,13 @@ export async function createCheckoutQuote(
   // Idempotent replay first: same key returns the same immutable quote.
   const existing = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
   if (existing) {
+    const savedWindow = scheduledWindowSnapshotSchema.safeParse(
+      existing.cycleSnapshot &&
+        typeof existing.cycleSnapshot === "object" &&
+        "deliveryWindow" in existing.cycleSnapshot
+        ? existing.cycleSnapshot.deliveryWindow
+        : null,
+    );
     const existingOptionId =
       existing.fulfillmentSnapshot && typeof existing.fulfillmentSnapshot === "object"
         ? (existing.fulfillmentSnapshot as { fulfillmentOptionId?: unknown }).fulfillmentOptionId
@@ -100,6 +114,8 @@ export async function createCheckoutQuote(
       existing.cartId !== command.cartId ||
       existing.addressId !== command.addressId ||
       (existing.deliveryCycleId ?? null) !== (command.deliveryCycleId ?? null) ||
+      (command.deliveryWindowId !== undefined &&
+        (!savedWindow.success || savedWindow.data.windowId !== command.deliveryWindowId)) ||
       (command.fulfillmentOptionId !== undefined &&
         existingOptionId !== command.fulfillmentOptionId) ||
       JSON.stringify(existing.requestedPromotionCodes) !==
@@ -212,7 +228,7 @@ async function createScheduledQuote(
   // Cycle must be open and before cutoff.
   const cycle = await database
     .prepare(
-      "SELECT id, version, market_id, cutoff_at, delivery_date, status FROM delivery_cycle WHERE id=? AND status='OPEN'",
+      "SELECT id, version, market_id, order_opens_at, cutoff_at, delivery_date, status FROM delivery_cycle WHERE id=? AND status='OPEN'",
     )
     .bind(command.deliveryCycleId)
     .first<{
@@ -220,13 +236,23 @@ async function createScheduledQuote(
       version: number;
       market_id: string;
       cutoff_at: number;
+      order_opens_at: number;
       delivery_date: number;
       status: string;
     }>();
   const now = Date.now();
   if (!cycle) return failure("CYCLE_CLOSED", "The delivery cycle is not open", command.requestId);
+  if (cycle.order_opens_at > now)
+    return failure("CYCLE_CLOSED", "Orders have not opened for this cycle", command.requestId);
   if (cycle.cutoff_at <= now)
     return failure("CYCLE_CLOSED", "The cycle cutoff has passed", command.requestId);
+  const window = await selectScheduledWindow(database, cycle.id, command.deliveryWindowId);
+  if (!window)
+    return failure(
+      "CYCLE_CLOSED",
+      "Choose an available configured delivery window",
+      command.requestId,
+    );
 
   // Zone routing for this cycle's market (address already resolved).
   const selected = (
@@ -326,7 +352,7 @@ async function createScheduledQuote(
     locationId: routing.location_id,
     cartId: command.cartId,
     address,
-    scheduleAt: new Date(cycle.delivery_date).toISOString(),
+    scheduleAt: window.pickupAt,
     now: now2,
   });
   if (!deliveryFee)
@@ -399,7 +425,8 @@ async function createScheduledQuote(
         modeVersion: routing.modeVersion,
         cycleId: cycle.id,
         cutoffAt: new Date(cycle.cutoff_at).toISOString(),
-        deliveryDate: new Date(cycle.delivery_date).toISOString(),
+        deliveryDate: window.startsAt,
+        deliveryWindow: window,
         zoneId: routing.zone_id,
         locationId: routing.location_id,
         locationName: routing.location_name,
@@ -432,6 +459,7 @@ async function createScheduledQuote(
   try {
     await database.batch([
       geographyQuoteGuard(database, routing, cycle),
+      scheduledWindowGuard(database, cycle.id, window),
       repository.insertQuote(
         {
           id: quoteId,

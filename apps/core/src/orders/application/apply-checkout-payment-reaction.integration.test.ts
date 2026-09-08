@@ -1,5 +1,8 @@
 import { describe, expect, it, onTestFinished } from "vitest";
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
+import { locationManager } from "../../test-location-fixtures";
+import { openDueDeliveryCycles } from "../../commerce/application/open-due-delivery-cycles";
+import { getCustomerOrderDetail } from "./get-customer-order-detail";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
@@ -128,7 +131,7 @@ async function createQuote(
   promotionCodes?: readonly string[],
 ) {
   const cycles = await env.DB.prepare(
-    "SELECT id FROM delivery_cycle WHERE status='OPEN' ORDER BY delivery_date ASC LIMIT 1",
+    "SELECT id FROM delivery_cycle WHERE id='cycle-next-cebu' AND status='OPEN'",
   ).all<{ id: string }>();
   expect(cycles.results.length).toBeGreaterThan(0);
   const mode = await env.DB.prepare(
@@ -206,6 +209,162 @@ function paymentCommandForQuote(
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("carries an operator-created window through payment, recovery and the customer order without stock", async () => {
+    const staff = await locationManager();
+    await env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('fulfillment.read','fulfillment.manage')",
+    )
+      .bind(staff.id)
+      .run();
+    const now = Date.now(),
+      at = (hours: number) => new Date(now + hours * 3600000).toISOString();
+    const draft = await exports.default.saveAdminDeliveryCycleDraft({
+      headers: staff.headers,
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      marketId: "market-metro-cebu",
+      name: "Customer window journey",
+      expectedVersion: 0,
+      reason: "Plan tested fulfillment",
+      orderOpensAt: at(-1),
+      cutoffAt: at(24),
+      procurementAt: at(25),
+      preparationAt: at(28),
+      pickupAt: at(30),
+      windows: [
+        { name: "Morning delivery", startsAt: at(31), endsAt: at(33) },
+        { name: "Afternoon delivery", startsAt: at(34), endsAt: at(36) },
+      ],
+      participation: [{ zoneId: "zone-cebu-city-core", locationId: "location-cebu-central" }],
+    });
+    if (!draft.ok) throw new Error(draft.error.message);
+    expect(
+      await exports.default.scheduleAdminDeliveryCycle({
+        headers: staff.headers,
+        requestId: crypto.randomUUID(),
+        cycleId: draft.value.cycleId,
+        expectedVersion: 1,
+        reason: "Publish checked windows",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await openDueDeliveryCycles(env.DB, now)).toBe(1);
+    const window = draft.value.windows[1];
+    if (!window) throw new Error("Missing afternoon window");
+    const fixture = await seededCheckout({ onHand: 0 });
+    const quoteCommand = {
+      ...fixture,
+      cartVersion: 3,
+      deliveryCycleId: draft.value.cycleId,
+      deliveryWindowId: window.windowId,
+      fulfillmentOptionId: "operator-window-test",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    const quote = await createCheckoutQuote(env.DB, quoteCommand, quoteDependencies);
+    if (!quote.ok) throw new Error(quote.error.message);
+    expect(
+      await createCheckoutQuote(
+        env.DB,
+        { ...quoteCommand, deliveryWindowId: draft.value.windows[0]?.windowId },
+        quoteDependencies,
+      ),
+    ).toMatchObject({ ok: false });
+    const provider = createMockPaymentProvider(),
+      registry = new ProviderRegistry("test", [provider]);
+    const payment = await createCheckoutPaymentIntent(
+      env.DB,
+      registry,
+      "mock",
+      quoteDependencies.routeDistance,
+      paymentCommandForQuote(fixture.customerId, quote.value),
+      quoteDependencies.deliveryProviders,
+    );
+    if (!payment.ok) throw new Error(payment.error.message);
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    if (!attempt) throw new Error("Payment not started");
+    setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+    expect(
+      await reconcilePayment(env.DB, registry, {
+        paymentIntentId: payment.value.paymentIntentId,
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "test",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const reaction = await env.DB.prepare(
+      "SELECT id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER'",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ id: string }>();
+    if (!reaction) throw new Error("Missing payment reaction");
+    const command = {
+      reactionId: reaction.id,
+      paymentIntentId: payment.value.paymentIntentId,
+      checkoutAttemptId: quote.value.quoteId,
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_window_snapshot BEFORE INSERT ON order_delivery_window_snapshot BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await applyCheckoutPaymentReaction(env.DB, command)).toMatchObject({ applied: false });
+      expect(
+        await env.DB.prepare("SELECT count(*) count FROM grocery_order WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_window_snapshot");
+    }
+    const committed = await applyCheckoutPaymentReaction(env.DB, command);
+    expect(committed).toMatchObject({ applied: true });
+    if (!committed.orderId) throw new Error("Order not committed");
+    expect(await applyCheckoutPaymentReaction(env.DB, command)).toEqual({
+      ...committed,
+      reason: "ALREADY_APPLIED",
+    });
+    expect(
+      await getCustomerOrderDetail(env.DB, {
+        customerId: fixture.customerId,
+        orderId: committed.orderId,
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        fulfillment: {
+          deliveryWindow: {
+            name: window.name,
+            startsAt: window.startsAt,
+            endsAt: window.endsAt,
+            timezone: "Asia/Manila",
+          },
+        },
+      },
+    });
+    expect(
+      await env.DB.prepare("SELECT pickup_at FROM order_delivery_window_snapshot WHERE order_id=?")
+        .bind(committed.orderId)
+        .first(),
+    ).toEqual({ pickup_at: Date.parse(at(30)) });
+    expect(
+      await env.DB.prepare(
+        "SELECT on_hand,reserved FROM inventory_balance WHERE inventory_pool_id=?",
+      )
+        .bind(fixture.poolId)
+        .first(),
+    ).toEqual({ on_hand: 0, reserved: 0 });
+    await expect(
+      env.DB.prepare("UPDATE order_delivery_window_snapshot SET name='Changed' WHERE order_id=?")
+        .bind(committed.orderId)
+        .run(),
+    ).rejects.toThrow();
+  });
   it.each(["revision", "expiry", "cutoff"])(
     "rejects %s changes during provider revalidation before creating a payment intent",
     async (change) => {

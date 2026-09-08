@@ -53,7 +53,9 @@ export async function operationalCandidates(
           AND r.max_concurrent_instant_orders IS NOT NULL)
         OR (g.fulfillment_mode='SCHEDULED' AND g.cadence='WEEKLY' AND EXISTS (
           SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
-          WHERE cycle.market_id=m.id AND cycle.status='OPEN' AND cycle.cutoff_at>?
+          WHERE cycle.market_id=m.id AND cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
+            AND EXISTS (SELECT 1 FROM delivery_cycle_window w JOIN delivery_cycle_schedule s ON s.cycle_id=w.cycle_id
+              WHERE w.cycle_id=cycle.id AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at)
             AND participation.zone_id=z.id AND participation.location_id=l.id AND participation.status='ACTIVE'
             AND (? IS NULL OR cycle.id=?))))
     ORDER BY l.id,z.id`)
@@ -66,6 +68,7 @@ export async function operationalCandidates(
       input.marketId ?? null,
       input.mode ?? null,
       input.mode ?? null,
+      now,
       now,
       input.cycleId ?? null,
       input.cycleId ?? null,
@@ -106,6 +109,7 @@ export function geographyQuoteGuard(
         AND ((g.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness WHERE location_id=l.id AND version=? AND dispatch_ready=1 AND instant_promise_minutes IS NOT NULL AND max_concurrent_instant_orders IS NOT NULL))
           OR (g.fulfillment_mode='SCHEDULED' AND g.cadence='WEEKLY' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
             WHERE cycle.id=? AND cycle.version=? AND cycle.status='OPEN' AND cycle.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
+              AND cycle.order_opens_at<=CAST(unixepoch('subsec')*1000 AS INTEGER)
               AND participation.zone_id=z.id AND participation.location_id=l.id AND participation.status='ACTIVE')))
     )`)
     .bind(

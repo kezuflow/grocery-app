@@ -118,7 +118,18 @@ export async function listFulfillmentOptions(
   const options: FulfillmentOptionView[] = [];
   for (const mode of candidate ? [candidate.mode] : (["SCHEDULED"] as const)) {
     let reason: FulfillmentOptionView["unavailableReason"] = candidate ? null : "MODE_UNAVAILABLE";
-    let cycle: { id: string; cutoff: number; delivery: number; version: number } | null = null;
+    type CycleWindow = {
+      id: string;
+      cutoff: number;
+      delivery: number;
+      version: number;
+      windowId: string;
+      windowName: string;
+      startsAt: number;
+      endsAt: number;
+      pickupAt: number;
+    };
+    let cycles: CycleWindow[] = [];
     if (candidate && mode === "INSTANT") {
       const unavailable = await database
         .prepare(
@@ -149,28 +160,35 @@ export async function listFulfillmentOptions(
     }
     if (candidate && mode === "SCHEDULED") {
       for (const operationalCandidate of orderedCandidates) {
-        const availableCycle = await database
+        const availableCycles = await database
           .prepare(
-            `SELECT dc.id,dc.cutoff_at cutoff,dc.delivery_date delivery,dc.version
+            `SELECT dc.id,dc.cutoff_at cutoff,dc.delivery_date delivery,dc.version,
+              w.id windowId,w.name windowName,w.starts_at startsAt,w.ends_at endsAt,s.pickup_at pickupAt
          FROM delivery_cycle dc JOIN delivery_cycle_zone cycle_zone ON cycle_zone.cycle_id=dc.id
           AND cycle_zone.zone_id=? AND cycle_zone.location_id=? AND cycle_zone.status='ACTIVE'
-         WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>?
-         ORDER BY dc.delivery_date,dc.id LIMIT 1`,
+         JOIN delivery_cycle_schedule s ON s.cycle_id=dc.id JOIN delivery_cycle_window w ON w.cycle_id=dc.id
+         WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>? AND dc.order_opens_at<=?
+           AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at
+         ORDER BY dc.delivery_date,dc.id,w.starts_at,w.id LIMIT 30`,
           )
           .bind(
             operationalCandidate.zoneId,
             operationalCandidate.locationId,
             operationalCandidate.marketId,
             Date.now(),
+            Date.now(),
           )
-          .first<{ id: string; cutoff: number; delivery: number; version: number }>();
-        if (availableCycle) {
+          .all<CycleWindow>();
+        if (availableCycles.results.length) {
           candidate = operationalCandidate;
-          cycle = availableCycle;
+          // Present every configured window of the next eligible cycle, as one offering.
+          cycles = availableCycles.results.filter(
+            (window) => window.id === availableCycles.results[0]?.id,
+          );
           break;
         }
       }
-      if (!cycle) reason = "CYCLE_UNAVAILABLE";
+      if (!cycles.length) reason = "CYCLE_UNAVAILABLE";
     }
     if (candidate && reason === null) {
       const unavailableCatalogItem = await database
@@ -210,75 +228,80 @@ export async function listFulfillmentOptions(
           ? dependencies.instantDeliveryPartners
           : [null]
         : [dependencies.scheduledDeliveryPartner ?? null];
-    for (const partner of partners) {
-      let optionReason: FulfillmentOptionView["unavailableReason"] =
-        !partner && reason === null
-          ? mode === "INSTANT"
-            ? "DELIVERY_PARTNER_UNAVAILABLE"
-            : "FEE_UNAVAILABLE"
-          : reason;
-      let fee: FulfillmentOptionView["feePreview"] = null;
-      if (candidate && partner && optionReason === null) {
-        const now = Date.now();
-        const quoted = await quoteProviderDelivery(database, partner.provider, {
-          providerCode: partner.providerCode,
-          serviceType: partner.serviceType,
-          marketId: candidate.marketId,
-          locationId: candidate.locationId,
-          cartId: query.cartId,
-          address,
-          scheduleAt: mode === "SCHEDULED" && cycle ? new Date(cycle.delivery).toISOString() : null,
-          now,
-        });
-        if (!quoted) optionReason = "FEE_UNAVAILABLE";
-        else
-          fee = {
-            subtotalMinor: quoted.feeMinor,
-            discountMinor: 0,
-            totalMinor: quoted.feeMinor,
-            currency: quoted.snapshot.currency,
-          };
-      }
-      const evidence = candidate
-        ? {
+    for (const cycle of cycles.length ? cycles : [null]) {
+      for (const partner of partners) {
+        let optionReason: FulfillmentOptionView["unavailableReason"] =
+          !partner && reason === null
+            ? mode === "INSTANT"
+              ? "DELIVERY_PARTNER_UNAVAILABLE"
+              : "FEE_UNAVAILABLE"
+            : reason;
+        let fee: FulfillmentOptionView["feePreview"] = null;
+        if (candidate && partner && optionReason === null) {
+          const now = Date.now();
+          const quoted = await quoteProviderDelivery(database, partner.provider, {
+            providerCode: partner.providerCode,
+            serviceType: partner.serviceType,
+            marketId: candidate.marketId,
             locationId: candidate.locationId,
-            modeVersion: candidate.modeVersion,
-            geographyVersion: candidate.geographyVersion,
-            cycle,
-            ...(partner
-              ? { providerCode: partner.providerCode, providerServiceType: partner.serviceType }
-              : {}),
-          }
-        : { unavailable: true };
-      options.push({
-        optionId: await optionId(currentQuery, mode, evidence),
-        mode,
-        eligible: optionReason === null,
-        unavailableReason: optionReason,
-        deliveryPartner:
-          mode === "INSTANT" && partner
+            cartId: query.cartId,
+            address,
+            scheduleAt:
+              mode === "SCHEDULED" && cycle ? new Date(cycle.pickupAt).toISOString() : null,
+            now,
+          });
+          if (!quoted) optionReason = "FEE_UNAVAILABLE";
+          else
+            fee = {
+              subtotalMinor: quoted.feeMinor,
+              discountMinor: 0,
+              totalMinor: quoted.feeMinor,
+              currency: quoted.snapshot.currency,
+            };
+        }
+        const evidence = candidate
+          ? {
+              locationId: candidate.locationId,
+              modeVersion: candidate.modeVersion,
+              geographyVersion: candidate.geographyVersion,
+              cycle,
+              ...(partner
+                ? { providerCode: partner.providerCode, providerServiceType: partner.serviceType }
+                : {}),
+            }
+          : { unavailable: true };
+        options.push({
+          optionId: await optionId(currentQuery, mode, evidence),
+          mode,
+          eligible: optionReason === null,
+          unavailableReason: optionReason,
+          deliveryPartner:
+            mode === "INSTANT" && partner
+              ? {
+                  code: partner.providerCode,
+                  displayName: partner.displayName,
+                  serviceType: partner.serviceType,
+                  serviceLabel: partner.serviceLabel,
+                }
+              : null,
+          promisedAt:
+            mode === "INSTANT" && candidate?.promiseMinutes
+              ? new Date(Date.now() + candidate.promiseMinutes * 60_000).toISOString()
+              : null,
+          deliveryWindow: cycle
             ? {
-                code: partner.providerCode,
-                displayName: partner.displayName,
-                serviceType: partner.serviceType,
-                serviceLabel: partner.serviceLabel,
+                windowId: cycle.windowId,
+                name: cycle.windowName,
+                startsAt: new Date(cycle.startsAt).toISOString(),
+                endsAt: new Date(cycle.endsAt).toISOString(),
               }
             : null,
-        promisedAt:
-          mode === "INSTANT" && candidate?.promiseMinutes
-            ? new Date(Date.now() + candidate.promiseMinutes * 60_000).toISOString()
-            : null,
-        deliveryWindow: cycle
-          ? {
-              startsAt: new Date(cycle.delivery).toISOString(),
-              endsAt: new Date(cycle.delivery + 24 * 60 * 60_000).toISOString(),
-            }
-          : null,
-        feePreview: fee,
-        cycleId: cycle?.id ?? null,
-        cutoffAt: cycle ? new Date(cycle.cutoff).toISOString() : null,
-        provisional: true,
-      });
+          feePreview: fee,
+          cycleId: cycle?.id ?? null,
+          cutoffAt: cycle ? new Date(cycle.cutoff).toISOString() : null,
+          provisional: true,
+        });
+      }
     }
   }
   return { ok: true, value: options, requestId: query.requestId };

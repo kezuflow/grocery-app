@@ -1,4 +1,5 @@
 import { isSufficientForCommitment } from "../../payments/domain/payment";
+import { scheduledWindowSnapshotSchema } from "../../commerce/application/scheduled-window";
 import { createInvoiceReadinessStatement } from "./create-invoice-readiness";
 import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
@@ -608,6 +609,28 @@ export async function applyCheckoutPaymentReaction(
           ) > ?`,
         )
         .bind(cycleSnapshot.locationId, maxConcurrentInstantOrders),
+    );
+  }
+  if (!instant && cycleSnapshot.deliveryWindow !== undefined) {
+    const window = scheduledWindowSnapshotSchema.safeParse(cycleSnapshot.deliveryWindow);
+    if (!window.success) return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
+    statements.push(
+      database
+        .prepare(
+          "INSERT INTO order_delivery_window_snapshot(order_id,cycle_id,window_id,name,timezone,starts_at,ends_at,pickup_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        )
+        .bind(
+          orderId,
+          cycleSnapshot.cycleId,
+          window.data.windowId,
+          window.data.name,
+          window.data.timezone,
+          Date.parse(window.data.startsAt),
+          Date.parse(window.data.endsAt),
+          Date.parse(window.data.pickupAt),
+          now,
+        ),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
     );
   }
   statements.push(

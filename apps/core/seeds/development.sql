@@ -1,6 +1,8 @@
 -- Deterministic local-development data for Admin and customer workflows.
 -- Re-runnable: stable seed identities use INSERT OR IGNORE.
 -- Deliberately excludes product_media rows and all R2 objects.
+-- Retained sample Orders keep their original delivery-date evidence. Create a new
+-- Scheduled cycle with explicit windows through Admin before testing new checkout.
 
 -- Synthetic staff actor used by audit, issue-assignment, and inventory fixtures. It has no
 -- credential or session and therefore cannot authenticate.

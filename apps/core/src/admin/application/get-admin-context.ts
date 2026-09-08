@@ -288,7 +288,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "administration",
     parentCode: null,
     kind: "workspace",
-    capabilities: ["settings.read", "settings.manage"],
+    capabilities: ["settings.read", "settings.manage", "fulfillment.read", "fulfillment.manage"],
   },
   {
     code: "settings-fulfillment-mode",
@@ -298,6 +298,15 @@ const WORKSPACES: ReadonlyArray<{
     parentCode: "settings",
     kind: "destination",
     capabilities: ["settings.read", "settings.manage"],
+  },
+  {
+    code: "settings-delivery-cycles",
+    label: "Scheduled cycles",
+    href: "/admin/settings/delivery-cycles",
+    section: "administration",
+    parentCode: "settings",
+    kind: "destination",
+    capabilities: ["fulfillment.read", "fulfillment.manage"],
   },
 ];
 

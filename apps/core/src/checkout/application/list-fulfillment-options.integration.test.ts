@@ -30,6 +30,8 @@ describe("listFulfillmentOptions", () => {
         "INSERT INTO cart_item (cart_id,sku_id,quantity) VALUES (?,'sku-red-onion-500g',1)",
       ).bind(cartId),
     ]);
+    await env.DB.prepare(`INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at)
+      SELECT 'second-options-window',id,'Evening',delivery_date+14400000,delivery_date+21600000,0 FROM delivery_cycle WHERE id='cycle-next-cebu'`).run();
     const query = {
       customerId,
       addressId,
@@ -54,7 +56,20 @@ describe("listFulfillmentOptions", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.map((option) => option.mode)).toEqual(["SCHEDULED"]);
+    expect(result.value.map((option) => option.mode)).toEqual(["SCHEDULED", "SCHEDULED"]);
+    expect(new Set(result.value.map((option) => option.optionId)).size).toBe(2);
+    expect(result.value.map((option) => option.deliveryWindow?.name)).toEqual([
+      "Test delivery window",
+      "Evening",
+    ]);
+    expect(result.value.every((option) => option.eligible)).toBe(true);
+    for (const option of result.value) {
+      expect(option.deliveryWindow?.windowId).toBeTruthy();
+      expect(
+        Date.parse(option.deliveryWindow?.endsAt ?? "") -
+          Date.parse(option.deliveryWindow?.startsAt ?? ""),
+      ).toBe(2 * 3600000);
+    }
     expect(JSON.stringify(result.value)).not.toMatch(/location-cebu|zone-cebu|hub/i);
     expect(result.value.every((option) => option.optionId.startsWith("fulfillment_"))).toBe(true);
     const stale = await listFulfillmentOptions(

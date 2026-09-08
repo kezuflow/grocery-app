@@ -184,6 +184,14 @@ export async function createPayment(
           AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version)))
           OR (q.fulfillment_mode='SCHEDULED' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
             WHERE cycle.id=q.delivery_cycle_id AND cycle.status='OPEN' AND cycle.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
+              AND cycle.order_opens_at<=CAST(unixepoch('subsec')*1000 AS INTEGER)
+              AND EXISTS (SELECT 1 FROM delivery_cycle_window window JOIN delivery_cycle_schedule schedule ON schedule.cycle_id=window.cycle_id
+                WHERE window.cycle_id=cycle.id AND window.id=json_extract(q.cycle_snapshot_json,'$.deliveryWindow.windowId')
+                  AND window.name=json_extract(q.cycle_snapshot_json,'$.deliveryWindow.name')
+                  AND schedule.timezone=json_extract(q.cycle_snapshot_json,'$.deliveryWindow.timezone')
+                  AND window.starts_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.startsAt'),'subsec')*1000 AS INTEGER)
+                  AND window.ends_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.endsAt'),'subsec')*1000 AS INTEGER)
+                  AND schedule.pickup_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER))
               AND cycle.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.cycleVersion'),cycle.version)
               AND participation.zone_id=zone.id AND participation.location_id=l.id AND participation.status='ACTIVE')))
     )`)

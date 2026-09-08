@@ -1,4 +1,8 @@
 import { operationalCandidates } from "../../geography/application/operational-candidates";
+import {
+  scheduledWindowSnapshotSchema,
+  selectScheduledWindow,
+} from "../../commerce/application/scheduled-window";
 import type { CheckoutQuoteRow } from "../infrastructure/d1-checkout-repository";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
@@ -22,6 +26,7 @@ type Snapshot = {
   geographyVersion?: number;
   zoneId?: string;
   locationId?: string;
+  deliveryWindow?: unknown;
 };
 
 type LiveCartItem = {
@@ -132,6 +137,24 @@ export async function revalidateCheckoutQuote(
       "Service area or fulfillment location changed; accept a new quote",
     );
   const marketId = selected.marketId;
+  if (quote.fulfillmentMode !== "INSTANT") {
+    const acceptedWindow = scheduledWindowSnapshotSchema.safeParse(snapshot.deliveryWindow);
+    const currentWindow =
+      acceptedWindow.success && quote.deliveryCycleId
+        ? await selectScheduledWindow(database, quote.deliveryCycleId, acceptedWindow.data.windowId)
+        : null;
+    if (
+      !acceptedWindow.success ||
+      !currentWindow ||
+      currentWindow.windowId !== acceptedWindow.data.windowId ||
+      currentWindow.name !== acceptedWindow.data.name ||
+      currentWindow.timezone !== acceptedWindow.data.timezone ||
+      currentWindow.startsAt !== acceptedWindow.data.startsAt ||
+      currentWindow.endsAt !== acceptedWindow.data.endsAt ||
+      currentWindow.pickupAt !== acceptedWindow.data.pickupAt
+    )
+      return rejected("PRICE_CHANGED", "Delivery window changed; accept a new quote");
+  }
   if (quote.fulfillmentMode === "INSTANT") {
     for (const item of liveItems.results) {
       const held = await database

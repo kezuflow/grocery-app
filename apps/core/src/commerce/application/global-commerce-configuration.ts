@@ -106,10 +106,12 @@ async function readinessBlockers(
         `SELECT 1 ready
            FROM delivery_cycle cycle
            JOIN delivery_cycle_zone zone ON zone.cycle_id=cycle.id AND zone.status='ACTIVE'
-          WHERE cycle.status='OPEN' AND cycle.cutoff_at>?
+          WHERE cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
+            AND EXISTS (SELECT 1 FROM delivery_cycle_window w JOIN delivery_cycle_schedule s ON s.cycle_id=w.cycle_id
+              WHERE w.cycle_id=cycle.id AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at)
           LIMIT 1`,
       )
-      .bind(Date.now())
+      .bind(Date.now(), Date.now())
       .first<{ ready: number }>();
     if (!cycle)
       blockers.push({
@@ -370,8 +372,10 @@ async function execute(
             .prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE NOT EXISTS (
             SELECT 1 FROM delivery_cycle cycle
             JOIN delivery_cycle_zone zone ON zone.cycle_id=cycle.id AND zone.status='ACTIVE'
-            WHERE cycle.status='OPEN' AND cycle.cutoff_at>?)`)
-            .bind(now),
+            WHERE cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
+              AND EXISTS (SELECT 1 FROM delivery_cycle_window w JOIN delivery_cycle_schedule s ON s.cycle_id=w.cycle_id
+                WHERE w.cycle_id=cycle.id AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at))`)
+            .bind(now, now),
     );
   }
   if (input.action === "SWITCH_MODE" && targetMode !== current.fulfillment_mode) {

@@ -7,6 +7,7 @@ import type {
 } from "./geography";
 import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminLocationsService } from "./admin-locations";
+import type { AdminDeliveryCyclesService } from "./admin-delivery-cycles";
 import type { AdminServiceabilityService } from "./admin-serviceability";
 import type { AdminStaffAccessService } from "./admin-staff-access";
 import type { InitialAdministratorService } from "./initial-administrator";
@@ -65,6 +66,7 @@ export interface ImplementedCoreService
     OperationsService,
     AdminFoundationService,
     AdminLocationsService,
+    AdminDeliveryCyclesService,
     AdminServiceabilityService,
     AdminStaffAccessService,
     InitialAdministratorService,
@@ -202,6 +204,11 @@ export const coreServiceMethodNames = [
   "setAdminSkuPrice",
   "getAdminSkuPrices",
   "listAdminLocations",
+  "listAdminDeliveryCycles",
+  "listAdminCycleDestinations",
+  "saveAdminDeliveryCycleDraft",
+  "scheduleAdminDeliveryCycle",
+  "cancelAdminDeliveryCycle",
   "createAdminLocation",
   "updateAdminLocation",
   "transitionAdminLocation",

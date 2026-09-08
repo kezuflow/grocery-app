@@ -65,6 +65,19 @@ beforeEach(async (context) => {
       ? migrations.filter((migration) => migration.name < "0069_schema_integrity.sql")
       : migrations;
   await applyD1Migrations(env.DB, selectedMigrations);
+  if (
+    selectedMigrations.some((migration) => migration.name === "0082_delivery_cycle_schedule.sql")
+  ) {
+    // Explicit disposable fixture configuration; retained upgrades invent no scheduling facts.
+    await env.DB.batch([
+      env.DB
+        .prepare(`INSERT OR IGNORE INTO delivery_cycle_schedule(cycle_id,timezone,procurement_at,preparation_at,pickup_at,created_at,updated_at)
+        SELECT id,'Asia/Manila',cutoff_at,delivery_date-3600000,delivery_date,0,0 FROM delivery_cycle WHERE id='cycle-next-cebu'`),
+      env.DB
+        .prepare(`INSERT OR IGNORE INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at)
+        SELECT 'window-test-cebu',id,'Test delivery window',delivery_date+3600000,delivery_date+10800000,0 FROM delivery_cycle WHERE id='cycle-next-cebu'`),
+    ]);
+  }
   if (isDeliveryMigrationTest) {
     await emulateDeployedPre0043DeliverySchema();
   }

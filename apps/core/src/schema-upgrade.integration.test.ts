@@ -114,12 +114,53 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
     });
   }
   expect(emailSnapshots[1]?.rows.length).toBeGreaterThan(0);
+  const retainedCycles = (
+    await env.DB.prepare("SELECT rowid,* FROM delivery_cycle ORDER BY id").all()
+  ).results;
+  const retainedFulfillment = (
+    await env.DB.prepare("SELECT rowid,* FROM order_fulfillment_snapshot ORDER BY order_id").all()
+  ).results;
   await applyD1Migrations(
     env.DB,
     migrations.filter((candidate) => candidate.name >= "0081_"),
   );
   for (const snapshot of emailSnapshots)
     expect((await env.DB.prepare(snapshot.sql).all()).results).toEqual(snapshot.rows);
+  expect(
+    (await env.DB.prepare("SELECT rowid,* FROM delivery_cycle ORDER BY id").all()).results,
+  ).toEqual(retainedCycles);
+  expect(
+    (await env.DB.prepare("SELECT rowid,* FROM order_fulfillment_snapshot ORDER BY order_id").all())
+      .results,
+  ).toEqual(retainedFulfillment);
+  expect(
+    await env.DB.prepare("SELECT count(*) count FROM delivery_cycle_schedule").first(),
+  ).toEqual({ count: 0 });
+  expect(await env.DB.prepare("SELECT count(*) count FROM delivery_cycle_window").first()).toEqual({
+    count: 0,
+  });
+  expect(
+    await env.DB.prepare("SELECT count(*) count FROM order_delivery_window_snapshot").first(),
+  ).toEqual({ count: 0 });
+  const retainedScheduledOrder = await env.DB.prepare(
+    "SELECT order_id,cycle_id FROM order_fulfillment_snapshot WHERE cycle_id IS NOT NULL ORDER BY order_id LIMIT 1",
+  ).first<{ order_id: string; cycle_id: string }>();
+  if (!retainedScheduledOrder) throw new Error("Retained Scheduled Order fixture is required");
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO delivery_cycle(id,market_id,name,order_opens_at,cutoff_at,delivery_date,status,capacity,allocated,version) VALUES ('upgrade-other-cycle','market-metro-cebu','Other cycle',0,1,2,'DRAFT',0,0,1)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at) VALUES ('upgrade-other-window','upgrade-other-cycle','Other window',2,3,0)",
+    ),
+  ]);
+  await expect(
+    env.DB.prepare(
+      "INSERT INTO order_delivery_window_snapshot(order_id,cycle_id,window_id,name,timezone,starts_at,ends_at,pickup_at,created_at) VALUES (?,?,'upgrade-other-window','Other window','Asia/Manila',2,3,1,0)",
+    )
+      .bind(retainedScheduledOrder.order_id, retainedScheduledOrder.cycle_id)
+      .run(),
+  ).rejects.toThrow(/FOREIGN KEY/i);
   expect((await env.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
   expect(
     (

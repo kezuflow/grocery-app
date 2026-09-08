@@ -108,6 +108,7 @@ export type CustomerOrderDetailView = {
     deliveryStatus: DeliveryJobState | null;
     cycleId: string | null;
     deliveryDate: string | null;
+    deliveryWindow?: { name: string; timezone: string; startsAt: string; endsAt: string } | null;
     promisedAt: string | null;
     address: {
       label: string | null;

@@ -152,6 +152,7 @@ export function createCheckoutRpc(context: CoreRpcContext) {
           cartVersion: input.cartVersion,
           addressId: input.addressId,
           deliveryCycleId: selected.mode === "SCHEDULED" ? selected.cycleId : null,
+          deliveryWindowId: selected.deliveryWindow?.windowId,
           fulfillmentOptionId: input.fulfillmentOptionId,
           deliveryPartner: selected.deliveryPartner,
           promotionCodes: input.promotionCodes,

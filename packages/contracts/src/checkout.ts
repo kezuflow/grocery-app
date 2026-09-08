@@ -123,7 +123,7 @@ export type FulfillmentOptionView = {
     serviceLabel: string;
   } | null;
   promisedAt: string | null;
-  deliveryWindow: { startsAt: string; endsAt: string } | null;
+  deliveryWindow: { startsAt: string; endsAt: string; windowId?: string; name?: string } | null;
   feePreview: {
     subtotalMinor: number;
     discountMinor: number;

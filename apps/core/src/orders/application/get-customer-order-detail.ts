@@ -167,12 +167,14 @@ export async function getCustomerOrderDetail(
               o.fulfillment_mode AS fulfillmentMode,
               ofs.cycle_id AS cycleId, ofs.cutoff_at AS cutoffAt,
               ofs.delivery_date AS deliveryDate, ofs.promised_at AS promisedAt,
+              window.name AS windowName,window.timezone AS windowTimezone,window.starts_at AS windowStartsAt,window.ends_at AS windowEndsAt,
               f.status AS fulfillmentStatus, f.updated_at AS fulfillmentUpdatedAt,
               d.id AS deliveryId, d.status AS deliveryStatus, d.updated_at AS deliveryUpdatedAt,
               EXISTS(SELECT 1 FROM order_payment_reaction opr
                      WHERE opr.order_id=o.id AND opr.checkout_quote_id IS NOT NULL) AS hasQuote
        FROM grocery_order o
        LEFT JOIN order_fulfillment_snapshot ofs ON ofs.order_id=o.id
+       LEFT JOIN order_delivery_window_snapshot window ON window.order_id=o.id
        LEFT JOIN fulfillment_record f ON f.order_id=o.id
        LEFT JOIN delivery_job d ON d.order_id=o.id
        WHERE o.id=? AND o.customer_id=?`,
@@ -198,6 +200,10 @@ export async function getCustomerOrderDetail(
       cycleId: string | null;
       cutoffAt: number | null;
       deliveryDate: number | null;
+      windowName: string | null;
+      windowTimezone: string | null;
+      windowStartsAt: number | null;
+      windowEndsAt: number | null;
       promisedAt: number | null;
       fulfillmentStatus: string | null;
       fulfillmentUpdatedAt: number | null;
@@ -517,6 +523,19 @@ export async function getCustomerOrderDetail(
         deliveryStatus: row.deliveryStatus as DeliveryJobState | null,
         cycleId: row.fulfillmentMode === "SCHEDULED" ? row.cycleId : null,
         deliveryDate: row.fulfillmentMode === "SCHEDULED" ? iso(row.deliveryDate) : null,
+        deliveryWindow:
+          row.fulfillmentMode === "SCHEDULED" &&
+          row.windowName &&
+          row.windowTimezone &&
+          row.windowStartsAt !== null &&
+          row.windowEndsAt !== null
+            ? {
+                name: row.windowName,
+                timezone: row.windowTimezone,
+                startsAt: new Date(row.windowStartsAt).toISOString(),
+                endsAt: new Date(row.windowEndsAt).toISOString(),
+              }
+            : null,
         promisedAt: row.fulfillmentMode === "INSTANT" ? iso(row.promisedAt) : null,
         address: safeAddress(row.addressSnapshotJson),
       },

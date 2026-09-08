@@ -48,6 +48,7 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "audit",
   "settings",
   "settings-fulfillment-mode",
+  "settings-delivery-cycles",
 ];
 
 const SECTION_ORDER: ReadonlyArray<AdminNavigationSectionCode> = [

@@ -56,6 +56,10 @@ Global service-area publication defines a named market boundary, contained deliv
 
 A configurable `SCHEDULED` operational schedule containing cadence, order-open, cutoff, procurement, packing, dispatch, delivery date/window, zone/location participation, and lifecycle state. Weekend and `WEEKLY` behavior are configuration, not code. It contains no customer-count, order-count, zone, seat, or cycle capacity. `INSTANT` fulfillment does not require or fabricate a DeliveryCycle.
 
+Global `fulfillment.manage` owns draft creation/editing and scheduling; `fulfillment.read` owns the administration read models. Draft timing uses explicit UTC instants plus the market timezone. Opening precedes a future cutoff; cutoff, procurement, preparation and planned pickup occur in that order, with ties allowed after cutoff. Each named delivery window starts at or after pickup and ends strictly after its start. These are Core scheduling checks, not database workflow gates. Scheduling freezes the draft's timing, windows and participating zone/location identities. Opening and cutoff are audited, idempotent time-driven commands. Published configuration cannot be edited through the draft command.
+
+New Scheduled checkout presents the named windows of the next eligible cycle at the closest eligible destination. It quotes Lalamove at the planned pickup time, preserves the selected window separately from pickup, and revalidates that exact evidence before starting Payment. Committed Orders preserve the window name, instants and timezone independently of current configuration. Retained cycles without explicit windows cannot supply new window promises; historical committed Orders retain their original date evidence without fabricated intervals.
+
 ## Identity and Access
 
 ### AuthenticationIdentity
