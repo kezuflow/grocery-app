@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
+import { createAuth } from "./auth/service";
+import { resolveAuthenticatedCustomer } from "./customer/principal";
 import type {
   CoreServiceBinding,
   RpcResult,
@@ -45,6 +47,123 @@ async function commerceContext(cookie: string): Promise<RpcResult<SubscriptionEl
 }
 
 describe("Phase 4A authenticated customer boundary", () => {
+  it("rejects first provisioning if access is disabled before its transaction", async () => {
+    const account = await signUp();
+    await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(account.userId).run();
+    const cookie = await signIn(account.email);
+    const db = new Proxy(env.DB, {
+      get(database, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await database
+              .prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+              .bind(account.userId)
+              .run();
+            return database.batch(statements);
+          };
+        const value = Reflect.get(database, property, database);
+        return typeof value === "function" ? value.bind(database) : value;
+      },
+    });
+    const result = await resolveAuthenticatedCustomer(
+      db,
+      { headers: { cookie }, requestId: requestId() },
+      {
+        now: Date.now,
+        getSessionUser: async (headers) =>
+          (await createAuth(env).api.getSession({ headers }))?.user ?? null,
+      },
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE action='CUSTOMER.PROVISIONED' AND actor_user_id=?",
+      )
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+  it("rolls back implicit principal/customer creation when its audit is ignored and safely retries", async () => {
+    const account = await signUp();
+    await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(account.userId).run();
+    const cookie = await signIn(account.email);
+    await env.DB.prepare("DELETE FROM customer_principal WHERE auth_user_id=?")
+      .bind(account.userId)
+      .run();
+    await env.DB.prepare(
+      "CREATE TRIGGER test_ignore_customer_provisioning BEFORE INSERT ON audit_event WHEN NEW.action='CUSTOMER.PROVISIONED' BEGIN SELECT RAISE(IGNORE); END",
+    ).run();
+    const request = { headers: { cookie }, requestId: requestId() };
+    try {
+      expect(await core.listCustomerAddresses(request)).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM customer WHERE auth_user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM customer_principal WHERE auth_user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.prepare("DROP TRIGGER test_ignore_customer_provisioning").run();
+    }
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => core.listCustomerAddresses(request)),
+    );
+    expect(results.every((result) => result.ok)).toBe(true);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM customer_principal WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE action='CUSTOMER.PROVISIONED' AND actor_user_id=?",
+      )
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it("preserves a retained customer identity when attaching its principal", async () => {
+    const account = await signUp();
+    await env.DB.prepare("UPDATE user SET email_verified=1 WHERE id=?").bind(account.userId).run();
+    const cookie = await signIn(account.email);
+    const customerId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO customer(id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
+    )
+      .bind(customerId, account.userId, Date.now(), Date.now())
+      .run();
+    expect(
+      await core.listCustomerAddresses({ headers: { cookie }, requestId: requestId() }),
+    ).toMatchObject({ ok: true });
+    const customer = await env.DB.prepare(
+      "SELECT id,principal_id FROM customer WHERE auth_user_id=?",
+    )
+      .bind(account.userId)
+      .first<{ id: string; principal_id: string | null }>();
+    expect(customer?.id).toBe(customerId);
+    expect(customer?.principal_id).toBeTruthy();
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE action='CUSTOMER.PROVISIONED' AND actor_user_id=?",
+      )
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
   it("signup provisions an idempotent principal and preserves auth cookies", async () => {
     const account = await signUp();
     const principal = await env.DB.prepare(

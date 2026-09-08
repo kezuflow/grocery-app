@@ -1,4 +1,5 @@
 import type { AppErrorCode, AuthenticatedRequest } from "@freshmarkets/contracts";
+import { auditEventStatement } from "../audit/application/append-audit-event";
 
 export type SessionUser = { id: string; email: string; name: string; emailVerified: boolean };
 
@@ -39,70 +40,112 @@ export async function resolveAuthenticatedCustomer(
   const user = await getSessionUser(input.headers);
   if (!user) return failure("UNAUTHENTICATED", "Authentication is required", input.requestId);
 
-  let principal = await database
-    .prepare("SELECT id, status FROM customer_principal WHERE auth_user_id=?")
-    .bind(user.id)
-    .first<{ id: string; status: string }>();
-  if (!principal) {
-    const principalId = crypto.randomUUID();
-    await database
-      .prepare(
-        "INSERT OR IGNORE INTO customer_principal (id, auth_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
-      )
-      .bind(principalId, user.id, now(), now())
-      .run();
-    principal = await database
-      .prepare("SELECT id, status FROM customer_principal WHERE auth_user_id=?")
-      .bind(user.id)
-      .first<{ id: string; status: string }>();
-  }
-  if (!principal)
-    return failure("INTERNAL_ERROR", "Customer principal could not be resolved", input.requestId);
-  if (principal.status !== "active")
-    return failure("FORBIDDEN", "Customer access is disabled", input.requestId);
-
-  let customer = await database
-    .prepare("SELECT id, status FROM customer WHERE principal_id=?")
-    .bind(principal.id)
-    .first<{ id: string; status: string }>();
-  if (!customer) {
-    const legacy = await database
-      .prepare("SELECT id, status FROM customer WHERE auth_user_id=? AND principal_id IS NULL")
-      .bind(user.id)
-      .first<{ id: string; status: string }>();
-    if (legacy) {
-      await database
-        .prepare("UPDATE customer SET principal_id=? WHERE id=? AND principal_id IS NULL")
-        .bind(principal.id, legacy.id)
-        .run();
-    } else {
-      const customerId = crypto.randomUUID();
-      await database
-        .prepare(
-          "INSERT OR IGNORE INTO customer (id, auth_user_id, principal_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
-        )
-        .bind(customerId, user.id, principal.id, now(), now())
-        .run();
-    }
-    customer = await database
-      .prepare("SELECT id, status FROM customer WHERE principal_id=?")
-      .bind(principal.id)
-      .first<{ id: string; status: string }>();
-  }
-  if (!customer)
-    return failure("INTERNAL_ERROR", "Customer aggregate could not be reconciled", input.requestId);
-  if (customer.status !== "active")
-    return failure("FORBIDDEN", "Customer access is disabled", input.requestId);
-  return {
-    ok: true,
-    value: {
-      user,
-      principalId: principal.id,
-      customerId: customer.id,
-      customerStatus: customer.status,
-    },
-    requestId: input.requestId,
+  type CustomerRow = {
+    principalId: string | null;
+    principalStatus: string | null;
+    customerId: string | null;
+    customerPrincipalId: string | null;
+    customerStatus: string | null;
   };
+  const readSql = `SELECT cp.id AS principalId,cp.status AS principalStatus,c.id AS customerId,c.principal_id AS customerPrincipalId,c.status AS customerStatus
+    FROM user u LEFT JOIN customer_principal cp ON cp.auth_user_id=u.id LEFT JOIN customer c ON c.auth_user_id=u.id WHERE u.id=?`;
+  const existing = await database.prepare(readSql).bind(user.id).first<CustomerRow>();
+  if (existing?.principalId && existing.principalStatus !== "active")
+    return failure("FORBIDDEN", "Customer access is disabled", input.requestId);
+  if (existing?.customerId && existing.customerStatus !== "active")
+    return failure("FORBIDDEN", "Customer access is disabled", input.requestId);
+  if (
+    existing?.customerId &&
+    existing.principalId &&
+    existing.customerPrincipalId === existing.principalId &&
+    existing.customerStatus === "active"
+  ) {
+    return {
+      ok: true,
+      value: {
+        user,
+        principalId: existing.principalId,
+        customerId: existing.customerId,
+        customerStatus: existing.customerStatus,
+      },
+      requestId: input.requestId,
+    };
+  }
+
+  const customerId = crypto.randomUUID();
+  const occurredAt = now();
+  try {
+    const result = await database.batch<CustomerRow>([
+      database
+        .prepare(`INSERT INTO customer_principal(id,auth_user_id,status,created_at,updated_at)
+        SELECT ?,id,'active',?,? FROM user WHERE id=? AND NOT EXISTS(SELECT 1 FROM customer_principal WHERE auth_user_id=?)`)
+        .bind(crypto.randomUUID(), occurredAt, occurredAt, user.id, user.id),
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(SELECT 1 FROM customer_principal WHERE auth_user_id=? AND status='active')",
+        )
+        .bind(user.id),
+      database
+        .prepare(`UPDATE customer SET principal_id=(SELECT id FROM customer_principal WHERE auth_user_id=?)
+        WHERE auth_user_id=? AND principal_id IS NULL AND status='active'`)
+        .bind(user.id, user.id),
+      database
+        .prepare(`INSERT INTO customer(id,auth_user_id,principal_id,status,created_at,updated_at)
+        SELECT ?,auth_user_id,id,'active',?,? FROM customer_principal WHERE auth_user_id=? AND status='active'
+        AND NOT EXISTS(SELECT 1 FROM customer WHERE auth_user_id=?)`)
+        .bind(customerId, occurredAt, occurredAt, user.id, user.id),
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(
+        SELECT 1 FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id
+        WHERE c.auth_user_id=? AND c.status='active' AND cp.status='active')`)
+        .bind(user.id),
+      auditEventStatement(
+        database,
+        {
+          actorUserId: user.id,
+          action: "CUSTOMER.PROVISIONED",
+          resourceType: "customer",
+          resourceId: customerId,
+          correlationId: input.requestId,
+          idempotencyKey: `provision:${customerId}`,
+          occurredAt,
+        },
+        {
+          clause: "EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=?)",
+          binds: [customerId, user.id],
+        },
+      ),
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()!=1 AND EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=?)",
+        )
+        .bind(customerId, user.id),
+      database.prepare(readSql).bind(user.id),
+    ]);
+    const customer = result.at(-1)?.results[0];
+    if (!customer?.customerId || !customer.principalId || customer.customerStatus !== "active")
+      return failure(
+        "INTERNAL_ERROR",
+        "Customer aggregate could not be reconciled",
+        input.requestId,
+      );
+    return {
+      ok: true,
+      value: {
+        user,
+        principalId: customer.principalId,
+        customerId: customer.customerId,
+        customerStatus: customer.customerStatus,
+      },
+      requestId: input.requestId,
+    };
+  } catch {
+    return failure(
+      "CONFLICT",
+      "Customer access changed or could not be provisioned; retry the request",
+      input.requestId,
+    );
+  }
 }
 
 function failure(

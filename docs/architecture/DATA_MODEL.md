@@ -72,6 +72,7 @@ Scope check constraint/application rule: exactly the intended hierarchy scope is
 `customer_principal` is the application authorization gate for commerce access. Better
 Auth remains authoritative for identity, sessions, accounts, and verification. The
 resolver validates principal status before reading or provisioning the linked customer.
+First-access reconciliation atomically requires an active principal and Customer relationship, preserves a legacy Customer ID when linking its principal, and records one `CUSTOMER.PROVISIONED` audit only for a newly created Customer. Ignored required effects roll back principal/Customer creation together. Concurrent first access resolves the same identity; the return read is part of the winning transaction.
 Customer does not duplicate Better Auth profile fields; delivery recipient identity remains
 address-owned.
 
