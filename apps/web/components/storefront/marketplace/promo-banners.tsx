@@ -11,38 +11,12 @@ import {
   type PointerEvent,
 } from "react";
 
-const PROMOS = [
-  {
-    href: "/?category=fruits",
-    src: "/promos/fresh-this-week.png",
-    alt: "Fresh this week — seasonal picks, packed fresh",
-  },
-  {
-    href: "/?category=fruits",
-    src: "/promos/tropical-fruit-favorites.png",
-    alt: "Tropical fruit favorites — sweet picks for every basket",
-  },
-  {
-    href: "/?category=leafy-greens-herbs",
-    src: "/promos/leafy-greens-for-dinner.png",
-    alt: "Leafy greens for dinner — local bunches, everyday freshness",
-  },
-  {
-    href: "/?category=native-specialty-produce",
-    src: "/promos/native-cebu-market-picks.png",
-    alt: "Native Cebu market picks — discover regional produce",
-  },
-  {
-    href: "/account",
-    src: "/promos/membership-made-simple.png",
-    alt: "Membership made simple — review current membership details",
-  },
-] as const;
+import type { PublishedPromotionCampaign } from "@freshmarkets/contracts";
 
 /**
  * Image-based promotion cards sized for the marketplace's compact deals rail.
  */
-export function PromoBanners() {
+export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampaign[] }) {
   const galleryRef = useRef<HTMLDivElement>(null);
   const [controlsReady, setControlsReady] = useState(false);
   const pausedRef = useRef(false);
@@ -108,6 +82,7 @@ export function PromoBanners() {
     suppressClickRef.current = false;
   };
 
+  if (campaigns.length === 0) return null;
   return (
     <section
       id="daily-deals"
@@ -179,52 +154,35 @@ export function PromoBanners() {
           onPointerCancel={finishDrag}
           onClickCapture={preventDraggedClick}
         >
-          {PROMOS.map((promo, index) => (
+          {campaigns.map((promo, index) => (
             <Link
-              key={promo.src}
-              href={promo.href}
-              aria-label={promo.alt}
+              key={promo.promotionId}
+              href="/#catalog"
+              aria-label={promo.name}
               data-promo-card
               className="group block min-w-0 shrink-0 basis-[86%] snap-start overflow-hidden rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] sm:basis-[58%] md:basis-[44%] lg:basis-[36%] xl:basis-[32%]"
             >
               <img
-                src={promo.src}
-                alt={promo.alt}
+                src={promo.image.src}
+                alt={promo.image.alt}
                 width={1200}
                 height={540}
                 loading={index === 0 ? "eager" : "lazy"}
                 draggable={false}
                 className="pointer-events-none aspect-[20/9] h-auto w-full select-none object-cover transition-transform duration-200 group-hover:scale-[1.01]"
               />
+              <div className="space-y-1 p-4">
+                <h3 className="font-semibold">{promo.name}</h3>
+                <p className="text-sm">{promo.description}</p>
+                <p className="break-all text-sm font-medium">Code: {promo.code}</p>
+                <p className="text-xs text-[var(--fm-text-muted)]">
+                  Eligibility and final savings are checked at checkout.
+                </p>
+              </div>
             </Link>
           ))}
         </div>
       </div>
     </section>
-  );
-}
-
-/**
- * Membership context strip stating the checkout gate in customer language.
- */
-export function MembershipStrip() {
-  return (
-    <div
-      data-testid="storefront-membership-strip"
-      className="flex flex-col gap-2 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-5 py-4 text-sm sm:flex-row sm:items-center sm:justify-between"
-    >
-      <p>
-        <strong className="font-semibold">Membership eligibility is checked at checkout.</strong>{" "}
-        <span className="text-[var(--fm-text-muted)]">
-          Review your current offer, trial eligibility, and available actions in your account.
-        </span>
-      </p>
-      <Link
-        href="/account"
-        className="shrink-0 font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
-      >
-        See membership benefits
-      </Link>
-    </div>
   );
 }

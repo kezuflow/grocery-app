@@ -1,7 +1,7 @@
 # Commerce alignment execution
 
-Updated: 2026-09-08 20:25 UTC / 2026-09-09 Asia/Manila.
-Status: application implementation paused at owner interruption; continuation planning requested. This checkpoint does not itself resume application work. A subsequent continuation request resumes the authorized scope below.
+Updated: 2026-09-08 20:55 UTC / 2026-09-09 Asia/Manila.
+Status: implementation active. CA-3.1 locally verified; committing it, then continuing CA-3.2a. No whole phase or provider acceptance is claimed.
 
 ## Scope and resume source
 
@@ -11,39 +11,36 @@ Previous checkpoint content is preserved byte-for-byte in [execution history](CO
 
 ## Observed workspace and preservation
 
+- Resume Git observation: `main`, HEAD `0b55737` (continuation documentation), preceding implementation `012b5db`; initial dirty inventory matches the saved six partial media files and two barrel exports plus the two protected files.
 - Branch: `main`. Last observed implementation HEAD and local `origin/main`: `012b5db0e6ca7355f821658c7308bf25eae59e6d`, `feat(promotions): author controlled campaign audiences`. This is the last pushed implementation slice; a later documentation commit may be the current HEAD. Inspect Git on resume.
 - User-owned modified `.codex/config.toml` and untracked `docs/product/SIMPLIFICATION_DISCUSSION.md`: leave untouched, do not stage, do not adopt the discussion as scope.
 - `docs/product/IMPLEMENTATION_STATUS.md`: pre-existing invalid UTF-8 elsewhere; append bytes only if needed.
-- Only disposable database state: `apps/core/.wrangler/e2e-commerce-alignment-20260907`. No retained/shared/remote database was reset or upgraded. No migration 0086 was applied during this task.
+- Only disposable database state: `apps/core/.wrangler/e2e-commerce-alignment-20260907`. No retained/shared/remote database was reset or upgraded. Migration 0086 was applied only to isolated test databases and the designated disposable browser state.
 - Prior application checks/stacks finished; no running application test process is recorded. Recheck processes before testing. Never overlap Core suites and managed browser stacks; keep source fixed during browser acceptance.
 - No actual PayMongo/Lalamove/OAuth/email acceptance, real provider action or deployment was performed. No subagents are authorized.
 
-## Active slice: CA-3.1 campaign media lifecycle and publication
+## Active slice: CA-3.2a product upload unknown-outcome recovery
 
-Owning phase: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 3 - Catalog, images, promotions and pricing; section B and Phase 3 exit criteria.
-Implementation: **in progress**. Acceptance: **not verified**. User-visible goal: Global staff uploads/previews/replaces/removes a campaign image through normal controls, and eligible-for-publication campaign content appears anonymously without a frontend rebuild. Checkout remains the authority for customer benefit eligibility.
+Owning phase: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 3 — Catalog, images, promotions and pricing; section B failure/retry acceptance, within parent CA-3.2.
 
-Uncommitted implementation files already present before the planning request:
+Implementation: not started. Observable acceptance: a failed/uncertain product upload with no object can retry the same immutable bytes/key using R2 create-only semantics; a previously successful write with a lost response is observed; competing attempts cannot duplicate publication; unattached confirmed objects after abandoned browser work are cleaned internally. Preserve ordinary product image controls and original result replay. No operator recovery workspace.
 
-- `apps/core/migrations/0086_promotion_media.sql`: proposed media/upload/cleanup tables, not applied.
-- `apps/core/src/admin/application/promotion-media-storage.ts`: initial durable upload, conditional R2 storage, unknown-outcome recovery and cleanup helpers.
-- `apps/core/src/admin/application/promotion-media.ts`: initial upload/update/remove command implementation.
-- `packages/contracts/src/promotion-media.ts` and export in `packages/contracts/src/index.ts`.
-- `packages/validation/src/promotion-media.ts` and export in `packages/validation/src/index.ts`.
+This child splits a concrete review finding out of CA-3.2; it changes tracking granularity, not authorized scope. Immediate next action: reproduce the missing-object retry in `product-media-recovery.integration.test.ts`, inspect `product-media-commands.ts` and the cleanup job, repair the owning recovery path, and run focused Worker/D1/R2 plus existing product-media browser acceptance. Keep all other CA-3.2 criteria open pending a complete coverage audit.
 
-These are scaffolding, not a reachable feature. Only Core typechecking and formatting were reported before interruption; no Worker/browser/media migration acceptance exists for this slice. Do not claim older promotion tests cover these files.
+## Completed in this continuation: CA-3.1
 
-Proposed implementation uses the existing PRODUCT_MEDIA R2 bucket with a promotions object namespace and independent media versions. This design needs review against canonical ownership and existing product-media patterns before it is accepted; campaign image changes must not rewrite financial benefit authority. Storage recovery stays internal, with ordinary operator CRUD.
+Campaign media is reachable through ordinary Global Admin controls and anonymous storefront rendering. Added migration 0086 attachment/upload/cleanup storage, typed contracts and validators, seven Core RPC methods, guarded upload/update/remove commands, Admin/public reads, scheduled internal observation/cleanup, same-origin media adapters, image editor and Core-fed home campaign rail. Images have independent versions; financial definitions/history stay unchanged. Home membership strip and bundled membership campaign removal is partial CA-6 retirement; wider membership work remains open.
 
-Remaining slice work:
+Local evidence against the intended working tree based on `0b55737` (these are actual commands, not discovery):
 
-1. Review existing partial command/storage code against product-media ownership, full-transaction guards, stable retries, ambiguous R2/D1 outcomes and bounded cleanup. Resolve orphaned or abandoned upload paths, including authorization/owner-state changes during upload.
-2. Complete purpose-built Admin/public read models and publication checks; wire service interface, RPC manifest/entry points, same-origin Web routes and internal cleanup scheduling.
-3. Add normal campaign image controls and public campaign rendering with loading/error/empty/permission behavior. Recheck publication on content reads; customer-specific promotion eligibility still comes from checkout. Any membership UI removal touched here must be recorded against CA-6, whose wider retirement work remains open.
-4. Complete canonical contract/data documentation and migration consistency as needed. Prove clean creation and the supported retained upgrade path without modifying retained environments.
-5. Execute meaningful Worker/D1/R2 failure/replay/race/scope tests and actual Admin-to-anonymous-storefront browser upload/replace/remove/deactivate journeys. Verify applicable contracts/Web/types/lint/build/binding checks and review the final diff before commit.
+- `pnpm --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/admin/application/promotion-media.integration.test.ts src/entrypoint/core-service-conformance.test.ts`: 15 passed/2 files (12 media, 3 conformance), including opening/end boundary, original replay, unknown/failed R2 writes, authority loss, cleanup retry and attachment races/rollback.
+- `pnpm --filter @freshmarkets/web test`: 403 passed/101 files; `pnpm --filter @freshmarkets/contracts test`: 68 passed/19 files. After final layout changes, `pnpm --filter @freshmarkets/web exec vitest run --config vitest.config.ts components/storefront/marketplace/promo-banners.test.tsx test/app/api/admin/published-promotion-media.test.ts`: 4 passed/2 files.
+- `$env:E2E_START_STACK='1'; $env:E2E_STATE_NAME='e2e-commerce-alignment-20260907'; pnpm --filter @freshmarkets/web exec playwright test tests/promotion-media.spec.ts tests/admin-promotions.spec.ts --retries=0`: 11 passed in 2.7 minutes, including desktop/mobile Admin upload/replace/remove and anonymous publication/deactivation; managed build and migration setup passed. Earlier media-only run: 2 passed; layout review then moved the editor out of Audience and replaced the transparent fixture with visible existing artwork. Final screenshots inspected and copied to `C:/Users/reggi/.codex/visualizations/2026/09/08/01a082ba-d1a3-7ce3-985b-99ed446e7347/commerce-campaign-media`.
+- `pnpm migration:check` passed, including the added populated 0085-to-0086 all-row/row-identity preservation probe. `pnpm harness:test`: 26 passed.
+- `pnpm typecheck`, `pnpm lint`, `pnpm architecture:check`, `pnpm readiness:check`, `pnpm naming:check`, `pnpm format:check`, `git diff --check`, Core `build` (dry run), Web `check:vinext` passed. Last full aggregate remains the inherited f6f8c88-era check; no whole Phase 3 completion is claimed.
+- Corrected test fixture initially caused 7 campaign tests to fail on lowercase codes; subsequent runs passed. Initial Windows-default decoding of the home page failed before writing that file; explicit UTF-8 retry succeeded. Final format check caught three new media routes; directory-level formatting corrected them and the recheck passed. None of these failures remains active.
 
-Concrete next action on implementation resume: reconcile this inventory with current Git, review `promotion-media.ts` and `promotion-media-storage.ts` alongside existing product-media command/recovery/publication/cleanup modules, and identify the missing guards/wiring before changing code. Run the focused source-plan coverage check and register any blocking earlier-phase prerequisites; do not restart completed catalog work.
+No application suite/browser stack is running at this milestone. Only the designated disposable E2E state received migration 0086; no retained/shared/remote DB or deployment was changed. Protected files remain outside the intended commit. All CA-3.1 implementation files are ready to stage together; no adjacent commerce partial edits remain outside that slice. Commit/push result will be recorded at the next milestone after Git confirms it.
 
 ## Open task and acceptance ledger
 
@@ -52,7 +49,8 @@ Five major phase blocks remain (Phases 3-7), plus earlier-phase acceptance oblig
 | ID | Source and coverage | Implementation / acceptance | Exit or next decomposition |
 | --- | --- | --- | --- |
 | CA-0-2 | Phases 0-2; sections A, E, F, relevant audit defects | Substantial existing work / partial evidence | Reconcile canonical and retained-baseline decisions; verify no-SQL site/address/serviceability/pickup/cycle setup, onboarding/scoped access and financial recovery. Register concrete missing evidence; fix any prerequisite before dependent work. Real account/provider inputs remain explicit. |
-| CA-3.1 | Phase 3, section B: campaign media | In progress / not verified | Complete active slice above. |
+| CA-3.1 | Phase 3, section B: campaign media | Implemented / locally verified | Evidence above; no real provider/deployment acceptance implied. |
+| CA-3.2a | Child of CA-3.2, section B: product upload recovery | Active / reproduction next | Same-key missing-object retry and internal abandoned-upload cleanup; preserve existing product journeys. |
 | CA-3.2 | Phase 3, sections B-C and promotion application in F | Implemented portions / partially verified | Check complete catalog/category/variant/product-media/publication/Global-price/local-activation/promotion authoring-to-checkout acceptance. Reuse existing evidence by revision; close actual gaps and phase gates. |
 | CA-4 | Phase 4, section D | Pending completion / not verified | Initial physical stock receipt, Global dispatch, tracked transit, destination-authorized accepted receipt, discrepancies/losses/returns, ledger conservation and races; reachable operator journey. Inspect existing code before decomposition. |
 | CA-5 | Phase 5, section G | Existing primitives / not verified as a journey | Cutoff exact paid demand, paid additions, purchase confirmation, receiving and cycle allocation, shortage resolution, picking/packing, inspected surplus; separate from Instant inventory. |

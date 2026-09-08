@@ -5,7 +5,7 @@ import { ProductGridEmpty, ProductRail } from "../components/storefront/catalog-
 import { CatalogResults } from "../components/storefront/marketplace/catalog-results";
 import { CategoryStrip } from "../components/storefront/marketplace/category-strip";
 import { QuickViewProvider } from "../components/storefront/marketplace/quick-view-provider";
-import { MembershipStrip, PromoBanners } from "../components/storefront/marketplace/promo-banners";
+import { PromoBanners } from "../components/storefront/marketplace/promo-banners";
 import { railEligible, toPresentationProducts } from "../lib/storefront/catalog-presentation";
 
 const PAGE_SIZE = 24;
@@ -43,7 +43,10 @@ export default async function MarketplaceHome({
   const client = coreClient(env.CORE);
 
   if (browsing) {
-    const home = await client.getMarketplaceHome({ requestId, itemsPerRail: 12 });
+    const [home, campaigns] = await Promise.all([
+      client.getMarketplaceHome({ requestId, itemsPerRail: 12 }),
+      client.listPublishedPromotionCampaigns({ requestId: crypto.randomUUID() }),
+    ]);
     if (!home.ok) {
       return (
         <StorefrontShell>
@@ -68,8 +71,14 @@ export default async function MarketplaceHome({
               className="-mx-4 px-4 sm:mx-0 sm:px-0"
             />
 
-            <div className="mt-6 space-y-7">
-              <PromoBanners />
+            <div id="catalog" className="mt-6 space-y-7">
+              {campaigns.ok ? (
+                <PromoBanners campaigns={campaigns.value.items} />
+              ) : (
+                <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+                  Offers are temporarily unavailable.
+                </p>
+              )}
               {rails.map((rail) => (
                 <ProductRail
                   key={rail.slug}
@@ -78,7 +87,6 @@ export default async function MarketplaceHome({
                   products={rail.products}
                 />
               ))}
-              <MembershipStrip />
             </div>
           </div>
         </QuickViewProvider>
@@ -118,7 +126,7 @@ export default async function MarketplaceHome({
             className="-mx-4 px-4 sm:mx-0 sm:px-0"
           />
 
-          <div className="mt-6 space-y-7">
+          <div id="catalog" className="mt-6 space-y-7">
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
@@ -139,7 +147,6 @@ export default async function MarketplaceHome({
             ) : (
               <ProductGridEmpty query={query} />
             )}
-            <MembershipStrip />
           </div>
         </div>
       </QuickViewProvider>

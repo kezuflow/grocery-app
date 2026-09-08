@@ -1,4 +1,15 @@
 import {
+  uploadAdminPromotionMedia,
+  updateAdminPromotionMedia,
+  removeAdminPromotionMedia,
+} from "./admin/application/promotion-media";
+import {
+  getAdminPromotionMedia,
+  getAdminPromotionMediaContent,
+  getPublishedPromotionMedia,
+  listPublishedPromotionCampaigns,
+} from "./admin/application/promotion-media-reads";
+import {
   getAdminPromotionAudience as getAdminPromotionAudienceQuery,
   setAdminPromotionAudience as setAdminPromotionAudienceCommand,
 } from "./admin/application/promotion-audience";
@@ -1632,6 +1643,84 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+  }
+  async getAdminPromotionMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").PromotionMediaService["getAdminPromotionMedia"]
+    >[0],
+  ) {
+    return getAdminPromotionMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async uploadAdminPromotionMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").PromotionMediaService["uploadAdminPromotionMedia"]
+    >[0],
+  ) {
+    return uploadAdminPromotionMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async updateAdminPromotionMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").PromotionMediaService["updateAdminPromotionMedia"]
+    >[0],
+  ) {
+    return updateAdminPromotionMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async removeAdminPromotionMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").PromotionMediaService["removeAdminPromotionMedia"]
+    >[0],
+  ) {
+    return removeAdminPromotionMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async getAdminPromotionMediaContent(
+    input: Parameters<
+      import("@freshmarkets/contracts").PromotionMediaService["getAdminPromotionMediaContent"]
+    >[0],
+  ) {
+    return getAdminPromotionMediaContent(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async getPublishedPromotionMedia(
+    input: import("@freshmarkets/contracts").PublishedPromotionMediaRequest,
+  ) {
+    return getPublishedPromotionMedia(this.env.DB, this.env.PRODUCT_MEDIA, input);
+  }
+  async listPublishedPromotionCampaigns(input: { requestId: string }) {
+    return listPublishedPromotionCampaigns(this.env.DB, input);
   }
   async listAdminPromotions(input: import("@freshmarkets/contracts").AdminPromotionListRequest) {
     const validation = promotionListRequestSchema.safeParse(input);

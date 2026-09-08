@@ -17,19 +17,33 @@ vi.mock("next/link", () => ({
 import { PromoBanners } from "./promo-banners";
 
 describe("PromoBanners", () => {
-  it("renders the five image-based daily deal cards in a horizontal carousel", () => {
-    const html = renderToStaticMarkup(<PromoBanners />);
-
-    expect(html).toContain("Daily Deals");
-    expect(html.match(/<img/g)).toHaveLength(5);
-    expect(html).toContain('src="/promos/fresh-this-week.png"');
-    expect(html).toContain('src="/promos/tropical-fruit-favorites.png"');
-    expect(html).toContain('src="/promos/leafy-greens-for-dinner.png"');
-    expect(html).toContain('src="/promos/native-cebu-market-picks.png"');
-    expect(html).toContain('src="/promos/membership-made-simple.png"');
-    expect(html).toContain('data-testid="daily-deals-gallery"');
-    expect(html).toContain('aria-label="Previous deal"');
-    expect(html).toContain('aria-label="Next deal"');
-    expect(html).toContain("fm-scrollbar-none");
+  it("renders Core campaign images and structured terms without promising eligibility", () => {
+    const html = renderToStaticMarkup(
+      <PromoBanners
+        campaigns={[
+          {
+            promotionId: "p",
+            code: "FRESH",
+            name: "Fresh campaign",
+            description: "Fresh savings",
+            benefitType: "ORDER_FIXED_DISCOUNT",
+            discountMinor: 500,
+            percent: null,
+            minimumMinor: 0,
+            maximumDiscountMinor: null,
+            endsAt: null,
+            image: { src: "/media/promotions/image/1", alt: "Fresh vegetables" },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain('src="/media/promotions/image/1"');
+    expect(html).toContain("Fresh campaign");
+    expect(html).toContain("FRESH");
+    expect(html).toContain("checked at checkout");
+    expect(html).not.toContain("membership");
+  });
+  it("omits the rail when no campaign is published", () => {
+    expect(renderToStaticMarkup(<PromoBanners campaigns={[]} />)).toBe("");
   });
 });

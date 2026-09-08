@@ -38,3 +38,5 @@ export * from "./admin-categories";
 export * from "./admin-products";
 
 export * from "./admin-promotions";
+
+export * from "./promotion-media";

@@ -420,6 +420,12 @@ Promotion create, draft edit, lifecycle and targeted-grant commands accept bound
 
 That transaction repair initially covered fixed/percentage merchandise discounts; canonical delivery benefit authoring is described above. Draft edits validate amounts, dates and current benefit shape; creation bounds optional positive usage limits. Web adapters bound JSON to 8 KiB. Normal Create/Save and lifecycle actions preserve the complete unconfirmed request internally. Dates in the draft form are explicitly UTC. This integrity repair does not claim delivery-benefit authoring, complete audience authoring, campaign media or provider acceptance.
 
+### Campaign image administration and publication
+
+`getAdminPromotionMedia` and `getAdminPromotionMediaContent` require Global `promotions.read`. Upload, alt-text update and removal require Global `promotions.manage`, a stable command key, and the expected current media identity/version (null for an initial upload). Images have independent versions; changing one never changes the financial Promotion definition or committed benefit history. Core validates bounded JPEG/PNG/WebP bytes and generates the object identity. A replacement atomically deactivates the prior attachment, queues its cleanup, attaches the successor, audits and records the original command result. No storage recovery controls are exposed to staff.
+
+`listPublishedPromotionCampaigns` is an anonymous, bounded (20) read of active campaigns within their effective dates, with a valid supported benefit and active image. It supplies structured campaign text/benefit fields and opaque image URLs, never audience customer identities, raw rules, object keys or a promise of customer eligibility. `getPublishedPromotionMedia` rechecks the owner, effective dates and media version before returning bytes, including after the storage read. Same-origin Web adapters revalidate Core publication before honoring ETags; stale/replaced/inactive URLs return unavailable with no-store caching. Checkout remains authoritative for audience, usage, stacking and final savings.
+
 ### Historical implementation — Promotions service (Slice 4, 2026-08-27)
 
 `packages/contracts/src/admin-promotions.ts` publishes `AdminPromotionsService` (`listAdminPromotions`, `getAdminPromotion`, `createAdminPromotion`, `updateAdminPromotion`, `changeAdminPromotionStatus`, `previewAdminPromotion`, `grantAdminPromotion`, `listPromotionGrants`, `listPromotionRedemptions`).

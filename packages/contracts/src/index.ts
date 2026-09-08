@@ -28,3 +28,5 @@ export type * from "./orders";
 export { customerOrderHistoryStates } from "./orders";
 export type * from "./operations";
 export * from "./admin-delivery-cycles";
+
+export * from "./promotion-media";

@@ -1,3 +1,4 @@
+import type { PromotionMediaService } from "./promotion-media";
 import type { RpcResult } from "./common";
 import type { CustomerProfileService } from "./customer-profile";
 import type {
@@ -78,6 +79,7 @@ export interface ImplementedCoreService
     CustomerProfileService,
     AdminPrivacyService,
     AdminPromotionsService,
+    PromotionMediaService,
     AdminCatalogService,
     AdminInventoryReadService,
     AdminOrdersService,
@@ -177,6 +179,13 @@ export const coreServiceMethodNames = [
   "requestCustomerClosure",
   "listPrivacyRequests",
   "applyPrivacyAction",
+  "getAdminPromotionMedia",
+  "uploadAdminPromotionMedia",
+  "updateAdminPromotionMedia",
+  "removeAdminPromotionMedia",
+  "getAdminPromotionMediaContent",
+  "getPublishedPromotionMedia",
+  "listPublishedPromotionCampaigns",
   "listAdminPromotions",
   "getAdminPromotion",
   "getAdminPromotionAudience",

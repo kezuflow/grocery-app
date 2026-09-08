@@ -157,8 +157,28 @@ const beforePreferences = database
   });
 apply(
   database,
-  migrations.filter((name) => name >= "0079_"),
+  migrations.filter((name) => name >= "0079_" && name < "0086_"),
 );
+const beforeCampaignMedia = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => {
+    const query = `SELECT rowid,* FROM ${quote(name)} ORDER BY rowid`;
+    return { name, query, rows: database.prepare(query).all() };
+  });
+apply(
+  database,
+  migrations.filter((name) => name >= "0086_"),
+);
+for (const snapshot of beforeCampaignMedia)
+  assert.deepEqual(
+    database.prepare(snapshot.query).all(),
+    snapshot.rows,
+    `${snapshot.name}: campaign media upgrade preserves retained rows`,
+  );
+for (const table of ["promotion_media", "promotion_media_upload", "promotion_media_cleanup"])
+  assert.equal(database.prepare(`SELECT count(*) count FROM ${quote(table)}`).get().count, 0);
+assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 for (const snapshot of beforePreferences)
   assert.deepEqual(
     database.prepare(snapshot.query).all(),
