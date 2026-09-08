@@ -161,6 +161,70 @@ async function seedReaction(quoteId: string) {
 }
 
 describe("instant order commitment", () => {
+  it.each(["payment", "reaction", "refund"] as const)(
+    "rejects a transaction-time %s change before all commitment effects",
+    async (kind) => {
+      await configureInstant();
+      const { quoteId } = await seededInstantQuote(false, true);
+      const { intentId, reactionId } = await seedReaction(quoteId);
+      const db = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (kind === "payment")
+                await target
+                  .prepare(
+                    "UPDATE payment_intent SET status='REFUNDED',version=version+1 WHERE id=?",
+                  )
+                  .bind(intentId)
+                  .run();
+              if (kind === "reaction")
+                await target
+                  .prepare("UPDATE payment_reaction SET subject_id='another-quote' WHERE id=?")
+                  .bind(reactionId)
+                  .run();
+              if (kind === "refund")
+                await target
+                  .prepare(
+                    "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,created_at,updated_at) VALUES (?, ?, 1, 'PHP','REQUESTED','Concurrent finance review',?,?,?)",
+                  )
+                  .bind(crypto.randomUUID(), intentId, crypto.randomUUID(), Date.now(), Date.now())
+                  .run();
+              return target.batch(statements);
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect(
+        await applyCheckoutPaymentReaction(db, {
+          reactionId,
+          paymentIntentId: intentId,
+          checkoutAttemptId: quoteId,
+          canonicalPaymentState: "SUCCEEDED",
+        }),
+      ).toMatchObject({ applied: false });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='COMMITTED'",
+        )
+          .bind(quoteId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
+          .bind(reactionId)
+          .first(),
+      ).toEqual({ status: "PENDING" });
+    },
+  );
   it("recovers a failed paid commitment through reviewed Core retry and the same owning applier", async () => {
     await configureInstant();
     const { quoteId } = await seededInstantQuote(false, true);

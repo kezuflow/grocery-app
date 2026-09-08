@@ -33,8 +33,10 @@ export async function applyCheckoutPaymentReaction(
   const now = Date.now();
 
   const existing = await database
-    .prepare("SELECT status FROM payment_reaction WHERE id=?")
-    .bind(input.reactionId)
+    .prepare(
+      "SELECT status FROM payment_reaction WHERE id=? AND payment_intent_id=? AND reaction_type='COMMIT_ORDER' AND subject_type='checkout_quote' AND subject_id=?",
+    )
+    .bind(input.reactionId, input.paymentIntentId, input.checkoutAttemptId)
     .first<{ status: string }>();
   if (!existing) return { applied: false, reason: "INSUFFICIENT_STATE" };
 
@@ -43,6 +45,7 @@ export async function applyCheckoutPaymentReaction(
     .bind(input.paymentIntentId)
     .first<{ order_id: string }>();
   if (already) return { applied: true, reason: "ALREADY_APPLIED", orderId: already.order_id };
+  if (existing.status !== "PENDING") return { applied: false, reason: "INSUFFICIENT_STATE" };
 
   if (!isSufficientForCommitment(input.canonicalPaymentState))
     return { applied: false, reason: "INSUFFICIENT_STATE" };
@@ -55,7 +58,7 @@ export async function applyCheckoutPaymentReaction(
   // against this Quote. Physical entitlement and cutoff still guard commitment.
   const payment = await database
     .prepare(
-      `SELECT 1 AS eligible FROM payment_intent
+      `SELECT version FROM payment_intent
        WHERE id=? AND subject_type='checkout_quote' AND subject_id=? AND customer_id=?
          AND status='SUCCEEDED' AND amount_minor=? AND currency=? AND created_at<?`,
     )
@@ -67,7 +70,7 @@ export async function applyCheckoutPaymentReaction(
       quote.currency,
       quote.expiresAt,
     )
-    .first<{ eligible: number }>();
+    .first<{ version: number }>();
   if (!payment) return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
   const instant = quote.fulfillmentMode === "INSTANT";
 
@@ -195,6 +198,23 @@ export async function applyCheckoutPaymentReaction(
         "INSERT INTO order_payment_reaction (id, payment_intent_id, reaction_id, order_id, checkout_quote_id, applied_at) VALUES (?, ?, ?, ?, ?, ?)",
       )
       .bind(crypto.randomUUID(), input.paymentIntentId, input.reactionId, orderId, quote.id, now),
+    database
+      .prepare(`INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT EXISTS (
+      SELECT 1 FROM payment_intent p JOIN payment_reaction r ON r.payment_intent_id=p.id
+      WHERE p.id=? AND p.version=? AND p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=?
+      AND p.customer_id=? AND p.amount_minor=? AND p.currency=? AND p.status='SUCCEEDED' AND p.created_at<?
+      AND r.id=? AND r.status='PENDING' AND r.reaction_type='COMMIT_ORDER' AND r.subject_type=p.subject_type AND r.subject_id=p.subject_id
+      AND NOT EXISTS (SELECT 1 FROM payment_refund refund WHERE refund.payment_intent_id=p.id AND (refund.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED') OR refund.next_retry_at IS NOT NULL)))`)
+      .bind(
+        input.paymentIntentId,
+        payment.version,
+        quote.id,
+        quote.customerId,
+        quote.totalMinor,
+        quote.currency,
+        quote.expiresAt,
+        input.reactionId,
+      ),
     database
       .prepare(
         `INSERT INTO grocery_order (
@@ -592,9 +612,10 @@ export async function applyCheckoutPaymentReaction(
   statements.push(
     database
       .prepare(
-        "UPDATE payment_reaction SET status='SUCCEEDED', attempts=attempts+1, updated_at=? WHERE id=?",
+        "UPDATE payment_reaction SET status='SUCCEEDED', attempts=attempts+1, updated_at=? WHERE id=? AND payment_intent_id=? AND status='PENDING' AND reaction_type='COMMIT_ORDER' AND subject_type='checkout_quote' AND subject_id=?",
       )
-      .bind(now, input.reactionId),
+      .bind(now, input.reactionId, input.paymentIntentId, quote.id),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
   );
 
   try {

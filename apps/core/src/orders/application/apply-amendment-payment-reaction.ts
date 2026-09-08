@@ -27,7 +27,7 @@ export async function applyAmendmentPaymentReaction(
     .prepare(
       `SELECT a.id, a.order_id, a.status, a.version, a.currency, a.total_minor,
               a.payment_intent_id, pi.amount_minor AS payment_amount_minor,
-              pi.currency AS payment_currency, pi.status AS payment_status, f.location_id, f.cycle_id, f.zone_id,
+              pi.currency AS payment_currency, pi.status AS payment_status, pi.version AS payment_version, f.location_id, f.cycle_id, f.zone_id,
               f.fulfillment_mode
        FROM paid_order_amendment a
        JOIN payment_intent pi ON pi.id=a.payment_intent_id
@@ -49,12 +49,22 @@ export async function applyAmendmentPaymentReaction(
       payment_amount_minor: number;
       payment_currency: string;
       payment_status: string;
+      payment_version: number;
       location_id: string | null;
       cycle_id: string | null;
       zone_id: string | null;
       fulfillment_mode: "INSTANT" | "SCHEDULED";
     }>();
   if (!amendment) return { applied: false, reason: "CAS_CONFLICT" };
+  if (
+    !(await database
+      .prepare(
+        "SELECT 1 FROM payment_reaction WHERE id=? AND payment_intent_id=? AND reaction_type='COMMIT_AMENDMENT' AND subject_type='paid_order_amendment' AND subject_id=?",
+      )
+      .bind(input.reactionId, input.paymentIntentId, input.amendmentId)
+      .first())
+  )
+    return { applied: false, reason: "CAS_CONFLICT" };
   if (amendment.status === "COMMITTED") return { applied: true, reason: "ALREADY_APPLIED" };
   if (
     !isSufficientForCommitment(input.canonicalPaymentState) ||
@@ -99,11 +109,22 @@ export async function applyAmendmentPaymentReaction(
            WHERE o.id=paid_order_amendment.order_id AND o.status='COMMITTED'
              AND f.fulfillment_mode='SCHEDULED' AND f.cutoff_at>? AND c.status='OPEN')
           AND EXISTS (SELECT 1 FROM payment_intent pi WHERE pi.id=paid_order_amendment.payment_intent_id
-            AND pi.status='SUCCEEDED' AND pi.amount_minor=paid_order_amendment.total_minor AND pi.currency=paid_order_amendment.currency)
+            AND pi.status='SUCCEEDED' AND pi.version=? AND pi.purpose='ORDER_AMENDMENT' AND pi.subject_type='paid_order_amendment' AND pi.subject_id=paid_order_amendment.id
+            AND pi.customer_id=(SELECT customer_id FROM grocery_order WHERE id=paid_order_amendment.order_id)
+            AND pi.amount_minor=paid_order_amendment.total_minor AND pi.currency=paid_order_amendment.currency
+            AND NOT EXISTS (SELECT 1 FROM payment_refund refund WHERE refund.payment_intent_id=pi.id AND (refund.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED') OR refund.next_retry_at IS NOT NULL)))
           AND EXISTS (SELECT 1 FROM payment_reaction r WHERE r.id=? AND r.payment_intent_id=paid_order_amendment.payment_intent_id
-            AND r.subject_id=paid_order_amendment.id AND r.reaction_type='COMMIT_AMENDMENT' AND r.status='PENDING')`,
+            AND r.subject_id=paid_order_amendment.id AND r.subject_type='paid_order_amendment' AND r.reaction_type='COMMIT_AMENDMENT' AND r.status='PENDING')`,
       )
-      .bind(now, now, input.amendmentId, amendment.version, now, input.reactionId),
+      .bind(
+        now,
+        now,
+        input.amendmentId,
+        amendment.version,
+        now,
+        amendment.payment_version,
+        input.reactionId,
+      ),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -34 WHERE changes()!=1"),
   ];
 

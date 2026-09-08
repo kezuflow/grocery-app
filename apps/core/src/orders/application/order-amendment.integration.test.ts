@@ -108,6 +108,97 @@ async function committedOrder() {
 }
 
 describe("paid-order amendments", () => {
+  it.each(["paymentVersion", "refund"] as const)(
+    "rejects a transaction-time %s change without committing paid additions",
+    async (kind) => {
+      const f = await committedOrder();
+      const addition = await createOrderAmendment(env.DB, {
+        customerId: f.customerId,
+        orderId: f.orderId,
+        expectedOrderVersion: 5,
+        additions: [{ skuId: f.skuId, quantity: 2 }],
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      });
+      if (!addition.ok) throw new Error("Missing addition");
+      const provider = createMockPaymentProvider(),
+        registry = new ProviderRegistry("test", [provider]);
+      const payment = await createAmendmentPaymentIntent(env.DB, registry, "mock", {
+        customerId: f.customerId,
+        amendmentId: addition.value.amendmentId,
+        expectedAmendmentVersion: addition.value.version,
+        expectedCurrency: "PHP",
+        expectedTotalMinor: addition.value.financial.totalMinor,
+        returnUrl: "https://app.example/orders",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+        headers: {},
+      });
+      if (!payment.ok) throw new Error("Missing payment");
+      const paymentId = payment.value.paymentIntentId;
+      const attempt = await env.DB.prepare(
+        "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+      )
+        .bind(paymentId)
+        .first<{ provider_reference: string }>();
+      if (!attempt) throw new Error("Missing attempt");
+      setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+      await reconcilePayment(env.DB, registry, {
+        paymentIntentId: paymentId,
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "test",
+        requestId: crypto.randomUUID(),
+      });
+      const reaction = await env.DB.prepare(
+        "SELECT id FROM payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(paymentId)
+        .first<{ id: string }>();
+      if (!reaction) throw new Error("Missing reaction");
+      const db = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (kind === "paymentVersion")
+                await target
+                  .prepare("UPDATE payment_intent SET version=version+1 WHERE id=?")
+                  .bind(paymentId)
+                  .run();
+              else
+                await target
+                  .prepare(
+                    "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,created_at,updated_at) VALUES (?,?,1,'PHP','REQUESTED','Concurrent finance review',?,?,?)",
+                  )
+                  .bind(crypto.randomUUID(), paymentId, crypto.randomUUID(), Date.now(), Date.now())
+                  .run();
+              return target.batch(statements);
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect(
+        await applyAmendmentPaymentReaction(db, {
+          reactionId: reaction.id,
+          paymentIntentId: paymentId,
+          amendmentId: addition.value.amendmentId,
+          canonicalPaymentState: "SUCCEEDED",
+        }),
+      ).toMatchObject({ applied: false });
+      expect(
+        await env.DB.prepare("SELECT status FROM paid_order_amendment WHERE id=?")
+          .bind(addition.value.amendmentId)
+          .first(),
+      ).toEqual({ status: "PENDING_PAYMENT" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM committed_demand WHERE amendment_line_id IN (SELECT id FROM paid_order_amendment_line WHERE amendment_id=?)",
+        )
+          .bind(addition.value.amendmentId)
+          .first(),
+      ).toEqual({ n: 0 });
+    },
+  );
   it("creates an additive amendment priced fresh without touching the original", async () => {
     const fixture = await committedOrder();
     const before = await env.DB.prepare("SELECT total_minor FROM grocery_order WHERE id=?")
