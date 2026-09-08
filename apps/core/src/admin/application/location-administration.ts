@@ -183,6 +183,9 @@ type LocationMutation =
   | { kind: "UPDATE"; request: z.infer<typeof updateSchema> }
   | { kind: "TRANSITION"; request: z.infer<typeof transitionSchema> };
 
+const requireLocationEffect = (db: D1Database) =>
+  db.prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=1");
+
 async function execute(
   deps: LocationAdministrationDeps,
   mutation: LocationMutation,
@@ -390,6 +393,7 @@ async function execute(
         "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES (?,?,?,'PROCESSING','location',?,?)",
       )
       .bind(scope, idempotencyKey, hash, now, now),
+    requireLocationEffect(deps.db),
   ];
   if (
     mutation.kind === "UPDATE" &&
@@ -439,6 +443,7 @@ async function execute(
           now,
           now,
         ),
+      requireLocationEffect(deps.db),
     );
   else if (mutation.kind === "TRANSITION") {
     if (next.status === "active")
@@ -484,12 +489,18 @@ async function execute(
   if (mutation.kind !== "TRANSITION") {
     statements.push(
       deps.db.prepare("DELETE FROM location_capability WHERE location_id=?").bind(locationId),
+      deps.db
+        .prepare(
+          "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS(SELECT 1 FROM location_capability WHERE location_id=?)",
+        )
+        .bind(locationId),
     );
     for (const capability of next.capabilities)
       statements.push(
         deps.db
           .prepare("INSERT INTO location_capability(location_id,capability,enabled) VALUES (?,?,1)")
           .bind(locationId, capability),
+        requireLocationEffect(deps.db),
       );
   }
   if (mutation.kind !== "CREATE" && next.purpose === "CUSTOMER_FULFILLMENT") {
@@ -501,6 +512,7 @@ async function execute(
           "INSERT INTO geography_configuration(market_id,version,updated_at) VALUES (?,2,?) ON CONFLICT(market_id) DO UPDATE SET version=version+1,updated_at=excluded.updated_at",
         )
         .bind(marketId, now),
+      requireLocationEffect(deps.db),
       deps.db
         .prepare(`UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=?
       WHERE status='ACTIVE' AND json_extract(cycle_snapshot_json,'$.locationId') IN
@@ -508,6 +520,13 @@ async function execute(
       AND NOT EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.purpose='GROCERY_CHECKOUT'
         AND payment.subject_type='checkout_quote' AND payment.subject_id=checkout_quote.id)`)
         .bind(now, marketId),
+      deps.db
+        .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (
+        SELECT 1 FROM checkout_quote WHERE status='ACTIVE'
+        AND json_extract(cycle_snapshot_json,'$.locationId') IN (SELECT id FROM fulfillment_location WHERE market_id=?)
+        AND NOT EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.purpose='GROCERY_CHECKOUT'
+          AND payment.subject_type='checkout_quote' AND payment.subject_id=checkout_quote.id))`)
+        .bind(marketId),
     );
   }
   statements.push(
@@ -531,11 +550,13 @@ async function execute(
         capabilities: next.capabilities,
       },
     }),
+    requireLocationEffect(deps.db),
     deps.db
       .prepare(
         "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=?",
       )
       .bind(JSON.stringify(next), now, scope, idempotencyKey),
+    requireLocationEffect(deps.db),
   );
   try {
     await deps.db.batch(statements);

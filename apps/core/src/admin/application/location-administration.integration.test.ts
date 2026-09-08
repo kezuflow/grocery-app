@@ -51,6 +51,68 @@ async function noEffects(key: string) {
 }
 
 describe("Global location setup", () => {
+  it.each([
+    ["claim", "BEFORE INSERT ON idempotency_records"],
+    ["location", "BEFORE INSERT ON fulfillment_location"],
+    ["capability", "BEFORE INSERT ON location_capability"],
+    ["audit", "BEFORE INSERT ON audit_event"],
+    ["receipt", "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'"],
+  ])("rolls back suppressed %s creation evidence and replays recovery", async (_name, trigger) => {
+    const manager = await staff();
+    const request = createRequest(manager.headers);
+    await env.DB.exec(
+      `CREATE TRIGGER ignore_location_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END;`,
+    );
+    try {
+      expect(await core.createAdminLocation(request)).toMatchObject({ ok: false });
+      await noEffects(request.idempotencyKey);
+      expect(
+        await env.DB.prepare("SELECT count(*) count FROM fulfillment_location WHERE code=?")
+          .bind(request.code)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_location_effect");
+    }
+    const result = await core.createAdminLocation(request);
+    expect(result).toMatchObject({ ok: true });
+    expect(await core.createAdminLocation(request)).toEqual(result);
+  });
+  it("rejects a suppressed capability removal without retaining a misleading result", async () => {
+    const manager = await staff();
+    const request = createRequest(manager.headers);
+    const created = await core.createAdminLocation(request);
+    if (!created.ok) throw new Error("Create failed");
+    const update = {
+      ...request,
+      locationId: created.value.locationId,
+      expectedVersion: 1,
+      capabilities: [],
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_location_capability_delete BEFORE DELETE ON location_capability BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await core.updateAdminLocation(update)).toMatchObject({ ok: false });
+      await noEffects(update.idempotencyKey);
+      expect(
+        await env.DB.prepare("SELECT version FROM fulfillment_location WHERE id=?")
+          .bind(created.value.locationId)
+          .first(),
+      ).toEqual({ version: 1 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_location_capability_delete");
+    }
+    const result = await core.updateAdminLocation(update);
+    expect(result).toMatchObject({ ok: true, value: { capabilities: [], version: 2 } });
+    expect(await core.updateAdminLocation(update)).toEqual(result);
+    expect(
+      await env.DB.prepare("SELECT count(*) count FROM location_capability WHERE location_id=?")
+        .bind(created.value.locationId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
   it("permanently finalizes temporary address text at the confirmed pin and retains saved evidence", async () => {
     const manager = await staff();
     const request = {
@@ -205,14 +267,50 @@ describe("Global location setup", () => {
         now,
       ),
     ]);
-    const changed = await core.updateAdminLocation({
+    const rename = {
       ...request,
       name: "Renamed site",
       locationId: created.value.locationId,
       expectedVersion: 1,
       idempotencyKey: crypto.randomUUID(),
-    });
+    };
+    for (const trigger of [
+      "BEFORE INSERT ON geography_configuration",
+      "BEFORE UPDATE ON checkout_quote WHEN NEW.status='SUPERSEDED'",
+    ]) {
+      const revision = await env.DB.prepare(
+        "SELECT version FROM geography_configuration WHERE market_id=?",
+      )
+        .bind(request.marketId)
+        .first();
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_location_invalidation ${trigger} BEGIN SELECT RAISE(IGNORE); END;`,
+      );
+      try {
+        expect(await core.updateAdminLocation(rename)).toMatchObject({ ok: false });
+        await noEffects(rename.idempotencyKey);
+        expect(
+          await env.DB.prepare("SELECT version FROM fulfillment_location WHERE id=?")
+            .bind(created.value.locationId)
+            .first(),
+        ).toEqual({ version: 1 });
+        expect(
+          await env.DB.prepare("SELECT version FROM geography_configuration WHERE market_id=?")
+            .bind(request.marketId)
+            .first(),
+        ).toEqual(revision);
+        expect(
+          await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+            .bind(`unstarted-${id}`)
+            .first(),
+        ).toEqual({ status: "ACTIVE" });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_location_invalidation");
+      }
+    }
+    const changed = await core.updateAdminLocation(rename);
     expect(changed.ok).toBe(true);
+    expect(await core.updateAdminLocation(rename)).toEqual(changed);
     expect(
       await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
         .bind(`unstarted-${id}`)
