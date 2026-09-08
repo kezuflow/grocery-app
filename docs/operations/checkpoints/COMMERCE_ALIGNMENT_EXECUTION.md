@@ -1,6 +1,16 @@
 # Commerce alignment execution
 
-## Active execution - 2026-09-08 18:45 UTC
+## Active execution - 2026-09-08 19:00 UTC
+
+Main contains b8e32b2 transaction repairs, f7f17dc variant editor, and 17744d8 status-path correction. The owner still authorizes every remaining commerce workflow in dependency order, without routine approval or subagents. Preserve unrelated .codex/config.toml outside commits. Product status is docs/product/IMPLEMENTATION_STATUS.md; append bytes only.
+
+The current verified promotion slice repairs create/edit/status/grant complete transactions and original results. Twelve real effect/replay regressions reproduced (one suppression scenario already passed); the first exploratory run also exposed a test total-count assumption, corrected to command-specific identities before the recorded regression run. Repaired commands validate unknown inputs with bounded schemas, recheck Global current IAM and mutable state in the transaction, require write/audit/receipt effects, replay before later lifecycle rejection, and recover lost responses from frozen JSON receipts. No new migration/RPC signature or business benefit vocabulary in this slice. Web uses bounded adapters and preserved complete requests. Added the missing draft campaign edit form; date fields are explicitly UTC.
+
+Executed: 25 Core Worker/D1 tests across promotion effects/admin suites, including authority revocation, activation/edit race, deactivation/grant race, concurrent identical create with lost batch responses. All 398 Web tests (99 files), 2 shared validation tests, workspace typechecks, lint, formatting/naming, architecture/readiness and Core dry-run build pass. Managed Web build/clean disposable D1 and 5 promotion browser tests pass with zero retries, including lost-response create/edit/activate and denied access. Screenshot inspected. Evidence logs: C:/Users/reggi/.codex/visualizations/2026/09/08/01a0822b-3c98-76a1-8c9e-a2d5e223a182/promotion-*. Full aggregate last passed at b8e32b2; no whole phase accepted.
+
+Next after saving/pushing this verified slice: complete canonical promotion benefits (delivery waiver/percentage/fixed), controlled targets/limits and preview using the Quote policy, remove active membership eligibility, and campaign media/publication. Current evaluator still uses legacy DELIVERY_FEE_DISCOUNT and membership entitlement; Admin supports merchandise only; raw customer-ID grant control and incomplete preview remain. Review migrations 0029/0047/0069 and retained baseline policy before any schema work. Then continue transfers, exact Scheduled allocation/receiving and delivery/manual fallback, remaining onboarding and full acceptance. Only apps/core/.wrangler/e2e-commerce-alignment-20260907 is disposable; no retained reset/provider operation was performed. No browser/Core process from these runs remains active. Keep source fixed during browser tests and never overlap Core suites with their stack.
+
+## Prior verified variant slice - 2026-09-08 18:45 UTC
 
 The owner still authorizes every remaining commerce workflow in dependency order, without routine approval or subagents. Transaction repairs are committed and pushed as b8e32b2. The Global variant editor is committed and pushed as f7f17dc; preserve the unrelated .codex/config.toml change outside commits.
 

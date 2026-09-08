@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import type {
   AdminPromotionDetail,
   AdminPromotionGrantPage,
@@ -7,6 +7,13 @@ import type {
   AdminPromotionRedemptionPage,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
+import {
+  z,
+  adminPromotionSummarySchema,
+  adminPromotionGrantViewSchema,
+} from "@freshmarkets/validation";
+import { PromotionDefinitionForm } from "@/components/admin/promotion-definition-form";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
@@ -37,7 +44,10 @@ export default function PromotionDetailPage({
   const [previewResult, setPreviewResult] = useState<AdminPromotionPreviewView | null>(null);
   const [grantCustomerId, setGrantCustomerId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const commandKeys = useRef(new Map<string, string>());
+  const command = useCatalogCommand(
+    z.union([adminPromotionSummarySchema, adminPromotionGrantViewSchema]),
+  );
+  const frozen = command.pending || command.uncertain;
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -48,8 +58,9 @@ export default function PromotionDetailPage({
           fetch(`${BASE}/${encodeURIComponent(promotionId)}/grants`),
           fetch(`${BASE}/${encodeURIComponent(promotionId)}/redemptions`),
         ]);
-        const promotionPayload =
-          (await promotionResponse.json()) as RpcResult<AdminPromotionDetail>;
+        const promotionPayload = catalogResultSchema(adminPromotionSummarySchema).parse(
+          await promotionResponse.json(),
+        );
         if (!promotionPayload.ok) {
           setState({
             phase: "error",
@@ -82,30 +93,19 @@ export default function PromotionDetailPage({
   useEffect(() => load(), [load]);
 
   async function run(url: string, method: "POST" | "PATCH", body: unknown) {
-    const intent = `${method}:${url}:${JSON.stringify(body)}`;
-    const idempotencyKey = commandKeys.current.get(intent) ?? crypto.randomUUID();
-    commandKeys.current.set(intent, idempotencyKey);
-    const response = await fetch(url, {
-      method,
-      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { code?: string; message?: string };
-    };
-    setNotice(
-      payload.ok
-        ? "Applied."
-        : payload.error?.code === "CONFLICT" && url.endsWith("/grants")
-          ? "This customer already has a grant for this promotion."
-          : (payload.error?.message ?? "The command failed."),
-    );
-    if (payload.ok) {
-      commandKeys.current.delete(intent);
-      if (url.endsWith("/grants")) setGrantCustomerId("");
-      load();
+    try {
+      const payload = await command.submit(url, body, method).catch(() => command.retry());
+      if (!payload) return false;
+      setNotice(payload.ok ? "Applied." : payload.error.message);
+      if (payload.ok) {
+        setGrantCustomerId("");
+        load();
+      }
+      return payload.ok;
+    } catch {
+      setNotice("The change could not be confirmed. Try again to check the same change.");
+      return false;
     }
-    return payload.ok;
   }
 
   async function loadHistory(kind: "grants" | "redemptions", cursor: string) {
@@ -170,7 +170,7 @@ export default function PromotionDetailPage({
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title={promotion.name}
-        description={`${promotion.code} · v${promotion.version}`}
+        description={promotion.code}
         action={
           <StatusBadge
             tone={
@@ -195,6 +195,49 @@ export default function PromotionDetailPage({
         </p>
       ) : null}
 
+      {command.uncertain ? (
+        <Button
+          disabled={command.pending}
+          onClick={async () => {
+            try {
+              const result = await command.retry();
+              if (!result) return;
+              setNotice(result.ok ? "Applied." : result.error.message);
+              if (result.ok) load();
+            } catch {
+              setNotice("The change is still unconfirmed. Try again.");
+            }
+          }}
+        >
+          Try again
+        </Button>
+      ) : null}
+      <ListPageSection
+        title="Campaign details"
+        description="Draft details can be edited before activation."
+      >
+        {promotion.status === "DRAFT" ? (
+          <PromotionDefinitionForm
+            promotion={promotion}
+            disabled={frozen}
+            onSave={(body) => run(`${BASE}/${encodeURIComponent(promotionId)}`, "PATCH", body)}
+          />
+        ) : (
+          <div className="space-y-2 p-4 text-sm">
+            <p>{promotion.description || "No description"}</p>
+            <p>
+              {promotion.benefitType === "ORDER_FIXED_DISCOUNT"
+                ? `Merchandise discount: PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)}`
+                : `Merchandise discount: ${promotion.percent}%`}
+            </p>
+            <p>Minimum purchase: PHP {(promotion.minimumMinor / 100).toFixed(2)}</p>
+            <p>
+              Starts: {promotion.startsAt}{" "}
+              {promotion.endsAt ? `Ends: ${promotion.endsAt}` : "No end date"}
+            </p>
+          </div>
+        )}
+      </ListPageSection>
       <ListPageSection
         title="Lifecycle"
         description="Every action requires a reason and is audited."
@@ -202,6 +245,7 @@ export default function PromotionDetailPage({
         <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
           <Input
             aria-label="Reason"
+            disabled={frozen}
             placeholder="reason (required)"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
@@ -211,6 +255,7 @@ export default function PromotionDetailPage({
             {promotion.status === "DRAFT" || promotion.status === "INACTIVE" ? (
               <Button
                 size="sm"
+                disabled={frozen}
                 onClick={() => {
                   if (reason.trim() === "") return setNotice("A reason is required.");
                   void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
@@ -227,6 +272,7 @@ export default function PromotionDetailPage({
               <Button
                 size="sm"
                 variant="outline"
+                disabled={frozen}
                 onClick={() => {
                   if (reason.trim() === "") return setNotice("A reason is required.");
                   void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
@@ -243,6 +289,7 @@ export default function PromotionDetailPage({
               <Button
                 size="sm"
                 variant="destructive"
+                disabled={frozen}
                 onClick={() => {
                   if (reason.trim() === "") return setNotice("A reason is required.");
                   void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
@@ -311,6 +358,7 @@ export default function PromotionDetailPage({
           <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
             <Input
               aria-label="Customer ID"
+              disabled={frozen}
               placeholder="customer ID"
               value={grantCustomerId}
               onChange={(event) => setGrantCustomerId(event.target.value)}
@@ -318,6 +366,7 @@ export default function PromotionDetailPage({
             />
             <Button
               size="sm"
+              disabled={frozen}
               onClick={() => {
                 if (grantCustomerId.trim() === "") {
                   setNotice("A customer ID is required.");

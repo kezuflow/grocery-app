@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { AdminPromotionPage, RpcResult } from "@freshmarkets/contracts";
+import type { AdminPromotionPage } from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
@@ -15,7 +15,8 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
-import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
+import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -33,7 +34,7 @@ export default function PromotionsPage() {
   const [name, setName] = useState("");
   const [discount, setDiscount] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const createIntent = useAdminCommandIntent();
+  const createIntent = useCatalogCommand(adminPromotionSummarySchema);
   const pagination = useAdminPagination();
 
   const load = useCallback((cursor: string | null) => {
@@ -43,7 +44,7 @@ export default function PromotionsPage() {
         const params = new URLSearchParams({ limit: "50" });
         if (cursor) params.set("cursor", cursor);
         const response = await fetch(`/api/admin/promotions?${params}`);
-        const payload = (await response.json()) as RpcResult<AdminPromotionPage>;
+        const payload = catalogResultSchema(adminPromotionPageSchema).parse(await response.json());
         if (!payload.ok) {
           setState({
             phase: "error",
@@ -71,36 +72,37 @@ export default function PromotionsPage() {
       setNotice("A code, name, and numeric discount are required.");
       return;
     }
-    let payload: RpcResult<unknown>;
-    try {
-      payload = await createIntent.submit(async (idempotencyKey) => {
-        const response = await fetch("/api/admin/promotions", {
-          method: "POST",
-          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-          body: JSON.stringify({
-            code: code.trim().toUpperCase(),
-            name: name.trim(),
-            benefitType: "ORDER_FIXED_DISCOUNT",
-            discountMinor: Math.round(Number(discount) * 100),
-            minimumMinor: 0,
-            startsAt: new Date().toISOString(),
-          }),
-        });
-        return (await response.json()) as RpcResult<unknown>;
-      });
-    } catch {
-      setNotice("Connection lost. Retry to safely reuse the same promotion request.");
+    const [whole, fraction = ""] = discount.trim().split(".");
+    const amount = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+    if (!/^\d+(\.\d{1,2})?$/.test(discount.trim()) || !Number.isSafeInteger(amount) || amount < 1) {
+      setNotice("Enter a positive discount with at most two decimal places.");
       return;
     }
-    setNotice(
-      payload.ok ? "Promotion created as DRAFT." : (payload.error?.message ?? "Creation failed."),
-    );
-    if (payload.ok) {
-      setCode("");
-      setName("");
-      setDiscount("");
-      pagination.reset();
-      load(null);
+    try {
+      const payload = await createIntent
+        .submit("/api/admin/promotions", {
+          code: code.trim().toUpperCase(),
+          name: name.trim(),
+          description: "",
+          benefitType: "ORDER_FIXED_DISCOUNT",
+          discountMinor: amount,
+          minimumMinor: 0,
+          startsAt: new Date().toISOString(),
+        })
+        .catch(() => createIntent.retry());
+      if (!payload) return;
+      setNotice(payload.ok ? "Promotion created as DRAFT." : payload.error.message);
+      if (payload.ok) {
+        setCode("");
+        setName("");
+        setDiscount("");
+        pagination.reset();
+        load(null);
+      }
+    } catch {
+      setNotice(
+        "Creation could not be confirmed. Try Create draft again to check the same change.",
+      );
     }
   }
 
@@ -108,7 +110,7 @@ export default function PromotionsPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Promotions"
-        description="Order-benefit definitions over the closed vocabulary. Membership trials stay with their own authority."
+        description="Create and manage merchandise discount campaigns."
       />
 
       {state.phase === "loading" ? (
@@ -151,6 +153,7 @@ export default function PromotionsPage() {
             <form className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center" onSubmit={create}>
               <Input
                 aria-label="Promotion code"
+                disabled={createIntent.pending || createIntent.uncertain}
                 placeholder="CODE"
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
@@ -158,6 +161,7 @@ export default function PromotionsPage() {
               />
               <Input
                 aria-label="Promotion name"
+                disabled={createIntent.pending || createIntent.uncertain}
                 placeholder="name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -165,6 +169,7 @@ export default function PromotionsPage() {
               />
               <Input
                 aria-label="Fixed discount in pesos"
+                disabled={createIntent.pending || createIntent.uncertain}
                 placeholder="discount ₱"
                 value={discount}
                 onChange={(event) => setDiscount(event.target.value)}

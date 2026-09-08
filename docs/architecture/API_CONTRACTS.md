@@ -404,6 +404,12 @@ New Customer and Staff invitation creation includes one required durable email i
 Invitation list items expose current `emailStatus`: `NOT_REQUESTED`, `QUEUED`, `SENDING`, `ACCEPTED`, `FAILED`, `OUTCOME_UNKNOWN`, or `CANCELED`. `ACCEPTED` means provider submission acceptance, not inbox delivery. Command receipts retain their original result independently of this live projection. Older invitations without an email intent remain `NOT_REQUESTED`; historical replay does not enqueue retrospective mail. Live sender and inbox delivery acceptance remains a separate environment/provider check.
 - Material commands are idempotent, version-guarded where concurrent mutation is possible, reason-gated, and audited (`CUSTOMER.*`/`PRIVACY.*` closed vocabulary).
 
+### Current promotion command integrity (2026-09-09)
+
+Promotion create, draft edit, lifecycle and targeted-grant commands accept bounded shared schemas and recheck active staff, Global scope and `promotions.manage` inside the complete transaction. Each required business effect, immutable audit and original JSON result must succeed together. Draft version/status and active promotion/customer grant eligibility are guarded in the same batch. A zero-row effect aborts the whole command. Successful identical replay is resolved before later lifecycle/version rejection; changed payload under the same key conflicts. A lost batch response reads the frozen receipt. Historical reference-only results conflict for history review rather than reapplying a command or claiming the current record is its original result.
+
+The implemented Admin benefit subset remains fixed/percentage merchandise discounts pending full campaign work. Draft edits validate amounts, dates and current benefit shape; creation bounds optional positive usage limits. Web adapters bound JSON to 8 KiB. Normal Create/Save and lifecycle actions preserve the complete unconfirmed request internally. Dates in the draft form are explicitly UTC. This integrity repair does not claim delivery-benefit authoring, complete targeting/preview, campaign media or provider acceptance.
+
 ### Historical implementation — Promotions service (Slice 4, 2026-08-27)
 
 `packages/contracts/src/admin-promotions.ts` publishes `AdminPromotionsService` (`listAdminPromotions`, `getAdminPromotion`, `createAdminPromotion`, `updateAdminPromotion`, `changeAdminPromotionStatus`, `previewAdminPromotion`, `grantAdminPromotion`, `listPromotionGrants`, `listPromotionRedemptions`).

@@ -36,3 +36,5 @@ export type RequestMetaInput = z.infer<typeof requestMetaSchema>;
 export * from "./admin-catalog-media";
 export * from "./admin-categories";
 export * from "./admin-products";
+
+export * from "./admin-promotions";

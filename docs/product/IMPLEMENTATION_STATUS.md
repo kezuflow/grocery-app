@@ -918,3 +918,8 @@ Validation: pnpm check passed Core 1405/185, Web 396/98, contracts 68/19, shared
 ### 2026-09-09 - Global variant editing
 
 Added normal Global Edit/Save for variant names, labels, ordering, catalog activation and Piece shipping estimates; local catalog status is visible separately from local selling. Verified 22 Core Worker/D1 tests, 2 focused Web tests, Web types/lint/naming and two desktop/mobile browser journeys with lost-response replay (zero retries). Managed Web build and clean disposable D1 setup passed. No schema/RPC signature changes. Prior full aggregate passed for b8e32b2; the full commerce plan remains open, including promotion authoring/media and downstream operations. See the active commerce execution checkpoint for exact evidence and next work.
+
+
+### 2026-09-09 - Promotion command integrity and draft editing
+
+Promotion create/edit/lifecycle/grant now commit business effects, audit and frozen original result together, with bounded unknown inputs, transaction-time IAM/state checks and replay before lifecycle rejection. Added reachable draft campaign editing and complete request preservation in Web. Verified 25 Core Worker tests, 398 Web tests, 2 validation tests, types/lint/conventions/architecture/readiness, both builds and five real browser journeys (zero retries), including lost-response create/edit/activate. Delivery-benefit authoring, complete targeting/preview, campaign media and later commerce phases remain open. No migration/provider acceptance in this slice; see active commerce checkpoint.
