@@ -121,6 +121,11 @@ export async function resolveReconciliationCase(
     const refundedCleanup = row.refunded_commitment
       ? await prepareRefundedCommitmentResolution(database, { ...command, reason, now })
       : [];
+    const committedCleanup = await prepareCommittedFinanceExceptionResolution(
+      database,
+      row.payment_intent_id,
+      now,
+    );
     await database.batch([
       database
         .prepare(`INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT ${authority}`)
@@ -132,6 +137,7 @@ export async function resolveReconciliationCase(
         .bind(scope, command.idempotencyKey, hash, now, now, hash, legacyHash),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
       ...refundedCleanup,
+      ...committedCleanup,
       database
         .prepare(
           `UPDATE payment_reconciliation_case SET status='RESOLVED',resolved_at=?,version=version+1 WHERE id=? AND version=? AND status='OPEN' AND payment_intent_id IS ? AND category=? AND created_at=? AND ${completedReconciliationResolutionEvidence}`,
@@ -174,3 +180,4 @@ export async function resolveReconciliationCase(
   }
   return { ok: true, value: accepted, requestId: command.requestId };
 }
+import { prepareCommittedFinanceExceptionResolution } from "../../orders/application/resolve-committed-finance-exceptions";

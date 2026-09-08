@@ -4,6 +4,7 @@ import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
 import { recordFinancialEvent } from "../../payments/application/financial-observability";
 import { permitsPromotionStack } from "../../promotions/domain/checkout-promotion";
+import { resolveCommittedFinanceExceptionStatements } from "./resolve-committed-finance-exceptions";
 
 export type ApplyCheckoutPaymentReactionInput = {
   reactionId: string;
@@ -44,7 +45,7 @@ export async function applyCheckoutPaymentReaction(
     .prepare("SELECT order_id FROM order_payment_reaction WHERE payment_intent_id=?")
     .bind(input.paymentIntentId)
     .first<{ order_id: string }>();
-  if (already) return { applied: true, reason: "ALREADY_APPLIED", orderId: already.order_id };
+  if (already) return repairCommittedExceptions(database, input, already.order_id, now);
   if (existing.status !== "PENDING") return { applied: false, reason: "INSUFFICIENT_STATE" };
 
   if (!isSufficientForCommitment(input.canonicalPaymentState))
@@ -616,6 +617,7 @@ export async function applyCheckoutPaymentReaction(
       )
       .bind(now, input.reactionId, input.paymentIntentId, quote.id),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+    ...resolveCommittedFinanceExceptionStatements(database, { ...input, orderId, now }),
   );
 
   try {
@@ -629,7 +631,7 @@ export async function applyCheckoutPaymentReaction(
       .bind(input.paymentIntentId)
       .first<{ order_id: string }>();
     if (paymentWinner)
-      return { applied: true, reason: "ALREADY_APPLIED", orderId: paymentWinner.order_id };
+      return repairCommittedExceptions(database, input, paymentWinner.order_id, now);
     const quoteWinner = await database
       .prepare("SELECT order_id FROM order_payment_reaction WHERE checkout_quote_id=?")
       .bind(quote.id)
@@ -675,6 +677,23 @@ export async function applyCheckoutPaymentReaction(
   }
 }
 
+async function repairCommittedExceptions(
+  database: D1Database,
+  input: ApplyCheckoutPaymentReactionInput,
+  orderId: string,
+  now: number,
+): Promise<OrderCommittedOutcome> {
+  try {
+    await database.batch(
+      resolveCommittedFinanceExceptionStatements(database, { ...input, orderId, now }),
+    );
+    return { applied: true, reason: "ALREADY_APPLIED", orderId };
+  } catch {
+    // The Order remains committed; retry its derived exception projection without new commerce effects.
+    return { applied: false, reason: "CAS_CONFLICT", orderId };
+  }
+}
+
 function deliveryInstructionsSnapshot(addressSnapshot: Record<string, unknown>): string | null {
   const structured = addressSnapshot.delivery_instructions_json;
   if (typeof structured === "string") return structured;
@@ -692,7 +711,7 @@ async function recordFinanceExceptionRow(
 ): Promise<void> {
   await database
     .prepare(
-      "INSERT OR IGNORE INTO finance_exception (id, kind, payment_intent_id, reaction_id, details_json, attempts, last_error_code, status, created_at) VALUES (?, ?, ?, ?, '{}', 1, ?, 'OPEN', ?)",
+      "INSERT OR IGNORE INTO finance_exception (id, kind, payment_intent_id, reaction_id, details_json, attempts, last_error_code, status, created_at) SELECT ?, ?, ?, ?, '{}', 1, ?, 'OPEN', ? WHERE NOT EXISTS (SELECT 1 FROM order_payment_reaction link JOIN grocery_order o ON o.id=link.order_id WHERE link.payment_intent_id=? AND link.reaction_id=?)",
     )
     .bind(
       crypto.randomUUID(),
@@ -701,6 +720,8 @@ async function recordFinanceExceptionRow(
       input.reactionId,
       errorCode.slice(0, 120),
       now,
+      input.paymentIntentId,
+      input.reactionId,
     )
     .run();
 }

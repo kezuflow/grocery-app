@@ -520,10 +520,121 @@ describe("instant order commitment", () => {
           .bind(reactionId)
           .first(),
       ).toEqual({ status: "SUCCEEDED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM finance_exception WHERE payment_intent_id=? AND status='OPEN'",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM audit_event WHERE action='ORDER.COMMITMENT_RECOVERED' AND json_extract(details_json,'$.paymentIntentId')=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ n: 1 });
     } finally {
       vi.useRealTimers();
     }
   });
+  it.each(["audit", "projection"] as const)(
+    "repairs a retained committed exception with required %s and no duplicate Order",
+    async (fault) => {
+      await configureInstant();
+      const { quoteId } = await seededInstantQuote(false, true);
+      const { intentId, reactionId } = await seedReaction(quoteId);
+      const input = {
+        reactionId,
+        paymentIntentId: intentId,
+        checkoutAttemptId: quoteId,
+        canonicalPaymentState: "SUCCEEDED" as const,
+      };
+      const committed = await applyCheckoutPaymentReaction(env.DB, input);
+      expect(committed.applied).toBe(true);
+      // Explicit retained projection seam: an Order exists but its old exception was never closed.
+      const manager = await locationManager("global");
+      await env.DB.prepare(
+        "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='refunds.manage'",
+      )
+        .bind(manager.id)
+        .run();
+      const resolution = {
+        headers: manager.headers,
+        caseId: crypto.randomUUID(),
+        expectedVersion: 1,
+        reason: "Verified the committed Order after recovery",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      };
+      await env.DB.prepare(
+        "INSERT INTO payment_reconciliation_case(id,payment_intent_id,category,status,details_json,created_at,version) VALUES (?,?,'REACTION_FAILURE','OPEN',?, ?,1)",
+      )
+        .bind(resolution.caseId, intentId, JSON.stringify({ reactionId }), Date.now())
+        .run();
+      await env.DB.prepare(
+        "INSERT INTO finance_exception(id,kind,payment_intent_id,reaction_id,details_json,attempts,status,created_at) VALUES (?,'TRANSIENT_FAILURE',?,?,'{}',1,'OPEN',?)",
+      )
+        .bind(crypto.randomUUID(), intentId, reactionId, Date.now())
+        .run();
+      await env.DB.exec(
+        fault === "audit"
+          ? "CREATE TRIGGER ignore_recovered_projection BEFORE INSERT ON audit_event WHEN NEW.action='ORDER.COMMITMENT_RECOVERED' BEGIN SELECT RAISE(IGNORE); END"
+          : "CREATE TRIGGER ignore_recovered_projection BEFORE UPDATE ON finance_exception WHEN NEW.status='RESOLVED' BEGIN SELECT RAISE(IGNORE); END",
+      );
+      try {
+        expect(await applyCheckoutPaymentReaction(env.DB, input)).toMatchObject({ applied: false });
+        expect(await exports.default.resolveAdminReconciliationCase(resolution)).toMatchObject({
+          ok: false,
+          error: { code: "CONFLICT" },
+        });
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_reconciliation_case WHERE id=?")
+            .bind(resolution.caseId)
+            .first(),
+        ).toEqual({ status: "OPEN" });
+        expect(
+          await env.DB.prepare("SELECT status FROM finance_exception WHERE payment_intent_id=?")
+            .bind(intentId)
+            .first(),
+        ).toEqual({ status: "OPEN" });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM audit_event WHERE action='ORDER.COMMITMENT_RECOVERED' AND aggregate_id=?",
+          )
+            .bind(committed.orderId)
+            .first(),
+        ).toEqual({ n: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_recovered_projection");
+      }
+      const resolved = await exports.default.resolveAdminReconciliationCase(resolution);
+      expect(resolved).toMatchObject({ ok: true });
+      expect(await exports.default.resolveAdminReconciliationCase(resolution)).toEqual(resolved);
+      expect(await applyCheckoutPaymentReaction(env.DB, input)).toMatchObject({ applied: true });
+      expect(
+        await env.DB.prepare(
+          "SELECT status,order_id FROM finance_exception WHERE payment_intent_id=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ status: "RESOLVED", order_id: committed.orderId });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM audit_event WHERE action='ORDER.COMMITMENT_RECOVERED' AND aggregate_id=?",
+        )
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ n: 1 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ n: 1 });
+    },
+  );
   it("allows only one winner between customer cancellation and preparation", async () => {
     await configureInstant();
     const { quoteId, customerId } = await seededInstantQuote(false);
