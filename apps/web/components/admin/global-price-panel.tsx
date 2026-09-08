@@ -126,7 +126,7 @@ export function GlobalPricePanel({
         setNotice(result.ok ? "Exact-location price saved." : result.error.message);
         setReload((value) => value + 1);
       } catch {
-        setNotice("The price result is unknown. Retry this same request to recover its result.");
+        setNotice("The price could not be confirmed. Select Save price to try again.");
       }
     },
     [intent],
@@ -189,7 +189,10 @@ export function GlobalPricePanel({
                 className="flex flex-wrap items-end gap-3"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (command) return;
+                  if (command) {
+                    void submit(command);
+                    return;
+                  }
                   if (!/^\d+(\.\d{1,2})?$/.test(amount)) {
                     setNotice("Enter a positive price with at most two decimal places.");
                     return;
@@ -240,18 +243,13 @@ export function GlobalPricePanel({
                     />
                   </label>
                 </details>
-                <Button type="submit" disabled={command !== null}>
-                  Save price
+                <Button type="submit" disabled={intent.pending}>
+                  {intent.pending ? "Saving price…" : "Save price"}
                 </Button>
               </form>
             ) : (
               <p>Read only. Global price-management permission is required to set prices.</p>
             )}
-            {command ? (
-              <Button disabled={intent.pending} onClick={() => void submit(command)}>
-                {intent.pending ? "Saving price…" : "Retry same price request"}
-              </Button>
-            ) : null}
             <details>
               <summary className="cursor-pointer">Price history</summary>
               <ul className="space-y-2" aria-label="Price history">

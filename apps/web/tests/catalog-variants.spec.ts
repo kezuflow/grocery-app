@@ -37,7 +37,7 @@ for (const width of [1440, 390]) {
     await page.getByLabel("Unit", { exact: true }).selectOption("unit-gram");
     await page.getByLabel("Amount", { exact: true }).fill("500");
     await page.getByRole("button", { name: "Add variant", exact: true }).click();
-    await page.getByRole("button", { name: "Retry saved command", exact: true }).click();
+    await page.getByRole("button", { name: "Add variant", exact: true }).click();
     await expect(
       page.getByRole("cell", { name: `SECOND_${suffix.slice(0, 8)}`.toUpperCase(), exact: true }),
     ).toHaveCount(1);
@@ -96,7 +96,7 @@ for (const width of [1440, 390]) {
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByLabel("Final retail price", { exact: true }).fill("29.50");
     await page.getByRole("button", { name: "Save price", exact: true }).click();
-    await page.getByRole("button", { name: "Retry same price request", exact: true }).click();
+    await page.getByRole("button", { name: "Save price", exact: true }).click();
     await expect(page.getByText("Exact-location price saved.", { exact: true })).toBeVisible();
     expect(prices).toHaveLength(2);
     expect(prices[1]).toEqual(prices[0]);

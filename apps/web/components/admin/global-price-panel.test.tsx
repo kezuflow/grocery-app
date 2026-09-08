@@ -119,10 +119,10 @@ describe("Global price editor", () => {
         .querySelector("form")
         ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
-    expect(container.textContent).toContain("result is unknown");
+    expect(container.textContent).toContain("price could not be confirmed");
     expect(input.disabled).toBe(true);
     const retry = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Retry same price request",
+      (button) => button.textContent === "Save price",
     );
     if (!retry) throw new Error("Retry button missing");
     await act(async () => retry.click());

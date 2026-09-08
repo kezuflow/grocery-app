@@ -82,7 +82,13 @@ export default function ProductDetailPage({
         : null,
   );
   const command = useAdminCommand();
-  const commandIntent = { pending: command.busy || command.uncertain };
+  const skuCommand = useAdminCommand();
+  const commandIntent = {
+    pending: command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain,
+  };
+  const variantNotice = skuCommand.uncertain
+    ? "The variant could not be confirmed. Select Add variant to try again."
+    : skuCommand.notice;
   const targetOptions = adminContext.state.phase === "ready" ? adminContext.state.scopes : [];
   const selectedScope =
     adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
@@ -162,10 +168,22 @@ export default function ProductDetailPage({
     body: unknown,
     successMessage = "Applied.",
   ) {
+    skuCommand.setNotice(null);
     const applied = await command.run(url, url, body, method);
     setNotice(applied ? successMessage : null);
     if (applied) load();
     return applied;
+  }
+  async function addVariant(body?: unknown) {
+    setNotice(null);
+    const applied =
+      body === undefined
+        ? await skuCommand.retry()
+        : await skuCommand.run(`${BASE}/skus`, `${BASE}/skus`, body);
+    if (applied) {
+      setNotice("Variant added.");
+      load();
+    }
   }
   if (state.phase === "loading") {
     return (
@@ -238,12 +256,12 @@ export default function ProductDetailPage({
         }
       />
 
-      {(notice ?? command.notice) ? (
+      {(notice ?? variantNotice ?? command.notice) ? (
         <p
           role="status"
           className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-3 text-sm"
         >
-          {notice ?? command.notice}
+          {notice ?? variantNotice ?? command.notice}
         </p>
       ) : null}
 
@@ -463,6 +481,10 @@ export default function ProductDetailPage({
               className="grid gap-4 border-b border-[var(--fm-border)] p-4"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (skuCommand.uncertain) {
+                  void addVariant();
+                  return;
+                }
                 const unit = units.find((candidate) => candidate.unitId === newSku.unitId);
                 if (
                   newSku.code.trim() === "" ||
@@ -495,7 +517,7 @@ export default function ProductDetailPage({
                   setNotice("Enter a positive shipping weight in grams for one sold unit.");
                   return;
                 }
-                void run(`${BASE}/skus`, "POST", {
+                void addVariant({
                   productId,
                   code: newSku.code.trim().toUpperCase(),
                   name: newSku.name.trim(),
@@ -523,6 +545,7 @@ export default function ProductDetailPage({
                   </span>
                   <Input
                     aria-label="SKU code"
+                    disabled={commandIntent.pending}
                     placeholder="ZUCCHINI-250G"
                     value={newSku.code}
                     onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
@@ -536,6 +559,7 @@ export default function ProductDetailPage({
                     </span>
                     <Input
                       aria-label="Estimated shipping weight"
+                      disabled={commandIntent.pending}
                       type="number"
                       inputMode="numeric"
                       min={1}
@@ -558,6 +582,7 @@ export default function ProductDetailPage({
                   </span>
                   <Input
                     aria-label="Display name"
+                    disabled={commandIntent.pending}
                     placeholder="Small bag (250 g)"
                     value={newSku.name}
                     onChange={(event) => setNewSku({ ...newSku, name: event.target.value })}
@@ -570,6 +595,7 @@ export default function ProductDetailPage({
                   </span>
                   <select
                     aria-label="Unit"
+                    disabled={commandIntent.pending}
                     value={newSku.unitId}
                     onChange={(event) => setNewSku({ ...newSku, unitId: event.target.value })}
                     className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
@@ -596,6 +622,7 @@ export default function ProductDetailPage({
                   </span>
                   <Input
                     aria-label="Amount"
+                    disabled={commandIntent.pending}
                     type="number"
                     inputMode="numeric"
                     min={1}
@@ -608,10 +635,10 @@ export default function ProductDetailPage({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={commandIntent.pending}
+                  disabled={command.busy || command.uncertain || skuCommand.busy}
                   className="sm:col-span-2 lg:col-span-1"
                 >
-                  Add variant
+                  {skuCommand.busy ? "Adding variant…" : "Add variant"}
                 </Button>
               </div>
               <p className="text-xs text-[var(--fm-text-muted)]">

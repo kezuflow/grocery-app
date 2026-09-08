@@ -144,6 +144,12 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await statusDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(reviewDeactivation).toBeFocused();
 
+  await adminPage.getByRole("combobox", { name: "Price location", exact: true }).click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await adminPage.getByLabel("Final retail price", { exact: true }).fill("29.99");
+  await adminPage.getByRole("button", { name: "Save price", exact: true }).click();
+  await expect(adminPage.getByText("Exact-location price saved.", { exact: true })).toBeVisible();
+
   const scopeControl = adminPage.getByRole("combobox", { name: "Active admin scope" });
   if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
     await scopeControl.selectOption({ label: "Central Cebu" });
@@ -153,12 +159,7 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
       .getByRole("option", { name: "Central Cebu" })
       .evaluate((option) => (option as HTMLElement).click());
   }
-  await adminPage.getByLabel(`New price for ${variantCode}`).fill("29.99");
-  await adminPage.getByRole("button", { name: "Review price" }).click();
-  await expect(adminPage.getByRole("alertdialog")).toContainText("Central Cebu");
-  await expect(adminPage.getByRole("alertdialog")).toContainText("2999 minor units");
-  await adminPage.getByRole("button", { name: "Confirm price" }).click();
-  await expect(adminPage.getByText("Price version created.", { exact: true })).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
   await adminPage.getByRole("button", { name: "Review start selling" }).click();
   await expect(adminPage.getByRole("alertdialog")).toContainText(
     "sets AVAILABLE for this location",

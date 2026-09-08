@@ -1,7 +1,7 @@
 # Commerce alignment execution
 
-Updated: 2026-09-08 21:24 UTC / 2026-09-09 Asia/Manila.
-Status: implementation active. CA-3.1 committed/pushed as `27889d4`; CA-3.2a committed/pushed as `60f348d`; CA-3.2b locally verified; CA-3.2c phase gate next. No whole phase or provider acceptance is claimed.
+Updated: 2026-09-08 21:48 UTC / 2026-09-09 Asia/Manila.
+Status: implementation active. CA-3.1 committed/pushed as `27889d4`; CA-3.2a committed/pushed as `60f348d`; CA-3.2b committed/pushed as `092a0ad`; CA-3.2d locally verified; CA-3.2c final revision gate active. No whole phase or provider acceptance is claimed.
 
 ## Scope and resume source
 
@@ -11,18 +11,30 @@ Previous checkpoint content is preserved byte-for-byte in [execution history](CO
 
 ## Observed workspace and preservation
 
-- Branch: `main`. Last confirmed pushed implementation HEAD: `60f348d`, `fix(catalog): recover interrupted product image uploads`. CA-3.2b is the only intended uncommitted application slice at this milestone. Initial resume HEAD was `0b55737`; its partial media scaffold was preserved and completed.
+- Branch: `main`. Last confirmed pushed implementation HEAD: `092a0ad`, `fix(promotions): accept authored codes through checkout`. Only CA-3.2d Web files/test edits and checkpoint are intended uncommitted work at this milestone. Initial resume HEAD was `0b55737`; its partial media scaffold was preserved and completed.
 - User-owned modified `.codex/config.toml` and untracked `docs/product/SIMPLIFICATION_DISCUSSION.md`: leave untouched, do not stage, do not adopt the discussion as scope.
 - `docs/product/IMPLEMENTATION_STATUS.md`: pre-existing invalid UTF-8 elsewhere; append bytes only if needed.
 - Only disposable database state: `apps/core/.wrangler/e2e-commerce-alignment-20260907`. No retained/shared/remote database was reset or upgraded. Migration 0086 was applied only to isolated test databases and the designated disposable browser state.
 - Prior application checks/stacks finished; no running application test process is recorded. Recheck processes before testing. Never overlap Core suites and managed browser stacks; keep source fixed during browser acceptance.
 - No actual PayMongo/Lalamove/OAuth/email acceptance, real provider action or deployment was performed. No subagents are authorized.
 
-## Active slice: CA-3.2c Phase 3 acceptance gate
+## Active slice: CA-3.2c final Phase 3 acceptance gate
 
-Owning phase: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 3 — Catalog, images, promotions and pricing, sections B-C and promotion application in F. No new implementation is assumed. Observable acceptance: reconcile each source criterion against current reachable code and real Worker/browser evidence; run current aggregate and catalog/category/variant/price/promotion browser matrix; fix reproduced gaps before accepting this phase. Earlier CA-0-2 and later CA-4/5/6/7 obligations remain open.
+Owning phase: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 3 — Catalog, images, promotions and pricing; sections B-C and promotion application in F. CA-3.2d closes the normal variant/price action gap and obsolete local price browser expectation. Immediate next action after its verified commit/push: run `pnpm check` on final source without a browser stack, then the full managed seven-file Phase 3 browser matrix below. Reconcile remaining source criteria and keep earlier onboarding/provider and later workflow acceptance open. No application stack remains running at this milestone; source must stay fixed during browser checks.
 
-Immediate next action after CA-3.2b commit/push: run `pnpm check` with no browser stack; then the managed browser matrix `tests/admin-catalog.spec.ts tests/category-recovery.spec.ts tests/catalog-variants.spec.ts tests/admin-promotions.spec.ts tests/product-media-recovery.spec.ts tests/promotion-media.spec.ts tests/authored-promotion-quote.spec.ts --retries=0` on the designated disposable state. Audit explicit/automatic promotion selection and claim/snapshot/replay coverage, published media across catalog/cart, and Global-only price writes with local activation. `global-pricing.spec.ts` uses response mocks and remains presentation-only; real variant/product-media journeys already exercise price/local activation through actual Core. Do not count test discovery as execution.
+## Completed in this continuation: CA-3.2d
+
+Verified source edits based on `092a0ad`: `apps/web/app/admin/catalog/products/[product-id]/page.tsx` uses a separate instance of the existing command hook for variant creation so the normal Add action retries only its own saved request; inputs freeze while unresolved. `apps/web/components/admin/global-price-panel.tsx` keeps one Save price action for original submit/retry. `global-price-panel.test.tsx` and `catalog-variants.spec.ts` retain exact-body/key replay assertions using normal actions. `admin-catalog.spec.ts` replaces its obsolete local price editor with the Global editor and asserts no local Save price control. No Core/schema/RPC change or new abstraction. `pnpm typecheck` passed; focused Web `vitest run --config vitest.config.ts components/admin/global-price-panel.test.tsx`: 2 passed/1 file.
+
+Final browser: `$env:E2E_START_STACK='1'; $env:E2E_STATE_NAME='e2e-commerce-alignment-20260907'; pnpm --filter @freshmarkets/web exec playwright test tests/admin-catalog.spec.ts tests/catalog-variants.spec.ts --retries=0`: **12 passed/2.9 minutes**, including real Global price authoring, local read-only price/activation, desktop/mobile identical-key/body retries through Add variant and Save price. Log `commerce-normal-catalog-actions.log` under the evidence root; screenshots inspected/copied to its `commerce-normal-catalog-actions` directory. Full `pnpm --filter @freshmarkets/web test`: **403 passed/101 files**. `pnpm lint`, `pnpm naming:check`, `pnpm format:check`, `git diff --check` passed. No Core/schema/RPC changes, providers, retained DBs or deployments. Commit/push pending final diff review.
+
+## CA-3.2c gate evidence and open acceptance
+
+`pnpm check` passed on `092a0ad`: Core 1467/190 files, Web 403/101, contracts 68/19, shared package tests, harness, migrations, conventions, lint, types and both builds. `pnpm --filter @freshmarkets/web check:vinext` passed 15 supported/0 issues. Aggregate log: `C:/Users/reggi/.codex/visualizations/2026/09/08/01a082ba-d1a3-7ce3-985b-99ed446e7347/commerce-phase3-check.log`. This aggregate predates the CA-3.2d Web changes.
+
+Managed matrix: `pnpm --filter @freshmarkets/web exec playwright test tests/admin-catalog.spec.ts tests/category-recovery.spec.ts tests/catalog-variants.spec.ts tests/admin-promotions.spec.ts tests/product-media-recovery.spec.ts tests/promotion-media.spec.ts tests/authored-promotion-quote.spec.ts --retries=0` with the E2E variables above. First startup failed during local migration before tests; standalone `pnpm --filter @freshmarkets/core exec wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e-commerce-alignment-20260907` completed remaining 0050-0086 (exit0). Same matrix rerun: **27 passed, 1 failed, 6.1 minutes**. Failure: `admin-catalog.spec.ts` expected the removed local `New price for ...` input; current policy correctly has no local write. Fixed under CA-3.2d, verification pending. Logs `commerce-phase3-browser.log` and `commerce-phase3-browser-retry.log` beside the aggregate log. Sessions 17509,99453,3761 ended; no stack remains. Only designated disposable DB changed.
+
+Coverage audit anchors: Admin catalog/category authoring and scope tests; real category/variant/product-media/promotion-media journeys; catalog service fixed variants, exact-location prices and Core media; admin catalog integration local price rejection/activation and shipping grams; catalog-effects transaction rollback/replay/concurrent price tests; promotion evaluator explicit/automatic/targeted usage and Instant Quote plus paid-reaction component stacking/claim/snapshot/replay tests. `global-pricing.spec.ts` uses response mocks and remains presentation-only. CA-3.2c stays open until CA-3.2d passes and the final phase criteria/evidence are reconciled. No whole Phase 3/provider acceptance is claimed. Wider legacy trial banner/checkout language stays open CA-6 work.
 
 ## Completed in this continuation: CA-3.2b
 
@@ -65,8 +77,9 @@ Five major phase blocks remain (Phases 3-7), plus earlier-phase acceptance oblig
 | CA-0-2 | Phases 0-2; sections A, E, F, relevant audit defects | Substantial existing work / partial evidence | Reconcile canonical and retained-baseline decisions; verify no-SQL site/address/serviceability/pickup/cycle setup, onboarding/scoped access and financial recovery. Register concrete missing evidence; fix any prerequisite before dependent work. Real account/provider inputs remain explicit. |
 | CA-3.1 | Phase 3, section B: campaign media | Implemented / locally verified | Evidence above; no real provider/deployment acceptance implied. |
 | CA-3.2a | Child of CA-3.2, section B: product upload recovery | Implemented / locally verified | Evidence above; committed/pushed `60f348d`. |
-| CA-3.2b | Child of CA-3.2, sections B/F: authored promotion to real Quote | Implemented / locally verified | Real Admin-to-Quote browser and focused Core evidence above. Final commit/push pending. |
-| CA-3.2c | Child of CA-3.2: Phase 3 acceptance gate | Active / current aggregate and matrix pending | Reconcile complete source criteria; fix reproduced gaps. |
+| CA-3.2b | Child of CA-3.2, sections B/F: authored promotion to real Quote | Implemented / locally verified | Real Admin-to-Quote browser and focused Core evidence above. Committed/pushed `092a0ad` (`60f348d..092a0ad`). |
+| CA-3.2c | Child of CA-3.2: Phase 3 acceptance gate | Active / aggregate passed; browser matrix running after startup retry; normal-action gap identified | Reconcile complete source criteria; fix reproduced gaps. |
+| CA-3.2d | Child of CA-3.2: ordinary variant/price actions after unknown outcome | Implemented / locally verified | 12 browser tests and 403 Web tests passed; pending commit/push. |
 | CA-3.2 | Phase 3, sections B-C and promotion application in F | Implemented portions / partially verified | Check complete catalog/category/variant/product-media/publication/Global-price/local-activation/promotion authoring-to-checkout acceptance. Reuse existing evidence by revision; close actual gaps and phase gates. |
 | CA-4 | Phase 4, section D | Pending completion / not verified | Initial physical stock receipt, Global dispatch, tracked transit, destination-authorized accepted receipt, discrepancies/losses/returns, ledger conservation and races; reachable operator journey. Inspect existing code before decomposition. |
 | CA-5 | Phase 5, section G | Existing primitives / not verified as a journey | Cutoff exact paid demand, paid additions, purchase confirmation, receiving and cycle allocation, shortage resolution, picking/packing, inspected surplus; separate from Instant inventory. |
