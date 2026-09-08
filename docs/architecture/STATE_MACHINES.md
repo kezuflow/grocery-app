@@ -122,7 +122,7 @@ SUCCEEDED may represent partial or full amount
 
 Use one or more refund records so each provider operation has a stable identity. Aggregate payment/order projections derive `PARTIALLY_REFUNDED` or `REFUNDED` from successful refund amounts. Retrying a failed provider request preserves the same application idempotency identity where the provider permits it.
 
-The refundable captured amount is claimed with one guarded insert. Outstanding `REQUESTED`, `PROCESSING`, and `ESCALATED` amounts remain reserved alongside `SUCCEEDED`; definitive `FAILED` releases its reservation. Concurrent claims cannot collectively exceed the captured amount.
+The refundable captured amount is claimed with one guarded insert. Outstanding `REQUESTED`, `APPROVED`, `PROCESSING`, and `ESCALATED` amounts remain reserved alongside `SUCCEEDED`; definitive `FAILED` releases its reservation. Concurrent claims cannot collectively exceed the captured amount.
 
 ## Procurement
 

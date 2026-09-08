@@ -413,7 +413,9 @@ Migration `0026_admin_foundation.sql` seeds the canonical capability rows with s
 - `admin.payments.getOverview() -> AdminPaymentOverview`
 - `admin.payments.list(filters, page) -> AdminPaymentPage`
 - `admin.payments.get({ paymentIntentId }) -> AdminPaymentDetail`
-- `admin.payments.refund({ paymentIntentId, amountMinor, reason, idempotencyKey }) -> AdminRefundView`
+- `admin.payments.refund({ paymentIntentId, amountMinor, expectedVersion, reason, idempotencyKey }) -> AdminRefundView`
+The refund command returns its immutable `REQUESTED` acceptance receipt. Current Refund progress is read separately; accepting the command never asserts provider success. Payments atomically checks current Global `refunds.manage`, payment version/captured provider evidence, coordinated-cancellation exclusion, available refund budget, audit and idempotency. Only the command that creates the durable Refund identity submits it; unknown outcomes retain that identity and reserve the amount for reconciliation. Exact replay returns the original receipt even after provider progress; changed decision/version conflicts. Historical successful keys without an original receipt report already recorded and require reconciliation, never duplicate submission. `AdminPaymentDetail.refundUnavailableReason` explains current capability, state, cancellation, budget or provider-evidence unavailability. Web retains the original amount, reason, version and key when the response is unknown.
+
 - `admin.payments.listReconciliationCases(filters, page) -> AdminReconciliationPage`
 - `admin.payments.resolveReconciliationCase({ caseId, reason, idempotencyKey }) -> AdminReconciliationCaseView`
 

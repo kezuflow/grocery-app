@@ -1,3 +1,6 @@
+import { requestHash } from "../../idempotency";
+import { requestStaffRefund } from "./request-staff-refund";
+import { locationManager } from "../../test-location-fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { cancelOrder } from "../../orders/application/cancel-order";
 import { env } from "cloudflare:workers";
@@ -634,4 +637,230 @@ describe("non-synthetic refunds", () => {
       .first<{ status: string }>();
     expect(intent?.status).toBe("REFUNDED");
   });
+});
+
+async function staffRefundFixture() {
+  const { intentId } = await succeededIntent();
+  const manager = await locationManager("global");
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='refunds.manage'",
+  )
+    .bind(manager.id)
+    .run();
+  const actor = await env.DB.prepare("SELECT auth_user_id FROM staff_identity WHERE id=?")
+    .bind(manager.id)
+    .first<{ auth_user_id: string }>();
+  const payment = await env.DB.prepare("SELECT version FROM payment_intent WHERE id=?")
+    .bind(intentId)
+    .first<{ version: number }>();
+  if (!actor || !payment) throw new Error("Missing staff/payment fixture");
+  return {
+    manager,
+    command: {
+      paymentIntentId: intentId,
+      amountMinor: 5000,
+      reason: "Inspected quality issue",
+      expectedVersion: payment.version,
+      actorAuthUserId: actor.auth_user_id,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    },
+  };
+}
+
+describe("staff refund admission and external execution", () => {
+  it("submits a verified captured payment once and preserves acceptance after progress", async () => {
+    const { command } = await staffRefundFixture();
+    const provider = createMockPaymentProvider();
+    const submit = vi.spyOn(provider, "requestRefund");
+    const registry = new ProviderRegistry("test", [provider]);
+    const first = await requestStaffRefund(env.DB, registry, command);
+    expect(first).toMatchObject({ ok: true, value: { status: "REQUESTED", amountMinor: 5000 } });
+    const stored = await env.DB.prepare(
+      "SELECT status,provider_refund_reference FROM payment_refund WHERE idempotency_key=?",
+    )
+      .bind(command.idempotencyKey)
+      .first<{ status: string; provider_refund_reference: string }>();
+    expect(stored?.status).toBe("PROCESSING");
+    const rawBody = JSON.stringify({
+      eventId: crypto.randomUUID(),
+      kind: "refund",
+      refundReference: stored?.provider_refund_reference,
+      vendorState: "paid",
+      amountMinor: 5000,
+      currency: "PHP",
+    });
+    await ingestProviderEvent(
+      env.DB,
+      registry,
+      "mock",
+      new Headers({
+        "x-mock-signature": await mockSignatureFor(rawBody),
+        "x-mock-timestamp": String(Date.now()),
+      }),
+      rawBody,
+    );
+    expect(await requestStaffRefund(env.DB, registry, command)).toEqual(first);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(
+      await requestStaffRefund(env.DB, registry, { ...command, reason: "Changed reason" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await requestStaffRefund(env.DB, registry, {
+        ...command,
+        expectedVersion: command.expectedVersion + 1,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+
+  it("retains unknown provider outcomes without repeating submission", async () => {
+    const { command } = await staffRefundFixture();
+    const provider = createMockPaymentProvider();
+    const submit = vi
+      .spyOn(provider, "requestRefund")
+      .mockRejectedValue(new Error("TEST_UNKNOWN_OUTCOME"));
+    const registry = new ProviderRegistry("test", [provider]);
+    const first = await requestStaffRefund(env.DB, registry, command);
+    expect(first).toMatchObject({ ok: true, value: { status: "REQUESTED" } });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_refund WHERE idempotency_key=?")
+        .bind(command.idempotencyKey)
+        .first(),
+    ).toEqual({ status: "ESCALATED" });
+    expect(await requestStaffRefund(env.DB, registry, command)).toEqual(first);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REFUND_UNRESOLVED'",
+      )
+        .bind(command.paymentIntentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
+  it.each(["PROCESSING", "SUCCEEDED"] as const)(
+    "handles retained %s keys without repeating historical effects",
+    async (status) => {
+      const { command } = await staffRefundFixture();
+      const hash = await requestHash({
+        paymentIntentId: command.paymentIntentId,
+        amountMinor: command.amountMinor,
+        reason: command.reason,
+      });
+      await env.DB.prepare(
+        "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,result_reference,created_at,updated_at) VALUES ('admin.payments.refund',?,?,?,'payment_refund',?, ?,?)",
+      )
+        .bind(
+          command.idempotencyKey,
+          hash,
+          status,
+          status === "SUCCEEDED" ? "historical-refund" : null,
+          Date.now(),
+          Date.now(),
+        )
+        .run();
+      const provider = createMockPaymentProvider();
+      const submit = vi.spyOn(provider, "requestRefund");
+      const registry = new ProviderRegistry("test", [provider]);
+      const result = await requestStaffRefund(env.DB, registry, command);
+      if (status === "SUCCEEDED") {
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: "CONFLICT", message: expect.stringContaining("already recorded") },
+        });
+        expect(submit).not.toHaveBeenCalled();
+      } else {
+        expect(result).toMatchObject({ ok: true, value: { status: "REQUESTED" } });
+        expect(await requestStaffRefund(env.DB, registry, command)).toEqual(result);
+        expect(submit).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it.each(["scope", "permission", "staff", "payment", "provider", "budget", "late-audit"] as const)(
+    "rejects a transaction-time %s change without partial admission",
+    async (kind) => {
+      const { manager, command } = await staffRefundFixture();
+      const provider = createMockPaymentProvider();
+      const submit = vi.spyOn(provider, "requestRefund");
+      let reached = false;
+      const database = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              reached = true;
+              if (kind === "scope")
+                await target
+                  .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                  .bind(manager.id)
+                  .run();
+              if (kind === "permission")
+                await target
+                  .prepare("DELETE FROM role_permission WHERE role_id=?")
+                  .bind(manager.id)
+                  .run();
+              if (kind === "staff")
+                await target
+                  .prepare("UPDATE staff_identity SET status='inactive' WHERE id=?")
+                  .bind(manager.id)
+                  .run();
+              if (kind === "payment")
+                await target
+                  .prepare("UPDATE payment_intent SET version=version+1 WHERE id=?")
+                  .bind(command.paymentIntentId)
+                  .run();
+              if (kind === "provider")
+                await target
+                  .prepare(
+                    "UPDATE payment_attempt SET provider_reference='changed' WHERE payment_intent_id=?",
+                  )
+                  .bind(command.paymentIntentId)
+                  .run();
+              if (kind === "budget")
+                await target
+                  .prepare(
+                    "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at) VALUES (?,?,20000,'PHP','ESCALATED','Competing unknown refund',?,1,?,?)",
+                  )
+                  .bind(
+                    crypto.randomUUID(),
+                    command.paymentIntentId,
+                    crypto.randomUUID(),
+                    Date.now(),
+                    Date.now(),
+                  )
+                  .run();
+              return target.batch(
+                kind === "late-audit"
+                  ? [...statements, target.prepare("INSERT INTO commitment_abort(id) VALUES (-40)")]
+                  : statements,
+              );
+            };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect(
+        await requestStaffRefund(database, new ProviderRegistry("test", [provider]), command),
+      ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(reached).toBe(true);
+      expect(submit).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_refund WHERE idempotency_key=?")
+          .bind(command.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE scope='admin.payments.refund' AND idempotency_key=?",
+        )
+          .bind(command.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE idempotency_key=?")
+          .bind(command.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
 });

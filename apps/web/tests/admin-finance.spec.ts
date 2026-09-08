@@ -117,6 +117,8 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
        idempotency_key, version, created_at, updated_at)
       VALUES ('${paymentIntentId}', 'GROCERY_CHECKOUT', 'checkout_quote', 'quote-${suffix}',
               '${customerId}', 12500, 'PHP', 'SUCCEEDED', 'intent-${suffix}', 1, ${now}, ${now});
+    INSERT INTO payment_attempt (id, customer_id, payment_intent_id, provider_reference, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at)
+      VALUES ('attempt-${suffix}', '${customerId}', '${paymentIntentId}', 'mock-captured-${suffix}', 12500, 'PHP', 'SUCCEEDED', 'mock', 'attempt-key-${suffix}', ${now}, ${now});
     INSERT INTO payment_reconciliation_case
       (id, payment_intent_id, category, status, details_json, created_at)
       VALUES ('${reconciliationCaseId}', '${paymentIntentId}', 'AMBIGUOUS_OUTCOME', 'OPEN', '{}', ${now});
@@ -142,7 +144,7 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   await adminPage.getByLabel("Confirmation reason").fill("E2E quality issue");
   await adminPage.getByRole("button", { name: "Confirm" }).click();
   await expect(
-    adminPage.getByRole("status").filter({ hasText: "Refund request recorded" }),
+    adminPage.getByRole("status").filter({ hasText: "Refund request accepted" }),
   ).toBeVisible();
 
   await adminPage.goto("/admin/payments/reconciliation");

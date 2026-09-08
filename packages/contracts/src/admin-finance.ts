@@ -258,6 +258,7 @@ export type AdminPaymentDetail = AdminPaymentSummary & {
   subjectType: string;
   subjectId: string;
   remainingRefundableMinor: number;
+  refundUnavailableReason: string | null;
   version: number;
   updatedAt: string;
   allowedActions: ReadonlyArray<"REQUEST_REFUND">;
@@ -293,6 +294,7 @@ export type AdminPaymentOverview = {
 };
 
 export type AdminRefundRequest = AuthenticatedRequest & {
+  expectedVersion: number;
   paymentIntentId: string;
   amountMinor: number;
   reason: string;

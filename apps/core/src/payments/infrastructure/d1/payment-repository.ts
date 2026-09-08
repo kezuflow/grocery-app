@@ -754,6 +754,52 @@ export type RefundRow = {
   version: number;
 };
 
+export type RefundBudgetClaim = {
+  refundId: string;
+  intentId: string;
+  amountMinor: number;
+  reason: string | null;
+  idempotencyKey: string;
+  now: number;
+};
+/** One authoritative budget guard shared by system and staff refund admission. */
+export function refundBudgetStatement(
+  database: D1Database,
+  input: RefundBudgetClaim,
+): D1PreparedStatement {
+  return database
+    .prepare(
+      `INSERT INTO payment_refund (
+             id, payment_intent_id, amount_minor, currency, status, reason,
+             idempotency_key, version, created_at, updated_at
+           )
+           SELECT ?, pi.id, ?, pi.currency, 'REQUESTED', ?, ?, 1, ?, ?
+           FROM payment_intent pi
+           WHERE pi.id=? AND pi.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
+             AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member member
+               JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
+               WHERE member.payment_intent_id=pi.id AND cancellation.status!='COMPLETED'
+                 AND ('order-cancel:'||cancellation.id||':'||pi.id!=? OR member.required_amount_minor!=?))
+             AND ? <= pi.amount_minor - COALESCE((
+               SELECT SUM(pr.amount_minor) FROM payment_refund pr
+               WHERE pr.payment_intent_id=pi.id
+                 AND pr.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')
+             ), 0)`,
+    )
+    .bind(
+      input.refundId,
+      input.amountMinor,
+      input.reason,
+      input.idempotencyKey,
+      input.now,
+      input.now,
+      input.intentId,
+      input.idempotencyKey,
+      input.amountMinor,
+      input.amountMinor,
+    );
+}
+
 export function extendPaymentRepositoryForRefunds(database: D1Database) {
   const base = extendPaymentRepository(database);
   return {
@@ -785,45 +831,8 @@ export function extendPaymentRepositoryForRefunds(database: D1Database) {
           }
         : null;
     },
-    claimRefundBudget(input: {
-      refundId: string;
-      intentId: string;
-      amountMinor: number;
-      reason: string | null;
-      idempotencyKey: string;
-      now: number;
-    }): Promise<boolean> {
-      return database
-        .prepare(
-          `INSERT INTO payment_refund (
-             id, payment_intent_id, amount_minor, currency, status, reason,
-             idempotency_key, version, created_at, updated_at
-           )
-           SELECT ?, pi.id, ?, pi.currency, 'REQUESTED', ?, ?, 1, ?, ?
-           FROM payment_intent pi
-           WHERE pi.id=? AND pi.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
-             AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member member
-               JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
-               WHERE member.payment_intent_id=pi.id AND cancellation.status!='COMPLETED'
-                 AND ('order-cancel:'||cancellation.id||':'||pi.id!=? OR member.required_amount_minor!=?))
-             AND ? <= pi.amount_minor - COALESCE((
-               SELECT SUM(pr.amount_minor) FROM payment_refund pr
-               WHERE pr.payment_intent_id=pi.id
-                 AND pr.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')
-             ), 0)`,
-        )
-        .bind(
-          input.refundId,
-          input.amountMinor,
-          input.reason,
-          input.idempotencyKey,
-          input.now,
-          input.now,
-          input.intentId,
-          input.idempotencyKey,
-          input.amountMinor,
-          input.amountMinor,
-        )
+    claimRefundBudget(input: RefundBudgetClaim): Promise<boolean> {
+      return refundBudgetStatement(database, input)
         .run()
         .then((result) => (result.meta?.changes ?? 0) === 1);
     },

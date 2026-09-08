@@ -9,6 +9,7 @@ import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { refundAmountMinor, refundResponse } from "../../../../lib/refund-response";
 import { PaymentNavigation } from "../../../../components/admin/payment-navigation";
 import { AdminDetailGrid, AdminLiveRegion } from "../../../../components/admin/admin-page-state";
 
@@ -24,6 +25,7 @@ export default function PaymentDetailPage({
   const [paymentId, setPaymentId] = useState("");
   const [payment, setPayment] = useState<AdminPaymentDetail | null>(null);
   const [amount, setAmount] = useState("");
+  const [unresolved, setUnresolved] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -46,48 +48,53 @@ export default function PaymentDetailPage({
       void load(id);
     });
   }, [load, params]);
-  async function refund(reason: string) {
-    if (!payment) return;
-    const amountMinor = Math.round(Number(amount) * 100);
-    if (
-      !Number.isInteger(amountMinor) ||
-      amountMinor <= 0 ||
-      amountMinor > payment.remainingRefundableMinor
-    ) {
-      setNotice("Enter a positive refund amount no greater than the refundable balance.");
-      return;
-    }
+  async function submitRefund(body: string) {
+    setUnresolved(body);
+    setConfirming(false);
     try {
-      const result = await command.submit(
-        async (idempotencyKey) =>
-          (await (
-            await fetch("/api/admin/payments/refunds", {
-              method: "POST",
-              headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-              body: JSON.stringify({
-                paymentIntentId: payment.paymentIntentId,
-                amountMinor,
-                reason,
-              }),
-            })
-          ).json()) as RpcResult<unknown>,
-      );
+      const result = await command.submit(async (idempotencyKey) => {
+        const response = await fetch("/api/admin/payments/refunds", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+          body,
+        });
+        return refundResponse.parse(await response.json());
+      });
+      setUnresolved(null);
       setNotice(
         result.ok
-          ? "Refund request recorded; provider confirmation remains authoritative."
+          ? "Refund request accepted. Its current provider status appears in refund history."
           : result.error.message,
       );
-      if (result.ok) {
-        setConfirming(false);
-        setAmount("");
-        await load(paymentId);
-      }
+      if (result.ok) setAmount("");
+      await load(paymentId);
     } catch {
-      setNotice("Connection lost. Retry confirmation to safely reuse the refund request.");
+      setNotice(
+        "The response was not confirmed. Retry the saved refund request to recover its result.",
+      );
     }
   }
+  async function refund(reason: string) {
+    if (!payment || unresolved || command.pending) return;
+    const amountMinor = refundAmountMinor(amount);
+    if (amountMinor === null || amountMinor > payment.remainingRefundableMinor) {
+      setConfirming(false);
+      setNotice(
+        "Enter a positive refund amount with at most two decimal places, within the refundable balance.",
+      );
+      return;
+    }
+    await submitRefund(
+      JSON.stringify({
+        paymentIntentId: payment.paymentIntentId,
+        amountMinor,
+        expectedVersion: payment.version,
+        reason,
+      }),
+    );
+  }
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="mx-auto min-w-0 max-w-[1280px] space-y-6 break-words">
       <Link className="text-sm underline" href="/admin/payments/transactions">
         ← Transactions
       </Link>
@@ -122,6 +129,21 @@ export default function PaymentDetailPage({
             action={<StatusBadge>{payment.status}</StatusBadge>}
           />
           <AdminLiveRegion message={notice} />
+          {unresolved ? (
+            <Alert>
+              <AlertTitle>Refund request needs recovery</AlertTitle>
+              <AlertDescription>
+                The saved amount, reason and payment version are retained for this retry.
+                <Button
+                  className="mt-3"
+                  disabled={command.pending}
+                  onClick={() => void submitRefund(unresolved)}
+                >
+                  Retry saved refund
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {payment.reconciliationCases.some((item) => item.status === "OPEN") ? (
             <Alert variant="destructive">
               <AlertTitle>Reconciliation required</AlertTitle>
@@ -253,10 +275,16 @@ export default function PaymentDetailPage({
               </ul>
             )}
           </ListPageSection>
+          {payment.refundUnavailableReason ? (
+            <Alert>
+              <AlertTitle>Refund unavailable</AlertTitle>
+              <AlertDescription>{payment.refundUnavailableReason}</AlertDescription>
+            </Alert>
+          ) : null}
           {payment.allowedActions.includes("REQUEST_REFUND") ? (
             <ListPageSection
               title="Request refund"
-              description="Creates a provider-backed REQUESTED refund; it does not assert financial success."
+              description="Request a refund against the available balance. Refund history shows provider progress."
             >
               <div className="flex flex-wrap gap-2 p-4">
                 <Input
@@ -264,12 +292,13 @@ export default function PaymentDetailPage({
                   aria-label="Refund amount"
                   inputMode="decimal"
                   placeholder={`up to ${money(payment.remainingRefundableMinor, payment.currency)}`}
+                  disabled={command.pending || unresolved !== null}
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                 />
                 <Button
                   variant="destructive"
-                  disabled={command.pending}
+                  disabled={command.pending || unresolved !== null}
                   onClick={() => setConfirming(true)}
                 >
                   Request refund

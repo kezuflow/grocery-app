@@ -2,6 +2,7 @@ import type { RefundRow } from "../infrastructure/d1/payment-repository";
 import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
 
 type RefundRowLike = Omit<RefundRow, "providerRefundReference">;
+import type { PaymentProvider } from "../ports/payment-provider";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { recordFinancialEvent } from "./financial-observability";
 
@@ -154,12 +155,46 @@ export async function requestRefund(
     }
   }
 
+  return submitClaimedRefund(database, provider, {
+    refundId,
+    requestedVersion,
+    paymentIntentId: intent.id,
+    currency: intent.currency,
+    providerCode: attempt.provider,
+    providerReference: attempt.provider_reference,
+    amountMinor: command.amountMinor,
+    idempotencyKey: command.idempotencyKey,
+    requestId: command.requestId,
+    now,
+  });
+}
+
+/** Only the command that created the durable Refund identity may submit it. */
+export async function submitClaimedRefund(
+  database: D1Database,
+  provider: Pick<PaymentProvider, "requestRefund">,
+  input: {
+    refundId: string;
+    requestedVersion: number;
+    paymentIntentId: string;
+    currency: string;
+    providerCode: string;
+    providerReference: string;
+    amountMinor: number;
+    idempotencyKey: string;
+    requestId: string;
+    now: number;
+  },
+): Promise<{ ok: true; value: RefundView; requestId: string } | ReturnType<typeof failure>> {
+  const repository = extendPaymentRepositoryForRefunds(database),
+    { refundId, requestedVersion, now } = input;
+
   try {
     const outcome = await provider.requestRefund({
-      providerReference: attempt.provider_reference,
-      refundProviderIdempotencyKey: command.idempotencyKey,
-      amountMinor: command.amountMinor,
-      currency: intent.currency,
+      providerReference: input.providerReference,
+      refundProviderIdempotencyKey: input.idempotencyKey,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
     });
     if (!outcome.ok) {
       await repository.updateRefundStatusCas({
@@ -172,7 +207,7 @@ export async function requestRefund(
       return failure(
         "PAYMENT_FAILED",
         `Provider rejected the refund: ${outcome.errorCode}`,
-        command.requestId,
+        input.requestId,
       );
     }
     const processing = await repository.updateRefundStatusCas({
@@ -184,12 +219,12 @@ export async function requestRefund(
       now,
     });
     if (processing !== 1) throw new Error("REFUND_STATUS_CONFLICT");
-    const stored = await repository.findRefundByIdempotencyKey(command.idempotencyKey);
+    const stored = await repository.findRefundByIdempotencyKey(input.idempotencyKey);
     if (!stored) throw new Error("REFUND_LOST");
     return {
       ok: true,
       value: toView({ ...stored, status: stored.status as RefundView["state"] }),
-      requestId: command.requestId,
+      requestId: input.requestId,
     };
   } catch (error) {
     // Ambiguous failure: keep the identity and record reconciliation instead of
@@ -202,7 +237,7 @@ export async function requestRefund(
       now: Date.now(),
     });
     await repository.recordReconciliationCase({
-      intentId: intent.id,
+      intentId: input.paymentIntentId,
       category: "REFUND_UNRESOLVED",
       detailsJson: JSON.stringify({
         refundId,
@@ -212,16 +247,16 @@ export async function requestRefund(
     });
     recordFinancialEvent({
       event: "refund_outcome_unresolved",
-      requestId: command.requestId,
+      requestId: input.requestId,
       scope: "refunds.request",
-      provider: attempt.provider,
+      provider: input.providerCode,
       aggregateId: refundId,
       outcomeCode: "REFUND_UNRESOLVED",
     });
     return failure(
       "CONFLICT",
       "Refund request is unresolved; reconciliation required",
-      command.requestId,
+      input.requestId,
     );
   }
 }

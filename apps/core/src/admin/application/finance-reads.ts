@@ -616,7 +616,7 @@ const PAYMENT_SELECT = `
           WHERE r.payment_intent_id = pi.id AND r.status = 'SUCCEEDED') AS refundedMinor,
          (SELECT COALESCE(SUM(r.amount_minor), 0) FROM payment_refund r
           WHERE r.payment_intent_id = pi.id
-            AND r.status IN ('REQUESTED','APPROVED','PROCESSING','SUCCEEDED')) AS reservedRefundMinor
+            AND r.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')) AS reservedRefundMinor
   FROM payment_intent pi LEFT JOIN customer c ON c.id = pi.customer_id
   LEFT JOIN user u ON u.id = c.auth_user_id`;
 
@@ -883,13 +883,38 @@ export async function getAdminPayment(
   const auditRows = await deps.db
     .prepare(
       `SELECT id, occurred_at AS occurredAt, action, reason FROM audit_event
-       WHERE aggregate_type IN ('payment','payment_intent') AND aggregate_id=?
+       WHERE (aggregate_type IN ('payment','payment_intent') AND aggregate_id=?) OR (aggregate_type='payment_refund' AND aggregate_id IN (SELECT id FROM payment_refund WHERE payment_intent_id=?))
        ORDER BY occurred_at DESC, id DESC LIMIT 10`,
     )
-    .bind(request.paymentIntentId)
+    .bind(request.paymentIntentId, request.paymentIntentId)
     .all<{ id: string; occurredAt: number; action: string; reason: string | null }>();
   const remainingRefundableMinor = Math.max(0, row.amountMinor - row.reservedRefundMinor);
   const refundable = ["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(row.status);
+  const activeCancellation = await deps.db
+    .prepare(`SELECT 1 FROM order_cancellation_refund_member member
+    JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
+    WHERE member.payment_intent_id=? AND cancellation.status!='COMPLETED' LIMIT 1`)
+    .bind(request.paymentIntentId)
+    .first();
+  const capturedAttempt = await deps.db
+    .prepare(
+      "SELECT provider,provider_reference FROM payment_attempt WHERE payment_intent_id=? AND status='SUCCEEDED' ORDER BY created_at DESC,id LIMIT 1",
+    )
+    .bind(request.paymentIntentId)
+    .first<{ provider: string; provider_reference: string | null }>();
+  const refundUnavailableReason = !access.value.capabilities.includes("refunds.manage")
+    ? "Global refund permission is required."
+    : !refundable
+      ? "This payment is not in a refundable state."
+      : activeCancellation
+        ? "The coordinated order cancellation owns this payment's refund. Review its progress."
+        : remainingRefundableMinor === 0
+          ? "The payment balance is already refunded or reserved by existing refunds."
+          : !capturedAttempt?.provider_reference
+            ? "Captured provider payment evidence is missing."
+            : !deps.payments?.get(capturedAttempt.provider)
+              ? "The captured payment provider is unavailable."
+              : null;
 
   return {
     ok: true,
@@ -904,15 +929,11 @@ export async function getAdminPayment(
       status: row.status,
       refundedMinor: row.refundedMinor,
       remainingRefundableMinor,
+      refundUnavailableReason,
       version: intent.version,
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(intent.updatedAt).toISOString(),
-      allowedActions:
-        access.value.capabilities.includes("refunds.manage") &&
-        refundable &&
-        remainingRefundableMinor > 0
-          ? ["REQUEST_REFUND"]
-          : [],
+      allowedActions: refundUnavailableReason === null ? ["REQUEST_REFUND"] : [],
       attempts: attempts.results.map((attempt) => ({
         attemptId: attempt.id,
         provider: attempt.provider,

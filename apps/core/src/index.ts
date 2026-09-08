@@ -944,8 +944,9 @@ const paymentDetailSchema = authenticatedRequestSchema.extend({
 });
 
 const refundRequestSchema = authenticatedRequestSchema.extend({
+  expectedVersion: validationSchema.number().int().safe().positive(),
   paymentIntentId: validationSchema.string().trim().min(1).max(200),
-  amountMinor: validationSchema.number().int().min(1),
+  amountMinor: validationSchema.number().int().safe().min(1),
   reason: validationSchema.string().trim().min(1).max(500),
   idempotencyKey: idempotencyKeySchema,
 });
@@ -2200,7 +2201,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return getAdminPaymentQuery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        payments: buildProviderRegistry(this.runtimeConfiguration()),
+      },
       validation.data,
     );
   }
@@ -2209,7 +2214,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return requestAdminRefundCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        payments: buildProviderRegistry(this.runtimeConfiguration()),
+      },
       validation.data,
     );
   }

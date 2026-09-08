@@ -120,8 +120,16 @@ async function seedOrderWithPayment(options: { status?: string } = {}): Promise<
       "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'order', ?, ?, 50000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
     ).bind(paymentIntentId, orderId, customerId, `pi-${crypto.randomUUID()}`, now, now),
     env.DB.prepare(
-      "INSERT INTO payment_attempt (id, customer_id, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, 50000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
-    ).bind(paymentAttemptId, customerId, `pa-${crypto.randomUUID()}`, now, now),
+      "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, provider_reference, amount_minor, currency, status, provider, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, 50000, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?)",
+    ).bind(
+      paymentAttemptId,
+      customerId,
+      paymentIntentId,
+      `provider-${paymentAttemptId}`,
+      `pa-${crypto.randomUUID()}`,
+      now,
+      now,
+    ),
     env.DB.prepare(
       "INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, created_at, order_number, committed_at, version) VALUES (?, ?, (SELECT id FROM delivery_cycle LIMIT 1), 'SCHEDULED', ?, ?, 50000, 'PHP', ?, ?, ?, ?, 1)",
     ).bind(
@@ -470,6 +478,7 @@ describe("finance administration", () => {
       await core.cancelAdminOrder({ ...request, resolution: "Changed resolution" }),
     ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
     const refund = await core.requestAdminRefund({
+      expectedVersion: 1,
       headers: request.headers,
       requestId: crypto.randomUUID(),
       paymentIntentId: fixture.paymentIntentId,
@@ -556,6 +565,7 @@ describe("finance administration", () => {
     const { paymentIntentId } = await seedOrderWithPayment();
 
     const zero = await core.requestAdminRefund({
+      expectedVersion: 1,
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,
@@ -566,6 +576,7 @@ describe("finance administration", () => {
     expect(zero).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
 
     const excessive = await core.requestAdminRefund({
+      expectedVersion: 1,
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,
@@ -577,6 +588,7 @@ describe("finance administration", () => {
 
     const key = `ref-${crypto.randomUUID()}`;
     const created = await core.requestAdminRefund({
+      expectedVersion: 1,
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,
@@ -589,6 +601,7 @@ describe("finance administration", () => {
     expect(created.value).toMatchObject({ status: "REQUESTED", amountMinor: 10000 });
 
     const replay = await core.requestAdminRefund({
+      expectedVersion: 1,
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,
@@ -615,6 +628,7 @@ describe("finance administration", () => {
 
     const [first, second] = await Promise.all([
       core.requestAdminRefund({
+        expectedVersion: 1,
         requestId: crypto.randomUUID(),
         headers: { cookie: manager.cookie },
         paymentIntentId,
@@ -623,6 +637,7 @@ describe("finance administration", () => {
         idempotencyKey: firstKey,
       }),
       core.requestAdminRefund({
+        expectedVersion: 1,
         requestId: crypto.randomUUID(),
         headers: { cookie: manager.cookie },
         paymentIntentId,
@@ -680,6 +695,7 @@ describe("finance administration", () => {
       value: { remainingRefundableMinor: 0, allowedActions: [] },
     });
     const request = await core.requestAdminRefund({
+      expectedVersion: 1,
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,

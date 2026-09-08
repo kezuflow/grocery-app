@@ -473,10 +473,12 @@ export function createPayMongoPaymentProvider(
       return (await getPaymentIntent(providerReference))?.view ?? null;
     },
     async requestRefund(input) {
+      let submitted = false;
       try {
         const intent = await getPaymentIntent(input.providerReference);
         if (!intent?.paymentReference)
           return { ok: false, errorCode: "PAYMONGO_PAYMENT_NOT_CAPTURED" };
+        submitted = true;
         const payload = await api(
           "/v1/refunds",
           {
@@ -495,10 +497,17 @@ export function createPayMongoPaymentProvider(
           input.refundProviderIdempotencyKey,
         );
         const item = resource(payload);
-        return item?.type === "refund"
-          ? { ok: true, providerRefundReference: item.id }
-          : { ok: false, errorCode: "PAYMONGO_INVALID_RESPONSE" };
+        if (item?.type !== "refund") throw new Error("PAYMONGO_INVALID_RESPONSE");
+        return { ok: true, providerRefundReference: item.id };
       } catch (error) {
+        // Once sent, a timeout, server failure or malformed success is not proof
+        // of rejection. Payments must retain the reserved identity for recovery.
+        if (
+          submitted &&
+          !(error instanceof PayMongoApiError && [400, 401, 403, 404, 422].includes(error.status))
+        ) {
+          throw new Error("PAYMONGO_REFUND_OUTCOME_UNKNOWN");
+        }
         return {
           ok: false,
           errorCode: error instanceof PayMongoApiError ? error.code : "PAYMONGO_UNAVAILABLE",

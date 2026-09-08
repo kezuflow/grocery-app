@@ -135,3 +135,71 @@ describe("PayMongo payment provider", () => {
     expect(result).toEqual({ ok: true, providerPlanReference: "plan_1" });
   });
 });
+
+describe("PayMongo refund outcome certainty", () => {
+  const request = {
+    providerReference: "pi_refund",
+    refundProviderIdempotencyKey: "stable-refund-key",
+    amountMinor: 500,
+    currency: "PHP",
+  };
+  function captured() {
+    return Response.json({
+      data: {
+        id: "pi_refund",
+        type: "payment_intent",
+        attributes: {
+          status: "succeeded",
+          amount: 1000,
+          currency: "PHP",
+          payments: [{ id: "pay_refund", attributes: { status: "paid" } }],
+        },
+      },
+    });
+  }
+  it.each(["timeout", "server", "invalid-json", "invalid-resource"])(
+    "keeps %s after submission unknown",
+    async (kind) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(captured());
+      if (kind === "timeout") fetcher.mockRejectedValueOnce(new Error("TEST_NETWORK_LOSS"));
+      if (kind === "server")
+        fetcher.mockResolvedValueOnce(
+          Response.json({ errors: [{ code: "server_error" }] }, { status: 500 }),
+        );
+      if (kind === "invalid-json") fetcher.mockResolvedValueOnce(new Response("unreadable"));
+      if (kind === "invalid-resource") fetcher.mockResolvedValueOnce(Response.json({ data: {} }));
+      await expect(provider(fetcher).requestRefund(request)).rejects.toThrow(
+        "PAYMONGO_REFUND_OUTCOME_UNKNOWN",
+      );
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(String(fetcher.mock.calls[1][0]).endsWith("/v1/refunds")).toBe(true);
+    },
+  );
+  it("distinguishes an explicit rejection from an accepted identity", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(captured())
+      .mockResolvedValueOnce(
+        Response.json({ errors: [{ code: "payment_not_refundable" }] }, { status: 422 }),
+      );
+    expect(await provider(fetcher).requestRefund(request)).toMatchObject({ ok: false });
+    fetcher.mockResolvedValueOnce(captured()).mockResolvedValueOnce(
+      Response.json({
+        data: { id: "ref_accepted", type: "refund", attributes: { status: "pending" } },
+      }),
+    );
+    expect(await provider(fetcher).requestRefund(request)).toEqual({
+      ok: true,
+      providerRefundReference: "ref_accepted",
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toMatchObject({
+      data: {
+        attributes: {
+          payment_id: "pay_refund",
+          amount: 500,
+          metadata: { freshmarkets_refund_key: "stable-refund-key" },
+        },
+      },
+    });
+  });
+});

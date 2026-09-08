@@ -90,6 +90,7 @@ describe("finance BFF routes", () => {
     await requestRefund(
       jsonRequest("https://x/refunds", {
         paymentIntentId: "pi-1",
+        expectedVersion: 1,
         amountMinor: 500,
         reason: "goodwill",
       }),
@@ -102,9 +103,23 @@ describe("finance BFF routes", () => {
     expect(coreMocks.requestAdminRefund.mock.calls[0][0]).toMatchObject({
       paymentIntentId: "pi-1",
       amountMinor: 500,
+      expectedVersion: 1,
     });
     expect(coreMocks.listAdminReconciliationCases.mock.calls[0][0].status).toBe("OPEN");
     expect(coreMocks.resolveAdminReconciliationCase.mock.calls[0][0].caseId).toBe("c1");
+  });
+
+  it("rejects a refund without the displayed payment version before calling Core", async () => {
+    const before = coreMocks.requestAdminRefund.mock.calls.length;
+    const response = await requestRefund(
+      jsonRequest("https://x/refunds", {
+        paymentIntentId: "pi-1",
+        amountMinor: 500,
+        reason: "Quality issue",
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(coreMocks.requestAdminRefund.mock.calls.length).toBe(before);
   });
 
   it("delegates payment overview and detail through typed Core methods", async () => {

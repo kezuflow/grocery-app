@@ -13,6 +13,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { allowedOrderIssueActions } from "./order-issue-policy";
 import { cancelOrder } from "../../orders/application/cancel-order";
+import { requestStaffRefund } from "../../payments/application/request-staff-refund";
 import { requestRefund } from "../../payments/application/request-refund";
 import { cancelSubscription } from "../../membership/application/change-subscription";
 import { claimCommandIdempotency } from "../../idempotency";
@@ -152,187 +153,24 @@ export async function cancelAdminOrder(
   };
 }
 
-/**
- * Request a refund on a payment intent: inserts a REQUESTED payment_refund
- * row with idempotency. Canonical outcomes arrive through the provider seam;
- * admin never asserts success.
- */
+/** Global staff refund admission and execution are owned by Payments. */
 export async function requestAdminRefund(
   deps: FinanceAdministrationDeps,
   request: AdminRefundRequest,
 ): Promise<RpcResult<AdminRefundView>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
   if (!access.ok) return access;
-  const reason = request.reason.trim();
-  if (reason === "") {
-    return failure("VALIDATION_FAILED", "A reason is required", request.requestId);
-  }
-
-  const intent = await deps.db
-    .prepare("SELECT id, amount_minor, currency, status FROM payment_intent WHERE id = ?")
-    .bind(request.paymentIntentId)
-    .first<{ id: string; amount_minor: number; currency: string; status: string }>();
-  if (!intent) return failure("NOT_FOUND", "Payment intent not found", request.requestId);
-  if (intent.status !== "SUCCEEDED" && intent.status !== "PARTIALLY_REFUNDED") {
-    return failure(
-      "VALIDATION_FAILED",
-      "Only succeeded payments can be refunded",
-      request.requestId,
-    );
-  }
-  if (!Number.isInteger(request.amountMinor) || request.amountMinor <= 0) {
-    return failure(
-      "VALIDATION_FAILED",
-      "amountMinor must be a positive integer",
-      request.requestId,
-    );
-  }
-  const refundedRow = await deps.db
-    .prepare(
-      "SELECT COALESCE(SUM(amount_minor), 0) AS refunded FROM payment_refund WHERE payment_intent_id = ? AND status IN ('REQUESTED', 'APPROVED', 'PROCESSING', 'ESCALATED', 'SUCCEEDED')",
-    )
-    .bind(request.paymentIntentId)
-    .first<{ refunded: number }>();
-  const refunded = refundedRow?.refunded ?? 0;
-  if (refunded + request.amountMinor > intent.amount_minor) {
-    return failure("VALIDATION_FAILED", "Refund exceeds the refundable amount", request.requestId);
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    "admin.payments.refund",
-    request.idempotencyKey,
-    {
-      paymentIntentId: request.paymentIntentId,
-      amountMinor: request.amountMinor,
-      reason,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    }
-    if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
-      const existing = await deps.db
-        .prepare(
-          "SELECT id, payment_intent_id, amount_minor, currency, status, reason, created_at FROM payment_refund WHERE id = ?",
-        )
-        .bind(claim.existing.resultReference)
-        .first<{
-          id: string;
-          payment_intent_id: string;
-          amount_minor: number;
-          currency: string;
-          status: string;
-          reason: string | null;
-          created_at: number;
-        }>();
-      if (existing) {
-        return {
-          ok: true,
-          value: {
-            refundId: existing.id,
-            paymentIntentId: existing.payment_intent_id,
-            amountMinor: existing.amount_minor,
-            currency: existing.currency,
-            status: existing.status,
-            reason: existing.reason,
-            createdAt: new Date(existing.created_at).toISOString(),
-          },
-          requestId: request.requestId,
-        };
-      }
-    }
-    return failure("CONFLICT", "The refund command is still processing", request.requestId);
-  }
-
-  const refundId = crypto.randomUUID();
-  try {
-    const refundGuard =
-      "EXISTS (SELECT 1 FROM payment_refund WHERE id=? AND payment_intent_id=? AND status='REQUESTED')";
-    const batchResult = await deps.db.batch([
-      deps.db
-        .prepare(
-          `INSERT INTO payment_refund (id, payment_intent_id, amount_minor, currency, status, reason, idempotency_key, version, created_at, updated_at)
-           SELECT ?, i.id, ?, i.currency, 'REQUESTED', ?, ?, 1, ?, ?
-           FROM payment_intent i
-           WHERE i.id = ? AND i.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
-             AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member member JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id WHERE member.payment_intent_id=i.id AND cancellation.status!='COMPLETED')
-             AND ? <= i.amount_minor - COALESCE((SELECT SUM(amount_minor) FROM payment_refund r WHERE r.payment_intent_id=i.id AND r.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')), 0)`,
-        )
-        .bind(
-          refundId,
-          request.amountMinor,
-          reason,
-          request.idempotencyKey,
-          now,
-          now,
-          request.paymentIntentId,
-          request.amountMinor,
-        ),
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: "PAYMENT.REFUND_REQUESTED",
-          resourceType: "payment_refund",
-          resourceId: refundId,
-          reason,
-          details: { paymentIntentId: request.paymentIntentId, amountMinor: request.amountMinor },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        { clause: refundGuard, binds: [refundId, request.paymentIntentId] },
-      ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${refundGuard}`,
-        )
-        .bind(
-          refundId,
-          now,
-          "admin.payments.refund",
-          request.idempotencyKey,
-          refundId,
-          request.paymentIntentId,
-        ),
-    ]);
-    if ((batchResult[0]?.meta?.changes ?? 0) !== 1) {
-      await idempotencyFailed(deps.db, "admin.payments.refund", request.idempotencyKey);
-      return failure(
-        "VALIDATION_FAILED",
-        "Refund exceeds the refundable amount",
-        request.requestId,
-      );
-    }
-  } catch (error) {
-    log("error", "admin.payments.refund_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, "admin.payments.refund", request.idempotencyKey);
-    return failure("CONFLICT", "The refund could not be recorded", request.requestId);
-  }
-
-  return {
-    ok: true,
-    value: {
-      refundId,
-      paymentIntentId: request.paymentIntentId,
-      amountMinor: request.amountMinor,
-      currency: intent.currency,
-      status: "REQUESTED",
-      reason,
-      createdAt: new Date(now).toISOString(),
-    },
+  if (!deps.payments)
+    return failure("CONFIGURATION_ERROR", "Payment providers are unavailable", request.requestId);
+  return requestStaffRefund(deps.db, deps.payments, {
+    paymentIntentId: request.paymentIntentId,
+    amountMinor: request.amountMinor,
+    reason: request.reason,
+    expectedVersion: request.expectedVersion,
+    idempotencyKey: request.idempotencyKey,
+    actorAuthUserId: access.value.authUserId,
     requestId: request.requestId,
-  };
+  });
 }
 
 /** Resolve an open reconciliation case with a required reason; audited. */

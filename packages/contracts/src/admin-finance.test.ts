@@ -198,6 +198,7 @@ describe("finance contracts", () => {
       amountMinor: 50_000,
       refundedMinor: 10_000,
       remainingRefundableMinor: 40_000,
+      refundUnavailableReason: null,
       currency: "PHP",
       status: "PARTIALLY_REFUNDED",
       version: 3,
