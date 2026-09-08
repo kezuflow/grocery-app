@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { createAuth } from "../../auth/service";
+import { cleanProductMedia } from "./product-media-recovery";
 import { uploadAdminProductMedia } from "./product-media";
 import { productMediaCleanupJob } from "../../scheduling/jobs/product-media-cleanup";
 import { runRegisteredJobs } from "../../scheduling/run-scheduled-jobs";
@@ -257,15 +258,17 @@ describe("Product media durable recovery", () => {
       }),
     ).toMatchObject({ ok: true });
   });
-  it("does not blindly resend an unknown R2 write when observation finds no object", async () => {
+  it("recovers an absent unknown write with create-only retry of the original immutable object", async () => {
     const { request } = await fixture();
-    let writes = 0;
+    const keys: string[] = [];
     const bucket = new Proxy(env.PRODUCT_MEDIA, {
       get(target, property) {
         if (property === "put")
-          return async () => {
-            writes++;
-            throw new Error("Simulated unknown write");
+          return async (...args: Parameters<R2Bucket["put"]>) => {
+            keys.push(args[0]);
+            expect(args[2]?.onlyIf).toEqual({ etagDoesNotMatch: "*" });
+            if (keys.length === 1) throw new Error("Simulated unknown write");
+            return target.put(...args);
           };
         const value = Reflect.get(target, property);
         return typeof value === "function" ? value.bind(target) : value;
@@ -273,20 +276,26 @@ describe("Product media durable recovery", () => {
     });
     const deps = { db: env.DB, auth: createAuth(env), bucket };
     expect(await uploadAdminProductMedia(deps, request)).toMatchObject({ ok: false });
-    expect(await uploadAdminProductMedia(deps, request)).toMatchObject({ ok: false });
-    expect(writes).toBe(1);
+    expect(await uploadAdminProductMedia(deps, request)).toMatchObject({ ok: true });
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
     expect(
       await env.DB.prepare("SELECT status FROM product_media_upload WHERE idempotency_key=?")
         .bind(request.idempotencyKey)
         .first(),
-    ).toEqual({ status: "UNKNOWN" });
+    ).toEqual({ status: "ATTACHED" });
+    expect(
+      await env.DB.prepare("SELECT count(*) count FROM product_media WHERE object_key=?")
+        .bind(keys[0])
+        .first(),
+    ).toEqual({ count: 1 });
     expect(
       await env.DB.prepare(
         "SELECT status FROM idempotency_records WHERE scope='admin.catalog.product-media.upload' AND idempotency_key=?",
       )
         .bind(request.idempotencyKey)
         .first(),
-    ).toEqual({ status: "PROCESSING" });
+    ).toEqual({ status: "SUCCEEDED" });
   });
   it("serves only the current published image anonymously and projects its versioned URL", async () => {
     const { request } = await fixture();
@@ -521,6 +530,15 @@ describe("Product media durable recovery", () => {
         .bind(request.idempotencyKey)
         .first(),
     ).toEqual({ count: 0 });
+    expect(await cleanProductMedia(env.DB, env.PRODUCT_MEDIA, Date.now() + 86400001)).toBe(1);
+    const expired = await env.DB.prepare(
+      "SELECT status,object_key FROM product_media_upload WHERE idempotency_key=?",
+    )
+      .bind(request.idempotencyKey)
+      .first<{ status: string; object_key: string }>();
+    expect(expired?.status).toBe("ABANDONED");
+    if (!expired) throw new Error("Missing upload evidence");
+    expect(await env.PRODUCT_MEDIA.head(expired.object_key)).toBeNull();
   });
   it("returns the original upload receipt after later metadata edits", async () => {
     const { request } = await fixture();

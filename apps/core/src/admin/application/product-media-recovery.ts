@@ -112,26 +112,29 @@ export async function storeMediaUpload(
     } catch {
       return false;
     }
-    if (
-      !stored ||
-      stored.customMetadata?.contentDigest !== upload.content_digest ||
-      stored.size !== bytes.byteLength
-    )
-      return false;
-    const claimed = await db
-      .prepare(
-        "UPDATE product_media_upload SET status='STORED',lease_token=NULL,lease_expires_at=NULL,version=version+1,updated_at=? WHERE id=? AND version=? AND status IN ('PENDING','UNKNOWN','STORED')",
+    if (stored) {
+      if (
+        stored.customMetadata?.contentDigest !== upload.content_digest ||
+        stored.size !== bytes.byteLength
       )
-      .bind(now, upload.id, upload.version)
-      .run();
-    return claimed.meta.changes === 1;
+        return false;
+      const claimed = await db
+        .prepare(
+          "UPDATE product_media_upload SET status='STORED',lease_token=NULL,lease_expires_at=NULL,version=version+1,updated_at=? WHERE id=? AND version=? AND status IN ('PENDING','UNKNOWN','STORED')",
+        )
+        .bind(now, upload.id, upload.version)
+        .run();
+      return claimed.meta.changes === 1;
+    }
+    // An absent observation is not proof that the previous write failed. A retry
+    // uses the same immutable bytes/key and an atomic create-only precondition.
   }
   const lease = crypto.randomUUID();
   const claimed = await db
     .prepare(
-      "UPDATE product_media_upload SET lease_token=?,lease_expires_at=?,version=version+1,updated_at=? WHERE id=? AND version=? AND status='PENDING' AND lease_token IS NULL",
+      "UPDATE product_media_upload SET status='PENDING',lease_token=?,lease_expires_at=?,version=version+1,updated_at=? WHERE id=? AND version=? AND status IN ('PENDING','UNKNOWN','STORED') AND (lease_token IS NULL OR lease_expires_at<=?)",
     )
-    .bind(lease, now + 120000, now, upload.id, upload.version)
+    .bind(lease, now + 120000, now, upload.id, upload.version, now)
     .run();
   if (claimed.meta.changes !== 1) return false;
   let stored = false;
@@ -173,13 +176,57 @@ export function mediaCleanupIntent(
 }
 
 /** Delete is idempotent. Metadata must already be inactive, and a live attachment blocks
- * every cleanup attempt. Exhaustion remains observable for explicit operator redrive. */
+ * every cleanup attempt. Exhaustion remains observable for internal diagnostics. */
 export async function cleanProductMedia(
   db: D1Database,
   bucket: R2Bucket,
   now = Date.now(),
   limit = 20,
 ): Promise<number> {
+  const uncertain = await db
+    .prepare(`SELECT id,object_key,content_digest,version FROM product_media_upload
+    WHERE status IN ('PENDING','UNKNOWN') AND updated_at<? AND (lease_token IS NULL OR lease_expires_at<=?)
+    ORDER BY updated_at,id LIMIT 20`)
+    .bind(now - 86400000, now)
+    .all<{ id: string; object_key: string; content_digest: string; version: number }>();
+  for (const upload of uncertain.results) {
+    let confirmed = false;
+    try {
+      const object = await bucket.head(upload.object_key);
+      confirmed = object?.customMetadata?.contentDigest === upload.content_digest;
+    } catch {
+      // Observation failure is not absence. Rotate bounded scans without retrying a write.
+    }
+    await db
+      .prepare(`UPDATE product_media_upload SET status=?,lease_token=NULL,lease_expires_at=NULL,version=version+1,updated_at=?
+      WHERE id=? AND version=? AND status IN ('PENDING','UNKNOWN')`)
+      .bind(confirmed ? "STORED" : "UNKNOWN", now, upload.id, upload.version)
+      .run();
+  }
+  // A browser may leave after storage or lose permission before attachment.
+  // Expire confirmed, unclaimed objects internally; uncertainty is retained for
+  // observation instead of treating a missing response as permission to delete.
+  const abandoned = await db
+    .prepare(`SELECT id,product_id,object_key,version FROM product_media_upload
+    WHERE status='STORED' AND lease_token IS NULL AND updated_at<? ORDER BY updated_at,id LIMIT 20`)
+    .bind(now - 86400000)
+    .all<{ id: string; product_id: string; object_key: string; version: number }>();
+  for (const upload of abandoned.results) {
+    try {
+      await db.batch([
+        db
+          .prepare(
+            "UPDATE product_media_upload SET status='ABANDONED',version=version+1,updated_at=? WHERE id=? AND version=? AND status='STORED' AND lease_token IS NULL",
+          )
+          .bind(now, upload.id, upload.version),
+        requireMediaEffect(db),
+        mediaCleanupIntent(db, upload.product_id, upload.object_key, now),
+        requireMediaEffect(db),
+      ]);
+    } catch {
+      // A concurrent attachment wins or the entire expiration rolls back.
+    }
+  }
   const rows = await db
     .prepare(`SELECT id,object_key,version,attempt_count FROM product_media_cleanup
     WHERE (status='PENDING' AND available_at<=?) OR (status='PROCESSING' AND lease_expires_at<=?) ORDER BY available_at,id LIMIT ?`)
