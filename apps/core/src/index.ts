@@ -266,6 +266,7 @@ import { getAdminSkuPrices as getAdminSkuPricesQuery } from "./admin/application
 import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
 import { createPaymentsRpc } from "./entrypoint/payments-rpc";
 import { createOrdersRpc } from "./entrypoint/orders-rpc";
+import { createInventoryTransfersRpc } from "./entrypoint/inventory-transfers-rpc";
 import { createOperationsRpc } from "./entrypoint/operations-rpc";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
 import { getAnalyticsOverview } from "./analytics/application/get-analytics-overview";
@@ -1020,6 +1021,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly checkoutRpc = createCheckoutRpc(this.rpcContext);
   private readonly paymentsRpc = createPaymentsRpc(this.rpcContext);
   private readonly ordersRpc = createOrdersRpc(this.rpcContext);
+  private readonly inventoryTransfersRpc = createInventoryTransfersRpc(this.rpcContext);
   private readonly operationsRpc = createOperationsRpc(this.rpcContext);
 
   async getAdminOverview(input: import("@freshmarkets/contracts").AdminOverviewRequest) {
@@ -2948,6 +2950,48 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   ) {
     return this.paymentsRpc.createAmendmentPaymentIntent(input);
   }
+  async listInventoryTransfers(
+    input: import("@freshmarkets/contracts").InventoryTransferListRequest,
+  ) {
+    return this.inventoryTransfersRpc.listInventoryTransfers(input);
+  }
+
+  async getInventoryTransfer(
+    input: import("@freshmarkets/contracts").InventoryTransferReadRequest,
+  ) {
+    return this.inventoryTransfersRpc.getInventoryTransfer(input);
+  }
+
+  async getInventoryTransferOptions(
+    input: import("@freshmarkets/contracts").InventoryTransferOptionsRequest,
+  ) {
+    return this.inventoryTransfersRpc.getInventoryTransferOptions(input);
+  }
+
+  async createInventoryTransfer(
+    input: import("@freshmarkets/contracts").CreateInventoryTransferRequest,
+  ) {
+    return this.inventoryTransfersRpc.createInventoryTransfer(input);
+  }
+
+  async dispatchInventoryTransfer(
+    input: import("@freshmarkets/contracts").InventoryTransferCommandRequest,
+  ) {
+    return this.inventoryTransfersRpc.dispatchInventoryTransfer(input);
+  }
+
+  async receiveInventoryTransfer(
+    input: import("@freshmarkets/contracts").ReceiveInventoryTransferRequest,
+  ) {
+    return this.inventoryTransfersRpc.receiveInventoryTransfer(input);
+  }
+
+  async cancelInventoryTransfer(
+    input: import("@freshmarkets/contracts").InventoryTransferCommandRequest,
+  ) {
+    return this.inventoryTransfersRpc.cancelInventoryTransfer(input);
+  }
+
   async adjustInventory(input: import("@freshmarkets/contracts").InventoryAdjustmentRequest) {
     return this.operationsRpc.adjustInventory(input);
   }

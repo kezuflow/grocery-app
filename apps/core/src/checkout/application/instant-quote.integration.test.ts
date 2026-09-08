@@ -1010,3 +1010,106 @@ it("uses a saved Admin audience when producing a real Instant quote", async () =
     }),
   ).toMatchObject({ ok: true });
 });
+
+it("receives warehouse stock concurrently with an Instant quote without losing stock or holds", async () => {
+  await configureInstant();
+  const heldBefore = await env.DB.prepare(
+    "SELECT COALESCE(SUM(quantity),0) quantity FROM checkout_inventory_holds WHERE location_id=? AND inventory_pool_id='pool-red-onion' AND status='HELD'",
+  )
+    .bind(LOCATION)
+    .first<{ quantity: number }>();
+  const priorHeld = heldBefore?.quantity ?? 0;
+  const basket = await seedBasket({ onHand: priorHeld + 2500, member: false });
+  const staff = await locationManager(),
+    warehouse = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('transfers.read','transfers.manage','inventory.adjust')",
+    ).bind(staff.id),
+    env.DB.prepare(
+      "INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at,purpose) VALUES (?,'market-metro-cebu',?,'Concurrent warehouse','FULFILLMENT_CENTER',10.3,123.9,'active',0,0,'CENTRAL_WAREHOUSE')",
+    ).bind(warehouse, warehouse),
+    env.DB.prepare(
+      "INSERT INTO location_capability(location_id,capability,enabled) VALUES (?,'INVENTORY',1),(?,'RECEIVING',1)",
+    ).bind(warehouse, warehouse),
+  ]);
+  const meta = {
+    headers: staff.headers,
+    requestId: crypto.randomUUID(),
+    reason: "Concurrent receipt acceptance",
+  };
+  expect(
+    await exports.default.adjustInventory({
+      ...meta,
+      locationId: warehouse,
+      inventoryPoolId: "pool-red-onion",
+      delta: 2000,
+      expectedVersion: 0,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  const draft = await exports.default.createInventoryTransfer({
+    ...meta,
+    sourceLocationId: warehouse,
+    destinationLocationId: LOCATION,
+    lines: [{ inventoryPoolId: "pool-red-onion", quantityBase: 2000 }],
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (!draft.ok) throw new Error(draft.error.message);
+  expect(
+    await exports.default.dispatchInventoryTransfer({
+      ...meta,
+      transferId: draft.value.transferId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  const details = await exports.default.getInventoryTransfer({
+    ...meta,
+    transferId: draft.value.transferId,
+  });
+  if (!details.ok || !details.value.lines[0]) throw new Error("Missing transfer line");
+  const [quoted, received] = await Promise.all([
+    createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    ),
+    exports.default.receiveInventoryTransfer({
+      ...meta,
+      transferId: draft.value.transferId,
+      expectedVersion: 2,
+      idempotencyKey: crypto.randomUUID(),
+      lines: [{ lineId: details.value.lines[0].lineId, acceptedBase: 2000 }],
+    }),
+  ]);
+  if (!quoted.ok) throw new Error(quoted.error.message);
+  expect(received).toMatchObject({ ok: true, value: { status: "RECEIVED" } });
+  expect(
+    await env.DB.prepare(
+      "SELECT on_hand,reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION)
+      .first(),
+  ).toEqual({ on_hand: priorHeld + 4500, reserved: 0 });
+  expect(
+    await env.DB.prepare(
+      "SELECT SUM(quantity) held FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+    )
+      .bind(quoted.value.quoteId)
+      .first(),
+  ).toEqual({ held: 2500 });
+  const current = await env.DB.prepare("SELECT version FROM checkout_quote WHERE id=?")
+    .bind(quoted.value.quoteId)
+    .first<{ version: number }>();
+  if (!current) throw new Error("Missing quote version");
+  expect(
+    await abandonCheckoutAttempt(env.DB, {
+      customerId: basket.customerId,
+      quoteId: quoted.value.quoteId,
+      expectedVersion: current.version,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+});

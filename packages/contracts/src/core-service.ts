@@ -1,3 +1,4 @@
+import type { InventoryTransfersService } from "./inventory-transfers";
 import type { PromotionMediaService } from "./promotion-media";
 import type { RpcResult } from "./common";
 import type { CustomerProfileService } from "./customer-profile";
@@ -67,6 +68,7 @@ export interface ImplementedCoreService
     OrdersService,
     OperationsReadService,
     OperationsService,
+    InventoryTransfersService,
     AdminFoundationService,
     AdminLocationsService,
     LocationScheduleService,
@@ -313,6 +315,13 @@ export const coreServiceMethodNames = [
   "listCustomerOrderIssues",
   "createOrderAmendment",
   "createAmendmentPaymentIntent",
+  "listInventoryTransfers",
+  "getInventoryTransfer",
+  "getInventoryTransferOptions",
+  "createInventoryTransfer",
+  "dispatchInventoryTransfer",
+  "receiveInventoryTransfer",
+  "cancelInventoryTransfer",
   "adjustInventory",
   "createProcurementRequirement",
   "receiveProcurement",

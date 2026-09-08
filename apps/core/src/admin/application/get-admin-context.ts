@@ -128,6 +128,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["catalog.manage"],
   },
   {
+    code: "transfers",
+    label: "Warehouse transfers",
+    href: "/admin/transfers",
+    section: "operations",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["transfers.read"],
+  },
+  {
     code: "inventory",
     label: "Inventory",
     href: "/admin/inventory",
@@ -325,7 +334,10 @@ const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "delivery",
 ]);
 
-const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set(["settings"]);
+const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "settings",
+  "transfers",
+]);
 
 function navigationScopeKindsFor(code: string): ReadonlyArray<AdminNavigationScopeKind> {
   if (ALL_SCOPE_NAVIGATION_CODES.has(code)) return ["GLOBAL", "MARKET", "LOCATION"];

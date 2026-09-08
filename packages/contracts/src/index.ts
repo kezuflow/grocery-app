@@ -30,3 +30,5 @@ export type * from "./operations";
 export * from "./admin-delivery-cycles";
 
 export * from "./promotion-media";
+
+export * from "./inventory-transfers";

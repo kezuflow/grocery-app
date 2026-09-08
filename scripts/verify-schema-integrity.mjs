@@ -168,7 +168,7 @@ const beforeCampaignMedia = database
   });
 apply(
   database,
-  migrations.filter((name) => name >= "0086_"),
+  migrations.filter((name) => name >= "0086_" && name < "0087_"),
 );
 for (const snapshot of beforeCampaignMedia)
   assert.deepEqual(
@@ -185,6 +185,37 @@ for (const snapshot of beforePreferences)
     snapshot.rows,
     `${snapshot.name}: preferences upgrade preserves every retained column and row`,
   );
+const beforeTransfers = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => {
+    const query = `SELECT rowid,* FROM ${quote(name)} ORDER BY rowid`;
+    return { name, query, rows: database.prepare(query).all() };
+  });
+apply(
+  database,
+  migrations.filter((name) => name >= "0087_"),
+);
+for (const snapshot of beforeTransfers) {
+  const rows = database.prepare(snapshot.query).all();
+  assert.deepEqual(
+    snapshot.name === "permission"
+      ? rows.filter((row) => !["transfers.read", "transfers.manage"].includes(row.code))
+      : rows,
+    snapshot.rows,
+    `${snapshot.name}: transfer upgrade preserves existing rows and grants`,
+  );
+}
+assert.deepEqual(
+  database
+    .prepare("SELECT code FROM permission WHERE code LIKE 'transfers.%' ORDER BY code")
+    .all()
+    .map((row) => row.code),
+  ["transfers.manage", "transfers.read"],
+);
+for (const table of ["inventory_transfer", "inventory_transfer_line", "inventory_transfer_receipt"])
+  assert.equal(database.prepare(`SELECT count(*) count FROM ${quote(table)}`).get().count, 0);
+assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 assert.equal(
   database
     .prepare(
@@ -261,7 +292,7 @@ assert.throws(
 assert.deepEqual(
   database
     .prepare(
-      "SELECT rowid,* FROM permission WHERE code NOT IN ('prices.read','prices.manage','locations.read','locations.manage') ORDER BY rowid",
+      "SELECT rowid,* FROM permission WHERE code NOT IN ('prices.read','prices.manage','locations.read','locations.manage','transfers.read','transfers.manage') ORDER BY rowid",
     )
     .all(),
   permissionsBeforePricing,

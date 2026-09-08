@@ -19,6 +19,8 @@ export const adminCapabilityCodes = [
   "locations.manage",
   "inventory.read",
   "inventory.adjust",
+  "transfers.read",
+  "transfers.manage",
   "promotions.read",
   "promotions.manage",
   "memberships.read",

@@ -40,3 +40,5 @@ export * from "./admin-products";
 export * from "./admin-promotions";
 
 export * from "./promotion-media";
+
+export * from "./inventory-transfers";
