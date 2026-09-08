@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { acceptCustomerInvitation } from "../../customer/invitations";
+import { updateMyCustomerProfile } from "../../customer/profile";
 import { createAuth } from "../../auth/service";
 import { inviteCustomer, revokeCustomerInvitation } from "./customer-invitations";
 import { changeCustomerAccess } from "./change-customer-access";
@@ -10,6 +11,202 @@ import { revokeCustomerSessions } from "./revoke-customer-sessions";
 import { applyPrivacyAction, requestCustomerClosure } from "./customer-commands";
 
 const core = exports.default as unknown as CoreServiceBinding;
+
+describe("customer profile preferences", () => {
+  async function profile() {
+    const account = await signUp();
+    const request = { headers: { cookie: account.cookie }, requestId: crypto.randomUUID() };
+    const initial = await core.getMyCustomerProfile(request);
+    if (!initial.ok) throw new Error("Profile read failed");
+    return {
+      account,
+      initial: initial.value,
+      request: {
+        ...request,
+        preferredLanguage: "Cebuano",
+        promotionalEmails: true,
+        expectedVersion: initial.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    };
+  }
+  it("provisions on read and preserves exact replay after later edits", async () => {
+    const { initial, request } = await profile();
+    expect(initial).toMatchObject({ preferredLanguage: null, promotionalEmails: false });
+    const saved = await core.updateMyCustomerProfile(request);
+    expect(saved).toMatchObject({
+      ok: true,
+      value: {
+        preferredLanguage: "Cebuano",
+        promotionalEmails: true,
+        version: initial.version + 1,
+      },
+    });
+    expect(
+      await core.updateMyCustomerProfile({
+        ...request,
+        preferredLanguage: null,
+        promotionalEmails: false,
+        expectedVersion: initial.version + 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await core.updateMyCustomerProfile(request)).toEqual(saved);
+    expect(
+      await core.updateMyCustomerProfile({ ...request, promotionalEmails: false }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(await core.getMyCustomerProfile(request)).toMatchObject({
+      ok: true,
+      value: { preferredLanguage: null, promotionalEmails: false, version: initial.version + 2 },
+    });
+  });
+  it("rejects unprovisioned writes without creating a customer", async () => {
+    const account = await signUp();
+    expect(
+      await core.updateMyCustomerProfile({
+        headers: { cookie: account.cookie },
+        requestId: "unprovisioned",
+        preferredLanguage: null,
+        promotionalEmails: false,
+        expectedVersion: 1,
+        idempotencyKey: "unprovisioned",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM customer WHERE auth_user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+  it("allows only one competing version and isolates different customer identities", async () => {
+    const { initial, request } = await profile();
+    const results = await Promise.all([
+      core.updateMyCustomerProfile(request),
+      core.updateMyCustomerProfile({
+        ...request,
+        preferredLanguage: "English",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const other = await profile();
+    expect(
+      await core.updateMyCustomerProfile({
+        ...request,
+        headers: other.request.headers,
+        expectedVersion: other.initial.version,
+      }),
+    ).toMatchObject({ ok: true, value: { customerId: other.initial.customerId } });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.PREFERENCES_UPDATED'",
+      )
+        .bind(initial.customerId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it.each(["profile", "audit", "receipt"])(
+    "rolls back an ignored %s effect and permits the same retry",
+    async (effect) => {
+      const { initial, request } = await profile();
+      const trigger =
+        effect === "profile"
+          ? "BEFORE UPDATE OF preferred_language ON customer"
+          : effect === "audit"
+            ? "BEFORE INSERT ON audit_event WHEN NEW.action='CUSTOMER.PREFERENCES_UPDATED'"
+            : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='customer.profile.update' AND NEW.status='SUCCEEDED'";
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_profile_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END;`,
+      );
+      expect(await core.updateMyCustomerProfile(request)).toMatchObject({ ok: false });
+      expect(await core.getMyCustomerProfile(request)).toMatchObject({ ok: true, value: initial });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE scope='customer.profile.update' AND idempotency_key LIKE ?",
+        )
+          .bind(`%:${request.idempotencyKey}`)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM audit_event WHERE action='CUSTOMER.PREFERENCES_UPDATED' AND aggregate_id=?",
+        )
+          .bind(initial.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      await env.DB.exec("DROP TRIGGER ignore_profile_effect");
+      expect(await core.updateMyCustomerProfile(request)).toMatchObject({ ok: true });
+    },
+  );
+  it("rejects disabled accounts, stale versions and invalid bounds", async () => {
+    const { account, request } = await profile();
+    expect(await core.updateMyCustomerProfile({ ...request, headers: {} })).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED" },
+    });
+    expect(
+      await core.updateMyCustomerProfile({ ...request, preferredLanguage: "a".repeat(81) }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await core.updateMyCustomerProfile({
+        ...request,
+        expectedVersion: request.expectedVersion + 1,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+      .bind(account.userId)
+      .run();
+    expect(await core.updateMyCustomerProfile(request)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+  });
+  it("rechecks access when disablement wins before the profile batch", async () => {
+    const { account, initial, request } = await profile();
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+              .bind(account.userId)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { headers, requestId, ...command } = request;
+    expect(
+      await updateMyCustomerProfile(
+        {
+          database,
+          session: async (input) =>
+            (await createAuth(env).api.getSession({ headers: new Headers(input.headers) }))?.user ??
+            null,
+          now: Date.now,
+        },
+        { headers, requestId },
+        command,
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT preferred_language,promotional_emails,version FROM customer WHERE id=?",
+      )
+        .bind(initial.customerId)
+        .first(),
+    ).toEqual({ preferred_language: null, promotional_emails: 0, version: initial.version });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM idempotency_records WHERE scope='customer.profile.update' AND idempotency_key=?",
+      )
+        .bind(`${account.userId}:${request.idempotencyKey}`)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+});
 
 describe("verified customer invitation acceptance", () => {
   it("acceptance and revocation cannot both win", async () => {

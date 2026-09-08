@@ -66,6 +66,8 @@ Better Auth's authentication users, credentials/linked accounts, sessions, email
 
 A global commerce profile linked to one Better Auth user ID. A customer is not duplicated by market or location. It owns preferences and saved `CustomerAddress` records and participates in carts and orders. Profile updates are limited to preferred language and notification preferences; staff support notes are append-only. Closure never implies irreversible erasure without an approved retention policy.
 
+Customer notification preferences may control promotional notifications only. Order, payment, delivery, cancellation and refund transaction updates are always sent; changing promotional preferences cannot suppress these operational consequences.
+
 ### CustomerAddress
 
 A customer-owned saved delivery address. Recipient name and phone are address-owned

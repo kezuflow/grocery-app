@@ -1,4 +1,5 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
+import { readCustomerProfile, updateMyCustomerProfile } from "./customer/profile";
 import { revokeCustomerInvitation } from "./admin/application/customer-invitations";
 import {
   getInitialAdministratorSetup,
@@ -1508,6 +1509,34 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         now: () => this.context.now(),
       },
       validation.data,
+    );
+  }
+  async getMyCustomerProfile(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.context.resolveAuthenticatedCustomer(validation.data);
+    if (!customer.ok) return customer;
+    const value = await readCustomerProfile(this.env.DB, customer.value.customerId);
+    return value
+      ? { ok: true as const, value, requestId: input.requestId }
+      : fail("NOT_FOUND", "Customer profile not found", input.requestId);
+  }
+  async updateMyCustomerProfile(
+    input: import("@freshmarkets/contracts").UpdateCustomerProfileRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const { headers: _headers, requestId: _requestId, ...command } = input;
+    return updateMyCustomerProfile(
+      {
+        database: this.env.DB,
+        session: (request) => this.context.session(request),
+        now: () => this.context.now(),
+      },
+      validation.data,
+      command,
     );
   }
   async acceptCustomerInvitation(

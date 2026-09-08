@@ -78,6 +78,8 @@ address-owned.
 
 ## Customers and Addresses
 
+Migration 0079 adds nullable `customer.preferred_language` and boolean `customer.promotional_emails` (integer 0/1). Existing rows retain all earlier values and receive no language preference and no promotional opt-in. Core owns preference eligibility; Customer version, required audit and immutable command receipt commit with each preference update. Transaction update delivery has no customer mute column. No Better Auth identity or address contact field is duplicated.
+
 - `customer_addresses(id PK, customer_id FK, label, recipient, phone, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider NULL, geocode_reference NULL, confirmation_source GEOCODER|USER_PIN|DEVICE_LOCATION NULL, user_confirmed_at NULL, delivery_instructions_json, service_area_id FK NULL, delivery_zone_id FK NULL, resolution_version, serviceable NULL, serviceability_reason NULL, notes, address_json compatibility NULL, status, version, created_at, updated_at)`
 - `customer_invitations(id PK, email_normalized, status PENDING|ACCEPTED|EXPIRED|REVOKED, invited_by_staff_id FK, expires_at, accepted_customer_id FK NULL, version, idempotency_key UNIQUE, created_at, updated_at)`
 - `privacy_requests(id PK, customer_id FK, request_type ACCESS|CORRECTION|CLOSURE|ANONYMIZATION, status SUBMITTED|VERIFYING|APPROVED|REJECTED|PROCESSING|COMPLETED|ESCALATED, requested_at, verified_at NULL, resolved_at NULL, assigned_staff_id FK NULL, reason NULL, resolution_json NULL, version, idempotency_key UNIQUE, created_at, updated_at)`

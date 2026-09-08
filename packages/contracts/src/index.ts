@@ -1,4 +1,5 @@
 export * from "./common";
+export * from "./customer-profile";
 export * from "./admin-foundation";
 export * from "./admin-locations";
 export * from "./admin-serviceability";

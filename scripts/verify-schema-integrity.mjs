@@ -132,7 +132,7 @@ const beforeInitialSetup = database
   }));
 apply(
   database,
-  migrations.filter((name) => name >= "0078_"),
+  migrations.filter((name) => name >= "0078_" && name < "0079_"),
 );
 for (const snapshot of beforeInitialSetup)
   assert.deepEqual(
@@ -143,6 +143,43 @@ for (const snapshot of beforeInitialSetup)
 assert.equal(
   database.prepare("SELECT COUNT(*) count FROM initial_administrator_setup").get().count,
   0,
+);
+const beforePreferences = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => {
+    const columns = database
+      .prepare(`PRAGMA table_info(${quote(name)})`)
+      .all()
+      .map((column) => column.name);
+    const query = `SELECT rowid,${columns.map(quote).join(",")} FROM ${quote(name)} ORDER BY rowid`;
+    return { name, query, rows: database.prepare(query).all() };
+  });
+apply(
+  database,
+  migrations.filter((name) => name >= "0079_"),
+);
+for (const snapshot of beforePreferences)
+  assert.deepEqual(
+    database.prepare(snapshot.query).all(),
+    snapshot.rows,
+    `${snapshot.name}: preferences upgrade preserves every retained column and row`,
+  );
+assert.equal(
+  database
+    .prepare(
+      "SELECT count(*) count FROM customer WHERE preferred_language IS NOT NULL OR promotional_emails!=0",
+    )
+    .get().count,
+  0,
+);
+assert.throws(
+  () => database.exec("UPDATE customer SET promotional_emails=2"),
+  /CHECK constraint failed/,
+);
+assert.throws(
+  () => database.exec("UPDATE customer SET preferred_language=''"),
+  /CHECK constraint failed/,
 );
 assert.throws(
   () =>

@@ -225,6 +225,9 @@ export default function AccountPage() {
         <Link href="/staff-invitation" className="font-medium underline">
           Staff invitation
         </Link>
+        <Link href="/account/profile" className="font-medium underline">
+          Your preferences
+        </Link>
         <Link href="/account/addresses" className="font-medium underline">
           Delivery addresses
         </Link>

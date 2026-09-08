@@ -10,6 +10,8 @@ Global owns catalog definition and exact-location price writes. Add `prices.read
 
 Customer-owned profile fields are preferred language and notification preferences; staff support annotations are append-only, author-attributed notes, not authentication display name/email or delivery recipient/phone. Those identity/contact facts stay with Better Auth and CustomerAddress respectively. Profile commands use explicit bounded fields and versions rather than arbitrary patches. Closure intake records requester, verification, reason, status, responsible staff and resolution. Irreversible anonymization cannot complete without an owner-approved field/retention policy; no duration, legal exemption, or deletion eligibility is inferred. Existing paid records and recovery remain available to authorized operations after access disablement.
 
+Owner clarification, 2026-09-08: Order, payment, delivery, cancellation and refund transaction updates are mandatory and cannot be muted through customer preferences. Promotional notifications are optional. This decision does not itself establish delivery implementation or provider acceptance.
+
 ## Physical and Scheduled supply
 
 An inventory-only central warehouse receives and stores goods. It has no customer dispatch eligibility and does not block selling for missing packing/courier settings. Locations carry versioned structured address, one coordinate pair, capability flags, operating hours/closures, and factual pickup profile where dispatch is enabled.

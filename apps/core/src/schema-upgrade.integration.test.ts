@@ -90,6 +90,11 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
   const retainedLedger = (
     await env.DB.prepare("SELECT * FROM inventory_ledger_entries ORDER BY id").all()
   ).results;
+  const retainedCustomers = (
+    await env.DB.prepare(
+      "SELECT id,auth_user_id,principal_id,status,version,created_at,updated_at FROM customer ORDER BY id",
+    ).all()
+  ).results;
   await applyD1Migrations(
     env.DB,
     migrations.filter((candidate) => candidate.name > migration.name),
@@ -122,4 +127,16 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
     await env.DB.prepare("SELECT COUNT(*) count FROM initial_administrator_setup").first(),
   ).toEqual({ count: 0 });
   expect((await env.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT id,auth_user_id,principal_id,status,version,created_at,updated_at FROM customer ORDER BY id",
+      ).all()
+    ).results,
+  ).toEqual(retainedCustomers);
+  expect(
+    await env.DB.prepare(
+      "SELECT count(*) AS count FROM customer WHERE preferred_language IS NOT NULL OR promotional_emails!=0",
+    ).first(),
+  ).toEqual({ count: 0 });
 }, 30_000);

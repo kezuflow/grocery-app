@@ -1,4 +1,5 @@
 import type { RpcResult } from "./common";
+import type { CustomerProfileService } from "./customer-profile";
 import type {
   AddressReverseRequest,
   AddressSearchCandidate,
@@ -68,6 +69,7 @@ export interface ImplementedCoreService
     AdminStaffAccessService,
     InitialAdministratorService,
     AdminCustomerService,
+    CustomerProfileService,
     AdminPrivacyService,
     AdminPromotionsService,
     AdminCatalogService,
@@ -153,6 +155,8 @@ export const coreServiceMethodNames = [
   "listCapabilityDefinitions",
   "listAdminCustomers",
   "getAdminCustomer",
+  "getMyCustomerProfile",
+  "updateMyCustomerProfile",
   "listCustomerInvitations",
   "inviteCustomer",
   "getMyCustomerInvitation",
