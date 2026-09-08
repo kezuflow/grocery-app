@@ -3,6 +3,8 @@ import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
+import { z } from "@freshmarkets/validation";
+import { customerClosureRequestTypes } from "@freshmarkets/contracts";
 
 /** Open an auditable privacy/closure request. Transport only. */
 async function POSTHandler(
@@ -10,8 +12,8 @@ async function POSTHandler(
   context: { params: Promise<{ "customer-id": string }> },
 ) {
   const { "customer-id": customerId } = await context.params;
-  const idempotencyKey = request.headers.get("idempotency-key") ?? "";
-  if (idempotencyKey.trim() === "") {
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
+  if (!idempotencyKey || idempotencyKey.length > 200) {
     return adminJson(
       {
         ok: false as const,
@@ -24,17 +26,14 @@ async function POSTHandler(
       { status: 400 },
     );
   }
-  const body = (await request.json().catch(() => null)) as {
-    requestType?: unknown;
-    reason?: unknown;
-  } | null;
-  if (
-    (body?.requestType !== "ACCESS" &&
-      body?.requestType !== "CORRECTION" &&
-      body?.requestType !== "CLOSURE" &&
-      body?.requestType !== "ANONYMIZATION") ||
-    typeof body?.reason !== "string"
-  ) {
+  const body = z
+    .object({
+      requestType: z.enum(customerClosureRequestTypes),
+      reason: z.string().trim().min(1).max(500),
+    })
+    .strict()
+    .safeParse(await request.json().catch(() => null));
+  if (!body.success) {
     return adminJson(
       {
         ok: false as const,
@@ -51,8 +50,7 @@ async function POSTHandler(
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     customerId,
-    requestType: body.requestType as "ACCESS" | "CORRECTION" | "CLOSURE" | "ANONYMIZATION",
-    reason: body.reason,
+    ...body.data,
     idempotencyKey,
   });
   return adminJson(result);

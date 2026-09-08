@@ -101,6 +101,8 @@ snapshots remain independent of subsequent address edits.
 
 Customer or Staff invitation records coordinate application provisioning but never store passwords, verification secrets, OAuth tokens, or session tokens. Privacy/closure completion may disable access and anonymize fields approved by retention policy; it never cascades deletion into Orders, Payments, Refunds, Promotion redemptions, inventory ledgers, or Audit events.
 
+Current commerce-closure completion coordinates `privacy_request`, `customer_principal`, Customer version, the reviewed Better Auth session set, required audit events and a frozen command receipt in one Core transaction. Only the access gate changes; retained Customer and commercial evidence remain. Historical completed privacy rows are not treated as proof that missing access/session effects occurred. Anonymization completion remains unavailable without approved retention and field policy.
+
 Customer invitation acceptance links `accepted_customer_id` to the verified invitee's existing or atomically provisioned Customer. It increments invitation version once and requires both provisioning evidence (only when a Customer is actually created) and acceptance evidence. Rejection rolls back new provisioning, invitation changes and command receipts. Revocation increments the reviewed pending version without deleting invitation history; a later invitation may then be created for the same email. These policies live in Core commands; the existing table relationships and unique pending-email identity remain structural protection.
 
 ## Retired Subscription Storage

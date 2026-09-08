@@ -444,6 +444,7 @@ const closureRequestSchema = authenticatedRequestSchema.extend({
 });
 
 const privacyListRequestSchema = authenticatedRequestSchema.extend({
+  customerId: validationSchema.string().trim().min(1).max(200).optional(),
   status: validationSchema
     .enum([
       "SUBMITTED",
@@ -470,7 +471,7 @@ const privacyActionRequestSchema = authenticatedRequestSchema.extend({
     "ESCALATE",
   ]),
   reason: validationSchema.string().trim().min(1).max(500),
-  expectedVersion: validationSchema.number().int().min(0),
+  expectedVersion: validationSchema.number().int().min(1),
   idempotencyKey: idempotencyKeySchema,
 });
 

@@ -78,6 +78,7 @@ export type CustomerInvitationPage = {
 };
 
 export type PrivacyRequestView = {
+  availableActions: ReadonlyArray<PrivacyRequestAction>;
   privacyRequestId: string;
   customerId: string;
   requestType: CustomerClosureRequestType;
@@ -152,6 +153,7 @@ export type AdminClosureRequestCommand = AuthenticatedRequest & {
 };
 
 export type AdminPrivacyListRequest = AuthenticatedRequest & {
+  customerId?: string;
   status?: PrivacyRequestStatus;
   cursor?: string;
   limit?: number;

@@ -186,6 +186,66 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath("customer-access-recovered.png"),
       fullPage: true,
     });
+    const login = await signedInPage.request.post("/api/auth/sign-in/email", {
+      headers: { origin: new URL(signedInPage.url()).origin },
+      data: { email: session.user.email, password: "correct-horse-battery-staple" },
+    });
+    expect(login.status()).toBe(200);
+    await adminPage
+      .getByRole("textbox", { name: "Privacy request reason", exact: true })
+      .fill("Customer requested commerce closure");
+    await adminPage.getByRole("button", { name: "Open privacy request" }).click();
+    const privacy = adminPage.getByRole("article", {
+      name: "Commerce access closure request",
+      exact: true,
+    });
+    await expect(privacy).toContainText("Status: SUBMITTED");
+    for (const [action, status] of [
+      ["Begin identity review", "VERIFYING"],
+      ["Approve request", "APPROVED"],
+      ["Begin processing", "PROCESSING"],
+    ]) {
+      await privacy
+        .getByRole("textbox", {
+          name: "Action reason for Commerce access closure request",
+          exact: true,
+        })
+        .fill(`${action} confirmed with customer`);
+      await privacy.getByRole("button", { name: action, exact: true }).click();
+      await expect(privacy).toContainText(`Status: ${status}`);
+    }
+    const completions: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(/\/api\/admin\/privacy-requests\/[^/]+\/actions$/, async (route) => {
+      completions.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      expect(await response.json()).toMatchObject({ ok: true, value: { status: "COMPLETED" } });
+      if (completions.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await privacy
+      .getByRole("textbox", {
+        name: "Action reason for Commerce access closure request",
+        exact: true,
+      })
+      .fill("Customer confirmed closure; retained history preserved");
+    await privacy.getByRole("button", { name: "Close commerce access" }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(privacy).toContainText("Status: COMPLETED");
+    expect(completions).toHaveLength(2);
+    expect(completions[1]).toEqual(completions[0]);
+    await expect(adminPage.getByRole("button", { name: "Restore access" })).toBeVisible();
+    await expect(
+      adminPage.getByRole("cell", { name: "CUSTOMER.CLOSED", exact: true }),
+    ).toBeVisible();
+    expect(await (await signedInPage.request.get("/api/auth/get-session")).json()).toBeNull();
+    await adminPage.screenshot({
+      path: testInfo.outputPath("customer-closure-completed.png"),
+      fullPage: true,
+    });
   });
 }
 

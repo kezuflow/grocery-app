@@ -11,9 +11,19 @@ import type {
   PrivacyRequestView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { z } from "@freshmarkets/validation";
+import {
+  privacyRequestActions,
+  privacyRequestStatuses,
+  customerClosureRequestTypes,
+} from "@freshmarkets/contracts";
+import {
+  beginCustomerAdministrationWrite,
+  completeCustomerAdministrationWrite,
+  requireCustomerWrite,
+} from "./customer-administration-write";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { log } from "../../observability";
 import { boundListLimit } from "./customer-administration-access";
 import {
   decodeStaffCursor,
@@ -24,6 +34,20 @@ import {
 
 const CLOSURE_SCOPE = "admin.customers.closure";
 const PRIVACY_ACTION_SCOPE = "admin.privacy.action";
+const privacyReceiptSchema = z.object({
+  privacyRequestId: z.string(),
+  customerId: z.string(),
+  requestType: z.enum(customerClosureRequestTypes),
+  status: z.enum(privacyRequestStatuses),
+  requestedAt: z.string(),
+  verifiedAt: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  assignedStaffId: z.string().nullable(),
+  reason: z.string().nullable(),
+  resolution: z.string().nullable(),
+  version: z.number().int().positive(),
+  availableActions: z.array(z.enum(privacyRequestActions)),
+});
 
 async function readCustomerIdentity(
   database: D1Database,
@@ -48,29 +72,6 @@ async function readCustomerIdentity(
       principalStatus: string;
     }>();
   return customer ?? null;
-}
-
-function idempotencyComplete(
-  database: D1Database,
-  scope: string,
-  key: string,
-  reference: string,
-  now: number,
-): D1PreparedStatement {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(reference, now, scope, key);
-}
-
-function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(Date.now(), scope, key)
-    .run();
 }
 
 type InvitationRow = {
@@ -150,7 +151,7 @@ export { inviteCustomer } from "./customer-invitations";
 export { changeCustomerAccess } from "./change-customer-access";
 export { revokeCustomerSessions } from "./revoke-customer-sessions";
 
-/** Open a privacy/closure request; auditable and replayable. */
+/** Record a reviewed customer privacy request without changing retained history. */
 export async function requestCustomerClosure(
   deps: CustomerAdministrationDeps,
   request: AdminClosureRequestCommand,
@@ -158,70 +159,54 @@ export async function requestCustomerClosure(
   const access = await resolveCustomerAdministrationAccess(deps, request, "customers.manage");
   if (!access.ok) return access;
   const reason = request.reason.trim();
-  if (reason === "") {
-    return {
-      ok: false,
-      error: {
-        code: "VALIDATION_FAILED",
-        message: "A reason is required",
-        requestId: request.requestId,
-      },
-    };
-  }
+  if (!reason)
+    return privacyFailure("VALIDATION_FAILED", "A reason is required", request.requestId);
+  const hash = await requestHash({
+    customerId: request.customerId,
+    requestType: request.requestType,
+    reason,
+  });
+  const resultType = "customer_privacy_request_snapshot";
+  const previous = await replayPrivacyCommand(deps.db, CLOSURE_SCOPE, request, hash, resultType);
+  if (previous) return previous;
   const customer = await readCustomerIdentity(deps.db, request.customerId);
-  if (!customer) {
-    return {
-      ok: false,
-      error: { code: "NOT_FOUND", message: "Customer not found", requestId: request.requestId },
-    };
-  }
-
+  if (!customer) return privacyFailure("NOT_FOUND", "Customer not found", request.requestId);
   const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    CLOSURE_SCOPE,
-    request.idempotencyKey,
-    {
-      customerId: request.customerId,
-      requestType: request.requestType,
-      reason,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return {
-        ok: false,
-        error: {
-          code: "IDEMPOTENCY_CONFLICT",
-          message: "Idempotency key was used with a different request",
-          requestId: request.requestId,
-        },
-      };
-    }
-    if (claim.existing?.status === "SUCCEEDED" && claim.existing.resultReference) {
-      const existing = await readPrivacyRequest(deps.db, claim.existing.resultReference);
-      if (existing) return { ok: true, value: existing, requestId: request.requestId };
-    }
-    return {
-      ok: false,
-      error: {
-        code: "CONFLICT",
-        message: "The closure command is still processing",
-        requestId: request.requestId,
-      },
-    };
-  }
-
-  const privacyRequestId = crypto.randomUUID();
+  const id = crypto.randomUUID();
+  const value = toPrivacyView({
+    id,
+    customer_id: request.customerId,
+    request_type: request.requestType,
+    status: "SUBMITTED",
+    requested_at: now,
+    verified_at: null,
+    resolved_at: null,
+    assigned_staff_id: access.value.staffId,
+    reason,
+    resolution: null,
+    version: 1,
+  });
   try {
     await deps.db.batch([
+      ...beginCustomerAdministrationWrite(deps.db, {
+        ...access.value,
+        scope: CLOSURE_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        resultType,
+        now,
+      }),
       deps.db
         .prepare(
-          "INSERT INTO privacy_request (id, customer_id, request_type, status, requested_at, assigned_staff_id, reason, version, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 'SUBMITTED', ?, ?, ?, 1, ?, ?, ?)",
+          "INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=? AND principal_id=? AND version=?)",
+        )
+        .bind(request.customerId, customer.auth_user_id, customer.principal_id, customer.version),
+      deps.db
+        .prepare(
+          "INSERT INTO privacy_request(id,customer_id,request_type,status,requested_at,assigned_staff_id,reason,version,idempotency_key,created_at,updated_at) VALUES(?,?,?,'SUBMITTED',?,?,?,1,?,?,?)",
         )
         .bind(
-          privacyRequestId,
+          id,
           request.customerId,
           request.requestType,
           now,
@@ -231,45 +216,38 @@ export async function requestCustomerClosure(
           now,
           now,
         ),
+      requireCustomerWrite(deps.db),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "CUSTOMER.CLOSURE_REQUESTED",
         resourceType: "privacy_request",
-        resourceId: privacyRequestId,
+        resourceId: id,
         reason,
         details: { requestType: request.requestType },
         correlationId: request.requestId,
+        idempotencyKey: `${CLOSURE_SCOPE}:${request.idempotencyKey}`,
         occurredAt: now,
       }),
-      idempotencyComplete(deps.db, CLOSURE_SCOPE, request.idempotencyKey, privacyRequestId, now),
+      requireCustomerWrite(deps.db),
+      ...completeCustomerAdministrationWrite(deps.db, {
+        scope: CLOSURE_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        result: value,
+        now,
+      }),
     ]);
-  } catch (error) {
-    log("error", "admin.customers.closure_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, CLOSURE_SCOPE, request.idempotencyKey);
-    return {
-      ok: false,
-      error: {
-        code: "CONFLICT",
-        message: "The closure request could not be created",
-        requestId: request.requestId,
-      },
-    };
+  } catch {
+    return (
+      (await replayPrivacyCommand(deps.db, CLOSURE_SCOPE, request, hash, resultType)) ??
+      privacyFailure(
+        "CONFLICT",
+        "Customer or staff access changed; refresh and retry",
+        request.requestId,
+      )
+    );
   }
-
-  const created = await readPrivacyRequest(deps.db, privacyRequestId);
-  if (!created) {
-    return {
-      ok: false,
-      error: {
-        code: "INTERNAL_ERROR",
-        message: "The privacy request could not be read back",
-        requestId: request.requestId,
-      },
-    };
-  }
-  return { ok: true, value: created, requestId: request.requestId };
+  return { ok: true, value, requestId: request.requestId };
 }
 
 type PrivacyRow = {
@@ -288,6 +266,11 @@ type PrivacyRow = {
 
 function toPrivacyView(row: PrivacyRow): PrivacyRequestView {
   return {
+    availableActions: privacyRequestActions.filter(
+      (action) =>
+        PRIVACY_TRANSITIONS[action].from.includes(row.status) &&
+        !(row.request_type === "ANONYMIZATION" && action === "COMPLETE"),
+    ),
     privacyRequestId: row.id,
     customerId: row.customer_id,
     requestType: row.request_type,
@@ -350,6 +333,10 @@ export async function listPrivacyRequests(
 
   const clauses: string[] = [];
   const binds: unknown[] = [];
+  if (request.customerId) {
+    clauses.push("customer_id=?");
+    binds.push(request.customerId);
+  }
   if (request.status !== undefined) {
     clauses.push("status = ?");
     binds.push(request.status);
@@ -388,7 +375,7 @@ const PRIVACY_TRANSITIONS: Record<
   ESCALATE: { from: ["VERIFYING", "PROCESSING"], to: "ESCALATED", terminal: false },
 };
 
-/** Apply a closed privacy action through the legal transition map. */
+/** Apply the reviewed workflow and all dependent closure effects atomically. */
 export async function applyPrivacyAction(
   deps: CustomerAdministrationDeps,
   request: AdminPrivacyActionRequest,
@@ -396,173 +383,244 @@ export async function applyPrivacyAction(
   const access = await resolveCustomerAdministrationAccess(deps, request, "customers.manage");
   if (!access.ok) return access;
   const reason = request.reason.trim();
-  if (reason === "") {
-    return {
-      ok: false,
-      error: {
-        code: "VALIDATION_FAILED",
-        message: "A reason is required",
-        requestId: request.requestId,
-      },
-    };
-  }
-
+  if (!reason)
+    return privacyFailure("VALIDATION_FAILED", "A reason is required", request.requestId);
+  const hash = await requestHash({
+    privacyRequestId: request.privacyRequestId,
+    action: request.action,
+    reason,
+    expectedVersion: request.expectedVersion,
+  });
+  const resultType = "customer_privacy_action_snapshot";
+  const previous = await replayPrivacyCommand(
+    deps.db,
+    PRIVACY_ACTION_SCOPE,
+    request,
+    hash,
+    resultType,
+    request.privacyRequestId,
+  );
+  if (previous) return previous;
   const row = await deps.db
     .prepare(
-      "SELECT id, customer_id, request_type, status, requested_at, verified_at, resolved_at, assigned_staff_id, reason, resolution, version FROM privacy_request WHERE id = ?",
+      "SELECT id,customer_id,request_type,status,requested_at,verified_at,resolved_at,assigned_staff_id,reason,resolution,version FROM privacy_request WHERE id=?",
     )
     .bind(request.privacyRequestId)
-    .first<PrivacyRow & { version: number }>();
-  if (!row) {
-    return {
-      ok: false,
-      error: {
-        code: "NOT_FOUND",
-        message: "Privacy request not found",
-        requestId: request.requestId,
-      },
-    };
-  }
-
+    .first<PrivacyRow>();
+  if (!row) return privacyFailure("NOT_FOUND", "Privacy request not found", request.requestId);
+  if (row.version !== request.expectedVersion)
+    return privacyFailure(
+      "STALE_VERSION",
+      "Request changed; refresh before retrying",
+      request.requestId,
+    );
   const transition = PRIVACY_TRANSITIONS[request.action];
-  if (!transition.from.includes(row.status)) {
-    return {
-      ok: false,
-      error: {
-        code: "ILLEGAL_TRANSITION",
-        message: `${request.action} is not legal from ${row.status}`,
-        requestId: request.requestId,
-      },
-    };
-  }
-
+  if (!transition.from.includes(row.status))
+    return privacyFailure(
+      "ILLEGAL_TRANSITION",
+      `${request.action} is not legal from ${row.status}`,
+      request.requestId,
+    );
+  if (request.action === "COMPLETE" && row.request_type === "ANONYMIZATION")
+    return privacyFailure(
+      "CONFLICT",
+      "Anonymization is unavailable until approved retention and field policy is configured",
+      request.requestId,
+    );
+  const customer = await readCustomerIdentity(deps.db, row.customer_id);
+  if (!customer) return privacyFailure("NOT_FOUND", "Customer not found", request.requestId);
+  const closeAccess = request.action === "COMPLETE" && row.request_type === "CLOSURE";
+  const sessionCount = closeAccess
+    ? await deps.db
+        .prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+        .bind(customer.auth_user_id)
+        .first<{ count: number }>()
+    : null;
+  if (closeAccess && !sessionCount)
+    return privacyFailure(
+      "INTERNAL_ERROR",
+      "Customer sessions could not be reviewed",
+      request.requestId,
+    );
   const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    PRIVACY_ACTION_SCOPE,
-    request.idempotencyKey,
-    {
-      privacyRequestId: request.privacyRequestId,
-      action: request.action,
-      reason,
-      expectedVersion: request.expectedVersion,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return {
-        ok: false,
-        error: {
-          code: "IDEMPOTENCY_CONFLICT",
-          message: "Idempotency key was used with a different request",
-          requestId: request.requestId,
-        },
-      };
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      const existing = await readPrivacyRequest(deps.db, request.privacyRequestId);
-      if (existing) return { ok: true, value: existing, requestId: request.requestId };
-    }
-    return {
-      ok: false,
-      error: {
-        code: "CONFLICT",
-        message: "The privacy action is still processing",
-        requestId: request.requestId,
-      },
-    };
-  }
-
-  const verifiedAt = request.action === "VERIFY" ? now : row.verified_at;
-  const resolvedAt = transition.terminal ? now : row.resolved_at;
-  const resolution = transition.terminal ? reason : row.resolution;
-  const appliedGuard =
-    "EXISTS (SELECT 1 FROM privacy_request WHERE id=? AND status=? AND version=?)";
-  const appliedGuardBinds = [request.privacyRequestId, transition.to, request.expectedVersion + 1];
-  let batchResults: D1Result[];
+  const updated: PrivacyRow = {
+    ...row,
+    status: transition.to,
+    verified_at: request.action === "VERIFY" ? now : row.verified_at,
+    resolved_at: transition.terminal ? now : row.resolved_at,
+    assigned_staff_id: access.value.staffId,
+    resolution: transition.terminal ? reason : row.resolution,
+    version: row.version + 1,
+  };
+  const value = toPrivacyView(updated);
+  const closureStatements: D1PreparedStatement[] =
+    closeAccess && sessionCount
+      ? [
+          deps.db
+            .prepare(
+              "UPDATE customer SET version=version+1,updated_at=? WHERE id=? AND auth_user_id=? AND principal_id=? AND version=?",
+            )
+            .bind(
+              now,
+              row.customer_id,
+              customer.auth_user_id,
+              customer.principal_id,
+              customer.version,
+            ),
+          requireCustomerWrite(deps.db),
+          deps.db
+            .prepare(
+              "UPDATE customer_principal SET status='disabled',updated_at=? WHERE id=? AND auth_user_id=? AND status=?",
+            )
+            .bind(now, customer.principal_id, customer.auth_user_id, customer.principalStatus),
+          requireCustomerWrite(deps.db),
+          deps.db
+            .prepare(
+              "INSERT INTO commitment_abort(id) SELECT -36 WHERE (SELECT count(*) FROM session WHERE user_id=?)!=?",
+            )
+            .bind(customer.auth_user_id, sessionCount.count),
+          deps.db.prepare("DELETE FROM session WHERE user_id=?").bind(customer.auth_user_id),
+          deps.db
+            .prepare(
+              "INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()!=? OR EXISTS(SELECT 1 FROM session WHERE user_id=?)",
+            )
+            .bind(sessionCount.count, customer.auth_user_id),
+          auditEventStatement(deps.db, {
+            actorUserId: access.value.authUserId,
+            action: "CUSTOMER.CLOSED",
+            resourceType: "customer",
+            resourceId: row.customer_id,
+            reason,
+            before: { accessStatus: customer.principalStatus },
+            after: { accessStatus: "disabled" },
+            details: { privacyRequestId: row.id, revokedSessionCount: sessionCount.count },
+            correlationId: request.requestId,
+            idempotencyKey: `${PRIVACY_ACTION_SCOPE}:${request.idempotencyKey}:closure`,
+            occurredAt: now,
+          }),
+          requireCustomerWrite(deps.db),
+        ]
+      : [];
   try {
-    batchResults = await deps.db.batch([
+    await deps.db.batch([
+      ...beginCustomerAdministrationWrite(deps.db, {
+        ...access.value,
+        scope: PRIVACY_ACTION_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        resultType,
+        now,
+      }),
       deps.db
         .prepare(
-          "UPDATE privacy_request SET status=?, verified_at=?, resolved_at=?, assigned_staff_id=?, resolution=?, updated_at=?, version=version+1 WHERE id=? AND status=? AND version=?",
+          "INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(SELECT 1 FROM customer WHERE id=? AND auth_user_id=? AND principal_id=? AND version=?)",
+        )
+        .bind(row.customer_id, customer.auth_user_id, customer.principal_id, customer.version),
+      deps.db
+        .prepare(
+          "UPDATE privacy_request SET status=?,verified_at=?,resolved_at=?,assigned_staff_id=?,resolution=?,updated_at=?,version=version+1 WHERE id=? AND status=? AND version=? AND customer_id=? AND request_type=?",
         )
         .bind(
-          transition.to,
-          verifiedAt,
-          resolvedAt,
-          access.value.staffId,
-          resolution,
+          updated.status,
+          updated.verified_at,
+          updated.resolved_at,
+          updated.assigned_staff_id,
+          updated.resolution,
           now,
-          request.privacyRequestId,
+          row.id,
           row.status,
           request.expectedVersion,
+          row.customer_id,
+          row.request_type,
         ),
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: "PRIVACY.ACTION_APPLIED",
-          resourceType: "privacy_request",
-          resourceId: request.privacyRequestId,
-          reason,
-          before: { status: row.status },
-          after: { status: transition.to },
-          details: { action: request.action },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        { clause: appliedGuard, binds: appliedGuardBinds },
-      ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
-        )
-        .bind(
-          request.privacyRequestId,
-          now,
-          PRIVACY_ACTION_SCOPE,
-          request.idempotencyKey,
-          ...appliedGuardBinds,
-        ),
+      requireCustomerWrite(deps.db),
+      ...closureStatements,
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "PRIVACY.ACTION_APPLIED",
+        resourceType: "privacy_request",
+        resourceId: row.id,
+        reason,
+        before: { status: row.status },
+        after: { status: transition.to },
+        details: { action: request.action },
+        correlationId: request.requestId,
+        idempotencyKey: `${PRIVACY_ACTION_SCOPE}:${request.idempotencyKey}:action`,
+        occurredAt: now,
+      }),
+      requireCustomerWrite(deps.db),
+      ...completeCustomerAdministrationWrite(deps.db, {
+        scope: PRIVACY_ACTION_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        result: value,
+        now,
+      }),
     ]);
-  } catch (error) {
-    log("error", "admin.privacy.action_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, PRIVACY_ACTION_SCOPE, request.idempotencyKey);
-    return {
-      ok: false,
-      error: {
-        code: "CONFLICT",
-        message: "The privacy action could not be applied",
-        requestId: request.requestId,
-      },
-    };
+  } catch {
+    return (
+      (await replayPrivacyCommand(
+        deps.db,
+        PRIVACY_ACTION_SCOPE,
+        request,
+        hash,
+        resultType,
+        row.id,
+      )) ??
+      privacyFailure(
+        "CONFLICT",
+        "Request, customer or staff access changed; refresh and retry",
+        request.requestId,
+      )
+    );
   }
+  return { ok: true, value, requestId: request.requestId };
+}
 
-  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
-    await idempotencyFailed(deps.db, PRIVACY_ACTION_SCOPE, request.idempotencyKey);
-    return {
-      ok: false,
-      error: {
-        code: "STALE_VERSION",
-        message: "Request changed; refresh before retrying",
-        requestId: request.requestId,
-      },
-    };
+async function replayPrivacyCommand(
+  database: D1Database,
+  scope: string,
+  request: { requestId: string; idempotencyKey: string },
+  hash: string,
+  resultType: string,
+  resourceId?: string,
+): Promise<RpcResult<PrivacyRequestView> | null> {
+  const saved = await findIdempotencyRecord(database, scope, request.idempotencyKey);
+  if (!saved) return null;
+  if (saved.requestHash !== hash)
+    return privacyFailure(
+      "IDEMPOTENCY_CONFLICT",
+      "Idempotency key was used with a different request",
+      request.requestId,
+    );
+  if (saved.status !== "SUCCEEDED") return null;
+  if (
+    saved.resultType === scope &&
+    saved.resultReference &&
+    (!resourceId || saved.resultReference === resourceId)
+  ) {
+    const legacy = await readPrivacyRequest(database, saved.resultReference);
+    if (legacy) return { ok: true, value: legacy, requestId: request.requestId };
   }
-  const updated = await readPrivacyRequest(deps.db, request.privacyRequestId);
-  if (!updated) {
-    return {
-      ok: false,
-      error: {
-        code: "INTERNAL_ERROR",
-        message: "The privacy request could not be read back",
-        requestId: request.requestId,
-      },
-    };
+  if (saved.resultType === resultType && saved.resultReference) {
+    try {
+      const parsed = privacyReceiptSchema.safeParse(JSON.parse(saved.resultReference));
+      if (parsed.success && (!resourceId || parsed.data.privacyRequestId === resourceId))
+        return { ok: true, value: parsed.data, requestId: request.requestId };
+    } catch {
+      /* Invalid saved evidence cannot authorize another write. */
+    }
   }
-  return { ok: true, value: updated, requestId: request.requestId };
+  return privacyFailure(
+    "INTERNAL_ERROR",
+    "The saved privacy result could not be read",
+    request.requestId,
+  );
+}
+function privacyFailure(
+  code: import("@freshmarkets/contracts").AppErrorCode,
+  message: string,
+  requestId: string,
+) {
+  return { ok: false as const, error: { code, message, requestId } };
 }

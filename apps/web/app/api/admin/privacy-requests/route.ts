@@ -3,6 +3,7 @@ import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
+import { z } from "@freshmarkets/validation";
 
 const PRIVACY_STATUSES = [
   "SUBMITTED",
@@ -40,7 +41,11 @@ async function GETHandler(request: Request) {
   const limit = parseLimit(params, webRequestId(request));
   if (limit instanceof Response) return limit;
   const statusParam = params.get("status");
-  if (statusParam !== null && !(PRIVACY_STATUSES as readonly string[]).includes(statusParam)) {
+  const parsedStatus = z
+    .enum(PRIVACY_STATUSES)
+    .optional()
+    .safeParse(statusParam ?? undefined);
+  if (!parsedStatus.success) {
     return adminJson(
       {
         ok: false as const,
@@ -53,11 +58,11 @@ async function GETHandler(request: Request) {
       { status: 400 },
     );
   }
-  const status = statusParam as (typeof PRIVACY_STATUSES)[number] | null;
   const result = await coreClient(env.CORE).listPrivacyRequests({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
-    status: status ?? undefined,
+    status: parsedStatus.data,
+    customerId: params.get("customerId") ?? undefined,
     cursor: params.get("cursor") ?? undefined,
     limit,
   });

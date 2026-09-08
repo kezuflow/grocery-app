@@ -7,6 +7,7 @@ import { createAuth } from "../../auth/service";
 import { inviteCustomer, revokeCustomerInvitation } from "./customer-invitations";
 import { changeCustomerAccess } from "./change-customer-access";
 import { revokeCustomerSessions } from "./revoke-customer-sessions";
+import { applyPrivacyAction, requestCustomerClosure } from "./customer-commands";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -586,6 +587,278 @@ describe("customer crm reads", () => {
   });
 });
 
+describe("customer privacy recovery", () => {
+  async function ready(requestType: "CLOSURE" | "ANONYMIZATION" = "CLOSURE") {
+    const manager = await seedManager();
+    const account = await signUp();
+    const customerId = await seedCustomer(account);
+    const creation = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      requestType,
+      reason: "Customer requested review",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const created = await core.requestCustomerClosure(creation);
+    if (!created.ok) throw new Error("Privacy request failed");
+    let current = created.value;
+    for (const action of ["VERIFY", "APPROVE", "BEGIN_PROCESSING"] as const) {
+      const next = await core.applyPrivacyAction({
+        headers: creation.headers,
+        requestId: crypto.randomUUID(),
+        privacyRequestId: current.privacyRequestId,
+        action,
+        reason: `${action} reviewed`,
+        expectedVersion: current.version,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      if (!next.ok) throw new Error("Privacy preparation failed");
+      current = next.value;
+    }
+    return {
+      manager,
+      account,
+      customerId,
+      creation,
+      created,
+      current,
+      completion: {
+        headers: creation.headers,
+        requestId: crypto.randomUUID(),
+        privacyRequestId: current.privacyRequestId,
+        action: "COMPLETE" as const,
+        reason: "Customer closure confirmed",
+        expectedVersion: current.version,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    };
+  }
+  it.each([
+    "request",
+    "customer",
+    "principal",
+    "sessions",
+    "closure-audit",
+    "action-audit",
+    "receipt",
+  ])("rolls back closure when the required %s effect is ignored", async (effect) => {
+    const setup = await ready();
+    const trigger =
+      effect === "request"
+        ? "BEFORE UPDATE ON privacy_request"
+        : effect === "customer"
+          ? "BEFORE UPDATE ON customer"
+          : effect === "principal"
+            ? "BEFORE UPDATE ON customer_principal"
+            : effect === "sessions"
+              ? "BEFORE DELETE ON session"
+              : effect === "closure-audit"
+                ? "BEFORE INSERT ON audit_event WHEN NEW.action='CUSTOMER.CLOSED'"
+                : effect === "action-audit"
+                  ? "BEFORE INSERT ON audit_event WHEN NEW.action='PRIVACY.ACTION_APPLIED'"
+                  : "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'";
+    await env.DB.exec(
+      `CREATE TRIGGER test_ignore_closure_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+    );
+    try {
+      expect(await core.applyPrivacyAction(setup.completion)).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM privacy_request WHERE id=?")
+          .bind(setup.current.privacyRequestId)
+          .first(),
+      ).toEqual({ status: "PROCESSING", version: setup.current.version });
+      expect(
+        await env.DB.prepare("SELECT status FROM customer_principal WHERE auth_user_id=?")
+          .bind(setup.account.userId)
+          .first(),
+      ).toEqual({ status: "active" });
+      expect(
+        await env.DB.prepare("SELECT version FROM customer WHERE id=?")
+          .bind(setup.customerId)
+          .first(),
+      ).toEqual({ version: 1 });
+      expect(
+        await env.DB.prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+          .bind(setup.account.userId)
+          .first(),
+      ).toEqual({ count: 1 });
+      expect(
+        await env.DB.prepare("SELECT count(*) AS count FROM audit_event WHERE correlation_id=?")
+          .bind(setup.completion.requestId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE scope='admin.privacy.action' AND idempotency_key=?",
+        )
+          .bind(setup.completion.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER test_ignore_closure_effect");
+    }
+    const completed = await core.applyPrivacyAction(setup.completion);
+    expect(completed).toMatchObject({
+      ok: true,
+      value: { status: "COMPLETED", availableActions: [] },
+    });
+    expect(await core.applyPrivacyAction(setup.completion)).toEqual(completed);
+    expect(await core.requestCustomerClosure(setup.creation)).toEqual(setup.created);
+  });
+  it.each(["request", "audit", "receipt"])(
+    "rolls back privacy creation when its %s is ignored",
+    async (effect) => {
+      const manager = await seedManager();
+      const customerId = await seedCustomer(await signUp());
+      const request = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        customerId,
+        requestType: "CLOSURE" as const,
+        reason: "Customer requested closure",
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const trigger =
+        effect === "request"
+          ? "BEFORE INSERT ON privacy_request"
+          : effect === "audit"
+            ? "BEFORE INSERT ON audit_event WHEN NEW.action='CUSTOMER.CLOSURE_REQUESTED'"
+            : "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'";
+      await env.DB.exec(
+        `CREATE TRIGGER test_ignore_privacy_create ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await core.requestCustomerClosure(request)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT count(*) AS count FROM privacy_request WHERE customer_id=?")
+            .bind(customerId)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT count(*) AS count FROM idempotency_records WHERE idempotency_key=?",
+          )
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER test_ignore_privacy_create");
+      }
+      expect(await core.requestCustomerClosure(request)).toMatchObject({ ok: true });
+    },
+  );
+  it.each(["creation", "completion"])(
+    "rechecks Global authority for privacy %s",
+    async (operation) => {
+      const setup = await ready();
+      const db = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await target
+                .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                .bind(setup.manager.staffId)
+                .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const deps = { auth: createAuth(env), db };
+      const result =
+        operation === "creation"
+          ? await requestCustomerClosure(deps, {
+              ...setup.creation,
+              idempotencyKey: crypto.randomUUID(),
+            })
+          : await applyPrivacyAction(deps, setup.completion);
+      expect(result).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT status FROM privacy_request WHERE id=?")
+          .bind(setup.current.privacyRequestId)
+          .first(),
+      ).toEqual({ status: "PROCESSING" });
+      expect(
+        await env.DB.prepare("SELECT status FROM customer_principal WHERE auth_user_id=?")
+          .bind(setup.account.userId)
+          .first(),
+      ).toEqual({ status: "active" });
+    },
+  );
+  it("does not claim anonymization completion without a configured policy", async () => {
+    const setup = await ready("ANONYMIZATION");
+    expect(setup.current.availableActions).not.toContain("COMPLETE");
+    expect(await core.applyPrivacyAction(setup.completion)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM privacy_request WHERE id=?")
+        .bind(setup.current.privacyRequestId)
+        .first(),
+    ).toEqual({ status: "PROCESSING" });
+    expect(
+      await env.DB.prepare("SELECT status FROM customer_principal WHERE auth_user_id=?")
+        .bind(setup.account.userId)
+        .first(),
+    ).toEqual({ status: "active" });
+  });
+  it("lets one completion win and preserves its receipt after a later authorized restoration", async () => {
+    const setup = await ready();
+    const competing = { ...setup.completion, idempotencyKey: crypto.randomUUID() };
+    const results = await Promise.all([
+      core.applyPrivacyAction(setup.completion),
+      core.applyPrivacyAction(competing),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.CLOSED'",
+      )
+        .bind(setup.customerId)
+        .first(),
+    ).toEqual({ count: 1 });
+    const winner = results[0]?.ok ? setup.completion : competing;
+    const winningResult = results.find((result) => result.ok);
+    if (!winningResult) throw new Error("No completion won");
+    expect(
+      await core.changeCustomerAccess({
+        headers: setup.creation.headers,
+        requestId: crypto.randomUUID(),
+        customerId: setup.customerId,
+        action: "RESTORE",
+        expectedVersion: 2,
+        reason: "Customer withdrew closure request",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await core.applyPrivacyAction(winner)).toEqual(winningResult);
+    expect(
+      await env.DB.prepare("SELECT status FROM customer_principal WHERE auth_user_id=?")
+        .bind(setup.account.userId)
+        .first(),
+    ).toEqual({ status: "active" });
+  });
+  it("filters the privacy queue to the requested customer", async () => {
+    const setup = await ready();
+    const other = await ready();
+    const result = await core.listPrivacyRequests({
+      headers: setup.creation.headers,
+      requestId: crypto.randomUUID(),
+      customerId: setup.customerId,
+      limit: 100,
+    });
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0]?.privacyRequestId).toBe(setup.current.privacyRequestId);
+      expect(result.value.items.some((item) => item.customerId === other.customerId)).toBe(false);
+    }
+  });
+});
+
 describe("customer crm commands", () => {
   it("rejects a session set changed before the transaction and retries against the current set", async () => {
     const manager = await seedManager();
@@ -1046,7 +1319,7 @@ describe("customer crm commands", () => {
     )
       .bind(privacyRequestId, staleKey)
       .first<{ audit_count: number; idempotency_status: string | null }>();
-    expect(staleEvidence).toEqual({ audit_count: 0, idempotency_status: "FAILED" });
+    expect(staleEvidence).toEqual({ audit_count: 0, idempotency_status: null });
 
     const illegal = await core.applyPrivacyAction({
       requestId: crypto.randomUUID(),
@@ -1087,6 +1360,20 @@ describe("customer crm commands", () => {
     expect(completed.status).toBe("COMPLETED");
     expect(completed.resolution).toContain("COMPLETE");
     expect(completed.resolvedAt).not.toBeNull();
+    expect(
+      await env.DB.prepare(
+        "SELECT cp.status FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id WHERE c.id=?",
+      )
+        .bind(customerId)
+        .first(),
+    ).toEqual({ status: "disabled" });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM session WHERE user_id=(SELECT auth_user_id FROM customer WHERE id=?)",
+      )
+        .bind(customerId)
+        .first(),
+    ).toEqual({ count: 0 });
 
     const queue = await core.listPrivacyRequests({
       requestId: crypto.randomUUID(),

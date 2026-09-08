@@ -63,6 +63,7 @@ describe("customer crm contracts", () => {
     } satisfies AdminCustomerSummary);
     void ({
       privacyRequestId: "pr-1",
+      availableActions: ["VERIFY", "APPROVE", "REJECT"],
       customerId: "cust-1",
       requestType: "CLOSURE",
       status: "SUBMITTED",

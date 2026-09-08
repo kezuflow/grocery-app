@@ -1,6 +1,7 @@
 "use client";
-import { useCallback, useEffect, useState, use } from "react";
-import type { AdminCustomerDetail, RpcResult } from "@freshmarkets/contracts";
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import type { AdminCustomerDetail } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
@@ -15,11 +16,48 @@ import {
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
+import { CustomerPrivacyPanel } from "../../../../components/admin/customer-privacy-panel";
 
 type LoadState =
   | { phase: "loading" }
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready"; customer: AdminCustomerDetail };
+
+const customerResultSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      customerId: z.string(),
+      authUserId: z.string(),
+      email: z.string(),
+      phone: z.string().nullable(),
+      accessStatus: z.enum(["active", "disabled"]),
+      subscriptionState: z.string().nullable(),
+      orderCount: z.number().int().nonnegative(),
+      lastOrderAt: z.string().nullable(),
+      version: z.number().int().positive(),
+      createdAt: z.string(),
+      recentAudit: z.array(
+        z.object({
+          auditEventId: z.string(),
+          occurredAt: z.string(),
+          actorId: z.string().nullable(),
+          action: z.string(),
+          resourceType: z.string(),
+          resourceId: z.string(),
+          marketId: z.string().nullable(),
+          locationId: z.string().nullable(),
+          reason: z.string().nullable(),
+          correlationId: z.string().nullable(),
+        }),
+      ),
+    }),
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ message: z.string(), requestId: z.string() }),
+  }),
+]);
 
 export default function CustomerDetailPage({
   params,
@@ -31,13 +69,16 @@ export default function CustomerDetailPage({
   const [reason, setReason] = useState("");
   const command = useAdminCommand();
   const { notice, setNotice } = command;
+  const loadGeneration = useRef(0);
 
   const load = useCallback(() => {
+    const generation = ++loadGeneration.current;
     setState({ phase: "loading" });
     void (async () => {
       try {
         const response = await fetch(`/api/admin/customers/${encodeURIComponent(customerId)}`);
-        const payload = (await response.json()) as RpcResult<AdminCustomerDetail>;
+        const payload = customerResultSchema.parse(await response.json());
+        if (generation !== loadGeneration.current) return;
         if (!payload.ok) {
           setState({
             phase: "error",
@@ -48,6 +89,7 @@ export default function CustomerDetailPage({
         }
         setState({ phase: "ready", customer: payload.value });
       } catch {
+        if (generation !== loadGeneration.current) return;
         setState({
           phase: "error",
           message: "Network error loading the customer.",
@@ -57,7 +99,12 @@ export default function CustomerDetailPage({
     })();
   }, [customerId]);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    load();
+    return () => {
+      loadGeneration.current += 1;
+    };
+  }, [load]);
 
   async function run(url: string, body: unknown) {
     const applied = await command.run(url, url, body);
@@ -65,7 +112,10 @@ export default function CustomerDetailPage({
     return applied;
   }
 
-  if (state.phase === "loading") {
+  if (
+    state.phase === "loading" ||
+    (state.phase === "ready" && state.customer.customerId !== customerId)
+  ) {
     return (
       <div className="space-y-3" role="status" aria-label="Loading customer">
         <Skeleton className="h-10 w-72" />
@@ -173,6 +223,7 @@ export default function CustomerDetailPage({
         </fieldset>
       </ListPageSection>
 
+      <CustomerPrivacyPanel customerId={customerId} command={command} onChanged={load} />
       <ListPageSection
         title="Recent material history"
         description="Sanitized audit summaries for this account."
