@@ -248,4 +248,75 @@ describe("Global service-area publication", () => {
       value: { serviceable: false },
     });
   });
+  it.each([
+    "BEFORE INSERT ON idempotency_records",
+    "BEFORE INSERT ON service_area",
+    "BEFORE INSERT ON delivery_zone",
+    "BEFORE INSERT ON location_serviceability",
+    "BEFORE INSERT ON geography_configuration",
+    "BEFORE INSERT ON audit_event",
+    "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'",
+  ])("rolls back suppressed publication effect %s and recovers", async (trigger) => {
+    const manager = await locationManager();
+    const request = command(manager.headers);
+    await env.DB.exec(
+      `CREATE TRIGGER ignore_area_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END;`,
+    );
+    try {
+      expect(await core.publishAdminServiceArea(request)).toMatchObject({ ok: false });
+      expect(await effects(request.idempotencyKey)).toEqual({ records: 0, audits: 0 });
+      expect(
+        await env.DB.prepare("SELECT count(*) count FROM service_area WHERE code=?")
+          .bind(request.code)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_area_effect");
+    }
+    const result = await core.publishAdminServiceArea(request);
+    expect(result).toMatchObject({ ok: true });
+    expect(await core.publishAdminServiceArea(request)).toEqual(result);
+  });
+  it.each(["location_serviceability", "delivery_zone", "service_area"])(
+    "retains the old boundary when %s retirement is suppressed",
+    async (table) => {
+      const manager = await locationManager();
+      const original = command(manager.headers);
+      const first = await core.publishAdminServiceArea(original);
+      if (!first.ok) throw new Error("First publication failed");
+      const next = {
+        ...original,
+        name: "Revised boundary",
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const before = await env.DB.prepare(
+        "SELECT version FROM geography_configuration WHERE market_id=?",
+      )
+        .bind(original.marketId)
+        .first();
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_area_retirement BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(IGNORE); END;`,
+      );
+      try {
+        expect(await core.publishAdminServiceArea(next)).toMatchObject({ ok: false });
+        expect(await effects(next.idempotencyKey)).toEqual({ records: 0, audits: 0 });
+        expect(
+          await env.DB.prepare("SELECT status,polygon_version FROM service_area WHERE id=?")
+            .bind(first.value.serviceAreaId)
+            .first(),
+        ).toEqual({ status: "active", polygon_version: 1 });
+        expect(
+          await env.DB.prepare("SELECT version FROM geography_configuration WHERE market_id=?")
+            .bind(original.marketId)
+            .first(),
+        ).toEqual(before);
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_area_retirement");
+      }
+      const result = await core.publishAdminServiceArea(next);
+      expect(result).toMatchObject({ ok: true, value: { version: 2 } });
+      expect(await core.publishAdminServiceArea(next)).toEqual(result);
+    },
+  );
 });

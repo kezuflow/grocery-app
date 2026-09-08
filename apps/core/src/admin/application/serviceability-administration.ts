@@ -26,6 +26,9 @@ import { operationalCandidates } from "../../geography/application/operational-c
 import { resolveLocationAdministrationAccess as access } from "./location-administration";
 import type { StaffAdministrationDeps } from "./staff-administration-access";
 
+const requirePublicationEffect = (db: D1Database) =>
+  db.prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=1");
+
 const publishSchema = authenticatedRequestSchema.extend({
   ...serviceAreaDefinitionSchema.shape,
   expectedVersion: z
@@ -302,6 +305,7 @@ export async function publishAdminServiceArea(
         "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES (?,?,?,'PROCESSING','service_area',?,?)",
       )
       .bind(scope, idempotencyKey, hash, now, now),
+    requirePublicationEffect(deps.db),
   ];
   for (const locationId of new Set(request.zones.flatMap((zone) => zone.locationIds)))
     statements.push(
@@ -319,14 +323,29 @@ export async function publishAdminServiceArea(
       .bind(now, request.marketId, request.code),
     deps.db
       .prepare(
+        "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM location_serviceability WHERE valid_to IS NULL AND zone_id IN (SELECT z.id FROM delivery_zone z JOIN service_area a ON a.id=z.service_area_id WHERE a.market_id=? AND a.code=?))",
+      )
+      .bind(request.marketId, request.code),
+    deps.db
+      .prepare(
         "UPDATE delivery_zone SET status='inactive',updated_at=? WHERE service_area_id IN (SELECT id FROM service_area WHERE market_id=? AND code=?)",
       )
       .bind(now, request.marketId, request.code),
     deps.db
       .prepare(
+        "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM delivery_zone WHERE status!='inactive' AND service_area_id IN (SELECT id FROM service_area WHERE market_id=? AND code=?))",
+      )
+      .bind(request.marketId, request.code),
+    deps.db
+      .prepare(
         "UPDATE service_area SET status='inactive',active_to=?,updated_at=? WHERE market_id=? AND code=? AND status='active'",
       )
       .bind(now, now, request.marketId, request.code),
+    deps.db
+      .prepare(
+        "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM service_area WHERE market_id=? AND code=? AND status='active')",
+      )
+      .bind(request.marketId, request.code),
     deps.db
       .prepare(
         "INSERT INTO service_area(id,market_id,code,name,polygon_geojson,polygon_version,active_from,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'active',?,?)",
@@ -342,6 +361,7 @@ export async function publishAdminServiceArea(
         now,
         now,
       ),
+    requirePublicationEffect(deps.db),
   );
   request.zones.forEach((zone, index) => {
     const zoneId = crypto.randomUUID();
@@ -360,6 +380,7 @@ export async function publishAdminServiceArea(
           now,
           now,
         ),
+      requirePublicationEffect(deps.db),
     );
     for (const locationId of zone.locationIds)
       statements.push(
@@ -368,6 +389,7 @@ export async function publishAdminServiceArea(
             "INSERT INTO location_serviceability(zone_id,location_id,priority,eligible,valid_from) VALUES (?,?,0,1,?)",
           )
           .bind(zoneId, locationId, now),
+        requirePublicationEffect(deps.db),
       );
   });
   statements.push(
@@ -376,11 +398,18 @@ export async function publishAdminServiceArea(
         "INSERT INTO geography_configuration(market_id,version,updated_at) VALUES (?,2,?) ON CONFLICT(market_id) DO UPDATE SET version=version+1,updated_at=excluded.updated_at",
       )
       .bind(request.marketId, now),
+    requirePublicationEffect(deps.db),
     deps.db
       .prepare(`UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=? WHERE status='ACTIVE'
       AND json_extract(cycle_snapshot_json,'$.locationId') IN (SELECT id FROM fulfillment_location WHERE market_id=?)
       AND NOT EXISTS (SELECT 1 FROM payment_intent p WHERE p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=checkout_quote.id)`)
       .bind(now, request.marketId),
+    deps.db
+      .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (
+      SELECT 1 FROM checkout_quote WHERE status='ACTIVE'
+      AND json_extract(cycle_snapshot_json,'$.locationId') IN (SELECT id FROM fulfillment_location WHERE market_id=?)
+      AND NOT EXISTS (SELECT 1 FROM payment_intent p WHERE p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=checkout_quote.id))`)
+      .bind(request.marketId),
     auditEventStatement(deps.db, {
       actorUserId: permitted.authUserId,
       action: "SERVICE_AREA.PUBLISH",
@@ -394,11 +423,13 @@ export async function publishAdminServiceArea(
       before: { version: request.expectedVersion },
       after: { version: value.version, zoneCount: request.zones.length },
     }),
+    requirePublicationEffect(deps.db),
     deps.db
       .prepare(
         "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=?",
       )
       .bind(JSON.stringify(value), now, scope, idempotencyKey),
+    requirePublicationEffect(deps.db),
   );
   try {
     await deps.db.batch(statements);
