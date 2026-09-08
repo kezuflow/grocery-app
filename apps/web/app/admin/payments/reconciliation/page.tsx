@@ -1,4 +1,5 @@
 "use client";
+import { ProviderEventRecovery } from "../../../../components/admin/provider-event-recovery";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { AdminReconciliationCaseView, AdminReconciliationPage } from "@freshmarkets/contracts";
@@ -114,6 +115,12 @@ export default function PaymentReconciliationPage() {
                   </p>
                   {item.resolutionUnavailableReason ? (
                     <p className="text-sm">{item.resolutionUnavailableReason}</p>
+                  ) : null}
+                  {item.providerEventRecovery ? (
+                    <ProviderEventRecovery
+                      record={item}
+                      onAccepted={() => load(pagination.cursor)}
+                    />
                   ) : null}
                   <div className="flex flex-wrap items-center gap-3">
                     {item.paymentIntentId ? (

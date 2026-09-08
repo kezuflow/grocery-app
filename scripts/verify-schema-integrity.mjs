@@ -105,6 +105,20 @@ const paymentsBeforeLookupRecovery = database
 const casesBeforeVersion = database
   .prepare("SELECT rowid,* FROM payment_reconciliation_case ORDER BY rowid")
   .all();
+database
+  .prepare(
+    "INSERT INTO payment_provider_event_inbox(id,provider,provider_event_id,payload_hash,processing_status,last_error_code,attempts,received_at,updated_at,raw_payload,signature_verified_at) VALUES ('retained-event-retry','retained-provider','retained-event','retained-hash','RECONCILIATION_REQUIRED','INBOX_REDRIVE_EXHAUSTED',10,1700000000000,1700000001000,'retained-private-evidence',1700000000000)",
+  )
+  .run();
+const inboxColumnsBeforeRecovery = database
+  .prepare("PRAGMA table_info(payment_provider_event_inbox)")
+  .all()
+  .map((column) => column.name);
+const inboxBeforeRecovery = database
+  .prepare(
+    `SELECT rowid,${inboxColumnsBeforeRecovery.map(quote).join(",")} FROM payment_provider_event_inbox ORDER BY rowid`,
+  )
+  .all();
 apply(
   database,
   migrations.filter((name) => name > "0069_schema_integrity.sql"),
@@ -112,6 +126,22 @@ apply(
 assert.deepEqual(
   database.prepare("SELECT rowid,* FROM payment_intent ORDER BY rowid").all(),
   paymentsBeforeLookupRecovery,
+);
+assert.deepEqual(
+  database
+    .prepare(
+      `SELECT rowid,${inboxColumnsBeforeRecovery.map(quote).join(",")} FROM payment_provider_event_inbox ORDER BY rowid`,
+    )
+    .all(),
+  inboxBeforeRecovery,
+);
+assert.equal(
+  database
+    .prepare(
+      "SELECT COUNT(*) count FROM payment_provider_event_inbox WHERE recovery_started_at IS NOT NULL",
+    )
+    .get().count,
+  0,
 );
 assert.equal(database.prepare("SELECT COUNT(*) count FROM payment_lookup_recovery").get().count, 0);
 assert.throws(

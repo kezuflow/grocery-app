@@ -106,6 +106,7 @@ Rules:
 
 - Provider events are durably unique by `(provider, providerEventId)`; application checkout/payment commands have their own stable idempotency keys.
 - Duplicate webhooks return the previously recorded inbox outcome. Provider events do not carry `expectedVersion`; the handler uses current-state validation, conditional aggregate updates, and safe retry/reconciliation on concurrent change.
+- An exhausted verified financial inbox event may enter `RETRY_REQUIRED` only through a reviewed, versioned Global recovery command. The new bounded window preserves original receipt evidence and audits prior attempts; replay uses the existing verified application path. This transition does not override Payment/Refund state or close its financial case.
 - If canonical Payments reaches `SUCCEEDED` but commitment initially fails or the response is lost, recovery must either commit the same order exactly once or create a visible refund/finance exception. Money must never become an invisible orphan.
 - A payment state is never inferred solely from client state.
 - Provider lookup and signed-event application validate provider/reference, amount, currency and the current Payment subject. The Payment compare-and-swap, observed attempt, required downstream reaction, continuation consumption and settlement evidence share a guarded transaction. A zero-row claim or ignored dependent write aborts that transition. Replaying a consistent captured state repairs a missing historical reaction without incrementing its Payment version.

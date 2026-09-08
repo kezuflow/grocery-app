@@ -12,10 +12,12 @@ export async function linkProviderReconciliationCases(
   if (!reference) return;
   const path = event.kind === "refund" ? "$.refundReference" : "$.providerReference";
   const cases = await database
-    .prepare(`SELECT id,version FROM payment_reconciliation_case WHERE payment_intent_id IS NULL AND category='UNMAPPED_PROVIDER_REFERENCE' AND status='OPEN'
+    .prepare(`SELECT id,version FROM payment_reconciliation_case WHERE payment_intent_id IS NULL AND status='OPEN'
     AND CASE WHEN json_valid(details_json) THEN json_extract(details_json,'$.provider') END=?
-    AND CASE WHEN json_valid(details_json) THEN json_extract(details_json,?) END=?`)
-    .bind(event.provider, path, reference)
+    AND ((category='UNMAPPED_PROVIDER_REFERENCE' AND CASE WHEN json_valid(details_json) THEN json_extract(details_json,?) END=?)
+      OR (category='AMBIGUOUS_OUTCOME' AND CASE WHEN json_valid(details_json) THEN json_extract(details_json,'$.reason') END='INBOX_REDRIVE_EXHAUSTED'
+        AND CASE WHEN json_valid(details_json) THEN json_extract(details_json,'$.providerEventId') END=?))`)
+    .bind(event.provider, path, reference, event.providerEventId)
     .all<{ id: string; version: number }>();
   if (!cases.results.length) return;
   const mapping =

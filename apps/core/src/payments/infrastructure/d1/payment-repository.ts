@@ -373,6 +373,7 @@ export type InboxRow = {
   signatureVerifiedAt: number | null;
   attempts: number;
   receivedAt: number;
+  recoveryStartedAt: number | null;
   availableAt: number | null;
   leaseOwner: string | null;
   leaseExpiresAt: number | null;
@@ -448,7 +449,7 @@ export function extendPaymentRepository(database: D1Database) {
     async findInboxEntry(provider: string, providerEventId: string): Promise<InboxRow | null> {
       const row = await database
         .prepare(
-          "SELECT id, provider, provider_event_id, payload_hash, processing_status, normalized_observation_json, raw_payload, signature_verified_at, attempts, received_at, available_at, lease_owner, lease_expires_at FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
+          "SELECT id, provider, provider_event_id, payload_hash, processing_status, normalized_observation_json, raw_payload, signature_verified_at, attempts, received_at, recovery_started_at, available_at, lease_owner, lease_expires_at FROM payment_provider_event_inbox WHERE provider=? AND provider_event_id=?",
         )
         .bind(provider, providerEventId)
         .first<{
@@ -462,6 +463,7 @@ export function extendPaymentRepository(database: D1Database) {
           signature_verified_at: number | null;
           attempts: number;
           received_at: number;
+          recovery_started_at: number | null;
           available_at: number | null;
           lease_owner: string | null;
           lease_expires_at: number | null;
@@ -478,6 +480,7 @@ export function extendPaymentRepository(database: D1Database) {
             signatureVerifiedAt: row.signature_verified_at,
             attempts: row.attempts,
             receivedAt: row.received_at,
+            recoveryStartedAt: row.recovery_started_at,
             availableAt: row.available_at,
             leaseOwner: row.lease_owner,
             leaseExpiresAt: row.lease_expires_at,
@@ -497,7 +500,7 @@ export function extendPaymentRepository(database: D1Database) {
     }): Promise<number> {
       return database
         .prepare(
-          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, provider_reference, event_type, normalized_observation_json, raw_payload, signature_verified_at, processing_status, attempts, received_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', 0, ?, ?, ?)",
+          "INSERT OR IGNORE INTO payment_provider_event_inbox (id, provider, provider_event_id, payload_hash, provider_reference, event_type, normalized_observation_json, raw_payload, signature_verified_at, processing_status, attempts, received_at, recovery_started_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', 0, ?, NULL, ?, ?)",
         )
         .bind(
           crypto.randomUUID(),
@@ -568,7 +571,7 @@ export function extendPaymentRepository(database: D1Database) {
           `UPDATE payment_provider_event_inbox
            SET lease_owner=?, lease_expires_at=?, updated_at=?, attempts=attempts+?
            WHERE id=? AND attempts=?
-             AND (?=0 OR (attempts<10 AND received_at>?))
+             AND (?=0 OR (attempts<10 AND COALESCE(recovery_started_at,received_at)>?))
              AND ${recoverableInboxState}
              AND (available_at IS NULL OR available_at<=?)
              AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at<=?)`,
@@ -593,7 +596,7 @@ export function extendPaymentRepository(database: D1Database) {
         .prepare(
           `SELECT id, provider, provider_event_id, payload_hash, processing_status,
                   normalized_observation_json, raw_payload, signature_verified_at,
-                  attempts, received_at, available_at,
+                  attempts, received_at, recovery_started_at, available_at,
                   lease_owner, lease_expires_at
            FROM payment_provider_event_inbox
            WHERE ${recoverableInboxState}
@@ -614,6 +617,7 @@ export function extendPaymentRepository(database: D1Database) {
           signature_verified_at: number | null;
           attempts: number;
           received_at: number;
+          recovery_started_at: number | null;
           available_at: number | null;
           lease_owner: string | null;
           lease_expires_at: number | null;
@@ -629,6 +633,7 @@ export function extendPaymentRepository(database: D1Database) {
         signatureVerifiedAt: row.signature_verified_at,
         attempts: row.attempts,
         receivedAt: row.received_at,
+        recoveryStartedAt: row.recovery_started_at,
         availableAt: row.available_at,
         leaseOwner: row.lease_owner,
         leaseExpiresAt: row.lease_expires_at,

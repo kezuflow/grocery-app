@@ -1,6 +1,14 @@
 import { reconciliationCaseCategories } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 export const reconciliationCaseSchema = z.object({
+  providerEventRecovery: z
+    .object({
+      canRetry: z.boolean(),
+      attempts: z.number().int().safe().nonnegative(),
+      state: z.string(),
+      unavailableReason: z.string().nullable(),
+    })
+    .optional(),
   caseId: z.string(),
   paymentIntentId: z.string().nullable(),
   category: z.enum(reconciliationCaseCategories),

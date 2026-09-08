@@ -62,7 +62,7 @@ const normalizedObservation = z.discriminatedUnion("kind", [
     paidAt: instant.nullable(),
   }),
 ]);
-function observation(value: string): VerifiedProviderEvent | null {
+export function parseNormalizedProviderObservation(value: string): VerifiedProviderEvent | null {
   try {
     const input: unknown = JSON.parse(value);
     const parsed = normalizedObservation.safeParse(input);
@@ -97,7 +97,9 @@ export async function redriveProviderInbox(
   };
   for (const inbox of due) {
     const leaseOwner = crypto.randomUUID();
-    const exhausted = inbox.attempts >= 10 || now - inbox.receivedAt >= 24 * 60 * 60 * 1000;
+    const exhausted =
+      inbox.attempts >= 10 ||
+      now - (inbox.recoveryStartedAt ?? inbox.receivedAt) >= 24 * 60 * 60 * 1000;
     if (
       (await repository.claimInbox({
         id: inbox.id,
@@ -112,7 +114,7 @@ export async function redriveProviderInbox(
     outcome.claimed += 1;
 
     const event = inbox.normalizedObservationJson
-      ? observation(inbox.normalizedObservationJson)
+      ? parseNormalizedProviderObservation(inbox.normalizedObservationJson)
       : null;
     if (
       inbox.signatureVerifiedAt === null ||

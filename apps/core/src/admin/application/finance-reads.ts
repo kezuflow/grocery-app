@@ -1,3 +1,4 @@
+import { readProviderEventRecovery } from "../../payments/application/read-provider-event-recovery";
 import {
   reconciliationResolutionEvidence,
   unresolvedReconciliationReason,
@@ -1111,7 +1112,13 @@ export async function listAdminReconciliationCases(
       resolvedAt: number | null;
     }>();
   const hasMore = rows.results.length > limit;
+  const recoveries = await readProviderEventRecovery(
+    deps.db,
+    rows.results.slice(0, limit).map((row) => row.id),
+    access.value.capabilities.includes("payments.manage"),
+  );
   const items: AdminReconciliationCaseView[] = rows.results.slice(0, limit).map((row) => ({
+    providerEventRecovery: recoveries.get(row.id),
     caseId: row.id,
     version: row.version,
     resolutionUnavailableReason:
