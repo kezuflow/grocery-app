@@ -325,7 +325,9 @@ describe("payment intent creation", () => {
           database: env.DB,
           registry,
           now: Date.now() + 20 * 60000,
-          emailDelivery: { send: async () => ({ ok: false, code: "TEST_DISABLED" }) },
+          emailDelivery: {
+            send: async () => ({ ok: false, code: "TEST_DISABLED", outcome: "NOT_SENT" }),
+          },
         });
         expect(
           await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")

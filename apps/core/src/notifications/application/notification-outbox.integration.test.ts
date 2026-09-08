@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { deliverNotifications } from "./deliver-notifications";
+import { deliverNotifications, deliverNotificationById } from "./deliver-notifications";
 import { enqueueNotification } from "./enqueue-notification";
+import { createCloudflareEmailDeliveryPort } from "../infrastructure/email-delivery-port";
 import {
   projectDomainNotifications,
   projectOrderCancellationNotification,
@@ -18,6 +19,273 @@ async function customer() {
 }
 
 describe("notification outbox", () => {
+  async function pending() {
+    const customerId = await customer();
+    const result = await enqueueNotification(env.DB, {
+      type: "ORDER_CONFIRMED",
+      aggregateType: "ORDER",
+      aggregateId: crypto.randomUUID(),
+      customerId,
+      recipient: "test@example.com",
+      templateData: {},
+      scheduledAt: 1,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!result.ok) throw new Error("Missing notification");
+    return result.value.id;
+  }
+  it("never retries a provider-accepted send whose response is lost", async () => {
+    const id = await pending();
+    let sends = 0;
+    const port = createCloudflareEmailDeliveryPort({
+      AUTH_EMAIL_FROM: "orders@example.com",
+      EMAIL: {
+        async send() {
+          sends++;
+          throw new Error("Network response lost");
+        },
+      },
+    });
+    expect(await deliverNotificationById(env.DB, port, id, 1)).toBe("TERMINAL");
+    expect(await deliverNotificationById(env.DB, port, id, 1_000_000)).toBe("TERMINAL");
+    expect(sends).toBe(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,last_error_code,attempts FROM notification_outbox WHERE id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ status: "FAILED", last_error_code: "SEND_OUTCOME_UNKNOWN", attempts: 1 });
+  });
+  it("allows one concurrent consumer to contact the provider", async () => {
+    const id = await pending();
+    let sends = 0;
+    const port = {
+      async send() {
+        sends++;
+        return { ok: true as const };
+      },
+    };
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => deliverNotificationById(env.DB, port, id, 1)),
+    );
+    expect(sends).toBe(1);
+    expect(results.filter((result) => result === "SENT")).toHaveLength(1);
+    expect(await deliverNotificationById(env.DB, port, id, 2)).toBe("ALREADY_SENT");
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) count FROM notification_attempt WHERE notification_id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it.each(["outbox", "attempt"])(
+    "retains uncertainty when final %s evidence cannot commit",
+    async (effect) => {
+      const id = await pending();
+      let sends = 0;
+      const port = {
+        async send() {
+          sends++;
+          return { ok: true as const };
+        },
+      };
+      const target = effect === "outbox" ? "notification_outbox" : "notification_attempt";
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_send_completion BEFORE UPDATE ON ${target} WHEN NEW.status='SENT' BEGIN SELECT RAISE(IGNORE); END;`,
+      );
+      try {
+        expect(await deliverNotificationById(env.DB, port, id, 1)).toBe("BUSY");
+        expect(
+          await env.DB.prepare("SELECT status FROM notification_outbox WHERE id=?")
+            .bind(id)
+            .first(),
+        ).toEqual({ status: "PROCESSING" });
+        expect(
+          await env.DB.prepare("SELECT status FROM notification_attempt WHERE notification_id=?")
+            .bind(id)
+            .first(),
+        ).toEqual({ status: "PROCESSING" });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_send_completion");
+      }
+      expect(await deliverNotificationById(env.DB, port, id, 300_002)).toBe("TERMINAL");
+      expect(sends).toBe(1);
+    },
+  );
+  it("applies a late known success to the same uncertain attempt", async () => {
+    const id = await pending();
+    let sends = 0;
+    expect(
+      await deliverNotificationById(
+        env.DB,
+        {
+          async send() {
+            sends++;
+            expect(
+              await deliverNotificationById(
+                env.DB,
+                {
+                  async send() {
+                    throw new Error("Must not send replacement");
+                  },
+                },
+                id,
+                300_002,
+              ),
+            ).toBe("TERMINAL");
+            return { ok: true };
+          },
+        },
+        id,
+        1,
+      ),
+    ).toBe("SENT");
+    expect(sends).toBe(1);
+    expect(
+      await env.DB.prepare("SELECT status,last_error_code FROM notification_outbox WHERE id=?")
+        .bind(id)
+        .first(),
+    ).toEqual({ status: "SENT", last_error_code: null });
+    expect(
+      await env.DB.prepare("SELECT status FROM notification_attempt WHERE notification_id=?")
+        .bind(id)
+        .first(),
+    ).toEqual({ status: "SENT" });
+  });
+  it("never performs a sixth send after the fifth result persistence is lost", async () => {
+    const id = await pending();
+    let now = 1;
+    let sends = 0;
+    for (let attempt = 1; attempt < 5; attempt++) {
+      expect(
+        await deliverNotificationById(
+          env.DB,
+          {
+            async send() {
+              sends++;
+              return { ok: false, code: "RATE_LIMITED", outcome: "NOT_SENT" };
+            },
+          },
+          id,
+          now,
+        ),
+      ).toBe("RETRY");
+      const row = await env.DB.prepare("SELECT available_at FROM notification_outbox WHERE id=?")
+        .bind(id)
+        .first<{ available_at: number }>();
+      if (!row) throw new Error("Missing notification");
+      now = row.available_at;
+    }
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_fifth_send BEFORE UPDATE ON notification_outbox WHEN NEW.status='SENT' BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(
+        await deliverNotificationById(
+          env.DB,
+          {
+            async send() {
+              sends++;
+              return { ok: true };
+            },
+          },
+          id,
+          now,
+        ),
+      ).toBe("BUSY");
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_fifth_send");
+    }
+    await deliverNotifications(
+      env.DB,
+      {
+        async send() {
+          throw new Error("Sixth send forbidden");
+        },
+      },
+      now + 300_001,
+    );
+    expect(sends).toBe(5);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,attempts,last_error_code FROM notification_outbox WHERE id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ status: "FAILED", attempts: 5, last_error_code: "SEND_OUTCOME_UNKNOWN" });
+  });
+  it("respects the scheduled instant on direct delivery commands", async () => {
+    const id = await pending();
+    let sends = 0;
+    await env.DB.prepare("UPDATE notification_outbox SET scheduled_at=100 WHERE id=?")
+      .bind(id)
+      .run();
+    const port = {
+      async send() {
+        sends++;
+        return { ok: true as const };
+      },
+    };
+    expect(await deliverNotificationById(env.DB, port, id, 99)).toBe("BUSY");
+    expect(sends).toBe(0);
+    expect(await deliverNotificationById(env.DB, port, id, 100)).toBe("SENT");
+    expect(sends).toBe(1);
+  });
+  it("cannot send without its durable attempt record", async () => {
+    const customerId = await customer();
+    const queued = await enqueueNotification(env.DB, {
+      type: "ORDER_CONFIRMED",
+      aggregateType: "ORDER",
+      aggregateId: "attempt-proof",
+      customerId,
+      recipient: "proof@example.com",
+      templateData: {},
+      scheduledAt: 1,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!queued.ok) throw new Error("Missing intent");
+    let sends = 0;
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_email_attempt BEFORE INSERT ON notification_attempt BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      await deliverNotificationById(
+        env.DB,
+        {
+          async send() {
+            sends++;
+            return { ok: true };
+          },
+        },
+        queued.value.id,
+        1,
+      );
+      expect(sends).toBe(0);
+      expect(
+        await env.DB.prepare("SELECT status,attempts FROM notification_outbox WHERE id=?")
+          .bind(queued.value.id)
+          .first(),
+      ).toEqual({ status: "PENDING", attempts: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_email_attempt");
+    }
+    expect(
+      await deliverNotificationById(
+        env.DB,
+        {
+          async send() {
+            sends++;
+            return { ok: true };
+          },
+        },
+        queued.value.id,
+        1,
+      ),
+    ).toBe("SENT");
+    expect(sends).toBe(1);
+  });
   it("deduplicates intent and records successful delivery independently", async () => {
     const customerId = await customer();
     const key = `notification-${crypto.randomUUID()}`;
@@ -70,7 +338,7 @@ describe("notification outbox", () => {
     });
     const failing = {
       async send() {
-        return { ok: false as const, code: "TEMPORARY" };
+        return { ok: false as const, code: "TEMPORARY", outcome: "NOT_SENT" as const };
       },
     };
     let now = 1;
@@ -187,7 +455,7 @@ describe("notification outbox", () => {
       env.DB,
       {
         async send() {
-          return { ok: false, code: "TEMPORARY" } as const;
+          return { ok: false, code: "TEMPORARY", outcome: "NOT_SENT" } as const;
         },
       },
       now,

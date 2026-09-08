@@ -1144,7 +1144,9 @@ describe("cancellation of remaining paid balances", () => {
     await job.run({
       database: env.DB,
       registry: new ProviderRegistry("test", []),
-      emailDelivery: { send: async () => ({ ok: false, code: "TEST_DISABLED" }) },
+      emailDelivery: {
+        send: async () => ({ ok: false, code: "TEST_DISABLED", outcome: "NOT_SENT" }),
+      },
       now,
     });
     expect(
