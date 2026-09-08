@@ -224,7 +224,7 @@ Core receives payment provider webhooks through a signed public webhook handler 
 - insert `(provider, providerEventId)` into the durable Payments inbox exactly once;
 - after successful signature verification, persist the exact bounded raw body, payload hash, provider event identity/type and verification time alongside the provider-neutral observation and processing history; never persist secret keys or authorization headers, and never expose raw payloads through ordinary Admin DTOs or logs;
 - append one immutable webhook-receipt row for every verified delivery, including duplicates and verified payloads rejected during normalization, while the separate event inbox deduplicates business processing by `(provider, providerEventId)`;
-- conditionally lease due `RECEIVED`/`RETRY_REQUIRED` rows so redelivery and scheduled redrive share one application path;
+- conditionally lease due `RECEIVED`/`RETRY_REQUIRED` rows and mapping-only `RECONCILIATION_REQUIRED` exceptions (`INTENT_MAPPING_AMBIGUOUS`, `REFUND_UNMAPPED`) so redelivery and scheduled redrive share one application path;
 - translate the vendor state into canonical Payments state under the configured payment commitment policy;
 - update Payments using handler-side legal-transition and compare-and-swap protection, safely retrying/reconciling concurrent aggregate changes;
 - invoke an explicit idempotent Order application command when the canonical outcome is sufficient;
@@ -243,6 +243,8 @@ Invalid or mismatched evidence fails closed into reconciliation without mutating
 Application-accessible mock payment providers, simulation RPCs/routes/pages, and mock runtime configuration are removed. Local and shared development use PayMongo sandbox credentials. Deterministic fake adapters remain test-only and are never registered by an application runtime.
 
 Retry availability uses bounded backoff. Expired leases are reclaimable; competing Workers cannot both own an observation. Retry age/attempt exhaustion transitions the inbox row to `RECONCILIATION_REQUIRED` and creates one operationally visible case, so recovery does not depend on the provider sending the event again.
+
+The lease durably consumes an application attempt before work starts, including interrupted work. Both delivery and scheduled claims enforce ten attempts and a 24-hour age limit; exhaustion handling does not consume another application attempt. Scheduled replay requires recorded signature verification and validates the normalized identity, hash, exact money and settlement evidence before application. Applied inbox evidence cannot be downgraded by a late failure. Mapping-only exceptions remain retryable within the same bounds; financial mismatches, illegal transitions and exhaustion do not automatically reopen. Once a verified event applies to a unique current Payment mapping, previously unlinked matching reference cases acquire that Payment identity with a versioned, audited transaction and remain open for financial review. A failed association is recoverable without repeating financial effects.
 
 The scheduler redrives provider inbox/reconciliation, expires provider actions and checkout holds, advances cycles and recovers notification delivery. Active membership/trial/recurring-billing jobs are removed.
 

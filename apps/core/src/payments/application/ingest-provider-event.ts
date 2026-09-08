@@ -1,3 +1,4 @@
+import { linkProviderReconciliationCases } from "./link-provider-reconciliation-cases";
 import type { VerifiedProviderEvent } from "../ports/payment-provider";
 import {
   extendPaymentRepository,
@@ -58,14 +59,31 @@ export async function applyVerifiedProviderEvent(
   now = Date.now(),
 ): Promise<{ ok: true; value: ProviderEventResult }> {
   const repository = extendPaymentRepository(database);
-  const finish = (processingStatus: ProviderEventProcessingStatus, errorCode?: string) =>
-    repository.setInboxStatus({
+  let mappedPaymentId: string | null = null;
+  const finish = async (processingStatus: ProviderEventProcessingStatus, errorCode?: string) => {
+    if (
+      processingStatus === "APPLIED" &&
+      mappedPaymentId &&
+      (event.kind === "payment" || event.kind === "refund")
+    )
+      await linkProviderReconciliationCases(database, event, mappedPaymentId, now);
+    const changed = await repository.setInboxStatus({
       id: inboxId,
       processingStatus,
       errorCode,
       now,
       leaseOwner,
     });
+    if (changed !== 1) {
+      const current = await repository.findInboxEntry(event.provider, event.providerEventId);
+      if (
+        !current ||
+        current.payloadHash !== event.payloadHash ||
+        !["APPLIED", "DUPLICATE"].includes(current.processingStatus)
+      )
+        throw new Error("INBOX_LEASE_LOST");
+    }
+  };
 
   if (event.kind === "subscription" || event.kind === "subscription_invoice") {
     const application =
@@ -130,6 +148,7 @@ export async function applyVerifiedProviderEvent(
       await finish("RECONCILIATION_REQUIRED", "AMOUNT_OR_CURRENCY_MISMATCH");
       return result(event, "RECONCILIATION_REQUIRED", refund.paymentIntentId, event.canonicalState);
     }
+    mappedPaymentId = refund.paymentIntentId;
     if (refund.status === "SUCCEEDED" && event.canonicalState === "PROCESSING") {
       await refunds.refreshIntentRefundState(refund.paymentIntentId, now);
       await advanceOrderCancellation(database, {
@@ -248,6 +267,7 @@ export async function applyVerifiedProviderEvent(
     return result(event, "RECONCILIATION_REQUIRED", intents[0].id, event.canonicalState);
   }
 
+  mappedPaymentId = intents[0].id;
   const application = await applyObservationToIntents(
     database,
     intents,
@@ -413,6 +433,7 @@ export async function ingestProviderEvent(
     leaseOwner,
     now,
     leaseMs: 30_000,
+    expectedAttempts: inbox.attempts,
   });
   if (claimedLease !== 1) return result(event, "RETRY_REQUIRED");
   return applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now);

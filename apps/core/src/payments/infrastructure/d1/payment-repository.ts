@@ -1,3 +1,5 @@
+const recoverableInboxState =
+  "(processing_status IN ('RECEIVED','RETRY_REQUIRED') OR (processing_status='RECONCILIATION_REQUIRED' AND last_error_code IN ('INTENT_MAPPING_AMBIGUOUS','REFUND_UNMAPPED')))";
 import type { PaymentObservationIdentity } from "../../ports/payment-provider";
 import type { ProviderSettlementObservation } from "../../ports/payment-provider";
 
@@ -520,17 +522,20 @@ export function extendPaymentRepository(database: D1Database) {
       errorCode?: string | null;
       now: number;
       leaseOwner?: string;
-    }): Promise<void> {
-      const retry = input.processingStatus === "RETRY_REQUIRED";
+    }): Promise<number> {
+      const retry =
+        input.processingStatus === "RETRY_REQUIRED" ||
+        (input.processingStatus === "RECONCILIATION_REQUIRED" &&
+          ["INTENT_MAPPING_AMBIGUOUS", "REFUND_UNMAPPED"].includes(input.errorCode ?? ""));
       return database
         .prepare(
           `UPDATE payment_provider_event_inbox
-           SET processing_status=?, last_error_code=?, attempts=attempts+1,
+           SET processing_status=?, last_error_code=?,
                first_failed_at=CASE WHEN ? THEN COALESCE(first_failed_at, ?) ELSE first_failed_at END,
                available_at=CASE WHEN ? THEN ? + MIN(900000, 1000 * (1 << MIN(attempts, 9))) ELSE NULL END,
                processed_at=CASE WHEN ? THEN NULL ELSE ? END,
                lease_owner=NULL, lease_expires_at=NULL, updated_at=?
-           WHERE id=? AND (? IS NULL OR lease_owner=?)`,
+           WHERE id=? AND (? IS NULL OR lease_owner=?) AND (processing_status NOT IN ('APPLIED','DUPLICATE') OR ? IN ('APPLIED','DUPLICATE'))`,
         )
         .bind(
           input.processingStatus,
@@ -545,17 +550,26 @@ export function extendPaymentRepository(database: D1Database) {
           input.id,
           input.leaseOwner ?? null,
           input.leaseOwner ?? null,
+          input.processingStatus,
         )
         .run()
-        .then(() => undefined);
+        .then((result) => result.meta.changes);
     },
-    claimInbox(input: { id: string; leaseOwner: string; now: number; leaseMs: number }) {
+    claimInbox(input: {
+      id: string;
+      leaseOwner: string;
+      now: number;
+      leaseMs: number;
+      expectedAttempts: number;
+      countAttempt?: boolean;
+    }) {
       return database
         .prepare(
           `UPDATE payment_provider_event_inbox
-           SET lease_owner=?, lease_expires_at=?, updated_at=?
-           WHERE id=?
-             AND processing_status IN ('RECEIVED','RETRY_REQUIRED')
+           SET lease_owner=?, lease_expires_at=?, updated_at=?, attempts=attempts+?
+           WHERE id=? AND attempts=?
+             AND (?=0 OR (attempts<10 AND received_at>?))
+             AND ${recoverableInboxState}
              AND (available_at IS NULL OR available_at<=?)
              AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at<=?)`,
         )
@@ -563,7 +577,11 @@ export function extendPaymentRepository(database: D1Database) {
           input.leaseOwner,
           input.now + input.leaseMs,
           input.now,
+          input.countAttempt === false ? 0 : 1,
           input.id,
+          input.expectedAttempts,
+          input.countAttempt === false ? 0 : 1,
+          input.now - 24 * 60 * 60 * 1000,
           input.now,
           input.now,
         )
@@ -578,7 +596,7 @@ export function extendPaymentRepository(database: D1Database) {
                   attempts, received_at, available_at,
                   lease_owner, lease_expires_at
            FROM payment_provider_event_inbox
-           WHERE processing_status IN ('RECEIVED','RETRY_REQUIRED')
+           WHERE ${recoverableInboxState}
              AND normalized_observation_json IS NOT NULL
              AND (available_at IS NULL OR available_at<=?)
              AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at<=?)
