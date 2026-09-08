@@ -108,8 +108,8 @@ export async function listAdminCustomers(
     binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
   }
   if (query !== "") {
-    clauses.push("u.email LIKE ?");
-    binds.push(`%${query}%`);
+    clauses.push("instr(lower(u.email),lower(?)) > 0");
+    binds.push(query);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db

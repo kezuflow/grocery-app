@@ -17,6 +17,7 @@ import {
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import { CustomerPrivacyPanel } from "../../../../components/admin/customer-privacy-panel";
+import { CustomerSupportPanel } from "../../../../components/admin/customer-support-panel";
 
 type LoadState =
   | { phase: "loading" }
@@ -224,6 +225,7 @@ export default function CustomerDetailPage({
       </ListPageSection>
 
       <CustomerPrivacyPanel customerId={customerId} command={command} onChanged={load} />
+      <CustomerSupportPanel customerId={customerId} command={command} onChanged={load} />
       <ListPageSection
         title="Recent material history"
         description="Sanitized audit summaries for this account."

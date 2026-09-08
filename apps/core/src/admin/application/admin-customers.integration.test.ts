@@ -4,6 +4,10 @@ import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { acceptCustomerInvitation } from "../../customer/invitations";
 import { updateMyCustomerProfile } from "../../customer/profile";
+import {
+  appendCustomerSupportNote,
+  updateAdminCustomerProfile,
+} from "./customer-profile-administration";
 import { createAuth } from "../../auth/service";
 import { inviteCustomer, revokeCustomerInvitation } from "./customer-invitations";
 import { changeCustomerAccess } from "./change-customer-access";
@@ -11,6 +15,356 @@ import { revokeCustomerSessions } from "./revoke-customer-sessions";
 import { applyPrivacyAction, requestCustomerClosure } from "./customer-commands";
 
 const core = exports.default as unknown as CoreServiceBinding;
+
+describe("Global customer preferences and support notes", () => {
+  it("searches long email text literally without exceeding D1 pattern limits", async () => {
+    const { request, account } = await workspace();
+    const email = `${"a".repeat(55)}_probe_${crypto.randomUUID().slice(0, 8)}@example.com`;
+    await env.DB.prepare("UPDATE user SET email=? WHERE id=?").bind(email, account.userId).run();
+    expect(
+      await core.listAdminCustomers({
+        headers: request.headers,
+        requestId: request.requestId,
+        query: email.toUpperCase(),
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { items: [expect.objectContaining({ customerId: request.customerId })] },
+    });
+    expect(
+      await core.listAdminCustomers({
+        headers: request.headers,
+        requestId: request.requestId,
+        query: "%",
+      }),
+    ).toMatchObject({ ok: true, value: { items: [] } });
+  });
+  it("rejects invalid notes and preserves a single winner across customer and staff profile edits", async () => {
+    const { request, account, manager } = await workspace();
+    expect(await core.appendCustomerSupportNote({ ...request, body: " " })).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    expect(
+      await core.appendCustomerSupportNote({ ...request, body: "a".repeat(2001) }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO customer_support_note(id,customer_id,author_staff_id,author_display_name,body,created_at,idempotency_key) VALUES (?,'missing',?,'Operator','A note',1,?)",
+      )
+        .bind(crypto.randomUUID(), manager.staffId, crypto.randomUUID())
+        .run(),
+    ).rejects.toThrow(/FOREIGN KEY constraint failed/);
+    const results = await Promise.all([
+      core.updateAdminCustomerProfile({
+        ...request,
+        preferredLanguage: "English",
+        promotionalEmails: false,
+        expectedVersion: 1,
+        reason: "Customer requested",
+      }),
+      core.updateMyCustomerProfile({
+        headers: { cookie: account.cookie },
+        requestId: crypto.randomUUID(),
+        preferredLanguage: "Cebuano",
+        promotionalEmails: true,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT version FROM customer WHERE id=?")
+        .bind(request.customerId)
+        .first(),
+    ).toEqual({ version: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.PREFERENCES_UPDATED'",
+      )
+        .bind(request.customerId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  function noteQuery({
+    headers,
+    requestId,
+    customerId,
+  }: import("@freshmarkets/contracts").AdminCustomerDetailRequest) {
+    return { headers, requestId, customerId };
+  }
+  async function workspace() {
+    const manager = await seedManager();
+    const account = await signUp();
+    const customerId = await seedCustomer(account);
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    return { manager, account, request };
+  }
+  it("edits only application preferences with versioned exact replay", async () => {
+    const { request, account } = await workspace();
+    const identity = await env.DB.prepare("SELECT name,email FROM user WHERE id=?")
+      .bind(account.userId)
+      .first();
+    const edit = {
+      ...request,
+      preferredLanguage: "Cebuano",
+      promotionalEmails: true,
+      expectedVersion: 1,
+      reason: "Customer asked for these preferences",
+    };
+    const saved = await core.updateAdminCustomerProfile(edit);
+    expect(saved).toMatchObject({
+      ok: true,
+      value: { preferredLanguage: "Cebuano", promotionalEmails: true, version: 2 },
+    });
+    expect(
+      await core.updateAdminCustomerProfile({
+        ...edit,
+        idempotencyKey: crypto.randomUUID(),
+        expectedVersion: 2,
+        promotionalEmails: false,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await core.updateAdminCustomerProfile(edit)).toEqual(saved);
+    expect(await core.updateAdminCustomerProfile({ ...edit, reason: "Different" })).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    expect(
+      await core.updateAdminCustomerProfile({ ...edit, idempotencyKey: crypto.randomUUID() }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(
+      await env.DB.prepare("SELECT name,email FROM user WHERE id=?").bind(account.userId).first(),
+    ).toEqual(identity);
+  });
+  it("appends concurrent notes once each, retains attribution, and paginates exact customers", async () => {
+    const { request, manager } = await workspace();
+    const note = { ...request, body: "Customer prefers a call before delivery." };
+    const same = await Promise.all([
+      core.appendCustomerSupportNote(note),
+      core.appendCustomerSupportNote(note),
+    ]);
+    expect(same[0]).toEqual(same[1]);
+    expect(same[0]).toMatchObject({
+      ok: true,
+      value: { body: note.body, authorStaffId: manager.staffId, authorDisplayName: "CRM Mgr" },
+    });
+    const different = await Promise.all([
+      core.appendCustomerSupportNote({
+        ...note,
+        body: "Correction: use the saved address instructions.",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+      core.appendCustomerSupportNote({
+        ...note,
+        body: "Follow-up completed.",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(different.every((result) => result.ok)).toBe(true);
+    const first = await core.listCustomerSupportNotes({ ...noteQuery(request), limit: 1 });
+    if (!first.ok || !first.value.nextCursor) throw new Error("Missing notes page");
+    const second = await core.listCustomerSupportNotes({
+      ...noteQuery(request),
+      limit: 100,
+      cursor: first.value.nextCursor,
+    });
+    if (!second.ok) throw new Error("Missing remaining notes");
+    expect(
+      new Set([...first.value.items, ...second.value.items].map((item) => item.noteId)).size,
+    ).toBe(3);
+    const other = await workspace();
+    expect(await core.listCustomerSupportNotes(noteQuery(other.request))).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
+    expect(await core.appendCustomerSupportNote({ ...note, body: "Altered" })).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    await expect(
+      env.DB.prepare("UPDATE customer_support_note SET body='replacement' WHERE customer_id=?")
+        .bind(request.customerId)
+        .run(),
+    ).rejects.toThrow(/IMMUTABLE_CUSTOMER_SUPPORT_NOTE/);
+    await expect(
+      env.DB.prepare("DELETE FROM customer_support_note WHERE customer_id=?")
+        .bind(request.customerId)
+        .run(),
+    ).rejects.toThrow(/IMMUTABLE_CUSTOMER_SUPPORT_NOTE/);
+    await env.DB.prepare("UPDATE staff_identity SET display_name='Renamed operator' WHERE id=?")
+      .bind(manager.staffId)
+      .run();
+    expect(await core.appendCustomerSupportNote(note)).toEqual(same[0]);
+    const history = await core.listCustomerSupportNotes(noteQuery(request));
+    expect(history).toMatchObject({
+      ok: true,
+      value: {
+        items: expect.arrayContaining([expect.objectContaining({ authorDisplayName: "CRM Mgr" })]),
+      },
+    });
+    expect(await core.getAdminCustomerProfile(request)).toMatchObject({
+      ok: true,
+      value: { version: 1 },
+    });
+    const audits = await env.DB.prepare(
+      "SELECT details_json FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.SUPPORT_NOTE_ADDED'",
+    )
+      .bind(request.customerId)
+      .all<{ details_json: string }>();
+    expect(audits.results).toHaveLength(3);
+    expect(audits.results.every((row) => !row.details_json.includes("Customer prefers"))).toBe(
+      true,
+    );
+  });
+  it.each(["note", "profile"])(
+    "rejects %s for a customer or a location-only staff member",
+    async (kind) => {
+      const { request, account, manager } = await workspace();
+      const run = (headers: { cookie: string }) =>
+        kind === "note"
+          ? core.appendCustomerSupportNote({ ...request, headers, body: "Private note" })
+          : core.updateAdminCustomerProfile({
+              ...request,
+              headers,
+              preferredLanguage: null,
+              promotionalEmails: false,
+              expectedVersion: 1,
+              reason: "Requested",
+            });
+      expect(await run({ cookie: account.cookie })).toMatchObject({
+        ok: false,
+        error: { code: "FORBIDDEN" },
+      });
+      expect(
+        await core.listCustomerSupportNotes({
+          ...noteQuery(request),
+          headers: { cookie: account.cookie },
+        }),
+      ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+      await env.DB.prepare("DELETE FROM staff_scope WHERE staff_id=?").bind(manager.staffId).run();
+      await env.DB.prepare(
+        "INSERT INTO staff_scope(id,staff_id,scope_kind,location_id) VALUES (?,?,'location','location-cebu-central')",
+      )
+        .bind(crypto.randomUUID(), manager.staffId)
+        .run();
+      expect(await run(request.headers)).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    },
+  );
+  it.each([
+    "note:write",
+    "note:audit",
+    "note:receipt",
+    "profile:write",
+    "profile:audit",
+    "profile:receipt",
+  ])("rolls back required %s effects", async (scenario) => {
+    const { request } = await workspace();
+    const isNote = scenario.startsWith("note:");
+    const run = () =>
+      isNote
+        ? core.appendCustomerSupportNote({ ...request, body: "Private support annotation" })
+        : core.updateAdminCustomerProfile({
+            ...request,
+            preferredLanguage: "English",
+            promotionalEmails: false,
+            expectedVersion: 1,
+            reason: "Customer requested",
+          });
+    const scope = isNote ? "admin.customers.support-note" : "admin.customers.profile";
+    const trigger = scenario.endsWith(":write")
+      ? isNote
+        ? "BEFORE INSERT ON customer_support_note"
+        : "BEFORE UPDATE OF preferred_language ON customer"
+      : scenario.endsWith(":audit")
+        ? `BEFORE INSERT ON audit_event WHEN NEW.action='${isNote ? "CUSTOMER.SUPPORT_NOTE_ADDED" : "CUSTOMER.PREFERENCES_UPDATED"}'`
+        : `BEFORE UPDATE ON idempotency_records WHEN NEW.scope='${scope}' AND NEW.status='SUCCEEDED'`;
+    await env.DB.exec(
+      `CREATE TRIGGER ignore_support_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END;`,
+    );
+    try {
+      expect(await run()).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT version,preferred_language FROM customer WHERE id=?")
+          .bind(request.customerId)
+          .first(),
+      ).toEqual({ version: 1, preferred_language: null });
+      expect(
+        await env.DB.prepare("SELECT count(*) count FROM customer_support_note WHERE customer_id=?")
+          .bind(request.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) count FROM idempotency_records WHERE scope=? AND idempotency_key=?",
+        )
+          .bind(scope, request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT count(*) count FROM audit_event WHERE aggregate_id=?")
+          .bind(request.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_support_effect");
+    }
+    expect(await run()).toMatchObject({ ok: true });
+  });
+  it.each(["note", "profile"])("rechecks Global authority before committing %s", async (kind) => {
+    const { request, manager } = await workspace();
+    const db = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+              .bind(manager.staffId)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { headers, requestId, ...target } = request;
+    const deps = { db, auth: createAuth(env) };
+    expect(
+      await (kind === "note"
+        ? appendCustomerSupportNote(
+            deps,
+            { headers, requestId },
+            { ...target, body: "Private note" },
+          )
+        : updateAdminCustomerProfile(
+            deps,
+            { headers, requestId },
+            {
+              ...target,
+              preferredLanguage: null,
+              promotionalEmails: true,
+              expectedVersion: 1,
+              reason: "Requested",
+            },
+          )),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT count(*) count FROM customer_support_note WHERE customer_id=?")
+        .bind(request.customerId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare("SELECT version FROM customer WHERE id=?")
+        .bind(request.customerId)
+        .first(),
+    ).toEqual({ version: 1 });
+  });
+});
 
 describe("customer profile preferences", () => {
   async function profile() {

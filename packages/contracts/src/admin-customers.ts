@@ -1,6 +1,34 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { AdminAuditEventListItem } from "./admin-foundation";
 import type { RpcResult } from "./common";
+import type { CustomerProfileView, UpdateCustomerProfileRequest } from "./customer-profile";
+
+export type AdminCustomerProfileUpdateRequest = UpdateCustomerProfileRequest & {
+  customerId: string;
+  reason: string;
+};
+export type CustomerSupportNoteView = {
+  noteId: string;
+  customerId: string;
+  authorStaffId: string;
+  authorDisplayName: string;
+  body: string;
+  createdAt: string;
+};
+export type CustomerSupportNotePage = {
+  items: ReadonlyArray<CustomerSupportNoteView>;
+  nextCursor: string | null;
+};
+export type CustomerSupportNoteListRequest = AuthenticatedRequest & {
+  customerId: string;
+  cursor?: string;
+  limit?: number;
+};
+export type AppendCustomerSupportNoteRequest = AuthenticatedRequest & {
+  customerId: string;
+  body: string;
+  idempotencyKey: string;
+};
 
 export const customerClosureRequestTypes = [
   "ACCESS",
@@ -173,6 +201,18 @@ export type AdminPrivacyActionRequest = AuthenticatedRequest & {
  * the invitee's verified session identity. No credential surface is exposed.
  */
 export type AdminCustomerService = {
+  getAdminCustomerProfile(
+    request: AdminCustomerDetailRequest,
+  ): Promise<RpcResult<CustomerProfileView>>;
+  updateAdminCustomerProfile(
+    request: AdminCustomerProfileUpdateRequest,
+  ): Promise<RpcResult<CustomerProfileView>>;
+  listCustomerSupportNotes(
+    request: CustomerSupportNoteListRequest,
+  ): Promise<RpcResult<CustomerSupportNotePage>>;
+  appendCustomerSupportNote(
+    request: AppendCustomerSupportNoteRequest,
+  ): Promise<RpcResult<CustomerSupportNoteView>>;
   revokeCustomerInvitation(
     request: RevokeCustomerInvitationRequest,
   ): Promise<RpcResult<CustomerInvitationView>>;

@@ -1,5 +1,11 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
 import { readCustomerProfile, updateMyCustomerProfile } from "./customer/profile";
+import {
+  getAdminCustomerProfile,
+  updateAdminCustomerProfile,
+  listCustomerSupportNotes,
+  appendCustomerSupportNote,
+} from "./admin/application/customer-profile-administration";
 import { revokeCustomerInvitation } from "./admin/application/customer-invitations";
 import {
   getInitialAdministratorSetup,
@@ -1476,6 +1482,56 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return getAdminCustomerQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async getAdminCustomerProfile(
+    input: import("@freshmarkets/contracts").AdminCustomerDetailRequest,
+  ) {
+    const validation = customerDetailRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return getAdminCustomerProfile(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async updateAdminCustomerProfile(
+    input: import("@freshmarkets/contracts").AdminCustomerProfileUpdateRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const { headers: _headers, requestId: _requestId, ...command } = input;
+    return updateAdminCustomerProfile(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+      command,
+    );
+  }
+  async listCustomerSupportNotes(
+    input: import("@freshmarkets/contracts").CustomerSupportNoteListRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const { headers: _headers, requestId: _requestId, ...query } = input;
+    return listCustomerSupportNotes(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+      query,
+    );
+  }
+  async appendCustomerSupportNote(
+    input: import("@freshmarkets/contracts").AppendCustomerSupportNoteRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const { headers: _headers, requestId: _requestId, ...command } = input;
+    return appendCustomerSupportNote(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+      command,
     );
   }
   async listCustomerInvitations(
