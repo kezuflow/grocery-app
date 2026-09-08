@@ -1,3 +1,5 @@
+import { adminCategoryCreateBodySchema, idempotencyKeySchema } from "@freshmarkets/validation";
+import { readBoundedJson } from "@/lib/http/bounded-body";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
@@ -48,52 +50,29 @@ async function GETHandler(request: Request) {
 }
 
 async function POSTHandler(request: Request) {
-  const idempotencyKey = request.headers.get("idempotency-key") ?? "";
-  if (idempotencyKey.trim() === "") {
+  const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
+  const body = await readBoundedJson(request, adminCategoryCreateBodySchema, { maxBytes: 16384 });
+  if (!key.success || !body.ok)
     return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "An idempotency-key header is required",
+          message: !body.ok ? body.error.message : "An idempotency-key header is required",
           requestId: webRequestId(request),
         },
       },
-      { status: 400 },
+      { status: !body.ok ? body.error.status : 400 },
     );
-  }
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (
-    typeof body?.code !== "string" ||
-    typeof body?.name !== "string" ||
-    typeof body?.slug !== "string"
-  ) {
-    return adminJson(
-      {
-        ok: false as const,
-        error: {
-          code: "VALIDATION_FAILED" as const,
-          message: "code, name, and slug are required",
-          requestId: webRequestId(request),
-        },
-      },
-      { status: 400 },
-    );
-  }
-  const result = await coreClient(env.CORE).createAdminCategory({
-    requestId: webRequestId(request),
-    headers: requestHeaders(request),
-    code: body.code,
-    name: body.name,
-    slug: body.slug,
-    sortOrder: typeof body.sortOrder === "number" ? body.sortOrder : 0,
-    parentCategoryId: typeof body.parentCategoryId === "string" ? body.parentCategoryId : null,
-    iconAssetKey: typeof body.iconAssetKey === "string" ? body.iconAssetKey : null,
-    idempotencyKey,
-  });
-  return adminJson(result);
+  return adminJson(
+    await coreClient(env.CORE).createAdminCategory({
+      ...body.value,
+      requestId: webRequestId(request),
+      headers: requestHeaders(request),
+      idempotencyKey: key.data,
+    }),
+  );
 }
-
 export const GET = observeAdminRoute("admin.catalog.categories.get", GETHandler);
 
 export const POST = observeAdminRoute("admin.catalog.categories.post", POSTHandler);

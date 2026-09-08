@@ -35,3 +35,4 @@ export const authenticatedRequestSchema = requestMetaSchema.extend({
 export type RequestMetaInput = z.infer<typeof requestMetaSchema>;
 export * from "./admin-catalog-media";
 export * from "./product-media-recovery";
+export * from "./admin-categories";

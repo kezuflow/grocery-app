@@ -1,10 +1,11 @@
 "use client";
+import { categoryDetailResultSchema } from "@/components/admin/category-authoring-state";
 
-import type { AdminCategoryDetail, AdminCategorySummary, RpcResult } from "@freshmarkets/contracts";
+import type { AdminCategoryDetail, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
+import { useCategoryCommand } from "@/components/admin/category-command-state";
 import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
 import { ListPageSection, PageHeader, StatusBadge } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function CategoryDetailPage() {
   const categoryId = useParams<{ "category-id": string }>()?.["category-id"];
   const searchParams = useSearchParams();
-  const intent = useAdminCommandIntent();
+  const intent = useCategoryCommand();
   const [result, setResult] = useState<RpcResult<AdminCategoryDetail> | null>(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -27,12 +28,17 @@ export default function CategoryDetailPage() {
         ? "Category updated."
         : "",
   );
+  const readGeneration = useRef(0);
   const load = useCallback(() => {
+    const generation = ++readGeneration.current;
     if (categoryId)
       void fetch(`/api/admin/catalog/categories/${categoryId}`)
-        .then((r) => r.json() as Promise<RpcResult<AdminCategoryDetail>>)
-        .then(setResult)
-        .catch(() =>
+        .then(async (r) => categoryDetailResultSchema.parse(await r.json()))
+        .then((result) => {
+          if (generation === readGeneration.current) setResult(result);
+        })
+        .catch(() => {
+          if (generation !== readGeneration.current) return;
           setResult({
             ok: false,
             error: {
@@ -40,10 +46,16 @@ export default function CategoryDetailPage() {
               message: "Network error loading Category",
               requestId: "unavailable",
             },
-          }),
-        );
+          });
+        });
   }, [categoryId]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    setResult(null);
+    load();
+    return () => {
+      readGeneration.current++;
+    };
+  }, [load]);
   async function changeStatus(confirmedReason: string) {
     if (!result?.ok || !confirmedReason.trim()) {
       setNotice("A reason is required.");
@@ -52,20 +64,12 @@ export default function CategoryDetailPage() {
     setConfirming(false);
     const status = result.value.status === "active" ? "inactive" : "active";
     try {
-      const response = await intent.submit(
-        async (idempotencyKey) =>
-          (
-            await fetch(`/api/admin/catalog/categories/${categoryId}/status`, {
-              method: "POST",
-              headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-              body: JSON.stringify({
-                status,
-                reason: confirmedReason,
-                expectedVersion: result.value.version,
-              }),
-            })
-          ).json() as Promise<RpcResult<AdminCategorySummary>>,
-      );
+      const response = await intent.submit(`/api/admin/catalog/categories/${categoryId}/status`, {
+        status,
+        reason: confirmedReason,
+        expectedVersion: result.value.version,
+      });
+      if (!response) return;
       if (!response.ok) {
         setNotice(
           response.error.code === "STALE_VERSION"
@@ -157,6 +161,7 @@ export default function CategoryDetailPage() {
             <Input
               className="mt-4"
               aria-label="Status change reason"
+              disabled={intent.pending || intent.uncertain}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               placeholder="Reason required"
@@ -167,11 +172,19 @@ export default function CategoryDetailPage() {
               variant={category.status === "active" ? "destructive" : "default"}
               disabled={intent.pending}
               onClick={() => {
+                if (intent.uncertain) {
+                  void changeStatus(reason);
+                  return;
+                }
                 if (!reason.trim()) setNotice("A reason is required.");
                 else setConfirming(true);
               }}
             >
-              {category.status === "active" ? "Review deactivation" : "Review activation"}
+              {intent.uncertain
+                ? "Retry saved category"
+                : category.status === "active"
+                  ? "Review deactivation"
+                  : "Review activation"}
             </Button>
           </section>
         ) : null}

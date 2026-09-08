@@ -1,15 +1,15 @@
 "use client";
 
-import type {
-  AdminCategoryDetail,
-  AdminCategoryPage,
-  AdminCategorySummary,
-  RpcResult,
-} from "@freshmarkets/contracts";
+import type { AdminCategoryDetail } from "@freshmarkets/contracts";
+import {
+  categoryDetailResultSchema,
+  useCategoryOptions,
+} from "@/components/admin/category-authoring-state";
+import { Button } from "@/components/ui/button";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CategoryForm, type CategoryFormValue } from "@/components/admin/category-form";
-import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
+import { useCategoryCommand } from "@/components/admin/category-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,35 +18,40 @@ export default function EditCategoryPage() {
   const categoryId = useParams<{ "category-id": string }>()?.["category-id"];
   const router = useRouter();
   const searchParams = useSearchParams();
-  const intent = useAdminCommandIntent();
+  const intent = useCategoryCommand();
   const [detail, setDetail] = useState<AdminCategoryDetail | null>(null);
-  const [parents, setParents] = useState<AdminCategorySummary[]>([]);
+  const parents = useCategoryOptions(categoryId);
   const [value, setValue] = useState<CategoryFormValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!categoryId) return;
-    void Promise.all([
-      fetch(`/api/admin/catalog/categories/${categoryId}`).then(
-        (r) => r.json() as Promise<RpcResult<AdminCategoryDetail>>,
-      ),
-      fetch("/api/admin/catalog/categories").then(
-        (r) => r.json() as Promise<RpcResult<AdminCategoryPage>>,
-      ),
-    ]).then(([category, list]) => {
-      if (!category.ok) {
-        setError(`${category.error.message} Request reference: ${category.error.requestId}`);
-        return;
-      }
-      setDetail(category.value);
-      setValue({
-        name: category.value.name,
-        slug: category.value.slug,
-        parentCategoryId: category.value.parent?.categoryId ?? null,
-        iconAssetKey: category.value.iconAssetKey,
-        sortOrder: category.value.sortOrder,
+    let current = true;
+    setDetail(null);
+    setValue(null);
+    setError(null);
+    void fetch(`/api/admin/catalog/categories/${encodeURIComponent(categoryId)}`)
+      .then(async (response) => categoryDetailResultSchema.parse(await response.json()))
+      .then((result) => {
+        if (!current) return;
+        if (!result.ok) {
+          setError(result.error.message);
+          return;
+        }
+        setDetail(result.value);
+        setValue({
+          name: result.value.name,
+          slug: result.value.slug,
+          parentCategoryId: result.value.parent?.categoryId ?? null,
+          iconAssetKey: result.value.iconAssetKey,
+          sortOrder: result.value.sortOrder,
+        });
+      })
+      .catch(() => {
+        if (current) setError("Category could not be loaded. Refresh to retry.");
       });
-      if (list.ok) setParents(list.value.items.filter((item) => item.categoryId !== categoryId));
-    });
+    return () => {
+      current = false;
+    };
   }, [categoryId]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -54,15 +59,11 @@ export default function EditCategoryPage() {
     setError(null);
     try {
       const result = await intent.submit(
-        async (idempotencyKey) =>
-          (
-            await fetch(`/api/admin/catalog/categories/${categoryId}`, {
-              method: "PATCH",
-              headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-              body: JSON.stringify({ ...value, expectedVersion: detail.version }),
-            })
-          ).json() as Promise<RpcResult<AdminCategorySummary>>,
+        `/api/admin/catalog/categories/${categoryId}`,
+        { ...value, expectedVersion: detail.version },
+        "PATCH",
       );
+      if (!result) return;
       if (!result.ok) {
         setError(
           result.error.code === "STALE_VERSION"
@@ -97,12 +98,30 @@ export default function EditCategoryPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
+      {parents.error ? <p role="alert">{parents.error}</p> : null}
+      {parents.loading ? <p role="status">Loading parent categories…</p> : null}
+      {parents.hasMore || parents.error ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={parents.loading}
+          onClick={() => void parents.loadMore()}
+        >
+          {parents.error ? "Retry parent categories" : "More parent categories"}
+        </Button>
+      ) : null}
       <section className="max-w-2xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6">
         <CategoryForm
           value={value}
-          categories={parents}
+          categories={
+            detail.parent &&
+            !parents.items.some((item) => item.categoryId === detail.parent?.categoryId)
+              ? [detail.parent, ...parents.items]
+              : parents.items
+          }
           pending={intent.pending}
-          submitLabel="Save category"
+          locked={intent.uncertain}
+          submitLabel={intent.uncertain ? "Retry saved category" : "Save category"}
           onChange={setValue}
           onSubmit={submit}
         />

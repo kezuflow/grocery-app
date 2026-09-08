@@ -1,6 +1,11 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
 import { getPublishedProductMedia } from "./catalog/published-product-media";
 import {
+  adminCategoryCreateBodySchema,
+  adminCategoryUpdateBodySchema,
+  adminCategoryStatusBodySchema,
+} from "@freshmarkets/validation";
+import {
   getAdminProductMediaRecovery,
   recoverAdminProductMedia,
 } from "./admin/application/product-media-recovery-administration";
@@ -571,31 +576,9 @@ const promotionGrantRequestSchema = authenticatedRequestSchema.extend({
   idempotencyKey: idempotencyKeySchema,
 });
 
-const catalogCategoryCreateSchema = authenticatedRequestSchema.extend({
-  code: validationSchema
-    .string()
-    .trim()
-    .min(2)
-    .max(60)
-    .regex(/^[A-Z][A-Z0-9_]*$/, "expected UPPER_SNAKE_CASE code"),
-  name: validationSchema.string().trim().min(1).max(120),
-  slug: validationSchema
-    .string()
-    .trim()
-    .min(1)
-    .max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug"),
-  sortOrder: validationSchema.number().int().min(0).max(10000).optional(),
-  parentCategoryId: validationSchema.string().trim().min(1).max(200).nullable().optional(),
-  iconAssetKey: validationSchema
-    .string()
-    .trim()
-    .max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/)
-    .nullable()
-    .optional(),
-  idempotencyKey: idempotencyKeySchema,
-});
+const catalogCategoryCreateSchema = authenticatedRequestSchema
+  .extend(adminCategoryCreateBodySchema.shape)
+  .extend({ idempotencyKey: idempotencyKeySchema });
 
 const catalogCategoryListSchema = authenticatedRequestSchema.extend({
   query: validationSchema.string().trim().min(1).max(100).optional(),
@@ -608,32 +591,12 @@ const catalogCategoryDetailSchema = authenticatedRequestSchema.extend({
   categoryId: validationSchema.string().trim().min(1).max(200),
 });
 
-const catalogCategoryUpdateSchema = catalogCategoryDetailSchema.extend({
-  name: validationSchema.string().trim().min(1).max(120),
-  slug: validationSchema
-    .string()
-    .trim()
-    .min(1)
-    .max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected kebab-case slug"),
-  parentCategoryId: validationSchema.string().trim().min(1).max(200).nullable(),
-  iconAssetKey: validationSchema
-    .string()
-    .trim()
-    .max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/)
-    .nullable(),
-  sortOrder: validationSchema.number().int().min(0).max(10000),
-  expectedVersion: validationSchema.number().int().min(1),
-  idempotencyKey: idempotencyKeySchema,
-});
-
-const catalogCategoryStatusSchema = catalogCategoryDetailSchema.extend({
-  status: validationSchema.enum(["active", "inactive"]),
-  reason: validationSchema.string().trim().min(1).max(500),
-  expectedVersion: validationSchema.number().int().min(1),
-  idempotencyKey: idempotencyKeySchema,
-});
+const catalogCategoryUpdateSchema = catalogCategoryDetailSchema
+  .extend(adminCategoryUpdateBodySchema.shape)
+  .extend({ idempotencyKey: idempotencyKeySchema });
+const catalogCategoryStatusSchema = catalogCategoryDetailSchema
+  .extend(adminCategoryStatusBodySchema.shape)
+  .extend({ idempotencyKey: idempotencyKeySchema });
 
 const catalogUnitCreateSchema = authenticatedRequestSchema.extend({
   code: validationSchema
