@@ -27,7 +27,6 @@ import type { AdminAnalyticsService } from "./admin-analytics";
 import type { AdminOverviewService } from "./admin-overview";
 import type { AuthService } from "./auth";
 import type { CatalogService } from "./catalog";
-import type { ProductMediaRecoveryService } from "./product-media-recovery";
 import type { CommerceConfigurationService } from "./commerce-configuration";
 import type {
   AbandonCheckoutAttemptRequest,
@@ -61,7 +60,6 @@ export interface ImplementedCoreService
     ReadinessService,
     Pick<AuthService, "auth" | "getApplicationContext">,
     CatalogService,
-    ProductMediaRecoveryService,
     MembershipService,
     Pick<PaymentsService, "beginRecurringAuthorization" | "completeRecurringAuthorization">,
     CheckoutService,
@@ -205,8 +203,6 @@ export const coreServiceMethodNames = [
   "removeAdminProductMedia",
   "getAdminProductMediaContent",
   "getPublishedProductMedia",
-  "getAdminProductMediaRecovery",
-  "recoverAdminProductMedia",
   "createAdminSku",
   "updateAdminSku",
   "setAdminSkuAvailability",

@@ -119,7 +119,7 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await adminPage.getByLabel("Media alt text").fill("E2E product image");
   await adminPage.getByLabel("Primary image").check();
   await adminPage.getByLabel("Media sort order").fill("1");
-  await adminPage.getByRole("button", { name: "Upload media" }).click();
+  await adminPage.getByRole("button", { name: "Upload image" }).click();
   await expect(adminPage.getByText("Media uploaded.", { exact: true })).toBeVisible();
   await expect(adminPage.getByLabel("Alt text for E2E product image")).toHaveValue(
     "E2E product image",

@@ -5,7 +5,6 @@ import { createAuth } from "../../auth/service";
 import { uploadAdminProductMedia } from "./product-media";
 import { productMediaCleanupJob } from "../../scheduling/jobs/product-media-cleanup";
 import { runRegisteredJobs } from "../../scheduling/run-scheduled-jobs";
-import { recoverAdminProductMedia } from "./product-media-recovery-administration";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 async function fixture() {
   const manager = await locationManager();
@@ -89,7 +88,7 @@ describe("Product media durable recovery", () => {
       await exports.default.uploadAdminProductMedia({ ...request, idempotencyKey: historicalKey }),
     ).toEqual(uploaded);
   });
-  it("bounds failed cleanup attempts and allows audited operator retry without repeated publication effects", async () => {
+  it("bounds failed background cleanup attempts without restoring removed publication", async () => {
     const { request } = await fixture();
     const uploaded = await exports.default.uploadAdminProductMedia(request);
     if (!uploaded.ok) throw new Error(uploaded.error.message);
@@ -140,37 +139,6 @@ describe("Product media durable recovery", () => {
       .bind(cleanup.id)
       .first<{ status: string; version: number; attempt_count: number }>();
     expect(failed).toMatchObject({ status: "FAILED", attempt_count: 5 });
-    if (!failed) throw new Error("Missing failed cleanup");
-    const retry = {
-      ...request,
-      itemId: cleanup.id,
-      action: "RETRY_CLEANUP" as const,
-      expectedVersion: failed.version,
-      idempotencyKey: crypto.randomUUID(),
-      reason: "Storage is available again",
-    };
-    const retried = await exports.default.recoverAdminProductMedia(retry);
-    expect(retried).toMatchObject({ ok: true, value: { status: "PENDING" } });
-    expect(await exports.default.recoverAdminProductMedia(retry)).toEqual(retried);
-    expect(
-      await env.DB.prepare(
-        "SELECT json_extract(before_json,'$.attempts') attempts FROM audit_event WHERE action='CATALOG.PRODUCT_MEDIA_RETRY_CLEANUP' AND idempotency_key=?",
-      )
-        .bind(retry.idempotencyKey)
-        .first(),
-    ).toEqual({ attempts: 5 });
-    await runRegisteredJobs(
-      env.DB,
-      "*/15 * * * *",
-      Date.now(),
-      [productMediaCleanupJob],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      env.PRODUCT_MEDIA,
-    );
-    expect(await env.PRODUCT_MEDIA.head(cleanup.object_key)).toBeNull();
     expect(
       await exports.default.getPublishedProductMedia({
         requestId: request.requestId,
@@ -178,170 +146,6 @@ describe("Product media durable recovery", () => {
         version: 1,
       }),
     ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
-  });
-  it("allows audited observation and discard of a stored unpublished upload with stable recovery replay", async () => {
-    const { request } = await fixture();
-    await env.DB.exec(
-      "CREATE TRIGGER reject_publication BEFORE INSERT ON product_media BEGIN SELECT RAISE(ABORT,'test publication failure'); END;",
-    );
-    try {
-      expect(await exports.default.uploadAdminProductMedia(request)).toMatchObject({ ok: false });
-    } finally {
-      await env.DB.exec("DROP TRIGGER reject_publication");
-    }
-    const upload = await env.DB.prepare(
-      "SELECT id,object_key FROM product_media_upload WHERE idempotency_key=?",
-    )
-      .bind(request.idempotencyKey)
-      .first<{ id: string; object_key: string }>();
-    if (!upload) throw new Error("Missing upload recovery intent");
-    const recovery = await exports.default.getAdminProductMediaRecovery(request);
-    if (!recovery.ok) throw new Error(recovery.error.message);
-    const item = recovery.value.items.find((candidate) => candidate.itemId === upload.id);
-    if (!item) throw new Error("Missing visible recovery item");
-    expect(item.allowedActions).toEqual(["OBSERVE_UPLOAD", "DISCARD_UPLOAD"]);
-    expect(item).not.toHaveProperty("objectKey");
-    const observation = {
-      ...request,
-      itemId: item.itemId,
-      action: "OBSERVE_UPLOAD" as const,
-      expectedVersion: item.version,
-      reason: "Confirm stored upload before discard",
-      idempotencyKey: crypto.randomUUID(),
-    };
-    const observed = await exports.default.recoverAdminProductMedia(observation);
-    expect(observed).toMatchObject({
-      ok: true,
-      value: { status: "STORED", version: item.version + 1 },
-    });
-    expect(await exports.default.recoverAdminProductMedia(observation)).toEqual(observed);
-    const discard = {
-      ...observation,
-      action: "DISCARD_UPLOAD" as const,
-      expectedVersion: item.version + 1,
-      idempotencyKey: crypto.randomUUID(),
-      reason: "Replace unpublished image",
-    };
-    await env.DB.exec(
-      "CREATE TRIGGER ignore_recovery_audit BEFORE INSERT ON audit_event WHEN NEW.action='CATALOG.PRODUCT_MEDIA_DISCARD_UPLOAD' BEGIN SELECT RAISE(IGNORE); END;",
-    );
-    try {
-      expect(await exports.default.recoverAdminProductMedia(discard)).toMatchObject({ ok: false });
-      expect(
-        await env.DB.prepare("SELECT status,version FROM product_media_upload WHERE id=?")
-          .bind(upload.id)
-          .first(),
-      ).toEqual({ status: "STORED", version: discard.expectedVersion });
-      expect(
-        await env.DB.prepare("SELECT count(*) count FROM product_media_cleanup WHERE object_key=?")
-          .bind(upload.object_key)
-          .first(),
-      ).toEqual({ count: 0 });
-      expect(
-        await env.DB.prepare(
-          "SELECT count(*) count FROM idempotency_records WHERE scope='admin.catalog.product-media.recover' AND idempotency_key=?",
-        )
-          .bind(discard.idempotencyKey)
-          .first(),
-      ).toEqual({ count: 0 });
-    } finally {
-      await env.DB.exec("DROP TRIGGER ignore_recovery_audit");
-    }
-    const discarded = await exports.default.recoverAdminProductMedia(discard);
-    expect(discarded).toMatchObject({ ok: true, value: { status: "ABANDONED" } });
-    expect(await exports.default.recoverAdminProductMedia(discard)).toEqual(discarded);
-    expect(
-      await exports.default.recoverAdminProductMedia({ ...discard, reason: "Changed reason" }),
-    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
-    expect(await exports.default.uploadAdminProductMedia(request)).toMatchObject({
-      ok: false,
-      error: { code: "MEDIA_UPLOAD_ABANDONED" },
-    });
-    await runRegisteredJobs(
-      env.DB,
-      "*/15 * * * *",
-      Date.now(),
-      [productMediaCleanupJob],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      env.PRODUCT_MEDIA,
-    );
-    expect(await env.PRODUCT_MEDIA.head(upload.object_key)).toBeNull();
-  });
-  it("retains unknown upload evidence and rechecks operator scope after storage observation", async () => {
-    const { request, manager } = await fixture();
-    const bucket = new Proxy(env.PRODUCT_MEDIA, {
-      get(target, property) {
-        if (property === "put")
-          return async () => {
-            throw new Error("Simulated unknown storage");
-          };
-        const value = Reflect.get(target, property);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-    expect(
-      await uploadAdminProductMedia({ db: env.DB, auth: createAuth(env), bucket }, request),
-    ).toMatchObject({ ok: false });
-    const upload = await env.DB.prepare(
-      "SELECT id,version FROM product_media_upload WHERE idempotency_key=?",
-    )
-      .bind(request.idempotencyKey)
-      .first<{ id: string; version: number }>();
-    if (!upload) throw new Error("Missing unknown upload");
-    const observation = {
-      ...request,
-      itemId: upload.id,
-      action: "OBSERVE_UPLOAD" as const,
-      expectedVersion: upload.version,
-      idempotencyKey: crypto.randomUUID(),
-      reason: "Inspect unknown write",
-    };
-    expect(
-      await exports.default.recoverAdminProductMedia({ ...observation, action: "DISCARD_UPLOAD" }),
-    ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
-    const observed = await exports.default.recoverAdminProductMedia(observation);
-    expect(observed).toMatchObject({
-      ok: true,
-      value: { status: "UNKNOWN", version: upload.version + 1 },
-    });
-    const revokedBucket = new Proxy(env.PRODUCT_MEDIA, {
-      get(target, property) {
-        if (property === "head")
-          return async (key: string) => {
-            const object = await target.head(key);
-            await env.DB.prepare("DELETE FROM staff_scope WHERE staff_id=?").bind(manager.id).run();
-            return object;
-          };
-        const value = Reflect.get(target, property);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-    const revoked = {
-      ...observation,
-      idempotencyKey: crypto.randomUUID(),
-      expectedVersion: upload.version + 1,
-    };
-    expect(
-      await recoverAdminProductMedia(
-        { db: env.DB, auth: createAuth(env), bucket: revokedBucket },
-        revoked,
-      ),
-    ).toMatchObject({ ok: false });
-    expect(
-      await env.DB.prepare("SELECT version FROM product_media_upload WHERE id=?")
-        .bind(upload.id)
-        .first(),
-    ).toEqual({ version: upload.version + 1 });
-    expect(
-      await env.DB.prepare(
-        "SELECT count(*) count FROM idempotency_records WHERE scope='admin.catalog.product-media.recover' AND idempotency_key=?",
-      )
-        .bind(revoked.idempotencyKey)
-        .first(),
-    ).toEqual({ count: 0 });
   });
   it("recovers a lost successful D1 publication response without deleting its object", async () => {
     const { request } = await fixture();

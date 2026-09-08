@@ -29,7 +29,6 @@ import {
 import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
 import { ProductMediaUpload } from "@/components/admin/product-media-upload";
-import { ProductMediaRecoveryPanel } from "@/components/admin/product-media-recovery-panel";
 import { GlobalPricePanel } from "../../../../../components/admin/global-price-panel";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
@@ -295,9 +294,6 @@ export default function ProductDetailPage({
                 load();
               }}
             />
-          ) : null}
-          {product.scope.kind === "GLOBAL" ? (
-            <ProductMediaRecoveryPanel productId={productId} />
           ) : null}
           {product.media.length ? (
             <ul className="divide-y divide-[var(--fm-border)]">

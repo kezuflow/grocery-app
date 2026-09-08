@@ -9,10 +9,6 @@ import {
   adminProductStatusBodySchema,
 } from "@freshmarkets/validation";
 import {
-  getAdminProductMediaRecovery,
-  recoverAdminProductMedia,
-} from "./admin/application/product-media-recovery-administration";
-import {
   getAdminLocationFulfillment,
   configureAdminLocationFulfillment,
 } from "./admin/application/location-fulfillment-readiness";
@@ -1910,33 +1906,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     input: import("@freshmarkets/contracts").PublishedProductMediaRequest,
   ) {
     return getPublishedProductMedia(this.env.DB, this.env.PRODUCT_MEDIA, input);
-  }
-  async getAdminProductMediaRecovery(
-    input: import("@freshmarkets/contracts").AuthenticatedRequest & {
-      productId: string;
-      cursor?: string;
-    },
-  ) {
-    return getAdminProductMediaRecovery(
-      {
-        db: this.env.DB,
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        bucket: this.env.PRODUCT_MEDIA,
-      },
-      input,
-    );
-  }
-  async recoverAdminProductMedia(
-    input: import("@freshmarkets/contracts").RecoverProductMediaRequest,
-  ) {
-    return recoverAdminProductMedia(
-      {
-        db: this.env.DB,
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        bucket: this.env.PRODUCT_MEDIA,
-      },
-      input,
-    );
   }
   async getAdminProductMediaContent(
     input: import("@freshmarkets/contracts").AdminProductMediaContentRequest,

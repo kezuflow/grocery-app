@@ -169,6 +169,7 @@ Every workspace designs:
 
 - Orders: protect commitment truth and operational resolution.
 - Catalog: manage global product identity and location availability/prices.
+- Product images: ordinary upload/preview/replace/remove with primary image, ordering, alt text and normal progress/errors. No recovery panel, storage-state controls, cleanup queue or reason entry for technical image maintenance.
 - Inventory: inspect location balances and record simple stock additions/removals with server-dated immutable activity.
 - Procurement and Receiving: preserve committed-demand and receiving correctness behind contextual advanced workflows; do not make them the default stock-entry vocabulary.
 - Fulfillment: preserve paid-order picking/packing transitions behind Orders and exception handling; do not represent fulfillment as a generic inventory edit.

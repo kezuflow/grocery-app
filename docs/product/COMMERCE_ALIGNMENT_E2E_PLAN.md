@@ -1,6 +1,8 @@
 # FreshMarkets Commerce Alignment and End-to-End Completion Plan
 
-Saved: 2026-09-07. Status: **implementation authorized; Phase 0 in progress; no phase yet accepted**.
+Saved: 2026-09-07. Review update: 2026-09-09. Status: **owner reviewing workflow scope; broader implementation paused; no phase accepted from this plan alone**.
+
+Owner correction, 2026-09-09: product image management is ordinary CRUD. Upload/preview/replace/remove, primary image, ordering and alt text stay in the product form with normal progress and error feedback. There is no image-recovery workspace, storage-observation action, cleanup queue, discard reason or manual storage-repair command for catalog operators. Duplicate prevention and background cleanup remain internal implementation details. Removing this extra feature is authorized; other proposed workflow simplifications await owner review.
 
 This document saves the owner's agreed commerce decisions and expands the earlier proposal with the missing setup, media, administration, and frontend-to-backend work requested by the owner. The coverage below is the implementation checklist; it is not a claim that every current defect has been found or that an existing screen is complete.
 
@@ -75,7 +77,7 @@ The boundary stays `Web -> typed Service Binding -> Core application command/que
 - Product media supports primary image, ordering, replacement and removal. Promotion media supports one primary campaign image with replacement/removal and accessible alt text. Promotion text/benefit data remains structured, not embedded only in an image.
 - Complete public image delivery through a same-origin Web media adapter backed by a Core-authorized published-media read. Anonymous customers can see published catalog/campaign images; draft/inactive media and private provider evidence remain protected. Use opaque media identity/version, bounded caching, ETags, and explicit invalidation on replacement/deactivation.
 - Make home, search/category, product detail and cart consume Core's canonical R2 media. Replace bundled-image authority; migrate needed development images or use explicit placeholders during the pre-launch reset. Do not require shipping a new frontend build for each upload.
-- D1 owns attachment/publication metadata. Handle failed metadata attachment, failed object cleanup, replacement races, and retry without orphaned active records or fabricated success. Pending cleanup is observable and retryable through existing recovery infrastructure.
+- D1 owns attachment/publication metadata. Handle failed metadata attachment, failed object cleanup, replacement races, and retry internally without orphaned active records or fabricated success. Catalog operators only use ordinary image actions; they do not manage storage or cleanup.
 - Complete promotion create/preview/activate/deactivate, dates, targets, usage limits, merchandise benefits and delivery discounts with the existing one-merchandise-plus-one-delivery stacking policy. Images do not make an expired/ineligible campaign applicable.
 
 **Acceptance:** Upload a new product image and promotion image in Admin; a fresh anonymous storefront renders them without a rebuild. Replace/remove/deactivate them and observe the correct public result. Reject oversized, disguised, unauthorized, and wrong-owner uploads; verify storage/metadata recovery on failure.
@@ -152,7 +154,7 @@ The boundary stays `Web -> typed Service Binding -> Core application command/que
 
 - Send relevant order/payment/delivery/cancellation/refund notifications from durable Core outbox facts through the existing Queue transport. Remove retired membership messaging. Email failure never changes business success.
 - Complete customer issue intake and staff queues for missing/wrong/damaged/poor-quality/quantity/delivery issues, with allowed support actions and separate refund authority.
-- Provide operational visibility for paid-but-uncommitted orders, missing stock, receiving/transfer discrepancies, stale packing, no rider, unknown bookings, failed refunds, media cleanup, and notification dead letters. Each exception has an owner, age, reason and legal recovery action.
+- Provide operational visibility for paid-but-uncommitted orders, missing stock, receiving/transfer discrepancies, stale packing, no rider, unknown bookings and failed refunds. Notification transport and media cleanup remain internal technical concerns. Business exceptions have an owner and an appropriate action; their screen organization is under owner review.
 - Verify environment configuration for Core D1/R2, Service Binding, auth/email, address provider, PayMongo, and Lalamove. Test local Worker behavior, sandbox account operations and production activation separately; mocks/builds are not live acceptance.
 - Keep transaction summaries labeled `NOT AN OFFICIAL BIR INVOICE`. Official invoice/tax/retention policy remains an explicit launch decision requiring factual business/accounting input; never invent seller or taxpayer data.
 - Plan versioned operational metrics for preparation/search/wait time, delivery punctuality, manual-fallback frequency, inventory accuracy, spoilage and actual courier variance. Contribution reporting requires recorded procurement/packaging/courier/processing costs and an approved formula; show unknown inputs as unavailable.

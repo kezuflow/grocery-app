@@ -83,6 +83,7 @@ Keep code, contracts, seeds, generators, migration verifiers, and tests consiste
 
 ## Design Rules
 
+- Product image administration is ordinary CRUD: upload/preview/replace/remove, primary image, ordering and alt text with normal progress/errors. Do not introduce image-recovery panels, storage-observation/discard commands or cleanup work for catalog operators. Keep storage failure handling internal. Other workflow simplifications are under owner review; do not infer authorization to redesign them.
 - Admin generic primitives come from shadcn/ui. Build custom components only for meaningful operational compositions.
 - Admin screens optimize scanning, decisions, queues, exceptions, and repeated actions; do not expose raw CRUD tables as the information architecture.
 - Marketplace UX follows `docs/design/marketplace/DESIGN.md`: mature grocery-commerce patterns inspired by DoorDash, without copying branding or restaurant assumptions.

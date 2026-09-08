@@ -3,7 +3,7 @@ import { z } from "@freshmarkets/validation";
 import { test, expect } from "./admin-authenticated-fixture";
 
 for (const width of [1440, 390]) {
-  test(`Product image upload recovery and storefront at ${width}px`, async ({
+  test(`Product image upload and storefront at ${width}px`, async ({
     adminPage: page,
     browser,
   }, testInfo) => {
@@ -57,10 +57,7 @@ for (const width of [1440, 390]) {
     await page.getByLabel("Product media image").setInputFiles(resolve("public/produce/abiu.webp"));
     await page.getByLabel("Media alt text").fill("Fresh abiu preview");
     await page.getByLabel("Primary image", { exact: true }).check();
-    await page.getByRole("button", { name: "Upload media", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Retry saved image" })).toBeVisible();
-    await expect(page.getByLabel("Media alt text")).toBeDisabled();
-    await page.getByRole("button", { name: "Retry saved image" }).click();
+    await page.getByRole("button", { name: "Upload image", exact: true }).click();
     await expect(page.getByText("Media uploaded.", { exact: true })).toBeVisible();
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
@@ -145,13 +142,13 @@ for (const width of [1440, 390]) {
       await page.getByRole("button", { name: "Review remove Fresh abiu preview" }).click();
       await page.getByRole("button", { name: "Confirm media removal" }).click();
       await expect(page.getByText("Media removed.", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Refresh recovery", exact: true }).click();
-      await expect(page.getByRole("region", { name: "Image recovery", exact: true })).toContainText(
-        "Stored image cleanup",
+      await expect(page.getByRole("region", { name: "Image recovery", exact: true })).toHaveCount(
+        0,
       );
-      await page
-        .getByRole("region", { name: "Image recovery", exact: true })
-        .screenshot({ path: testInfo.outputPath("image-cleanup-recovery.png") });
+      await page.screenshot({
+        path: testInfo.outputPath("product-image-controls.png"),
+        fullPage: true,
+      });
       expect(
         (
           await customer.request.get(imageUrl!, {

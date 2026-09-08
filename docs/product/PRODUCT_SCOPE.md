@@ -45,6 +45,7 @@ The The current release may operate one live fulfillment location, but its domai
 - Fixed sellable SKU sizes/packs persisted as configuration with SKU-specific integer base consumption; no universal pack/bunch/tray conversion.
 - SKU plus exact-location authoritative pricing with historical snapshots, no Market/global fallback, and no silent zero-price fallback.
 - Canonical product media in Cloudflare R2 with stable media references/object keys and alt/accessibility text; at minimum one primary image per sellable product, associated through a basic admin upload/association flow or controlled import/seed path. Arbitrary external URLs are not the canonical media source.
+- Product images use ordinary upload, preview, replace/remove, primary-image, ordering and alt-text controls. Upload progress and errors belong in that form. Image recovery, storage observation and cleanup administration are excluded from catalog operator workflows; duplicate prevention and background cleanup are internal.
 - Customer saved addresses with geocode coordinates and map confirmation where supported.
 - Structured delivery instructions (building/unit, landmark, gate/guard instruction, delivery note, recipient/contact instruction where appropriate) captured separately from structured Address fields and snapshotted immutably onto each committed Order; later Address edits never rewrite historical Order instructions.
 - Cebu City polygon serviceability and delivery-zone resolution.

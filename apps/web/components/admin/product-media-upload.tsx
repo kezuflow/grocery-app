@@ -24,7 +24,6 @@ export function ProductMediaUpload({
   const intent = useRef<{ key: string; body: FormData } | null>(null);
   const active = useRef(false);
   const [pending, setPending] = useState(false);
-  const [locked, setLocked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [primary, setPrimary] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -56,40 +55,45 @@ export function ProductMediaUpload({
     }
     active.current = true;
     setPending(true);
-    setLocked(true);
     setMessage("Uploading image…");
     try {
-      const response = await fetch(
-        `/api/admin/catalog/products/${encodeURIComponent(productId)}/media`,
-        {
-          method: "POST",
-          headers: { "idempotency-key": intent.current.key },
-          body: intent.current.body,
-        },
-      );
-      const result = responseSchema.parse(await response.json());
+      const saved = intent.current;
+      async function upload() {
+        const response = await fetch(
+          `/api/admin/catalog/products/${encodeURIComponent(productId)}/media`,
+          {
+            method: "POST",
+            headers: { "idempotency-key": saved.key },
+            body: saved.body,
+          },
+        );
+        return responseSchema.parse(await response.json());
+      }
+      // One bounded transport retry uses the same bytes and identity; it is not
+      // a second upload or an operator workflow.
+      const result = await upload().catch(() => upload());
       if (result.ok) {
         intent.current = null;
-        setLocked(false);
         setFile(null);
         setPrimary(false);
         form.reset();
         setMessage("Image uploaded.");
         onComplete();
       } else {
-        setMessage(result.error.message);
+        setMessage(
+          result.error.code === "CONFLICT"
+            ? "Image could not be uploaded. Please try again."
+            : result.error.message,
+        );
         if (
           result.error.code === "VALIDATION_FAILED" ||
           result.error.code === "MEDIA_UPLOAD_ABANDONED"
         ) {
           intent.current = null;
-          setLocked(false);
         }
       }
     } catch {
-      setMessage(
-        "The upload response was not confirmed. Retry the saved image to recover the same upload.",
-      );
+      setMessage("Image upload could not be confirmed. Please try again.");
     } finally {
       active.current = false;
       setPending(false);
@@ -97,7 +101,14 @@ export function ProductMediaUpload({
   }
   return (
     <form onSubmit={submit} className="space-y-3 border-b p-4">
-      <fieldset disabled={locked} className="grid gap-3 md:grid-cols-2">
+      <fieldset
+        disabled={pending}
+        onChange={() => {
+          intent.current = null;
+          setMessage(null);
+        }}
+        className="grid gap-3 md:grid-cols-2"
+      >
         <label className="grid gap-1 text-sm font-medium">
           Product media image
           <Input
@@ -134,7 +145,7 @@ export function ProductMediaUpload({
         </p>
       ) : null}
       <Button type="submit" disabled={pending}>
-        {pending ? "Uploading…" : locked ? "Retry saved image" : "Upload media"}
+        {pending ? "Uploading…" : "Upload image"}
       </Button>
     </form>
   );
