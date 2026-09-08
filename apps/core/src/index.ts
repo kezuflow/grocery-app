@@ -188,6 +188,7 @@ import {
   recheckAdminRefund as recheckAdminRefundCommand,
   recheckAdminPayment as recheckAdminPaymentCommand,
   retryAdminProviderEvent as retryAdminProviderEventCommand,
+  retryAdminPaymentReaction as retryAdminPaymentReactionCommand,
   resolveAdminReconciliationCase as resolveAdminReconciliationCaseCommand,
   changeAdminMembership as changeAdminMembershipCommand,
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
@@ -2218,6 +2219,25 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         payments: buildProviderRegistry(this.runtimeConfiguration()),
       },
       validation.data,
+    );
+  }
+  async retryAdminPaymentReaction(
+    input: import("@freshmarkets/contracts").AdminPaymentReactionRetryRequest,
+  ) {
+    const parsed = authenticatedRequestSchema
+      .extend({
+        caseId: validationSchema.string().trim().min(1).max(200),
+        expectedPaymentVersion: validationSchema.number().int().safe().positive(),
+        expectedVersion: validationSchema.number().int().safe().positive(),
+        reason: validationSchema.string().trim().min(1).max(500),
+        idempotencyKey: validationSchema.string().trim().min(1).max(200),
+      })
+      .safeParse(input);
+    if (!parsed.success)
+      return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
+    return retryAdminPaymentReactionCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      parsed.data,
     );
   }
   async retryAdminProviderEvent(

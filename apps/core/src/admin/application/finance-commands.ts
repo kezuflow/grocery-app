@@ -1,3 +1,4 @@
+import { retryPaymentReaction } from "../../payments/application/retry-payment-reaction";
 import { retryProviderEvent } from "../../payments/application/retry-provider-event";
 import { recheckStaffPayment } from "../../payments/application/recheck-staff-payment";
 import { resolveReconciliationCase } from "../../payments/application/resolve-reconciliation-case";
@@ -548,4 +549,13 @@ export async function retryAdminProviderEvent(
   const access = await resolveFinanceAdministrationAccess(deps, request, "payments.manage");
   if (!access.ok) return access;
   return retryProviderEvent(deps.db, { ...request, actorAuthUserId: access.value.authUserId });
+}
+
+export async function retryAdminPaymentReaction(
+  deps: FinanceAdministrationDeps,
+  request: import("@freshmarkets/contracts").AdminPaymentReactionRetryRequest,
+): Promise<RpcResult<import("@freshmarkets/contracts").AdminPaymentReactionRetryResult>> {
+  const access = await resolveFinanceAdministrationAccess(deps, request, "payments.manage");
+  if (!access.ok) return access;
+  return retryPaymentReaction(deps.db, { ...request, actorAuthUserId: access.value.authUserId });
 }

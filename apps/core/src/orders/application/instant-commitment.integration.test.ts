@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { redrivePaymentReactions } from "../../payments/application/redrive-payment-reactions";
+import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
@@ -159,6 +161,70 @@ async function seedReaction(quoteId: string) {
 }
 
 describe("instant order commitment", () => {
+  it("recovers a failed paid commitment through reviewed Core retry and the same owning applier", async () => {
+    await configureInstant();
+    const { quoteId } = await seededInstantQuote(false, true);
+    // Canonical captured payment is the existing explicit fixture seam.
+    const { intentId, reactionId } = await seedReaction(quoteId);
+    const now = Date.now();
+    await env.DB.prepare("UPDATE payment_reaction SET attempts=4 WHERE id=?")
+      .bind(reactionId)
+      .run();
+    await env.DB.exec(
+      "CREATE TRIGGER fail_order_commit BEFORE INSERT ON grocery_order BEGIN SELECT RAISE(ABORT,'TEST_COMMIT_FAILURE'); END",
+    );
+    try {
+      expect(
+        await redrivePaymentReactions(env.DB, new ProviderRegistry("test", []), now),
+      ).toMatchObject({ escalated: 1 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER fail_order_commit");
+    }
+    const record = await env.DB.prepare(
+      "SELECT id,version FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REACTION_FAILURE'",
+    )
+      .bind(intentId)
+      .first<{ id: string; version: number }>();
+    if (!record) throw new Error("Missing exhausted commitment case");
+    const manager = await locationManager("global");
+    await env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='payments.manage'",
+    )
+      .bind(manager.id)
+      .run();
+    vi.setSystemTime(now + 16 * 60 * 1000);
+    try {
+      const command = {
+        headers: manager.headers,
+        caseId: record.id,
+        expectedVersion: record.version,
+        expectedPaymentVersion: 2,
+        reason: "Local commitment persistence restored",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      };
+      const accepted = await exports.default.retryAdminPaymentReaction(command);
+      expect(accepted).toMatchObject({ ok: true, value: { state: "QUEUED" } });
+      expect(
+        await redrivePaymentReactions(env.DB, new ProviderRegistry("test", []), Date.now()),
+      ).toMatchObject({ applied: 1 });
+      expect(await exports.default.retryAdminPaymentReaction(command)).toEqual(accepted);
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(intentId)
+          .first(),
+      ).toEqual({ n: 1 });
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_reaction WHERE id=?")
+          .bind(reactionId)
+          .first(),
+      ).toEqual({ status: "SUCCEEDED" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("allows only one winner between customer cancellation and preparation", async () => {
     await configureInstant();
     const { quoteId, customerId } = await seededInstantQuote(false);

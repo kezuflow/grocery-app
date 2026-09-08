@@ -9,6 +9,15 @@ export const reconciliationCaseSchema = z.object({
       unavailableReason: z.string().nullable(),
     })
     .optional(),
+  paymentReactionRecovery: z
+    .object({
+      canRetry: z.boolean(),
+      attempts: z.number().int().safe().nonnegative(),
+      state: z.string(),
+      paymentVersion: z.number().int().safe().positive(),
+      unavailableReason: z.string().nullable(),
+    })
+    .optional(),
   caseId: z.string(),
   paymentIntentId: z.string().nullable(),
   category: z.enum(reconciliationCaseCategories),

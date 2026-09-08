@@ -1,3 +1,4 @@
+import { readPaymentReactionRecovery } from "../../payments/application/read-payment-reaction-recovery";
 import { readProviderEventRecovery } from "../../payments/application/read-provider-event-recovery";
 import {
   reconciliationResolutionEvidence,
@@ -1117,7 +1118,13 @@ export async function listAdminReconciliationCases(
     rows.results.slice(0, limit).map((row) => row.id),
     access.value.capabilities.includes("payments.manage"),
   );
+  const reactionRecoveries = await readPaymentReactionRecovery(
+    deps.db,
+    rows.results.slice(0, limit).map((row) => row.id),
+    access.value.capabilities.includes("payments.manage"),
+  );
   const items: AdminReconciliationCaseView[] = rows.results.slice(0, limit).map((row) => ({
+    paymentReactionRecovery: reactionRecoveries.get(row.id),
     providerEventRecovery: recoveries.get(row.id),
     caseId: row.id,
     version: row.version,

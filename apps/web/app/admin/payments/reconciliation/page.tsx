@@ -1,4 +1,5 @@
 "use client";
+import { PaymentReactionRecovery } from "../../../../components/admin/payment-reaction-recovery";
 import { ProviderEventRecovery } from "../../../../components/admin/provider-event-recovery";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -115,6 +116,12 @@ export default function PaymentReconciliationPage() {
                   </p>
                   {item.resolutionUnavailableReason ? (
                     <p className="text-sm">{item.resolutionUnavailableReason}</p>
+                  ) : null}
+                  {item.paymentReactionRecovery ? (
+                    <PaymentReactionRecovery
+                      record={item}
+                      onAccepted={() => load(pagination.cursor)}
+                    />
                   ) : null}
                   {item.providerEventRecovery ? (
                     <ProviderEventRecovery

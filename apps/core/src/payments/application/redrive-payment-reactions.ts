@@ -4,6 +4,7 @@ import { applyAmendmentPaymentReaction } from "../../orders/application/apply-am
 import { paymentDomainStates, type PaymentDomainState } from "../domain/payment";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { reconcilePayment } from "./reconcile-payment";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 
 const REACTION_MAX_ATTEMPTS = 5;
 const BATCH_LIMIT = 25;
@@ -208,17 +209,56 @@ async function escalateReaction(
   errorCode: string,
   now: number,
 ): Promise<number> {
-  const [updated] = await database.batch([
-    database
-      .prepare(
-        "UPDATE payment_reaction SET status='ESCALATED', last_error_code=?, updated_at=? WHERE id=? AND status='PENDING'",
-      )
-      .bind(errorCode, now, reactionId),
-    database
-      .prepare(
-        "INSERT INTO payment_reconciliation_case (id, payment_intent_id, category, status, details_json, created_at) SELECT ?, ?, 'REACTION_FAILURE', 'OPEN', ?, ? WHERE changes()=1",
-      )
-      .bind(crypto.randomUUID(), paymentIntentId, JSON.stringify({ reactionId, errorCode }), now),
-  ]);
-  return updated?.meta?.changes ?? 0;
+  const caseId = crypto.randomUUID();
+  try {
+    await database.batch([
+      database
+        .prepare(
+          "UPDATE payment_reaction SET status='ESCALATED', last_error_code=?, updated_at=? WHERE id=? AND payment_intent_id=? AND status='PENDING'",
+        )
+        .bind(errorCode, now, reactionId, paymentIntentId),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+      database
+        .prepare(
+          "INSERT INTO payment_reconciliation_case (id, payment_intent_id, category, status, details_json, created_at) VALUES (?, ?, 'REACTION_FAILURE', 'OPEN', ?, ?)",
+        )
+        .bind(caseId, paymentIntentId, JSON.stringify({ reactionId, errorCode }), now),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+      auditEventStatement(database, {
+        actorUserId: null,
+        action: "PAYMENT.REACTION_ESCALATED",
+        resourceType: "payment_reconciliation_case",
+        resourceId: caseId,
+        reason: errorCode,
+        idempotencyKey: caseId,
+        correlationId: reactionId,
+        occurredAt: now,
+      }),
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT EXISTS (SELECT 1 FROM audit_event WHERE aggregate_id=? AND action='PAYMENT.REACTION_ESCALATED' AND idempotency_key=?)",
+        )
+        .bind(caseId, caseId),
+    ]);
+  } catch (error) {
+    if (
+      await database
+        .prepare(
+          "SELECT 1 FROM payment_reaction WHERE id=? AND payment_intent_id=? AND status='SUCCEEDED'",
+        )
+        .bind(reactionId, paymentIntentId)
+        .first()
+    )
+      return 0;
+    const completed = await database
+      .prepare(`SELECT 1 FROM payment_reaction r JOIN payment_reconciliation_case c ON c.payment_intent_id=r.payment_intent_id
+      WHERE r.id=? AND r.status='ESCALATED' AND c.category='REACTION_FAILURE' AND c.status='OPEN'
+      AND CASE WHEN json_valid(c.details_json) THEN json_extract(c.details_json,'$.reactionId') END=r.id
+      AND EXISTS (SELECT 1 FROM audit_event a WHERE a.aggregate_id=c.id AND a.action='PAYMENT.REACTION_ESCALATED')`)
+      .bind(reactionId)
+      .first();
+    if (completed) return 0;
+    throw error;
+  }
+  return 1;
 }

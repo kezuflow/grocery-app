@@ -71,6 +71,40 @@ async function seedReaction(input: {
 const registry = new ProviderRegistry("development");
 
 describe("redrivePaymentReactions", () => {
+  it.each(["case", "audit"] as const)(
+    "does not strand an escalated reaction when its required %s is ignored",
+    async (kind) => {
+      const f = await seedReaction({
+        intentStatus: "SUCCEEDED",
+        reactionType: "COMMIT_ORDER",
+        subjectId: "missing-quote",
+        attempts: 5,
+      });
+      await env.DB.exec(
+        kind === "case"
+          ? "CREATE TRIGGER ignore_escalation_effect BEFORE INSERT ON payment_reconciliation_case WHEN NEW.category='REACTION_FAILURE' BEGIN SELECT RAISE(IGNORE); END"
+          : "CREATE TRIGGER ignore_escalation_effect BEFORE INSERT ON audit_event WHEN NEW.action='PAYMENT.REACTION_ESCALATED' BEGIN SELECT RAISE(IGNORE); END",
+      );
+      try {
+        await expect(redrivePaymentReactions(env.DB, registry, NOW)).rejects.toThrow();
+        expect(
+          await env.DB.prepare("SELECT status,attempts FROM payment_reaction WHERE id=?")
+            .bind(f.reactionId)
+            .first(),
+        ).toEqual({ status: "PENDING", attempts: 5 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM payment_reconciliation_case WHERE payment_intent_id=? AND category='REACTION_FAILURE'",
+          )
+            .bind(f.intentId)
+            .first(),
+        ).toEqual({ n: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_escalation_effect");
+      }
+      expect(await redrivePaymentReactions(env.DB, registry, NOW)).toMatchObject({ escalated: 1 });
+    },
+  );
   it("claims a due reaction once across concurrent sweeps and keeps the last attempt leased", async () => {
     const { reactionId } = await seedReaction({
       intentStatus: "SUCCEEDED",

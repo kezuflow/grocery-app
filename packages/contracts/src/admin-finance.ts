@@ -335,6 +335,13 @@ export type AdminRefundRecheckResult = {
 };
 
 export type AdminReconciliationCaseView = {
+  paymentReactionRecovery?: {
+    canRetry: boolean;
+    attempts: number;
+    state: string;
+    paymentVersion: number;
+    unavailableReason: string | null;
+  };
   providerEventRecovery?: {
     canRetry: boolean;
     attempts: number;
@@ -381,6 +388,10 @@ export type AdminProviderEventRetryResult = {
   state: "QUEUED";
   acceptedAt: string;
 };
+export type AdminPaymentReactionRetryRequest = AdminProviderEventRetryRequest & {
+  expectedPaymentVersion: number;
+};
+export type AdminPaymentReactionRetryResult = AdminProviderEventRetryResult;
 
 export type AdminMembershipSummary = {
   subscriptionId: string;
@@ -483,6 +494,9 @@ export type AdminPaymentsService = {
   retryAdminProviderEvent(
     request: AdminProviderEventRetryRequest,
   ): Promise<RpcResult<AdminProviderEventRetryResult>>;
+  retryAdminPaymentReaction(
+    request: AdminPaymentReactionRetryRequest,
+  ): Promise<RpcResult<AdminPaymentReactionRetryResult>>;
   recheckAdminRefund(
     request: AdminRefundRecheckRequest,
   ): Promise<RpcResult<AdminRefundRecheckResult>>;
