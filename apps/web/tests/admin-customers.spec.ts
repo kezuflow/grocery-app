@@ -98,6 +98,7 @@ for (const width of [1440, 390]) {
     await adminPage.getByRole("button", { name: "Create invitation", exact: true }).click();
     const withdrawn = adminPage.getByRole("article").filter({ hasText: withdrawnEmail });
     await expect(withdrawn).toBeVisible();
+    await expect(withdrawn).toContainText("Invitation email queued.");
     await withdrawn.getByRole("textbox").fill("Incorrect email address");
     const revocations: { key: string | undefined; body: string | null }[] = [];
     await adminPage.route("**/api/admin/customers/invitations/revoke", async (route) => {
@@ -114,6 +115,7 @@ for (const width of [1440, 390]) {
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(withdrawn).toContainText("REVOKED");
+    await expect(withdrawn).toContainText("Pending invitation email canceled.");
     await adminPage.getByRole("button", { name: "Load more invitations" }).click();
     await expect(
       adminPage.getByRole("article").filter({ hasText: session.user.email }),

@@ -5,6 +5,10 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import {
+  invitationNotificationStatements,
+  cancelPendingInvitationNotificationStatements,
+} from "../../notifications/application/invitation-notifications";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import {
@@ -136,6 +140,9 @@ async function changeInvitation(
             )
             .bind(now, id, change.expectedVersion),
       required(db),
+      ...(change.kind === "create"
+        ? invitationNotificationStatements(db, "customer", id, now)
+        : cancelPendingInvitationNotificationStatements(db, "customer", id, now)),
       auditEventStatement(db, {
         actorUserId: access.value.authUserId,
         action: change.kind === "create" ? "CUSTOMER.INVITED" : "CUSTOMER.INVITATION_REVOKED",

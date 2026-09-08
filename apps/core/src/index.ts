@@ -2845,6 +2845,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       createCloudflareEmailDeliveryPort(this.env),
       batch,
       systemClock.now().getTime(),
+      this.rpcContext.runtimeConfiguration().auth.baseUrl,
     );
   }
 

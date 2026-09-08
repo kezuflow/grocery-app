@@ -9,6 +9,8 @@ function escape(value: unknown): string {
 }
 
 const subjects: Record<NotificationType, string> = {
+  STAFF_INVITED: "You are invited to FreshMarkets staff access",
+  CUSTOMER_INVITED: "You are invited to FreshMarkets",
   ORDER_CONFIRMED: "Your FreshMarkets order is confirmed",
   PAYMENT_ACTION_REQUIRED: "Action needed for your FreshMarkets payment",
   PAYMENT_FAILED: "Your FreshMarkets payment needs attention",
@@ -27,8 +29,37 @@ const subjects: Record<NotificationType, string> = {
   ORDER_REFUND_EXCEPTION: "Your FreshMarkets refund needs support review",
 };
 
-export function renderEmail(type: NotificationType, data: Record<string, unknown>) {
+export function renderEmail(
+  type: NotificationType,
+  data: Record<string, unknown>,
+  applicationOrigin?: string,
+) {
   const subject = subjects[type];
+  if (type === "STAFF_INVITED" || type === "CUSTOMER_INVITED") {
+    if (!applicationOrigin) throw new Error("INVITATION_LINK_NOT_CONFIGURED");
+    const origin = new URL(applicationOrigin);
+    if (
+      origin.protocol !== "https:" &&
+      !(
+        origin.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname)
+      )
+    )
+      throw new Error("INVITATION_LINK_NOT_CONFIGURED");
+    const url = new URL(
+      type === "STAFF_INVITED" ? "/staff-invitation" : "/customer-invitation",
+      origin.origin,
+    ).toString();
+    if (!Number.isSafeInteger(data.expiresAt) || typeof data.expiresAt !== "number")
+      throw new Error("INVALID_INVITATION_TEMPLATE");
+    const expiresAt = new Date(data.expiresAt).toISOString();
+    const text = `${subject}. Sign in or create an account with this email address, verify your email, then review and accept the invitation: ${url}\nExpires ${expiresAt}.`;
+    return {
+      subject,
+      text,
+      html: `<p>${escape(subject)}</p><p>Sign in or create an account with this email address, verify your email, then review and accept the invitation.</p><p><a href="${escape(url)}">Review invitation</a></p><p>Expires ${escape(expiresAt)}.</p>`,
+      templateVersion: 1,
+    };
+  }
   const reference = escape(data.orderNumber ?? data.membershipReference ?? "your account");
   const rawReference = String(data.orderNumber ?? data.membershipReference ?? "your account");
   const amount =

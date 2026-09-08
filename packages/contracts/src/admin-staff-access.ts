@@ -1,6 +1,7 @@
 import type { AuthenticatedRequest, Scope } from "./auth";
 import type { Capability } from "./admin-foundation";
 import type { RpcResult } from "./common";
+import type { InvitationEmailStatus } from "./notifications";
 
 export const adminStaffInvitationStatuses = ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"] as const;
 export type AdminStaffInvitationStatus = (typeof adminStaffInvitationStatuses)[number];
@@ -53,7 +54,7 @@ export type AdminStaffInvitationView = {
 };
 
 export type AdminStaffInvitationPage = {
-  items: ReadonlyArray<AdminStaffInvitationView>;
+  items: ReadonlyArray<AdminStaffInvitationView & { emailStatus: InvitationEmailStatus }>;
   nextCursor: string | null;
 };
 

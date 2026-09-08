@@ -1,4 +1,6 @@
 export const notificationTypes = [
+  "STAFF_INVITED",
+  "CUSTOMER_INVITED",
   "ORDER_CONFIRMED",
   "PAYMENT_ACTION_REQUIRED",
   "PAYMENT_FAILED",

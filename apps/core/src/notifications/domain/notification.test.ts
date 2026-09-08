@@ -8,7 +8,9 @@ import {
 
 describe("notification policy", () => {
   it("closes the launch type vocabulary and rejects unsafe payloads", () => {
-    expect(notificationTypes).toHaveLength(16);
+    expect(notificationTypes).toHaveLength(18);
+    expect(notificationTypes).toContain("STAFF_INVITED");
+    expect(notificationTypes).toContain("CUSTOMER_INVITED");
     expect(
       validateNotification({
         type: "ORDER_CONFIRMED",

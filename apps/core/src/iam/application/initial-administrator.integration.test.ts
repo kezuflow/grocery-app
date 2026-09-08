@@ -59,6 +59,9 @@ beforeEach(async () => {
     ),
     env.DB.prepare("DELETE FROM audit_event WHERE id='initial-administrator-setup'"),
     env.DB.prepare(
+      "DELETE FROM notification_outbox WHERE staff_invitation_id IN (SELECT i.id FROM staff_invitation i JOIN staff_identity s ON s.id=i.invited_by_staff_id JOIN user u ON u.id=s.auth_user_id WHERE u.email=?)",
+    ).bind(ownerEmail),
+    env.DB.prepare(
       "DELETE FROM staff_invitation_role WHERE invitation_id IN (SELECT i.id FROM staff_invitation i JOIN staff_identity s ON s.id=i.invited_by_staff_id JOIN user u ON u.id=s.auth_user_id WHERE u.email=?)",
     ).bind(ownerEmail),
     env.DB.prepare(

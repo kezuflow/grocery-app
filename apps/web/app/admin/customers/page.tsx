@@ -7,6 +7,8 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { invitationEmailStatuses } from "@freshmarkets/contracts";
+import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
 import { Clipboard, EllipsisVertical, Eye, MailPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -50,6 +52,7 @@ const invitationResultSchema = z.discriminatedUnion("ok", [
           invitationId: z.string(),
           version: z.number().int().positive(),
           email: z.string(),
+          emailStatus: z.enum(invitationEmailStatuses),
           status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
           invitedByStaffId: z.string().nullable(),
           expiresAt: z.string(),
@@ -255,7 +258,7 @@ export default function CustomersPage() {
                 <Link className="underline" href="/customer-invitation">
                   Customer invitation
                 </Link>
-                . Email delivery is not yet available.
+                . Invitation email is queued with creation; delivery status appears below.
               </p>
               {invitations.items.map((invitation) => (
                 <article key={invitation.invitationId} className="space-y-2 rounded border p-3">
@@ -263,6 +266,7 @@ export default function CustomersPage() {
                   <p>
                     {invitation.status} · Expires {date(invitation.expiresAt)}
                   </p>
+                  <InvitationEmailStatusText status={invitation.emailStatus} />
                   {invitation.status === "PENDING" ? (
                     <fieldset
                       disabled={invitationCommand.busy || invitationCommand.uncertain}

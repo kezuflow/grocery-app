@@ -71,12 +71,20 @@ export async function runRegisteredJobs(
   }),
   emailDelivery: EmailDeliveryPort = disabledEmailDeliveryPort,
   notificationQueue?: NotificationQueueProducer,
+  applicationOrigin?: string,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
     let outcome: ScheduledJobOutcome;
     try {
-      outcome = await job.run({ database, now, registry, emailDelivery, notificationQueue });
+      outcome = await job.run({
+        database,
+        now,
+        registry,
+        emailDelivery,
+        notificationQueue,
+        applicationOrigin,
+      });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
     }
@@ -105,5 +113,6 @@ export async function runScheduledJobs(
     buildProviderRegistry(runtime),
     createCloudflareEmailDeliveryPort(env),
     env.NOTIFICATION_QUEUE,
+    runtime.auth.baseUrl,
   );
 }

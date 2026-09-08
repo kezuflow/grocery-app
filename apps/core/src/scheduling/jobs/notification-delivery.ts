@@ -5,7 +5,7 @@ import type { ScheduledJob } from "../types";
 
 export const notificationDeliveryJob: ScheduledJob = {
   name: "notifications.delivery",
-  async run({ database, emailDelivery, notificationQueue, now }) {
+  async run({ database, emailDelivery, notificationQueue, now, applicationOrigin }) {
     const projected = await projectDomainNotifications(database, now);
     if (notificationQueue) {
       const publication = await publishNotificationOutbox(database, notificationQueue, now);
@@ -15,7 +15,13 @@ export const notificationDeliveryJob: ScheduledJob = {
         detail: `${projected} projected, ${publication.attempted} publication attempts, ${publication.published} published`,
       };
     }
-    const delivery = await deliverNotifications(database, emailDelivery, now);
+    const delivery = await deliverNotifications(
+      database,
+      emailDelivery,
+      now,
+      25,
+      applicationOrigin,
+    );
     return {
       status: "SUCCEEDED",
       affected: projected + delivery.delivered,

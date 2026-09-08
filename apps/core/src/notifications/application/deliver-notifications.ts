@@ -7,16 +7,19 @@ export type NotificationDeliveryOutcome = "SENT" | "ALREADY_SENT" | "RETRY" | "T
 const required = (db: D1Database) =>
   db.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()!=1");
 const templateSchema = z.record(z.string(), z.unknown());
+const invitationEligibility =
+  "(staff_invitation_id IS NULL OR EXISTS(SELECT 1 FROM staff_invitation i WHERE i.id=notification_outbox.staff_invitation_id AND i.status='PENDING' AND i.expires_at>? AND i.email_normalized=notification_outbox.recipient_snapshot)) AND (customer_invitation_id IS NULL OR EXISTS(SELECT 1 FROM customer_invitation i WHERE i.id=notification_outbox.customer_invitation_id AND i.status='PENDING' AND i.expires_at>? AND i.email_normalized=notification_outbox.recipient_snapshot))";
 
 export async function deliverNotificationById(
   database: D1Database,
   port: EmailDeliveryPort,
   id: string,
   now: number,
+  applicationOrigin?: string,
 ): Promise<NotificationDeliveryOutcome> {
   const item = await database
     .prepare(
-      "SELECT id,event_type,recipient_snapshot,template_data_json,attempts,status,available_at,scheduled_at FROM notification_outbox WHERE id=?",
+      "SELECT id,event_type,recipient_snapshot,template_data_json,attempts,status,available_at,scheduled_at,customer_id,staff_invitation_id,customer_invitation_id FROM notification_outbox WHERE id=?",
     )
     .bind(id)
     .first<{
@@ -28,6 +31,9 @@ export async function deliverNotificationById(
       status: string;
       available_at: number;
       scheduled_at: number;
+      customer_id: string | null;
+      staff_invitation_id: string | null;
+      customer_invitation_id: string | null;
     }>();
   if (!item) return "TERMINAL";
   if (item.status === "SENT") return "ALREADY_SENT";
@@ -67,7 +73,13 @@ export async function deliverNotificationById(
   }
   const data = templateSchema.safeParse(raw);
   const type = z.enum(notificationTypes).safeParse(item.event_type);
-  if (!data.success || !type.success) {
+  const recipientMatches =
+    item.event_type === "STAFF_INVITED"
+      ? item.staff_invitation_id !== null
+      : item.event_type === "CUSTOMER_INVITED"
+        ? item.customer_invitation_id !== null
+        : item.customer_id !== null;
+  if (!data.success || !type.success || !recipientMatches) {
     await database
       .prepare(
         "UPDATE notification_outbox SET status='FAILED',last_error_code='INVALID_NOTIFICATION_TEMPLATE',updated_at=? WHERE id=? AND attempts=? AND status IN ('PENDING','PROCESSING') AND available_at<=?",
@@ -76,16 +88,54 @@ export async function deliverNotificationById(
       .run();
     return "TERMINAL";
   }
-  const template = renderEmail(type.data, data.data);
+  if (
+    !(await database
+      .prepare(`SELECT 1 FROM notification_outbox WHERE id=? AND ${invitationEligibility}`)
+      .bind(id, now, now)
+      .first())
+  ) {
+    await database
+      .prepare(
+        `UPDATE notification_outbox SET status='CANCELED',last_error_code='INVITATION_UNAVAILABLE',updated_at=? WHERE id=? AND attempts=? AND status IN ('PENDING','PROCESSING') AND available_at<=? AND NOT (${invitationEligibility})`,
+      )
+      .bind(now, id, item.attempts, now, now, now)
+      .run();
+    return "TERMINAL";
+  }
+  let template: ReturnType<typeof renderEmail>;
+  try {
+    template = renderEmail(type.data, data.data, applicationOrigin);
+  } catch {
+    await database
+      .prepare(
+        "UPDATE notification_outbox SET last_error_code='NOTIFICATION_TEMPLATE_UNAVAILABLE',updated_at=? WHERE id=? AND status='PENDING' AND attempts=?",
+      )
+      .bind(now, id, item.attempts)
+      .run();
+    return "RETRY";
+  }
   const attempt = item.attempts + 1;
   const attemptId = `notification-send:${id}:${attempt}`;
   try {
     await database.batch([
       database
         .prepare(
-          "UPDATE notification_outbox SET status='PROCESSING',attempts=?,available_at=?,updated_at=? WHERE id=? AND attempts=? AND attempts<5 AND status IN ('PENDING','PROCESSING') AND available_at<=? AND scheduled_at<=? AND NOT EXISTS(SELECT 1 FROM notification_attempt WHERE notification_id=notification_outbox.id AND status='PROCESSING')",
+          `UPDATE notification_outbox SET status='PROCESSING',attempts=?,available_at=?,updated_at=? WHERE id=? AND attempts=? AND attempts<5 AND status IN ('PENDING','PROCESSING') AND available_at<=? AND scheduled_at<=? AND NOT EXISTS(SELECT 1 FROM notification_attempt WHERE notification_id=notification_outbox.id AND status='PROCESSING') AND ${invitationEligibility} AND event_type=? AND recipient_snapshot=? AND template_data_json=?`,
         )
-        .bind(attempt, now + 5 * 60_000, now, id, item.attempts, now, now),
+        .bind(
+          attempt,
+          now + 5 * 60_000,
+          now,
+          id,
+          item.attempts,
+          now,
+          now,
+          now,
+          now,
+          item.event_type,
+          item.recipient_snapshot,
+          item.template_data_json,
+        ),
       required(database),
       database
         .prepare(
@@ -164,6 +214,7 @@ export async function deliverNotifications(
   port: EmailDeliveryPort,
   now: number,
   limit = 25,
+  applicationOrigin?: string,
 ) {
   const due = await database
     .prepare(
@@ -177,7 +228,8 @@ export async function deliverNotifications(
     }>();
   let delivered = 0;
   for (const item of due.results) {
-    if ((await deliverNotificationById(database, port, item.id, now)) === "SENT") delivered++;
+    if ((await deliverNotificationById(database, port, item.id, now, applicationOrigin)) === "SENT")
+      delivered++;
   }
   return { attempted: due.results.length, delivered };
 }

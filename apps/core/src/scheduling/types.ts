@@ -17,6 +17,7 @@ export interface ScheduledJobContext {
   readonly registry: PaymentProviderRegistry;
   readonly emailDelivery: EmailDeliveryPort;
   readonly notificationQueue?: NotificationQueueProducer;
+  readonly applicationOrigin?: string;
   readonly now: number;
 }
 

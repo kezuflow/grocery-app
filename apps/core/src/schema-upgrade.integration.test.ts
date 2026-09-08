@@ -97,8 +97,30 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
   ).results;
   await applyD1Migrations(
     env.DB,
-    migrations.filter((candidate) => candidate.name > migration.name),
+    migrations.filter((candidate) => candidate.name > migration.name && candidate.name < "0081_"),
   );
+  await env.DB.prepare(
+    "INSERT INTO notification_attempt(id,notification_id,status,attempted_at,completed_at) SELECT 'retained-email-attempt',id,'SENT',created_at,created_at FROM notification_outbox LIMIT 1",
+  ).run();
+  const emailSnapshots: { sql: string; rows: Record<string, unknown>[] }[] = [];
+  for (const name of ["notification_outbox", "notification_attempt"]) {
+    const columns = await env.DB.prepare(`PRAGMA table_info(${quote(name)})`).all<{
+      name: string;
+    }>();
+    const sql = `SELECT rowid,${columns.results.map((column) => quote(column.name)).join(",")} FROM ${quote(name)} ORDER BY rowid`;
+    emailSnapshots.push({
+      sql,
+      rows: (await env.DB.prepare(sql).all<Record<string, unknown>>()).results,
+    });
+  }
+  expect(emailSnapshots[1]?.rows.length).toBeGreaterThan(0);
+  await applyD1Migrations(
+    env.DB,
+    migrations.filter((candidate) => candidate.name >= "0081_"),
+  );
+  for (const snapshot of emailSnapshots)
+    expect((await env.DB.prepare(snapshot.sql).all()).results).toEqual(snapshot.rows);
+  expect((await env.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
   expect(
     (
       await env.DB.prepare(

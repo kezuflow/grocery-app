@@ -84,6 +84,7 @@ export async function consumeNotificationBatch(
   email: EmailDeliveryPort,
   batch: MessageBatch<NotificationQueueMessage>,
   now: number,
+  applicationOrigin?: string,
 ) {
   for (const message of batch.messages) {
     try {
@@ -91,7 +92,13 @@ export async function consumeNotificationBatch(
         message.ack();
         continue;
       }
-      const outcome = await deliverNotificationById(database, email, message.body.outboxId, now);
+      const outcome = await deliverNotificationById(
+        database,
+        email,
+        message.body.outboxId,
+        now,
+        applicationOrigin,
+      );
       if (outcome === "RETRY" || outcome === "BUSY") {
         if (message.attempts >= 5)
           await database

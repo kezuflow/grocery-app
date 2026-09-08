@@ -68,6 +68,8 @@ A global commerce profile linked to one Better Auth user ID. A customer is not d
 
 Customer notification preferences may control promotional notifications only. Order, payment, delivery, cancellation and refund transaction updates are always sent; changing promotional preferences cannot suppress these operational consequences.
 
+Customer and Staff invitations request transactional email independently of promotional preferences. Email delivery is a consequence of an invitation, not acceptance or authorization. The recipient must sign in with the matching verified identity and accept through Core; a link alone grants no access. Revoked, expired or already accepted invitations are ineligible for a new email send attempt.
+
 ### CustomerAddress
 
 A customer-owned saved delivery address. Recipient name and phone are address-owned

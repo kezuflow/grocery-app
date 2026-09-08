@@ -1,4 +1,8 @@
 import { invitationGrantStatements } from "../../iam/infrastructure/staff-invitation-repository";
+import {
+  invitationNotificationStatements,
+  cancelPendingInvitationNotificationStatements,
+} from "../../notifications/application/invitation-notifications";
 import type {
   AdminStaffInviteRequest,
   AdminStaffInvitationRevokeRequest,
@@ -172,6 +176,7 @@ export async function inviteAdminStaff(
         ),
       requireStaffWrite(deps.db),
       ...invitationGrantStatements(deps.db, invitationId, request.roleIds, request.scopes),
+      ...invitationNotificationStatements(deps.db, "staff", invitationId, now),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "STAFF.INVITED",
@@ -299,6 +304,7 @@ export async function revokeAdminStaffInvitation(
         )
         .bind(now, request.invitationId, request.expectedVersion),
       requireStaffWrite(deps.db),
+      ...cancelPendingInvitationNotificationStatements(deps.db, "staff", request.invitationId, now),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "STAFF.INVITATION_REVOKED",

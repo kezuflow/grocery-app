@@ -13,6 +13,8 @@ export async function enqueueNotification(
     idempotencyKey: string;
   },
 ) {
+  if (input.type === "STAFF_INVITED" || input.type === "CUSTOMER_INVITED")
+    return { ok: false as const, code: "INVITATION_RECIPIENT_REQUIRED" };
   const valid = validateNotification(input);
   if (!valid.ok) return { ok: false as const, code: valid.code };
   const now = Date.now();

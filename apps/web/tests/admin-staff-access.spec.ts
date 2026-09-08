@@ -106,6 +106,7 @@ for (const width of [1440, 390]) {
     await adminPage.getByRole("button", { name: "Create invitation", exact: true }).click();
     const row = adminPage.getByRole("listitem").filter({ hasText: displayName });
     await expect(row).toContainText("PENDING");
+    await expect(row).toContainText("Invitation email queued.");
     await adminPage
       .getByRole("textbox", { name: "Invitation revocation reason" })
       .fill("Assignment withdrawn");
@@ -136,6 +137,7 @@ for (const width of [1440, 390]) {
       .fill("Edited after uncertainty");
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(row).toContainText("REVOKED");
+    await expect(row).toContainText("Pending invitation email canceled.");
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
     expect(JSON.parse(requests[0]?.body ?? "null")).toEqual({

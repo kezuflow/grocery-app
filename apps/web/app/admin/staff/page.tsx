@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
+import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
 import type {
   AdminStaffInvitationPage,
   AdminStaffPage,
@@ -180,7 +181,7 @@ export default function StaffPage() {
           ) : null}
           <ListPageSection
             title="Invite a staff member"
-            description="Choose explicit access. The invitee signs in with their verified email at /staff-invitation."
+            description="Choose explicit access. An invitation email is queued; the invitee signs in with their verified email at /staff-invitation."
           >
             <form className="flex flex-wrap gap-2 p-4 sm:items-center" onSubmit={invite}>
               <Input
@@ -259,6 +260,7 @@ export default function StaffPage() {
                     <span className="ml-auto text-xs text-[var(--fm-text-muted)]">
                       expires {new Date(invitation.expiresAt).toISOString().slice(0, 10)}
                     </span>
+                    <InvitationEmailStatusText status={invitation.emailStatus} />
                     {invitation.status === "PENDING" ? (
                       <Button
                         size="sm"

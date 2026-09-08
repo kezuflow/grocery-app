@@ -1,3 +1,4 @@
+import { invitationEmailStatusSql } from "../../notifications/application/invitation-notifications";
 import type {
   AdminCustomerInvitationListRequest,
   AdminClosureRequestCommand,
@@ -132,14 +133,19 @@ export async function listCustomerInvitations(
   const binds = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : [];
   const rows = await deps.db
     .prepare(
-      `SELECT id, version, email_normalized, status, invited_by_staff_id, expires_at, created_at
+      `SELECT id, version, email_normalized, status, invited_by_staff_id, expires_at, created_at,${invitationEmailStatusSql("customer")} AS email_status
        FROM customer_invitation ${clause} ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .bind(...binds, limit + 1)
-    .all<InvitationRow>();
+    .all<
+      InvitationRow & { email_status: import("@freshmarkets/contracts").InvitationEmailStatus }
+    >();
   const hasMore = rows.results.length > limit;
   const pageRows = rows.results.slice(0, limit);
-  const items = pageRows.map(toInvitationView);
+  const items = pageRows.map((row) => ({
+    ...toInvitationView(row),
+    emailStatus: row.email_status,
+  }));
   const last = pageRows[pageRows.length - 1];
   const nextCursor =
     hasMore && last ? encodeStaffCursor({ createdAt: last.created_at, id: last.id }) : null;

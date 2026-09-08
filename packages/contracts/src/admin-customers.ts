@@ -1,6 +1,7 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { AdminAuditEventListItem } from "./admin-foundation";
 import type { RpcResult } from "./common";
+import type { InvitationEmailStatus } from "./notifications";
 import type { CustomerProfileView, UpdateCustomerProfileRequest } from "./customer-profile";
 
 export type AdminCustomerProfileUpdateRequest = UpdateCustomerProfileRequest & {
@@ -101,7 +102,7 @@ export type CustomerInvitationView = {
 };
 
 export type CustomerInvitationPage = {
-  items: ReadonlyArray<CustomerInvitationView>;
+  items: ReadonlyArray<CustomerInvitationView & { emailStatus: InvitationEmailStatus }>;
   nextCursor: string | null;
 };
 

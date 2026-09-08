@@ -1,3 +1,4 @@
+import { invitationEmailStatusSql } from "../../notifications/application/invitation-notifications";
 import type {
   AdminStaffInvitationListRequest,
   AdminStaffInvitationPage,
@@ -20,6 +21,7 @@ type InvitationRow = {
   invited_by_staff_id: string | null;
   expires_at: number;
   created_at: number;
+  email_status: import("@freshmarkets/contracts").InvitationEmailStatus;
 };
 
 /** Bounded invitation queue for the Staff workspace, global readers only. */
@@ -60,7 +62,7 @@ export async function listAdminStaffInvitations(
   const binds = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : [];
   const rows = await deps.db
     .prepare(
-      `SELECT id, version, email_normalized, display_name, status, invited_by_staff_id, expires_at, created_at
+      `SELECT id, version, email_normalized, display_name, status, invited_by_staff_id, expires_at, created_at,${invitationEmailStatusSql("staff")} AS email_status
        FROM staff_invitation
        ${clause}
        ORDER BY created_at DESC, id DESC
@@ -77,6 +79,7 @@ export async function listAdminStaffInvitations(
     email: row.email_normalized,
     displayName: row.display_name,
     status: row.status,
+    emailStatus: row.email_status,
     invitedByStaffId: row.invited_by_staff_id,
     expiresAt: new Date(row.expires_at).toISOString(),
     createdAt: new Date(row.created_at).toISOString(),
