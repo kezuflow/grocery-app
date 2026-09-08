@@ -1,6 +1,14 @@
 # Commerce alignment execution
 
-## Active execution - 2026-09-08 19:04 UTC
+## Active execution - 2026-09-08 19:31 UTC
+
+Main was 762a18e after promotion transaction, variant and membership-eligibility repairs. Current verified slice adds canonical delivery waiver/percentage/fixed authoring, caps, total/customer redemption limits and automatic selection; draft saves and all RPC boundaries share bounded schemas. Checkout and amount preview share integer discount calculation; unsupported retained benefit types/parameters fail closed. Web exposes all benefits and active configuration. New 0085 forward migration preserves the complete retained six-table promotion graph/rowids/paid snapshots and translates only legacy definition types with a version increment. Generator uses an in-memory 0084 baseline. No retained database was reset or upgraded.
+
+Validation: pnpm check passed (1433 Core tests/187 files, 398 Web/99, 68 contracts/19, shared/harness, migration checks, lint/types and both builds). Final retained-parameter guard followed by 55 focused Core tests passed. All 8 promotion browser tests passed with zero retries; after visual review added active caps/limits and reran all 3 delivery author/preview journeys successfully, zero retries. Mobile screenshot inspected. Workspace types, catalog generation and vinext compatibility passed; final format/naming/diff checks follow this record. Logs promotion-benefits-*.log and screenshots under C:/Users/reggi/.codex/visualizations/2026/09/08/01a0822b-3c98-76a1-8c9e-a2d5e223a182. Browser stack and Core suite finished. Save/push verified slice then continue.
+
+Next: named customer selection for grants, customer-aware preview through the Quote policy, closed audience authoring, R2 campaign media/publication. Then central transfers, Scheduled procurement/receiving/allocation, delivery/manual fallback, remaining onboarding/membership routes/jobs/notifications and full acceptance. No whole phase accepted. Only apps/core/.wrangler/e2e-commerce-alignment-20260907 is disposable; never overlap its browser stack with Core suites or change source during browser runs. Preserve unrelated .codex/config.toml; append only docs/product/IMPLEMENTATION_STATUS.md. No real provider/account operations or deployment performed. Owner authorizes continued dependency-ordered implementation without routine approvals or subagents.
+
+## Prior membership-eligibility slice - 2026-09-08 19:04 UTC
 
 Main is d14de2c after the verified promotion transaction/draft UI slice; prior commits b8e32b2 and f7f17dc remain pushed. The owner still authorizes the full commerce plan, no routine approvals or subagents. Preserve .codex/config.toml. Append status only to docs/product/IMPLEMENTATION_STATUS.md.
 

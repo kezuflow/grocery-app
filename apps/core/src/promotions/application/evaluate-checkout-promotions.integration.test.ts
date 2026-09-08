@@ -63,7 +63,7 @@ describe("D1 checkout promotion evaluation", () => {
         `INSERT INTO promotion (
           id, code, name, description, status, benefit_type, discount_minor, percent,
           minimum_minor, starts_at, automatic, priority, version, created_at, updated_at
-        ) VALUES (?, ?, 'Delivery', '', 'ACTIVE', 'DELIVERY_FEE_DISCOUNT', NULL, 50,
+        ) VALUES (?, ?, 'Delivery', '', 'ACTIVE', 'DELIVERY_PERCENT_DISCOUNT', NULL, 50,
                   0, ?, 1, 0, 2, ?, ?)`,
       ).bind(
         deliveryId,
@@ -138,3 +138,34 @@ for (const ruleType of ["MEMBER", "NON_MEMBER"] as const) {
     ).toEqual({ rule_type: ruleType });
   });
 }
+
+it("keeps unsupported legacy types and invalid stored percentages ineligible", async () => {
+  const customerId = await seedCustomer();
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const codes = [`LEGACY_${id}`, `INVALID_PERCENT_${id}`].map((code) => code.toUpperCase());
+  await env.DB.batch(
+    codes.map((code, index) =>
+      env.DB.prepare(
+        "INSERT INTO promotion(id,code,name,description,status,benefit_type,percent,minimum_minor,starts_at,automatic,priority,version,created_at,updated_at) VALUES (?,?,'Retained definition','','ACTIVE',?,?,0,?,0,0,1,?,?)",
+      ).bind(
+        `${id}-${index}`,
+        code,
+        index === 0 ? "DELIVERY_FEE_DISCOUNT" : "DELIVERY_PERCENT_DISCOUNT",
+        index === 0 ? 25 : 250,
+        now - 1,
+        now,
+        now,
+      ),
+    ),
+  );
+  const result = await evaluateCheckoutPromotions(env.DB, checkoutContext(customerId, codes));
+  expect(result.feedback).toEqual(
+    codes.map((code) => ({
+      code,
+      status: "INELIGIBLE",
+      message: "Promotion is not eligible for this order",
+    })),
+  );
+  expect(result.applications.filter((item) => codes.includes(item.code))).toEqual([]);
+});

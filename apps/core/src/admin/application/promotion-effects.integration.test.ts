@@ -295,3 +295,66 @@ it("recovers concurrent identical creates with lost responses and one immutable 
     error: { code: "IDEMPOTENCY_CONFLICT" },
   });
 });
+
+for (const benefitType of [
+  "DELIVERY_FEE_WAIVER",
+  "DELIVERY_PERCENT_DISCOUNT",
+  "DELIVERY_FIXED_DISCOUNT",
+] as const)
+  it(`authors and previews ${benefitType} with caps and usage limits`, async () => {
+    const { meta, create } = await fixture();
+    const initial = await exports.default.createAdminPromotion({
+      ...create,
+      benefitType,
+      discountMinor: benefitType === "DELIVERY_FIXED_DISCOUNT" ? 999 : undefined,
+      percent: benefitType === "DELIVERY_PERCENT_DISCOUNT" ? 25 : undefined,
+      maximumDiscountMinor: 500,
+    });
+    if (!initial.ok) throw new Error(initial.error.message);
+    const promotionId = initial.value.promotionId;
+    const edited = await exports.default.updateAdminPromotion({
+      ...meta,
+      idempotencyKey: crypto.randomUUID(),
+      promotionId,
+      name: "Delivery campaign",
+      description: "Delivery saving",
+      minimumMinor: 1000,
+      startsAt: create.startsAt,
+      expectedVersion: 1,
+      maximumDiscountMinor: 50,
+      globalUsageLimit: 10,
+      perCustomerUsageLimit: 1,
+      automatic: true,
+    });
+    expect(edited).toMatchObject({
+      ok: true,
+      value: {
+        benefitType,
+        maximumDiscountMinor: 50,
+        globalUsageLimit: 10,
+        perCustomerUsageLimit: 1,
+        automatic: true,
+      },
+    });
+    expect(
+      await exports.default.changeAdminPromotionStatus({
+        ...meta,
+        idempotencyKey: crypto.randomUUID(),
+        promotionId,
+        expectedVersion: 2,
+        action: "ACTIVATE",
+        reason: "Launch",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await exports.default.previewAdminPromotion({
+        ...meta,
+        promotionId,
+        subtotalMinor: 2001,
+        deliverySubtotalMinor: 1001,
+      }),
+    ).toMatchObject({ ok: true, value: { discountMinor: 50 } });
+    expect(
+      await exports.default.previewAdminPromotion({ ...meta, promotionId, subtotalMinor: 2001 }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });

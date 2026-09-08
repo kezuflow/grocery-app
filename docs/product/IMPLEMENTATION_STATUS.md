@@ -928,3 +928,8 @@ Promotion create/edit/lifecycle/grant now commit business effects, audit and fro
 ### 2026-09-09 - Pay-as-you-go promotion eligibility
 
 New-commerce promotion evaluation no longer reads subscription entitlement. Retained MEMBER/NON_MEMBER rules fail closed while their history stays intact. Reproduced two failures and verified 52 focused domain/Worker/D1 tests, including an actual no-subscription Instant quote rejecting both codes without claims, plus Core types/lint. This does not complete remaining membership routes/jobs or full campaign/commerce acceptance.
+
+
+### 2026-09-09 - Canonical delivery promotion benefits
+
+Implemented Global draft authoring for delivery waiver, percentage and fixed discounts, optional caps and total/customer redemption limits, with shared bounded RPC/Web schemas and integer checkout/preview calculations. Migration 0085 preserves retained financial snapshots and the complete dependent graph; clean and populated Worker/D1 upgrades verified. Unsupported retained benefit parameters fail closed. Active Admin detail displays saved controls. Aggregate passed: 1433 Core, 398 Web and 68 contract tests plus shared/harness/migration checks and both builds. Final guard: 55 focused Core tests pass. Eight promotion browser tests and three final mobile delivery journeys pass with zero retries. Preview remains an amount estimate; customer-aware eligibility, audience authoring and R2 campaign publication remain pending. No complete phase/provider acceptance or retained database operation claimed.

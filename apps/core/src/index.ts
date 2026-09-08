@@ -1,3 +1,10 @@
+import {
+  adminPromotionCreateBodySchema,
+  adminPromotionUpdateBodySchema,
+  adminPromotionStatusBodySchema,
+  adminPromotionPreviewBodySchema,
+  adminPromotionGrantBodySchema,
+} from "@freshmarkets/validation";
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
 import { getPublishedProductMedia } from "./catalog/published-product-media";
 import {
@@ -520,60 +527,34 @@ const promotionHistoryRequestSchema = promotionDetailRequestSchema.extend({
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 
-const promotionCreateRequestSchema = authenticatedRequestSchema.extend({
-  code: validationSchema
-    .string()
-    .trim()
-    .min(2)
-    .max(60)
-    .regex(/^[A-Z][A-Z0-9_]*$/, "expected UPPER_SNAKE_CASE code"),
-  name: validationSchema.string().trim().min(1).max(120),
-  description: validationSchema.string().trim().max(300),
-  benefitType: validationSchema.enum(["ORDER_FIXED_DISCOUNT", "ORDER_PERCENT_DISCOUNT"]),
-  discountMinor: validationSchema.number().int().min(1).optional(),
-  percent: validationSchema.number().int().min(1).max(100).optional(),
-  minimumMinor: validationSchema.number().int().min(0),
-  startsAt: validationSchema.string().trim().min(4).max(40),
-  endsAt: validationSchema.string().trim().min(4).max(40).nullable().optional(),
-  globalUsageLimit: validationSchema.number().int().min(1).nullable().optional(),
-  perCustomerUsageLimit: validationSchema.number().int().min(1).nullable().optional(),
-  automatic: validationSchema.boolean().optional(),
-  priority: validationSchema.number().int().min(0).max(10000).optional(),
-  idempotencyKey: idempotencyKeySchema,
-});
+const promotionCreateRequestSchema = authenticatedRequestSchema
+  .extend(adminPromotionCreateBodySchema.shape)
+  .extend({ idempotencyKey: idempotencyKeySchema });
 
-const promotionUpdateRequestSchema = authenticatedRequestSchema.extend({
-  promotionId: validationSchema.string().trim().min(1).max(200),
-  name: validationSchema.string().trim().min(1).max(120),
-  description: validationSchema.string().trim().max(300),
-  discountMinor: validationSchema.number().int().min(1).optional(),
-  percent: validationSchema.number().int().min(1).max(100).optional(),
-  minimumMinor: validationSchema.number().int().min(0),
-  startsAt: validationSchema.string().trim().min(4).max(40),
-  endsAt: validationSchema.string().trim().min(4).max(40).nullable().optional(),
-  expectedVersion: validationSchema.number().int().min(0),
-  idempotencyKey: idempotencyKeySchema,
-});
+const promotionUpdateRequestSchema = authenticatedRequestSchema
+  .extend(adminPromotionUpdateBodySchema.shape)
+  .extend({
+    promotionId: validationSchema.string().trim().min(1).max(200),
+    idempotencyKey: idempotencyKeySchema,
+  });
 
-const promotionStatusChangeRequestSchema = authenticatedRequestSchema.extend({
-  promotionId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum(["ACTIVATE", "DEACTIVATE", "ARCHIVE"]),
-  reason: validationSchema.string().trim().min(1).max(500),
-  expectedVersion: validationSchema.number().int().min(0),
-  idempotencyKey: idempotencyKeySchema,
-});
+const promotionStatusChangeRequestSchema = authenticatedRequestSchema
+  .extend(adminPromotionStatusBodySchema.shape)
+  .extend({
+    promotionId: validationSchema.string().trim().min(1).max(200),
+    idempotencyKey: idempotencyKeySchema,
+  });
 
-const promotionPreviewRequestSchema = authenticatedRequestSchema.extend({
-  promotionId: validationSchema.string().trim().min(1).max(200),
-  subtotalMinor: validationSchema.number().int().min(0),
-});
+const promotionPreviewRequestSchema = authenticatedRequestSchema
+  .extend(adminPromotionPreviewBodySchema.shape)
+  .extend({ promotionId: validationSchema.string().trim().min(1).max(200) });
 
-const promotionGrantRequestSchema = authenticatedRequestSchema.extend({
-  promotionId: validationSchema.string().trim().min(1).max(200),
-  customerId: validationSchema.string().trim().min(1).max(200),
-  maxRedemptions: validationSchema.number().int().min(1).max(1000),
-  idempotencyKey: idempotencyKeySchema,
-});
+const promotionGrantRequestSchema = authenticatedRequestSchema
+  .extend(adminPromotionGrantBodySchema.shape)
+  .extend({
+    promotionId: validationSchema.string().trim().min(1).max(200),
+    idempotencyKey: idempotencyKeySchema,
+  });
 
 const catalogCategoryCreateSchema = authenticatedRequestSchema
   .extend(adminCategoryCreateBodySchema.shape)

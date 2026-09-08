@@ -1,5 +1,11 @@
 import { z } from "zod";
-const manageableBenefitTypes = ["ORDER_FIXED_DISCOUNT", "ORDER_PERCENT_DISCOUNT"] as const;
+const manageableBenefitTypes = [
+  "ORDER_FIXED_DISCOUNT",
+  "ORDER_PERCENT_DISCOUNT",
+  "DELIVERY_FEE_WAIVER",
+  "DELIVERY_PERCENT_DISCOUNT",
+  "DELIVERY_FIXED_DISCOUNT",
+] as const;
 const promotionStatuses = ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 const integer = z.number().int().safe();
 const id = z.string().min(1).max(200);
@@ -8,6 +14,10 @@ const editable = {
   description: z.string().trim().max(2000).default(""),
   discountMinor: integer.positive().optional(),
   percent: integer.min(1).max(100).optional(),
+  maximumDiscountMinor: integer.positive().nullable().optional(),
+  globalUsageLimit: integer.positive().nullable().optional(),
+  perCustomerUsageLimit: integer.positive().nullable().optional(),
+  automatic: z.boolean().optional(),
   minimumMinor: integer.nonnegative(),
   startsAt: z.iso.datetime({ offset: true }),
   endsAt: z.iso.datetime({ offset: true }).nullable().optional(),
@@ -46,6 +56,7 @@ export const adminPromotionSummarySchema = z.object({
   benefitType: z.enum(manageableBenefitTypes),
   discountMinor: integer.nullable(),
   percent: integer.nullable(),
+  maximumDiscountMinor: integer.nullable().optional(),
   minimumMinor: integer,
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime().nullable(),
@@ -69,4 +80,9 @@ export const adminPromotionGrantViewSchema = z.object({
 export const adminPromotionPageSchema = z.object({
   items: z.array(adminPromotionSummarySchema),
   nextCursor: z.string().nullable(),
+});
+
+export const adminPromotionPreviewBodySchema = z.object({
+  subtotalMinor: integer.nonnegative(),
+  deliverySubtotalMinor: integer.nonnegative().optional(),
 });

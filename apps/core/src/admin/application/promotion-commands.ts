@@ -76,7 +76,7 @@ function receipt(
 ) {
   const result = grant
     ? `SELECT json_object('grantId',id,'promotionId',json_extract(parameters_json,'$.promotionId'),'customerId',customer_id,'benefitType',benefit_type,'maxRedemptions',max_redemptions,'status',status,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',created_at/1000.0,'unixepoch')) FROM promotion_grant WHERE id=?`
-    : `SELECT json_object('promotionId',id,'code',code,'name',name,'description',description,'status',status,'benefitType',benefit_type,'discountMinor',discount_minor,'percent',percent,'minimumMinor',minimum_minor,'startsAt',strftime('%Y-%m-%dT%H:%M:%fZ',starts_at/1000.0,'unixepoch'),'endsAt',strftime('%Y-%m-%dT%H:%M:%fZ',ends_at/1000.0,'unixepoch'),'globalUsageLimit',global_usage_limit,'perCustomerUsageLimit',per_customer_usage_limit,'automatic',json(CASE WHEN automatic=1 THEN 'true' ELSE 'false' END),'priority',priority,'version',version,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',created_at/1000.0,'unixepoch'),'updatedAt',strftime('%Y-%m-%dT%H:%M:%fZ',updated_at/1000.0,'unixepoch')) FROM promotion WHERE id=?`;
+    : `SELECT json_object('promotionId',id,'code',code,'name',name,'description',description,'status',status,'benefitType',benefit_type,'discountMinor',discount_minor,'percent',percent,'maximumDiscountMinor',maximum_discount_minor,'minimumMinor',minimum_minor,'startsAt',strftime('%Y-%m-%dT%H:%M:%fZ',starts_at/1000.0,'unixepoch'),'endsAt',strftime('%Y-%m-%dT%H:%M:%fZ',ends_at/1000.0,'unixepoch'),'globalUsageLimit',global_usage_limit,'perCustomerUsageLimit',per_customer_usage_limit,'automatic',json(CASE WHEN automatic=1 THEN 'true' ELSE 'false' END),'priority',priority,'version',version,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',created_at/1000.0,'unixepoch'),'updatedAt',strftime('%Y-%m-%dT%H:%M:%fZ',updated_at/1000.0,'unixepoch')) FROM promotion WHERE id=?`;
   return db
     .prepare(
       `UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(${result}),updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'`,
@@ -91,9 +91,14 @@ function validBenefit(
   discountMinor: number | null | undefined,
   percent: number | null | undefined,
 ) {
-  return type === "ORDER_FIXED_DISCOUNT"
-    ? discountMinor != null && percent == null
-    : type === "ORDER_PERCENT_DISCOUNT" && percent != null && discountMinor == null;
+  if (type === "DELIVERY_FEE_WAIVER") return discountMinor == null && percent == null;
+  if (type === "ORDER_FIXED_DISCOUNT" || type === "DELIVERY_FIXED_DISCOUNT")
+    return discountMinor != null && percent == null;
+  return (
+    (type === "ORDER_PERCENT_DISCOUNT" || type === "DELIVERY_PERCENT_DISCOUNT") &&
+    percent != null &&
+    discountMinor == null
+  );
 }
 
 export async function createAdminPromotion(
@@ -127,7 +132,7 @@ export async function createAdminPromotion(
     [
       db
         .prepare(
-          `INSERT INTO promotion(id,code,name,description,status,benefit_type,discount_minor,percent,minimum_minor,starts_at,ends_at,global_usage_limit,per_customer_usage_limit,automatic,priority,version,created_at,updated_at) VALUES (?,?,?,?,'DRAFT',?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+          `INSERT INTO promotion(id,code,name,description,status,benefit_type,discount_minor,percent,minimum_minor,starts_at,ends_at,global_usage_limit,per_customer_usage_limit,automatic,priority,maximum_discount_minor,version,created_at,updated_at) VALUES (?,?,?,?,'DRAFT',?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
         )
         .bind(
           id,
@@ -144,6 +149,7 @@ export async function createAdminPromotion(
           request.perCustomerUsageLimit ?? null,
           request.automatic ? 1 : 0,
           request.priority ?? 0,
+          request.maximumDiscountMinor ?? null,
           now,
           now,
         ),
@@ -216,7 +222,7 @@ export async function updateAdminPromotion(
     [
       db
         .prepare(
-          "UPDATE promotion SET name=?,description=?,discount_minor=?,percent=?,minimum_minor=?,starts_at=?,ends_at=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND status='DRAFT'",
+          "UPDATE promotion SET name=?,description=?,discount_minor=?,percent=?,minimum_minor=?,starts_at=?,ends_at=?,maximum_discount_minor=CASE WHEN ? THEN ? ELSE maximum_discount_minor END,global_usage_limit=CASE WHEN ? THEN ? ELSE global_usage_limit END,per_customer_usage_limit=CASE WHEN ? THEN ? ELSE per_customer_usage_limit END,automatic=COALESCE(?,automatic),updated_at=?,version=version+1 WHERE id=? AND version=? AND status='DRAFT'",
         )
         .bind(
           request.name,
@@ -226,6 +232,13 @@ export async function updateAdminPromotion(
           request.minimumMinor,
           Date.parse(request.startsAt),
           request.endsAt ? Date.parse(request.endsAt) : null,
+          request.maximumDiscountMinor !== undefined ? 1 : 0,
+          request.maximumDiscountMinor ?? null,
+          request.globalUsageLimit !== undefined ? 1 : 0,
+          request.globalUsageLimit ?? null,
+          request.perCustomerUsageLimit !== undefined ? 1 : 0,
+          request.perCustomerUsageLimit ?? null,
+          request.automatic === undefined ? null : request.automatic ? 1 : 0,
           now,
           current.id,
           request.expectedVersion,

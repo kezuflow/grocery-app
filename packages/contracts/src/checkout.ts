@@ -150,7 +150,9 @@ export type CheckoutPromotionApplicationView = {
     | "ORDER_FIXED_DISCOUNT"
     | "ORDER_PERCENT_DISCOUNT"
     | "DELIVERY_FEE_WAIVER"
-    | "DELIVERY_FEE_DISCOUNT";
+    | "DELIVERY_PERCENT_DISCOUNT"
+    | "DELIVERY_FIXED_DISCOUNT"
+    | "DELIVERY_FEE_DISCOUNT"; // Retained quote/payment evidence only.
   amountMinor: number;
   automatic: boolean;
 };

@@ -153,7 +153,7 @@ describe("checkout promotion selection", () => {
     const delivery = evaluateCheckoutPromotionCandidates(context, facts, [
       candidate({
         benefit: {
-          type: "DELIVERY_FEE_DISCOUNT",
+          type: "DELIVERY_PERCENT_DISCOUNT",
           percent: 100,
           discountMinor: null,
           maximumDiscountMinor: 500,

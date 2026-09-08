@@ -236,7 +236,11 @@ Post-delivery exception refunds initiated in the FreshMarkets dashboard retain p
 
 Promotion benefit/rule JSON uses closed schemas and contains no executable expressions. Membership benefit/rule types are not active.
 
-Order quote/commitment enforces one unique `MERCHANDISE` application and one unique `DELIVERY` application. Explicitly selected valid code/campaign candidates take precedence for their component; otherwise selection orders eligible candidates by computed value descending and stable promotion ID ascending.
+Core quote/commitment policy permits at most one `MERCHANDISE` application and one `DELIVERY` application; persistence protects each distinct promotion/redemption identity. Explicitly selected valid code/campaign candidates take precedence for their component; otherwise selection orders eligible candidates by computed value descending and stable promotion ID ascending.
+
+Migration 0085 expands the existing promotion/grant/redemption/quote-claim benefit enums for canonical `DELIVERY_PERCENT_DISCOUNT` and `DELIVERY_FIXED_DISCOUNT`. The legacy `DELIVERY_FEE_DISCOUNT` remains permitted only as retained evidence. Existing definition rows with that legacy type receive the equivalent explicit percentage type and a version increment, including archived definitions; amounts, dates, status and other configuration remain unchanged. Retained claim/grant/redemption/application types and JSON snapshots are not rewritten. The migration backs up and restores the six affected tables and their rowids, indexes and foreign-key relationships, including dependent rule and Order application rows. No other table is rebuilt. The reproducible generator operates only on an in-memory 0084 baseline. Existing deployments need the forward migration, never a reset or edited applied baseline.
+
+Admin authoring stores the closed benefit type in `promotion` with validated fixed/percentage/waiver fields, optional positive maximum discount, positive global/per-customer limits, and automatic selection flag. Only draft configuration edits change these values; committed snapshots remain immutable. These mutable shape/eligibility rules stay in Core commands, with whole-transaction required effects and current authority.
 
 ## Inventory and Committed Demand
 

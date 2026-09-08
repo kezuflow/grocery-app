@@ -4,16 +4,17 @@ import type { RpcResult } from "./common";
 export const promotionStatuses = ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 export type PromotionStatus = (typeof promotionStatuses)[number];
 
-/** Codes owned by the membership trial authority and never manageable by Admin. */
+/** Reserved historical trial codes cannot be authored for new commerce. */
 export const reservedPromotionCodes = ["INTRO_TRIAL", "LEGACY_TRIAL_HISTORY"] as const;
 export type ReservedPromotionCode = (typeof reservedPromotionCodes)[number];
-
-/**
- * The order-benefit subset manageable by this admin surface. The membership
- * fee waiver stays exclusively owned by the introductory-trial authority;
- * delivery benefits arrive when the Quote path consumes them.
- */
-export const manageableBenefitTypes = ["ORDER_FIXED_DISCOUNT", "ORDER_PERCENT_DISCOUNT"] as const;
+/** Closed merchandise and delivery benefits owned by Promotions. */
+export const manageableBenefitTypes = [
+  "ORDER_FIXED_DISCOUNT",
+  "ORDER_PERCENT_DISCOUNT",
+  "DELIVERY_FEE_WAIVER",
+  "DELIVERY_PERCENT_DISCOUNT",
+  "DELIVERY_FIXED_DISCOUNT",
+] as const;
 export type ManageableBenefitType = (typeof manageableBenefitTypes)[number];
 
 export const previewReasonCodes = [
@@ -33,6 +34,7 @@ export type AdminPromotionSummary = {
   benefitType: ManageableBenefitType;
   discountMinor: number | null;
   percent: number | null;
+  maximumDiscountMinor?: number | null;
   minimumMinor: number;
   startsAt: string;
   endsAt: string | null;
@@ -68,6 +70,7 @@ export type AdminPromotionCreateRequest = AuthenticatedRequest & {
   benefitType: ManageableBenefitType;
   discountMinor?: number;
   percent?: number;
+  maximumDiscountMinor?: number | null;
   minimumMinor: number;
   startsAt: string;
   endsAt?: string | null;
@@ -84,9 +87,13 @@ export type AdminPromotionUpdateRequest = AuthenticatedRequest & {
   description: string;
   discountMinor?: number;
   percent?: number;
+  maximumDiscountMinor?: number | null;
   minimumMinor: number;
   startsAt: string;
   endsAt?: string | null;
+  globalUsageLimit?: number | null;
+  perCustomerUsageLimit?: number | null;
+  automatic?: boolean;
   expectedVersion: number;
   idempotencyKey: string;
 };
@@ -102,6 +109,7 @@ export type AdminPromotionStatusChangeRequest = AuthenticatedRequest & {
 export type AdminPromotionPreviewRequest = AuthenticatedRequest & {
   promotionId: string;
   subtotalMinor: number;
+  deliverySubtotalMinor?: number;
 };
 
 export type AdminPromotionPreviewView = {

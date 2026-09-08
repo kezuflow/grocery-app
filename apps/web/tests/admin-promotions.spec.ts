@@ -109,3 +109,48 @@ test("creates, edits and activates a campaign through lost browser responses", a
   }
   await page.screenshot({ path: testInfo.outputPath("promotion-recovery.png"), fullPage: true });
 });
+
+for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amount off"])
+  test(`authors and previews ${benefit} from Admin`, async ({ adminPage: page }, testInfo) => {
+    const code = `DELIVERY_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.goto("/admin/promotions");
+    await page.getByLabel("Promotion code", { exact: true }).fill(code);
+    await page.getByLabel("Promotion name", { exact: true }).fill(benefit);
+    await page.getByRole("combobox", { name: "Campaign benefit", exact: true }).click();
+    await page.getByRole("option", { name: benefit, exact: true }).click();
+    if (benefit !== "Free delivery")
+      await page
+        .getByLabel(
+          benefit === "Delivery percentage off" ? "Discount percentage" : "Fixed discount in pesos",
+          { exact: true },
+        )
+        .fill(benefit === "Delivery percentage off" ? "25" : "30.00");
+    await page.getByRole("button", { name: "Create draft", exact: true }).click();
+    await page
+      .getByRole("row")
+      .filter({ has: page.getByRole("cell", { name: code, exact: true }) })
+      .getByRole("link", { name: "Manage", exact: true })
+      .click();
+    await page.getByLabel("Campaign maximum discount", { exact: true }).fill("25.50");
+    await page.getByLabel("Campaign total redemption limit", { exact: true }).fill("10");
+    await page.getByLabel("Campaign customer redemption limit", { exact: true }).fill("2");
+    await page.getByRole("button", { name: "Save campaign", exact: true }).click();
+    await expect(page.getByLabel("Campaign maximum discount", { exact: true })).toHaveValue(
+      "25.50",
+    );
+    await page.getByLabel("Reason", { exact: true }).fill("Launch delivery campaign");
+    await page.getByRole("button", { name: "Activate", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
+    await expect(page.getByText("Maximum discount: PHP 25.50", { exact: true })).toBeVisible();
+    await expect(page.getByText("Total redemption limit: 10", { exact: true })).toBeVisible();
+    await page.getByLabel("Subtotal in pesos", { exact: true }).fill("200.00");
+    await page.getByLabel("Delivery fee in pesos", { exact: true }).fill("70.00");
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: benefit === "Delivery percentage off" ? "17.50" : "25.50" }),
+    ).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("delivery-promotion.png"), fullPage: true });
+  });

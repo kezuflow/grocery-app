@@ -1,7 +1,18 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { AdminPromotionPage } from "@freshmarkets/contracts";
+import {
+  manageableBenefitTypes,
+  type ManageableBenefitType,
+  type AdminPromotionPage,
+} from "@freshmarkets/contracts";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
@@ -32,6 +43,7 @@ export default function PromotionsPage() {
   const [page, setPage] = useState<AdminPromotionPage | null>(null);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [benefit, setBenefit] = useState<ManageableBenefitType>("ORDER_FIXED_DISCOUNT");
   const [discount, setDiscount] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const createIntent = useCatalogCommand(adminPromotionSummarySchema);
@@ -74,8 +86,18 @@ export default function PromotionsPage() {
     }
     const [whole, fraction = ""] = discount.trim().split(".");
     const amount = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
-    if (!/^\d+(\.\d{1,2})?$/.test(discount.trim()) || !Number.isSafeInteger(amount) || amount < 1) {
+    if (
+      benefit.endsWith("FIXED_DISCOUNT") &&
+      (!/^\d+(\.\d{1,2})?$/.test(discount.trim()) || !Number.isSafeInteger(amount) || amount < 1)
+    ) {
       setNotice("Enter a positive discount with at most two decimal places.");
+      return;
+    }
+    if (
+      benefit.endsWith("PERCENT_DISCOUNT") &&
+      (!Number.isInteger(Number(discount)) || Number(discount) < 1 || Number(discount) > 100)
+    ) {
+      setNotice("Enter a whole percentage from 1 to 100.");
       return;
     }
     try {
@@ -84,8 +106,12 @@ export default function PromotionsPage() {
           code: code.trim().toUpperCase(),
           name: name.trim(),
           description: "",
-          benefitType: "ORDER_FIXED_DISCOUNT",
-          discountMinor: amount,
+          benefitType: benefit,
+          ...(benefit.endsWith("FIXED_DISCOUNT")
+            ? { discountMinor: amount }
+            : benefit.endsWith("PERCENT_DISCOUNT")
+              ? { percent: Number(discount) }
+              : {}),
           minimumMinor: 0,
           startsAt: new Date().toISOString(),
         })
@@ -110,7 +136,7 @@ export default function PromotionsPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Promotions"
-        description="Create and manage merchandise discount campaigns."
+        description="Create and manage merchandise and delivery discount campaigns."
       />
 
       {state.phase === "loading" ? (
@@ -150,7 +176,7 @@ export default function PromotionsPage() {
             title="Create a promotion"
             description="Created as DRAFT; activate when ready."
           >
-            <form className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center" onSubmit={create}>
+            <form className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={create}>
               <Input
                 aria-label="Promotion code"
                 disabled={createIntent.pending || createIntent.uncertain}
@@ -167,14 +193,46 @@ export default function PromotionsPage() {
                 onChange={(event) => setName(event.target.value)}
                 className="sm:w-56"
               />
-              <Input
-                aria-label="Fixed discount in pesos"
+              <Select
+                value={benefit}
                 disabled={createIntent.pending || createIntent.uncertain}
-                placeholder="discount ₱"
-                value={discount}
-                onChange={(event) => setDiscount(event.target.value)}
-                className="sm:w-32"
-              />
+                onValueChange={(value) => {
+                  const choice = manageableBenefitTypes.find((type) => type === value);
+                  if (choice) setBenefit(choice);
+                }}
+              >
+                <SelectTrigger aria-label="Campaign benefit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {manageableBenefitTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {
+                        {
+                          ORDER_FIXED_DISCOUNT: "Merchandise amount off",
+                          ORDER_PERCENT_DISCOUNT: "Merchandise percentage off",
+                          DELIVERY_FEE_WAIVER: "Free delivery",
+                          DELIVERY_PERCENT_DISCOUNT: "Delivery percentage off",
+                          DELIVERY_FIXED_DISCOUNT: "Delivery amount off",
+                        }[type]
+                      }
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {benefit !== "DELIVERY_FEE_WAIVER" ? (
+                <Input
+                  aria-label={
+                    benefit.endsWith("PERCENT_DISCOUNT")
+                      ? "Discount percentage"
+                      : "Fixed discount in pesos"
+                  }
+                  disabled={createIntent.pending || createIntent.uncertain}
+                  placeholder={benefit.endsWith("PERCENT_DISCOUNT") ? "percentage" : "discount PHP"}
+                  value={discount}
+                  onChange={(event) => setDiscount(event.target.value)}
+                />
+              ) : null}
               <Button type="submit" size="sm" disabled={createIntent.pending}>
                 {createIntent.pending ? "Creating…" : "Create draft"}
               </Button>
@@ -218,9 +276,11 @@ export default function PromotionsPage() {
                         </StatusBadge>
                       </TableCell>
                       <TableCell className="text-xs text-[var(--fm-text-muted)]">
-                        {promotion.benefitType === "ORDER_PERCENT_DISCOUNT"
+                        {promotion.benefitType.endsWith("PERCENT_DISCOUNT")
                           ? `${promotion.percent}% off`
-                          : `₱${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                          : promotion.benefitType === "DELIVERY_FEE_WAIVER"
+                            ? "Free delivery"
+                            : `PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
                       </TableCell>
                       <TableCell>
                         <Link

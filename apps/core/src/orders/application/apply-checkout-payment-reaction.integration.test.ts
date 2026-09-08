@@ -502,7 +502,12 @@ describe("order commitment from canonical payment reactions", () => {
         .first(),
     ).toEqual({ orders: 0, redemptions: 0, claims: 0 });
   });
-  it("snapshots a promotion claim without redemption, then redeems it once at commitment", async () => {
+  it.each([
+    "ORDER_FIXED_DISCOUNT",
+    "DELIVERY_FEE_WAIVER",
+    "DELIVERY_PERCENT_DISCOUNT",
+    "DELIVERY_FIXED_DISCOUNT",
+  ])("snapshots %s without redemption and redeems it once at commitment", async (benefitType) => {
     const fixture = await seededCheckout();
     const promotionId = `promotion-${crypto.randomUUID()}`;
     const code = `SAVE${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
@@ -512,18 +517,41 @@ describe("order commitment from canonical payment reactions", () => {
         id, code, name, description, status, benefit_type, discount_minor, percent,
         minimum_minor, starts_at, ends_at, global_usage_limit, per_customer_usage_limit,
         automatic, priority, version, created_at, updated_at
-      ) VALUES (?, ?, 'Checkout saving', '', 'ACTIVE', 'ORDER_FIXED_DISCOUNT', 5000, NULL,
+      ) VALUES (?, ?, 'Checkout saving', '', 'ACTIVE', ?, ?, ?,
                 0, ?, NULL, 10, 1, 0, 0, 1, ?, ?)`,
     )
-      .bind(promotionId, code, now - 1, now, now)
+      .bind(
+        promotionId,
+        code,
+        benefitType,
+        benefitType.endsWith("FIXED_DISCOUNT") ? 5000 : null,
+        benefitType === "DELIVERY_PERCENT_DISCOUNT" ? 25 : null,
+        now - 1,
+        now,
+        now,
+      )
       .run();
 
     const quote = await createQuote(fixture, [code.toLowerCase()]);
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
+    const amount =
+      benefitType === "ORDER_FIXED_DISCOUNT"
+        ? 5000
+        : benefitType === "DELIVERY_FEE_WAIVER"
+          ? quote.value.deliverySubtotalMinor
+          : benefitType === "DELIVERY_FIXED_DISCOUNT"
+            ? Math.min(5000, quote.value.deliverySubtotalMinor)
+            : Math.floor(quote.value.deliverySubtotalMinor / 4);
     expect(quote.value).toMatchObject({
-      orderDiscountMinor: 5000,
       requestedPromotionCodes: [code],
-      promotionApplications: [{ promotionId, component: "MERCHANDISE", amountMinor: 5000 }],
+      promotionApplications: [
+        {
+          promotionId,
+          benefitType,
+          component: benefitType.startsWith("DELIVERY") ? "DELIVERY" : "MERCHANDISE",
+          amountMinor: amount,
+        },
+      ],
     });
     const before = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM checkout_promotion_claim WHERE checkout_quote_id=?) AS claims, (SELECT COUNT(*) FROM promotion_redemption WHERE promotion_id=?) AS redemptions",
@@ -579,6 +607,13 @@ describe("order commitment from canonical payment reactions", () => {
       .bind(promotionId, promotionId, quote.value.quoteId)
       .first<{ redemptions: number; applications: number; claim_status: string }>();
     expect(after).toEqual({ redemptions: 1, applications: 1, claim_status: "COMMITTED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT benefit_type,amount_minor FROM promotion_redemption WHERE promotion_id=?",
+      )
+        .bind(promotionId)
+        .first(),
+    ).toEqual({ benefit_type: benefitType, amount_minor: amount });
   });
 
   it.each(["global", "customer", "grant", "system-grant"])(

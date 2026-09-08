@@ -52,7 +52,8 @@ export type CheckoutPromotionCandidate = {
       | "ORDER_FIXED_DISCOUNT"
       | "ORDER_PERCENT_DISCOUNT"
       | "DELIVERY_FEE_WAIVER"
-      | "DELIVERY_FEE_DISCOUNT";
+      | "DELIVERY_PERCENT_DISCOUNT"
+      | "DELIVERY_FIXED_DISCOUNT";
     discountMinor: number | null;
     percent: number | null;
     maximumDiscountMinor: number | null;
@@ -114,18 +115,36 @@ function ruleMatches(
   }
 }
 
-function amountFor(
-  candidate: CheckoutPromotionCandidate,
-  context: PromotionCheckoutContext,
+/** Retained storage may contain unsupported vocabulary or parameters; never broaden its benefit. */
+export function isPromotionBenefitValid(benefit: CheckoutPromotionCandidate["benefit"]): boolean {
+  const positive = (value: number | null) =>
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  if (benefit.maximumDiscountMinor !== null && !positive(benefit.maximumDiscountMinor))
+    return false;
+  if (benefit.type === "DELIVERY_FEE_WAIVER")
+    return benefit.discountMinor === null && benefit.percent === null;
+  if (benefit.type === "ORDER_FIXED_DISCOUNT" || benefit.type === "DELIVERY_FIXED_DISCOUNT")
+    return positive(benefit.discountMinor) && benefit.percent === null;
+  if (benefit.type === "ORDER_PERCENT_DISCOUNT" || benefit.type === "DELIVERY_PERCENT_DISCOUNT")
+    return (
+      positive(benefit.percent) && (benefit.percent ?? 0) <= 100 && benefit.discountMinor === null
+    );
+  return false;
+}
+
+export function calculatePromotionDiscount(
+  candidate: Pick<CheckoutPromotionCandidate, "benefit">,
+  context: Pick<PromotionCheckoutContext, "merchandiseSubtotalMinor" | "deliverySubtotalMinor">,
 ): { component: "MERCHANDISE" | "DELIVERY"; amountMinor: number } {
   const type = candidate.benefit.type;
   const component = type.startsWith("DELIVERY") ? "DELIVERY" : "MERCHANDISE";
   const basis =
     component === "DELIVERY" ? context.deliverySubtotalMinor : context.merchandiseSubtotalMinor;
   let amount = 0;
-  if (type === "ORDER_FIXED_DISCOUNT") amount = candidate.benefit.discountMinor ?? 0;
+  if (type === "ORDER_FIXED_DISCOUNT" || type === "DELIVERY_FIXED_DISCOUNT")
+    amount = candidate.benefit.discountMinor ?? 0;
   else if (type === "DELIVERY_FEE_WAIVER") amount = basis;
-  else amount = Math.floor((basis * (candidate.benefit.percent ?? 0)) / 100);
+  else amount = Number((BigInt(basis) * BigInt(candidate.benefit.percent ?? 0)) / 100n);
   if (candidate.benefit.maximumDiscountMinor !== null)
     amount = Math.min(amount, candidate.benefit.maximumDiscountMinor);
   return { component, amountMinor: Math.max(0, Math.min(basis, amount)) };
@@ -136,6 +155,8 @@ function evaluate(
   context: PromotionCheckoutContext,
   facts: PromotionEligibilityFacts,
 ): Evaluated {
+  if (!isPromotionBenefitValid(candidate.benefit))
+    return { candidate, application: null, eligible: false, reason: "INELIGIBLE" };
   const expired =
     candidate.status !== "ACTIVE" ||
     candidate.startsAt > context.at ||
@@ -158,7 +179,7 @@ function evaluate(
     !candidate.rules.every((rule) => ruleMatches(rule, context, facts))
   )
     return { candidate, application: null, eligible: false, reason: "INELIGIBLE" };
-  const { component, amountMinor } = amountFor(candidate, context);
+  const { component, amountMinor } = calculatePromotionDiscount(candidate, context);
   if (amountMinor <= 0)
     return { candidate, application: null, eligible: false, reason: "INELIGIBLE" };
   return {

@@ -40,6 +40,7 @@ export default function PromotionDetailPage({
   const { "promotion-id": promotionId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
+  const [deliverySubtotal, setDeliverySubtotal] = useState("");
   const [previewSubtotal, setPreviewSubtotal] = useState("");
   const [previewResult, setPreviewResult] = useState<AdminPromotionPreviewView | null>(null);
   const [grantCustomerId, setGrantCustomerId] = useState("");
@@ -226,11 +227,26 @@ export default function PromotionDetailPage({
           <div className="space-y-2 p-4 text-sm">
             <p>{promotion.description || "No description"}</p>
             <p>
-              {promotion.benefitType === "ORDER_FIXED_DISCOUNT"
-                ? `Merchandise discount: PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)}`
-                : `Merchandise discount: ${promotion.percent}%`}
+              {promotion.benefitType.endsWith("FIXED_DISCOUNT")
+                ? `Discount: PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)}`
+                : promotion.benefitType === "DELIVERY_FEE_WAIVER"
+                  ? "Free delivery"
+                  : `Discount: ${promotion.percent}%`}
             </p>
             <p>Minimum purchase: PHP {(promotion.minimumMinor / 100).toFixed(2)}</p>
+            <p>
+              Maximum discount:{" "}
+              {promotion.maximumDiscountMinor == null
+                ? "No cap"
+                : `PHP ${(promotion.maximumDiscountMinor / 100).toFixed(2)}`}
+            </p>
+            <p>Total redemption limit: {promotion.globalUsageLimit ?? "No limit"}</p>
+            <p>Customer redemption limit: {promotion.perCustomerUsageLimit ?? "No limit"}</p>
+            <p>
+              {promotion.automatic
+                ? "Applied automatically when eligible"
+                : "Applied by code or customer grant"}
+            </p>
             <p>
               Starts: {promotion.startsAt}{" "}
               {promotion.endsAt ? `Ends: ${promotion.endsAt}` : "No end date"}
@@ -308,7 +324,7 @@ export default function PromotionDetailPage({
 
       <ListPageSection
         title="Preview"
-        description="Read-only evaluation over a merchandise subtotal."
+        description="Preview the discount amount before checkout eligibility and usage are confirmed."
       >
         <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
           <Input
@@ -318,23 +334,43 @@ export default function PromotionDetailPage({
             onChange={(event) => setPreviewSubtotal(event.target.value)}
             className="sm:w-44"
           />
+          {promotion.benefitType.startsWith("DELIVERY") ? (
+            <Input
+              aria-label="Delivery fee in pesos"
+              placeholder="delivery fee PHP"
+              value={deliverySubtotal}
+              onChange={(event) => setDeliverySubtotal(event.target.value)}
+            />
+          ) : null}
           <Button
             size="sm"
             variant="outline"
             onClick={() => {
               const pesos = Number(previewSubtotal);
-              if (Number.isNaN(pesos)) {
-                setNotice("Enter a numeric subtotal.");
+              if (
+                !/^\d+(\.\d{1,2})?$/.test(previewSubtotal.trim()) ||
+                (promotion.benefitType.startsWith("DELIVERY") &&
+                  !/^\d+(\.\d{1,2})?$/.test(deliverySubtotal.trim()))
+              ) {
+                setNotice(
+                  "Enter the merchandise subtotal and delivery fee where required, with at most two decimal places.",
+                );
                 return;
               }
               void (async () => {
                 const response = await fetch(`${BASE}/${encodeURIComponent(promotionId)}/preview`, {
                   method: "POST",
                   headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ subtotalMinor: Math.round(pesos * 100) }),
+                  body: JSON.stringify({
+                    subtotalMinor: Math.round(pesos * 100),
+                    ...(promotion.benefitType.startsWith("DELIVERY")
+                      ? { deliverySubtotalMinor: Math.round(Number(deliverySubtotal) * 100) }
+                      : {}),
+                  }),
                 });
                 const payload = (await response.json()) as RpcResult<AdminPromotionPreviewView>;
                 setPreviewResult(payload.ok ? payload.value : null);
+                setNotice(payload.ok ? null : payload.error.message);
               })();
             }}
           >
@@ -343,7 +379,7 @@ export default function PromotionDetailPage({
           {previewResult ? (
             <span className="text-sm" role="status">
               {previewResult.eligible
-                ? `Eligible — discount ₱${((previewResult.discountMinor ?? 0) / 100).toFixed(2)}`
+                ? `Estimated discount ₱${((previewResult.discountMinor ?? 0) / 100).toFixed(2)}`
                 : `Not eligible (${previewResult.reasonCode})`}
             </span>
           ) : null}

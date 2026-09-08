@@ -1,3 +1,5 @@
+import { adminPromotionPreviewBodySchema } from "@freshmarkets/validation";
+import { readBoundedJson } from "@/lib/http/bounded-body";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
@@ -10,25 +12,24 @@ async function POSTHandler(
   context: { params: Promise<{ "promotion-id": string }> },
 ) {
   const { "promotion-id": promotionId } = await context.params;
-  const body = (await request.json().catch(() => null)) as { subtotalMinor?: unknown } | null;
-  if (!Number.isInteger(body?.subtotalMinor)) {
+  const body = await readBoundedJson(request, adminPromotionPreviewBodySchema, { maxBytes: 8192 });
+  if (!body.ok)
     return adminJson(
       {
         ok: false as const,
         error: {
           code: "VALIDATION_FAILED" as const,
-          message: "An integer subtotalMinor is required",
+          message: body.error.message,
           requestId: webRequestId(request),
         },
       },
-      { status: 400 },
+      { status: body.error.status },
     );
-  }
   const result = await coreClient(env.CORE).previewAdminPromotion({
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     promotionId,
-    subtotalMinor: body!.subtotalMinor as number,
+    ...body.value,
   });
   return adminJson(result);
 }

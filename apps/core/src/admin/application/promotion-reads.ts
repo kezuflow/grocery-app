@@ -1,3 +1,8 @@
+import { manageableBenefitTypes } from "@freshmarkets/contracts";
+import {
+  calculatePromotionDiscount,
+  isPromotionBenefitValid,
+} from "../../promotions/domain/checkout-promotion";
 import type {
   AdminPromotionDetailRequest,
   AdminPromotionListRequest,
@@ -25,6 +30,7 @@ type PromotionRow = {
   benefitType: string;
   discountMinor: number | null;
   percent: number | null;
+  maximumDiscountMinor: number | null;
   minimumMinor: number;
   startsAt: number;
   endsAt: number | null;
@@ -39,7 +45,7 @@ type PromotionRow = {
 
 const PROMOTION_SELECT = `
   SELECT id AS promotionId, code, name, description, status,
-         benefit_type AS benefitType, discount_minor AS discountMinor, percent,
+         benefit_type AS benefitType, discount_minor AS discountMinor, percent, maximum_discount_minor AS maximumDiscountMinor,
          minimum_minor AS minimumMinor, starts_at AS startsAt, ends_at AS endsAt,
          global_usage_limit AS globalUsageLimit, per_customer_usage_limit AS perCustomerUsageLimit,
          automatic, priority, version, created_at AS createdAt, updated_at AS updatedAt
@@ -55,6 +61,7 @@ export function toPromotionSummary(row: PromotionRow): AdminPromotionSummary {
     benefitType: row.benefitType as AdminPromotionSummary["benefitType"],
     discountMinor: row.discountMinor,
     percent: row.percent,
+    maximumDiscountMinor: row.maximumDiscountMinor,
     minimumMinor: row.minimumMinor,
     startsAt: new Date(row.startsAt).toISOString(),
     endsAt: row.endsAt === null ? null : new Date(row.endsAt).toISOString(),
@@ -156,7 +163,12 @@ export async function previewAdminPromotion(
 ): Promise<RpcResult<AdminPromotionPreviewView>> {
   const access = await resolvePromotionAdministrationAccess(deps, request, "promotions.read");
   if (!access.ok) return access;
-  if (!Number.isInteger(request.subtotalMinor) || request.subtotalMinor < 0) {
+  if (
+    !Number.isSafeInteger(request.subtotalMinor) ||
+    request.subtotalMinor < 0 ||
+    (request.deliverySubtotalMinor !== undefined &&
+      (!Number.isSafeInteger(request.deliverySubtotalMinor) || request.deliverySubtotalMinor < 0))
+  ) {
     return {
       ok: false,
       error: {
@@ -193,7 +205,7 @@ export async function previewAdminPromotion(
       requestId: request.requestId,
     };
   }
-  if (row.endsAt !== null && row.endsAt < now) {
+  if (row.endsAt !== null && row.endsAt <= now) {
     return {
       ok: true,
       value: { eligible: false, reasonCode: "PROMOTION_EXPIRED", discountMinor: null },
@@ -208,15 +220,46 @@ export async function previewAdminPromotion(
     };
   }
 
-  let discountMinor: number;
-  if (row.benefitType === "ORDER_PERCENT_DISCOUNT") {
-    discountMinor = Math.min(
-      Math.ceil((request.subtotalMinor * (row.percent ?? 0)) / 100),
-      request.subtotalMinor,
-    );
-  } else {
-    discountMinor = Math.min(row.discountMinor ?? 0, request.subtotalMinor);
-  }
+  const type = manageableBenefitTypes.find((type) => type === row.benefitType);
+  if (!type || (type.startsWith("DELIVERY") && request.deliverySubtotalMinor === undefined))
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "A delivery subtotal is required for delivery benefits",
+        requestId: request.requestId,
+      },
+    };
+  if (
+    !isPromotionBenefitValid({
+      type,
+      discountMinor: row.discountMinor,
+      percent: row.percent,
+      maximumDiscountMinor: row.maximumDiscountMinor,
+    })
+  )
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "Campaign benefit parameters need correction",
+        requestId: request.requestId,
+      },
+    };
+  const { amountMinor: discountMinor } = calculatePromotionDiscount(
+    {
+      benefit: {
+        type,
+        discountMinor: row.discountMinor,
+        percent: row.percent,
+        maximumDiscountMinor: row.maximumDiscountMinor,
+      },
+    },
+    {
+      merchandiseSubtotalMinor: request.subtotalMinor,
+      deliverySubtotalMinor: request.deliverySubtotalMinor ?? 0,
+    },
+  );
   return {
     ok: true,
     value: { eligible: true, reasonCode: null, discountMinor },
