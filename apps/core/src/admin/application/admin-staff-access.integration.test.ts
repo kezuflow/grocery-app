@@ -7,6 +7,7 @@ import { createAuth } from "../../auth/service";
 import { requestHash } from "../../idempotency";
 import { inviteAdminStaff, revokeAdminStaffInvitation } from "./invite-admin-staff";
 import { createAdminRole } from "./create-admin-role";
+import { updateAdminStaff, changeAdminStaffAccess } from "./update-admin-staff";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -231,6 +232,171 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
 }
 
 describe("staff administration commands", () => {
+  it.each(["rename", "access"] as const)(
+    "rejects %s after current manager scope is revoked",
+    async (kind) => {
+      const manager = await seedManager();
+      const target = await seedStaff({
+        principal: await signUp(),
+        permissionCodes: [],
+        scope: { kind: "global" },
+      });
+      const own = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        staffId: target.staffId,
+        expectedVersion: 1,
+      };
+      const db = new Proxy(env.DB, {
+        get(database, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await database
+                .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                .bind(manager.staffId)
+                .run();
+              return database.batch(statements);
+            };
+          const value = Reflect.get(database, property, database);
+          return typeof value === "function" ? value.bind(database) : value;
+        },
+      });
+      const deps = { auth: createAuth(env), db };
+      const result =
+        kind === "rename"
+          ? await updateAdminStaff(deps, { ...own, displayName: "Unauthorized" })
+          : await changeAdminStaffAccess(deps, {
+              ...own,
+              action: "SUSPEND",
+              reason: "Unauthorized",
+            });
+      expect(result).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT status,version,display_name FROM staff_identity WHERE id=?")
+          .bind(target.staffId)
+          .first(),
+      ).toEqual({ status: "active", version: 1, display_name: "Staff Member" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(own.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
+  it.each(["transition", "audit", "receipt"] as const)(
+    "rolls back ignored staff %s and retries the same access command",
+    async (effect) => {
+      const manager = await seedManager();
+      const target = await seedStaff({
+        principal: await signUp(),
+        permissionCodes: [],
+        scope: { kind: "global" },
+      });
+      const command = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        staffId: target.staffId,
+        expectedVersion: 1,
+        action: "SUSPEND" as const,
+        reason: "Required effects",
+      };
+      const trigger =
+        effect === "transition"
+          ? "BEFORE UPDATE ON staff_identity WHEN NEW.status='suspended'"
+          : effect === "audit"
+            ? "BEFORE INSERT ON audit_event WHEN NEW.action='STAFF.ACCESS_CHANGED'"
+            : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='admin.staff.access' AND NEW.status='SUCCEEDED'";
+      await env.DB.prepare(
+        `CREATE TRIGGER test_ignore_staff_change ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      ).run();
+      try {
+        expect(await core.changeAdminStaffAccess(command)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT status,version FROM staff_identity WHERE id=?")
+            .bind(target.staffId)
+            .first(),
+        ).toEqual({ status: "active", version: 1 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+          )
+            .bind(command.idempotencyKey)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=?")
+            .bind(target.staffId)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.prepare("DROP TRIGGER test_ignore_staff_change").run();
+      }
+      const result = await core.changeAdminStaffAccess(command);
+      expect(result).toMatchObject({ ok: true, value: { status: "suspended", version: 2 } });
+      expect(await core.changeAdminStaffAccess(command)).toEqual(result);
+    },
+  );
+  it("keeps original staff receipts after subsequent changes and serializes competing edits", async () => {
+    const fixture = await revocable();
+    const accepted = await core.acceptStaffInvitation({
+      headers: { cookie: fixture.invitee.cookie },
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      invitationId: fixture.created.invitationId,
+      expectedVersion: fixture.created.version,
+    });
+    if (!accepted.ok) throw new Error("Invitation acceptance failed");
+    const own = {
+      headers: { cookie: fixture.manager.cookie },
+      requestId: crypto.randomUUID(),
+      staffId: accepted.value.staffId,
+    };
+    const rename = {
+      ...own,
+      displayName: "Reviewed name",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const renamed = await core.updateAdminStaff(rename);
+    expect(renamed).toMatchObject({
+      ok: true,
+      value: { displayName: "Reviewed name", version: 2, roleCodes: ["operations_viewer"] },
+    });
+    const suspend = {
+      ...own,
+      action: "SUSPEND" as const,
+      reason: "Leave",
+      expectedVersion: 2,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const suspended = await core.changeAdminStaffAccess(suspend);
+    expect(suspended).toMatchObject({ ok: true, value: { status: "suspended", version: 3 } });
+    expect(await core.changeAdminStaffAccess(suspend)).toEqual(suspended);
+    expect(await core.updateAdminStaff(rename)).toEqual(renamed);
+    expect(await core.updateAdminStaff({ ...rename, displayName: "Changed intent" })).toMatchObject(
+      { ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } },
+    );
+    const outcomes = await Promise.all(
+      ["First", "Second"].map((displayName) =>
+        core.updateAdminStaff({
+          ...own,
+          displayName,
+          expectedVersion: 3,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ),
+    );
+    expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT version FROM staff_identity WHERE id=?")
+        .bind(accepted.value.staffId)
+        .first(),
+    ).toEqual({ version: 4 });
+  });
   async function revocable() {
     const manager = await seedManager();
     const invitee = await signUp();

@@ -5,214 +5,174 @@ import type {
   AppErrorCode,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import {
+  beginStaffAdministrationWrite,
+  requireStaffWrite,
+} from "../../iam/infrastructure/staff-administration-write";
+import {
+  completeStaffCommandReceipt,
+  staffCommandReceiptSchema,
+} from "../../iam/infrastructure/staff-command-receipt";
 import {
   readStaffDetail,
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
 
-const UPDATE_SCOPE = "admin.staff.update";
-const ACCESS_SCOPE = "admin.staff.access";
-
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
-function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(Date.now(), scope, key)
-    .run();
+type StaffChange =
+  | { kind: "rename"; displayName: string }
+  | { kind: "access"; action: "ACTIVATE" | "SUSPEND"; reason: string };
+
+async function changeStaff(
+  deps: StaffAdministrationDeps,
+  request: AdminStaffUpdateRequest | AdminStaffAccessChangeRequest,
+  change: StaffChange,
+): Promise<RpcResult<AdminStaffDetail>> {
+  const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
+  if (!access.ok) return access;
+  if (change.kind === "rename" ? !change.displayName : !change.reason)
+    return failure(
+      "VALIDATION_FAILED",
+      change.kind === "rename"
+        ? "A display name is required"
+        : "A reason is required for access changes",
+      request.requestId,
+    );
+  const scope = change.kind === "rename" ? "admin.staff.update" : "admin.staff.access";
+  const hash = await requestHash({
+    staffId: request.staffId,
+    expectedVersion: request.expectedVersion,
+    ...(change.kind === "rename"
+      ? { displayName: change.displayName }
+      : { action: change.action, reason: change.reason }),
+  });
+  async function replay(): Promise<RpcResult<AdminStaffDetail> | null> {
+    const saved = await findIdempotencyRecord(deps.db, scope, request.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash)
+      return failure(
+        "IDEMPOTENCY_CONFLICT",
+        "Idempotency key was used with a different request",
+        request.requestId,
+      );
+    if (saved.status !== "SUCCEEDED") return null;
+    if (saved.resultType === scope && saved.resultReference === request.staffId)
+      return readStaffDetail(deps, request.staffId, request.requestId);
+    if (saved.resultType === "staff_change_snapshot" && saved.resultReference) {
+      try {
+        const value: unknown = JSON.parse(saved.resultReference);
+        const parsed = staffCommandReceiptSchema.safeParse(value);
+        if (parsed.success && parsed.data.staffId === request.staffId)
+          return { ok: true, value: parsed.data, requestId: request.requestId };
+      } catch {
+        /* Malformed retained evidence must not cause another mutation. */
+      }
+    }
+    return failure("INTERNAL_ERROR", "Saved staff result is unavailable", request.requestId);
+  }
+  const prior = await replay();
+  if (prior) return prior;
+  const current = await deps.db
+    .prepare("SELECT display_name,status,version FROM staff_identity WHERE id=?")
+    .bind(request.staffId)
+    .first<{ display_name: string; status: "active" | "suspended"; version: number }>();
+  if (!current) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
+  const nextStatus =
+    change.kind === "access" && change.action === "SUSPEND" ? "suspended" : "active";
+  if (change.kind === "access" && current.status === nextStatus)
+    return failure("VALIDATION_FAILED", `Staff is already ${nextStatus}`, request.requestId);
+  if (current.version !== request.expectedVersion)
+    return failure("STALE_VERSION", "Staff changed; refresh before retrying", request.requestId);
+  const now = Date.now();
+  try {
+    await deps.db.batch([
+      ...beginStaffAdministrationWrite(deps.db, {
+        ...access.value,
+        scope,
+        key: request.idempotencyKey,
+        hash,
+        resultType: "staff_change_snapshot",
+        now,
+      }),
+      change.kind === "rename"
+        ? deps.db
+            .prepare(
+              "UPDATE staff_identity SET display_name=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND display_name=? AND status=?",
+            )
+            .bind(
+              change.displayName,
+              now,
+              request.staffId,
+              request.expectedVersion,
+              current.display_name,
+              current.status,
+            )
+        : deps.db
+            .prepare(
+              "UPDATE staff_identity SET status=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND status=?",
+            )
+            .bind(nextStatus, now, request.staffId, request.expectedVersion, current.status),
+      requireStaffWrite(deps.db),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: change.kind === "rename" ? "STAFF.UPDATED" : "STAFF.ACCESS_CHANGED",
+        resourceType: "staff_identity",
+        resourceId: request.staffId,
+        ...(change.kind === "access" ? { reason: change.reason } : {}),
+        before:
+          change.kind === "rename"
+            ? { displayName: current.display_name }
+            : { status: current.status },
+        after:
+          change.kind === "rename" ? { displayName: change.displayName } : { status: nextStatus },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      requireStaffWrite(deps.db),
+      ...completeStaffCommandReceipt(deps.db, {
+        staffId: request.staffId,
+        scope,
+        key: request.idempotencyKey,
+        hash,
+        now,
+      }),
+    ]);
+  } catch {
+    return (
+      (await replay()) ??
+      failure(
+        "CONFLICT",
+        "Staff changed or the command could not be recorded; refresh and retry the same request",
+        request.requestId,
+      )
+    );
+  }
+  return (
+    (await replay()) ??
+    failure("INTERNAL_ERROR", "Saved staff result is unavailable", request.requestId)
+  );
 }
 
-type StaffRow = {
-  id: string;
-  display_name: string;
-  status: "active" | "suspended";
-  version: number;
-};
-
-async function readStaffRow(database: D1Database, staffId: string): Promise<StaffRow | null> {
-  return database
-    .prepare("SELECT id, display_name, status, version FROM staff_identity WHERE id = ?")
-    .bind(staffId)
-    .first<StaffRow>();
-}
-
-/** Rename an application-owned staff identity; version-guarded and audited. */
-export async function updateAdminStaff(
+export function updateAdminStaff(
   deps: StaffAdministrationDeps,
   request: AdminStaffUpdateRequest,
 ): Promise<RpcResult<AdminStaffDetail>> {
-  const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
-  if (!access.ok) return access;
-  const displayName = request.displayName.trim();
-  if (displayName === "") {
-    return failure("VALIDATION_FAILED", "A display name is required", request.requestId);
-  }
-
-  const current = await readStaffRow(deps.db, request.staffId);
-  if (!current) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    UPDATE_SCOPE,
-    request.idempotencyKey,
-    { staffId: request.staffId, displayName, expectedVersion: request.expectedVersion },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      return readStaffDetail(deps, request.staffId, request.requestId);
-    }
-    return failure("CONFLICT", "The update command is still processing", request.requestId);
-  }
-
-  const appliedGuard =
-    "EXISTS (SELECT 1 FROM staff_identity WHERE id=? AND display_name=? AND version=?)";
-  const appliedGuardBinds = [request.staffId, displayName, request.expectedVersion + 1];
-  let batchResults: D1Result[];
-  try {
-    batchResults = await deps.db.batch([
-      deps.db
-        .prepare(
-          "UPDATE staff_identity SET display_name=?, updated_at=?, version=version+1 WHERE id=? AND version=?",
-        )
-        .bind(displayName, now, request.staffId, request.expectedVersion),
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: "STAFF.UPDATED",
-          resourceType: "staff_identity",
-          resourceId: request.staffId,
-          before: { displayName: current.display_name },
-          after: { displayName },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        { clause: appliedGuard, binds: appliedGuardBinds },
-      ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
-        )
-        .bind(request.staffId, now, UPDATE_SCOPE, request.idempotencyKey, ...appliedGuardBinds),
-    ]);
-  } catch {
-    await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
-    return failure("CONFLICT", "The staff update could not be recorded", request.requestId);
-  }
-  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
-    await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
-    return failure("STALE_VERSION", "Staff changed; refresh before retrying", request.requestId);
-  }
-  return readStaffDetail(deps, request.staffId, request.requestId);
+  return changeStaff(deps, request, { kind: "rename", displayName: request.displayName.trim() });
 }
 
-/** Activate or suspend an application-owned staff identity; audited. */
-export async function changeAdminStaffAccess(
+export function changeAdminStaffAccess(
   deps: StaffAdministrationDeps,
   request: AdminStaffAccessChangeRequest,
 ): Promise<RpcResult<AdminStaffDetail>> {
-  const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
-  if (!access.ok) return access;
-  const reason = request.reason.trim();
-  if (reason === "") {
-    return failure(
-      "VALIDATION_FAILED",
-      "A reason is required for access changes",
-      request.requestId,
-    );
-  }
-
-  const current = await readStaffRow(deps.db, request.staffId);
-  if (!current) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
-  const nextStatus = request.action === "SUSPEND" ? "suspended" : "active";
-  if (current.status === nextStatus) {
-    return failure("VALIDATION_FAILED", `Staff is already ${nextStatus}`, request.requestId);
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    ACCESS_SCOPE,
-    request.idempotencyKey,
-    {
-      staffId: request.staffId,
-      action: request.action,
-      reason,
-      expectedVersion: request.expectedVersion,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      return readStaffDetail(deps, request.staffId, request.requestId);
-    }
-    return failure("CONFLICT", "The access command is still processing", request.requestId);
-  }
-
-  const appliedGuard =
-    "EXISTS (SELECT 1 FROM staff_identity WHERE id=? AND status=? AND version=?)";
-  const appliedGuardBinds = [request.staffId, nextStatus, request.expectedVersion + 1];
-  let batchResults: D1Result[];
-  try {
-    batchResults = await deps.db.batch([
-      deps.db
-        .prepare(
-          "UPDATE staff_identity SET status=?, updated_at=?, version=version+1 WHERE id=? AND version=?",
-        )
-        .bind(nextStatus, now, request.staffId, request.expectedVersion),
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: "STAFF.ACCESS_CHANGED",
-          resourceType: "staff_identity",
-          resourceId: request.staffId,
-          reason,
-          before: { status: current.status },
-          after: { status: nextStatus },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        { clause: appliedGuard, binds: appliedGuardBinds },
-      ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
-        )
-        .bind(request.staffId, now, ACCESS_SCOPE, request.idempotencyKey, ...appliedGuardBinds),
-    ]);
-  } catch {
-    await idempotencyFailed(deps.db, ACCESS_SCOPE, request.idempotencyKey);
-    return failure("CONFLICT", "The staff access change could not be recorded", request.requestId);
-  }
-  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
-    await idempotencyFailed(deps.db, ACCESS_SCOPE, request.idempotencyKey);
-    return failure("STALE_VERSION", "Staff changed; refresh before retrying", request.requestId);
-  }
-  return readStaffDetail(deps, request.staffId, request.requestId);
+  return changeStaff(deps, request, {
+    kind: "access",
+    action: request.action,
+    reason: request.reason.trim(),
+  });
 }

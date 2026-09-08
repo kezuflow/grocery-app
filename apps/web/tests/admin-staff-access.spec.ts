@@ -185,13 +185,16 @@ for (const width of [1440, 390]) {
     await expect(signedInPage.getByText("Local inventory reader", { exact: true })).toBeVisible();
     await expect(signedInPage.getByRole("heading", { name: "Locations and scope" })).toBeVisible();
     const requests: { key: string | undefined; body: string | null }[] = [];
+    let acceptedStaffId = "";
     await signedInPage.route("**/api/staff-invitation", async (route) => {
       requests.push({
         key: route.request().headers()["idempotency-key"],
         body: route.request().postData(),
       });
       const response = await route.fetch();
-      expect(await response.json()).toMatchObject({ ok: true });
+      const receipt = await response.json();
+      expect(receipt).toMatchObject({ ok: true });
+      acceptedStaffId = receipt.value.staffId;
       if (requests.length === 1) await route.abort("failed");
       else await route.fulfill({ response });
     });
@@ -217,5 +220,45 @@ for (const width of [1440, 390]) {
     await expect(
       signedInPage.getByText("No pending staff invitation is available for your verified email."),
     ).toBeVisible();
+    await adminPage.setViewportSize({ width, height: 900 });
+    await adminPage.goto(`/admin/staff/${acceptedStaffId}`);
+    await adminPage.getByRole("textbox", { name: "Staff display name" }).fill("Renamed operator");
+    await adminPage.getByRole("button", { name: "Save profile" }).click();
+    await expect(
+      adminPage.getByRole("heading", { name: "Renamed operator", exact: true }),
+    ).toBeVisible();
+    const accessRequests: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(`**/api/admin/staff/${acceptedStaffId}/access`, async (route) => {
+      accessRequests.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      expect(await response.json()).toMatchObject({ ok: true });
+      if (accessRequests.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await adminPage
+      .getByRole("textbox", { name: "Reason for access change" })
+      .fill("Temporary leave");
+    await adminPage.getByRole("button", { name: "Suspend", exact: true }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await expect(adminPage.getByRole("button", { name: "Save profile" })).toBeDisabled();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(adminPage.getByRole("button", { name: "Activate", exact: true })).toBeVisible();
+    expect(accessRequests).toHaveLength(2);
+    expect(accessRequests[1]).toEqual(accessRequests[0]);
+    await adminPage
+      .getByRole("textbox", { name: "Reason for access change" })
+      .fill("Returned to work");
+    await adminPage.getByRole("button", { name: "Activate", exact: true }).click();
+    await expect(adminPage.getByRole("button", { name: "Suspend", exact: true })).toBeVisible();
+    expect(
+      await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await adminPage.screenshot({
+      path: testInfo.outputPath("staff-lifecycle.png"),
+      fullPage: true,
+    });
   });
 }
