@@ -16,7 +16,7 @@ import {
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
-import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { useStaffCommand } from "../../../../components/admin/use-staff-command";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -31,8 +31,8 @@ export default function RolesPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
-  const createIntent = useAdminCommandIntent();
+  const command = useStaffCommand();
+  const { notice, setNotice, busy, uncertain } = command;
   const pagination = useAdminPagination();
 
   const load = useCallback((cursor: string | null) => {
@@ -69,23 +69,14 @@ export default function RolesPage() {
       setNotice("A code and name are required.");
       return;
     }
-    const payload = await createIntent.submit(async (idempotencyKey) => {
-      const response = await fetch("/api/admin/roles", {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-        body: JSON.stringify({
-          code: code.trim(),
-          name: name.trim(),
-          description: "",
-          capabilityCodes: [],
-        }),
-      });
-      return (await response.json()) as RpcResult<unknown>;
-    });
-    setNotice(
-      payload.ok ? "Role created." : (payload.error?.message ?? "The role could not be created."),
-    );
-    if (payload.ok) {
+    if (
+      await command.run("create-role", "/api/admin/roles", {
+        code: code.trim(),
+        name: name.trim(),
+        description: "",
+        capabilityCodes: [],
+      })
+    ) {
       setCode("");
       setName("");
       load(pagination.cursor);
@@ -133,6 +124,22 @@ export default function RolesPage() {
             </p>
           ) : null}
 
+          {uncertain ? (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void command.retry().then((ok) => {
+                  if (ok) {
+                    setCode("");
+                    setName("");
+                    load(pagination.cursor);
+                  }
+                })
+              }
+            >
+              Retry unconfirmed action
+            </Button>
+          ) : null}
           <ListPageSection
             title="Create a role"
             description="Starts empty; assign capabilities on the role page."
@@ -155,7 +162,7 @@ export default function RolesPage() {
                 onChange={(event) => setName(event.target.value)}
                 className="sm:w-64"
               />
-              <Button type="submit" size="sm">
+              <Button type="submit" size="sm" disabled={busy || uncertain}>
                 Create role
               </Button>
             </form>

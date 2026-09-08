@@ -1,233 +1,222 @@
-import type {
-  AdminRoleCapabilitiesRequest,
-  AdminRoleSummary,
-  AdminRoleUpdateRequest,
-  AppErrorCode,
-  RpcResult,
+import {
+  adminCapabilityCodes,
+  isAdminCapability,
+  type AdminRoleCapabilitiesRequest,
+  type AdminRoleSummary,
+  type AdminRoleUpdateRequest,
+  type AdminRoleArchiveRequest,
+  type AppErrorCode,
+  type RpcResult,
 } from "@freshmarkets/contracts";
-import { isAdminCapability } from "@freshmarkets/contracts";
-import { claimCommandIdempotency } from "../../idempotency";
+import { z } from "@freshmarkets/validation";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { loadRoleCapabilities, readRoleDetail } from "./list-admin-roles";
+import {
+  beginStaffAdministrationWrite,
+  completeStaffAdministrationWrite,
+  requireStaffWrite,
+} from "../../iam/infrastructure/staff-administration-write";
+import { readRoleDetail } from "./list-admin-roles";
 import {
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
 
-const UPDATE_SCOPE = "admin.roles.update";
-const CAPABILITIES_SCOPE = "admin.roles.capabilities";
-
+const receiptSchema = z.object({
+  roleId: z.string(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string(),
+  status: z.enum(["ACTIVE", "ARCHIVED"]),
+  capabilityCodes: z.array(z.enum(adminCapabilityCodes)),
+  version: z.number().int().positive(),
+});
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
+type RoleChange =
+  | { kind: "profile"; name: string; description: string }
+  | { kind: "capabilities"; capabilityCodes: AdminRoleCapabilitiesRequest["capabilityCodes"] }
+  | { kind: "archive"; reason: string };
 
-type RoleRow = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  status: "ACTIVE" | "ARCHIVED";
-  version: number;
-};
-
-async function readRoleRow(database: D1Database, roleId: string): Promise<RoleRow | null> {
-  return database
-    .prepare("SELECT id, code, name, description, status, version FROM role WHERE id = ?")
-    .bind(roleId)
-    .first<RoleRow>();
-}
-
-function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(Date.now(), scope, key)
-    .run();
-}
-
-/** Rename or re-describe an ACTIVE role; version-guarded and audited. */
-export async function updateAdminRole(
+/** The three explicit role transitions share admission, required effects and receipt semantics. */
+export async function applyAdminRoleChange(
   deps: StaffAdministrationDeps,
-  request: AdminRoleUpdateRequest,
+  request: AdminRoleUpdateRequest | AdminRoleCapabilitiesRequest | AdminRoleArchiveRequest,
+  change: RoleChange,
 ): Promise<RpcResult<AdminRoleSummary>> {
   const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
   if (!access.ok) return access;
-
-  const current = await readRoleRow(deps.db, request.roleId);
-  if (!current) return failure("NOT_FOUND", "Role not found", request.requestId);
-  if (current.status !== "ACTIVE") {
-    return failure("VALIDATION_FAILED", "Archived roles cannot be updated", request.requestId);
-  }
-  const name = request.name.trim();
-  const description = request.description.trim();
-  if (name === "") {
+  if (change.kind === "profile" && !change.name)
     return failure("VALIDATION_FAILED", "A name is required", request.requestId);
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    UPDATE_SCOPE,
-    request.idempotencyKey,
-    { roleId: request.roleId, name, description, expectedVersion: request.expectedVersion },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
-      return failure(
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
-        request.requestId,
-      );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      return readRoleDetail(deps, request.roleId, request.requestId);
-    }
-    return failure("CONFLICT", "The update command is still processing", request.requestId);
-  }
-
-  const appliedGuard =
-    "EXISTS (SELECT 1 FROM role WHERE id=? AND name=? AND description=? AND version=?)";
-  const appliedGuardBinds = [request.roleId, name, description, request.expectedVersion + 1];
-  let batchResults: D1Result[];
-  try {
-    batchResults = await deps.db.batch([
-      deps.db
-        .prepare(
-          "UPDATE role SET name=?, description=?, version=version+1 WHERE id=? AND version=?",
-        )
-        .bind(name, description, request.roleId, request.expectedVersion),
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: "ROLE.UPDATED",
-          resourceType: "role",
-          resourceId: request.roleId,
-          before: { name: current.name, description: current.description },
-          after: { name, description },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        { clause: appliedGuard, binds: appliedGuardBinds },
-      ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${appliedGuard}`,
-        )
-        .bind(request.roleId, now, UPDATE_SCOPE, request.idempotencyKey, ...appliedGuardBinds),
-    ]);
-  } catch {
-    await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
-    return failure("CONFLICT", "The role update could not be recorded", request.requestId);
-  }
-  if ((batchResults[0]?.meta?.changes ?? 0) !== 1) {
-    await idempotencyFailed(deps.db, UPDATE_SCOPE, request.idempotencyKey);
-    return failure("STALE_VERSION", "Role changed; refresh before retrying", request.requestId);
-  }
-  return readRoleDetail(deps, request.roleId, request.requestId);
-}
-
-/** Atomically replace a role's canonical capability set; version-guarded. */
-export async function setAdminRoleCapabilities(
-  deps: StaffAdministrationDeps,
-  request: AdminRoleCapabilitiesRequest,
-): Promise<RpcResult<AdminRoleSummary>> {
-  const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
-  if (!access.ok) return access;
-
-  const current = await readRoleRow(deps.db, request.roleId);
-  if (!current) return failure("NOT_FOUND", "Role not found", request.requestId);
-  if (current.status !== "ACTIVE") {
-    return failure(
-      "VALIDATION_FAILED",
-      "Archived roles cannot change capabilities",
-      request.requestId,
-    );
-  }
-  const capabilityCodes = [...new Set(request.capabilityCodes)];
-  if (!capabilityCodes.every((capability) => isAdminCapability(capability))) {
+  if (change.kind === "archive" && !change.reason)
+    return failure("VALIDATION_FAILED", "An archive reason is required", request.requestId);
+  if (change.kind === "capabilities" && !change.capabilityCodes.every(isAdminCapability))
     return failure(
       "VALIDATION_FAILED",
       "Capabilities must come from the canonical vocabulary",
       request.requestId,
     );
-  }
-  const before = (await loadRoleCapabilities(deps, [request.roleId])).get(request.roleId)!;
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    CAPABILITIES_SCOPE,
-    request.idempotencyKey,
-    {
-      roleId: request.roleId,
-      capabilityCodes: [...capabilityCodes].sort(),
-      expectedVersion: request.expectedVersion,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
+  const scope =
+    change.kind === "profile"
+      ? "admin.roles.update"
+      : change.kind === "capabilities"
+        ? "admin.roles.capabilities"
+        : "admin.roles.archive";
+  const payload =
+    change.kind === "profile"
+      ? { name: change.name, description: change.description }
+      : change.kind === "capabilities"
+        ? { capabilityCodes: [...change.capabilityCodes].sort() }
+        : { reason: change.reason };
+  const hash = await requestHash({
+    roleId: request.roleId,
+    expectedVersion: request.expectedVersion,
+    ...payload,
+  });
+  async function replay(): Promise<RpcResult<AdminRoleSummary> | null> {
+    const saved = await findIdempotencyRecord(deps.db, scope, request.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different request",
         request.requestId,
       );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
+    if (saved.status !== "SUCCEEDED") return null;
+    if (saved.resultType === scope && saved.resultReference === request.roleId)
       return readRoleDetail(deps, request.roleId, request.requestId);
+    if (saved.resultType === "role_change_snapshot" && saved.resultReference) {
+      try {
+        const value: unknown = JSON.parse(saved.resultReference);
+        const parsed = receiptSchema.safeParse(value);
+        if (parsed.success && parsed.data.roleId === request.roleId)
+          return { ok: true, value: parsed.data, requestId: request.requestId };
+      } catch {
+        /* Invalid retained evidence cannot authorize another change. */
+      }
     }
-    return failure("CONFLICT", "The capability command is still processing", request.requestId);
+    return failure("INTERNAL_ERROR", "Saved role result is unavailable", request.requestId);
   }
-
-  const guard = "EXISTS (SELECT 1 FROM role WHERE id = ? AND version = ?)";
-  const guardBinds = [request.roleId, request.expectedVersion];
-  await deps.db.batch([
-    deps.db
-      .prepare(`DELETE FROM role_permission WHERE role_id = ? AND ${guard}`)
-      .bind(request.roleId, ...guardBinds),
-    ...capabilityCodes.map((capability) =>
-      deps.db
-        .prepare(
-          "INSERT OR IGNORE INTO role_permission (role_id, permission_id) SELECT ?, id FROM permission WHERE code = ? AND " +
-            guard,
-        )
-        .bind(request.roleId, capability, ...guardBinds),
-    ),
-    auditEventStatement(
-      deps.db,
-      {
-        actorUserId: access.value.authUserId,
-        action: "ROLE.CAPABILITIES_SET",
-        resourceType: "role",
-        resourceId: request.roleId,
-        before: { capabilityCodes: [...before].sort() },
-        after: { capabilityCodes: [...capabilityCodes].sort() },
-        correlationId: request.requestId,
-        occurredAt: now,
-      },
-      { clause: guard, binds: guardBinds },
-    ),
+  const prior = await replay();
+  if (prior) return prior;
+  const detail = await readRoleDetail(deps, request.roleId, request.requestId);
+  if (!detail.ok) return detail;
+  const current = detail.value;
+  if (current.status !== "ACTIVE")
+    return failure("VALIDATION_FAILED", "Archived roles cannot be changed", request.requestId);
+  if (current.version !== request.expectedVersion)
+    return failure("STALE_VERSION", "Role changed; refresh before retrying", request.requestId);
+  const value: AdminRoleSummary = {
+    ...current,
+    version: current.version + 1,
+    ...(change.kind === "profile"
+      ? { name: change.name, description: change.description }
+      : change.kind === "capabilities"
+        ? { capabilityCodes: [...change.capabilityCodes].sort() }
+        : { status: "ARCHIVED" as const }),
+  };
+  const now = Date.now();
+  const statements: D1PreparedStatement[] = [
+    ...beginStaffAdministrationWrite(deps.db, {
+      ...access.value,
+      scope,
+      key: request.idempotencyKey,
+      hash,
+      resultType: "role_change_snapshot",
+      now,
+    }),
     deps.db
       .prepare(
-        `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-         WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard}`,
+        "UPDATE role SET name=?,description=?,status=?,version=version+1 WHERE id=? AND status='ACTIVE' AND version=?",
       )
-      .bind(request.roleId, now, CAPABILITIES_SCOPE, request.idempotencyKey, ...guardBinds),
-    deps.db
-      .prepare("UPDATE role SET version = version + 1 WHERE id = ? AND version = ?")
-      .bind(request.roleId, request.expectedVersion),
-  ]);
-
-  const after = await deps.db
-    .prepare("SELECT version FROM role WHERE id = ?")
-    .bind(request.roleId)
-    .first<{ version: number }>();
-  if (after?.version !== request.expectedVersion + 1) {
-    return failure("STALE_VERSION", "Role changed; refresh before retrying", request.requestId);
+      .bind(value.name, value.description, value.status, request.roleId, request.expectedVersion),
+    requireStaffWrite(deps.db),
+  ];
+  if (change.kind === "capabilities")
+    statements.push(
+      deps.db.prepare("DELETE FROM role_permission WHERE role_id=?").bind(request.roleId),
+      deps.db
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -35 WHERE EXISTS(SELECT 1 FROM role_permission WHERE role_id=?)",
+        )
+        .bind(request.roleId),
+      ...change.capabilityCodes.flatMap((code) => [
+        deps.db
+          .prepare(
+            "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code=?",
+          )
+          .bind(request.roleId, code),
+        requireStaffWrite(deps.db),
+      ]),
+    );
+  statements.push(
+    auditEventStatement(deps.db, {
+      actorUserId: access.value.authUserId,
+      action:
+        change.kind === "profile"
+          ? "ROLE.UPDATED"
+          : change.kind === "capabilities"
+            ? "ROLE.CAPABILITIES_SET"
+            : "ROLE.ARCHIVED",
+      resourceType: "role",
+      resourceId: request.roleId,
+      ...(change.kind === "archive" ? { reason: change.reason } : {}),
+      before:
+        change.kind === "profile"
+          ? { name: current.name, description: current.description }
+          : change.kind === "capabilities"
+            ? { capabilityCodes: current.capabilityCodes }
+            : { status: "ACTIVE" },
+      after:
+        change.kind === "profile"
+          ? { name: value.name, description: value.description }
+          : change.kind === "capabilities"
+            ? { capabilityCodes: value.capabilityCodes }
+            : { status: "ARCHIVED" },
+      correlationId: request.requestId,
+      occurredAt: now,
+    }),
+    requireStaffWrite(deps.db),
+    ...completeStaffAdministrationWrite(deps.db, {
+      scope,
+      key: request.idempotencyKey,
+      hash,
+      result: value,
+      now,
+    }),
+  );
+  try {
+    await deps.db.batch(statements);
+  } catch {
+    return (
+      (await replay()) ??
+      failure(
+        "CONFLICT",
+        "Role or authority changed; refresh and retry the same request",
+        request.requestId,
+      )
+    );
   }
-  return readRoleDetail(deps, request.roleId, request.requestId);
+  return { ok: true, value, requestId: request.requestId };
+}
+
+export function updateAdminRole(
+  deps: StaffAdministrationDeps,
+  request: AdminRoleUpdateRequest,
+): Promise<RpcResult<AdminRoleSummary>> {
+  return applyAdminRoleChange(deps, request, {
+    kind: "profile",
+    name: request.name.trim(),
+    description: request.description.trim(),
+  });
+}
+export function setAdminRoleCapabilities(
+  deps: StaffAdministrationDeps,
+  request: AdminRoleCapabilitiesRequest,
+): Promise<RpcResult<AdminRoleSummary>> {
+  return applyAdminRoleChange(deps, request, {
+    kind: "capabilities",
+    capabilityCodes: [...new Set(request.capabilityCodes)].sort(),
+  });
 }

@@ -3,12 +3,15 @@ import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
+import { z } from "@freshmarkets/validation";
+
+const bodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).strict();
 
 /** Revoke every Better Auth session for the staff user. Transport only. */
 async function POSTHandler(request: Request, context: { params: Promise<{ "staff-id": string }> }) {
   const { "staff-id": staffId } = await context.params;
   const idempotencyKey = request.headers.get("idempotency-key") ?? "";
-  if (idempotencyKey.trim() === "") {
+  if (idempotencyKey.trim() === "" || idempotencyKey.length > 200) {
     return adminJson(
       {
         ok: false as const,
@@ -21,8 +24,9 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "staff
       { status: 400 },
     );
   }
-  const body = (await request.json().catch(() => null)) as { reason?: unknown } | null;
-  if (typeof body?.reason !== "string" || body.reason.trim() === "") {
+  const body: unknown = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(body);
+  if (!parsed.success) {
     return adminJson(
       {
         ok: false as const,
@@ -39,7 +43,7 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "staff
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     staffId,
-    reason: body.reason,
+    reason: parsed.data.reason,
     idempotencyKey,
   });
   return adminJson(result);

@@ -14,7 +14,7 @@ import {
   ListPageSection,
   StatusBadge,
 } from "../../../../../components/admin/admin-shell";
-import { useAdminCommandIntent } from "../../../../../components/admin/admin-command-state";
+import { useStaffCommand } from "../../../../../components/admin/use-staff-command";
 
 type LoadState =
   | { phase: "loading" }
@@ -31,8 +31,8 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
-  const commandIntent = useAdminCommandIntent();
+  const command = useStaffCommand();
+  const { notice, setNotice, busy, uncertain } = command;
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -54,10 +54,18 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
         const capabilityPayload = (await capabilityResponse.json()) as RpcResult<
           ReadonlyArray<CapabilityDefinitionView>
         >;
+        if (!capabilityPayload.ok) {
+          setState({
+            phase: "error",
+            message: capabilityPayload.error.message,
+            requestId: capabilityPayload.error.requestId,
+          });
+          return;
+        }
         setState({
           phase: "ready",
           role: rolePayload.value,
-          capabilities: capabilityPayload.ok ? capabilityPayload.value : [],
+          capabilities: capabilityPayload.value,
         });
         setName(rolePayload.value.name);
         setDescription(rolePayload.value.description);
@@ -70,18 +78,8 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
   useEffect(() => load(), [load]);
 
   async function run(url: string, method: "POST" | "PUT" | "PATCH", body: unknown) {
-    const payload = await commandIntent.submit(async (idempotencyKey) => {
-      const response = await fetch(url, {
-        method,
-        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-        body: JSON.stringify(body),
-      });
-      return (await response.json()) as RpcResult<unknown>;
-    });
-    setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
-    if (payload.ok) load();
+    if (await command.run(url, url, body, method)) load();
   }
-
   if (state.phase === "loading") {
     return (
       <div className="space-y-3" role="status" aria-label="Loading role">
@@ -131,102 +129,118 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
         </p>
       ) : null}
 
-      {role.status === "ACTIVE" ? (
-        <ListPageSection title="Identity" description="Rename or re-describe the role.">
-          <form
-            className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(`/api/admin/roles/${encodeURIComponent(roleId)}`, "PATCH", {
-                name: name.trim(),
-                description: description.trim(),
-                expectedVersion: role.version,
-              });
-            }}
-          >
-            <Input
-              aria-label="Role name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="sm:w-64"
-            />
-            <Input
-              aria-label="Role description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              className="sm:w-80"
-            />
-            <Button type="submit" size="sm">
-              Save
-            </Button>
-          </form>
-        </ListPageSection>
-      ) : null}
-
-      <ListPageSection
-        title="Capabilities"
-        description={
-          role.status === "ACTIVE"
-            ? "Atomic replacement over the closed canonical vocabulary."
-            : "Archived roles keep their history and cannot change capabilities."
-        }
-      >
-        <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
-          {capabilities.map((capability) => (
-            <label key={capability.code} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                disabled={role.status !== "ACTIVE"}
-                checked={assigned.has(capability.code)}
-                onChange={(event) => {
-                  const next = new Set(assigned);
-                  if (event.target.checked) next.add(capability.code);
-                  else next.delete(capability.code);
-                  void run(`/api/admin/roles/${encodeURIComponent(roleId)}/capabilities`, "PUT", {
-                    capabilityCodes: [...next],
-                    expectedVersion: role.version,
-                  });
-                }}
-              />
-              <span className="font-mono text-xs">{capability.code}</span>
-              <span className="text-xs text-[var(--fm-text-muted)]">{capability.description}</span>
-            </label>
-          ))}
-        </div>
-      </ListPageSection>
-
-      {role.status === "ACTIVE" ? (
-        <ListPageSection
-          title="Archive"
-          description="Archiving preserves history; archived roles cannot be assigned."
+      {uncertain ? (
+        <Button
+          disabled={busy}
+          onClick={() =>
+            void command.retry().then((ok) => {
+              if (ok) load();
+            })
+          }
         >
-          <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-            <Input
-              aria-label="Archive reason"
-              placeholder="reason (required)"
-              value={archiveReason}
-              onChange={(event) => setArchiveReason(event.target.value)}
-              className="sm:w-72"
-            />
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => {
-                if (archiveReason.trim() === "") {
-                  setNotice("An archive reason is required.");
-                  return;
-                }
-                void run(`/api/admin/roles/${encodeURIComponent(roleId)}/archive`, "POST", {
-                  reason: archiveReason.trim(),
+          Retry unconfirmed action
+        </Button>
+      ) : null}
+      <fieldset disabled={busy || uncertain} className="min-w-0 space-y-6">
+        {role.status === "ACTIVE" ? (
+          <ListPageSection title="Identity" description="Rename or re-describe the role.">
+            <form
+              className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(`/api/admin/roles/${encodeURIComponent(roleId)}`, "PATCH", {
+                  name: name.trim(),
+                  description: description.trim(),
                   expectedVersion: role.version,
                 });
               }}
             >
-              Archive role
-            </Button>
+              <Input
+                aria-label="Role name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="sm:w-64"
+              />
+              <Input
+                aria-label="Role description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                className="sm:w-80"
+              />
+              <Button type="submit" size="sm">
+                Save
+              </Button>
+            </form>
+          </ListPageSection>
+        ) : null}
+
+        <ListPageSection
+          title="Capabilities"
+          description={
+            role.status === "ACTIVE"
+              ? "Atomic replacement over the closed canonical vocabulary."
+              : "Archived roles keep their history and cannot change capabilities."
+          }
+        >
+          <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            {capabilities.map((capability) => (
+              <label key={capability.code} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  disabled={role.status !== "ACTIVE"}
+                  checked={assigned.has(capability.code)}
+                  onChange={(event) => {
+                    const next = new Set(assigned);
+                    if (event.target.checked) next.add(capability.code);
+                    else next.delete(capability.code);
+                    void run(`/api/admin/roles/${encodeURIComponent(roleId)}/capabilities`, "PUT", {
+                      capabilityCodes: [...next],
+                      expectedVersion: role.version,
+                    });
+                  }}
+                />
+                <span className="font-mono text-xs">{capability.code}</span>
+                <span className="text-xs text-[var(--fm-text-muted)]">
+                  {capability.description}
+                </span>
+              </label>
+            ))}
           </div>
         </ListPageSection>
-      ) : null}
+
+        {role.status === "ACTIVE" ? (
+          <ListPageSection
+            title="Archive"
+            description="Archiving preserves history; archived roles cannot be assigned."
+          >
+            <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+              <Input
+                aria-label="Archive reason"
+                placeholder="reason (required)"
+                value={archiveReason}
+                onChange={(event) => setArchiveReason(event.target.value)}
+                className="sm:w-72"
+              />
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  if (archiveReason.trim() === "") {
+                    setNotice("An archive reason is required.");
+                    return;
+                  }
+                  void run(`/api/admin/roles/${encodeURIComponent(roleId)}/archive`, "POST", {
+                    reason: archiveReason.trim(),
+                    expectedVersion: role.version,
+                  });
+                }}
+              >
+                Archive role
+              </Button>
+            </div>
+          </ListPageSection>
+        ) : null}
+      </fieldset>
     </div>
   );
 }

@@ -157,18 +157,40 @@ for (const width of [1440, 390]) {
     await signedInPage.setViewportSize({ width, height: 900 });
     const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
     expect(session.user.emailVerified).toBe(true);
-    const role = await (
-      await adminPage.request.post("/api/admin/roles", {
-        headers: { "idempotency-key": crypto.randomUUID() },
-        data: {
-          code: `local-reader-${crypto.randomUUID()}`,
-          name: "Local inventory reader",
-          description: "Browser onboarding",
-          capabilityCodes: ["inventory.read"],
-        },
-      })
-    ).json();
-    expect(role).toMatchObject({ ok: true });
+    await adminPage.setViewportSize({ width, height: 900 });
+    await adminPage.goto("/admin/staff/roles");
+    const roleCode = `local-reader-${crypto.randomUUID()}`;
+    const creations: { key: string | undefined; body: string | null }[] = [];
+    let createdRoleId = "";
+    await adminPage.route("**/api/admin/roles", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      creations.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      const result = await response.json();
+      expect(result).toMatchObject({ ok: true });
+      createdRoleId = result.value.roleId;
+      if (creations.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await adminPage.getByRole("textbox", { name: "Role code", exact: true }).fill(roleCode);
+    await adminPage
+      .getByRole("textbox", { name: "Role name", exact: true })
+      .fill("Local inventory reader");
+    await adminPage.getByRole("button", { name: "Create role", exact: true }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    const roleRow = adminPage.getByRole("row").filter({ hasText: roleCode });
+    await expect(roleRow).toBeVisible();
+    expect(creations).toHaveLength(2);
+    expect(creations[1]).toEqual(creations[0]);
+    await roleRow.getByRole("link", { name: "Edit", exact: true }).click();
+    await adminPage.getByRole("checkbox", { name: /^inventory.read / }).click();
+    await expect(adminPage.getByRole("checkbox", { name: /^inventory.read / })).toBeChecked();
+    const role = await (await adminPage.request.get(`/api/admin/roles/${createdRoleId}`)).json();
+    expect(role).toMatchObject({ ok: true, value: { capabilityCodes: ["inventory.read"] } });
     const invitation = await (
       await adminPage.request.post("/api/admin/staff/invitations", {
         headers: { "idempotency-key": crypto.randomUUID() },
@@ -296,5 +318,66 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath("staff-lifecycle.png"),
       fullPage: true,
     });
+    const sessionRequests: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(
+      `**/api/admin/staff/${acceptedStaffId}/sessions/revoke`,
+      async (route) => {
+        sessionRequests.push({
+          key: route.request().headers()["idempotency-key"],
+          body: route.request().postData(),
+        });
+        const response = await route.fetch();
+        const result = await response.json();
+        expect(result).toMatchObject({ ok: true });
+        expect(result.value.revokedSessionCount).toBeGreaterThan(0);
+        if (sessionRequests.length === 1) await route.abort("failed");
+        else await route.fulfill({ response });
+      },
+    );
+    await adminPage
+      .getByRole("textbox", { name: "Reason for access change" })
+      .fill("Session security review");
+    await adminPage.getByRole("button", { name: "Revoke sessions", exact: true }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toHaveCount(
+      0,
+    );
+    expect(sessionRequests).toHaveLength(2);
+    expect(sessionRequests[1]).toEqual(sessionRequests[0]);
+    expect(await (await signedInPage.request.get("/api/auth/get-session")).json()).toBeNull();
+    await adminPage.goto(`/admin/staff/roles/${role.value.roleId}`);
+    await adminPage
+      .getByRole("textbox", { name: "Role name", exact: true })
+      .fill("Reviewed inventory role");
+    await adminPage.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      adminPage.getByRole("heading", { name: "Reviewed inventory role", exact: true }),
+    ).toBeVisible();
+    await adminPage.getByRole("checkbox", { name: /^orders.read / }).click();
+    await expect(adminPage.getByRole("checkbox", { name: /^orders.read / })).toBeChecked();
+    const archives: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(`**/api/admin/roles/${role.value.roleId}/archive`, async (route) => {
+      archives.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      expect(await response.json()).toMatchObject({ ok: true, value: { status: "ARCHIVED" } });
+      if (archives.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await adminPage.getByRole("textbox", { name: "Archive reason" }).fill("Replaced role");
+    await adminPage.getByRole("button", { name: "Archive role", exact: true }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(adminPage.getByText("ARCHIVED", { exact: true })).toBeVisible();
+    expect(archives).toHaveLength(2);
+    expect(archives[1]).toEqual(archives[0]);
+    await expect(adminPage.getByRole("checkbox", { name: /^orders.read / })).toBeDisabled();
+    expect(
+      await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await adminPage.screenshot({ path: testInfo.outputPath("role-archived.png"), fullPage: true });
   });
 }

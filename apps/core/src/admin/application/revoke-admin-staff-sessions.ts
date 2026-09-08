@@ -4,26 +4,25 @@ import type {
   RpcResult,
   SessionRevocationResult,
 } from "@freshmarkets/contracts";
-import { claimCommandIdempotency, findIdempotencyRecord } from "../../idempotency";
+import { z } from "@freshmarkets/validation";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import {
+  beginStaffAdministrationWrite,
+  completeStaffAdministrationWrite,
+  requireStaffWrite,
+} from "../../iam/infrastructure/staff-administration-write";
 import {
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
 } from "./staff-administration-access";
-
 const SCOPE = "admin.staff.sessions.revoke";
-
+const receiptSchema = z.object({ revokedSessionCount: z.number().int().nonnegative() });
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
-/**
- * Revoke every Better Auth session for the staff member's linked user. The
- * runtime uses the minimal Better Auth build whose server API does not expose
- * administrative revocation, so the command deletes the authentication
- * authority's own session rows — exactly what its sign-out performs — leaving
- * no application-side session state.
- */
+/** Revocation uses Better Auth's session storage; it creates no second session authority. */
 export async function revokeAdminStaffSessions(
   deps: StaffAdministrationDeps,
   request: AdminStaffSessionRevocationRequest,
@@ -31,74 +30,108 @@ export async function revokeAdminStaffSessions(
   const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
   if (!access.ok) return access;
   const reason = request.reason.trim();
-  if (reason === "") {
+  if (!reason)
     return failure("VALIDATION_FAILED", "A revocation reason is required", request.requestId);
-  }
-
-  const target = await deps.db
-    .prepare("SELECT id, auth_user_id FROM staff_identity WHERE id = ?")
-    .bind(request.staffId)
-    .first<{ id: string; auth_user_id: string }>();
-  if (!target) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(deps.db, () => now, SCOPE, request.idempotencyKey, {
-    staffId: request.staffId,
-    reason,
-  });
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
+  const hash = await requestHash({ staffId: request.staffId, reason });
+  async function replay(): Promise<RpcResult<SessionRevocationResult> | null> {
+    const saved = await findIdempotencyRecord(deps.db, SCOPE, request.idempotencyKey);
+    if (!saved) return null;
+    if (saved.requestHash !== hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different request",
         request.requestId,
       );
+    if (saved.status !== "SUCCEEDED") return null;
+    if (saved.resultReference !== null) {
+      try {
+        const value: unknown =
+          saved.resultType === SCOPE && /^\d+$/.test(saved.resultReference)
+            ? { revokedSessionCount: Number(saved.resultReference) }
+            : saved.resultType === "staff_session_revocation_snapshot"
+              ? JSON.parse(saved.resultReference)
+              : null;
+        const parsed = receiptSchema.safeParse(value);
+        if (parsed.success) return { ok: true, value: parsed.data, requestId: request.requestId };
+      } catch {
+        /* Malformed evidence must never trigger another session deletion. */
+      }
     }
-    if (claim.existing?.status === "SUCCEEDED") {
-      const record = await findIdempotencyRecord(deps.db, SCOPE, request.idempotencyKey);
-      return {
-        ok: true,
-        value: { revokedSessionCount: Number(record?.resultReference ?? "0") },
-        requestId: request.requestId,
-      };
-    }
-    return failure("CONFLICT", "The revocation command is still processing", request.requestId);
+    return failure(
+      "INTERNAL_ERROR",
+      "Saved session revocation result is unavailable",
+      request.requestId,
+    );
   }
-
-  const sessionCount = await deps.db
-    .prepare("SELECT COUNT(*) AS count FROM session WHERE user_id=?")
+  const prior = await replay();
+  if (prior) return prior;
+  const target = await deps.db
+    .prepare("SELECT auth_user_id,version FROM staff_identity WHERE id=?")
+    .bind(request.staffId)
+    .first<{ auth_user_id: string; version: number }>();
+  if (!target) return failure("NOT_FOUND", "Staff identity not found", request.requestId);
+  const count = await deps.db
+    .prepare("SELECT COUNT(*) count FROM session WHERE user_id=?")
     .bind(target.auth_user_id)
     .first<{ count: number }>();
-  const revokedSessionCount = sessionCount?.count ?? 0;
+  if (!count) return failure("INTERNAL_ERROR", "Sessions could not be reviewed", request.requestId);
+  const value = { revokedSessionCount: count.count };
+  const now = Date.now();
   try {
     await deps.db.batch([
-      deps.db.prepare("DELETE FROM session WHERE user_id = ?").bind(target.auth_user_id),
+      ...beginStaffAdministrationWrite(deps.db, {
+        ...access.value,
+        scope: SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        resultType: "staff_session_revocation_snapshot",
+        now,
+      }),
+      deps.db
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -35 WHERE NOT EXISTS(SELECT 1 FROM staff_identity WHERE id=? AND auth_user_id=? AND version=?) OR (SELECT COUNT(*) FROM session WHERE user_id=?)!=?",
+        )
+        .bind(
+          request.staffId,
+          target.auth_user_id,
+          target.version,
+          target.auth_user_id,
+          value.revokedSessionCount,
+        ),
+      deps.db.prepare("DELETE FROM session WHERE user_id=?").bind(target.auth_user_id),
+      deps.db
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -35 WHERE changes()!=? OR EXISTS(SELECT 1 FROM session WHERE user_id=?)",
+        )
+        .bind(value.revokedSessionCount, target.auth_user_id),
       auditEventStatement(deps.db, {
         actorUserId: access.value.authUserId,
         action: "STAFF.SESSIONS_REVOKED",
         resourceType: "staff_identity",
         resourceId: request.staffId,
         reason,
-        details: { revokedSessionCount },
+        details: value,
         correlationId: request.requestId,
         occurredAt: now,
       }),
-      deps.db
-        .prepare(
-          "UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-        )
-        .bind(String(revokedSessionCount), now, SCOPE, request.idempotencyKey),
+      requireStaffWrite(deps.db),
+      ...completeStaffAdministrationWrite(deps.db, {
+        scope: SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        result: value,
+        now,
+      }),
     ]);
-  } catch (error) {
-    await deps.db
-      .prepare(
-        "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
+  } catch {
+    return (
+      (await replay()) ??
+      failure(
+        "CONFLICT",
+        "Staff access or sessions changed; retry the same request",
+        request.requestId,
       )
-      .bind(Date.now(), SCOPE, request.idempotencyKey)
-      .run();
-    const message = error instanceof Error ? error.message : "session revocation failed";
-    return failure("INTERNAL_ERROR", message, request.requestId);
+    );
   }
-
-  return { ok: true, value: { revokedSessionCount }, requestId: request.requestId };
+  return { ok: true, value, requestId: request.requestId };
 }

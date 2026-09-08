@@ -10,6 +10,7 @@ import { createAdminRole } from "./create-admin-role";
 import { updateAdminStaff, changeAdminStaffAccess } from "./update-admin-staff";
 import { setAdminStaffRoles } from "./set-admin-staff-roles";
 import { setAdminStaffScopes } from "./set-admin-staff-scopes";
+import { revokeAdminStaffSessions } from "./revoke-admin-staff-sessions";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -234,6 +235,146 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
 }
 
 describe("staff administration commands", () => {
+  it.each(["delete", "audit", "receipt"] as const)(
+    "requires session revocation %s and retries without touching a later login",
+    async (effect) => {
+      const manager = await seedManager();
+      const principal = await signUp();
+      const target = await seedStaff({ principal, permissionCodes: [], scope: { kind: "global" } });
+      const command = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        staffId: target.staffId,
+        reason: "Security review",
+      };
+      const trigger =
+        effect === "delete"
+          ? "BEFORE DELETE ON session"
+          : effect === "audit"
+            ? "BEFORE INSERT ON audit_event WHEN NEW.action='STAFF.SESSIONS_REVOKED'"
+            : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='admin.staff.sessions.revoke' AND NEW.status='SUCCEEDED'";
+      const before = await env.DB.prepare("SELECT COUNT(*) count FROM session WHERE user_id=?")
+        .bind(principal.userId)
+        .first();
+      await env.DB.prepare(
+        `CREATE TRIGGER test_ignore_session_revocation ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      ).run();
+      try {
+        expect(await core.revokeAdminStaffSessions(command)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM session WHERE user_id=?")
+            .bind(principal.userId)
+            .first(),
+        ).toEqual(before);
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+          )
+            .bind(command.idempotencyKey)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=?")
+            .bind(target.staffId)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.prepare("DROP TRIGGER test_ignore_session_revocation").run();
+      }
+      const result = await core.revokeAdminStaffSessions(command);
+      expect(result).toMatchObject({ ok: true });
+      const login = await SELF.fetch("https://core.example.invalid/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
+        body: JSON.stringify({ email: principal.email, password: "correct-horse-battery-staple" }),
+      });
+      expect(login.status).toBe(200);
+      expect(await core.revokeAdminStaffSessions(command)).toEqual(result);
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM session WHERE user_id=?")
+          .bind(principal.userId)
+          .first(),
+      ).toEqual({ count: 1 });
+      if (!result.ok) throw new Error("Revocation missing");
+      await env.DB.prepare(
+        "UPDATE idempotency_records SET result_type='admin.staff.sessions.revoke',result_reference=? WHERE scope='admin.staff.sessions.revoke' AND idempotency_key=?",
+      )
+        .bind(String(result.value.revokedSessionCount), command.idempotencyKey)
+        .run();
+      expect(await core.revokeAdminStaffSessions(command)).toEqual(result);
+      expect(
+        await core.revokeAdminStaffSessions({ ...command, reason: "Changed intent" }),
+      ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    },
+  );
+  it.each(["authority", "sessions"] as const)(
+    "rejects revocation when %s changes before its batch",
+    async (boundary) => {
+      const manager = await seedManager();
+      const principal = await signUp();
+      const target = await seedStaff({ principal, permissionCodes: [], scope: { kind: "global" } });
+      const command = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        staffId: target.staffId,
+        reason: "Current state",
+      };
+      const db = new Proxy(env.DB, {
+        get(database, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (boundary === "authority")
+                await database
+                  .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                  .bind(manager.staffId)
+                  .run();
+              else {
+                const login = await SELF.fetch(
+                  "https://core.example.invalid/api/auth/sign-in/email",
+                  {
+                    method: "POST",
+                    headers: {
+                      "content-type": "application/json",
+                      origin: "https://core.example.invalid",
+                    },
+                    body: JSON.stringify({
+                      email: principal.email,
+                      password: "correct-horse-battery-staple",
+                    }),
+                  },
+                );
+                expect(login.status).toBe(200);
+              }
+              return database.batch(statements);
+            };
+          const value = Reflect.get(database, property, database);
+          return typeof value === "function" ? value.bind(database) : value;
+        },
+      });
+      expect(await revokeAdminStaffSessions({ auth: createAuth(env), db }, command)).toMatchObject({
+        ok: false,
+      });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM session WHERE user_id=?")
+          .bind(principal.userId)
+          .first(),
+      ).toEqual({ count: boundary === "sessions" ? 2 : 1 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(command.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+      if (boundary === "sessions")
+        expect(await core.revokeAdminStaffSessions(command)).toMatchObject({
+          ok: true,
+          value: { revokedSessionCount: 2 },
+        });
+    },
+  );
   it.each(["roles", "scopes"] as const)(
     "rejects %s replacement after current authority or assignment eligibility changes",
     async (kind) => {
