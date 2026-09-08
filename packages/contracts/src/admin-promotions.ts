@@ -165,7 +165,37 @@ export type AdminPromotionRedemptionPage = {
  * the forwarded session and requires the named capability plus a global scope
  * in Core. Preview never mutates state; redemptions are read-only here.
  */
+
+export type AdminPromotionRule =
+  | { type: "FIRST_ORDER" | "NEW_CUSTOMER"; parameters: Record<string, never> }
+  | { type: "MINIMUM_SUBTOTAL"; parameters: { minimumMinor: number } }
+  | { type: "CUSTOMER_SEGMENT"; parameters: { segmentId: string } }
+  | { type: "SPECIFIC_CUSTOMERS"; parameters: { customerIds: string[] } };
+export type AdminPromotionAudience = {
+  promotionId: string;
+  version: number;
+  rules: AdminPromotionRule[];
+};
+export type AdminPromotionAudienceView = AdminPromotionAudience & {
+  unsupportedRuleCount: number;
+  segments: { segmentId: string; name: string }[];
+  moreSegments: boolean;
+  customers: { customerId: string; label: string }[];
+};
+export type AdminPromotionAudienceRequest = AdminPromotionDetailRequest & { segmentQuery?: string };
+export type AdminPromotionAudienceUpdateRequest = AdminPromotionDetailRequest & {
+  rules: AdminPromotionRule[];
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
 export type AdminPromotionsService = {
+  getAdminPromotionAudience(
+    request: AdminPromotionAudienceRequest,
+  ): Promise<RpcResult<AdminPromotionAudienceView>>;
+  setAdminPromotionAudience(
+    request: AdminPromotionAudienceUpdateRequest,
+  ): Promise<RpcResult<AdminPromotionAudience>>;
   listAdminPromotions(request: AdminPromotionListRequest): Promise<RpcResult<AdminPromotionPage>>;
   getAdminPromotion(request: AdminPromotionDetailRequest): Promise<RpcResult<AdminPromotionDetail>>;
   createAdminPromotion(

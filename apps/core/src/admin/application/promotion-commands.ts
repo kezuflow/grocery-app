@@ -1,3 +1,4 @@
+import { readPromotionRules } from "./promotion-audience";
 import type {
   AdminPromotionDetailRequest,
   AdminPromotionGrantPage,
@@ -305,6 +306,15 @@ export async function changeAdminPromotionStatus(
   )
     return invalid(input);
   const now = Date.now();
+  if (
+    request.action === "ACTIVATE" &&
+    (await readPromotionRules(db, current.id)).unsupportedRuleCount > 0
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Replace retired or invalid audience conditions before activating",
+      request.requestId,
+    );
   const action = `PROMOTION.${request.action === "ACTIVATE" ? "ACTIVATED" : request.action === "DEACTIVATE" ? "DEACTIVATED" : "ARCHIVED"}`;
   return executePromotionCommand(
     db,

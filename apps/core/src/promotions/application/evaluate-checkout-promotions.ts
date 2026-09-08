@@ -1,3 +1,4 @@
+import { promotionRuleSchema } from "@freshmarkets/validation";
 import {
   evaluateCheckoutPromotionCandidates,
   permitsPromotionStack,
@@ -37,21 +38,12 @@ function safeRule(row: {
   rule_type: string;
   parameters_json: string;
 }): CheckoutPromotionRule | null {
-  const types = [
-    "FIRST_ORDER",
-    "NEW_CUSTOMER",
-    "MINIMUM_SUBTOTAL",
-    "CUSTOMER_SEGMENT",
-    "SPECIFIC_CUSTOMERS",
-  ] as const;
-  if (!types.includes(row.rule_type as (typeof types)[number])) return null;
   try {
-    const parameters = JSON.parse(row.parameters_json) as unknown;
-    if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) return null;
-    return {
-      type: row.rule_type as CheckoutPromotionRule["type"],
-      parameters: parameters as Readonly<Record<string, unknown>>,
-    };
+    const parsed = promotionRuleSchema.safeParse({
+      type: row.rule_type,
+      parameters: JSON.parse(row.parameters_json),
+    });
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

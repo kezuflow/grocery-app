@@ -15,6 +15,7 @@ import {
   adminPromotionPreviewViewSchema,
 } from "@freshmarkets/validation";
 import { CustomerPicker, type CustomerChoice } from "@/components/admin/customer-picker";
+import { PromotionAudienceEditor } from "@/components/admin/promotion-audience-editor";
 import { PromotionDefinitionForm } from "@/components/admin/promotion-definition-form";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
@@ -258,6 +259,17 @@ export default function PromotionDetailPage({
             </p>
           </div>
         )}
+      </ListPageSection>
+      <ListPageSection
+        title="Audience"
+        description="Choose the customers who can qualify for this campaign."
+      >
+        <PromotionAudienceEditor
+          promotionId={promotionId}
+          status={promotion.status}
+          version={promotion.version}
+          onSaved={load}
+        />
       </ListPageSection>
       <ListPageSection
         title="Lifecycle"

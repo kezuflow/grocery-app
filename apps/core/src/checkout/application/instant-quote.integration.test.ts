@@ -929,3 +929,84 @@ it("quotes pay-as-you-go commerce while rejecting retained membership promotion 
       .first(),
   ).toEqual({ count: 0 });
 });
+
+it("uses a saved Admin audience when producing a real Instant quote", async () => {
+  const basket = await seedBasket({ onHand: 10000, member: false });
+  const manager = await locationManager();
+  await env.DB.prepare(
+    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('promotions.read','promotions.manage')",
+  )
+    .bind(manager.id)
+    .run();
+  await env.DB.prepare(
+    "UPDATE customer SET auth_user_id=(SELECT auth_user_id FROM staff_identity WHERE id=?),principal_id=(SELECT id FROM customer_principal WHERE auth_user_id=(SELECT auth_user_id FROM staff_identity WHERE id=?)) WHERE id=?",
+  )
+    .bind(manager.id, manager.id, basket.customerId)
+    .run();
+  const meta = { headers: manager.headers, requestId: crypto.randomUUID() };
+  const code = `AUTHORED_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
+  const created = await exports.default.createAdminPromotion({
+    ...meta,
+    code,
+    name: "First purchase campaign",
+    description: "",
+    benefitType: "ORDER_FIXED_DISCOUNT",
+    discountMinor: 100,
+    minimumMinor: 0,
+    startsAt: new Date(Date.now() - 1000).toISOString(),
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (!created.ok) throw new Error(created.error.message);
+  const promotionId = created.value.promotionId;
+  expect(
+    await exports.default.setAdminPromotionAudience({
+      ...meta,
+      promotionId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      rules: [
+        { type: "FIRST_ORDER", parameters: {} },
+        { type: "SPECIFIC_CUSTOMERS", parameters: { customerIds: [basket.customerId] } },
+      ],
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await exports.default.changeAdminPromotionStatus({
+      ...meta,
+      promotionId,
+      action: "ACTIVATE",
+      reason: "Launch authored campaign",
+      expectedVersion: 2,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  const quote = await createCheckoutQuote(
+    env.DB,
+    { ...command(basket.customerId, basket.cartId, basket.addressId), promotionCodes: [code] },
+    quoteDependencies,
+  );
+  if (!quote.ok) throw new Error(quote.error.message);
+  expect(quote.value.promotionFeedback).toContainEqual(
+    expect.objectContaining({ code, status: "APPLIED" }),
+  );
+  expect(
+    await env.DB.prepare(
+      "SELECT definition_version,amount_minor FROM checkout_promotion_claim WHERE checkout_quote_id=? AND promotion_id=?",
+    )
+      .bind(quote.value.quoteId, promotionId)
+      .first(),
+  ).toEqual({ definition_version: 3, amount_minor: 100 });
+  const current = await env.DB.prepare("SELECT version FROM checkout_quote WHERE id=?")
+    .bind(quote.value.quoteId)
+    .first<{ version: number }>();
+  if (!current) throw new Error("Missing quote");
+  expect(
+    await abandonCheckoutAttempt(env.DB, {
+      customerId: basket.customerId,
+      quoteId: quote.value.quoteId,
+      expectedVersion: current.version,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+});

@@ -179,6 +179,8 @@ export const coreServiceMethodNames = [
   "applyPrivacyAction",
   "listAdminPromotions",
   "getAdminPromotion",
+  "getAdminPromotionAudience",
+  "setAdminPromotionAudience",
   "createAdminPromotion",
   "updateAdminPromotion",
   "changeAdminPromotionStatus",

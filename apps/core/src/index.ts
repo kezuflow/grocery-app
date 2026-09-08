@@ -1,4 +1,8 @@
 import {
+  getAdminPromotionAudience as getAdminPromotionAudienceQuery,
+  setAdminPromotionAudience as setAdminPromotionAudienceCommand,
+} from "./admin/application/promotion-audience";
+import {
   adminPromotionCreateBodySchema,
   adminPromotionUpdateBodySchema,
   adminPromotionStatusBodySchema,
@@ -1645,6 +1649,22 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return getAdminPromotionQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async getAdminPromotionAudience(
+    input: import("@freshmarkets/contracts").AdminPromotionAudienceRequest,
+  ) {
+    return getAdminPromotionAudienceQuery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async setAdminPromotionAudience(
+    input: import("@freshmarkets/contracts").AdminPromotionAudienceUpdateRequest,
+  ) {
+    return setAdminPromotionAudienceCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
     );
   }
   async createAdminPromotion(input: import("@freshmarkets/contracts").AdminPromotionCreateRequest) {

@@ -175,12 +175,47 @@ test("selects a customer for preview and safely retries a customer grant", async
     .filter({ has: page.getByRole("cell", { name: code, exact: true }) })
     .getByRole("link", { name: "Manage", exact: true })
     .click();
+  await page.getByRole("button", { name: "Add condition", exact: true }).click();
+  await page.getByRole("button", { name: "Add condition", exact: true }).click();
+  await page.getByRole("combobox", { name: "Condition 2", exact: true }).click();
+  await page.getByRole("option", { name: "Selected customers", exact: true }).click();
+  await page.getByLabel("Eligible customer 2", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Search eligible customer 2", exact: true }).click();
+  await page.getByRole("button", { name: email, exact: true }).click();
+  await page.getByRole("button", { name: "Add condition", exact: true }).click();
+  await page.getByRole("combobox", { name: "Condition 3", exact: true }).click();
+  await page.getByRole("option", { name: "Minimum merchandise purchase", exact: true }).click();
+  await page.getByLabel("Condition 3 minimum purchase", { exact: true }).fill("150.75");
+  const audienceRequests: { body: string | null; key: string | undefined }[] = [];
+  await page.route("**/api/admin/promotions/*/audience", async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    audienceRequests.push({
+      body: route.request().postData(),
+      key: route.request().headers()["idempotency-key"],
+    });
+    const response = await route.fetch();
+    expect(await response.json()).toMatchObject({ ok: true });
+    if (audienceRequests.length === 1) await route.abort("failed");
+    else await route.fulfill({ response });
+  });
+  await page.getByRole("button", { name: "Save audience", exact: true }).click();
+  await expect(page.getByLabel("Condition 3 minimum purchase", { exact: true })).toHaveValue(
+    "150.75",
+  );
+  await expect.poll(() => audienceRequests.length).toBe(2);
+  expect(audienceRequests[1]).toEqual(audienceRequests[0]);
+  expect(audienceRequests[0]?.key).toBeTruthy();
   await page.getByLabel("Reason", { exact: true }).fill("Launch customer campaign");
   await page.getByRole("button", { name: "Activate", exact: true }).click();
   await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
   await page.getByLabel("Preview customer", { exact: true }).fill(email);
   await page.getByRole("button", { name: "Search preview customer", exact: true }).click();
   await page.getByRole("button", { name: email, exact: true }).click();
+  await page.getByLabel("Subtotal in pesos", { exact: true }).fill("100");
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Customer is not eligible" }),
+  ).toBeVisible();
   await page.getByLabel("Subtotal in pesos", { exact: true }).fill("200");
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Eligible discount" })).toContainText(

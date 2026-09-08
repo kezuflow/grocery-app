@@ -507,6 +507,8 @@ Operational command/read contracts publish the canonical Fulfillment (`NOT_START
 - `admin.promotions.deactivate({ promotionId, reason, expectedVersion, idempotencyKey }) -> PromotionDetail`
 - `admin.promotions.archive({ promotionId, reason, expectedVersion, idempotencyKey }) -> PromotionDetail`
 - `admin.promotions.preview({ promotionId, customerId?, cartSnapshot? }) -> PromotionPreviewView`
+- `admin.promotions.getAudience({ promotionId, segmentQuery? }) -> PromotionAudienceView`
+- `admin.promotions.setAudience({ promotionId, rules, expectedVersion, idempotencyKey }) -> PromotionAudience`
 - `admin.promotions.listRedemptions({ promotionId, cursor? }) -> PromotionRedemptionPage`
 - `admin.promotions.grant({ promotionId, customerId, idempotencyKey }) -> PromotionGrantView`
 - `admin.fulfillment.getGlobalCommerceConfiguration({}) -> GlobalCommerceConfigurationView`
@@ -879,3 +881,8 @@ Payment creation stores the adapter's response before applying its local Attempt
 
 
 Promotion grants recheck active Customer and its matching active commerce principal inside the complete write transaction. Selecting a customer in Admin uses the existing capability-protected customer search by email/phone. Disabling commerce access cannot race a grant into a partial write or successful receipt.
+
+
+The implemented binding names are `getAdminPromotionAudience` and `setAdminPromotionAudience`, with same-origin GET/PATCH `/api/admin/promotions/:promotionId/audience`. Audience replacement is a draft-only command requiring Global `promotions.manage`. It validates the closed FIRST_ORDER, NEW_CUSTOMER, MINIMUM_SUBTOTAL, CUSTOMER_SEGMENT and SPECIFIC_CUSTOMERS shapes, up to ten conditions and twenty distinct customers per customer condition. Every condition must match at checkout. Empty conditions intentionally remove audience restrictions; dates, definition minimum and usage limits still apply. Selected references must identify active matching Customer/commerce principals or active segments at the write boundary. The complete replacement, campaign version, audit and frozen result commit together. Any missing delete/insert effect or raced reference/authority/lifecycle guard aborts the complete command. Replay returns the original audience/version even after later activation.
+
+Audience reads expose typed rules, an unsupported-condition count, bounded active segment choices with optional name search, and customer display labels only with Global `customers.read`. Unsupported retained rules never become an empty eligible rule set: checkout fails them closed, activation rejects them, and the draft editor requires explicit replacement before saving over them. This does not erase retained redemption/Order snapshots. Segment assignment remains Customer-owned data; this endpoint does not edit segment membership.

@@ -103,3 +103,49 @@ export const adminPromotionPreviewViewSchema = z.object({
     ])
     .nullable(),
 });
+
+export const promotionRuleSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("FIRST_ORDER"), parameters: z.object({}).strict() }).strict(),
+  z.object({ type: z.literal("NEW_CUSTOMER"), parameters: z.object({}).strict() }).strict(),
+  z
+    .object({
+      type: z.literal("MINIMUM_SUBTOTAL"),
+      parameters: z.object({ minimumMinor: integer.nonnegative() }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("CUSTOMER_SEGMENT"),
+      parameters: z.object({ segmentId: id }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SPECIFIC_CUSTOMERS"),
+      parameters: z
+        .object({
+          customerIds: z
+            .array(id)
+            .min(1)
+            .max(20)
+            .refine((ids) => new Set(ids).size === ids.length),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
+export const adminPromotionAudienceBodySchema = z.object({
+  rules: z.array(promotionRuleSchema).max(10),
+  expectedVersion: integer.positive(),
+});
+export const adminPromotionAudienceSchema = z.object({
+  promotionId: id,
+  version: integer.positive(),
+  rules: z.array(promotionRuleSchema),
+});
+export const adminPromotionAudienceViewSchema = adminPromotionAudienceSchema.extend({
+  unsupportedRuleCount: integer.nonnegative(),
+  segments: z.array(z.object({ segmentId: id, name: z.string() })),
+  moreSegments: z.boolean(),
+  customers: z.array(z.object({ customerId: id, label: z.string() })),
+});
