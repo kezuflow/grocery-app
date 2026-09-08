@@ -92,7 +92,10 @@ it.each(["timeout", "server", "invalid-json", "invalid-resource"] as const)(
         .bind(row?.id)
         .first(),
     ).toEqual({ category: "AMBIGUOUS_OUTCOME", status: "OPEN" });
-    await createPayment(env.DB, registry, input);
+    expect(await createPayment(env.DB, registry, input)).toMatchObject({
+      ok: false,
+      error: { code: "PAYMENT_OUTCOME_UNRESOLVED" },
+    });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(
       await env.DB.prepare("SELECT COUNT(*) n FROM payment_attempt WHERE payment_intent_id=?")

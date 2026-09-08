@@ -94,6 +94,12 @@ export async function createPayment(
         command.requestId,
       );
     const state = toActionState(existing.status);
+    if (existing.status === "INITIATED")
+      return failure(
+        "PAYMENT_OUTCOME_UNRESOLVED",
+        "The original payment outcome is still unknown and requires reconciliation",
+        command.requestId,
+      );
     const action =
       state === "REQUIRES_ACTION"
         ? await repository.findActiveProviderAction(existing.id, Date.now())
