@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "../../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
-import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 
 type LoadState =
   | { phase: "loading" }
@@ -29,8 +29,8 @@ export default function CustomerDetailPage({
   const { "customer-id": customerId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [reason, setReason] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
-  const commandIntent = useAdminCommandIntent();
+  const command = useAdminCommand();
+  const { notice, setNotice } = command;
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -60,17 +60,9 @@ export default function CustomerDetailPage({
   useEffect(() => load(), [load]);
 
   async function run(url: string, body: unknown) {
-    const payload = await commandIntent.submit(async (idempotencyKey) => {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-        body: JSON.stringify(body),
-      });
-      return (await response.json()) as RpcResult<unknown>;
-    });
-    setNotice(payload.ok ? "Applied." : (payload.error?.message ?? "The command failed."));
-    if (payload.ok) load();
-    return payload.ok;
+    const applied = await command.run(url, url, body);
+    if (applied) load();
+    return applied;
   }
 
   if (state.phase === "loading") {
@@ -101,7 +93,7 @@ export default function CustomerDetailPage({
   const { customer } = state;
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="mx-auto max-w-[1280px] space-y-6 [&_h1]:break-all">
       <PageHeader
         title={customer.email}
         description={`Joined ${customer.createdAt.slice(0, 10)} · ${customer.orderCount} order${customer.orderCount === 1 ? "" : "s"} · v${customer.version}`}
@@ -121,11 +113,24 @@ export default function CustomerDetailPage({
         </p>
       ) : null}
 
+      {command.uncertain ? (
+        <Button
+          disabled={command.busy}
+          onClick={async () => {
+            if (await command.retry()) load();
+          }}
+        >
+          Retry unconfirmed action
+        </Button>
+      ) : null}
       <ListPageSection
         title="Commerce access and sessions"
         description="Disabling access blocks checkout and account commerce surfaces; sessions revoke immediately."
       >
-        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+        <fieldset
+          disabled={command.busy || command.uncertain}
+          className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
+        >
           <Input
             aria-label="Reason"
             placeholder="reason (required)"
@@ -165,7 +170,7 @@ export default function CustomerDetailPage({
           >
             Revoke sessions
           </Button>
-        </div>
+        </fieldset>
       </ListPageSection>
 
       <ListPageSection

@@ -5,6 +5,8 @@ import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { acceptCustomerInvitation } from "../../customer/invitations";
 import { createAuth } from "../../auth/service";
 import { inviteCustomer, revokeCustomerInvitation } from "./customer-invitations";
+import { changeCustomerAccess } from "./change-customer-access";
+import { revokeCustomerSessions } from "./revoke-customer-sessions";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -489,6 +491,28 @@ async function seedCustomer(principal: { userId: string }): Promise<string> {
 }
 
 describe("customer crm reads", () => {
+  it("excludes unrelated staff actions when that staff user is also a customer", async () => {
+    const manager = await seedManager();
+    const identity = await env.DB.prepare("SELECT auth_user_id FROM staff_identity WHERE id=?")
+      .bind(manager.staffId)
+      .first<{ auth_user_id: string }>();
+    if (!identity) throw new Error("Missing manager");
+    const customerId = await seedCustomer({ userId: identity.auth_user_id });
+    expect(
+      await core.inviteCustomer({
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        email: `unrelated-${crypto.randomUUID()}@example.com`,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const detail = await core.getAdminCustomer({
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+    });
+    expect(detail).toMatchObject({ ok: true, value: { recentAudit: [] } });
+  });
   it("denies unauthenticated and non-staff readers", async () => {
     expect(await core.listAdminCustomers({ requestId: "r1", headers: {} })).toMatchObject({
       ok: false,
@@ -563,6 +587,295 @@ describe("customer crm reads", () => {
 });
 
 describe("customer crm commands", () => {
+  it("rejects a session set changed before the transaction and retries against the current set", async () => {
+    const manager = await seedManager();
+    const account = await signUp();
+    const customerId = await seedCustomer(account);
+    const user = await env.DB.prepare("SELECT email FROM user WHERE id=?")
+      .bind(account.userId)
+      .first<{ email: string }>();
+    if (!user) throw new Error("Missing account");
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      reason: "Support review",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            const login = await SELF.fetch("https://core.example.invalid/api/auth/sign-in/email", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                origin: "https://core.example.invalid",
+              },
+              body: JSON.stringify({ email: user.email, password: "correct-horse-battery-staple" }),
+            });
+            expect(login.status).toBe(200);
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(
+      await revokeCustomerSessions({ auth: createAuth(env), db: database }, request),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.SESSIONS_REVOKED'",
+      )
+        .bind(customerId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(await core.revokeCustomerSessions(request)).toMatchObject({
+      ok: true,
+      value: { revokedSessionCount: 2 },
+    });
+  });
+  it("replays the original access decision after restoration and rejects changed intent", async () => {
+    const manager = await seedManager();
+    const account = await signUp();
+    const customerId = await seedCustomer(account);
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      reason: "Support review",
+      idempotencyKey: crypto.randomUUID(),
+      action: "DISABLE" as const,
+      expectedVersion: 1,
+    };
+    const disabled = await core.changeCustomerAccess(request);
+    expect(disabled).toMatchObject({ ok: true, value: { accessStatus: "disabled", version: 2 } });
+    expect(await core.changeCustomerAccess(request)).toEqual(disabled);
+    expect(
+      await core.changeCustomerAccess({
+        ...request,
+        action: "RESTORE",
+        expectedVersion: 2,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await core.changeCustomerAccess(request)).toEqual(disabled);
+    const detail = await core.getAdminCustomer({
+      headers: request.headers,
+      requestId: crypto.randomUUID(),
+      customerId,
+    });
+    expect(detail.ok).toBe(true);
+    if (detail.ok)
+      expect(
+        detail.value.recentAudit.filter((event) => event.action === "CUSTOMER.ACCESS_CHANGED"),
+      ).toHaveLength(2);
+    expect(await core.changeCustomerAccess({ ...request, reason: "Another reason" })).toMatchObject(
+      { ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } },
+    );
+    await env.DB.prepare(
+      "UPDATE idempotency_records SET result_type=scope,result_reference=? WHERE scope='admin.customers.access' AND idempotency_key=?",
+    )
+      .bind(customerId, request.idempotencyKey)
+      .run();
+    expect(await core.changeCustomerAccess(request)).toMatchObject({
+      ok: true,
+      value: { accessStatus: "active", version: 3 },
+    });
+  });
+  it("replaying session revocation preserves a later real login and legacy count receipts", async () => {
+    const manager = await seedManager();
+    const account = await signUp();
+    const customerId = await seedCustomer(account);
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      reason: "Support review",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const revoked = await core.revokeCustomerSessions(request);
+    expect(revoked.ok).toBe(true);
+    if (!revoked.ok) return;
+    const user = await env.DB.prepare("SELECT email FROM user WHERE id=?")
+      .bind(account.userId)
+      .first<{ email: string }>();
+    if (!user) throw new Error("Missing account");
+    const login = await SELF.fetch("https://core.example.invalid/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://core.example.invalid" },
+      body: JSON.stringify({ email: user.email, password: "correct-horse-battery-staple" }),
+    });
+    expect(login.status).toBe(200);
+    expect(await core.revokeCustomerSessions(request)).toEqual(revoked);
+    await env.DB.prepare(
+      "UPDATE idempotency_records SET result_type=scope,result_reference=? WHERE scope='admin.customers.sessions.revoke' AND idempotency_key=?",
+    )
+      .bind(String(revoked.value.revokedSessionCount), request.idempotencyKey)
+      .run();
+    expect(await core.revokeCustomerSessions(request)).toEqual(revoked);
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+        .bind(account.userId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it.each(["access", "sessions"])(
+    "rechecks customer %s authority inside the batch",
+    async (operation) => {
+      const manager = await seedManager();
+      const account = await signUp();
+      const customerId = await seedCustomer(account);
+      const request = {
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        customerId,
+        reason: "Support review",
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const database = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await target
+                .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                .bind(manager.staffId)
+                .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const deps = { auth: createAuth(env), db: database };
+      expect(
+        operation === "access"
+          ? await changeCustomerAccess(deps, { ...request, action: "DISABLE", expectedVersion: 1 })
+          : await revokeCustomerSessions(deps, request),
+      ).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM customer_principal WHERE auth_user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual({ status: "active" });
+      expect(
+        await env.DB.prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual({ count: 1 });
+    },
+  );
+  it("allows one competing access version to win", async () => {
+    const manager = await seedManager();
+    const customerId = await seedCustomer(await signUp());
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      reason: "Support review",
+      idempotencyKey: crypto.randomUUID(),
+      action: "DISABLE" as const,
+      expectedVersion: 1,
+    };
+    const results = await Promise.all([
+      core.changeCustomerAccess(request),
+      core.changeCustomerAccess({ ...request, idempotencyKey: crypto.randomUUID() }),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT version FROM customer WHERE id=?").bind(customerId).first(),
+    ).toEqual({ version: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM audit_event WHERE aggregate_id=? AND action='CUSTOMER.ACCESS_CHANGED'",
+      )
+        .bind(customerId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it.each([
+    "access:principal",
+    "access:version",
+    "access:audit",
+    "access:receipt",
+    "sessions:delete",
+    "sessions:audit",
+    "sessions:receipt",
+  ])("rolls back %s when its required write is ignored", async (scenario) => {
+    const operation = scenario.startsWith("access") ? "access" : "sessions";
+    const manager = await seedManager();
+    const account = await signUp();
+    const customerId = await seedCustomer(account);
+    const request = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      customerId,
+      reason: "Support access review",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const sessions = await env.DB.prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+      .bind(account.userId)
+      .first();
+    const trigger = scenario.endsWith("principal")
+      ? "BEFORE UPDATE ON customer_principal"
+      : scenario.endsWith("version")
+        ? "BEFORE UPDATE ON customer"
+        : scenario.endsWith("delete")
+          ? "BEFORE DELETE ON session"
+          : scenario.endsWith("receipt")
+            ? "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'"
+            : `BEFORE INSERT ON audit_event WHEN NEW.action='${operation === "access" ? "CUSTOMER.ACCESS_CHANGED" : "CUSTOMER.SESSIONS_REVOKED"}'`;
+    await env.DB.exec(
+      `CREATE TRIGGER test_ignore_customer_access_audit ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+    );
+    try {
+      const result =
+        operation === "access"
+          ? await core.changeCustomerAccess({ ...request, action: "DISABLE", expectedVersion: 1 })
+          : await core.revokeCustomerSessions(request);
+      expect(result).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT status FROM customer_principal WHERE auth_user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual({ status: "active" });
+      expect(
+        await env.DB.prepare("SELECT version FROM customer WHERE id=?").bind(customerId).first(),
+      ).toEqual({ version: 1 });
+      expect(
+        await env.DB.prepare("SELECT count(*) AS count FROM session WHERE user_id=?")
+          .bind(account.userId)
+          .first(),
+      ).toEqual(sessions);
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER test_ignore_customer_access_audit");
+    }
+    const retried =
+      operation === "access"
+        ? await core.changeCustomerAccess({ ...request, action: "DISABLE", expectedVersion: 1 })
+        : await core.revokeCustomerSessions(request);
+    expect(retried).toMatchObject({ ok: true });
+  });
   it("invites customers idempotently and rejects duplicate pending invitations", async () => {
     const manager = await seedManager();
     const email = `new-cust-${crypto.randomUUID().slice(0, 6)}@example.com`;
@@ -668,8 +981,10 @@ describe("customer crm commands", () => {
     expect(restored.value.accessStatus).toBe("active");
 
     const auditRow = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'CUSTOMER.ACCESS_CHANGED'",
-    ).first<{ count: number }>();
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'CUSTOMER.ACCESS_CHANGED' AND aggregate_id=?",
+    )
+      .bind(customerId)
+      .first<{ count: number }>();
     expect(auditRow?.count ?? 0).toBe(2);
   });
 

@@ -46,13 +46,16 @@ for (const width of [1440, 390]) {
       signedInPage.getByRole("heading", { name: "Welcome to FreshMarkets" }),
     ).toBeVisible();
     const requests: { key: string | undefined; body: string | null }[] = [];
+    let acceptedCustomerId = "";
     await signedInPage.route("**/api/customer-invitation", async (route) => {
       requests.push({
         key: route.request().headers()["idempotency-key"],
         body: route.request().postData(),
       });
       const response = await route.fetch();
-      expect(await response.json()).toMatchObject({ ok: true });
+      const acceptedResult = await response.json();
+      expect(acceptedResult).toMatchObject({ ok: true });
+      acceptedCustomerId = acceptedResult.value.customerId;
       if (requests.length === 1) await route.abort("failed");
       else await route.fulfill({ response });
     });
@@ -117,6 +120,72 @@ for (const width of [1440, 390]) {
     ).toContainText("ACCEPTED");
     expect(revocations).toHaveLength(2);
     expect(revocations[1]).toEqual(revocations[0]);
+    await adminPage.goto(`/admin/customers/${acceptedCustomerId}`);
+    await adminPage
+      .getByRole("textbox", { name: "Reason", exact: true })
+      .fill("Customer access review");
+    const accessRequests: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(`**/api/admin/customers/${acceptedCustomerId}/access`, async (route) => {
+      accessRequests.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      expect(await response.json()).toMatchObject({ ok: true });
+      if (accessRequests.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await adminPage.getByRole("button", { name: "Disable access" }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(adminPage.getByRole("button", { name: "Restore access" })).toBeVisible();
+    expect(accessRequests).toHaveLength(2);
+    expect(accessRequests[1]).toEqual(accessRequests[0]);
+    expect(await (await signedInPage.request.get("/api/commerce/address")).json()).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    await adminPage.getByRole("button", { name: "Restore access" }).click();
+    await expect(adminPage.getByRole("button", { name: "Disable access" })).toBeVisible();
+    expect(await (await signedInPage.request.get("/api/commerce/address")).json()).toMatchObject({
+      ok: true,
+    });
+    const sessionRequests: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route(
+      `**/api/admin/customers/${acceptedCustomerId}/sessions/revoke`,
+      async (route) => {
+        sessionRequests.push({
+          key: route.request().headers()["idempotency-key"],
+          body: route.request().postData(),
+        });
+        const response = await route.fetch();
+        expect(await response.json()).toMatchObject({ ok: true });
+        if (sessionRequests.length === 1) await route.abort("failed");
+        else await route.fulfill({ response });
+      },
+    );
+    await adminPage.getByRole("button", { name: "Revoke sessions" }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toHaveCount(
+      0,
+    );
+    expect(sessionRequests).toHaveLength(2);
+    expect(sessionRequests[1]).toEqual(sessionRequests[0]);
+    await expect(
+      adminPage.getByRole("cell", { name: "CUSTOMER.SESSIONS_REVOKED", exact: true }),
+    ).toBeVisible();
+    await expect(
+      adminPage.getByRole("cell", { name: "CUSTOMER.ACCESS_CHANGED", exact: true }),
+    ).toHaveCount(2);
+    expect(await (await signedInPage.request.get("/api/auth/get-session")).json()).toBeNull();
+    expect(
+      await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await adminPage.screenshot({
+      path: testInfo.outputPath("customer-access-recovered.png"),
+      fullPage: true,
+    });
   });
 }
 

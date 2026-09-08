@@ -28,7 +28,7 @@ type CustomerRow = {
   createdAt: number;
 };
 
-const CUSTOMER_SELECT = `
+export const CUSTOMER_SELECT = `
   SELECT c.id AS customerId, c.auth_user_id AS authUserId, u.email AS email, c.phone,
          cp.status AS accessStatus, c.version, c.created_at AS createdAt,
          (SELECT s.status FROM subscription s WHERE s.customer_id = c.id
@@ -149,10 +149,13 @@ export async function getAdminCustomer(
     .prepare(
       `SELECT id, occurred_at, actor_user_id, action, aggregate_type, aggregate_id,
               market_id, location_id, reason, correlation_id
-       FROM audit_event WHERE actor_user_id = ?
+       FROM audit_event WHERE
+         (aggregate_type='customer' AND aggregate_id=?)
+         OR (aggregate_type='customer_invitation' AND aggregate_id IN (SELECT id FROM customer_invitation WHERE accepted_customer_id=?))
+         OR (aggregate_type='privacy_request' AND aggregate_id IN (SELECT id FROM privacy_request WHERE customer_id=?))
        ORDER BY occurred_at DESC, id DESC LIMIT 10`,
     )
-    .bind(row.authUserId)
+    .bind(row.customerId, row.customerId, row.customerId)
     .all<{
       id: string;
       occurred_at: number;

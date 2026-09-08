@@ -53,7 +53,7 @@ export type AdminCustomerSummary = {
 };
 
 export type AdminCustomerDetail = AdminCustomerSummary & {
-  /** Ten most recent sanitized Audit summaries for the customer's auth user. */
+  /** Ten recent sanitized events about this Customer, its accepted invitations and privacy requests. */
   recentAudit: ReadonlyArray<AdminAuditEventListItem>;
 };
 

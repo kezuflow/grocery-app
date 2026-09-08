@@ -3,6 +3,7 @@ import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
+import { z } from "@freshmarkets/validation";
 
 /** Disable or restore commerce access. Transport only; Core authorizes. */
 async function POSTHandler(
@@ -10,8 +11,8 @@ async function POSTHandler(
   context: { params: Promise<{ "customer-id": string }> },
 ) {
   const { "customer-id": customerId } = await context.params;
-  const idempotencyKey = request.headers.get("idempotency-key") ?? "";
-  if (idempotencyKey.trim() === "") {
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
+  if (!idempotencyKey || idempotencyKey.length > 200) {
     return adminJson(
       {
         ok: false as const,
@@ -24,16 +25,15 @@ async function POSTHandler(
       { status: 400 },
     );
   }
-  const body = (await request.json().catch(() => null)) as {
-    action?: unknown;
-    reason?: unknown;
-    expectedVersion?: unknown;
-  } | null;
-  if (
-    (body?.action !== "DISABLE" && body?.action !== "RESTORE") ||
-    typeof body?.reason !== "string" ||
-    !Number.isInteger(body?.expectedVersion)
-  ) {
+  const body = z
+    .object({
+      action: z.enum(["DISABLE", "RESTORE"]),
+      reason: z.string().trim().min(1).max(500),
+      expectedVersion: z.number().int().positive(),
+    })
+    .strict()
+    .safeParse(await request.json().catch(() => null));
+  if (!body.success) {
     return adminJson(
       {
         ok: false as const,
@@ -50,9 +50,7 @@ async function POSTHandler(
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     customerId,
-    action: body.action as "DISABLE" | "RESTORE",
-    reason: body.reason,
-    expectedVersion: body.expectedVersion as number,
+    ...body.data,
     idempotencyKey,
   });
   return adminJson(result);

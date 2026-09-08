@@ -426,7 +426,7 @@ const customerAccessChangeRequestSchema = authenticatedRequestSchema.extend({
   customerId: validationSchema.string().trim().min(1).max(200),
   action: validationSchema.enum(["DISABLE", "RESTORE"]),
   reason: validationSchema.string().trim().min(1).max(500),
-  expectedVersion: validationSchema.number().int().min(0),
+  expectedVersion: validationSchema.number().int().min(1),
   idempotencyKey: idempotencyKeySchema,
 });
 

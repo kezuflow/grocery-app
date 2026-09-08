@@ -49,6 +49,21 @@ function jsonRequest(url: string, body: unknown): Request {
 }
 
 describe("customer crm BFF routes", () => {
+  it.each([0, -1, "1", 1.5])(
+    "rejects invalid customer access version %s before Core",
+    async (expectedVersion) => {
+      const response = await changeAccess(
+        jsonRequest("https://freshmarkets.ph/api/admin/customers/cust-1/access", {
+          action: "DISABLE",
+          reason: "Review",
+          expectedVersion,
+        }),
+        customerParams,
+      );
+      expect(response.status).toBe(400);
+      expect(coreMocks.changeCustomerAccess).not.toHaveBeenCalled();
+    },
+  );
   it("validates and forwards reviewed invitation decisions", async () => {
     const body = { invitationId: "invitation-1", expectedVersion: 2 };
     coreMocks.acceptCustomerInvitation.mockResolvedValue({
