@@ -3,6 +3,8 @@
 -- Deliberately excludes product_media rows and all R2 objects.
 -- Retained sample Orders keep their original delivery-date evidence. Create a new
 -- Scheduled cycle with explicit windows through Admin before testing new checkout.
+-- Configure each customer site's actual operating hours/closures through Locations;
+-- migrations do not infer a 24-hour operating schedule for retained sites.
 
 -- Synthetic staff actor used by audit, issue-assignment, and inventory fixtures. It has no
 -- credential or session and therefore cannot authenticate.

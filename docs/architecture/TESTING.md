@@ -63,6 +63,8 @@ The existing Playwright configuration accepts `APP_BASE_URL` for an already-runn
 
 `E2E_STATE_NAME` selects a separate direct child of `apps/core/.wrangler` for managed setup and authenticated fixtures. Names must match `e2e-[a-z0-9-]+`. Setup resets that selected directory, so choose a new name or an already identified disposable directory. The default remains `e2e-state`; setting a new name does not authorize resetting existing state.
 
+Authenticated fixture SQL uses the installed `wrangler-e2e` CLI and explicit `wrangler.e2e.jsonc`, matching the managed local controller. A newer CLI intermittently executed local SQL but failed to exit within the fixture timeout. Fixture success still requires a zero exit status; neither printed SQL success nor a timeout is accepted as completed setup. Production/build Wrangler and existing timeout/assertions remain unchanged.
+
 ## Required failure and concurrency scenarios
 
 For a changed critical command, select every applicable case:

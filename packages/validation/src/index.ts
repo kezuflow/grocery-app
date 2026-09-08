@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export { z } from "zod";
 export * from "./admin-locations";
+export * from "./location-operating-schedule";
 export * from "./admin-serviceability";
 export * from "./location-delivery-profile";
 export * from "./admin-delivery-cycles";

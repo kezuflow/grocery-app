@@ -1,7 +1,8 @@
 "use client";
 
-import type { GlobalCommerceConfigurationView, RpcResult } from "@freshmarkets/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { appErrorCodes, type GlobalCommerceConfigurationView } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
@@ -9,10 +10,41 @@ import { WorkspaceNavigation } from "../../../../components/admin/workspace-navi
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../../components/ui/select";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { useAdminContext } from "../../admin-context-provider";
 
 type CommerceAction = "PAUSE" | "SWITCH_MODE" | "OPEN";
+type Command = {
+  action: CommerceAction;
+  expectedVersion: number;
+  reason: string;
+  fulfillmentMode?: "INSTANT" | "SCHEDULED";
+  cadence?: "WEEKLY" | null;
+};
+const responseSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    requestId: z.string(),
+    value: z.object({
+      sellingState: z.enum(["OPEN", "PAUSED"]),
+      fulfillmentMode: z.enum(["INSTANT", "SCHEDULED"]),
+      cadence: z.literal("WEEKLY").nullable(),
+      version: z.number().int().positive(),
+      readinessBlockers: z.array(z.object({ code: z.string(), message: z.string() })),
+    }),
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ code: z.enum(appErrorCodes), message: z.string(), requestId: z.string() }),
+  }),
+]);
 
 export default function FulfillmentModePage() {
   const { state: adminState } = useAdminContext();
@@ -23,14 +55,19 @@ export default function FulfillmentModePage() {
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const commandIntent = useAdminCommandIntent();
+  const [unconfirmed, setUnconfirmed] = useState<Command | null>(null);
+  const locked = commandIntent.pending || unconfirmed !== null;
+  const readGeneration = useRef(0);
 
   const load = useCallback(async () => {
-    if (!isGlobal) return;
+    if (!isGlobal || unconfirmed) return;
+    const generation = ++readGeneration.current;
     setState("loading");
     try {
-      const payload = (await (
-        await fetch("/api/admin/commerce-configuration")
-      ).json()) as RpcResult<GlobalCommerceConfigurationView>;
+      const payload = responseSchema.parse(
+        await (await fetch("/api/admin/commerce-configuration")).json(),
+      );
+      if (generation !== readGeneration.current) return;
       if (!payload.ok) {
         setNotice(
           payload.error.code === "FORBIDDEN"
@@ -44,51 +81,63 @@ export default function FulfillmentModePage() {
       setMode(payload.value.fulfillmentMode);
       setState("ready");
     } catch {
+      if (generation !== readGeneration.current) return;
       setNotice("Network error loading the global commerce configuration.");
       setState("error");
     }
-  }, [isGlobal]);
+  }, [isGlobal, unconfirmed]);
 
   useEffect(() => {
     if (isGlobal) void load();
   }, [isGlobal, load]);
 
   async function run(action: CommerceAction) {
-    if (!configuration || !isGlobal || commandIntent.pending) return;
-    if (!reason.trim()) {
+    if (!configuration || (!isGlobal && !unconfirmed) || commandIntent.pending) return;
+    if (!unconfirmed && !reason.trim()) {
       setNotice("A reason is required for commerce configuration changes.");
       return;
     }
-    const payload = await commandIntent.submit(async (idempotencyKey) => {
-      const response = await fetch("/api/admin/commerce-configuration", {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-        body: JSON.stringify({
-          action,
-          expectedVersion: configuration.version,
-          reason: reason.trim(),
-          ...(action === "SWITCH_MODE"
-            ? { fulfillmentMode: mode, cadence: mode === "SCHEDULED" ? "WEEKLY" : null }
-            : {}),
-        }),
-      });
-      return (await response.json()) as RpcResult<GlobalCommerceConfigurationView>;
-    });
-    setNotice(
-      payload.ok
-        ? action === "PAUSE"
-          ? "Selling paused."
-          : action === "OPEN"
-            ? "Selling reopened."
-            : "Global fulfillment mode saved."
-        : payload.error.message,
-    );
-    if (payload.ok) {
-      setConfiguration(payload.value);
-      setMode(payload.value.fulfillmentMode);
-      setReason("");
-    } else if (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT") {
-      void load();
+    const command = unconfirmed ?? {
+      action,
+      expectedVersion: configuration.version,
+      reason: reason.trim(),
+      ...(action === "SWITCH_MODE"
+        ? { fulfillmentMode: mode, cadence: mode === "SCHEDULED" ? ("WEEKLY" as const) : null }
+        : {}),
+    };
+    readGeneration.current += 1;
+    setUnconfirmed(command);
+    try {
+      const payload = await commandIntent.submit(async (idempotencyKey) =>
+        responseSchema.parse(
+          await (
+            await fetch("/api/admin/commerce-configuration", {
+              method: "POST",
+              headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+              body: JSON.stringify(command),
+            })
+          ).json(),
+        ),
+      );
+      setUnconfirmed(null);
+      setNotice(
+        payload.ok
+          ? command.action === "PAUSE"
+            ? "Selling paused."
+            : command.action === "OPEN"
+              ? "Selling reopened."
+              : "Global fulfillment mode saved."
+          : payload.error.message,
+      );
+      if (payload.ok) {
+        setConfiguration(payload.value);
+        setMode(payload.value.fulfillmentMode);
+        setReason("");
+      }
+    } catch {
+      setNotice(
+        "Response not confirmed. Retry the original commerce request to recover its result.",
+      );
     }
   }
 
@@ -99,7 +148,7 @@ export default function FulfillmentModePage() {
         description="Pause selling, switch the one global fulfillment mode, verify readiness, and reopen new commerce."
       />
       <WorkspaceNavigation parentCode="settings" label="Settings administration" />
-      {!isGlobal ? (
+      {!isGlobal && !unconfirmed ? (
         <AdminPageState
           state="permission-empty"
           title="Switch to Global scope"
@@ -122,10 +171,10 @@ export default function FulfillmentModePage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {isGlobal && state === "ready" && configuration ? (
+      {(isGlobal || unconfirmed) && state === "ready" && configuration ? (
         <ListPageSection
           title="FreshMarkets commerce"
-          description={`Current version ${configuration.version}. Committed orders keep their original mode, promise, price, and delivery snapshots.`}
+          description="Committed orders keep their original mode, promise, price, and delivery snapshots."
         >
           {notice ? (
             <p role="status" className="border-b p-3 text-sm">
@@ -135,15 +184,21 @@ export default function FulfillmentModePage() {
           <div className="grid gap-4 p-4 sm:grid-cols-2">
             <label className="space-y-1 text-sm font-medium">
               Global mode
-              <select
-                aria-label="Global fulfillment mode"
+              <Select
+                disabled={locked}
                 value={mode}
-                onChange={(event) => setMode(event.target.value as "INSTANT" | "SCHEDULED")}
-                className="flex h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm dark:bg-[var(--fm-surface)]"
+                onValueChange={(value) => {
+                  if (value === "INSTANT" || value === "SCHEDULED") setMode(value);
+                }}
               >
-                <option value="SCHEDULED">Scheduled (Weekly cadence)</option>
-                <option value="INSTANT">Instant</option>
-              </select>
+                <SelectTrigger aria-label="Global fulfillment mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SCHEDULED">Scheduled (Weekly cadence)</SelectItem>
+                  <SelectItem value="INSTANT">Instant</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <div className="space-y-1 text-sm font-medium">
               Selling state
@@ -173,26 +228,35 @@ export default function FulfillmentModePage() {
               Change reason
               <Input
                 aria-label="Commerce change reason"
+                disabled={locked}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               />
             </label>
             <div className="flex flex-wrap gap-2">
+              {unconfirmed && (
+                <Button
+                  disabled={commandIntent.pending}
+                  onClick={() => void run(unconfirmed.action)}
+                >
+                  Retry unconfirmed commerce request
+                </Button>
+              )}
               {configuration.sellingState === "OPEN" ? (
-                <Button disabled={commandIntent.pending} onClick={() => void run("PAUSE")}>
+                <Button disabled={locked} onClick={() => void run("PAUSE")}>
                   {commandIntent.pending ? "Saving…" : "Pause selling"}
                 </Button>
               ) : (
                 <>
                   <Button
-                    disabled={commandIntent.pending || mode === configuration.fulfillmentMode}
+                    disabled={locked || mode === configuration.fulfillmentMode}
                     onClick={() => void run("SWITCH_MODE")}
                   >
                     {commandIntent.pending ? "Saving…" : "Activate global mode"}
                   </Button>
                   <Button
                     variant="outline"
-                    disabled={commandIntent.pending || mode !== configuration.fulfillmentMode}
+                    disabled={locked || mode !== configuration.fulfillmentMode}
                     onClick={() => void run("OPEN")}
                   >
                     {commandIntent.pending ? "Saving…" : "Reopen selling"}

@@ -6,7 +6,8 @@ const coreRoot = fileURLToPath(new URL("../../core", import.meta.url));
 const e2eStateName = process.env.E2E_STATE_NAME ?? "e2e-state";
 if (!/^e2e-[a-z0-9-]+$/.test(e2eStateName)) throw new Error("Invalid E2E_STATE_NAME");
 const wrangler = fileURLToPath(
-  new URL("../../core/node_modules/wrangler/bin/wrangler.js", import.meta.url),
+  // Match the managed local controller; newer CLI cleanup can hang after successful local SQL.
+  new URL("../node_modules/wrangler-e2e/bin/wrangler.js", import.meta.url),
 );
 const appBaseUrl =
   process.env.E2E_START_STACK === "1"
@@ -35,6 +36,8 @@ export function executeAdminE2eSql(sql: string): void {
         "d1",
         "execute",
         "DB",
+        "--config",
+        "wrangler.e2e.jsonc",
         "--local",
         "--persist-to",
         `.wrangler/${e2eStateName}`,

@@ -1,5 +1,9 @@
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
 import {
+  getAdminLocationSchedule,
+  saveAdminLocationSchedule,
+} from "./admin/application/location-schedule-administration";
+import {
   listAdminDeliveryCycles,
   listAdminCycleDestinations,
   saveAdminDeliveryCycleDraft,
@@ -2116,6 +2120,22 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         geocoder: buildGeocoderPort(this.env),
       },
+      input,
+    );
+  }
+  async getAdminLocationSchedule(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & { locationId: string },
+  ) {
+    return getAdminLocationSchedule(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async saveAdminLocationSchedule(
+    input: import("@freshmarkets/contracts").SaveAdminLocationScheduleRequest,
+  ) {
+    return saveAdminLocationSchedule(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );
   }

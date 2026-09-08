@@ -1,5 +1,9 @@
 import { describe, expect, it, onTestFinished } from "vitest";
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
+import { locationManager } from "../../test-location-fixtures";
+import { createPayment } from "../../payments/application/create-payment";
+import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
+import { createMockPaymentProvider } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { createCheckoutQuote } from "./create-checkout-quote";
 import { abandonCheckoutAttempt } from "./abandon-checkout-attempt";
 import { startPromotionalTrial } from ".././../membership/application/start-promotional-trial";
@@ -125,7 +129,127 @@ function command(customerId: string, cartId: string, addressId: string) {
 }
 
 describe("instant checkout quotes", () => {
-  it.each(["revision", "expiry", "readiness"])(
+  it("requires complete quote invalidation for a closure and blocks new payment after recovery", async () => {
+    await configureInstant();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const quoted = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+    if (!quoted.ok) throw new Error(quoted.error.message);
+    const staff = await locationManager();
+    const current = await exports.default.getAdminLocationSchedule({
+      headers: staff.headers,
+      locationId: LOCATION,
+      requestId: crypto.randomUUID(),
+    });
+    if (!current.ok || !current.value.schedule) throw new Error("Missing hours fixture");
+    const originalSchedule = JSON.stringify(current.value.schedule);
+    onTestFinished(async () => {
+      await env.DB.prepare(
+        "UPDATE location_operating_schedule SET definition_json=? WHERE location_id=?",
+      )
+        .bind(originalSchedule, LOCATION)
+        .run();
+      const latest = await env.DB.prepare("SELECT version FROM checkout_quote WHERE id=?")
+        .bind(quoted.value.quoteId)
+        .first<{ version: number }>();
+      if (latest)
+        expect(
+          await abandonCheckoutAttempt(env.DB, {
+            customerId: basket.customerId,
+            quoteId: quoted.value.quoteId,
+            expectedVersion: latest.version,
+            idempotencyKey: crypto.randomUUID(),
+            requestId: crypto.randomUUID(),
+          }),
+        ).toMatchObject({ ok: true });
+    });
+    const quoteVersion = await env.DB.prepare("SELECT version FROM checkout_quote WHERE id=?")
+      .bind(quoted.value.quoteId)
+      .first<{ version: number }>();
+    if (!quoteVersion) throw new Error("Quote missing after creation");
+    const now = Date.now();
+    const request = {
+      headers: staff.headers,
+      locationId: LOCATION,
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: current.value.version,
+      reason: "Emergency closure",
+      schedule: {
+        ...current.value.schedule,
+        closures: [
+          {
+            startsAt: new Date(now - 1000).toISOString(),
+            endsAt: new Date(now + 3600000).toISOString(),
+            reason: "Maintenance",
+          },
+        ],
+      },
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_hours_quotes BEFORE UPDATE ON checkout_quote BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await exports.default.saveAdminLocationSchedule(request)).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT version FROM fulfillment_location WHERE id=?")
+          .bind(LOCATION)
+          .first(),
+      ).toEqual({ version: current.value.version });
+      expect(
+        await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+          .bind(quoted.value.quoteId)
+          .first(),
+      ).toEqual({ status: "ACTIVE" });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_hours_quotes");
+    }
+    expect(await exports.default.saveAdminLocationSchedule(request)).toMatchObject({ ok: true });
+    expect(
+      await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+        .bind(quoted.value.quoteId)
+        .first(),
+    ).toEqual({ status: "SUPERSEDED" });
+    const paymentKey = crypto.randomUUID();
+    expect(
+      await createPayment(env.DB, new ProviderRegistry("test", [createMockPaymentProvider()]), {
+        purpose: "GROCERY_CHECKOUT",
+        subjectType: "checkout_quote",
+        subjectId: quoted.value.quoteId,
+        customerId: basket.customerId,
+        checkoutVersion: quoteVersion.version,
+        amountMinor: quoted.value.totalMinor,
+        currency: "PHP",
+        providerCode: "mock",
+        returnUrl: "https://example.com/return",
+        idempotencyKey: paymentKey,
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT count(*) count FROM payment_intent WHERE idempotency_key=?")
+        .bind(paymentKey)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await createCheckoutQuote(
+        env.DB,
+        command(basket.customerId, basket.cartId, basket.addressId),
+        quoteDependencies,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "INSTANT_MODE_UNAVAILABLE" } });
+  });
+  it.each(["revision", "expiry", "readiness", "hours"])(
     "rejects %s changes during courier quotation with no quote, attempt or holds",
     async (change) => {
       await configureInstant();
@@ -141,6 +265,9 @@ describe("instant checkout quotes", () => {
       const readiness = await env.DB.prepare(
         "SELECT location_id,dispatch_ready FROM fulfillment_location_readiness",
       ).all<{ location_id: string; dispatch_ready: number }>();
+      const hours = await env.DB.prepare(
+        "SELECT location_id,definition_json FROM location_operating_schedule",
+      ).all<{ location_id: string; definition_json: string }>();
       const cycles = await env.DB.prepare("SELECT id,status,version FROM delivery_cycle").all<{
         id: string;
         status: string;
@@ -148,6 +275,11 @@ describe("instant checkout quotes", () => {
       }>();
       onTestFinished(async () => {
         await env.DB.batch([
+          ...hours.results.map((row) =>
+            env.DB.prepare(
+              "UPDATE location_operating_schedule SET definition_json=? WHERE location_id=?",
+            ).bind(row.definition_json, row.location_id),
+          ),
           ...links.results.map((row) =>
             env.DB.prepare(
               "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
@@ -177,7 +309,9 @@ describe("instant checkout quotes", () => {
               ? "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'"
               : change === "expiry"
                 ? "UPDATE location_serviceability SET valid_to=1"
-                : "UPDATE fulfillment_location_readiness SET dispatch_ready=0";
+                : change === "hours"
+                  ? "UPDATE location_operating_schedule SET definition_json=json_set(definition_json,'$.weekly',json('[]'))"
+                  : "UPDATE fulfillment_location_readiness SET dispatch_ready=0";
           await env.DB.prepare(sql).run();
           return deliveryProvider.quote(...args);
         },

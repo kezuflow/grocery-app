@@ -81,6 +81,26 @@ beforeEach(async (context) => {
   if (isDeliveryMigrationTest) {
     await emulateDeployedPre0043DeliverySchema();
   }
+  if (
+    selectedMigrations.some(
+      (migration) => migration.name === "0083_location_operating_schedule.sql",
+    )
+  ) {
+    // Synthetic commerce fixtures explicitly operate all week. No retained migration invents hours.
+    await env.DB.prepare(`INSERT OR IGNORE INTO location_operating_schedule(location_id,timezone,definition_json,updated_at)
+      SELECT l.id,m.timezone,?,0 FROM fulfillment_location l JOIN market m ON m.id=l.market_id`)
+      .bind(
+        JSON.stringify({
+          weekly: Array.from({ length: 7 }, (_, index) => ({
+            dayOfWeek: index + 1,
+            opensMinute: 0,
+            closesMinute: 1440,
+          })),
+          closures: [],
+        }),
+      )
+      .run();
+  }
   await env.DB.prepare(
     "INSERT OR IGNORE INTO delivery_fee_configuration (id, market_id, location_id, currency, minimum_delivery_fee_minor, per_kilometer_rate_minor, status, version, effective_from, effective_to, created_at, updated_at) VALUES ('test-fee-cebu-v1', 'market-metro-cebu', 'location-cebu-central', 'PHP', 5000, 2500, 'ACTIVE', 1, 0, NULL, 0, 0)",
   ).run();

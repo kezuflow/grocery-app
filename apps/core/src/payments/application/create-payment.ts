@@ -177,6 +177,13 @@ export async function createPayment(
         AND geography.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.geographyVersion'),1)
         AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
         AND l.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.locationVersion'),l.version)
+        AND EXISTS (SELECT 1 FROM location_operating_schedule hours WHERE hours.location_id=l.id AND hours.timezone=market.timezone)
+        AND (CASE WHEN q.delivery_cycle_id IS NULL THEN CAST(unixepoch('subsec')*1000 AS INTEGER)
+          ELSE CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER) END)
+          >=json_extract(q.cycle_snapshot_json,'$.operatingInterval.startsAt')
+        AND (CASE WHEN q.delivery_cycle_id IS NULL THEN CAST(unixepoch('subsec')*1000 AS INTEGER)
+          ELSE CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER) END)
+          <json_extract(q.cycle_snapshot_json,'$.operatingInterval.endsAt')
         AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND area.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (area.active_to IS NULL OR area.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3

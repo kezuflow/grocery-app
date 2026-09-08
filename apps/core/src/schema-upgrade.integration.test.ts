@@ -183,6 +183,9 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
   expect(await env.DB.prepare("SELECT COUNT(*) count FROM cycle_goods_balance").first()).toEqual({
     count: 0,
   });
+  expect(
+    await env.DB.prepare("SELECT COUNT(*) count FROM location_operating_schedule").first(),
+  ).toEqual({ count: 0 });
   expect(await env.DB.prepare("SELECT COUNT(*) count FROM cycle_goods_movement").first()).toEqual({
     count: 0,
   });

@@ -116,7 +116,7 @@ export async function listFulfillmentOptions(
   let candidate = orderedCandidates[0] ?? null;
   const currentQuery = { ...query, addressVersion: address.version };
   const options: FulfillmentOptionView[] = [];
-  for (const mode of candidate ? [candidate.mode] : (["SCHEDULED"] as const)) {
+  for (const mode of [selling.configuration.fulfillment_mode]) {
     let reason: FulfillmentOptionView["unavailableReason"] = candidate ? null : "MODE_UNAVAILABLE";
     type CycleWindow = {
       id: string;
@@ -168,6 +168,7 @@ export async function listFulfillmentOptions(
           AND cycle_zone.zone_id=? AND cycle_zone.location_id=? AND cycle_zone.status='ACTIVE'
          JOIN delivery_cycle_schedule s ON s.cycle_id=dc.id JOIN delivery_cycle_window w ON w.cycle_id=dc.id
          WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>? AND dc.order_opens_at<=?
+           AND dc.id IN (SELECT value FROM json_each(?))
            AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at
          ORDER BY dc.delivery_date,dc.id,w.starts_at,w.id LIMIT 30`,
           )
@@ -177,6 +178,7 @@ export async function listFulfillmentOptions(
             operationalCandidate.marketId,
             Date.now(),
             Date.now(),
+            JSON.stringify(operationalCandidate.eligibleCycleIds),
           )
           .all<CycleWindow>();
         if (availableCycles.results.length) {

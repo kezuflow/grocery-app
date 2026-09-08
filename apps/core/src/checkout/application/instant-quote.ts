@@ -1,3 +1,4 @@
+import { operatingScheduleGuard } from "../../geography/application/operating-schedule-guard";
 import {
   createCheckoutRepository,
   type CheckoutQuoteRow,
@@ -67,7 +68,7 @@ export async function createInstantQuote(
         promise_minutes: selected.promiseMinutes,
       }
     : null;
-  if (!routing || routing.promise_minutes === null)
+  if (!routing || routing.promise_minutes === null || !routing.openInterval)
     return failure(
       "INSTANT_MODE_UNAVAILABLE",
       "Instant delivery is not available at this address",
@@ -243,6 +244,7 @@ export async function createInstantQuote(
       cycleSnapshot: {
         geographyVersion: routing.geographyVersion,
         locationVersion: routing.locationVersion,
+        operatingInterval: routing.openInterval,
         readinessVersion: routing.readinessVersion,
         modeVersion: routing.modeVersion,
         zoneId: routing.zone_id,
@@ -281,6 +283,7 @@ export async function createInstantQuote(
   try {
     await database.batch([
       geographyQuoteGuard(database, routing),
+      operatingScheduleGuard(database, routing, routing.openInterval),
       database
         .prepare(
           "UPDATE checkout_inventory_holds SET status='EXPIRED', updated_at=? WHERE status='HELD' AND checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?)",

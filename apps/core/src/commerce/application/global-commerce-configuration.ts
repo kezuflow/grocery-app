@@ -83,6 +83,16 @@ async function readinessBlockers(
       message: `${missingCapabilities.name} requires picking, packing, and dispatch capabilities`,
     });
 
+  const missingHours = await database
+    .prepare(`SELECT l.name FROM fulfillment_location l JOIN market m ON m.id=l.market_id
+    LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
+    WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND (hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0) ORDER BY l.id LIMIT 1`)
+    .first<{ name: string }>();
+  if (missingHours)
+    blockers.push({
+      code: "LOCATION_HOURS_NOT_CONFIGURED",
+      message: `${missingHours.name} requires configured operating hours`,
+    });
   if (mode === "INSTANT") {
     const unready = await database
       .prepare(
@@ -356,6 +366,9 @@ async function execute(
   if (input.action === "OPEN") {
     // These predicates guard every effect, including the version, audit and replay result.
     statements.push(
+      database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE EXISTS (
+        SELECT 1 FROM fulfillment_location l JOIN market m ON m.id=l.market_id LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
+        WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND (hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0))`),
       database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE
         NOT EXISTS (SELECT 1 FROM fulfillment_location WHERE status='active' AND purpose='CUSTOMER_FULFILLMENT')
         OR EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT'

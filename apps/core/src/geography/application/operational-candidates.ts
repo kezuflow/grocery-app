@@ -1,4 +1,6 @@
 import type { Coordinate } from "@freshmarkets/contracts";
+import { z, locationOperatingScheduleSchema } from "@freshmarkets/validation";
+import { operatingInterval, nextOperatingBoundary } from "../operating-schedule";
 import { parsePolygonGeoJson, pointInPolygon, sortLocationsByDistance } from "../geometry";
 
 export type OperationalCandidate = {
@@ -17,6 +19,10 @@ export type OperationalCandidate = {
   locationVersion: number;
   readinessVersion: number | null;
   promiseMinutes: number | null;
+  scheduleJson: string;
+  scheduleTimezone: string;
+  eligibleCycleIds: string[];
+  openInterval: { startsAt: number; endsAt: number } | null;
 };
 
 /** Common geofence and operational eligibility for preview, options and quote routing. No stock reads. */
@@ -35,7 +41,12 @@ export async function operationalCandidates(
     .prepare(`SELECT l.id,l.id locationId,l.name locationName,l.market_id marketId,m.code marketCode,
     l.latitude,l.longitude,z.id zoneId,z.name zoneName,g.fulfillment_mode mode,g.version modeVersion,
     revision.version geographyVersion,l.version locationVersion,r.version readinessVersion,r.instant_promise_minutes promiseMinutes,
-    a.polygon_geojson areaPolygon,z.polygon_geojson zonePolygon
+    a.polygon_geojson areaPolygon,z.polygon_geojson zonePolygon,
+    hours.definition_json scheduleJson,hours.timezone scheduleTimezone,
+    (SELECT json_group_array(json_object('id',cycle.id,'pickupAt',plan.pickup_at)) FROM delivery_cycle cycle
+      JOIN delivery_cycle_schedule plan ON plan.cycle_id=cycle.id JOIN delivery_cycle_zone p ON p.cycle_id=cycle.id
+      WHERE p.location_id=l.id AND p.zone_id=z.id AND p.status='ACTIVE' AND cycle.status='OPEN'
+        AND cycle.order_opens_at<=? AND cycle.cutoff_at>?) cyclesJson
     FROM fulfillment_location l JOIN market m ON m.id=l.market_id AND m.status='active'
     JOIN geography_configuration revision ON revision.market_id=m.id
     JOIN location_serviceability link ON link.location_id=l.id AND link.eligible=1
@@ -45,6 +56,7 @@ export async function operationalCandidates(
       AND a.active_from<=? AND (a.active_to IS NULL OR a.active_to>?)
     JOIN global_commerce_configuration g ON g.id='global'
     LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
+    JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
     WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
       AND (? IS NULL OR m.id=?) AND (? IS NULL OR g.fulfillment_mode=?)
       AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1
@@ -64,6 +76,8 @@ export async function operationalCandidates(
       now,
       now,
       now,
+      now,
+      now,
       input.marketId ?? null,
       input.marketId ?? null,
       input.mode ?? null,
@@ -73,8 +87,14 @@ export async function operationalCandidates(
       input.cycleId ?? null,
       input.cycleId ?? null,
     )
-    .all<OperationalCandidate & { areaPolygon: string; zonePolygon: string }>();
-  const candidates = rows.results
+    .all<
+      Omit<OperationalCandidate, "eligibleCycleIds" | "openInterval"> & {
+        areaPolygon: string;
+        zonePolygon: string;
+        cyclesJson: string;
+      }
+    >();
+  const evaluated = rows.results
     .filter((row) => {
       const area = parsePolygonGeoJson(row.areaPolygon),
         zone = parsePolygonGeoJson(row.zonePolygon);
@@ -85,7 +105,43 @@ export async function operationalCandidates(
         pointInPolygon([point.longitude, point.latitude], zone)
       );
     })
-    .map(({ areaPolygon: _area, zonePolygon: _zone, ...candidate }) => candidate);
+    .map(({ areaPolygon: _area, zonePolygon: _zone, cyclesJson, ...candidate }) => {
+      const schedule = locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson));
+      const cycles = z
+        .array(z.object({ id: z.string(), pickupAt: z.number() }))
+        .parse(JSON.parse(cyclesJson));
+      const eligibleCycleIds = cycles
+        .filter(
+          (cycle) =>
+            (!input.cycleId || cycle.id === input.cycleId) &&
+            operatingInterval(schedule, candidate.scheduleTimezone, cycle.pickupAt) !== null,
+        )
+        .map((cycle) => cycle.id);
+      return {
+        ...candidate,
+        eligibleCycleIds,
+        openInterval: operatingInterval(schedule, candidate.scheduleTimezone, now),
+        nextBoundary: nextOperatingBoundary(schedule, candidate.scheduleTimezone, now),
+      };
+    });
+  // A nearer closed site may open without a configuration write. Fence that clock transition too.
+  const routingValidUntil = Math.min(...evaluated.map((candidate) => candidate.nextBoundary));
+  const candidates = evaluated
+    .filter((candidate) =>
+      candidate.mode === "INSTANT"
+        ? candidate.openInterval !== null
+        : candidate.eligibleCycleIds.length > 0,
+    )
+    .map(({ nextBoundary: _boundary, ...candidate }) => ({
+      ...candidate,
+      openInterval:
+        candidate.mode === "INSTANT" && candidate.openInterval
+          ? {
+              ...candidate.openInterval,
+              endsAt: Math.min(candidate.openInterval.endsAt, routingValidUntil),
+            }
+          : candidate.openInterval,
+    }));
   return sortLocationsByDistance(point, candidates);
 }
 

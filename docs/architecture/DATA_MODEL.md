@@ -34,6 +34,8 @@ Better Auth does not own customer profiles, addresses, application IAM, membersh
 
 ## Organization, Markets, and Geography
 
+Migration 0083 adds `location_operating_schedule(location_id PK/FK, timezone, definition_json, updated_at)`. Its bounded typed definition contains weekly weekday/minute intervals and dated closure instants/reasons. Core owns interval policy; storage protects location identity and valid JSON. The location aggregate version guards every schedule write alongside the geography revision. Retained locations receive no inferred hours; disposable tests configure their own synthetic schedules. Unstarted Quotes record an applicable opening interval for payment-time revalidation; started Payments and committed fulfillment snapshots remain unchanged.
+
 - `organizations(id PK, name, status, created_at, updated_at)`
 - `markets(id PK, organization_id FK, code UNIQUE, name, currency, timezone, status)`
 - `fulfillment_locations(id PK, market_id FK, code, name, type, address_json, latitude, longitude, status, version, UNIQUE(market_id, code))`

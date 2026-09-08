@@ -3,6 +3,7 @@ export * from "./notifications";
 export * from "./customer-profile";
 export * from "./admin-foundation";
 export * from "./admin-locations";
+export * from "./location-operating-schedule";
 export * from "./admin-serviceability";
 export * from "./admin-staff-access";
 export * from "./initial-administrator";

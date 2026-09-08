@@ -210,6 +210,12 @@ export function LocationsWorkspace({
                 >
                   <div>
                     <h2 className="font-medium">{location.name}</h2>
+                    <Link
+                      href={`/admin/locations/${encodeURIComponent(location.locationId)}/schedule`}
+                      className="text-sm underline"
+                    >
+                      Operating hours for {location.name}
+                    </Link>
                     <p className="text-sm">
                       {location.purpose === "CENTRAL_WAREHOUSE"
                         ? "Central warehouse"
