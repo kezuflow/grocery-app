@@ -397,26 +397,28 @@ export async function getCustomerOrderDetail(
     cancellationRow || unresolvedIndependentRefund
       ? null
       : await buildCancellationRefundSet(database, query.orderId, 0);
-  const cancellationDecision = initialRefundSet
-    ? decideOrderCancellation({
-        actor: "CUSTOMER",
-        cause: "CUSTOMER_REQUEST",
-        mode: row.fulfillmentMode,
-        orderState: row.status as import("../domain/order-state-machine").OrderLifecycleState,
-        serviceFeeMinor: row.serviceFeeMinor,
-        grossPaidMinor: initialRefundSet.grossPaidMinor,
-        now: Date.now(),
-        cutoffAt: row.cutoffAt,
-      })
-    : null;
+  const cancellationDecision =
+    initialRefundSet && !(row.serviceFeeMinor > 0 && initialRefundSet.previouslyRefundedMinor > 0)
+      ? decideOrderCancellation({
+          actor: "CUSTOMER",
+          cause: "CUSTOMER_REQUEST",
+          mode: row.fulfillmentMode,
+          orderState: row.status as import("../domain/order-state-machine").OrderLifecycleState,
+          serviceFeeMinor: row.serviceFeeMinor,
+          grossPaidMinor: initialRefundSet.grossPaidMinor,
+          now: Date.now(),
+          cutoffAt: row.cutoffAt,
+        })
+      : null;
   const cancellation: CustomerOrderDetailView["cancellation"] = cancellationRow
     ? cancellationRow
-    : cancellationDecision?.allowed
+    : cancellationDecision?.allowed && initialRefundSet
       ? {
           status: null,
-          requiredRefundMinor: cancellationDecision.refundMinor,
+          requiredRefundMinor:
+            cancellationDecision.refundMinor - (initialRefundSet?.previouslyRefundedMinor ?? 0),
           retainedServiceFeeMinor: cancellationDecision.retainedServiceFeeMinor,
-          currency: initialRefundSet!.currency,
+          currency: initialRefundSet.currency,
         }
       : {
           status: null,
@@ -428,13 +430,15 @@ export async function getCustomerOrderDetail(
     ? "CANCELLATION_ALREADY_REQUESTED"
     : unresolvedIndependentRefund
       ? "REFUND_ALREADY_IN_PROGRESS"
-      : cancellationDecision?.allowed
-        ? null
-        : cancellationDecision?.code === "CANCELLATION_WINDOW_CLOSED"
-          ? "CANCELLATION_WINDOW_CLOSED"
-          : cancellationDecision?.code === "CUTOFF_EVIDENCE_MISSING"
-            ? "CANCELLATION_CONFIGURATION_UNAVAILABLE"
-            : "ORDER_NOT_CANCELABLE";
+      : initialRefundSet && row.serviceFeeMinor > 0 && initialRefundSet.previouslyRefundedMinor > 0
+        ? "REFUND_EVIDENCE_REQUIRES_REVIEW"
+        : cancellationDecision?.allowed
+          ? null
+          : cancellationDecision?.code === "CANCELLATION_WINDOW_CLOSED"
+            ? "CANCELLATION_WINDOW_CLOSED"
+            : cancellationDecision?.code === "CUTOFF_EVIDENCE_MISSING"
+              ? "CANCELLATION_CONFIGURATION_UNAVAILABLE"
+              : "ORDER_NOT_CANCELABLE";
   const issues = issuesResult.results.map(toCustomerOrderIssueView);
   const invoice: CustomerOrderDetailView["invoice"] = invoiceRow
     ? {

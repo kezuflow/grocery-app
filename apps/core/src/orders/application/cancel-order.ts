@@ -1,3 +1,4 @@
+import { zeroRefundCancellationStatements } from "./complete-zero-refund-cancellation";
 import type { RefundState } from "@freshmarkets/contracts";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { z } from "@freshmarkets/validation";
@@ -302,18 +303,14 @@ export async function requestOrderCancellation(
       ]);
       return { ok: true, value: accepted, requestId: command.requestId };
     }
-    const existingRefund = await database
-      .prepare(
-        `SELECT 1 AS found FROM payment_refund
-         WHERE payment_intent_id IN (${initialSet.members.map(() => "?").join(",")})
-         LIMIT 1`,
-      )
-      .bind(...initialSet.members.map((member) => member.paymentIntentId))
-      .first<{ found: number }>();
-    if (existingRefund)
+    if (
+      actor === "CUSTOMER" &&
+      order.service_fee_minor > 0 &&
+      initialSet.previouslyRefundedMinor > 0
+    )
       throw appError(
         "FINANCIAL_OPERATION_REQUIRES_REVIEW",
-        "An existing refund must be reconciled before coordinated cancellation",
+        "Historical fee/refund components require financial review before customer cancellation",
       );
     const snapshot = await database
       .prepare("SELECT cutoff_at FROM order_fulfillment_snapshot WHERE order_id=?")
@@ -353,8 +350,8 @@ export async function requestOrderCancellation(
     const accepted: CancelOrderOutcome = {
       state: "CANCELLATION_REQUESTED",
       cancellationId,
-      status: "REQUESTED",
-      requiredRefundMinor: policy.refundMinor,
+      status: refundSet.members.length === 0 ? "COMPLETED" : "REQUESTED",
+      requiredRefundMinor: policy.refundMinor - initialSet.previouslyRefundedMinor,
       retainedServiceFeeMinor: policy.retainedServiceFeeMinor,
       currency: refundSet.currency,
       refunds: refundSet.members.map((member) => ({
@@ -379,17 +376,24 @@ export async function requestOrderCancellation(
       ...initialSet.members.map((member) =>
         database
           .prepare(`INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (
-        SELECT 1 FROM payment_intent payment WHERE payment.id=? AND payment.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')
+        SELECT 1 FROM payment_intent payment WHERE payment.id=? AND payment.status=? AND payment.version=?
         AND payment.amount_minor=? AND payment.currency=? AND (
-          EXISTS (SELECT 1 FROM order_payment_reaction WHERE order_id=? AND payment_intent_id=payment.id) OR
-          EXISTS (SELECT 1 FROM paid_order_amendment WHERE order_id=? AND status='COMMITTED' AND payment_intent_id=payment.id)))
-        OR EXISTS (SELECT 1 FROM payment_refund WHERE payment_intent_id=?)`)
+          (?='ORDER' AND EXISTS (SELECT 1 FROM order_payment_reaction WHERE order_id=? AND payment_intent_id=payment.id)) OR
+          (?='AMENDMENT' AND EXISTS (SELECT 1 FROM paid_order_amendment WHERE order_id=? AND status='COMMITTED' AND payment_intent_id=payment.id))))
+        OR (SELECT COALESCE(SUM(amount_minor),0) FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED')!=?
+        OR EXISTS (SELECT 1 FROM payment_refund WHERE payment_intent_id=? AND (status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED') OR next_retry_at IS NOT NULL))`)
           .bind(
             member.paymentIntentId,
-            member.requiredAmountMinor,
+            member.paymentStatus,
+            member.paymentVersion,
+            member.capturedAmountMinor,
             member.currency,
+            member.source,
             order.id,
+            member.source,
             order.id,
+            member.paymentIntentId,
+            member.refundedMinor,
             member.paymentIntentId,
           ),
       ),
@@ -426,7 +430,7 @@ export async function requestOrderCancellation(
           cause,
           reason,
           policy.retainedServiceFeeMinor,
-          policy.refundMinor,
+          policy.refundMinor - initialSet.previouslyRefundedMinor,
           refundSet.currency,
           now,
           now,
@@ -454,21 +458,30 @@ export async function requestOrderCancellation(
           "UPDATE paid_order_amendment SET status='CANCELED',version=version+1,updated_at=? WHERE order_id=? AND status IN ('DRAFT','PENDING_PAYMENT')",
         )
         .bind(now, order.id),
+      ...(refundSet.members.length === 0
+        ? zeroRefundCancellationStatements(database, {
+            cancellationId,
+            orderId: order.id,
+            orderVersion: order.version + (nextOrderState === order.status ? 0 : 1),
+            now,
+          })
+        : []),
       ...evidence(
         accepted.state,
-        nextOrderState,
-        order.version + (nextOrderState === order.status ? 0 : 1),
+        refundSet.members.length === 0 && actor !== "STAFF_EXCEPTION" ? "CANCELED" : nextOrderState,
+        order.version +
+          (nextOrderState === order.status ? 0 : 1) +
+          (refundSet.members.length === 0 && actor !== "STAFF_EXCEPTION" ? 1 : 0),
       ),
       ...saveResult(accepted, now),
     );
     await database.batch(statements);
-    await projectCancellationSafely(database, cancellationId, "REQUESTED");
+    if (refundSet.members.length > 0)
+      await projectCancellationSafely(database, cancellationId, "REQUESTED");
 
     if (ports?.requestRefund)
       await resumeCancellationRefunds(database, cancellationId, ports.requestRefund, nowClock());
-    if (refundSet.members.length === 0)
-      await finalizeZeroRefund(database, cancellationId, order.id, actor);
-    else
+    if (refundSet.members.length > 0)
       await database
         .prepare(
           "UPDATE order_cancellation SET status='REFUNDS_PROCESSING',version=version+1,updated_at=? WHERE id=? AND status='REQUESTED'",
@@ -603,26 +616,6 @@ async function cancellationView(
         ? "PROCESSING"
         : null,
   };
-}
-
-async function finalizeZeroRefund(
-  database: D1Database,
-  cancellationId: string,
-  orderId: string,
-  actor: CancellationActor,
-) {
-  await database.batch([
-    database
-      .prepare(
-        "UPDATE order_cancellation SET status='COMPLETED',version=version+1,updated_at=? WHERE id=?",
-      )
-      .bind(Date.now(), cancellationId),
-    database
-      .prepare(
-        "UPDATE grocery_order SET status='CANCELED',version=version+1 WHERE id=? AND status IN ('CANCELLATION_REQUESTED','EXCEPTION') AND ?!='STAFF_EXCEPTION'",
-      )
-      .bind(orderId, actor),
-  ]);
 }
 
 function releaseOperationalEffectStatements(

@@ -1,3 +1,4 @@
+import { completeZeroRefundCancellation } from "./complete-zero-refund-cancellation";
 import type { RefundState } from "@freshmarkets/contracts";
 import { synchronizeOrderCancellationForPayment } from "./advance-order-cancellation";
 
@@ -29,6 +30,10 @@ export async function resumeCancellationRefunds(
     )
     .bind(cancellationId)
     .all<{ id: string; payment_intent_id: string; required_amount_minor: number }>();
+  if (members.results.length === 0) {
+    await completeZeroRefundCancellation(database, cancellationId, now);
+    return 0;
+  }
   let attempted = 0;
   for (const member of members.results) {
     await synchronizeOrderCancellationForPayment(database, member.payment_intent_id);
@@ -94,12 +99,12 @@ export async function resumeDueCancellationRefunds(
 ) {
   const due = await database
     .prepare(`SELECT cancellation.id FROM order_cancellation cancellation
-    WHERE cancellation.status!='COMPLETED' AND EXISTS (
+    WHERE cancellation.status!='COMPLETED' AND ((cancellation.required_refund_minor=0 AND EXISTS (SELECT 1 FROM grocery_order o WHERE o.id=cancellation.order_id AND (o.status IN ('CANCELLATION_REQUESTED','EXCEPTION') OR (cancellation.actor_type='STAFF_EXCEPTION' AND o.status='DELIVERED'))) AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member WHERE cancellation_id=cancellation.id)) OR EXISTS (
       SELECT 1 FROM order_cancellation_refund_member member LEFT JOIN payment_refund refund
         ON refund.id=member.refund_id OR (member.refund_id IS NULL AND refund.idempotency_key='order-cancel:'||member.cancellation_id||':'||member.payment_intent_id)
       WHERE member.cancellation_id=cancellation.id AND (
         (member.status='NOT_REQUESTED' AND member.attempts<? AND (member.attempts=0 OR member.updated_at<=?))
-        OR (refund.id IS NOT NULL AND (member.refund_id IS NULL OR member.status!=refund.status))))
+        OR (refund.id IS NOT NULL AND (member.refund_id IS NULL OR member.status!=refund.status)))))
     ORDER BY cancellation.updated_at,cancellation.id LIMIT 10`)
     .bind(MAX_ATTEMPTS, now - RETRY_DELAY_MS)
     .all<{ id: string }>();

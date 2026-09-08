@@ -169,7 +169,7 @@ async function seedOrder(options: {
     ]);
   }
 
-  return { customerId, otherCustomerId, orderId, mode: options.mode };
+  return { customerId, otherCustomerId, orderId, intentId, mode: options.mode };
 }
 
 describe("getCustomerOrderDetail", () => {
@@ -242,6 +242,43 @@ describe("getCustomerOrderDetail", () => {
       },
     });
   });
+
+  it.each([500, 28_500])(
+    "previews only the remaining balance after %i was refunded",
+    async (amount) => {
+      const fixture = await seedOrder({ mode: "INSTANT", withQuote: true });
+      const now = Date.now();
+      // Canonical prior-refund seam; command-to-provider recovery is covered by cancellation tests.
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,reason,idempotency_key,version,created_at,updated_at) VALUES (?,?,?,'PHP','SUCCEEDED','Earlier refund',?,1,?,?)",
+        ).bind(crypto.randomUUID(), fixture.intentId, amount, crypto.randomUUID(), now, now),
+        env.DB.prepare("UPDATE payment_intent SET status=?,version=version+1 WHERE id=?").bind(
+          amount === 28_500 ? "REFUNDED" : "PARTIALLY_REFUNDED",
+          fixture.intentId,
+        ),
+      ]);
+      expect(
+        await getCustomerOrderDetail(env.DB, {
+          customerId: fixture.customerId,
+          orderId: fixture.orderId,
+          requestId: crypto.randomUUID(),
+        }),
+      ).toMatchObject({
+        ok: true,
+        value: {
+          cancellation: {
+            status: null,
+            requiredRefundMinor: 28_500 - amount,
+            retainedServiceFeeMinor: 0,
+          },
+          actions: expect.arrayContaining([
+            { action: "CANCEL", available: true, disabledReason: null },
+          ]),
+        },
+      });
+    },
+  );
 
   it("returns NOT_FOUND for another customer and null components for legacy totals", async () => {
     const fixture = await seedOrder({ mode: "INSTANT", withQuote: false });

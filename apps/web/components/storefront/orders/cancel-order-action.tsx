@@ -16,6 +16,8 @@ function disabledMessage(reason: string | null): string {
   return (
     {
       CANCELLATION_WINDOW_CLOSED: "The cancellation window has closed.",
+      REFUND_EVIDENCE_REQUIRES_REVIEW:
+        "Contact support to review the historical fee and earlier refunds before cancellation.",
       REFUND_ALREADY_IN_PROGRESS: "A refund is already being processed for this order.",
       CANCELLATION_ALREADY_REQUESTED: "Cancellation is already being processed.",
       CANCELLATION_CONFIGURATION_UNAVAILABLE: "Cancellation details are temporarily unavailable.",
