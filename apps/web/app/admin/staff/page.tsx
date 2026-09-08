@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { z } from "@freshmarkets/validation";
 import type {
   AdminStaffInvitationPage,
   AdminStaffPage,
@@ -35,26 +36,68 @@ type LoadState =
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready" };
 
+type PendingStaffCommand = { operationId: string; url: string; body: string; key: string };
+const commandResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), value: z.unknown() }),
+  z.object({ ok: z.literal(false), error: z.object({ message: z.string() }) }),
+]);
 function useCommand() {
   const [notice, setNotice] = useState<string | null>(null);
-  const keys = useRef(new Map<string, string>());
-  const run = useCallback(async (operationId: string, url: string, body: unknown) => {
-    const signature = `${operationId}:${JSON.stringify(body)}`;
-    const idempotencyKey = keys.current.get(signature) ?? crypto.randomUUID();
-    keys.current.set(signature, idempotencyKey);
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json()) as RpcResult<unknown> & {
-      error?: { message?: string };
-    };
-    setNotice(payload.ok ? "Done." : (payload.error?.message ?? "The command failed."));
-    if (payload.ok) keys.current.delete(signature);
-    return payload.ok;
+  const [busy, setBusy] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const pending = useRef<PendingStaffCommand | null>(null);
+  const inFlight = useRef(false);
+  const execute = useCallback(async (command: PendingStaffCommand) => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      const response = await fetch(command.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": command.key },
+        body: command.body,
+      });
+      const parsed = commandResultSchema.safeParse(await response.json());
+      if (!parsed.success) throw new Error("Invalid staff command result");
+      pending.current = null;
+      setUncertain(false);
+      setNotice(parsed.data.ok ? "Done." : parsed.data.error.message);
+      return parsed.data.ok;
+    } catch {
+      setUncertain(true);
+      setNotice(
+        "The action could not be confirmed. Retry the original request before starting another action.",
+      );
+      return false;
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }, []);
-  return { notice, setNotice, run };
+  const run = useCallback(
+    async (operationId: string, url: string, body: unknown) => {
+      const serialized = JSON.stringify(body);
+      const previous = pending.current;
+      if (
+        previous &&
+        (previous.operationId !== operationId ||
+          previous.url !== url ||
+          previous.body !== serialized)
+      ) {
+        setNotice("Retry the unconfirmed action before submitting a changed request.");
+        return false;
+      }
+      const command = previous ?? { operationId, url, body: serialized, key: crypto.randomUUID() };
+      pending.current = command;
+      return execute(command);
+    },
+    [execute],
+  );
+  const retry = useCallback(
+    () => (pending.current ? execute(pending.current) : Promise.resolve(false)),
+    [execute],
+  );
+  return { notice, setNotice, run, retry, busy, uncertain };
 }
 
 export default function StaffPage() {
@@ -68,7 +111,7 @@ export default function StaffPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
-  const { notice, setNotice, run } = useCommand();
+  const { notice, setNotice, run, retry, busy, uncertain } = useCommand();
 
   const load = useCallback(() => {
     setState({ phase: "loading" });
@@ -182,6 +225,23 @@ export default function StaffPage() {
             </p>
           ) : null}
 
+          {uncertain ? (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void retry().then((ok) => {
+                  if (ok) {
+                    setInviteEmail("");
+                    setInviteName("");
+                    setRevokeReason("");
+                    load();
+                  }
+                })
+              }
+            >
+              Retry unconfirmed action
+            </Button>
+          ) : null}
           <ListPageSection
             title="Invite a staff member"
             description="Choose explicit access. The invitee signs in with their verified email at /staff-invitation."
@@ -233,7 +293,7 @@ export default function StaffPage() {
                     )}
                 </SelectContent>
               </Select>
-              <Button type="submit" size="sm">
+              <Button type="submit" size="sm" disabled={busy || uncertain}>
                 Create invitation
               </Button>
             </form>
@@ -267,6 +327,7 @@ export default function StaffPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        disabled={busy || uncertain}
                         onClick={() => {
                           if (revokeReason.trim() === "") {
                             setNotice("A revocation reason is required.");
@@ -275,7 +336,7 @@ export default function StaffPage() {
                           void run(
                             `revoke:${invitation.invitationId}`,
                             `/api/admin/staff/invitations/${encodeURIComponent(invitation.invitationId)}/revoke`,
-                            { reason: revokeReason.trim() },
+                            { reason: revokeReason.trim(), expectedVersion: invitation.version },
                           ).then((ok) => {
                             if (ok) {
                               setRevokeReason("");

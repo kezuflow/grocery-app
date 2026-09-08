@@ -144,6 +144,7 @@ describe("staff access BFF routes", () => {
     const response = await revokeInvitation(
       jsonRequest("https://freshmarkets.ph/api/admin/staff/invitations/inv-1/revoke", {
         reason: "withdrawn",
+        expectedVersion: 1,
       }),
       invitationParams,
     );
@@ -151,9 +152,24 @@ describe("staff access BFF routes", () => {
     expect(coreMocks.revokeAdminStaffInvitation.mock.calls[0][0]).toMatchObject({
       invitationId: "inv-1",
       reason: "withdrawn",
+      expectedVersion: 1,
       idempotencyKey: "idem-1",
     });
   });
+  it.each([undefined, 0, -1, 1.5, "1"])(
+    "rejects invalid invitation version %s before Core",
+    async (expectedVersion) => {
+      const response = await revokeInvitation(
+        jsonRequest("https://freshmarkets.ph/api/admin/staff/invitations/inv-1/revoke", {
+          reason: "withdrawn",
+          expectedVersion,
+        }),
+        invitationParams,
+      );
+      expect(response.status).toBe(400);
+      expect(coreMocks.revokeAdminStaffInvitation).not.toHaveBeenCalled();
+    },
+  );
 
   it("delegates access changes with a closed action and integer version", async () => {
     coreMocks.changeAdminStaffAccess.mockResolvedValue({ ok: true, value: {}, requestId: "r" });

@@ -13,6 +13,7 @@ import {
 
 type InvitationRow = {
   id: string;
+  version: number;
   email_normalized: string;
   display_name: string;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
@@ -59,7 +60,7 @@ export async function listAdminStaffInvitations(
   const binds = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : [];
   const rows = await deps.db
     .prepare(
-      `SELECT id, email_normalized, display_name, status, invited_by_staff_id, expires_at, created_at
+      `SELECT id, version, email_normalized, display_name, status, invited_by_staff_id, expires_at, created_at
        FROM staff_invitation
        ${clause}
        ORDER BY created_at DESC, id DESC
@@ -72,6 +73,7 @@ export async function listAdminStaffInvitations(
   const pageRows = rows.results.slice(0, limit);
   const items = pageRows.map((row) => ({
     invitationId: row.id,
+    version: row.version,
     email: row.email_normalized,
     displayName: row.display_name,
     status: row.status,

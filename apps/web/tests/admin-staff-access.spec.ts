@@ -76,6 +76,80 @@ test("staff invitation succeeds with capability and is denied without it", async
 });
 
 for (const width of [1440, 390]) {
+  test(`operator creates and safely revokes an invitation after a lost response at ${width}px`, async ({
+    adminPage,
+  }, testInfo) => {
+    await adminPage.setViewportSize({ width, height: 900 });
+    const name = `Revocation reader ${width}`;
+    const role = await (
+      await adminPage.request.post("/api/admin/roles", {
+        headers: { "idempotency-key": crypto.randomUUID() },
+        data: {
+          code: `revoke-reader-${crypto.randomUUID()}`,
+          name,
+          description: "Browser revocation",
+          capabilityCodes: ["inventory.read"],
+        },
+      })
+    ).json();
+    expect(role).toMatchObject({ ok: true });
+    const displayName = `Withdrawn operator ${width}`;
+    await adminPage.goto("/admin/staff");
+    await adminPage
+      .getByRole("textbox", { name: "Invitee email" })
+      .fill(`withdrawn-${crypto.randomUUID()}@example.com`);
+    await adminPage.getByRole("textbox", { name: "Invitee display name" }).fill(displayName);
+    await adminPage.getByRole("combobox", { name: "Invitation role" }).click();
+    await adminPage.getByRole("option", { name, exact: true }).click();
+    await adminPage.getByRole("combobox", { name: "Invitation scope" }).click();
+    await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+    await adminPage.getByRole("button", { name: "Create invitation", exact: true }).click();
+    const row = adminPage.getByRole("listitem").filter({ hasText: displayName });
+    await expect(row).toContainText("PENDING");
+    await adminPage
+      .getByRole("textbox", { name: "Invitation revocation reason" })
+      .fill("Assignment withdrawn");
+    const requests: { key: string | undefined; body: string | null }[] = [];
+    await adminPage.route("**/api/admin/staff/invitations/*/revoke", async (route) => {
+      requests.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+      });
+      const response = await route.fetch();
+      expect(await response.json()).toMatchObject({
+        ok: true,
+        value: { status: "REVOKED", version: 2 },
+      });
+      if (requests.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await row.getByRole("button", { name: "Revoke", exact: true }).click();
+    await expect(
+      adminPage.getByText(
+        "The action could not be confirmed. Retry the original request before starting another action.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(row.getByRole("button", { name: "Revoke", exact: true })).toBeDisabled();
+    await adminPage
+      .getByRole("textbox", { name: "Invitation revocation reason" })
+      .fill("Edited after uncertainty");
+    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(row).toContainText("REVOKED");
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toEqual(requests[0]);
+    expect(JSON.parse(requests[0]?.body ?? "null")).toEqual({
+      reason: "Assignment withdrawn",
+      expectedVersion: 1,
+    });
+    expect(
+      await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await adminPage.screenshot({
+      path: testInfo.outputPath("staff-invitation-revoked.png"),
+      fullPage: true,
+    });
+  });
   test(`verified invitee reviews grants and retries lost acceptance at ${width}px`, async ({
     adminPage,
     signedInPage,

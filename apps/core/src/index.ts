@@ -299,6 +299,7 @@ const emailTextSchema = validationSchema
 
 const staffInvitationRevokeRequestSchema = authenticatedRequestSchema.extend({
   invitationId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().positive(),
   reason: validationSchema.string().trim().min(1).max(500),
   idempotencyKey: idempotencyKeySchema,
 });

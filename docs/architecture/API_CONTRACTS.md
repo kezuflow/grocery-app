@@ -783,6 +783,8 @@ See [Phase 0 decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for the retained-baseli
 
 ### Staff creation atomicity
 
+`AdminStaffInvitationView.version` carries current invitation concurrency evidence. `revokeAdminStaffInvitation` requires that `expectedVersion`, a reason and a stable key. Current Global staff authority, the `PENDING` transition, required audit and the frozen revocation receipt are atomic; acceptance and revocation cannot both win. Old creation snapshots without a version represent their known creation version one. Legacy successful revocation receipts can replay their original pre-version intent, but new commands cannot omit a version. The Staff page keeps an unconfirmed request unchanged and exposes an explicit retry before allowing a different action.
+
 Staff role creation and invitation creation recheck current active Staff identity, `staff.manage` and Global scope in the same Core transaction as every required grant, audit and command receipt. Rejection leaves no newly claimed receipt or partial access. New creation receipts preserve the original DTO when the role or invitation later changes; preexisting success records that saved only a resource identity retain their historical read-back compatibility. Unfinished same-intent claims may be reclaimed atomically. This does not accept the remaining staff lifecycle commands, which need their own current-authority, state/version and required-effect verification.
 
 ### Initial administrator setup

@@ -40,6 +40,7 @@ export type AdminStaffPage = {
 
 export type AdminStaffInvitationView = {
   invitationId: string;
+  version: number;
   email: string;
   displayName: string;
   status: AdminStaffInvitationStatus;
@@ -118,6 +119,7 @@ export type AdminStaffInvitationListRequest = AuthenticatedRequest & {
 
 export type AdminStaffInvitationRevokeRequest = AuthenticatedRequest & {
   invitationId: string;
+  expectedVersion: number;
   reason: string;
   idempotencyKey: string;
 };

@@ -41,6 +41,7 @@ describe("staff access contracts", () => {
     } satisfies AdminRoleDetail);
     void ({
       invitationId: "inv-1",
+      version: 1,
       email: "new-staff@example.com",
       displayName: "New Staff",
       status: "PENDING",

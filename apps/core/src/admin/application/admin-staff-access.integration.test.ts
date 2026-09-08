@@ -5,7 +5,7 @@ import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { acceptStaffInvitation } from "../../iam/application/accept-staff-invitation";
 import { createAuth } from "../../auth/service";
 import { requestHash } from "../../idempotency";
-import { inviteAdminStaff } from "./invite-admin-staff";
+import { inviteAdminStaff, revokeAdminStaffInvitation } from "./invite-admin-staff";
 import { createAdminRole } from "./create-admin-role";
 
 const core = exports.default as unknown as CoreServiceBinding;
@@ -231,6 +231,153 @@ async function seedManager(): Promise<{ cookie: string; staffId: string }> {
 }
 
 describe("staff administration commands", () => {
+  async function revocable() {
+    const manager = await seedManager();
+    const invitee = await signUp();
+    const created = await core.inviteAdminStaff({
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      email: invitee.email,
+      displayName: "Revocation target",
+      roleIds: ["role_operations_viewer"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+    });
+    if (!created.ok) throw new Error("Invitation missing");
+    const command = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      invitationId: created.value.invitationId,
+      expectedVersion: created.value.version,
+      reason: "Invitation withdrawn",
+    };
+    return { manager, invitee, created: created.value, command };
+  }
+  it("replays retained success evidence without repeating creation or revocation", async () => {
+    const fixture = await revocable();
+    const revoked = await core.revokeAdminStaffInvitation(fixture.command);
+    expect(revoked).toMatchObject({ ok: true });
+    const legacyHash = await requestHash({
+      invitationId: fixture.command.invitationId,
+      reason: fixture.command.reason,
+    });
+    await env.DB.prepare(
+      "UPDATE idempotency_records SET result_type='admin.staff.invitation.revoke',request_hash=?,result_reference=? WHERE scope='admin.staff.invitation.revoke' AND idempotency_key=?",
+    )
+      .bind(legacyHash, fixture.command.invitationId, fixture.command.idempotencyKey)
+      .run();
+    expect(await core.revokeAdminStaffInvitation(fixture.command)).toEqual(revoked);
+    expect(
+      await core.revokeAdminStaffInvitation({ ...fixture.command, reason: "Different intent" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE correlation_id=?")
+        .bind(fixture.command.requestId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it.each(["transition", "audit", "receipt"])(
+    "rolls back an ignored revocation %s and replays recovery",
+    async (effect) => {
+      const fixture = await revocable();
+      const trigger =
+        effect === "transition"
+          ? "BEFORE UPDATE ON staff_invitation WHEN NEW.status='REVOKED'"
+          : effect === "audit"
+            ? "BEFORE INSERT ON audit_event WHEN NEW.action='STAFF.INVITATION_REVOKED'"
+            : "BEFORE UPDATE ON idempotency_records WHEN NEW.scope='admin.staff.invitation.revoke' AND NEW.status='SUCCEEDED'";
+      await env.DB.prepare(
+        `CREATE TRIGGER test_ignore_staff_revoke ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      ).run();
+      try {
+        expect(await core.revokeAdminStaffInvitation(fixture.command)).toMatchObject({
+          ok: false,
+          error: { code: "CONFLICT" },
+        });
+        expect(
+          await env.DB.prepare("SELECT status,version FROM staff_invitation WHERE id=?")
+            .bind(fixture.created.invitationId)
+            .first(),
+        ).toEqual({ status: "PENDING", version: 1 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+          )
+            .bind(fixture.command.idempotencyKey)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM audit_event WHERE correlation_id=?")
+            .bind(fixture.command.requestId)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.prepare("DROP TRIGGER test_ignore_staff_revoke").run();
+      }
+      const revoked = await core.revokeAdminStaffInvitation(fixture.command);
+      expect(revoked).toMatchObject({ ok: true, value: { status: "REVOKED", version: 2 } });
+      expect(await core.revokeAdminStaffInvitation(fixture.command)).toEqual(revoked);
+    },
+  );
+  it("rejects stale revocation and coordinates concurrent invitee acceptance", async () => {
+    const fixture = await revocable();
+    expect(
+      await core.revokeAdminStaffInvitation({ ...fixture.command, expectedVersion: 2 }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    const accepted = {
+      headers: { cookie: fixture.invitee.cookie },
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      invitationId: fixture.created.invitationId,
+      expectedVersion: 1,
+    };
+    const [revoke, accept] = await Promise.all([
+      core.revokeAdminStaffInvitation(fixture.command),
+      core.acceptStaffInvitation(accepted),
+    ]);
+    expect([revoke, accept].filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT status,version FROM staff_invitation WHERE id=?")
+        .bind(fixture.created.invitationId)
+        .first(),
+    ).toEqual({ status: revoke.ok ? "REVOKED" : "ACCEPTED", version: 2 });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM staff_identity WHERE auth_user_id=?")
+        .bind(fixture.invitee.userId)
+        .first(),
+    ).toEqual({ count: accept.ok ? 1 : 0 });
+  });
+  it("rejects revocation if the manager loses Global scope before its transaction", async () => {
+    const fixture = await revocable();
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+              .bind(fixture.manager.staffId)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(
+      await revokeAdminStaffInvitation({ auth: createAuth(env), db: database }, fixture.command),
+    ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM staff_invitation WHERE id=?")
+        .bind(fixture.created.invitationId)
+        .first(),
+    ).toEqual({ status: "PENDING", version: 1 });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?")
+        .bind(fixture.command.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
   it.each(["role", "grant", "invitation", "audit", "receipt"])(
     "rolls back suppressed %s creation effects and safely retries",
     async (effect) => {
@@ -350,6 +497,7 @@ describe("staff administration commands", () => {
       await core.revokeAdminStaffInvitation({
         ...own,
         invitationId: invited.value.invitationId,
+        expectedVersion: invited.value.version,
         reason: "Superseded",
         idempotencyKey: crypto.randomUUID(),
       }),
@@ -514,6 +662,7 @@ describe("staff administration commands", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       invitationId: created.value.invitationId,
+      expectedVersion: created.value.version,
       reason: "no longer required",
       idempotencyKey: revokeKey,
     });
@@ -525,6 +674,7 @@ describe("staff administration commands", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       invitationId: created.value.invitationId,
+      expectedVersion: created.value.version,
       reason: "no longer required",
       idempotencyKey: revokeKey,
     });
@@ -534,6 +684,7 @@ describe("staff administration commands", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       invitationId: created.value.invitationId,
+      expectedVersion: created.value.version,
       reason: "different reason",
       idempotencyKey: revokeKey,
     });
@@ -543,6 +694,7 @@ describe("staff administration commands", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       invitationId: created.value.invitationId,
+      expectedVersion: created.value.version,
       reason: "no longer required",
       idempotencyKey: `rvk-${crypto.randomUUID()}`,
     });

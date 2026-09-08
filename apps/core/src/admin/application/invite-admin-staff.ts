@@ -6,7 +6,7 @@ import type {
   AppErrorCode,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { z } from "@freshmarkets/validation";
 import {
   beginStaffAdministrationWrite,
@@ -14,7 +14,6 @@ import {
   requireStaffWrite,
 } from "../../iam/infrastructure/staff-administration-write";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { log } from "../../observability";
 import {
   resolveStaffAdministrationAccess,
   type StaffAdministrationDeps,
@@ -25,6 +24,8 @@ const INVITATION_REVOKE_SCOPE = "admin.staff.invitation.revoke";
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const invitationResultSchema = z.object({
   invitationId: z.string(),
+  // Older creation snapshots predate the version field; creation was always version 1.
+  version: z.number().int().positive().default(1),
   email: z.string(),
   displayName: z.string(),
   status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
@@ -51,6 +52,7 @@ type InvitationRow = {
 function toView(row: InvitationRow): AdminStaffInvitationView {
   return {
     invitationId: row.id,
+    version: row.version,
     email: row.email_normalized,
     displayName: row.display_name,
     status: row.status,
@@ -70,15 +72,6 @@ async function readInvitation(
     )
     .bind(invitationId)
     .first<InvitationRow>();
-}
-
-function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(Date.now(), scope, key)
-    .run();
 }
 
 /**
@@ -145,6 +138,7 @@ export async function inviteAdminStaff(
     invitationId = crypto.randomUUID();
   const value: AdminStaffInvitationView = {
     invitationId,
+    version: 1,
     email,
     displayName,
     status: "PENDING",
@@ -209,107 +203,131 @@ export async function inviteAdminStaff(
   return { ok: true, value, requestId: request.requestId };
 }
 
-/** Revoke a PENDING invitation with a required reason; audited and idempotent. */
+/** Revoke the reviewed invitation version with current authority and required effects. */
 export async function revokeAdminStaffInvitation(
   deps: StaffAdministrationDeps,
   request: AdminStaffInvitationRevokeRequest,
 ): Promise<RpcResult<AdminStaffInvitationView>> {
   const access = await resolveStaffAdministrationAccess(deps, request, "staff.manage");
   if (!access.ok) return access;
-  if (request.reason.trim() === "") {
+  const reason = request.reason.trim();
+  if (!reason)
     return failure("VALIDATION_FAILED", "A revocation reason is required", request.requestId);
-  }
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    INVITATION_REVOKE_SCOPE,
-    request.idempotencyKey,
-    { invitationId: request.invitationId, reason: request.reason.trim() },
-  );
   const existing = await readInvitation(deps.db, request.invitationId);
   if (!existing) return failure("NOT_FOUND", "Invitation not found", request.requestId);
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
+  const existingView = toView(existing);
+  const hash = await requestHash({
+    invitationId: request.invitationId,
+    reason,
+    expectedVersion: request.expectedVersion,
+  });
+  async function replay(): Promise<RpcResult<AdminStaffInvitationView> | null> {
+    const saved = await findIdempotencyRecord(
+      deps.db,
+      INVITATION_REVOKE_SCOPE,
+      request.idempotencyKey,
+    );
+    if (!saved) return null;
+    if (
+      saved.status === "SUCCEEDED" &&
+      saved.resultType === INVITATION_REVOKE_SCOPE &&
+      saved.resultReference === request.invitationId
+    ) {
+      const legacyHash = await requestHash({ invitationId: request.invitationId, reason });
+      if (saved.requestHash === legacyHash)
+        return { ok: true, value: existingView, requestId: request.requestId };
+    }
+    if (saved.requestHash !== hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different request",
         request.requestId,
       );
+    if (saved.status === "SUCCEEDED" && saved.resultReference) {
+      if (saved.resultType !== "revoked_staff_invitation_snapshot")
+        return { ok: true, value: existingView, requestId: request.requestId };
+      let value: unknown;
+      try {
+        value = JSON.parse(saved.resultReference);
+      } catch {
+        return failure(
+          "INTERNAL_ERROR",
+          "Saved revocation result is unavailable",
+          request.requestId,
+        );
+      }
+      const parsed = invitationResultSchema.safeParse(value);
+      return parsed.success
+        ? { ok: true, value: parsed.data, requestId: request.requestId }
+        : failure("INTERNAL_ERROR", "Saved revocation result is unavailable", request.requestId);
     }
-    if (claim.existing?.status === "SUCCEEDED") {
-      return { ok: true, value: toView(existing), requestId: request.requestId };
-    }
-    return failure("CONFLICT", "The revocation command is still processing", request.requestId);
+    return null;
   }
-  if (existing.status !== "PENDING") {
-    await idempotencyFailed(deps.db, INVITATION_REVOKE_SCOPE, request.idempotencyKey);
+  const prior = await replay();
+  if (prior) return prior;
+  if (existing.status !== "PENDING")
     return failure(
       "VALIDATION_FAILED",
       "Only pending invitations can be revoked",
       request.requestId,
     );
-  }
-
+  if (existing.version !== request.expectedVersion)
+    return failure(
+      "STALE_VERSION",
+      "Invitation changed; refresh before revoking",
+      request.requestId,
+    );
+  const now = Date.now();
+  const value: AdminStaffInvitationView = {
+    ...toView(existing),
+    status: "REVOKED",
+    version: existing.version + 1,
+  };
   try {
-    const guard = {
-      clause:
-        "EXISTS (SELECT 1 FROM staff_invitation WHERE id=? AND status='REVOKED' AND version=?)",
-      binds: [request.invitationId, existing.version + 1] as const,
-    };
-    const results = await deps.db.batch([
+    await deps.db.batch([
+      ...beginStaffAdministrationWrite(deps.db, {
+        ...access.value,
+        scope: INVITATION_REVOKE_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        resultType: "revoked_staff_invitation_snapshot",
+        now,
+      }),
       deps.db
         .prepare(
-          "UPDATE staff_invitation SET status='REVOKED', updated_at=?, version=version+1 WHERE id=? AND status='PENDING' AND version=?",
+          "UPDATE staff_invitation SET status='REVOKED',version=version+1,updated_at=? WHERE id=? AND version=? AND status='PENDING'",
         )
-        .bind(now, request.invitationId, existing.version),
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: "STAFF.INVITATION_REVOKED",
-          resourceType: "staff_invitation",
-          resourceId: request.invitationId,
-          reason: request.reason.trim(),
-          before: { status: existing.status },
-          after: { status: "REVOKED" },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        guard,
-      ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING' AND ${guard.clause}`,
-        )
-        .bind(
-          request.invitationId,
-          now,
-          INVITATION_REVOKE_SCOPE,
-          request.idempotencyKey,
-          ...guard.binds,
-        ),
+        .bind(now, request.invitationId, request.expectedVersion),
+      requireStaffWrite(deps.db),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "STAFF.INVITATION_REVOKED",
+        resourceType: "staff_invitation",
+        resourceId: request.invitationId,
+        reason,
+        before: { status: existing.status, version: existing.version },
+        after: { status: "REVOKED", version: value.version },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      requireStaffWrite(deps.db),
+      ...completeStaffAdministrationWrite(deps.db, {
+        scope: INVITATION_REVOKE_SCOPE,
+        key: request.idempotencyKey,
+        hash,
+        result: value,
+        now,
+      }),
     ]);
-    if ((results[0]?.meta?.changes ?? 0) !== 1) {
-      await idempotencyFailed(deps.db, INVITATION_REVOKE_SCOPE, request.idempotencyKey);
-      return failure(
+  } catch {
+    return (
+      (await replay()) ??
+      failure(
         "CONFLICT",
-        "The invitation changed; refresh before retrying",
+        "The invitation changed or could not be revoked; refresh and retry the same request",
         request.requestId,
-      );
-    }
-  } catch (error) {
-    log("error", "admin.staff.invitation_revoke_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, INVITATION_REVOKE_SCOPE, request.idempotencyKey);
-    return failure("CONFLICT", "The invitation could not be revoked", request.requestId);
+      )
+    );
   }
-
-  const revoked = await readInvitation(deps.db, request.invitationId);
-  if (!revoked)
-    return failure("INTERNAL_ERROR", "The invitation could not be read back", request.requestId);
-  return { ok: true, value: toView(revoked), requestId: request.requestId };
+  return { ok: true, value, requestId: request.requestId };
 }
