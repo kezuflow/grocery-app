@@ -8,7 +8,6 @@ import { deliveryCycleCutoffJob } from "./jobs/delivery-cycle-cutoff";
 import { deliveryCycleCloseoutJob } from "./jobs/delivery-cycle-closeout";
 import { paymentsReactionRedriveJob } from "./jobs/payments-reaction-redrive";
 import { paymentsReconciliationRedriveJob } from "./jobs/payments-reconciliation-redrive";
-import { membershipRenewalsJob } from "./jobs/membership-renewals";
 import { providerInboxRedriveJob } from "./jobs/provider-inbox-redrive";
 import { providerActionExpiryJob } from "./jobs/provider-action-expiry";
 import { notificationDeliveryJob } from "./jobs/notification-delivery";
@@ -30,7 +29,6 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
     orderCancellationRefundsJob,
     refundReconciliationJob,
     membershipScheduledCancellationsJob,
-    membershipRenewalsJob,
     providerActionExpiryJob,
     deliveryCycleCutoffJob,
     notificationDeliveryJob,

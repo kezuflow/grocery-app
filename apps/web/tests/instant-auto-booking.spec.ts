@@ -116,7 +116,7 @@ for (const width of [1440, 390]) {
       marketId,
       locationId,
       currency: "PHP",
-      amountMinor: 100000,
+      amountMinor: 100,
       validFrom: Date.now(),
       expectedVersion: sku.priceVersion ?? 0,
     });
@@ -242,7 +242,7 @@ for (const width of [1440, 390]) {
       const quote = z
         .object({ totalMinor: z.number(), merchandiseSubtotalMinor: z.number() })
         .parse(await value(await quoteResponse));
-      expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100000);
+      expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100);
       await page
         .getByRole("button", { name: "Accept total and continue to payment", exact: true })
         .click();
@@ -259,6 +259,20 @@ for (const width of [1440, 390]) {
       return order.id;
     }
     expect(product.inventoryPool.position?.availableBase ?? 0).toBeGreaterThanOrEqual(1000);
+    await page.goto("/account");
+    await expect(page.getByRole("heading", { name: "Your account", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /trial|membership/i })).toHaveCount(0);
+    await expect(
+      page.getByRole("complementary", { name: "FreshMarkets membership offer" }),
+    ).toHaveCount(0);
+    const retired = await page.request.post("/api/membership/enroll", {
+      data: { offerId: "offer-membership-monthly" },
+      headers: { "idempotency-key": crypto.randomUUID() },
+    });
+    expect(await retired.json()).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
     const orderId = await checkout(2);
     const deliverySchema = z.object({
       items: z.array(

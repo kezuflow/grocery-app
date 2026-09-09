@@ -184,7 +184,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "memberships",
-    label: "Memberships",
+    label: "Membership history",
     href: "/admin/memberships",
     section: "commerce",
     parentCode: "customers",
@@ -227,15 +227,7 @@ const WORKSPACES: ReadonlyArray<{
     kind: "destination",
     capabilities: ["payments.read", "payments.manage"],
   },
-  {
-    code: "commerce-configuration",
-    label: "Membership pricing",
-    href: "/admin/commerce-configuration",
-    section: "finance",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["memberships.read", "payments.read"],
-  },
+
   {
     code: "promotions",
     label: "Promotions",

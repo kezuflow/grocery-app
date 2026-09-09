@@ -207,7 +207,7 @@ describe("scoped admin context", () => {
       parentCode: "payments",
       kind: "destination",
     });
-    expect(context.value.navigation).toContainEqual({
+    expect(context.value.navigation).not.toContainEqual({
       code: "commerce-configuration",
       label: "Membership pricing",
       href: "/admin/commerce-configuration",
@@ -300,7 +300,7 @@ describe("scoped admin context", () => {
     });
     expect(context.value.navigation).toContainEqual({
       code: "memberships",
-      label: "Memberships",
+      label: "Membership history",
       href: "/admin/memberships",
       section: "commerce",
       scopeKinds: ["GLOBAL"],

@@ -282,13 +282,7 @@ export async function createInstantQuote(
   });
   if (!decision.eligible) {
     const code = decision.failures[0] ?? "CONFIGURATION_ERROR";
-    return failure(
-      code,
-      code === "MINIMUM_ORDER_NOT_MET"
-        ? "Basket does not meet the market minimum"
-        : "Checkout market configuration is unavailable",
-      command.requestId,
-    );
+    return failure(code, "Checkout market configuration is unavailable", command.requestId);
   }
   const evidence = decision.evidence!;
   try {

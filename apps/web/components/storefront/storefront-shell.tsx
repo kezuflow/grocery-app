@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { CartIndicator } from "./marketplace/cart-indicator";
 import { CartDrawer } from "./marketplace/cart-drawer";
-import { MembershipCtaBar } from "./marketplace/membership-cta-bar";
 import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront-navigation";
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
@@ -20,7 +19,6 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
         <StorefrontSidebar />
         <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
       </div>
-      <MembershipCtaBar />
       <MobileNavigation />
       <CartDrawer />
       <ToastAnnouncer />

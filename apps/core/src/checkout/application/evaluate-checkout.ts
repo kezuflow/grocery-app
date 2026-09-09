@@ -44,10 +44,10 @@ export async function evaluateCheckout(
       }>(),
     database
       .prepare(
-        "SELECT mcp.minimum_basket_minor, mcp.currency FROM delivery_cycle dc JOIN market_commerce_policy mcp ON mcp.market_id=dc.market_id WHERE dc.id=?",
+        "SELECT m.currency FROM delivery_cycle dc JOIN market m ON m.id=dc.market_id AND m.status='active' WHERE dc.id=?",
       )
       .bind(command.cycleId)
-      .first<{ minimum_basket_minor: number; currency: string }>(),
+      .first<{ currency: string }>(),
   ]);
   const routingCandidates = address?.delivery_zone_code
     ? await database

@@ -17,18 +17,18 @@ function financial(merchandiseSubtotalMinor: number, deliverySubtotalMinor = 0) 
 }
 
 describe("resolveCheckoutDecision", () => {
-  it("uses pre-discount merchandise only for the market minimum", async () => {
+  it("accepts a small nonempty basket regardless of the retained market minimum", async () => {
     const decision = await resolveCheckoutDecision(env.DB, {
       marketId: "market-metro-cebu",
-      financial: financial(49_999, 20_000),
+      financial: financial(1, 0),
       evidence: { mode: "SCHEDULED" as const },
     });
 
     expect(decision).toMatchObject({
-      eligible: false,
-      failures: ["MINIMUM_ORDER_NOT_MET"],
-      minimumBasketMinor: 50_000,
-      evidence: null,
+      eligible: true,
+      failures: [],
+      minimumBasketMinor: null,
+      evidence: { mode: "SCHEDULED" },
     });
   });
 
@@ -45,7 +45,7 @@ describe("resolveCheckoutDecision", () => {
       eligible: true,
       failures: [],
       currency: "PHP",
-      minimumBasketMinor: 50_000,
+      minimumBasketMinor: null,
       evidence,
     });
     expect(Object.isFrozen(decision.evidence)).toBe(true);

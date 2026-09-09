@@ -770,18 +770,18 @@ describe("order commitment from canonical payment reactions", () => {
       });
     },
   );
-  it("rejects a scheduled basket below the market minimum", async () => {
+  it("accepts a small Scheduled basket without a general minimum", async () => {
     const fixture = await seededCheckout({ quantity: 1 });
 
     const quote = await createQuote(fixture);
 
-    expect(quote).toMatchObject({ ok: false, error: { code: "MINIMUM_ORDER_NOT_MET" } });
+    expect(quote).toMatchObject({ ok: true });
     const persisted = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
     )
       .bind(fixture.cartId)
       .first<{ count: number }>();
-    expect(persisted?.count).toBe(0);
+    expect(persisted?.count).toBe(1);
   });
 
   it("allows quote creation without any subscription", async () => {

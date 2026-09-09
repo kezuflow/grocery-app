@@ -340,7 +340,7 @@ describe("instant checkout quotes", () => {
       ).toEqual({ count: 0 });
     },
   );
-  it("rejects a basket below the market minimum before creating a quote or hold", async () => {
+  it("accepts a small basket and creates its quote and stock hold", async () => {
     await configureInstant();
     await env.DB.prepare(
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
@@ -353,19 +353,19 @@ describe("instant checkout quotes", () => {
       quoteDependencies,
     );
 
-    expect(result).toMatchObject({ ok: false, error: { code: "MINIMUM_ORDER_NOT_MET" } });
+    expect(result).toMatchObject({ ok: true });
     const persisted = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM checkout_quote WHERE cart_id=?",
     )
       .bind(basket.cartId)
       .first<{ count: number }>();
-    expect(persisted?.count).toBe(0);
+    expect(persisted?.count).toBe(1);
     const holds = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM checkout_inventory_holds WHERE checkout_attempt_id IN (SELECT id FROM checkout_quote WHERE cart_id=?)",
     )
       .bind(basket.cartId)
       .first<{ count: number }>();
-    expect(holds?.count).toBe(0);
+    expect(holds?.count).toBe(1);
   });
 
   it("abandons a newly quoted Instant checkout through the owning commands", async () => {

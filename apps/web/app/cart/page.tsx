@@ -161,7 +161,7 @@ export default function CartPage() {
               actionHref={!canCheckout ? "/" : guest ? undefined : "/checkout"}
               onAction={guest && canCheckout ? () => setAuthOpen(true) : undefined}
               disabled={loading || Boolean(cart?.checkoutBlocked)}
-              note="Minimum order, availability, and delivery are confirmed at checkout."
+              note="Availability and delivery are confirmed at checkout."
             />
           </div>
         </div>

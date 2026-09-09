@@ -19,6 +19,43 @@ async function customer() {
 }
 
 describe("notification outbox", () => {
+  it.each(["TRIAL_ENDING", "FIRST_PAID_RENEWAL_UPCOMING"] as const)(
+    "cancels retained %s reminders without sending or deleting evidence",
+    async (type) => {
+      const customerId = await customer();
+      const result = await enqueueNotification(env.DB, {
+        type,
+        aggregateType: "SUBSCRIPTION",
+        aggregateId: crypto.randomUUID(),
+        customerId,
+        recipient: "test@example.com",
+        templateData: {},
+        scheduledAt: 1,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      if (!result.ok) throw new Error("Missing notification");
+      let sends = 0;
+      const port = createCloudflareEmailDeliveryPort({
+        AUTH_EMAIL_FROM: "orders@example.com",
+        EMAIL: {
+          async send() {
+            sends++;
+            return { messageId: "unexpected" };
+          },
+        },
+      });
+      expect(await deliverNotificationById(env.DB, port, result.value.id, 1)).toBe("TERMINAL");
+      expect(await deliverNotificationById(env.DB, port, result.value.id, 2)).toBe("TERMINAL");
+      expect(sends).toBe(0);
+      expect(
+        await env.DB.prepare(
+          "SELECT status,last_error_code,attempts FROM notification_outbox WHERE id=?",
+        )
+          .bind(result.value.id)
+          .first(),
+      ).toEqual({ status: "CANCELED", last_error_code: "MEMBERSHIP_RETIRED", attempts: 0 });
+    },
+  );
   async function pending() {
     const customerId = await customer();
     const result = await enqueueNotification(env.DB, {

@@ -56,6 +56,17 @@ export async function deliverNotificationById(
       return "TERMINAL";
     }
   }
+  if (item.event_type === "TRIAL_ENDING" || item.event_type === "FIRST_PAID_RENEWAL_UPCOMING") {
+    const canceled = await database
+      .prepare(`UPDATE notification_outbox
+      SET status='CANCELED',last_error_code='MEMBERSHIP_RETIRED',updated_at=?
+      WHERE id=? AND event_type=? AND attempts=? AND status IN ('PENDING','PROCESSING')
+        AND available_at<=? AND NOT EXISTS(SELECT 1 FROM notification_attempt
+          WHERE notification_id=notification_outbox.id AND status='PROCESSING')`)
+      .bind(now, id, item.event_type, item.attempts, now)
+      .run();
+    return canceled.meta.changes === 1 ? "TERMINAL" : "BUSY";
+  }
   if (item.attempts >= 5) {
     await database
       .prepare(

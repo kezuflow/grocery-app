@@ -113,37 +113,6 @@ export async function projectDomainNotifications(
       identity: `payment:${payment.id}:${type}:${payment.updated_at}`,
     });
   }
-  const subscriptions = await database
-    .prepare(
-      `SELECT s.id,s.customer_id customerId,u.email,s.status,s.trial_ends_at,s.ends_at
-     FROM subscription s JOIN customer c ON c.id=s.customer_id JOIN user u ON u.id=c.auth_user_id
-     WHERE (s.status='TRIALING' AND s.trial_ends_at IS NOT NULL) OR (s.status='ACTIVE' AND s.ends_at IS NOT NULL)`,
-    )
-    .all<{
-      id: string;
-      customerId: string;
-      email: string;
-      status: string;
-      trial_ends_at: number | null;
-      ends_at: number | null;
-    }>();
-  for (const subscription of subscriptions.results) {
-    const end =
-      subscription.status === "TRIALING" ? subscription.trial_ends_at : subscription.ends_at;
-    if (!end) continue;
-    const type: NotificationType =
-      subscription.status === "TRIALING" ? "TRIAL_ENDING" : "FIRST_PAID_RENEWAL_UPCOMING";
-    facts.push({
-      type,
-      aggregateType: "SUBSCRIPTION",
-      aggregateId: subscription.id,
-      customerId: subscription.customerId,
-      recipient: subscription.email,
-      reference: subscription.id,
-      scheduledAt: Math.max(now, end - 3 * 24 * 60 * 60_000),
-      identity: `membership:${subscription.id}:${type}:${end}`,
-    });
-  }
   let inserted = 0;
   for (const fact of facts) {
     const before = await database

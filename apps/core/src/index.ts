@@ -258,10 +258,7 @@ import {
   changeAdminMembership as changeAdminMembershipCommand,
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
 } from "./admin/application/finance-commands";
-import {
-  getMembershipPriceConfiguration as getMembershipPriceConfigurationQuery,
-  updateMembershipPriceConfiguration as updateMembershipPriceConfigurationCommand,
-} from "./admin/application/commerce-configuration";
+import { getMembershipPriceConfiguration as getMembershipPriceConfigurationQuery } from "./admin/application/commerce-configuration";
 import { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 import { createCoreRpcContext } from "./entrypoint/context";
 import { createAuthRpc } from "./entrypoint/auth-rpc";
@@ -2711,10 +2708,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = membershipPriceConfigurationSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return updateMembershipPriceConfigurationCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
+    return fail("ILLEGAL_TRANSITION", "Membership pricing is no longer available", input.requestId);
   }
   async listAdminMemberships(input: import("@freshmarkets/contracts").AdminMembershipListRequest) {
     const validation = membershipListSchema.safeParse(input);

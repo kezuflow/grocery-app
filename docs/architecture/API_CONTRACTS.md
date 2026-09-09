@@ -10,6 +10,11 @@ Domain-oriented commands in this document are the contract. Removed broad compat
 
 Core owns implementation and authorization. Web owns presentation adapters. Contract changes follow the pre-launch interface policy in `ENGINEERING.md`. Update all consumers coherently and remove unused compatibility paths when safe; use additive evolution where retained deployments or temporary Web/Core version skew actually require it.
 
+## Retired membership boundaries
+
+New trial/enrollment, membership-offer/eligibility and recurring-authorization RPCs reject authenticated calls with `ILLEGAL_TRANSITION` and create no membership, payment or provider setup. Membership-price editing is retired. Account/marketplace pages expose ordinary shopping; old enrollment-payment/pricing pages redirect to Account/Settings. Existing subscription summaries, authorized historical administration/cancellation and financial/provider reconciliation remain for retained records. Local retirement does not assert cancellation of provider-owned billing. Trial expiry and creation of trial-ending/upcoming-renewal reminders are no longer active jobs; retained unsent reminders of those two types are canceled at delivery without deleting evidence. Unknown sends remain unresolved rather than being relabeled as canceled. Existing provider-account disposition remains separate external work.
+
+Otherwise eligible nonempty Instant and Scheduled carts have no general spending minimum. Core still checks active market currency, exact prices, availability and delivery; spending conditions for a particular promotion affect only that promotion. Retained minimum-policy rows and historical service-fee amounts never create a new checkout fee/minimum.
 ## Common Envelope and Context
 
 Conceptual RPC inputs include:

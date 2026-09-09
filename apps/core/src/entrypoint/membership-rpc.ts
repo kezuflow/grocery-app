@@ -8,24 +8,17 @@ import type {
 import {
   expectedVersionSchema,
   idempotencyKeySchema,
-  identifierSchema,
   reasonSchema,
   z,
 } from "@freshmarkets/validation";
-import { getSubscriptionEligibility } from "../membership/application/subscription-eligibility";
-import { startPromotionalTrial } from "../membership/application/start-promotional-trial";
 import {
-  beginPaidEnrollment,
   findSubscriptionIdForCustomer,
-  getMembershipExperience,
-  getMembershipOffer,
   getSubscriptionSummaryForCustomer,
 } from "../membership/application/get-membership-experience";
 import { cancelSubscription } from "../membership/application/change-subscription";
 import { authenticatedRequestSchema } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
-import { provisionPaidMembership } from "../payments/application/provision-paid-membership";
 import { cancelProviderSubscription } from "../payments/application/cancel-provider-subscription";
 
 export function createMembershipRpc(context: CoreRpcContext) {
@@ -39,10 +32,14 @@ export function createMembershipRpc(context: CoreRpcContext) {
     async getMembershipExperience(input: GetSubscriptionRequest) {
       const customer = await customerFor(input);
       if (!customer.ok) return customer;
-      return getMembershipExperience(context.env.DB, {
-        customerId: customer.value.customerId,
-        requestId: input.requestId,
-      });
+      return {
+        ok: false as const,
+        error: {
+          code: "ILLEGAL_TRANSITION" as const,
+          message: "Membership enrollment is no longer available",
+          requestId: input.requestId,
+        },
+      };
     },
 
     async getSubscriptionSummary(input: GetSubscriptionRequest) {
@@ -57,67 +54,53 @@ export function createMembershipRpc(context: CoreRpcContext) {
     async getOffer(input: GetSubscriptionRequest) {
       const customer = await customerFor(input);
       if (!customer.ok) return customer;
-      return getMembershipOffer(context.env.DB, {
-        customerId: customer.value.customerId,
-        requestId: input.requestId,
-      });
+      return {
+        ok: false as const,
+        error: {
+          code: "ILLEGAL_TRANSITION" as const,
+          message: "Membership enrollment is no longer available",
+          requestId: input.requestId,
+        },
+      };
     },
 
     async startTrial(input: StartTrialRequest) {
-      const validation = authenticatedRequestSchema
-        .extend({ idempotencyKey: idempotencyKeySchema })
-        .safeParse(input);
-      if (!validation.success) return validationFailure(input.requestId, validation.error);
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      const customer = await customerFor(input);
       if (!customer.ok) return customer;
-      return startPromotionalTrial(context.env.DB, {
-        customerId: customer.value.customerId,
-        idempotencyKey: validation.data.idempotencyKey,
-        requestId: input.requestId,
-      });
+      return {
+        ok: false as const,
+        error: {
+          code: "ILLEGAL_TRANSITION" as const,
+          message: "Membership enrollment is no longer available",
+          requestId: input.requestId,
+        },
+      };
     },
 
     async getSubscriptionEligibility(input: SubscriptionEligibilityRequest) {
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      const customer = await customerFor(input);
       if (!customer.ok) return customer;
-      return getSubscriptionEligibility(context.env.DB, {
-        ...input,
-        customerId: customer.value.customerId,
-      });
+      return {
+        ok: false as const,
+        error: {
+          code: "ILLEGAL_TRANSITION" as const,
+          message: "Membership enrollment is no longer available",
+          requestId: input.requestId,
+        },
+      };
     },
 
     async beginPaidEnrollment(input: BeginPaidEnrollmentRequest) {
-      const validation = authenticatedRequestSchema
-        .extend({ offerId: identifierSchema, idempotencyKey: idempotencyKeySchema })
-        .safeParse(input);
-      if (!validation.success) return validationFailure(input.requestId, validation.error);
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      const customer = await customerFor(input);
       if (!customer.ok) return customer;
-      const enrollment = await beginPaidEnrollment(context.env.DB, {
-        customerId: customer.value.customerId,
-        offerId: validation.data.offerId,
-        idempotencyKey: validation.data.idempotencyKey,
-        requestId: input.requestId,
-      });
-      if (!enrollment.ok) return enrollment;
-      const providerCode = context.paymentProviderCode();
-      if (providerCode !== "paymongo") return enrollment;
-      const offer = await getMembershipOffer(context.env.DB, {
-        customerId: customer.value.customerId,
-        requestId: input.requestId,
-      });
-      if (!offer.ok) return offer;
-      return provisionPaidMembership(context.env.DB, context.paymentProviders(), {
-        providerCode,
-        subscription: enrollment.value,
-        customerId: customer.value.customerId,
-        offerName: offer.value.name,
-        priceVersionId: offer.value.priceVersionId,
-        amountMinor: offer.value.amountMinor,
-        currency: offer.value.currency,
-        idempotencyKey: validation.data.idempotencyKey,
-        requestId: input.requestId,
-      });
+      return {
+        ok: false as const,
+        error: {
+          code: "ILLEGAL_TRANSITION" as const,
+          message: "Membership enrollment is no longer available",
+          requestId: input.requestId,
+        },
+      };
     },
 
     async cancelSubscription(input: CancelSubscriptionRequest) {
