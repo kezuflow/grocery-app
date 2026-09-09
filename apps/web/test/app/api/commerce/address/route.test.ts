@@ -32,6 +32,7 @@ function request(method: "POST" | "PATCH", body: unknown) {
     method,
     headers: {
       "content-type": "application/json",
+      "idempotency-key": "address-command-key",
       cookie: "freshmarkets.session=secret",
       origin: "https://freshmarkets.ph",
     },
@@ -44,6 +45,17 @@ beforeEach(() => {
 });
 
 describe("customer address route", () => {
+  it.each(["POST", "PATCH"] as const)(
+    "requires a stable key before forwarding %s",
+    async (method) => {
+      const input = request(method, {});
+      input.headers.delete("idempotency-key");
+      const result = await (method === "POST" ? POST(input) : PATCH(input));
+      expect(result.status).toBe(400);
+      expect(core.createCustomerAddress).not.toHaveBeenCalled();
+      expect(core.updateCustomerAddress).not.toHaveBeenCalled();
+    },
+  );
   it("forwards browser session headers on authenticated address reads", async () => {
     core.listCustomerAddresses.mockResolvedValue({ ok: true, value: [], requestId: "read-1" });
 
@@ -82,6 +94,7 @@ describe("customer address route", () => {
     expect(response.status).toBe(200);
     expect(core.createCustomerAddress).toHaveBeenCalledWith(
       expect.objectContaining({
+        idempotencyKey: "address-command-key",
         label: "Home",
         recipient: "Ana Santos",
         phone: "+639171234567",

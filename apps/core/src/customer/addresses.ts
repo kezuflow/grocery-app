@@ -13,6 +13,8 @@ import { drizzle } from "drizzle-orm/d1";
 import type { GeocoderPort } from "../geography/ports/geocoder";
 import { resolveServiceability } from "../geography/serviceability";
 import { normalizePhilippineMobile } from "./domain/customer-phone";
+import { auditEventStatement } from "../audit/application/append-audit-event";
+import { findIdempotencyRecord, requestHash } from "../idempotency";
 
 type CustomerAddressRow = {
   id: string;
@@ -51,6 +53,146 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 
+type AddressWrite = { scope: string; key: string; hash: string; actorUserId: string };
+
+async function replayAddressWrite(
+  database: D1Database,
+  write: AddressWrite,
+  customerId: string,
+  requestId: string,
+) {
+  const saved = await findIdempotencyRecord(database, write.scope, write.key);
+  if (!saved) return null;
+  if (saved.requestHash !== write.hash)
+    return failure(
+      "IDEMPOTENCY_CONFLICT",
+      "This request key was used for another address change",
+      requestId,
+    );
+  if (saved.status !== "SUCCEEDED") return null;
+  let row: CustomerAddressRow;
+  try {
+    row = JSON.parse(saved.resultReference ?? "null") as CustomerAddressRow;
+    if (
+      !row ||
+      row.customer_id !== customerId ||
+      typeof row.id !== "string" ||
+      !Number.isSafeInteger(row.version) ||
+      !ADDRESS_COLUMNS.split(", ").every((column) => Object.hasOwn(row, column))
+    )
+      return failure("INTERNAL_ERROR", "Saved address result is unavailable", requestId);
+    return { ok: true as const, value: customerAddressView(row), requestId };
+  } catch {
+    return failure("INTERNAL_ERROR", "Saved address result is unavailable", requestId);
+  }
+}
+
+/** Reuse the same ownership and replay boundary for both address writes. */
+async function beginAddressWrite(
+  database: D1Database,
+  action: "create" | "update",
+  command: { customerId: string } & (CreateCustomerAddressRequest | UpdateCustomerAddressRequest),
+) {
+  if (!command.idempotencyKey?.trim() || command.idempotencyKey.length > 200)
+    return failure(
+      "VALIDATION_FAILED",
+      "A stable address request key is required",
+      command.requestId,
+    );
+  const actor = await database
+    .prepare(
+      "SELECT c.auth_user_id AS userId FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.id=? AND c.status='active' AND cp.status='active'",
+    )
+    .bind(command.customerId)
+    .first<{ userId: string }>();
+  if (!actor)
+    return failure("FORBIDDEN", "An active customer account is required", command.requestId);
+  const { headers: _headers, requestId: _requestId, idempotencyKey: _key, ...intent } = command;
+  const write: AddressWrite = {
+    scope: `customer.address.${action}`,
+    key: `${actor.userId}:${command.idempotencyKey}`,
+    hash: await requestHash(intent),
+    actorUserId: actor.userId,
+  };
+  return (
+    (await replayAddressWrite(database, write, command.customerId, command.requestId)) ?? { write }
+  );
+}
+
+/** One row supplies both bound SQL values and the immutable result snapshot. */
+async function persistAddress(
+  database: D1Database,
+  write: AddressWrite,
+  row: CustomerAddressRow,
+  requestId: string,
+  expectedVersion?: number,
+) {
+  const columns = ADDRESS_COLUMNS.split(", ") as Array<keyof CustomerAddressRow>;
+  const mutable = columns.filter(
+    (column) => column !== "id" && column !== "customer_id" && column !== "created_at",
+  );
+  const statement =
+    expectedVersion === undefined
+      ? database
+          .prepare(
+            `INSERT INTO customer_address (${ADDRESS_COLUMNS}) VALUES (${columns.map(() => "?").join(",")})`,
+          )
+          .bind(...columns.map((column) => row[column]))
+      : database
+          .prepare(
+            `UPDATE customer_address SET ${mutable.map((column) => `${column}=?`).join(",")} WHERE id=? AND customer_id=? AND status='active' AND version=?`,
+          )
+          .bind(...mutable.map((column) => row[column]), row.id, row.customer_id, expectedVersion);
+  const required = () =>
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()!=1");
+  try {
+    await database.batch([
+      database
+        .prepare(
+          "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES (?,?,?,'PROCESSING','customer_address_row_snapshot',?,?) ON CONFLICT(scope,idempotency_key) DO NOTHING",
+        )
+        .bind(write.scope, write.key, write.hash, row.updated_at, row.updated_at),
+      required(),
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -36 WHERE NOT EXISTS(SELECT 1 FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.id=? AND c.auth_user_id=? AND c.status='active' AND cp.status='active')",
+        )
+        .bind(row.customer_id, write.actorUserId),
+      statement,
+      required(),
+      auditEventStatement(database, {
+        actorUserId: write.actorUserId,
+        action:
+          expectedVersion === undefined ? "CUSTOMER.ADDRESS_CREATED" : "CUSTOMER.ADDRESS_UPDATED",
+        resourceType: "customer_address",
+        resourceId: row.id,
+        details: { version: row.version },
+        correlationId: requestId,
+        idempotencyKey: `${write.scope}:${write.key}`,
+        occurredAt: row.updated_at,
+      }),
+      required(),
+      database
+        .prepare(
+          "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",
+        )
+        .bind(JSON.stringify(row), row.updated_at, write.scope, write.key, write.hash),
+      required(),
+    ]);
+    return { ok: true as const, value: customerAddressView(row), requestId };
+  } catch (error) {
+    const replay = await replayAddressWrite(database, write, row.customer_id, requestId);
+    if (replay) return replay;
+    if (error instanceof Error && error.message.includes("CHECK constraint failed: id = 0"))
+      return failure(
+        "CONFLICT",
+        "The address changed or could not be saved. Refresh and retry.",
+        requestId,
+      );
+    throw error;
+  }
+}
+
 export function customerAddressView(row: CustomerAddressRow) {
   return {
     id: row.id,
@@ -83,6 +225,8 @@ export async function createCustomerAddress(
   | { ok: true; value: ReturnType<typeof customerAddressView>; requestId: string }
   | ReturnType<typeof failure>
 > {
+  const start = await beginAddressWrite(database, "create", command);
+  if (!("write" in start)) return start;
   const phone = normalizePhilippineMobile(command.phone);
   if (!phone)
     return failure(
@@ -115,46 +259,36 @@ export async function createCustomerAddress(
     : null;
   const addressJson = structured ? JSON.stringify(confirmation!.components) : command.addressJson;
 
-  await database
-    .prepare(
-      "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, address_components_json, barangay, city, postal_code, latitude, longitude, geocode_provider, geocode_reference, confirmation_source, user_confirmed_at, delivery_instructions_json, service_area_code, delivery_zone_code, resolution_version, serviceable, serviceability_reason, notes, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?)",
-    )
-    .bind(
-      id,
-      command.customerId,
-      command.label,
-      command.recipient,
-      phone,
-      addressJson,
-      confirmation ? JSON.stringify(confirmation.components) : null,
-      confirmation?.components.barangay ?? null,
-      confirmation?.components.city ?? null,
-      confirmation?.components.postalCode ?? null,
-      command.latitude,
-      command.longitude,
-      confirmation?.provider ?? null,
-      confirmation?.providerReference ?? null,
-      confirmation?.source ?? null,
-      confirmation?.confirmedAt ?? null,
-      structured ? JSON.stringify(command.instructions) : null,
-      geo.value.serviceArea?.code ?? null,
-      geo.value.deliveryZone?.code ?? null,
-      geo.value.serviceArea?.polygonVersion ?? null,
-      geo.value.serviceable ? 1 : 0,
-      geo.value.reason,
-      command.notes ?? null,
-      now,
-      now,
-    )
-    .run();
-
-  const row = await database
-    .prepare(`SELECT ${ADDRESS_COLUMNS} FROM customer_address WHERE id=? AND customer_id=?`)
-    .bind(id, command.customerId)
-    .first<CustomerAddressRow>();
-  if (!row)
-    return failure("INTERNAL_ERROR", "Created address could not be read", command.requestId);
-  return { ok: true as const, value: customerAddressView(row), requestId: command.requestId };
+  const row: CustomerAddressRow = {
+    id,
+    customer_id: command.customerId,
+    label: command.label,
+    recipient: command.recipient,
+    phone,
+    address_json: addressJson!,
+    address_components_json: structured ? JSON.stringify(confirmation!.components) : null,
+    barangay: confirmation?.components.barangay ?? null,
+    city: confirmation?.components.city ?? null,
+    postal_code: confirmation?.components.postalCode ?? null,
+    latitude: command.latitude,
+    longitude: command.longitude,
+    geocode_provider: confirmation?.provider ?? null,
+    geocode_reference: confirmation?.providerReference ?? null,
+    confirmation_source: confirmation?.source ?? null,
+    user_confirmed_at: confirmation?.confirmedAt ?? null,
+    delivery_instructions_json: structured ? JSON.stringify(command.instructions) : null,
+    service_area_code: geo.value.serviceArea?.code ?? null,
+    delivery_zone_code: geo.value.deliveryZone?.code ?? null,
+    resolution_version: geo.value.serviceArea?.polygonVersion ?? null,
+    serviceable: geo.value.serviceable ? 1 : 0,
+    serviceability_reason: geo.value.reason,
+    notes: command.notes ?? null,
+    status: "active",
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+  return persistAddress(database, start.write, row, command.requestId);
 }
 
 export async function listCustomerAddresses(
@@ -187,6 +321,8 @@ export async function updateCustomerAddress(
   | { ok: true; value: ReturnType<typeof customerAddressView>; requestId: string }
   | ReturnType<typeof failure>
 > {
+  const start = await beginAddressWrite(database, "update", command);
+  if (!("write" in start)) return start;
   const current = await database
     .prepare(
       `SELECT ${ADDRESS_COLUMNS} FROM customer_address WHERE id=? AND customer_id=? AND status='active'`,
@@ -194,6 +330,8 @@ export async function updateCustomerAddress(
     .bind(command.addressId, command.customerId)
     .first<CustomerAddressRow>();
   if (!current) return failure("NOT_FOUND", "Customer address not found", command.requestId);
+  if (current.version !== command.expectedVersion)
+    return failure("STALE_VERSION", "Address changed; refresh before updating", command.requestId);
   const phone =
     command.phone === undefined ? current.phone : normalizePhilippineMobile(command.phone);
   if (!phone)
@@ -356,48 +494,33 @@ export async function updateCustomerAddress(
     ? JSON.stringify(components)
     : (command.addressJson ?? current.address_json);
 
-  const updated = await database
-    .prepare(
-      "UPDATE customer_address SET label=?, recipient=?, phone=?, address_json=?, address_components_json=?, barangay=?, city=?, postal_code=?, latitude=?, longitude=?, geocode_provider=?, geocode_reference=?, confirmation_source=?, user_confirmed_at=?, delivery_instructions_json=?, service_area_code=?, delivery_zone_code=?, resolution_version=?, serviceable=?, serviceability_reason=?, notes=?, version=version+1, updated_at=? WHERE id=? AND customer_id=? AND status='active' AND version=?",
-    )
-    .bind(
-      command.label ?? current.label,
-      command.recipient ?? current.recipient,
-      phone,
-      addressJson,
-      canonicalFieldsPresent ? JSON.stringify(components) : null,
-      canonicalFieldsPresent ? components.barangay : null,
-      canonicalFieldsPresent ? components.city : null,
-      canonicalFieldsPresent ? components.postalCode : null,
-      latitude,
-      longitude,
-      geocodeProvider,
-      geocodeReference,
-      confirmationSource,
-      confirmedAt,
-      canonicalFieldsPresent ? JSON.stringify(instructions) : null,
-      serviceability.serviceAreaCode,
-      serviceability.deliveryZoneCode,
-      serviceability.resolutionVersion,
-      serviceability.serviceable,
-      serviceability.reason,
-      command.notes !== undefined ? command.notes : current.notes,
-      now,
-      current.id,
-      command.customerId,
-      command.expectedVersion,
-    )
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1)
-    return failure("STALE_VERSION", "Address changed; refresh before updating", command.requestId);
-
-  const row = await database
-    .prepare(`SELECT ${ADDRESS_COLUMNS} FROM customer_address WHERE id=? AND customer_id=?`)
-    .bind(current.id, command.customerId)
-    .first<CustomerAddressRow>();
-  if (!row)
-    return failure("INTERNAL_ERROR", "Updated address could not be read", command.requestId);
-  return { ok: true as const, value: customerAddressView(row), requestId: command.requestId };
+  const row: CustomerAddressRow = {
+    ...current,
+    label: command.label ?? current.label,
+    recipient: command.recipient ?? current.recipient,
+    phone,
+    address_json: addressJson,
+    address_components_json: canonicalFieldsPresent ? JSON.stringify(components) : null,
+    barangay: canonicalFieldsPresent ? components.barangay : null,
+    city: canonicalFieldsPresent ? components.city : null,
+    postal_code: canonicalFieldsPresent ? components.postalCode : null,
+    latitude,
+    longitude,
+    geocode_provider: geocodeProvider,
+    geocode_reference: geocodeReference,
+    confirmation_source: confirmationSource,
+    user_confirmed_at: confirmedAt,
+    delivery_instructions_json: canonicalFieldsPresent ? JSON.stringify(instructions) : null,
+    service_area_code: serviceability.serviceAreaCode,
+    delivery_zone_code: serviceability.deliveryZoneCode,
+    resolution_version: serviceability.resolutionVersion,
+    serviceable: serviceability.serviceable,
+    serviceability_reason: serviceability.reason,
+    notes: command.notes !== undefined ? command.notes : current.notes,
+    version: current.version + 1,
+    updated_at: now,
+  };
+  return persistAddress(database, start.write, row, command.requestId, command.expectedVersion);
 }
 
 function componentsEqual(left: AddressComponents, right: AddressComponents): boolean {

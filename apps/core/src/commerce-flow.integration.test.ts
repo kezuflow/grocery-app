@@ -74,7 +74,11 @@ describe("customer checkout flow", () => {
   it("commits one order and replays the same result", async () => {
     const cookie = await authenticatedCookie();
     const headers = { cookie };
-    const request = () => ({ headers, requestId: requestId() });
+    const request = () => ({
+      headers,
+      requestId: requestId(),
+      idempotencyKey: crypto.randomUUID(),
+    });
 
     const address = await core.createCustomerAddress({
       ...request(),

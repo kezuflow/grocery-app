@@ -184,6 +184,7 @@ describe("provider-neutral geography contracts", () => {
     >;
 
     const structuredCreate = {
+      idempotencyKey: "create-structured",
       requestId: "req-create-structured",
       headers: { cookie: "session=opaque" },
       label: "Home",
@@ -211,6 +212,7 @@ describe("provider-neutral geography contracts", () => {
       },
     } satisfies CreateCustomerAddressRequest;
     const legacyCreate = {
+      idempotencyKey: "create-legacy",
       requestId: "req-create-legacy",
       headers: { cookie: "session=opaque" },
       label: "Home",

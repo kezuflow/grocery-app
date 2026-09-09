@@ -63,7 +63,11 @@ async function account() {
   return {
     userId: body.user!.id!,
     cookie: cookieHeader(signIn),
-    request: () => ({ headers: { cookie: cookieHeader(signIn) }, requestId: requestId() }),
+    request: () => ({
+      headers: { cookie: cookieHeader(signIn) },
+      requestId: requestId(),
+      idempotencyKey: crypto.randomUUID(),
+    }),
   };
 }
 
@@ -1416,6 +1420,247 @@ describe("customer account phone and address management", () => {
           .bind(`${user.userId}:${command.idempotencyKey}`)
           .first(),
       ).toEqual({ count: 0 });
+    },
+  );
+});
+
+describe("saved address write transactions", () => {
+  function permanentGeocoder() {
+    return geocoder({
+      async reversePermanent({ coordinate }) {
+        return {
+          provider: "MAPBOX",
+          providerReference: "permanent-test-reference",
+          displayAddress: "Confirmed entrance",
+          coordinate,
+          components,
+          accuracy: "rooftop",
+        };
+      },
+    });
+  }
+  async function command() {
+    const user = await account();
+    await core.listCustomerAddresses(user.request());
+    return {
+      user,
+      input: {
+        ...user.request(),
+        customerId: await customerIdFor(user.userId),
+        label: "Home",
+        recipient: "Recipient",
+        phone: "+639171234567",
+        latitude: 10.32,
+        longitude: 123.9,
+        components,
+        componentsSource: "TEMPORARY_GEOCODER" as const,
+        confirmationSource: "GEOCODER" as const,
+        instructions,
+      },
+    };
+  }
+  it("replays creation before another provider lookup and preserves its original result after an edit", async () => {
+    const { user, input } = await command();
+    const provider = permanentGeocoder();
+    const finalized = vi.spyOn(provider, "reversePermanent");
+    const created = await createCustomerAddressCommand(env.DB, provider, input);
+    if (!created.ok) throw new Error("Create failed");
+    expect(
+      await core.updateCustomerAddress({
+        ...user.request(),
+        addressId: created.value.id,
+        expectedVersion: 1,
+        label: "Office",
+      }),
+    ).toMatchObject({ ok: true, value: { label: "Office", version: 2 } });
+    const replay = await createCustomerAddressCommand(env.DB, provider, {
+      ...input,
+      requestId: requestId(),
+    });
+    expect(replay).toMatchObject({ ok: true, value: created.value });
+    expect(finalized).toHaveBeenCalledOnce();
+    expect(
+      await env.DB.prepare("SELECT label,version FROM customer_address WHERE id=?")
+        .bind(created.value.id)
+        .first(),
+    ).toEqual({ label: "Office", version: 2 });
+    expect(
+      await env.DB.prepare("SELECT count(*) AS count FROM customer_address WHERE customer_id=?")
+        .bind(input.customerId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(
+      await createCustomerAddressCommand(env.DB, provider, { ...input, label: "Different" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+  it.each(["create", "update"] as const)(
+    "rechecks disabled access after %s provider finalization",
+    async (kind) => {
+      const { user, input } = await command();
+      const existing = await createAddress(user.request());
+      if (!existing.ok) throw new Error("Address setup failed");
+      const provider = permanentGeocoder();
+      const original = provider.reversePermanent.bind(provider);
+      provider.reversePermanent = async (point) => {
+        const value = await original(point);
+        await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+          .bind(user.userId)
+          .run();
+        return value;
+      };
+      const result =
+        kind === "create"
+          ? await createCustomerAddressCommand(env.DB, provider, input)
+          : await updateCustomerAddressCommand(env.DB, provider, {
+              ...input,
+              addressId: existing.value.id,
+              expectedVersion: existing.value.version,
+            });
+      expect(result).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT count(*) AS count FROM customer_address WHERE customer_id=?")
+          .bind(input.customerId)
+          .first(),
+      ).toEqual({ count: 1 });
+      expect(
+        await env.DB.prepare("SELECT version FROM customer_address WHERE id=?")
+          .bind(existing.value.id)
+          .first(),
+      ).toEqual({ version: existing.value.version });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE scope=? AND idempotency_key=?",
+        )
+          .bind(`customer.address.${kind}`, `${user.userId}:${input.idempotencyKey}`)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
+  it("rejects an edit overtaken during permanent confirmation and replays a successful edit without overwriting newer data", async () => {
+    const { user, input } = await command();
+    const existing = await createAddress(user.request());
+    if (!existing.ok) throw new Error("Address setup failed");
+    const edit = {
+      ...input,
+      addressId: existing.value.id,
+      expectedVersion: existing.value.version,
+    };
+    const provider = permanentGeocoder();
+    const original = provider.reversePermanent.bind(provider);
+    provider.reversePermanent = async (point) => {
+      const result = await original(point);
+      expect(
+        await core.updateCustomerAddress({
+          ...user.request(),
+          addressId: edit.addressId,
+          expectedVersion: 1,
+          label: "Newer label",
+        }),
+      ).toMatchObject({ ok: true });
+      return result;
+    };
+    expect(await updateCustomerAddressCommand(env.DB, provider, edit)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare("SELECT label,version FROM customer_address WHERE id=?")
+        .bind(edit.addressId)
+        .first(),
+    ).toEqual({ label: "Newer label", version: 2 });
+    const currentEdit = { ...edit, expectedVersion: 2 };
+    const stableProvider = permanentGeocoder();
+    const lookup = vi.spyOn(stableProvider, "reversePermanent");
+    const success = await updateCustomerAddressCommand(env.DB, stableProvider, currentEdit);
+    expect(success).toMatchObject({ ok: true, value: { label: "Home", version: 3 } });
+    expect(
+      await core.updateCustomerAddress({
+        ...user.request(),
+        addressId: edit.addressId,
+        expectedVersion: 3,
+        label: "Latest",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await updateCustomerAddressCommand(env.DB, stableProvider, currentEdit)).toEqual(
+      success,
+    );
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(
+      await env.DB.prepare("SELECT label,version FROM customer_address WHERE id=?")
+        .bind(edit.addressId)
+        .first(),
+    ).toEqual({ label: "Latest", version: 4 });
+    expect(
+      await updateCustomerAddressCommand(env.DB, stableProvider, {
+        ...currentEdit,
+        label: "Changed intent",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+  it.each(["create", "update"] as const)(
+    "rolls back every suppressed %s effect and permits exact retry",
+    async (kind) => {
+      for (const effect of ["claim", "address", "audit", "receipt"]) {
+        const { user, input } = await command();
+        const existing = await createAddress(user.request());
+        if (!existing.ok) throw new Error("Address setup failed");
+        const edit = {
+          ...input,
+          addressId: existing.value.id,
+          expectedVersion: 1,
+          label: "Updated",
+        };
+        const action = kind === "create" ? "CUSTOMER.ADDRESS_CREATED" : "CUSTOMER.ADDRESS_UPDATED";
+        const scope = `customer.address.${kind}`;
+        const execute = () =>
+          kind === "create"
+            ? createCustomerAddressCommand(env.DB, permanentGeocoder(), input)
+            : updateCustomerAddressCommand(env.DB, permanentGeocoder(), edit);
+        const trigger =
+          effect === "claim"
+            ? `BEFORE INSERT ON idempotency_records WHEN NEW.scope='${scope}'`
+            : effect === "address"
+              ? `BEFORE ${kind === "create" ? "INSERT" : "UPDATE"} ON customer_address`
+              : effect === "audit"
+                ? `BEFORE INSERT ON audit_event WHEN NEW.action='${action}'`
+                : `BEFORE UPDATE ON idempotency_records WHEN NEW.scope='${scope}' AND NEW.status='SUCCEEDED'`;
+        const beforeAudit = await env.DB.prepare(
+          "SELECT count(*) AS count FROM audit_event",
+        ).first();
+        await env.DB.exec(
+          `CREATE TRIGGER ignore_address_write_effect ${trigger} BEGIN SELECT RAISE(IGNORE); END;`,
+        );
+        try {
+          expect(await execute()).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+          expect(
+            await env.DB.prepare(
+              "SELECT count(*) AS count FROM customer_address WHERE customer_id=?",
+            )
+              .bind(input.customerId)
+              .first(),
+          ).toEqual({ count: 1 });
+          expect(
+            await env.DB.prepare("SELECT label,version FROM customer_address WHERE id=?")
+              .bind(existing.value.id)
+              .first(),
+          ).toEqual({ label: "Home", version: 1 });
+          expect(await env.DB.prepare("SELECT count(*) AS count FROM audit_event").first()).toEqual(
+            beforeAudit,
+          );
+          expect(
+            await env.DB.prepare(
+              "SELECT count(*) AS count FROM idempotency_records WHERE scope=? AND idempotency_key=?",
+            )
+              .bind(scope, `${user.userId}:${input.idempotencyKey}`)
+              .first(),
+          ).toEqual({ count: 0 });
+        } finally {
+          await env.DB.exec("DROP TRIGGER ignore_address_write_effect");
+        }
+        const success = await execute();
+        expect(success).toMatchObject({ ok: true });
+        expect(await execute()).toEqual(success);
+      }
     },
   );
 });

@@ -106,11 +106,38 @@ for (const width of [1440, 390]) {
     await signedInPage
       .getByRole("textbox", { name: /^Delivery note/ })
       .fill("Synthetic delivery instruction");
+    const addressWrites: Record<
+      string,
+      Array<{ key: string | undefined; body: string | null; result: unknown }>
+    > = { POST: [], PATCH: [] };
+    await signedInPage.route("**/api/commerce/address", async (route) => {
+      const method = route.request().method();
+      if (!(method in addressWrites)) return route.continue();
+      const response = await route.fetch();
+      const result = await response.json();
+      expect(result).toMatchObject({ ok: true });
+      addressWrites[method].push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postData(),
+        result: result.value,
+      });
+      if (addressWrites[method].length === 1) await route.abort();
+      else await route.fulfill({ response });
+    });
     await signedInPage.getByRole("button", { name: "Save confirmed address", exact: true }).click();
+    await expect(signedInPage.getByRole("textbox", { name: /^Phone number/ })).toBeDisabled();
+    await signedInPage.getByRole("button", { name: "Retry saving address", exact: true }).click();
     await expect(
       signedInPage.getByText("Delivery address saved and refreshed.", { exact: true }),
     ).toBeVisible();
     const commands: Array<{ key: string | undefined; body: string | null }> = [];
+    expect(addressWrites.POST).toHaveLength(2);
+    expect(addressWrites.POST[0].key).toBeTruthy();
+    expect(addressWrites.POST[1]).toEqual(addressWrites.POST[0]);
+    expect(addressWrites.POST[0].result).toMatchObject({ version: 1 });
+    await expect(
+      signedInPage.getByRole("button", { name: "Edit Home address", exact: true }),
+    ).toHaveCount(1);
     await signedInPage.route("**/api/commerce/address/manage", async (route) => {
       commands.push({
         key: route.request().headers()["idempotency-key"],
@@ -137,9 +164,18 @@ for (const width of [1440, 390]) {
     await signedInPage
       .getByRole("button", { name: "Update confirmed address", exact: true })
       .click();
+    await expect(signedInPage.getByRole("textbox", { name: /^Delivery note/ })).toBeDisabled();
+    await signedInPage.getByRole("button", { name: "Retry saving address", exact: true }).click();
     await expect(
       signedInPage.getByText("Delivery address saved and refreshed.", { exact: true }),
     ).toBeVisible();
+    expect(addressWrites.PATCH).toHaveLength(2);
+    expect(addressWrites.PATCH[0].key).toBeTruthy();
+    expect(addressWrites.PATCH[1]).toEqual(addressWrites.PATCH[0]);
+    expect(addressWrites.PATCH[0].result).toMatchObject({
+      version: 2,
+      instructions: { deliveryNote: "Updated synthetic instruction" },
+    });
     await signedInPage.goto("/checkout");
     await expect(signedInPage.getByRole("radio", { name: /^Home/ })).toBeChecked();
     await signedInPage.goto("/account/addresses");

@@ -26,6 +26,7 @@ for (const width of [1440, 390])
     });
     expect(await item.json()).toMatchObject({ ok: true });
     const address = await page.request.post("/api/commerce/address", {
+      headers: { "idempotency-key": crypto.randomUUID() },
       data: {
         label: "Checkout home",
         recipient: "Test Customer",

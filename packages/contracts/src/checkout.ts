@@ -10,6 +10,7 @@ import type {
 import type { CustomerAddressStatus } from "./states";
 
 type CustomerAddressCreateBase = AuthenticatedRequest & {
+  idempotencyKey: string;
   label: string;
   recipient: string;
   phone: string;
@@ -37,6 +38,7 @@ export type CreateCustomerAddressRequest = CustomerAddressCreateBase &
   );
 
 export type UpdateCustomerAddressRequest = AuthenticatedRequest & {
+  idempotencyKey: string;
   addressId: string;
   expectedVersion: number;
   label?: string;

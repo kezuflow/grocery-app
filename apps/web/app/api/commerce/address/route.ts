@@ -100,8 +100,9 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   const parsed = addressBodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
+  if (!parsed.success || !idempotencyKey || idempotencyKey.length > 200)
     return Response.json(
       {
         ok: false,
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
   const body = parsed.data;
   const result = await coreClient(env.CORE).createCustomerAddress({
     requestId,
+    idempotencyKey,
     headers: requestHeaders(request),
     label: body.label,
     recipient: body.recipient,
@@ -128,8 +130,9 @@ export async function POST(request: Request) {
 }
 export async function PATCH(request: Request) {
   const requestId = crypto.randomUUID();
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   const parsed = updateAddressBodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
+  if (!parsed.success || !idempotencyKey || idempotencyKey.length > 200)
     return Response.json(
       {
         ok: false,
@@ -140,6 +143,7 @@ export async function PATCH(request: Request) {
   const body = parsed.data;
   const result = await coreClient(env.CORE).updateCustomerAddress({
     requestId,
+    idempotencyKey,
     headers: requestHeaders(request),
     addressId: body.addressId,
     expectedVersion: body.expectedVersion,

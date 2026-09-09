@@ -169,6 +169,40 @@ describe("AddressEditor", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps the exact address write after a lost response and blocks pin changes until retry", async () => {
+    const commands: Array<{ key: string | null; body: string }> = [];
+    const confirmed = vi.fn();
+    const adapter = new FakeMapAdapter();
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      commands.push({
+        key: new Headers(init?.headers).get("idempotency-key"),
+        body: String(init?.body),
+      });
+      if (commands.length === 1) throw new Error("Response lost");
+      return response({ ok: true, value: savedAddress });
+    });
+    const { container, root } = mount({
+      initialAddress: savedAddress,
+      fetchImpl: fetchMock,
+      onConfirmed: confirmed,
+      mapAdapter: adapter,
+    });
+    const submit = () =>
+      Array.from(container.querySelectorAll("button")).find((button) => button.type === "submit")!;
+    click(submit());
+    await flush();
+    expect(input(container, "Recipient name").matches(":disabled")).toBe(true);
+    expect(container.textContent).toContain("Retry saving address");
+    act(() => adapter.emitPinMove({ latitude: 10.34, longitude: 123.91 }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    click(submit());
+    await flush();
+    expect(commands[0]?.key).toBeTruthy();
+    expect(commands[1]).toEqual(commands[0]);
+    expect(confirmed).toHaveBeenCalledExactlyOnceWith(savedAddress.id);
+    act(() => root.unmount());
+  });
+
   it("retains a failed browsing selection for retry and exposes only permanent confirmation", async () => {
     const confirmed = vi.fn();
     let attempts = 0;

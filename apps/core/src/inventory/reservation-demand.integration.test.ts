@@ -56,7 +56,7 @@ async function authenticatedCookie() {
 async function checkoutFixture(quantity: number) {
   const cookie = await authenticatedCookie();
   const headers = { cookie };
-  const request = () => ({ headers, requestId: requestId() });
+  const request = () => ({ headers, requestId: requestId(), idempotencyKey: crypto.randomUUID() });
   const address = await core.createCustomerAddress({
     ...request(),
     label: "Home",

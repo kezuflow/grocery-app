@@ -212,6 +212,9 @@ export function AddressEditor({
   >("idle");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [saveError, setSaveError] = useState("");
+  const [saveUncertain, setSaveUncertain] = useState(false);
+  const pendingSave = useRef<{ method: "POST" | "PATCH"; key: string; body: string } | null>(null);
+  const saveInFlight = useRef(false);
   const [locationError, setLocationError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const serviceabilityAbortRef = useRef<AbortController | null>(null);
@@ -403,6 +406,7 @@ export function AddressEditor({
   }
 
   function movePin(nextCoordinate: Coordinate): void {
+    if (purpose === "save" && (saveInFlight.current || saveUncertain)) return;
     const generation = ++coordinateActionGenerationRef.current;
     void confirmCoordinate(nextCoordinate, "USER_PIN", generation);
   }
@@ -498,411 +502,439 @@ export function AddressEditor({
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (purpose !== "save") return;
+    if (purpose !== "save" || saveInFlight.current) return;
     setSaveError("");
-    const errors = validate();
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || !coordinate || !confirmationSource) {
-      if (!coordinate || !confirmationSource)
-        setSaveError("Choose a search result, current location, or map pin before saving.");
-      return;
+    if (!pendingSave.current) {
+      const errors = validate();
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0 || !coordinate || !confirmationSource) {
+        if (!coordinate || !confirmationSource)
+          setSaveError("Choose a search result, current location, or map pin before saving.");
+        return;
+      }
+      const method = initialAddress ? "PATCH" : "POST";
+      const body = {
+        ...(initialAddress
+          ? { addressId: initialAddress.id, expectedVersion: initialAddress.version }
+          : {}),
+        label: label.trim(),
+        recipient: recipient.trim(),
+        phone: normalizePhilippineMobile(phone)!,
+        components,
+        componentsSource,
+        ...coordinate,
+        confirmationSource,
+        instructions,
+        ...(!initialAddress ? { notes: nullable(notes) } : {}),
+      };
+      pendingSave.current = { method, key: crypto.randomUUID(), body: JSON.stringify(body) };
     }
+    saveInFlight.current = true;
     setSaveState("saving");
-    const method = initialAddress ? "PATCH" : "POST";
-    const body = {
-      ...(initialAddress
-        ? { addressId: initialAddress.id, expectedVersion: initialAddress.version }
-        : {}),
-      label: label.trim(),
-      recipient: recipient.trim(),
-      phone: normalizePhilippineMobile(phone)!,
-      components,
-      componentsSource,
-      ...coordinate,
-      confirmationSource,
-      instructions,
-      ...(!initialAddress ? { notes: nullable(notes) } : {}),
-    };
     try {
       const response = await fetchImpl("/api/commerce/address", {
-        method,
+        method: pendingSave.current.method,
         credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", "idempotency-key": pendingSave.current.key },
+        body: pendingSave.current.body,
       });
       const result = (await response.json()) as RpcResult<CustomerAddressView>;
       if (!response.ok || !result.ok) {
         setSaveState("error");
         setSaveError(safeSaveMessage(result.ok ? undefined : result.error));
+        pendingSave.current = null;
+        setSaveUncertain(false);
         return;
       }
+      if (typeof result.value.id !== "string") throw new Error("Address result unavailable");
+      pendingSave.current = null;
+      setSaveUncertain(false);
       setSaveState("idle");
       onConfirmed?.(result.value.id);
     } catch {
       setSaveState("error");
-      setSaveError(safeSaveMessage());
+      setSaveUncertain(true);
+      setSaveError("Saving could not be confirmed. Retry the same address.");
+    } finally {
+      saveInFlight.current = false;
     }
   }
 
   return (
     <form onSubmit={save} className="grid gap-6" aria-label="Delivery address editor" noValidate>
-      <section aria-labelledby="address-search-heading" className="grid gap-3">
-        <div>
-          <h2 id="address-search-heading" className="text-lg font-semibold text-slate-950">
-            Find the delivery address
-          </h2>
-          <p id="address-search-help" className="mt-1 text-sm text-slate-600">
-            Search within the Philippines. Results are biased toward Cebu and stay only in this
-            editor.
-          </p>
-        </div>
-        <TextField
-          id="address-search"
-          label="Search for an address"
-          description="Choose a result, then move the map pin to the exact entrance if needed."
-          autoComplete="street-address"
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-        />
-        <button
-          type="button"
-          onClick={useCurrentLocation}
-          className="w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-        >
-          Use current location
-        </button>
-        {locationError ? (
-          <p role="alert" className="text-sm text-red-700">
-            {locationError}
-          </p>
-        ) : null}
-        {searchState === "searching" ? (
-          <p role="status" aria-live="polite" className="text-sm text-slate-600">
-            Searching for addresses…
-          </p>
-        ) : null}
-        {searchError ? (
-          <p role="alert" className="text-sm text-red-700">
-            {searchError}
-          </p>
-        ) : null}
-        {candidates.length > 0 ? (
-          <ul aria-label="Address search results" className="divide-y rounded-lg border">
-            {candidates.map((candidate) => (
-              <li key={candidate.candidateKey}>
-                <button
-                  type="button"
-                  onClick={() => chooseCandidate(candidate)}
-                  className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50 focus-visible:outline-2"
-                >
-                  {candidate.displayAddress}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
-        <div>
-          <h2 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
-            Confirm the exact entrance
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            The confirmed pin determines delivery coverage. Drag it when the suggested point is not
-            exact.
-          </p>
-        </div>
-        <MapboxMap
-          publicAccessToken={publicAccessToken}
-          adapter={mapAdapter}
-          initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
-          scene={{
-            draggablePin: {
-              position: coordinate ?? CEBU_CENTER,
-              label: coordinate ? "Confirmed delivery entrance" : "Move pin to delivery entrance",
-            },
-          }}
-          onPinMove={movePin}
-          onMapClick={movePin}
-          ariaLabel="Delivery address pin confirmation map"
-          className="min-h-72 rounded-xl border"
-          fallback={
-            <p className="text-sm text-slate-700">
-              You can still choose a search result or use your current location, then confirm the
-              selected address below.
-            </p>
-          }
-        />
-        {selectedDisplayAddress ? (
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Selected address:</span> {selectedDisplayAddress}
-          </p>
-        ) : null}
-        <p role="status" aria-live="polite" className="text-sm text-slate-600">
-          {coordinateAnnouncement}
-        </p>
-        {serviceabilityState === "checking" ? (
-          <p role="status" aria-live="polite" className="text-sm text-slate-600">
-            Checking delivery coverage…
-          </p>
-        ) : null}
-        {serviceabilityState === "error" ? (
-          <p role="alert" className="text-sm text-red-700">
-            Delivery coverage could not be checked. You can retry by selecting the address or pin
-            again.
-          </p>
-        ) : null}
-        {serviceabilityState === "ready" && serviceability ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className={
-              serviceability.serviceable
-                ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
-                : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
-            }
-          >
-            <p className="font-semibold">
-              {serviceability.serviceable ? "Delivery is available" : "Delivery is unavailable"}
-            </p>
-            <p>
-              {serviceability.serviceable
-                ? "Core confirmed this pin is inside the current delivery area."
-                : purpose === "save"
-                  ? "You may save this address, but it cannot be used at checkout until corrected."
-                  : "Try another address or adjust the pin to check a different entrance."}
+      <fieldset
+        className="contents"
+        disabled={purpose === "save" && (saveState === "saving" || saveUncertain)}
+      >
+        <section aria-labelledby="address-search-heading" className="grid gap-3">
+          <div>
+            <h2 id="address-search-heading" className="text-lg font-semibold text-slate-950">
+              Find the delivery address
+            </h2>
+            <p id="address-search-help" className="mt-1 text-sm text-slate-600">
+              Search within the Philippines. Results are biased toward Cebu and stay only in this
+              editor.
             </p>
           </div>
-        ) : null}
-      </section>
-
-      {purpose === "serviceability" ? (
-        <div className="grid gap-3">
-          <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            This browsing location is not a saved checkout address. Core will confirm it again when
-            you check out.
-          </p>
-          {onServiceabilityConfirmed &&
-          serviceability?.serviceable &&
-          coordinate &&
-          selectedDisplayAddress ? (
-            <button
-              type="button"
-              disabled={saveState === "saving" || serviceabilityState !== "ready"}
-              onClick={() => void confirmBrowsing()}
-              className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
-            >
-              {saveState === "saving" ? "Confirming address…" : "Deliver here"}
-            </button>
-          ) : null}
-          {saveError ? (
-            <p role="alert" className="text-sm text-red-700">
-              {saveError}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <>
-          <section aria-labelledby="address-details-heading" className="grid gap-4">
-            <h2 id="address-details-heading" className="text-lg font-semibold text-slate-950">
-              Address and recipient details
-            </h2>
-            {providerResolvedComponents ? (
-              <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                Search-result address fields are provider-resolved when saved. Move the pin to
-                establish a first-party location before changing them; add unit, entrance, landmark,
-                and courier guidance under Delivery instructions.
-              </p>
-            ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                id="address-label"
-                label="Address label"
-                description="For example, Home or Office."
-                value={label}
-                error={fieldErrors.label}
-                onChange={(event) => setLabel(event.currentTarget.value)}
-              />
-              <TextField
-                id="address-recipient"
-                label="Recipient name"
-                value={recipient}
-                error={fieldErrors.recipient}
-                onChange={(event) => setRecipient(event.currentTarget.value)}
-              />
-              <TextField
-                id="address-phone"
-                label="Phone number"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="0917 123 4567"
-                description="Shared with the external courier so they can reach the recipient."
-                value={phone}
-                error={fieldErrors.phone}
-                onChange={(event) => setPhone(event.currentTarget.value)}
-              />
-              <TextField
-                id="address-line-1"
-                label="Street, building, or place"
-                readOnly={providerResolvedComponents}
-                value={components.addressLine1}
-                error={fieldErrors.addressLine1}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setFirstPartyComponent("addressLine1", value);
-                }}
-              />
-              <TextField
-                id="address-line-2"
-                label="Additional address line"
-                readOnly={providerResolvedComponents}
-                value={components.addressLine2 ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setFirstPartyComponent("addressLine2", value);
-                }}
-              />
-              <TextField
-                id="address-barangay"
-                label="Barangay"
-                readOnly={providerResolvedComponents}
-                value={components.barangay ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setFirstPartyComponent("barangay", value);
-                }}
-              />
-              <TextField
-                id="address-city"
-                label="City"
-                readOnly={providerResolvedComponents}
-                value={components.city}
-                error={fieldErrors.city}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setFirstPartyComponent("city", value);
-                }}
-              />
-              <TextField
-                id="address-region"
-                label="Region or province"
-                readOnly={providerResolvedComponents}
-                value={components.region ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setFirstPartyComponent("region", value);
-                }}
-              />
-              <TextField
-                id="address-postal-code"
-                label="Postal code"
-                readOnly={providerResolvedComponents}
-                inputMode="numeric"
-                value={components.postalCode ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setFirstPartyComponent("postalCode", value);
-                }}
-              />
-            </div>
-          </section>
-
-          <section aria-labelledby="delivery-instructions-heading" className="grid gap-4">
-            <div>
-              <h2
-                id="delivery-instructions-heading"
-                className="text-lg font-semibold text-slate-950"
-              >
-                Delivery instructions
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Add only details the external courier needs for this destination.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                id="instruction-building-unit"
-                label="Building or unit"
-                value={instructions.buildingUnit ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setInstructions((current) => ({ ...current, buildingUnit: value }));
-                }}
-              />
-              <TextField
-                id="instruction-landmark"
-                label="Landmark"
-                value={instructions.landmark ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setInstructions((current) => ({ ...current, landmark: value }));
-                }}
-              />
-            </div>
-            <TextAreaField
-              id="instruction-gate-guard"
-              label="Gate or guard instructions"
-              value={instructions.gateGuard ?? ""}
-              onChange={(event) => {
-                const value = nullable(event.currentTarget.value);
-                setInstructions((current) => ({ ...current, gateGuard: value }));
-              }}
-            />
-            <TextAreaField
-              id="instruction-delivery-note"
-              label="Delivery note"
-              description="For example, where to leave groceries or when to call."
-              maxLength={1000}
-              value={instructions.deliveryNote ?? ""}
-              onChange={(event) => {
-                const value = nullable(event.currentTarget.value);
-                setInstructions((current) => ({ ...current, deliveryNote: value }));
-              }}
-            />
-            <TextAreaField
-              id="instruction-recipient"
-              label="Recipient guidance"
-              maxLength={1000}
-              value={instructions.recipientInstruction ?? ""}
-              onChange={(event) => {
-                const value = nullable(event.currentTarget.value);
-                setInstructions((current) => ({ ...current, recipientInstruction: value }));
-              }}
-            />
-            {!initialAddress ? (
-              <TextAreaField
-                id="address-notes"
-                label="Private address note"
-                description="Optional account note. Delivery instructions belong in the fields above."
-                maxLength={1000}
-                value={notes}
-                onChange={(event) => setNotes(event.currentTarget.value)}
-              />
-            ) : null}
-          </section>
-
-          {saveError ? (
-            <p role="alert" className="text-sm text-red-700">
-              {saveError}
-            </p>
-          ) : null}
+          <TextField
+            id="address-search"
+            label="Search for an address"
+            description="Choose a result, then move the map pin to the exact entrance if needed."
+            autoComplete="street-address"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
           <button
-            type="submit"
-            disabled={saveState === "saving" || !coordinate || !confirmationSource}
-            className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            onClick={useCurrentLocation}
+            className="w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
           >
-            {saveState === "saving"
-              ? "Saving address…"
-              : serviceability?.serviceable === false
-                ? "Save unavailable address"
-                : initialAddress
-                  ? "Update confirmed address"
-                  : "Save confirmed address"}
+            Use current location
           </button>
-        </>
-      )}
+          {locationError ? (
+            <p role="alert" className="text-sm text-red-700">
+              {locationError}
+            </p>
+          ) : null}
+          {searchState === "searching" ? (
+            <p role="status" aria-live="polite" className="text-sm text-slate-600">
+              Searching for addresses…
+            </p>
+          ) : null}
+          {searchError ? (
+            <p role="alert" className="text-sm text-red-700">
+              {searchError}
+            </p>
+          ) : null}
+          {candidates.length > 0 ? (
+            <ul aria-label="Address search results" className="divide-y rounded-lg border">
+              {candidates.map((candidate) => (
+                <li key={candidate.candidateKey}>
+                  <button
+                    type="button"
+                    onClick={() => chooseCandidate(candidate)}
+                    className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50 focus-visible:outline-2"
+                  >
+                    {candidate.displayAddress}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+
+        <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
+          <div>
+            <h2 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
+              Confirm the exact entrance
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              The confirmed pin determines delivery coverage. Drag it when the suggested point is
+              not exact.
+            </p>
+          </div>
+          <MapboxMap
+            publicAccessToken={publicAccessToken}
+            adapter={mapAdapter}
+            initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
+            scene={{
+              draggablePin: {
+                position: coordinate ?? CEBU_CENTER,
+                label: coordinate ? "Confirmed delivery entrance" : "Move pin to delivery entrance",
+              },
+            }}
+            onPinMove={movePin}
+            onMapClick={movePin}
+            ariaLabel="Delivery address pin confirmation map"
+            className="min-h-72 rounded-xl border"
+            fallback={
+              <p className="text-sm text-slate-700">
+                You can still choose a search result or use your current location, then confirm the
+                selected address below.
+              </p>
+            }
+          />
+          {selectedDisplayAddress ? (
+            <p className="text-sm text-slate-700">
+              <span className="font-semibold">Selected address:</span> {selectedDisplayAddress}
+            </p>
+          ) : null}
+          <p role="status" aria-live="polite" className="text-sm text-slate-600">
+            {coordinateAnnouncement}
+          </p>
+          {serviceabilityState === "checking" ? (
+            <p role="status" aria-live="polite" className="text-sm text-slate-600">
+              Checking delivery coverage…
+            </p>
+          ) : null}
+          {serviceabilityState === "error" ? (
+            <p role="alert" className="text-sm text-red-700">
+              Delivery coverage could not be checked. You can retry by selecting the address or pin
+              again.
+            </p>
+          ) : null}
+          {serviceabilityState === "ready" && serviceability ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className={
+                serviceability.serviceable
+                  ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
+                  : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
+              }
+            >
+              <p className="font-semibold">
+                {serviceability.serviceable ? "Delivery is available" : "Delivery is unavailable"}
+              </p>
+              <p>
+                {serviceability.serviceable
+                  ? "Core confirmed this pin is inside the current delivery area."
+                  : purpose === "save"
+                    ? "You may save this address, but it cannot be used at checkout until corrected."
+                    : "Try another address or adjust the pin to check a different entrance."}
+              </p>
+            </div>
+          ) : null}
+        </section>
+
+        {purpose === "serviceability" ? (
+          <div className="grid gap-3">
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              This browsing location is not a saved checkout address. Core will confirm it again
+              when you check out.
+            </p>
+            {onServiceabilityConfirmed &&
+            serviceability?.serviceable &&
+            coordinate &&
+            selectedDisplayAddress ? (
+              <button
+                type="button"
+                disabled={saveState === "saving" || serviceabilityState !== "ready"}
+                onClick={() => void confirmBrowsing()}
+                className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+              >
+                {saveState === "saving" ? "Confirming address…" : "Deliver here"}
+              </button>
+            ) : null}
+            {saveError ? (
+              <p role="alert" className="text-sm text-red-700">
+                {saveError}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <section aria-labelledby="address-details-heading" className="grid gap-4">
+              <h2 id="address-details-heading" className="text-lg font-semibold text-slate-950">
+                Address and recipient details
+              </h2>
+              {providerResolvedComponents ? (
+                <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                  Search-result address fields are provider-resolved when saved. Move the pin to
+                  establish a first-party location before changing them; add unit, entrance,
+                  landmark, and courier guidance under Delivery instructions.
+                </p>
+              ) : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  id="address-label"
+                  label="Address label"
+                  description="For example, Home or Office."
+                  value={label}
+                  error={fieldErrors.label}
+                  onChange={(event) => setLabel(event.currentTarget.value)}
+                />
+                <TextField
+                  id="address-recipient"
+                  label="Recipient name"
+                  value={recipient}
+                  error={fieldErrors.recipient}
+                  onChange={(event) => setRecipient(event.currentTarget.value)}
+                />
+                <TextField
+                  id="address-phone"
+                  label="Phone number"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="0917 123 4567"
+                  description="Shared with the external courier so they can reach the recipient."
+                  value={phone}
+                  error={fieldErrors.phone}
+                  onChange={(event) => setPhone(event.currentTarget.value)}
+                />
+                <TextField
+                  id="address-line-1"
+                  label="Street, building, or place"
+                  readOnly={providerResolvedComponents}
+                  value={components.addressLine1}
+                  error={fieldErrors.addressLine1}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFirstPartyComponent("addressLine1", value);
+                  }}
+                />
+                <TextField
+                  id="address-line-2"
+                  label="Additional address line"
+                  readOnly={providerResolvedComponents}
+                  value={components.addressLine2 ?? ""}
+                  onChange={(event) => {
+                    const value = nullable(event.currentTarget.value);
+                    setFirstPartyComponent("addressLine2", value);
+                  }}
+                />
+                <TextField
+                  id="address-barangay"
+                  label="Barangay"
+                  readOnly={providerResolvedComponents}
+                  value={components.barangay ?? ""}
+                  onChange={(event) => {
+                    const value = nullable(event.currentTarget.value);
+                    setFirstPartyComponent("barangay", value);
+                  }}
+                />
+                <TextField
+                  id="address-city"
+                  label="City"
+                  readOnly={providerResolvedComponents}
+                  value={components.city}
+                  error={fieldErrors.city}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFirstPartyComponent("city", value);
+                  }}
+                />
+                <TextField
+                  id="address-region"
+                  label="Region or province"
+                  readOnly={providerResolvedComponents}
+                  value={components.region ?? ""}
+                  onChange={(event) => {
+                    const value = nullable(event.currentTarget.value);
+                    setFirstPartyComponent("region", value);
+                  }}
+                />
+                <TextField
+                  id="address-postal-code"
+                  label="Postal code"
+                  readOnly={providerResolvedComponents}
+                  inputMode="numeric"
+                  value={components.postalCode ?? ""}
+                  onChange={(event) => {
+                    const value = nullable(event.currentTarget.value);
+                    setFirstPartyComponent("postalCode", value);
+                  }}
+                />
+              </div>
+            </section>
+
+            <section aria-labelledby="delivery-instructions-heading" className="grid gap-4">
+              <div>
+                <h2
+                  id="delivery-instructions-heading"
+                  className="text-lg font-semibold text-slate-950"
+                >
+                  Delivery instructions
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Add only details the external courier needs for this destination.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  id="instruction-building-unit"
+                  label="Building or unit"
+                  value={instructions.buildingUnit ?? ""}
+                  onChange={(event) => {
+                    const value = nullable(event.currentTarget.value);
+                    setInstructions((current) => ({ ...current, buildingUnit: value }));
+                  }}
+                />
+                <TextField
+                  id="instruction-landmark"
+                  label="Landmark"
+                  value={instructions.landmark ?? ""}
+                  onChange={(event) => {
+                    const value = nullable(event.currentTarget.value);
+                    setInstructions((current) => ({ ...current, landmark: value }));
+                  }}
+                />
+              </div>
+              <TextAreaField
+                id="instruction-gate-guard"
+                label="Gate or guard instructions"
+                value={instructions.gateGuard ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setInstructions((current) => ({ ...current, gateGuard: value }));
+                }}
+              />
+              <TextAreaField
+                id="instruction-delivery-note"
+                label="Delivery note"
+                description="For example, where to leave groceries or when to call."
+                maxLength={1000}
+                value={instructions.deliveryNote ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setInstructions((current) => ({ ...current, deliveryNote: value }));
+                }}
+              />
+              <TextAreaField
+                id="instruction-recipient"
+                label="Recipient guidance"
+                maxLength={1000}
+                value={instructions.recipientInstruction ?? ""}
+                onChange={(event) => {
+                  const value = nullable(event.currentTarget.value);
+                  setInstructions((current) => ({ ...current, recipientInstruction: value }));
+                }}
+              />
+              {!initialAddress ? (
+                <TextAreaField
+                  id="address-notes"
+                  label="Private address note"
+                  description="Optional account note. Delivery instructions belong in the fields above."
+                  maxLength={1000}
+                  value={notes}
+                  onChange={(event) => setNotes(event.currentTarget.value)}
+                />
+              ) : null}
+            </section>
+
+            {saveError ? (
+              <p role="alert" className="text-sm text-red-700">
+                {saveError}
+              </p>
+            ) : null}
+            {!saveUncertain ? (
+              <button
+                type="submit"
+                disabled={saveState === "saving" || !coordinate || !confirmationSource}
+                className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saveState === "saving"
+                  ? "Saving address…"
+                  : serviceability?.serviceable === false
+                    ? "Save unavailable address"
+                    : initialAddress
+                      ? "Update confirmed address"
+                      : "Save confirmed address"}
+              </button>
+            ) : null}
+          </>
+        )}
+      </fieldset>
+      {saveUncertain ? (
+        <button
+          type="submit"
+          disabled={saveState === "saving"}
+          className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white"
+        >
+          {saveState === "saving" ? "Saving address…" : "Retry saving address"}
+        </button>
+      ) : null}
     </form>
   );
 }

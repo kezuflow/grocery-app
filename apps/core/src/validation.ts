@@ -81,6 +81,7 @@ const customerPhoneSchema = z
   });
 
 const addressBaseSchema = headersRequest.extend({
+  idempotencyKey: idempotencyKeySchema,
   label: reasonSchema,
   recipient: reasonSchema,
   phone: customerPhoneSchema,
@@ -131,6 +132,7 @@ export const addressRequestSchema = z.union([
 
 export const addressUpdateRequestSchema = headersRequest
   .extend({
+    idempotencyKey: idempotencyKeySchema,
     addressId: identifierSchema,
     expectedVersion: z.number().int().safe().nonnegative(),
     label: reasonSchema.optional(),
