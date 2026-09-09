@@ -12,6 +12,15 @@
 - Ensure the Web proxy preserves cookies, callback URLs, origin, and CSRF
   protections when forwarding `/api/auth` to Core.
 
+The owner authorized native Cloudflare email setup on 2026-09-10. Wrangler
+enabled Email Sending for `freshmarkets.ph`; the selected transactional sender
+is `no-reply@freshmarkets.ph`. It is configured in the ignored local Core
+`.dev.vars`, and must also be supplied to Core's deployment environment when
+that release is authorized. Sending-domain setup does not deploy a Worker,
+verify inbox delivery, or create the inbound `support@freshmarkets.ph` mailbox.
+Current acceptance and the outstanding test-recipient input are tracked only
+in [the active checkpoint](checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md).
+
 ## Verify without bypassing auth
 
 1. Deploy Core and Web with the environment configuration above.
