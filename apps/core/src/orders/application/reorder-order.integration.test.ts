@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { getCart, setCartItem } from "../../checkout/application/cart";
 import { reorderOrder } from "./reorder-order";
+import { selectCartLocation } from "../../checkout/application/select-cart-location";
 
 async function customer() {
   const suffix = crypto.randomUUID();
@@ -12,6 +13,16 @@ async function customer() {
   )
     .bind(customerId, `auth-${suffix}`, now, now)
     .run();
+  const selected = await selectCartLocation(env.DB, {
+    customerId,
+    headers: {},
+    requestId: crypto.randomUUID(),
+    latitude: 10.32,
+    longitude: 123.9,
+    expectedVersion: 0,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (!selected.ok) throw new Error(selected.error.message);
   return customerId;
 }
 

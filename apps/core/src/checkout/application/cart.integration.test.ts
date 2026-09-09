@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { addCartItemsBatch, getCart, setCartItem } from "./cart";
+import { selectCartLocation } from "./select-cart-location";
 
 async function customer() {
   const suffix = crypto.randomUUID();
@@ -11,7 +12,16 @@ async function customer() {
   )
     .bind(customerId, `auth-${suffix}`, now, now)
     .run();
-  return { customerId, requestId: `request-${suffix}`, headers: {} };
+  const principal = { customerId, requestId: `request-${suffix}`, headers: {} };
+  const selected = await selectCartLocation(env.DB, {
+    ...principal,
+    latitude: 10.32,
+    longitude: 123.9,
+    expectedVersion: 0,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (!selected.ok) throw new Error(selected.error.message);
+  return principal;
 }
 
 async function cloneSku(options: { available: boolean; priced: boolean; locationPrice?: number }) {
@@ -45,7 +55,7 @@ async function cloneSku(options: { available: boolean; priced: boolean; location
 }
 
 describe("cart aggregate", () => {
-  it("returns one identity under concurrent first touch", async () => {
+  it("returns the selected Cart identity under concurrent reads", async () => {
     const principal = await customer();
     const results = await Promise.all(Array.from({ length: 4 }, () => getCart(env.DB, principal)));
     const ids = results.map((result) => (result.ok ? result.value.id : null));

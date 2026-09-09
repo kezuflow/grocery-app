@@ -5,10 +5,15 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Auth } from "../../auth/auth";
 import { FreshMarketsAuthProvider } from "../../auth/freshmarkets-auth-provider";
+import { authClient } from "../../../lib/auth/auth-client";
 
 export function CheckoutAuthDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<AuthView>("signIn");
+  const { data: session } = authClient.useSession();
+  useEffect(() => {
+    if (session?.user) window.location.replace("/cart");
+  }, [session?.user]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -42,7 +47,7 @@ export function CheckoutAuthDialog({ onClose }: { onClose: () => void }) {
         >
           <X className="size-4" aria-hidden="true" />
         </button>
-        <FreshMarketsAuthProvider redirectTo="/checkout" onAuthViewChange={setView}>
+        <FreshMarketsAuthProvider redirectTo="/cart" onAuthViewChange={setView}>
           <Auth
             view={view}
             socialLayout="vertical"

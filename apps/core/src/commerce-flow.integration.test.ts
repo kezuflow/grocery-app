@@ -104,6 +104,15 @@ describe("customer checkout flow", () => {
     });
     expect(address.ok).toBe(true);
     if (!address.ok) return;
+    expect(
+      await core.selectCartLocation({
+        ...request(),
+        latitude: 10.32,
+        longitude: 123.9,
+        expectedVersion: 0,
+        idempotencyKey: requestId(),
+      }),
+    ).toMatchObject({ ok: true });
     const cart = await core.getCart(request());
     expect(cart.ok).toBe(true);
     if (!cart.ok) return;

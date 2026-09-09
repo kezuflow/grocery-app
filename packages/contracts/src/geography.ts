@@ -83,6 +83,8 @@ export type ServiceabilityZone = {
 };
 
 export type ServiceabilityResult = {
+  /** Nearest geographically eligible site for browsing; checkout revalidates operations. */
+  fulfillmentLocation?: { id: string; name: string } | null;
   serviceable: boolean;
   reason: ServiceabilityFailureReason | null;
   coordinate: Coordinate;

@@ -6,7 +6,6 @@ import type {
   SetCartItemRequest,
 } from "@freshmarkets/contracts";
 import type { AppErrorCode } from "@freshmarkets/contracts";
-import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
 import {
@@ -36,35 +35,18 @@ async function activeCart(database: D1Database, customerId: string): Promise<Car
     .first<CartRow>();
 }
 
-/** Load or atomically provision the customer's single active cart. */
+/** Read the customer's Cart after an explicit delivery-location selection. */
 export async function getCart(
   database: D1Database,
   input: AuthenticatedRequest & { customerId: string },
 ): Promise<CartResult> {
-  let cart = await activeCart(database, input.customerId);
+  const cart = await activeCart(database, input.customerId);
   if (!cart) {
-    const locationId = await activeFulfillmentLocationId(
-      database,
-      await activeMarketCode(database),
+    return failure(
+      "DELIVERY_LOCATION_REQUIRED",
+      "Choose a delivery address to start your cart.",
+      input.requestId,
     );
-    if (!locationId)
-      return failure(
-        "CONFIGURATION_ERROR",
-        "No active fulfillment location is configured",
-        input.requestId,
-      );
-    const now = Date.now();
-    await database
-      .prepare(
-        `INSERT INTO cart (id, customer_id, location_id, status, version, created_at, updated_at)
-         VALUES (?, ?, ?, 'ACTIVE', 1, ?, ?)
-         ON CONFLICT(customer_id) WHERE status='ACTIVE' DO NOTHING`,
-      )
-      .bind(crypto.randomUUID(), input.customerId, locationId, now, now)
-      .run();
-    cart = await activeCart(database, input.customerId);
-    if (!cart)
-      return failure("INTERNAL_ERROR", "The active cart could not be provisioned", input.requestId);
   }
 
   const currency = await database
@@ -189,6 +171,7 @@ export async function getCart(
     ok: true,
     value: {
       id: cart.id,
+      locationId: cart.location_id,
       version: cart.version,
       items,
       totalMinor: items.reduce((sum, item) => sum + (item.lineTotalMinor ?? 0), 0),

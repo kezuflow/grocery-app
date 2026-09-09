@@ -214,6 +214,22 @@ export const setCartItemRequestSchema = headersRequest.extend({
   idempotencyKey: idempotencyKeySchema,
 });
 
+export const selectCartLocationRequestSchema = headersRequest.extend({
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  expectedVersion: z.number().int().nonnegative(),
+  idempotencyKey: idempotencyKeySchema,
+});
+export const mergeGuestCartRequestSchema = headersRequest.extend({
+  cartId: identifierSchema,
+  expectedVersion: expectedVersionSchema,
+  idempotencyKey: idempotencyKeySchema,
+  items: z
+    .array(z.object({ skuId: identifierSchema, quantity: positiveIntegerSchema }))
+    .min(1)
+    .max(100),
+});
+
 export const adminOrderCommandSchema = headersRequest.extend({
   orderId: identifierSchema,
   action: z.enum(["CANCEL", "REFUND"]),

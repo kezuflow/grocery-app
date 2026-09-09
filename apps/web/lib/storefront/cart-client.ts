@@ -1,5 +1,6 @@
-import type { CartView, CatalogMedia } from "@freshmarkets/contracts";
+import type { CartView, CatalogMedia, RpcResult, GuestCartMerge } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { loadCartForLocation, requestDeliveryLocation } from "./load-cart-for-location";
 const cartMediaSchema = z.object({
   src: z.string().regex(/^\/media\/products\/[A-Za-z0-9_-]+\/[1-9]\d*$/),
   alt: z.string().trim().min(1).max(300),
@@ -47,6 +48,11 @@ export type CartItemMetadata = Pick<
 >;
 
 const GUEST_CART_KEY = "freshmarkets.guest-cart.v1";
+const GUEST_MERGE_KEY = "freshmarkets.guest-cart-merge.v1";
+let loadError = "";
+export function cartLoadError(): string {
+  return loadError;
+}
 
 type CartRouteResult = {
   ok: boolean;
@@ -166,7 +172,10 @@ function rememberGuestItem(skuId: string, quantity: number, metadata?: CartItemM
   };
   if (typeof window !== "undefined") {
     if (items.length)
-      window.localStorage.setItem(GUEST_CART_KEY, JSON.stringify({ version: 1, items }));
+      window.localStorage.setItem(
+        GUEST_CART_KEY,
+        JSON.stringify({ version: 1, transferId: crypto.randomUUID(), items }),
+      );
     else window.localStorage.removeItem(GUEST_CART_KEY);
   }
   rememberCart(view);
@@ -174,6 +183,7 @@ function rememberGuestItem(skuId: string, quantity: number, metadata?: CartItemM
 }
 
 export function clearGuestCart(): void {
+  loadError = "";
   if (typeof window !== "undefined") window.localStorage.removeItem(GUEST_CART_KEY);
   if (cachedCartView?.id === "guest-cart") cachedCartView = null;
 }
@@ -187,16 +197,28 @@ async function postCartQuantity(
   quantity: number,
   metadata?: CartItemMetadata,
 ): Promise<AddToCartResult> {
-  let serverView = cachedCartView?.id !== "guest-cart" ? cachedCartView : null;
+  if (window.localStorage.getItem(GUEST_MERGE_KEY)) {
+    await fetchCart();
+    return {
+      ok: false,
+      reason: "error",
+      message: loadError || "Your saved cart was updated. Review its quantities before editing.",
+    };
+  }
+  if (loadError && guestCartView()) {
+    const view = rememberGuestItem(skuId, quantity, metadata);
+    return { ok: true, count: cartCountFromView(view) };
+  }
+  let serverView: CartView | null = null;
   if (!serverView) {
     try {
-      const response = await fetch("/api/commerce/cart");
-      const loaded = (await response.json()) as CartRouteResult;
-      if (loaded.ok && loaded.value) serverView = loaded.value;
+      const loaded = await loadCartForLocation();
+      if (loaded.ok) serverView = loaded.value;
       else if (loaded.error?.code === "UNAUTHENTICATED") {
         const view = rememberGuestItem(skuId, quantity, metadata);
         return { ok: true, count: cartCountFromView(view), requiresSignIn: true };
       } else {
+        if (loaded.error?.code === "DELIVERY_LOCATION_REQUIRED") requestDeliveryLocation();
         return {
           ok: false,
           reason: "error",
@@ -240,30 +262,80 @@ async function postCartQuantity(
   };
 }
 
-async function mergeGuestCart(serverView: CartView, guestView: CartView): Promise<CartView | null> {
-  let merged = serverView;
-  for (const item of guestView.items) {
-    try {
-      const response = await fetch("/api/commerce/cart", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          cartId: merged.id,
-          skuId: item.skuId,
-          quantity: item.quantity,
-          expectedVersion: merged.version,
-          idempotencyKey: crypto.randomUUID(),
-        }),
-      });
-      const result = (await response.json()) as CartRouteResult;
-      if (!result.ok || !result.value) return null;
-      merged = result.value;
-    } catch {
-      return null;
+async function mergeGuestCart(serverView: CartView, guestView: CartView): Promise<CartView> {
+  const raw = window.localStorage.getItem(GUEST_CART_KEY);
+  if (!raw) {
+    const current = (await (await fetch("/api/commerce/cart")).json()) as RpcResult<CartView>;
+    if (!current.ok) throw new Error(current.error.message);
+    return current.value;
+  }
+  const schema = z.object({
+    raw: z.string(),
+    body: z.object({
+      cartId: z.string(),
+      expectedVersion: z.number().int().positive(),
+      idempotencyKey: z.string(),
+      items: z.array(z.object({ skuId: z.string(), quantity: z.number().int().positive() })),
+    }),
+  });
+  const stored = window.localStorage.getItem(GUEST_MERGE_KEY);
+  const pending = stored ? schema.parse(JSON.parse(stored)) : null;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+  const identity = [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+  const command = pending ?? {
+    raw,
+    body: {
+      cartId: serverView.id,
+      expectedVersion: serverView.version,
+      idempotencyKey: `guest-${identity}`,
+      items: guestView.items.map((item) => ({ skuId: item.skuId, quantity: item.quantity })),
+    },
+  };
+  window.localStorage.setItem(GUEST_MERGE_KEY, JSON.stringify(command));
+  const result = (await (
+    await fetch("/api/commerce/cart/merge", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(command.body),
+    })
+  ).json()) as RpcResult<GuestCartMerge>;
+  if (!result.ok) {
+    if (result.error.code === "CART_VERSION_CONFLICT" || result.error.code === "NOT_FOUND")
+      window.localStorage.removeItem(GUEST_MERGE_KEY);
+    throw new Error(result.error.message);
+  }
+  const current = (await (await fetch("/api/commerce/cart")).json()) as RpcResult<CartView>;
+  if (!current.ok) throw new Error(current.error.message);
+  if (window.localStorage.getItem(GUEST_CART_KEY) !== command.raw) {
+    const changed = guestCartView();
+    const remaining =
+      changed?.items
+        .map((item) => ({
+          ...item,
+          currency: changed.currency,
+          quantity: Math.max(
+            0,
+            item.quantity -
+              (command.body.items.find((applied) => applied.skuId === item.skuId)?.quantity ?? 0),
+          ),
+        }))
+        .filter((item) => item.quantity > 0) ?? [];
+    window.localStorage.removeItem(GUEST_MERGE_KEY);
+    if (remaining.length) {
+      window.localStorage.setItem(
+        GUEST_CART_KEY,
+        JSON.stringify({ version: 1, transferId: crypto.randomUUID(), items: remaining }),
+      );
+      loadError =
+        "Your saved cart changed during sign-in. Retry loading to carry over the remaining items, then review quantities.";
+      return { ...current.value, checkoutBlocked: true };
     }
   }
   clearGuestCart();
-  return merged;
+  window.localStorage.removeItem(GUEST_MERGE_KEY);
+  return current.value;
 }
 
 /** Increment a SKU's cart quantity by one. */
@@ -279,29 +351,64 @@ export function addToCart(
  * Load the current cart. Anonymous visitors resolve to null rather than an
  * error so surfaces can render signed-out states without console noise.
  */
-export async function fetchCart(): Promise<CartView | null> {
+let loadingCart: Promise<CartView | null> | null = null;
+export function fetchCart(): Promise<CartView | null> {
+  if (!loadingCart)
+    loadingCart = loadCart().finally(() => {
+      loadingCart = null;
+    });
+  return loadingCart;
+}
+async function loadCart(): Promise<CartView | null> {
+  loadError = "";
   try {
-    const response = await fetch("/api/commerce/cart");
-    const result = (await response.json()) as CartRouteResult;
+    const result = await loadCartForLocation();
     if (result.ok && result.value) {
       const guest = guestCartView();
       const merged = guest ? await mergeGuestCart(result.value, guest) : result.value;
-      const next = merged ?? result.value;
+      const next = merged;
       rememberCart(next);
       return next;
     }
+    if (!result.ok && result.error.code !== "UNAUTHENTICATED") loadError = result.error.message;
     const guest = guestCartView();
     if (guest) {
-      rememberCart(guest);
-      return guest;
+      const view = loadError
+        ? {
+            ...guest,
+            checkoutBlocked: true,
+            items: guest.items.map((item) => ({
+              ...item,
+              unitPriceMinor: null,
+              lineTotalMinor: null,
+              availability: "PRICE_UNAVAILABLE" as const,
+            })),
+          }
+        : guest;
+      rememberCart(view);
+      return view;
     }
     cachedCartView = null;
     return null;
-  } catch {
+  } catch (error) {
+    loadError =
+      error instanceof Error
+        ? error.message
+        : "Your saved cart could not be loaded. Retry without losing your items.";
     const guest = guestCartView();
     if (guest) {
-      rememberCart(guest);
-      return guest;
+      const view = {
+        ...guest,
+        checkoutBlocked: true,
+        items: guest.items.map((item) => ({
+          ...item,
+          unitPriceMinor: null,
+          lineTotalMinor: null,
+          availability: "PRICE_UNAVAILABLE" as const,
+        })),
+      };
+      rememberCart(view);
+      return view;
     }
     return null;
   }

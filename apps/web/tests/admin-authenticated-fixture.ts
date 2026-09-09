@@ -16,6 +16,24 @@ const appBaseUrl =
 const authenticatedFixtureEnabled =
   process.env.E2E_AUTHENTICATED === "1" || process.env.E2E_START_STACK === "1";
 
+// These fixtures start after a customer chose a delivery location. First-visit
+// tests use their separate anonymous page to exercise the actual selection UI.
+async function selectFixtureLocation(page: Page): Promise<void> {
+  const point = { latitude: 10.32, longitude: 123.9 };
+  await page.context().addCookies([
+    {
+      name: "freshmarkets_browse_point",
+      value: encodeURIComponent(JSON.stringify(point)),
+      url: appBaseUrl,
+      sameSite: "Lax",
+    },
+  ]);
+  const selected = await page.request.post("/api/commerce/cart/location", {
+    data: { ...point, expectedVersion: 0, idempotencyKey: crypto.randomUUID() },
+  });
+  expect(await selected.json()).toMatchObject({ ok: true });
+}
+
 type AdminFixtures = {
   adminPage: Page;
   catalogReadOnlyPage: Page;
@@ -112,6 +130,7 @@ async function provisionAccount(
       `Admin fixture signin failed with HTTP ${signIn.status()}: ${await signIn.text()}`,
     );
   }
+  await selectFixtureLocation(page);
 }
 
 export const test = base.extend<AdminFixtures>({
@@ -171,6 +190,7 @@ export const test = base.extend<AdminFixtures>({
       data: { email, password },
     });
     expect(signIn.status()).toBeLessThan(400);
+    await selectFixtureLocation(page);
     await use(page);
     await context.close();
   },

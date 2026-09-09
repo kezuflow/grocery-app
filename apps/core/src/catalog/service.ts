@@ -30,7 +30,6 @@ type Database = CatalogRawDatabase;
 
 /** Seed identifiers remain fixtures, not pricing or routing fallbacks. */
 export const MARKET_METRO_CEBU = "market-metro-cebu";
-export const LAUNCH_LOCATION_ID = "location-cebu-central";
 
 const DEFAULT_PAGE_LIMIT = 24;
 const MAX_PAGE_LIMIT = 50;
@@ -567,7 +566,7 @@ export async function searchCatalog(
   },
 ): Promise<CatalogSearchPage> {
   const nowMs = Date.now();
-  const context = await resolveCommerceContext(database, input.locationId ?? LAUNCH_LOCATION_ID);
+  const context = await resolveCommerceContext(database, input.locationId);
   if (input.cursor !== undefined) decodeCatalogCursor(input.cursor); // fail fast
 
   const requestedLimit = Math.min(Math.max(1, input.limit ?? DEFAULT_PAGE_LIMIT), MAX_PAGE_LIMIT);
@@ -608,7 +607,7 @@ export async function getProduct(
   locationId?: string,
 ): Promise<MarketplaceProductView | null> {
   const nowMs = Date.now();
-  const context = await resolveCommerceContext(database, locationId ?? LAUNCH_LOCATION_ID);
+  const context = await resolveCommerceContext(database, locationId);
   // Detail lookup is not availability-filtered: unknown or inactive slugs are
   // NOT_FOUND, but currently unavailabile products still render honestly.
   const rows = await selectProductRows(database, { nowMs, slug, limit: 1 });
@@ -643,7 +642,7 @@ export async function getMarketplaceHome(
   input: { locationId?: string; itemsPerRail?: number },
 ): Promise<MarketplaceHomeView> {
   const nowMs = Date.now();
-  const context = await resolveCommerceContext(database, input.locationId ?? LAUNCH_LOCATION_ID);
+  const context = await resolveCommerceContext(database, input.locationId);
   const itemsPerRail = Math.min(
     Math.max(1, Math.floor(input.itemsPerRail ?? DEFAULT_ITEMS_PER_RAIL)),
     MAX_ITEMS_PER_RAIL,

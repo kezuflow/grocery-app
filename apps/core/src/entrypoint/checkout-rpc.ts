@@ -7,6 +7,8 @@ import type {
   DeliveryCycleRequest,
   FulfillmentOptionsRequest,
   SetCartItemRequest,
+  SelectCartLocationRequest,
+  MergeGuestCartRequest,
 } from "@freshmarkets/contracts";
 import { identifierSchema, positiveIntegerSchema } from "@freshmarkets/validation";
 import { abandonCheckoutAttempt } from "../checkout/application/abandon-checkout-attempt";
@@ -14,6 +16,8 @@ import { listFulfillmentOptions } from "../checkout/application/list-fulfillment
 import { listDeliveryCycles } from "../commerce/cycle-queries";
 import { activeMarketCode } from "../geography/market-defaults";
 import { getCart, setCartItem } from "../checkout/application/cart";
+import { selectCartLocation } from "../checkout/application/select-cart-location";
+import { mergeGuestCart } from "../checkout/application/merge-guest-cart";
 import {
   createCheckoutQuote,
   refreshCustomerCheckoutQuote,
@@ -27,6 +31,8 @@ import {
   createCheckoutQuoteSchema,
   refreshCheckoutQuoteSchema,
   setCartItemRequestSchema,
+  selectCartLocationRequestSchema,
+  mergeGuestCartRequestSchema,
 } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
@@ -83,6 +89,24 @@ export function createCheckoutRpc(context: CoreRpcContext) {
       return setCartItem(context.env.DB, { ...input, customerId: customer.value.customerId });
     },
 
+    async selectCartLocation(input: SelectCartLocationRequest) {
+      const validation = selectCartLocationRequestSchema.safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return selectCartLocation(context.env.DB, {
+        ...input,
+        customerId: customer.value.customerId,
+      });
+    },
+
+    async mergeGuestCart(input: MergeGuestCartRequest) {
+      const validation = mergeGuestCartRequestSchema.safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return mergeGuestCart(context.env.DB, { ...input, customerId: customer.value.customerId });
+    },
     async evaluateCheckout(input: CheckoutEligibilityRequest) {
       const validation = checkoutRequestSchema.safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);

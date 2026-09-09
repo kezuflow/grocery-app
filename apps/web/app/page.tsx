@@ -7,6 +7,7 @@ import { CategoryStrip } from "../components/storefront/marketplace/category-str
 import { QuickViewProvider } from "../components/storefront/marketplace/quick-view-provider";
 import { PromoBanners } from "../components/storefront/marketplace/promo-banners";
 import { railEligible, toPresentationProducts } from "../lib/storefront/catalog-presentation";
+import { readBrowsingLocation } from "../lib/storefront/read-browsing-location";
 
 const PAGE_SIZE = 24;
 
@@ -41,10 +42,11 @@ export default async function MarketplaceHome({
   const browsing = category === "all" && query === "";
   const requestId = crypto.randomUUID();
   const client = coreClient(env.CORE);
+  const locationId = await readBrowsingLocation();
 
   if (browsing) {
     const [home, campaigns] = await Promise.all([
-      client.getMarketplaceHome({ requestId, itemsPerRail: 12 }),
+      client.getMarketplaceHome({ requestId, itemsPerRail: 12, locationId }),
       client.listPublishedPromotionCampaigns({ requestId: crypto.randomUUID() }),
     ]);
     if (!home.ok) {
@@ -100,6 +102,7 @@ export default async function MarketplaceHome({
       query: query || undefined,
       categorySlug: category === "all" ? undefined : category,
       limit: PAGE_SIZE,
+      locationId,
     }),
     client.listCategories({ requestId: crypto.randomUUID() }),
   ]);
@@ -143,6 +146,7 @@ export default async function MarketplaceHome({
                 initialCursor={results.value.nextCursor}
                 query={query}
                 categorySlug={category === "all" ? undefined : category}
+                locationId={locationId}
               />
             ) : (
               <ProductGridEmpty query={query} />

@@ -36,6 +36,21 @@ async function eligibleCount(categorySlug?: string): Promise<number> {
 }
 
 describe("catalog read models (integration)", () => {
+  it("keeps general browsing visible without inventing a location, price or stock availability", async () => {
+    const detail = await getProduct(db(), "red-onion");
+    expect(detail?.product.variants.length).toBeGreaterThan(0);
+    for (const variant of detail!.product.variants)
+      expect(variant).toMatchObject({
+        availability: "LOCATION_REQUIRED",
+        priceMinor: null,
+        currency: null,
+      });
+    const page = await searchCatalog(db(), { query: "onion", limit: 5 });
+    expect(page.items.length).toBeGreaterThan(0);
+    for (const item of page.items)
+      for (const variant of item.variants)
+        expect(variant).toMatchObject({ availability: "LOCATION_REQUIRED", priceMinor: null });
+  });
   it("returns safe database-backed category icon paths", async () => {
     const view = await listCategories(db());
     expect(view.categories.map(({ code, iconSrc }) => ({ code, iconSrc }))).toEqual([

@@ -311,6 +311,8 @@ export const coreServiceMethodNames = [
   "getSubscriptionEligibility",
   "listDeliveryCycles",
   "getCart",
+  "selectCartLocation",
+  "mergeGuestCart",
   "setCartItem",
   "evaluateCheckout",
   "createCheckoutQuote",

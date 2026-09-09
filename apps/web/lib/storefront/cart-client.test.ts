@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CartView } from "@freshmarkets/contracts";
 import {
   CART_CHANGED_EVENT,
@@ -8,11 +8,23 @@ import {
   cartCountFromView,
   fetchCart,
   quantityForSku,
+  clearGuestCart,
+  cartLoadError,
 } from "./cart-client";
 
+// Location-command behavior is exercised separately against its real fetch sequence.
+vi.mock("./load-cart-for-location", () => ({
+  loadCartForLocation: async () => (await fetch("/api/commerce/cart")).json(),
+  requestDeliveryLocation: vi.fn(),
+}));
+const guestKey = "freshmarkets.guest-cart.v1",
+  pendingKey = "freshmarkets.guest-cart-merge.v1";
+let saved: Map<string, string>;
+let dispatch: ReturnType<typeof vi.fn>;
 function view(overrides: Partial<CartView> = {}): CartView {
   return {
     id: "cart-1",
+    locationId: "location-1",
     version: 2,
     items: [
       {
@@ -39,44 +51,58 @@ function view(overrides: Partial<CartView> = {}): CartView {
     ...overrides,
   };
 }
+function saveGuest() {
+  saved.set(
+    guestKey,
+    JSON.stringify({
+      version: 1,
+      transferId: "one-guest-selection",
+      items: [
+        {
+          skuId: "sku-a",
+          quantity: 2,
+          name: "Avocado",
+          unitPriceMinor: 9450,
+          currency: "PHP",
+          lineTotalMinor: 18900,
+        },
+      ],
+    }),
+  );
+}
+const response = (value: unknown) => new Response(JSON.stringify(value));
+beforeEach(() => {
+  saved = new Map();
+  dispatch = vi.fn();
+  vi.stubGlobal("window", {
+    dispatchEvent: dispatch,
+    localStorage: {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => saved.set(key, value),
+      removeItem: (key: string) => saved.delete(key),
+    },
+  });
+  clearGuestCart();
+});
+afterEach(() => vi.unstubAllGlobals());
 
 describe("cart view helpers", () => {
-  it("exposes a stable event for opening the storefront cart drawer", () => {
-    assert.equal(CART_DRAWER_REQUEST_EVENT, "fm:cart-drawer-request");
-  });
-
-  it("sums item quantities into the cart count", () => {
+  it("exposes a stable cart drawer event", () =>
+    assert.equal(CART_DRAWER_REQUEST_EVENT, "fm:cart-drawer-request"));
+  it("sums quantities and handles an empty Cart", () => {
     assert.equal(cartCountFromView(view()), 3);
     assert.equal(cartCountFromView(view({ items: [] })), 0);
   });
-
-  it("finds a sku quantity and defaults to zero", () => {
+  it("finds a SKU quantity without inventing a missing line", () => {
     assert.equal(quantityForSku(view(), "sku-a"), 2);
     assert.equal(quantityForSku(view(), "missing"), 0);
   });
 });
-
 describe("addToCart", () => {
-  it("retains canonical image URLs in guest carts and rejects tampered remote image URLs", async () => {
-    let saved: string | null = null;
-    const storage = {
-      getItem: () => saved,
-      setItem: (_key: string, value: string) => {
-        saved = value;
-      },
-      removeItem: () => {
-        saved = null;
-      },
-    };
-    vi.stubGlobal("window", { dispatchEvent: vi.fn(), localStorage: storage });
+  it("retains canonical guest image URLs and rejects tampered remote images", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ ok: false, error: { code: "UNAUTHENTICATED" } }), {
-            status: 401,
-          }),
-      ),
+      vi.fn(async () => response({ ok: false, error: { code: "UNAUTHENTICATED" } })),
     );
     const media = { src: "/media/products/image-1/2", alt: "Fresh avocado" };
     expect(
@@ -88,166 +114,165 @@ describe("addToCart", () => {
       }),
     ).toMatchObject({ ok: true });
     expect((await fetchCart())?.items[0]?.media).toEqual(media);
-    saved = JSON.stringify({
-      items: [
-        {
-          skuId: "sku-media",
-          quantity: 1,
-          name: "Avocado",
-          unitPriceMinor: 100,
-          currency: "PHP",
-          media: { src: "https://outside.invalid/tracker", alt: "Unsafe saved image" },
-        },
-      ],
-    });
-    expect((await fetchCart())?.items[0]?.media).toBeNull();
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  function stubFetch(body: unknown, ok: boolean) {
-    const dispatch = vi.fn();
-    vi.stubGlobal("window", { dispatchEvent: dispatch });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 401 })),
-    );
-    return dispatch;
-  }
-
-  it("broadcasts the new cart count on success", async () => {
-    const dispatch = stubFetch({ ok: true, value: view() }, true);
-    const result = await addToCart("sku-a", 3);
-    assert.deepEqual(result, { ok: true, count: 3 });
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    const dispatched = dispatch.mock.calls[0]?.[0] as CustomEvent | undefined;
-    assert.equal(dispatched?.type, CART_CHANGED_EVENT);
-  });
-
-  it("classifies UNAUTHENTICATED failures", async () => {
-    const storage = {
-      value: null as string | null,
-      getItem: () => storage.value,
-      setItem: (_key: string, value: string) => {
-        storage.value = value;
-      },
-      removeItem: () => {
-        storage.value = null;
-      },
-      clear: () => {
-        storage.value = null;
-      },
-    } as unknown as Storage;
-    const dispatch = stubFetch(
-      { ok: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required" } },
-      false,
-    );
-    vi.stubGlobal("window", { dispatchEvent: dispatch, localStorage: storage });
-    const result = await addToCart("sku-a", 1, {
-      name: "Avocado",
-      unitPriceMinor: 9450,
-      currency: "PHP",
-    });
-    assert.deepEqual(result, { ok: true, count: 1, requiresSignIn: true });
-    assert.equal(JSON.parse(storage.value ?? "{}").items[0].skuId, "sku-a");
-  });
-
-  it("reports fetch failures as generic errors", async () => {
-    vi.stubGlobal("window", { dispatchEvent: vi.fn() });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("offline");
-      }),
-    );
-    const result = await addToCart("sku-a", 1);
-    assert.equal(result.ok, false);
-    assert.equal(result.ok === false && result.reason, "error");
-  });
-});
-
-describe("fetchCart", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("returns the view on success", async () => {
-    vi.stubGlobal("window", { dispatchEvent: vi.fn() });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ ok: true, value: view() }))),
-    );
-    assert.equal((await fetchCart())?.id, "cart-1");
-  });
-
-  it("returns null for anonymous visitors and failures", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () => new Response(JSON.stringify({ ok: false, error: { code: "UNAUTHENTICATED" } })),
-      ),
-    );
-    assert.equal(await fetchCart(), null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("offline");
-      }),
-    );
-    assert.equal(await fetchCart(), null);
-  });
-
-  it("merges a saved guest cart after authentication succeeds", async () => {
-    const storage = {
-      value: JSON.stringify({
-        version: 1,
+    saved.set(
+      guestKey,
+      JSON.stringify({
         items: [
           {
-            skuId: "sku-a",
-            quantity: 2,
+            skuId: "sku-media",
+            quantity: 1,
             name: "Avocado",
-            unitPriceMinor: 9450,
+            unitPriceMinor: 100,
             currency: "PHP",
-            lineTotalMinor: 18900,
+            media: { src: "https://outside.invalid/tracker", alt: "Unsafe image" },
           },
         ],
       }),
-      getItem: () => storage.value,
-      setItem: (_key: string, value: string) => {
-        storage.value = value;
-      },
-      removeItem: () => {
-        storage.value = null;
-      },
-    } as unknown as Storage;
-    vi.stubGlobal("window", { dispatchEvent: vi.fn(), localStorage: storage });
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    );
+    expect((await fetchCart())?.items[0]?.media).toBeNull();
+  });
+  it("broadcasts the authoritative count on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ ok: true, value: view() })),
+    );
+    expect(await addToCart("sku-a", 3)).toEqual({ ok: true, count: 3 });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]?.[0].type).toBe(CART_CHANGED_EVENT);
+  });
+  it("keeps anonymous items for sign-in with a distinct transfer identity", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        response({ ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in" } }),
+      ),
+    );
+    expect(
+      await addToCart("sku-a", 1, { name: "Avocado", unitPriceMinor: 9450, currency: "PHP" }),
+    ).toEqual({ ok: true, count: 1, requiresSignIn: true });
+    const first = JSON.parse(saved.get(guestKey)!);
+    expect(first.items[0].skuId).toBe("sku-a");
+    await addToCart("sku-a", 2, { name: "Avocado", unitPriceMinor: 9450, currency: "PHP" });
+    expect(JSON.parse(saved.get(guestKey)!).transferId).not.toBe(first.transferId);
+  });
+  it("reports fetch failure without claiming a mutation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    expect(await addToCart("sku-a", 1)).toMatchObject({ ok: false, reason: "error" });
+  });
+});
+describe("fetchCart", () => {
+  it("returns the authoritative view", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ ok: true, value: view() })),
+    );
+    expect((await fetchCart())?.id).toBe("cart-1");
+  });
+  it("returns null for anonymous empty carts and exposes a retryable transport error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ ok: false, error: { code: "UNAUTHENTICATED" } })),
+    );
+    expect(await fetchCart()).toBeNull();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    expect(await fetchCart()).toBeNull();
+    expect(cartLoadError()).toBe("offline");
+  });
+  it("merges all guest lines in one command and uses the following current Cart read", async () => {
+    saveGuest();
+    let quantity = 3;
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
-        return new Response(
-          JSON.stringify({
-            ok: true,
-            value: view({
-              items: [
-                {
-                  skuId: "sku-a",
-                  quantity: 2,
-                  name: "Avocado",
-                  availability: "AVAILABLE",
-                  unitPriceMinor: 9450,
-                  lineTotalMinor: 18900,
-                },
-              ],
-            }),
-          }),
-        );
+        const body = JSON.parse(String(init.body));
+        expect(body.items).toEqual([{ skuId: "sku-a", quantity: 2 }]);
+        quantity += 2;
+        return response({ ok: true, value: { cartId: "cart-1", version: 3 } });
       }
-      return new Response(JSON.stringify({ ok: true, value: view({ items: [] }) }));
+      return response({
+        ok: true,
+        value: view({
+          items: [
+            { ...view().items[0]!, quantity, unitPriceMinor: 100, lineTotalMinor: quantity * 100 },
+          ],
+        }),
+      });
     });
     vi.stubGlobal("fetch", fetchMock);
-    const result = await fetchCart();
-    assert.equal(result?.items[0]?.skuId, "sku-a");
-    assert.equal(fetchMock.mock.calls.length, 2);
-    assert.equal(storage.value, null);
+    const [first, concurrent] = await Promise.all([fetchCart(), fetchCart()]);
+    expect(first).toEqual(concurrent);
+    expect(first?.items[0]).toMatchObject({
+      quantity: 5,
+      unitPriceMinor: 100,
+      lineTotalMinor: 500,
+    });
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+    expect(saved.has(guestKey)).toBe(false);
+    expect(saved.has(pendingKey)).toBe(false);
+  });
+  it("replays the same merge after a lost success response without duplicating existing quantities", async () => {
+    saveGuest();
+    let quantity = 3;
+    const commands: string[] = [];
+    const applied = new Set<string>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          const raw = String(init.body),
+            body = JSON.parse(raw);
+          commands.push(raw);
+          if (!applied.has(body.idempotencyKey)) {
+            applied.add(body.idempotencyKey);
+            quantity += 2;
+            throw new Error("response lost");
+          }
+          return response({ ok: true, value: { cartId: "cart-1", version: 3 } });
+        }
+        return response({
+          ok: true,
+          value: view({
+            version: applied.size ? 3 : 2,
+            items: [{ ...view().items[0]!, quantity }],
+          }),
+        });
+      }),
+    );
+    expect((await fetchCart())?.checkoutBlocked).toBe(true);
+    expect(saved.has(guestKey)).toBe(true);
+    expect(saved.has(pendingKey)).toBe(true);
+    expect((await fetchCart())?.items[0]?.quantity).toBe(5);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    expect(applied.size).toBe(1);
+    expect(saved.has(guestKey)).toBe(false);
+  });
+  it("keeps rejected guest data visible for review and permits removal before retry", async () => {
+    saveGuest();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) =>
+        init?.method === "POST"
+          ? response({
+              ok: false,
+              error: { code: "NOT_FOUND", message: "Saved item no longer exists" },
+            })
+          : response({ ok: true, value: view({ items: [] }) }),
+      ),
+    );
+    expect((await fetchCart())?.checkoutBlocked).toBe(true);
+    expect(saved.has(guestKey)).toBe(true);
+    expect(saved.has(pendingKey)).toBe(false);
+    expect(await addToCart("sku-a", 0)).toMatchObject({ ok: true, count: 0 });
+    expect(saved.has(guestKey)).toBe(false);
   });
 });

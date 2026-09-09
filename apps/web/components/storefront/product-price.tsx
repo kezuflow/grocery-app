@@ -5,8 +5,11 @@ import { formatMoney } from "@/lib/storefront/catalog-presentation";
 export function ProductPrice({
   variant,
 }: {
-  variant: Pick<CatalogVariant, "priceMinor" | "currency" | "sale">;
+  variant: Pick<CatalogVariant, "priceMinor" | "currency" | "sale"> & {
+    availability?: CatalogVariant["availability"];
+  };
 }) {
+  if (variant.availability === "LOCATION_REQUIRED") return <>Choose delivery location</>;
   if (variant.priceMinor === null || variant.currency === null) return <>Unavailable</>;
   return variant.sale ? (
     <span className="inline-flex flex-wrap items-baseline gap-x-2">

@@ -2,6 +2,12 @@
 
 import { ChevronDown, MapPin, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import {
+  browsingPointFromCookies,
+  DELIVERY_LOCATION_REQUEST_EVENT,
+  rememberBrowsingPoint,
+} from "../../../lib/storefront/browsing-location";
 import { useStorefrontRuntime } from "../storefront-runtime";
 import { AddressEditor, type ServiceabilitySelection } from "./address-editor";
 
@@ -11,7 +17,11 @@ type BrowsingLocation = Pick<ServiceabilitySelection, "displayAddress" | "coordi
 
 function readSelection(): BrowsingLocation | null {
   try {
-    const value = JSON.parse(sessionStorage.getItem(SESSION_SELECTION_KEY) ?? "null") as unknown;
+    const value = JSON.parse(
+      localStorage.getItem(SESSION_SELECTION_KEY) ??
+        sessionStorage.getItem(SESSION_SELECTION_KEY) ??
+        "null",
+    ) as unknown;
     if (!value || typeof value !== "object") return null;
     const candidate = value as Partial<BrowsingLocation>;
     if (
@@ -28,10 +38,11 @@ function readSelection(): BrowsingLocation | null {
 }
 
 function compactAddress(value: string): string {
-  return value.split(",")[0]?.trim() || "Cebu City";
+  return value.split(",")[0]?.trim() || "Choose location";
 }
 
 export function DeliveryAddressDialog() {
+  const pathname = usePathname();
   const { mapboxPublicAccessToken } = useStorefrontRuntime();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -41,7 +52,17 @@ export function DeliveryAddressDialog() {
   useEffect(() => {
     setSelection(readSelection());
     setInteractive(true);
-  }, []);
+    const browsing = pathname === "/" || pathname.startsWith("/products/") || pathname === "/cart";
+    if (
+      browsing &&
+      !browsingPointFromCookies(document.cookie) &&
+      !sessionStorage.getItem("freshmarkets.location-prompt-dismissed")
+    )
+      setOpen(true);
+    const requestLocation = () => setOpen(true);
+    window.addEventListener(DELIVERY_LOCATION_REQUEST_EVENT, requestLocation);
+    return () => window.removeEventListener(DELIVERY_LOCATION_REQUEST_EVENT, requestLocation);
+  }, [pathname]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -55,9 +76,11 @@ export function DeliveryAddressDialog() {
       displayAddress: next.displayAddress,
       coordinate: next.coordinate,
     };
-    sessionStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify(browsingLocation));
+    localStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify(browsingLocation));
+    rememberBrowsingPoint(next.coordinate);
     setSelection(browsingLocation);
     setOpen(false);
+    window.location.reload();
   }
 
   return (
@@ -75,7 +98,7 @@ export function DeliveryAddressDialog() {
           <span className="block text-[10px] text-[var(--fm-text-muted)]">Deliver to</span>
           <span className="flex min-w-0 items-center gap-1 font-semibold">
             <span className="max-w-28 truncate sm:max-w-40">
-              {compactAddress(selection?.displayAddress ?? "Cebu City")}
+              {compactAddress(selection?.displayAddress ?? "Choose location")}
             </span>
             <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
           </span>
@@ -86,7 +109,10 @@ export function DeliveryAddressDialog() {
         <dialog
           ref={dialogRef}
           aria-label="Choose delivery address"
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
+            setOpen(false);
+          }}
           onCancel={(event) => {
             event.preventDefault();
             setOpen(false);
@@ -114,6 +140,16 @@ export function DeliveryAddressDialog() {
               </button>
             </header>
             <div className="p-5 sm:p-6">
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
+                  setOpen(false);
+                }}
+                className="mb-4 min-h-11 text-sm font-semibold underline"
+              >
+                Skip for now — browse groceries
+              </button>
               <AddressEditor
                 purpose="serviceability"
                 publicAccessToken={mapboxPublicAccessToken}

@@ -3,7 +3,12 @@ import Link from "next/link";
 import { ShoppingBasket } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CartView } from "@freshmarkets/contracts";
-import { addToCart, cartCountFromView, fetchCart } from "../../lib/storefront/cart-client";
+import {
+  addToCart,
+  cartCountFromView,
+  fetchCart,
+  cartLoadError,
+} from "../../lib/storefront/cart-client";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 import { OrderSummary } from "../../components/storefront/marketplace/order-summary";
 import { CheckoutAuthDialog } from "../../components/storefront/marketplace/checkout-auth-dialog";
@@ -22,6 +27,7 @@ export default function CartPage() {
     try {
       const next = await fetchCart();
       setCart(next);
+      setError(cartLoadError());
     } finally {
       setLoading(false);
     }
@@ -77,6 +83,13 @@ export default function CartPage() {
                 className="mt-5 rounded-[var(--fm-radius-control)] bg-[var(--fm-danger-soft)] p-3 text-sm text-[var(--fm-destructive)]"
               >
                 {error}
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="ml-3 min-h-11 font-semibold underline"
+                >
+                  Retry loading cart
+                </button>
               </p>
             ) : null}
             {loading ? (

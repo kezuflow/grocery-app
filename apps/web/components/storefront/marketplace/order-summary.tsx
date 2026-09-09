@@ -33,6 +33,7 @@ export function OrderSummary({
   const currency = cart?.currency ?? "PHP";
   const subtotal = cart?.totalMinor ?? 0;
   const total = totalMinor ?? subtotal;
+  const pricesAvailable = !cart?.items.some((item) => item.lineTotalMinor === null);
   const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
   return (
@@ -54,7 +55,7 @@ export function OrderSummary({
         <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
           <span>Items ({itemCount})</span>
           <span className="font-medium tabular-nums text-[var(--fm-text)]">
-            {money(subtotal, currency)}
+            {pricesAvailable ? money(subtotal, currency) : "Price unavailable"}
           </span>
         </div>
         {quote ? (
@@ -86,7 +87,9 @@ export function OrderSummary({
         )}
         <div className="flex items-center justify-between gap-4 border-t border-[var(--fm-border)] pt-3 text-base font-bold">
           <span>Total</span>
-          <span className="tabular-nums">{money(total, currency)}</span>
+          <span className="tabular-nums">
+            {pricesAvailable ? money(total, currency) : "Price unavailable"}
+          </span>
         </div>
       </div>
 

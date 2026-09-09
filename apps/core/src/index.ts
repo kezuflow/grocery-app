@@ -2948,6 +2948,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async getCart(input: AuthenticatedRequest) {
     return this.checkoutRpc.getCart(input);
   }
+  async selectCartLocation(input: import("@freshmarkets/contracts").SelectCartLocationRequest) {
+    return this.checkoutRpc.selectCartLocation(input);
+  }
+  async mergeGuestCart(input: import("@freshmarkets/contracts").MergeGuestCartRequest) {
+    return this.checkoutRpc.mergeGuestCart(input);
+  }
   async setCartItem(input: import("@freshmarkets/contracts").SetCartItemRequest) {
     return this.checkoutRpc.setCartItem(input);
   }

@@ -189,6 +189,7 @@ export function evaluateServiceability(
     request,
     {
       serviceable: locations.length > 0,
+      fulfillmentLocation: locations[0] ? { id: locations[0].id, name: locations[0].name } : null,
       reason: locations.length ? null : "NO_ELIGIBLE_LOCATION",
       market,
       serviceArea: {

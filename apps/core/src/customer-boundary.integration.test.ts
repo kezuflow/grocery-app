@@ -38,7 +38,21 @@ async function signIn(email: string) {
 }
 
 async function commerceContext(cookie: string) {
-  return core.getCart({ headers: { cookie }, requestId: requestId() });
+  const input = { headers: { cookie }, requestId: requestId() };
+  const cart = await core.getCart(input);
+  if (cart.ok || cart.error.code !== "DELIVERY_LOCATION_REQUIRED") return cart;
+  const selected = await core.selectCartLocation({
+    ...input,
+    latitude: 10.32,
+    longitude: 123.9,
+    expectedVersion: 0,
+    idempotencyKey: requestId(),
+  });
+  return selected.ok ||
+    selected.error.code === "CART_VERSION_CONFLICT" ||
+    selected.error.code === "CONFLICT"
+    ? core.getCart(input)
+    : selected;
 }
 
 describe("Phase 4A authenticated customer boundary", () => {

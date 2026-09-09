@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
+import { readBrowsingLocation } from "@/lib/storefront/read-browsing-location";
 import { jsonWithRequestId, webRequestContext } from "@/lib/http/request-context";
 
 export async function GET(request: Request): Promise<Response> {
@@ -15,6 +16,7 @@ export async function GET(request: Request): Promise<Response> {
   const result = await coreClient(env.CORE).getCatalogProduct({
     requestId,
     slug,
+    locationId: await readBrowsingLocation(request.headers.get("cookie") ?? ""),
   });
   return jsonWithRequestId(result, requestId);
 }

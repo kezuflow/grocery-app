@@ -122,6 +122,7 @@ describe("serviceability resolver", () => {
     expect(result.value.serviceArea?.polygonVersion).toBe(2);
     expect(result.value.deliveryZone?.polygonVersion).toBe(3);
     expect(result.value.fulfillmentEligibility).toEqual({ eligible: true, candidateCount: 2 });
+    expect(result.value.fulfillmentLocation?.id).toBe("location-cebu-central");
   });
 
   it("reports a stale prior polygon resolution", () => {

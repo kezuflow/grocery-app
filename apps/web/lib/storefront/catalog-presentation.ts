@@ -89,7 +89,10 @@ export function pickDefaultVariant(
     (variant): variant is CatalogVariant & { priceMinor: number; currency: string } =>
       variant.priceMinor !== null && variant.currency !== null,
   );
-  if (priced.length === 0) return null;
+  if (priced.length === 0) {
+    const unlocated = variants.find((variant) => variant.availability === "LOCATION_REQUIRED");
+    return unlocated ? presentationVariant(unlocated) : null;
+  }
   const selectable = priced.some((variant) => variant.availability === "AVAILABLE")
     ? priced.filter((variant) => variant.availability === "AVAILABLE")
     : priced;

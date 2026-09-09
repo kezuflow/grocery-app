@@ -200,6 +200,7 @@ export type AbandonCheckoutResult = {
 };
 
 export type CartView = {
+  locationId?: string;
   id: string;
   version: number;
   items: ReadonlyArray<{
@@ -228,6 +229,21 @@ export type SetCartItemRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type SelectCartLocationRequest = AuthenticatedRequest & {
+  latitude: number;
+  longitude: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+export type CartLocationSelection = { cartId: string; version: number; locationId: string };
+export type MergeGuestCartRequest = AuthenticatedRequest & {
+  cartId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  items: readonly { skuId: string; quantity: number }[];
+};
+export type GuestCartMerge = { cartId: string; version: number };
+
 /**
  * Canonical checkout target port. Commitment lives behind
  * `createAttempt`/`createPayment`/`recoverCommitment`; the sandbox-only
@@ -238,6 +254,8 @@ export type CheckoutService = {
     request: CheckoutEligibilityRequest,
   ): Promise<RpcResult<CheckoutEligibilityView>>;
   getCart(request: AuthenticatedRequest): Promise<RpcResult<CartView>>;
+  selectCartLocation(request: SelectCartLocationRequest): Promise<RpcResult<CartLocationSelection>>;
+  mergeGuestCart(request: MergeGuestCartRequest): Promise<RpcResult<GuestCartMerge>>;
   setCartItem(request: SetCartItemRequest): Promise<RpcResult<CartView>>;
   createCustomerAddress(
     request: CreateCustomerAddressRequest,

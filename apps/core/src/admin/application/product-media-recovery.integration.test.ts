@@ -424,6 +424,15 @@ describe("Product media durable recovery", () => {
     const image = await exports.default.getPublishedProductMedia(imageRequest);
     expect(image).toMatchObject({ ok: true, value: { mimeType: "image/jpeg" } });
     if (image.ok) expect(new Uint8Array(image.value.bytes)).toEqual(new Uint8Array(request.bytes));
+    expect(
+      await exports.default.selectCartLocation({
+        ...request,
+        latitude: 10.32,
+        longitude: 123.9,
+        expectedVersion: 0,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
     const cart = await exports.default.getCart(request);
     if (!cart.ok) throw new Error(cart.error.message);
     const added = await exports.default.setCartItem({
