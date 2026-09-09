@@ -1,5 +1,19 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.12 product-image diagnosis (2026-09-10)
+
+Owner asks to check the missing images on freshmarkets.ph against the local produce assets. Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**, deployed storefront/media acceptance. This diagnostic request takes precedence over the older next-action text below; it does not reopen or repeat the deployment reset. Acceptance: inspect live D1/R2 and public image behavior, establish exact local-to-product matches, and identify remaining work.
+
+Observed `main` at `cb693e60`; existing deployment/config/checkpoint changes and unrelated deletions remain preserved. No application, remote database, R2 object or deployment was changed by this diagnosis.
+
+Executed read-only evidence against the live staging resources serving freshmarkets.ph:
+- `pnpm --filter @freshmarkets/core exec wrangler d1 execute freshmarkets-core-staging --env staging --remote --command "SELECT count(*) AS products FROM product; SELECT count(*) AS media FROM product_media; SELECT id,slug,name,image_metadata_json FROM product ORDER BY slug LIMIT 3;" --json`: 227 products, zero product_media records. D1 target is the current `48aaa957-2be1-4883-9998-5321a49d2825`.
+- Same remote query with `SELECT id,slug,name,image_metadata_json FROM product ORDER BY slug;`, compared in PowerShell to `apps/web/public/produce`: 226 files, 226 exact and unique assetKey matches, no unused assets; only Farm eggs (`product-eggs`) has no image metadata/file. All files pass RIFF/WEBP signature and 5 MiB limit checks; visual subject accuracy was not independently reviewed.
+- `pnpm --filter @freshmarkets/core exec wrangler r2 bucket info freshmarkets-product-media-staging`: zero objects, zero bytes (bucket statistics, consistent with prior reset evidence).
+- Node fetch of `https://freshmarkets.ph`: HTTP 200, zero `/media/products/` URLs, 82 product-image placeholders. Fetch of `/produce/abiu.webp`: HTTP 200, image/webp, 25,708 bytes. Static files are deployed; the current Core projection reads product_media and serves versioned R2-backed URLs, so legacy image_metadata_json alone cannot publish them.
+
+CA-7.12 diagnosis is complete. Remaining work at this request's level: one media-population operation for 226 exact matches and one missing Farm eggs asset. Concrete next action: import the 226 files through the Core-owned media upload/publication command, preserving existing media and its audit/idempotency/version safeguards, then verify every resulting public URL. Upload/publication has not been executed or claimed. Prior broader deployment/provider acceptance remains separate below.
+
 Updated: 2026-09-10. This is the **only active commerce checkpoint**. [History](COMMERCE_ALIGNMENT_EXECUTION_HISTORY_20260909.md) contains completed evidence and superseded instructions; consult it only for a specific missing fact. Do not read it as another task list.
 
 ## Current task and authority
