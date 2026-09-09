@@ -1,378 +1,348 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Temporal } from "temporal-polyfill";
 import type {
+  AnalyticsMetricValue,
   AnalyticsOverviewView,
-  AnalyticsWindow,
-  MetricSeriesView,
   MetricDefinitionView,
   RpcResult,
 } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../../components/ui/table";
-import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
-import { useAdminContext } from "../admin-context-provider";
+import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 import { AdminDashboardGrid, MetricCard } from "../../../components/admin/admin-compositions";
-import { AnalyticsChartGrid } from "../../../components/admin/analytics-chart-grid";
+import { useAdminContext } from "../admin-context-provider";
 
-type AnalyticsState =
+type ReportState =
   | { phase: "loading" }
-  | { phase: "error"; message: string; requestId: string | null }
+  | { phase: "error"; message: string }
   | {
       phase: "ready";
       definitions: ReadonlyArray<MetricDefinitionView>;
       overview: AnalyticsOverviewView;
-      series: ReadonlyArray<MetricSeriesView>;
     };
 
-function currentWindow(): AnalyticsWindow {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 30);
-  return {
-    startAt: start.toISOString(),
-    endAt: end.toISOString(),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Manila",
-  };
-}
+const groups = [
+  ["ORDERS", "Orders"],
+  ["FINANCE", "Money"],
+  ["INVENTORY", "Products"],
+  ["PROMOTIONS", "Promotions"],
+  ["DELIVERY", "Delivery"],
+  ["CUSTOMERS", "Customers"],
+] as const;
+const selectClass = "h-9 w-full rounded-md border bg-background px-3 text-sm";
 
-function formatNumber(value: number | null): string {
-  return value === null ? "Unavailable" : new Intl.NumberFormat("en-PH").format(value);
-}
-
-function formatInstant(value: string | null): string {
-  if (!value) return "Not available";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleString();
-}
-
-function errorMessage(code: string, message: string): string {
-  if (code === "FORBIDDEN")
-    return "Analytics access requires the analytics.read capability for this scope.";
-  if (code === "VALIDATION_FAILED")
-    return "The analytics window or timezone is invalid. Refresh and try again.";
-  return message;
+function reportValue(
+  metric: AnalyticsMetricValue,
+  definition: MetricDefinitionView,
+): string | null {
+  if (metric.availability !== "AVAILABLE" || metric.value === null) return null;
+  if (definition.valueUnit === "MINOR_UNITS") {
+    const currency = metric.dimensions.find((dimension) => dimension.key === "currency")?.value;
+    if (!currency) return null;
+    const formatter = new Intl.NumberFormat("en-PH", { style: "currency", currency });
+    const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
+    return formatter.format(metric.value / 10 ** digits);
+  }
+  return new Intl.NumberFormat("en-PH").format(metric.value);
 }
 
 export default function AnalyticsPage() {
-  const { state: adminContext } = useAdminContext();
-  const [state, setState] = useState<AnalyticsState>({ phase: "loading" });
-  const [attempt, setAttempt] = useState(0);
+  const { state: admin } = useAdminContext();
+  const scope = admin.phase === "ready" ? admin.selectedScope : null;
+  const scopeKey = JSON.stringify(scope);
+  const scopeOption =
+    admin.phase === "ready"
+      ? admin.scopes.find((option) =>
+          scope?.kind === "LOCATION"
+            ? option.kind === "location" && option.locationId === scope.locationId
+            : scope?.kind === "MARKET"
+              ? option.marketId === scope.marketId
+              : true,
+        )
+      : undefined;
+  const defaultTimezone = scopeOption?.timezone ?? "Asia/Manila";
+  const [timezone, setTimezone] = useState(defaultTimezone);
+  const [startDate, setStartDate] = useState(() =>
+    Temporal.Now.plainDateISO(defaultTimezone).subtract({ days: 29 }).toString(),
+  );
+  const [endDate, setEndDate] = useState(() =>
+    Temporal.Now.plainDateISO(defaultTimezone).toString(),
+  );
   const [currency, setCurrency] = useState("");
-  const [baseUnit, setBaseUnit] = useState("");
-  const window = useMemo(currentWindow, []);
+  const [selection, setSelection] = useState<{ skuId: string; label: string } | null>(null);
+  const [search, setSearch] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<ReportState>({ phase: "loading" });
+  const currencies =
+    admin.phase === "ready" ? [...new Set(admin.scopes.map((option) => option.currency))] : [];
+  const timezones =
+    admin.phase === "ready"
+      ? [...new Set([defaultTimezone, ...admin.scopes.map((option) => option.timezone)])]
+      : [defaultTimezone];
 
-  const load = useCallback(async () => {
-    if (adminContext.phase !== "ready" || adminContext.selectedScope === null) {
+  useEffect(() => {
+    setTimezone(defaultTimezone);
+    setCurrency(scopeOption?.currency ?? "");
+    setSelection(null);
+    setCursor(null);
+  }, [scopeKey, defaultTimezone, scopeOption?.currency]);
+
+  const period = useMemo(() => {
+    try {
+      const start = Temporal.PlainDate.from(startDate);
+      const end = Temporal.PlainDate.from(endDate);
+      if (Temporal.PlainDate.compare(start, end) > 0) return null;
+      return {
+        startAt: start.toZonedDateTime(timezone).toInstant().toString(),
+        endAt: end.add({ days: 1 }).toZonedDateTime(timezone).toInstant().toString(),
+        timezone,
+      };
+    } catch {
+      return null;
+    }
+  }, [startDate, endDate, timezone]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!scope || !period) {
       setState({
         phase: "error",
-        message: "Select an Admin scope to load Analytics.",
-        requestId: null,
+        message: !scope
+          ? "Select an Admin location or scope to view reports."
+          : "Choose a valid start and end date.",
       });
       return;
     }
+    const query = new URLSearchParams({ ...period, scopeKind: scope.kind });
+    if (scope.kind !== "GLOBAL") query.set("marketId", scope.marketId);
+    if (scope.kind === "LOCATION") query.set("locationId", scope.locationId);
+    query.set(
+      "dimensions",
+      JSON.stringify([
+        ...(currency ? [{ key: "currency", value: currency }] : []),
+        ...(selection ? [{ key: "skuId", value: selection.skuId }] : []),
+      ]),
+    );
+    if (productSearch) query.set("productSearch", productSearch);
+    if (cursor) query.set("productCursor", cursor);
     setState({ phase: "loading" });
-    const query = new URLSearchParams({
-      startAt: window.startAt,
-      endAt: window.endAt,
-      timezone: window.timezone,
-    });
-    query.set("scopeKind", adminContext.selectedScope.kind);
-    if (adminContext.selectedScope.kind === "MARKET") {
-      query.set("marketId", adminContext.selectedScope.marketId);
-    }
-    if (adminContext.selectedScope.kind === "LOCATION") {
-      query.set("marketId", adminContext.selectedScope.marketId);
-      query.set("locationId", adminContext.selectedScope.locationId);
-    }
-    const dimensions = [
-      ...(currency ? [{ key: "currency", value: currency }] : []),
-      ...(baseUnit ? [{ key: "baseUnit", value: baseUnit }] : []),
-    ];
-    if (dimensions.length > 0) query.set("dimensions", JSON.stringify(dimensions));
-    try {
-      const [definitionsResponse, overviewResponse] = await Promise.all([
-        fetch(`/api/admin/analytics/definitions?${query.toString()}`),
-        fetch(`/api/admin/analytics/overview?${query.toString()}`),
-      ]);
-      const definitions = (await definitionsResponse.json()) as RpcResult<
-        ReadonlyArray<MetricDefinitionView>
-      >;
-      if (!definitions.ok) {
-        setState({
-          phase: "error",
-          message: errorMessage(definitions.error.code, definitions.error.message),
-          requestId: definitions.error.requestId,
-        });
-        return;
+    void (async () => {
+      try {
+        const [definitionResponse, overviewResponse] = await Promise.all([
+          fetch(`/api/admin/analytics/definitions?${query}`, { signal: controller.signal }),
+          fetch(`/api/admin/analytics/overview?${query}`, { signal: controller.signal }),
+        ]);
+        const definitions = (await definitionResponse.json()) as RpcResult<
+          ReadonlyArray<MetricDefinitionView>
+        >;
+        const overview = (await overviewResponse.json()) as RpcResult<AnalyticsOverviewView>;
+        if (!definitions.ok) throw new Error(definitions.error.message);
+        if (!overview.ok) throw new Error(overview.error.message);
+        if (!controller.signal.aborted)
+          setState({ phase: "ready", definitions: definitions.value, overview: overview.value });
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setState({
+            phase: "error",
+            message: error instanceof Error ? error.message : "Reports could not be loaded.",
+          });
       }
-      const overview = (await overviewResponse.json()) as RpcResult<AnalyticsOverviewView>;
-      if (!overview.ok) {
-        setState({
-          phase: "error",
-          message: errorMessage(overview.error.code, overview.error.message),
-          requestId: overview.error.requestId,
-        });
-        return;
-      }
-      const series = await Promise.all(
-        overview.value.metrics.slice(0, 4).map(async (metric) => {
-          const seriesQuery = new URLSearchParams(query);
-          seriesQuery.set("definitionVersion", String(metric.definitionVersion));
-          try {
-            const response = await fetch(
-              `/api/admin/analytics/metrics/${encodeURIComponent(metric.metricCode)}?${seriesQuery}`,
-            );
-            const result = (await response.json()) as RpcResult<MetricSeriesView>;
-            return result.ok ? result.value : null;
-          } catch {
-            return null;
-          }
-        }),
-      );
-      setState({
-        phase: "ready",
-        definitions: definitions.value,
-        overview: overview.value,
-        series: series.filter((metric): metric is MetricSeriesView => metric !== null),
-      });
-    } catch {
-      setState({ phase: "error", message: "Network error loading Analytics.", requestId: null });
-    }
-  }, [adminContext, baseUnit, currency, window]);
+    })();
+    return () => controller.abort();
+  }, [scope, period, currency, selection, productSearch, cursor, attempt]);
 
-  useEffect(() => {
-    void load();
-  }, [load, attempt]);
-
+  const options = state.phase === "ready" ? state.overview.productOptions : undefined;
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Analytics"
-        description="Versioned operational metrics from authoritative Core read models. Values remain unavailable when their source policy is unresolved."
-        action={
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
-              Currency
-              <input
-                aria-label="Analytics currency"
-                className="w-24 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1.5 text-sm uppercase text-[var(--fm-text)]"
-                inputMode="text"
-                maxLength={3}
-                placeholder="All"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value.trim().toUpperCase())}
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
-              Base unit
-              <select
-                aria-label="Analytics base unit"
-                className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-2 py-1.5 text-sm text-[var(--fm-text)]"
-                value={baseUnit}
-                onChange={(event) => setBaseUnit(event.target.value)}
-              >
-                <option value="">All</option>
-                <option value="GRAM">Gram</option>
-                <option value="PIECE">Piece</option>
-              </select>
-            </label>
-            <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>
-              Refresh
-            </Button>
-          </div>
-        }
+        description="Orders, money, Products and customers for the period you choose."
       />
-
-      {state.phase === "loading" ? <AnalyticsLoading /> : null}
-
+      <section
+        aria-label="Report filters"
+        className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <label className="space-y-1 text-sm">
+          From
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          Through
+          <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+        </label>
+        <label className="space-y-1 text-sm">
+          Timezone
+          <select
+            className={selectClass}
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
+          >
+            {timezones.map((zone) => (
+              <option key={zone}>{zone}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-sm">
+          Currency
+          <select
+            className={selectClass}
+            value={currency}
+            onChange={(event) => setCurrency(event.target.value)}
+          >
+            <option value="">Select currency</option>
+            {currencies.map((code) => (
+              <option key={code}>{code}</option>
+            ))}
+          </select>
+        </label>
+        <form
+          className="flex items-end gap-2 sm:col-span-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setProductSearch(search.trim());
+            setCursor(null);
+          }}
+        >
+          <label className="flex-1 space-y-1 text-sm">
+            Find a purchased Product
+            <Input
+              value={search}
+              maxLength={100}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Product or selling option"
+            />
+          </label>
+          <Button type="submit" variant="outline">
+            Search
+          </Button>
+        </form>
+        <label className="space-y-1 text-sm sm:col-span-2">
+          Product selling option
+          <select
+            className={selectClass}
+            value={selection?.skuId ?? ""}
+            onChange={(event) => {
+              const option = options?.items.find((item) => item.skuId === event.target.value);
+              setSelection(
+                option
+                  ? { skuId: option.skuId, label: `${option.productName} · ${option.optionName}` }
+                  : null,
+              );
+            }}
+          >
+            <option value="">Select to view Product quantities</option>
+            {selection && !options?.items.some((item) => item.skuId === selection.skuId) ? (
+              <option value={selection.skuId}>{selection.label}</option>
+            ) : null}
+            {options?.items.map((option) => (
+              <option key={option.skuId} value={option.skuId}>
+                {option.productName} · {option.optionName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+          {cursor ? (
+            <Button variant="outline" onClick={() => setCursor(null)}>
+              First Product page
+            </Button>
+          ) : null}
+          {options?.nextCursor ? (
+            <Button variant="outline" onClick={() => setCursor(options.nextCursor)}>
+              More Products
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            Refresh
+          </Button>
+        </div>
+      </section>
+      {state.phase === "loading" ? (
+        <div role="status" aria-label="Loading Analytics">
+          <Skeleton className="h-40 w-full" />
+        </div>
+      ) : null}
       {state.phase === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Analytics could not be loaded</AlertTitle>
-          <AlertDescription>
-            {state.message}
-            {state.requestId ? (
-              <>
-                <br />
-                <span className="font-mono text-xs">Request reference: {state.requestId}</span>
-              </>
-            ) : null}
-            <br />
-            <Button
-              className="mt-3"
-              size="sm"
-              variant="outline"
-              onClick={() => setAttempt((value) => value + 1)}
-            >
-              Retry
-            </Button>
-          </AlertDescription>
+          <AlertTitle>Reports could not be loaded</AlertTitle>
+          <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}
-
       {state.phase === "ready" ? (
-        <AnalyticsReady
-          definitions={state.definitions}
-          overview={state.overview}
-          series={state.series}
-        />
+        <>
+          <p className="text-sm text-muted-foreground">
+            {startDate} through {endDate} · {state.overview.window.timezone}. Updated{" "}
+            {new Date(state.overview.freshness.computedAt).toLocaleString("en-PH", {
+              timeZone: state.overview.window.timezone,
+            })}
+            .
+          </p>
+          {groups.map(([category, title]) => {
+            const definitions = state.definitions.filter(
+              (definition) => definition.category === category,
+            );
+            if (!definitions.length) return null;
+            return (
+              <ListPageSection
+                key={category}
+                title={title}
+                description={
+                  category === "FINANCE"
+                    ? "Received and refunded amounts are separate. Neither figure is profit."
+                    : category === "DELIVERY"
+                      ? "Charges and recorded costs cover the same paid Orders. Unknown costs remain unavailable."
+                      : category === "INVENTORY"
+                        ? (selection?.label ?? "Choose one purchased selling option above.")
+                        : undefined
+                }
+              >
+                <AdminDashboardGrid ariaLabel={title} className="p-4">
+                  {definitions.map((definition) => {
+                    const metric = state.overview.metrics.find(
+                      (candidate) =>
+                        candidate.metricCode === definition.code &&
+                        candidate.definitionVersion === definition.version,
+                    );
+                    return (
+                      <MetricCard
+                        key={definition.code}
+                        className="xl:col-span-4"
+                        label={definition.displayName}
+                        value={metric ? reportValue(metric, definition) : null}
+                        unavailableReason={
+                          metric?.unavailableReason ?? "This figure is unavailable."
+                        }
+                        detail={definition.formulaDescription}
+                      />
+                    );
+                  })}
+                </AdminDashboardGrid>
+              </ListPageSection>
+            );
+          })}
+          <details className="rounded-lg border p-4 text-sm">
+            <summary className="cursor-pointer font-medium">How these figures are counted</summary>
+            <ul className="mt-3 space-y-3">
+              {state.definitions.map((definition) => (
+                <li key={definition.code}>
+                  <strong>{definition.displayName}</strong> (version {definition.version}):{" "}
+                  {definition.formulaDescription}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
       ) : null}
-    </div>
-  );
-}
-
-function AnalyticsReady({
-  definitions,
-  overview,
-  series,
-}: {
-  definitions: ReadonlyArray<MetricDefinitionView>;
-  overview: AnalyticsOverviewView;
-  series: ReadonlyArray<MetricSeriesView>;
-}) {
-  return (
-    <>
-      <AdminDashboardGrid ariaLabel="Analytics context">
-        <MetricCard
-          className="xl:col-span-3"
-          label="Window"
-          value={`${overview.window.startAt.slice(0, 10)} → ${overview.window.endAt.slice(0, 10)}`}
-        />
-        <MetricCard className="xl:col-span-3" label="Timezone" value={overview.window.timezone} />
-        <MetricCard
-          className="xl:col-span-3"
-          label="Scope"
-          value={
-            overview.scope.kind === "global"
-              ? "Global"
-              : overview.scope.kind === "market"
-                ? `Market ${overview.scope.marketId}`
-                : `Location ${overview.scope.locationId}`
-          }
-        />
-        <MetricCard
-          className="xl:col-span-3"
-          label="Source freshness"
-          value={formatInstant(overview.freshness.sourceWatermark)}
-          detail={`Computed ${formatInstant(overview.freshness.computedAt)}`}
-        />
-      </AdminDashboardGrid>
-
-      <AnalyticsChartGrid series={series} />
-
-      <ListPageSection
-        title="Metric summary"
-        description="Core-provided values for the selected window; unavailable metrics are not represented as zero."
-      >
-        {overview.metrics.length === 0 ? (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
-            No metrics are available for this window and scope.
-          </p>
-        ) : (
-          <AdminDashboardGrid ariaLabel="Metric summary" className="p-4">
-            {overview.metrics.map((metric) => (
-              <MetricCard
-                key={`${metric.metricCode}:${metric.definitionVersion}`}
-                className="xl:col-span-4"
-                label={metric.metricCode}
-                value={metric.availability === "AVAILABLE" ? formatNumber(metric.value) : null}
-                unavailableReason={
-                  metric.unavailableReason ?? "Metric is unavailable for this context."
-                }
-                detail={
-                  <>
-                    <span>Definition v{metric.definitionVersion}</span>
-                    {metric.dimensions.length > 0 ? (
-                      <span className="mt-1 block">
-                        {metric.dimensions
-                          .map((dimension) => `${dimension.key}: ${dimension.value}`)
-                          .join(" · ")}
-                      </span>
-                    ) : null}
-                  </>
-                }
-              />
-            ))}
-          </AdminDashboardGrid>
-        )}
-      </ListPageSection>
-
-      <ListPageSection
-        title="Definitions"
-        description="Published formula descriptions, versions, dimensions, and freshness metadata returned by Core."
-      >
-        {definitions.length === 0 ? (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
-            No Analytics definitions are published for this account.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Metric</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Formula description</TableHead>
-                  <TableHead>Freshness</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {definitions.map((definition) => (
-                  <TableRow key={`${definition.code}:${definition.version}`}>
-                    <TableCell>
-                      <div className="font-medium">{definition.displayName}</div>
-                      <div className="font-mono text-xs text-[var(--fm-text-muted)]">
-                        {definition.code}
-                      </div>
-                    </TableCell>
-                    <TableCell>v{definition.version}</TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        tone={definition.availability === "AVAILABLE" ? "success" : "warning"}
-                      >
-                        {definition.availability}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="max-w-sm text-xs">
-                      {definition.formulaDescription}
-                      {definition.unavailableReason ? (
-                        <div className="mt-1 text-[var(--fm-warning)]">
-                          {definition.unavailableReason}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-xs text-[var(--fm-text-muted)]">
-                      {definition.freshness
-                        ? formatInstant(definition.freshness.sourceWatermark)
-                        : "Not available"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </ListPageSection>
-    </>
-  );
-}
-
-function AnalyticsLoading() {
-  return (
-    <div className="space-y-3" role="status" aria-label="Loading Analytics">
-      <Skeleton className="h-24 w-full" />
-      <Skeleton className="h-48 w-full" />
-      <Skeleton className="h-56 w-full" />
     </div>
   );
 }

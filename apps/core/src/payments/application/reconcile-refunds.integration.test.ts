@@ -157,7 +157,16 @@ describe("bounded provider Refund lookup recovery", () => {
         .bind(f.refund.id)
         .first(),
     ).toEqual({ n: 1 });
+    const confirmation = await env.DB.prepare("SELECT succeeded_at FROM payment_refund WHERE id=?")
+      .bind(f.refund.id)
+      .first<{ succeeded_at: number | null }>();
+    expect(confirmation?.succeeded_at).toEqual(expect.any(Number));
     await reconcileRefunds(env.DB, testRegistry(), Date.now() + 120_000);
+    expect(
+      await env.DB.prepare("SELECT succeeded_at FROM payment_refund WHERE id=?")
+        .bind(f.refund.id)
+        .first(),
+    ).toEqual(confirmation);
     expect(submit).not.toHaveBeenCalled();
     submit.mockRestore();
   });

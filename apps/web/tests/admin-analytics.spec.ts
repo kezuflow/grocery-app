@@ -35,7 +35,18 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
       ],
       environment: "test",
     },
-    scopes: [],
+    scopes: [
+      {
+        kind: "location",
+        marketId: "market-metro-cebu",
+        marketCode: "CEBU",
+        locationId: "location-cebu-central",
+        locationCode: "CENTRAL",
+        locationName: "Central Cebu",
+        currency: "PHP",
+        timezone: "Asia/Manila",
+      },
+    ],
     selectedScope: { kind: "GLOBAL" },
     timezone: "Asia/Manila",
   });
@@ -62,13 +73,13 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
             approvedAt: "2026-08-01T00:00:00.000Z",
           },
           {
-            code: "aov",
+            code: "refund_amount",
             version: 1,
-            displayName: "Average order value",
+            displayName: "Money refunded",
             category: "FINANCE",
-            formulaDescription: "Unavailable until the canonical accounting policy is resolved.",
+            formulaDescription: "Successful refunds by first confirmation date.",
             availability: "UNAVAILABLE",
-            unavailableReason: "ACCOUNTING_POLICY_UNRESOLVED",
+            unavailableReason: "Retained refund confirmation dates are unavailable.",
             dimensions: ["currency"],
             freshness: null,
             approvedAt: null,
@@ -91,6 +102,10 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
           },
           scope: { kind: "global" },
           definitions: [{ metricCode: "order_count", definitionVersion: 1 }],
+          productOptions: {
+            items: [{ skuId: "sku-report", productName: "Red Onion", optionName: "500 g" }],
+            nextCursor: null,
+          },
           freshness: {
             sourceWatermark: "2026-08-29T00:00:00.000Z",
             computedAt: "2026-08-29T00:01:00.000Z",
@@ -105,11 +120,11 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
               dimensions: [],
             },
             {
-              metricCode: "aov",
+              metricCode: "refund_amount",
               definitionVersion: 1,
               availability: "UNAVAILABLE",
               value: null,
-              unavailableReason: "ACCOUNTING_POLICY_UNRESOLVED",
+              unavailableReason: "Retained refund confirmation dates are unavailable.",
               dimensions: [{ key: "currency", value: "PHP" }],
             },
           ],
@@ -122,9 +137,11 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
   await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
   await expect(page.getByText("42", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("ACCOUNTING_POLICY_UNRESOLVED", { exact: true }).first(),
+    page.getByText("Retained refund confirmation dates are unavailable.", { exact: true }).first(),
   ).toBeVisible();
-  await expect(page.getByText("Source freshness", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Timezone", exact: true })).toHaveValue(
+    "Asia/Manila",
+  );
   const dimensionedRequest = page.waitForRequest((request) => {
     if (!request.url().includes("/api/admin/analytics/overview")) return false;
     const dimensions = new URL(request.url()).searchParams.get("dimensions");
@@ -132,11 +149,13 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
     const parsed = JSON.parse(dimensions) as Array<{ key: string; value: string }>;
     return (
       parsed.some(({ key, value }) => key === "currency" && value === "PHP") &&
-      parsed.some(({ key, value }) => key === "baseUnit" && value === "GRAM")
+      parsed.some(({ key, value }) => key === "skuId" && value === "sku-report")
     );
   });
-  await page.getByLabel("Analytics currency").fill("php");
-  await page.getByLabel("Analytics base unit").selectOption("GRAM");
+  await page.getByRole("combobox", { name: "Currency", exact: true }).selectOption("PHP");
+  await page
+    .getByRole("combobox", { name: "Product selling option", exact: true })
+    .selectOption("sku-report");
   await dimensionedRequest;
 });
 
@@ -149,5 +168,7 @@ test("a Staff principal without capability is denied the Analytics workspace", a
   deniedAdminPage,
 }) => {
   await deniedAdminPage.goto("/admin/analytics");
-  await expect(deniedAdminPage.getByRole("alert")).toContainText(/requires.*analytics\.read/i);
+  await expect(deniedAdminPage.getByRole("alert")).toContainText(
+    /analytics\.read.*required|requires.*analytics\.read/i,
+  );
 });

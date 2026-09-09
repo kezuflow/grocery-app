@@ -30,6 +30,8 @@ for (const width of [1440, 390]) {
       "Requires the managed test-provider ingress.",
     );
     test.setTimeout(420000);
+    const reportStart = new Date().toISOString();
+    const confirmedTotals: number[] = [];
     page.setDefaultTimeout(10000);
     admin.setDefaultTimeout(10000);
     await page.setViewportSize({ width, height: 1000 });
@@ -267,6 +269,7 @@ for (const width of [1440, 390]) {
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       expect(orders.parse(await read(page, "/api/commerce/orders")).items).toEqual(before.items);
       await confirmTestPayment(quote.totalMinor);
+      confirmedTotals.push(quote.totalMinor);
       const current = orders.parse(await read(page, "/api/commerce/orders"));
       const created = current.items.filter(
         (item) => !before.items.some((old) => old.id === item.id),
@@ -367,7 +370,44 @@ for (const width of [1440, 390]) {
         response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
-    await value(await canceledSale);
+    const cancellation = z
+      .object({
+        cancellationId: z.string(),
+        refunds: z.array(z.object({ paymentId: z.string(), amountMinor: z.number() })),
+      })
+      .parse(await value(await canceledSale));
+    for (const refund of cancellation.refunds) {
+      const body = JSON.stringify({
+        eventId: crypto.randomUUID(),
+        kind: "refund",
+        refundReference: `mock_refund_order-cancel:${cancellation.cancellationId}:${refund.paymentId}`,
+        vendorState: "paid",
+        amountMinor: refund.amountMinor,
+        currency: "PHP",
+      });
+      const headers = {
+        "content-type": "application/json",
+        "x-mock-timestamp": String(Date.now()),
+        "x-mock-signature": createHash("sha256")
+          .update(`mock-provider-test-secret:${body}`)
+          .digest("hex"),
+      };
+      expect(
+        await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
+      ).toMatchObject({ processingStatus: "APPLIED" });
+      expect(
+        await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
+      ).toMatchObject({ processingStatus: "DUPLICATE" });
+    }
+    expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
+    await expect
+      .poll(
+        async () =>
+          z
+            .object({ cancellation: z.object({ status: z.string().nullable() }) })
+            .parse(await read(page, `/api/commerce/orders/${saleOrder}`)).cancellation.status,
+      )
+      .toBe("COMPLETED");
     const restoredSale = saleView.parse(await read(admin, saleUrl));
     expect(restoredSale.productTargets[0]?.remainingQuantity).toBe(2);
     await post(admin, `${saleUrl}/status`, {
@@ -582,5 +622,89 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByText("Our team marked this issue resolved.", { exact: true }),
     ).toBeVisible();
+    const reportQuery = new URLSearchParams({
+      startAt: reportStart,
+      endAt: new Date().toISOString(),
+      timezone: "Asia/Manila",
+      scopeKind: "LOCATION",
+      marketId,
+      locationId,
+      dimensions: JSON.stringify([
+        { key: "currency", value: "PHP" },
+        { key: "skuId", value: skuId },
+      ]),
+    });
+    const report = z
+      .object({
+        metrics: z.array(
+          z.object({
+            metricCode: z.string(),
+            value: z.number().nullable(),
+            availability: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+            unavailableReason: z.string().nullable(),
+          }),
+        ),
+      })
+      .parse(await read(admin, `/api/admin/analytics/overview?${reportQuery}`));
+    const metric = (code: string) => report.metrics.find((item) => item.metricCode === code);
+    expect(report.metrics).toHaveLength(15);
+    expect(metric("order_count")).toMatchObject({ availability: "AVAILABLE", value: 2 });
+    expect(metric("delivered_orders")).toMatchObject({ availability: "AVAILABLE", value: 1 });
+    expect(metric("canceled_orders")).toMatchObject({ availability: "AVAILABLE", value: 1 });
+    expect(metric("paid_product_quantity")).toMatchObject({ availability: "AVAILABLE", value: 4 });
+    expect(metric("canceled_product_quantity")).toMatchObject({
+      availability: "AVAILABLE",
+      value: 2,
+    });
+    expect(metric("discount_spend")).toMatchObject({ availability: "AVAILABLE", value: 50 });
+    expect(metric("received_amount")).toMatchObject({
+      availability: "AVAILABLE",
+      value: confirmedTotals.reduce((sum, amount) => sum + amount, 0),
+    });
+    expect(metric("active_customers")).toMatchObject({ availability: "AVAILABLE", value: 1 });
+    expect(metric("repeat_orders")?.value).toBeGreaterThanOrEqual(1);
+    if (metric("refund_amount")?.availability === "AVAILABLE")
+      expect(metric("refund_amount")?.value).toBe(confirmedTotals[0]);
+    else expect(metric("refund_amount")?.unavailableReason).toContain("Retained payment records");
+    await admin.evaluate(
+      ({ marketId, locationId }) =>
+        sessionStorage.setItem(
+          "freshmarkets.admin.preferred-scope",
+          JSON.stringify({ kind: "LOCATION", marketId, locationId }),
+        ),
+      { marketId, locationId },
+    );
+    await admin.goto("/admin/analytics");
+    await expect(admin.getByRole("heading", { name: "Analytics", exact: true })).toBeVisible();
+    await expect(
+      admin
+        .getByRole("region", { name: "Orders", exact: true })
+        .getByText("Paid Orders", { exact: true }),
+    ).toBeVisible();
+    await admin.getByLabel("Find a purchased Product", { exact: true }).fill("Red Onion");
+    await admin.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(
+      admin
+        .getByRole("combobox", { name: "Product selling option", exact: true })
+        .locator(`option[value="${skuId}"]`),
+    ).toBeAttached();
+    const selectedReport = admin.waitForResponse((response) => {
+      if (!response.url().includes("/api/admin/analytics/overview")) return false;
+      return new URL(response.url()).searchParams.get("dimensions")?.includes(skuId) ?? false;
+    });
+    await admin
+      .getByRole("combobox", { name: "Product selling option", exact: true })
+      .selectOption(skuId);
+    await selectedReport;
+    await expect(
+      admin
+        .getByRole("region", { name: "Products", exact: true })
+        .getByText("Paid Product quantity", { exact: true }),
+    ).toBeVisible();
+    await expect(admin.getByText("Active members", { exact: true })).toHaveCount(0);
+    await admin.screenshot({
+      path: testInfo.outputPath(`ca71-commerce-reports-${width}.png`),
+      fullPage: true,
+    });
   });
 }

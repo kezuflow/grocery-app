@@ -14,6 +14,7 @@ const DIMENSION_KEYS = new Set<AnalyticsDimensionKey>([
   "promotionId",
   "promotionBenefitType",
   "inventoryAdjustmentReason",
+  "skuId",
 ]);
 
 export function invalid(request: Request, message: string): Response {

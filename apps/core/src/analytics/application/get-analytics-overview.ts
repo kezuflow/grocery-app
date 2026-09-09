@@ -12,6 +12,7 @@ import {
 } from "../metric-definitions";
 import { resolveAnalyticsAccess, type AnalyticsDeps } from "./analytics-access";
 import { executeMetricQuery } from "./metric-queries";
+import { listReportProducts } from "./report-products";
 
 /** Composes Overview from the same persisted definitions and named query dispatch as series reads. */
 export async function getAnalyticsOverview(
@@ -23,6 +24,10 @@ export async function getAnalyticsOverview(
   try {
     const window = parseAnalyticsWindow(request.window);
     const dimensions = parseAnalyticsDimensions(request.dimensions ?? []);
+    const productOptions = await listReportProducts(deps.db, access.value.scope, {
+      search: request.productSearch,
+      cursor: request.productCursor,
+    });
     const definitions = await listMetricDefinitions(deps.db, {});
     const metrics = [] as AnalyticsOverviewView["metrics"] extends ReadonlyArray<infer Item>
       ? Item[]
@@ -86,6 +91,7 @@ export async function getAnalyticsOverview(
           computedAt: new Date(access.value.now).toISOString(),
         },
         metrics,
+        productOptions,
       },
       requestId: request.requestId,
     };

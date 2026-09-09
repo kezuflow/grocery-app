@@ -38,6 +38,7 @@ type MetricDefinitionRow = {
   displayName: string;
   category: string;
   formulaJson: string;
+  roundingPolicy: string;
   dimensionsJson: string;
   status: string;
   unavailableReason: string | null;
@@ -173,7 +174,7 @@ function mapDefinitionRow(row: MetricDefinitionRow): MetricDefinitionView {
   const status = row.status as MetricDefinitionStatus;
   const queryKey = metricQueryKeyByCode[row.code];
   if (
-    (queryKey === null && status !== "BLOCKED") ||
+    (queryKey === null && status === "APPROVED") ||
     (queryKey !== null && status === "BLOCKED") ||
     (status === "APPROVED" && row.unavailableReason !== null) ||
     (status === "BLOCKED" && (!row.unavailableReason || row.approvedAt !== null)) ||
@@ -187,6 +188,13 @@ function mapDefinitionRow(row: MetricDefinitionRow): MetricDefinitionView {
     displayName: row.displayName,
     category: row.category as AnalyticsMetricCategory,
     formulaDescription: parseStoredFormulaDescription(row.formulaJson),
+    ...(row.roundingPolicy === "MINOR_UNITS_BY_CURRENCY"
+      ? { valueUnit: "MINOR_UNITS" as const }
+      : row.roundingPolicy === "INTEGER_COUNT"
+        ? { valueUnit: "COUNT" as const }
+        : row.roundingPolicy === "SELLING_UNITS"
+          ? { valueUnit: "SELLING_UNITS" as const }
+          : {}),
     availability: status === "APPROVED" ? "AVAILABLE" : "UNAVAILABLE",
     unavailableReason: row.unavailableReason,
     dimensions: parseStoredDimensions(row.dimensionsJson),
@@ -225,13 +233,14 @@ export async function listMetricDefinitions(
     where.push("status = ?");
     parameters.push(filters.status);
   } else {
+    where.push("status = 'APPROVED'");
     where.push(
       "version = (SELECT MAX(version) FROM metric_definitions versioned WHERE versioned.code = metric_definitions.code)",
     );
   }
   const rows = await database
     .prepare(
-      `SELECT code, version, display_name AS displayName, category, formula_json AS formulaJson,
+      `SELECT code, version, display_name AS displayName, category, formula_json AS formulaJson, rounding_policy AS roundingPolicy,
         dimensions_json AS dimensionsJson, status, unavailable_reason AS unavailableReason,
         approved_at AS approvedAt
        FROM metric_definitions${where.length === 0 ? "" : ` WHERE ${where.join(" AND ")}`}
@@ -260,7 +269,7 @@ export async function resolveMetricDefinition(
     definitionVersion === undefined ? [metricCode] : [metricCode, definitionVersion];
   const rows = await database
     .prepare(
-      `SELECT code, version, display_name AS displayName, category, formula_json AS formulaJson,
+      `SELECT code, version, display_name AS displayName, category, formula_json AS formulaJson, rounding_policy AS roundingPolicy,
         dimensions_json AS dimensionsJson, status, unavailable_reason AS unavailableReason,
         approved_at AS approvedAt
        FROM metric_definitions WHERE ${where} ORDER BY version DESC`,

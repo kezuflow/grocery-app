@@ -1,52 +1,35 @@
-/** Named Core query functions are selected only through this closed registry. */
-export type AnalyticsQueryKey =
-  | "orderCount"
-  | "refundAmount"
-  | "newCustomers"
-  | "activeCustomers"
-  | "repeatCustomerRate"
-  | "ordersPerCustomer"
-  | "activeMembers"
-  | "trialingMembers"
-  | "promotionRedemptions"
-  | "discountSpend"
-  | "promotionInfluencedOrderRevenue"
-  | "fulfillmentTime"
-  | "pickingTime"
-  | "packingTime"
-  | "deliveryTime"
-  | "lateDeliveryRate"
-  | "cancellationRate"
-  | "outOfStockRate"
-  | "stockouts"
-  | "inventoryAdjustmentsShrinkage";
-
-/**
- * Persisted D1 rows own all definition metadata. This registry intentionally
- * contains only the allowed code-to-named-function binding; null marks a
- * required blocked metric that must never be calculated.
- */
+/** Persisted definitions own metadata; only these approved reports execute SQL. */
 export const metricQueryKeyByCode = {
   order_count: "orderCount",
+  delivered_orders: "deliveredOrders",
+  canceled_orders: "canceledOrders",
+  paid_product_quantity: "paidProductQuantity",
+  canceled_product_quantity: "canceledProductQuantity",
+  delivery_charges: "deliveryCharges",
+  delivery_costs: "deliveryCosts",
   refund_amount: "refundAmount",
+  received_amount: "receivedAmount",
   new_customers: "newCustomers",
   active_customers: "activeCustomers",
-  repeat_customer_rate: "repeatCustomerRate",
-  orders_per_customer: "ordersPerCustomer",
-  active_members: "activeMembers",
-  trialing_members: "trialingMembers",
+  repeat_customers: "repeatCustomers",
+  repeat_orders: "repeatOrders",
   promotion_redemptions: "promotionRedemptions",
   discount_spend: "discountSpend",
-  promotion_influenced_order_revenue: "promotionInfluencedOrderRevenue",
-  fulfillment_time: "fulfillmentTime",
-  picking_time: "pickingTime",
-  packing_time: "packingTime",
-  delivery_time: "deliveryTime",
-  late_delivery_rate: "lateDeliveryRate",
-  cancellation_rate: "cancellationRate",
-  out_of_stock_rate: "outOfStockRate",
-  stockouts: "stockouts",
-  inventory_adjustments_shrinkage: "inventoryAdjustmentsShrinkage",
+  // Retained definition names are readable history, not current report scope.
+  repeat_customer_rate: null,
+  orders_per_customer: null,
+  active_members: null,
+  trialing_members: null,
+  promotion_influenced_order_revenue: null,
+  fulfillment_time: null,
+  picking_time: null,
+  packing_time: null,
+  delivery_time: null,
+  late_delivery_rate: null,
+  cancellation_rate: null,
+  out_of_stock_rate: null,
+  stockouts: null,
+  inventory_adjustments_shrinkage: null,
   gmv: null,
   revenue_net_sales: null,
   average_order_value: null,
@@ -57,9 +40,10 @@ export const metricQueryKeyByCode = {
   promotion_redemption_rate: null,
   substitution_rate: null,
   inventory_turnover: null,
-} as const satisfies Readonly<Record<string, AnalyticsQueryKey | null>>;
+} as const;
 
 export type MetricCode = keyof typeof metricQueryKeyByCode;
+export type AnalyticsQueryKey = Exclude<(typeof metricQueryKeyByCode)[MetricCode], null>;
 
 export function isMetricCode(value: string): value is MetricCode {
   return Object.hasOwn(metricQueryKeyByCode, value);

@@ -191,6 +191,8 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 
 ## Payments and Refunds
 
+`payment_refund.succeeded_at` (0093) is nullable first-success confirmation evidence. The existing Payments compare-and-swap transaction sets it only on the transition into `SUCCEEDED`; duplicate observations and retries preserve it. Retained successful refunds without reliable first-confirmation evidence remain null rather than receiving a fabricated creation/update date. Reports keep those gaps visible. Existing financial and recovery guards remain in the same transaction.
+
 `payment_creation_observation` (0076) preserves one immutable provider creation response per Payment with its provider/reference, original subject/customer/money identity and private continuation fields. Provider/reference is unique; applied_at is the only completion metadata. Adoption checks the original identity/current Payment version and guards Payment, Attempt, valid continuation, audit and applied_at together. This observation is creation evidence, never capture evidence. Existing Payments are preserved; historical provider-response fields are not invented or backfilled. Private redirect URLs/client tokens are excluded from logs, audit and public recovery DTOs.
 
 `payment_lookup_recovery(payment_intent_id PK/FK, status PENDING|COMPLETED|EXHAUSTED, attempts, available_at, lease_token NULL, last_error_code NULL, version, created_at, updated_at)` owns bounded read-only lookup scheduling separately from canonical Payment versions. Migration 0075 adds it without changing retained payment evidence. Its lease token fences late workers; a fresh operator recheck uses expected Payment and recovery versions (zero means no recovery record yet). Exhaustion and its review case/audit commit together. Lookup recovery never authorizes another charge or fabricates a terminal payment outcome.
@@ -371,6 +373,8 @@ High-volume lists use keyset pagination with stable compound sort keys, commonly
 - Optional `analytics_projection_*` tables contain rebuildable aggregates/checkpoints only; every row records definition version and projection watermark. They have no foreign-key ownership semantics that permit source-state mutation.
 
 Migration `0040_analytics_dimension_safety.sql` extends the immutable definition lifecycle with `SUPERSEDED`, preserves replaced versions, and publishes version 2 of `refund_amount` and `inventory_adjustments_shrinkage`. A partial unique index continues to enforce one `APPROVED` row per metric code.
+
+Migration `0093_commerce_reports.sql` preserves those historical definitions and publishes the 15 approved commerce figures. Replaced/retired approved rows change only lifecycle status/reason; their formulas, versions, identities and approval evidence remain intact. Blocked history remains blocked. New definitions expose purchase-based customer counts, separate received/refunded money, Order event counts, selling-option quantities, committed promotion allocations and comparable delivery charges/costs. No reporting tables copy or replace financial or commercial facts, and no metric publication operator workflow is introduced.
 
 Admin customer, operational, and Analytics DTOs are query projections over source tables with capability/scope filtering. Better Auth tables are joined only for narrowly permitted authentication display needs and never replace Customer/Application IAM ownership.
 

@@ -35,6 +35,7 @@ describe("admin analytics contracts", () => {
       "promotionId",
       "promotionBenefitType",
       "inventoryAdjustmentReason",
+      "skuId",
     ]);
   });
 

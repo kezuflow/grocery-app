@@ -28,6 +28,7 @@ export const analyticsDimensionKeys = [
   "promotionId",
   "promotionBenefitType",
   "inventoryAdjustmentReason",
+  "skuId",
 ] as const;
 export type AnalyticsDimensionKey = (typeof analyticsDimensionKeys)[number];
 
@@ -56,6 +57,8 @@ export type MetricDefinitionView = {
   displayName: string;
   category: AnalyticsMetricCategory;
   formulaDescription: string;
+  /** Monetary values are exact minor units in the selected currency. */
+  valueUnit?: "COUNT" | "MINOR_UNITS" | "SELLING_UNITS";
   availability: MetricDefinitionAvailability;
   unavailableReason: string | null;
   dimensions: ReadonlyArray<AnalyticsDimensionKey>;
@@ -78,6 +81,10 @@ export type AnalyticsMetricValue = {
 };
 
 export type AnalyticsOverviewView = {
+  productOptions?: {
+    items: ReadonlyArray<{ skuId: string; productName: string; optionName: string }>;
+    nextCursor: string | null;
+  };
   window: AnalyticsWindow;
   scope: Scope;
   definitions: ReadonlyArray<AnalyticsDefinitionReference>;
@@ -108,6 +115,8 @@ export type ListMetricDefinitionsRequest = AuthenticatedRequest & {
 };
 
 export type AnalyticsOverviewRequest = AuthenticatedRequest & {
+  productSearch?: string;
+  productCursor?: string;
   window: AnalyticsWindow;
   scope?: AdminSelectedScope;
   dimensions?: ReadonlyArray<AnalyticsDimension>;

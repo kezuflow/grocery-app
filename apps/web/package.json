@@ -40,6 +40,7 @@
     "recharts": "3.10.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
+    "temporal-polyfill": "1.0.4",
     "vinext": "1.0.0-beta.8"
   },
   "devDependencies": {

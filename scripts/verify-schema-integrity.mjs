@@ -271,7 +271,7 @@ const beforeWeighedReceipts = database
   });
 apply(
   database,
-  migrations.filter((name) => name >= "0090_"),
+  migrations.filter((name) => name >= "0090_" && name < "0093_"),
 );
 for (const snapshot of beforeWeighedReceipts)
   assert.deepEqual(
@@ -281,6 +281,55 @@ for (const snapshot of beforeWeighedReceipts)
   );
 for (const table of ["scheduled_counted_receipt", "scheduled_counted_receipt_line"])
   assert.equal(database.prepare(`SELECT COUNT(*) count FROM ${quote(table)}`).get().count, 0);
+const beforeReports = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => {
+    const columns = database
+      .prepare(`PRAGMA table_info(${quote(name)})`)
+      .all()
+      .map((row) => quote(row.name));
+    const query = `SELECT rowid,${columns.join(",")} FROM ${quote(name)} ORDER BY rowid`;
+    return { name, query, rows: database.prepare(query).all() };
+  });
+apply(
+  database,
+  migrations.filter((name) => name >= "0093_"),
+);
+for (const snapshot of beforeReports) {
+  const actual = database.prepare(snapshot.query).all();
+  if (snapshot.name !== "metric_definitions") {
+    assert.deepEqual(
+      actual,
+      snapshot.rows,
+      `${snapshot.name}: report upgrade preserves every original field and row`,
+    );
+    continue;
+  }
+  const replaced = new Set(["order_count", "new_customers", "active_customers", "refund_amount"]);
+  for (const previous of snapshot.rows) {
+    const expected = { ...previous };
+    if (previous.status === "APPROVED") {
+      expected.status = "SUPERSEDED";
+      expected.unavailable_reason = replaced.has(previous.code)
+        ? "Superseded by approved purchase-based commerce reports."
+        : "Retired from the approved commerce reports; historical definition retained.";
+    }
+    assert.deepEqual(
+      { ...actual.find((row) => row.id === previous.id) },
+      expected,
+      `${previous.code} v${previous.version}: preserve historical formula and identity; only supersede lifecycle`,
+    );
+  }
+  assert.equal(actual.length, snapshot.rows.length + 15);
+  assert.equal(actual.filter((row) => row.status === "APPROVED").length, 15);
+}
+assert.equal(
+  database.prepare("SELECT COUNT(*) count FROM payment_refund WHERE succeeded_at IS NOT NULL").get()
+    .count,
+  0,
+  "Do not invent first-success dates for retained refunds",
+);
 assert.deepEqual(
   database.prepare(receiptQuery).all(),
   retainedReceipts,

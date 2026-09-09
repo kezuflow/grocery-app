@@ -284,50 +284,25 @@ describe("Core Analytics reads", () => {
     ).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
 
-  it("preserves empty denominators, freshness metadata, and overview-series definition parity", async () => {
+  it("preserves empty totals, freshness and overview-series definition parity", async () => {
     const reader = await seedAnalyticsReader();
-    const series = await core.getMetricSeries({
-      requestId: crypto.randomUUID(),
-      headers: { cookie: reader.cookie },
-      metricCode: "orders_per_customer",
-      window,
-    });
-    expect(series).toMatchObject({
-      ok: true,
-      value: {
-        definitionVersion: 1,
-        availability: "AVAILABLE",
-        points: [{ occurredAt: window.endAt, value: null }],
-        freshness: { sourceWatermark: null },
-      },
-    });
-
-    const overview = await core.getAnalyticsOverview({
-      requestId: crypto.randomUUID(),
-      headers: { cookie: reader.cookie },
-      window,
-    });
-    expect(overview).toMatchObject({ ok: true });
+    const request = { requestId: crypto.randomUUID(), headers: { cookie: reader.cookie }, window };
+    const overview = await core.getAnalyticsOverview(request);
+    expect(overview.ok).toBe(true);
     if (!overview.ok) return;
-    const overviewGmv = overview.value.metrics.find((metric) => metric.metricCode === "gmv");
-    const directGmv = await core.getMetricSeries({
-      requestId: crypto.randomUUID(),
-      headers: { cookie: reader.cookie },
-      metricCode: "gmv",
-      window,
-    });
-    expect(overviewGmv).toMatchObject({
-      definitionVersion: 1,
-      availability: "UNAVAILABLE",
-      value: null,
-    });
-    expect(directGmv).toMatchObject({
-      ok: true,
-      value: { definitionVersion: 1, availability: "UNAVAILABLE" },
-    });
+    expect(overview.value.metrics).toHaveLength(15);
+    expect(overview.value.metrics.some((metric) => metric.metricCode === "gmv")).toBe(false);
+    for (const code of ["order_count", "new_customers", "paid_product_quantity"]) {
+      const series = await core.getMetricSeries({ ...request, metricCode: code });
+      expect(series.ok).toBe(true);
+      if (!series.ok) continue;
+      const metric = overview.value.metrics.find((item) => item.metricCode === code)!;
+      expect(series.value.definitionVersion).toBe(metric.definitionVersion);
+      expect(series.value.availability).toBe(metric.availability);
+      expect(series.value.points[0]?.value ?? null).toBe(metric.value);
+    }
   });
-
-  it("fails closed when a metric lacks its canonical event timestamp", async () => {
+  it("requires explicit currency for financial totals", async () => {
     const reader = await seedAnalyticsReader();
     await expect(
       core.getMetricSeries({
@@ -341,8 +316,7 @@ describe("Core Analytics reads", () => {
       value: {
         availability: "UNAVAILABLE",
         points: [],
-        unavailableReason:
-          "Select a currency because Refund amounts cannot be combined across currencies.",
+        unavailableReason: "Select a currency to view money received or refunded.",
       },
     });
   });
@@ -357,7 +331,7 @@ describe("Core Analytics reads", () => {
     });
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) return;
-    expect(result.value.metrics).toHaveLength(30);
+    expect(result.value.metrics).toHaveLength(15);
     expect(
       result.value.metrics.find((metric) => metric.metricCode === "order_count")?.dimensions,
     ).toEqual([]);
@@ -366,151 +340,28 @@ describe("Core Analytics reads", () => {
     ).toEqual([{ key: "currency", value: "PHP" }]);
   });
 
-  it("does not infer refund success from payment_refund.updated_at", async () => {
+  it("keeps retired inventory metrics historical and requires one selling option for Product counts", async () => {
     const reader = await seedAnalyticsReader();
+    const request = { requestId: crypto.randomUUID(), headers: { cookie: reader.cookie }, window };
     await expect(
       core.getMetricSeries({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: reader.cookie },
-        metricCode: "refund_amount",
-        window,
-        dimensions: [{ key: "currency", value: "PHP" }],
-      }),
-    ).resolves.toMatchObject({
-      ok: true,
-      value: {
-        availability: "UNAVAILABLE",
-        points: [],
-        unavailableReason:
-          "Unavailable because canonical refund success timestamps are not yet instrumented.",
-      },
-    });
-  });
-
-  it("never combines incompatible inventory base units and returns the effective unit", async () => {
-    const reader = await seedAnalyticsReader();
-    const now = Date.parse("2026-08-15T12:00:00.000Z");
-    const categoryId = crypto.randomUUID();
-    const seeds = [
-      { suffix: "gram", dimension: "MASS", baseUnit: "GRAM", quantity: 100 },
-      {
-        suffix: "milliliter",
-        dimension: "VOLUME",
-        baseUnit: "MILLILITER",
-        quantity: 200,
-      },
-      { suffix: "piece", dimension: "COUNT", baseUnit: "PIECE", quantity: 3 },
-    ] as const;
-    await env.DB.prepare(
-      "INSERT INTO category (id, code, name, slug, status, sort_order, created_at, updated_at) VALUES (?, ?, 'Analytics units', ?, 'active', 99, ?, ?)",
-    )
-      .bind(
-        categoryId,
-        `AN_${crypto.randomUUID().slice(0, 8)}`,
-        `an-${crypto.randomUUID()}`,
-        now,
-        now,
-      )
-      .run();
-    for (const seed of seeds) {
-      const unitId = crypto.randomUUID();
-      const poolId = crypto.randomUUID();
-      const productId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare(
-          "INSERT INTO unit (id, code, name, dimension, symbol, created_at, canonical_base_code, conversion_numerator, conversion_denominator, status, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', 1, ?)",
-        ).bind(
-          unitId,
-          `AN_${seed.suffix.toUpperCase()}_${crypto.randomUUID().slice(0, 6)}`,
-          seed.suffix,
-          seed.dimension,
-          seed.suffix,
-          now,
-          seed.baseUnit,
-          now,
-        ),
-        env.DB.prepare(
-          "INSERT INTO inventory_pool (id, base_unit_id, sourcing_mode, canonical_sourcing_mode, created_at, updated_at) VALUES (?, ?, 'STOCKED', 'STOCKED', ?, ?)",
-        ).bind(poolId, unitId, now, now),
-        env.DB.prepare(
-          "INSERT INTO product (id, category_id, inventory_pool_id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
-        ).bind(
-          productId,
-          categoryId,
-          poolId,
-          `analytics-${seed.suffix}-${crypto.randomUUID()}`,
-          seed.suffix,
-          now,
-          now,
-        ),
-        env.DB.prepare(
-          "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at) VALUES (?, ?, 'location-cebu-central', 'ADJUSTMENT', ?, 0, 'analytics-test', ?, 'staff', 'COUNT', '{}', ?)",
-        ).bind(crypto.randomUUID(), poolId, seed.quantity, crypto.randomUUID(), now),
-      ]);
-    }
-
-    const common = {
-      requestId: crypto.randomUUID(),
-      headers: { cookie: reader.cookie },
-      metricCode: "inventory_adjustments_shrinkage",
-      window,
-    };
-    await expect(core.getMetricSeries(common)).resolves.toMatchObject({
-      ok: true,
-      value: {
-        definitionVersion: 2,
-        availability: "UNAVAILABLE",
-        unavailableReason: "Select a base unit because this result contains multiple base units.",
-        dimensions: [],
-        points: [],
-      },
-    });
-    await expect(
-      core.getMetricSeries({
-        ...common,
-        dimensions: [{ key: "baseUnit", value: "GRAM" }],
-      }),
-    ).resolves.toMatchObject({
-      ok: true,
-      value: {
-        availability: "AVAILABLE",
-        dimensions: [{ key: "baseUnit", value: "GRAM" }],
-        points: [{ value: 100 }],
-      },
-    });
-  });
-
-  it("adds a single discovered inventory base unit to result metadata", async () => {
-    const reader = await seedAnalyticsReader();
-    const now = Date.parse("2026-08-16T12:00:00.000Z");
-    await env.DB.prepare(
-      "INSERT INTO inventory_ledger_entries (id, inventory_pool_id, location_id, movement_type, quantity_delta_base, reservation_delta_base, reference_type, reference_id, actor_type, reason_code, metadata_json, created_at) VALUES (?, 'pool-red-onion', 'location-cebu-central', 'ADJUSTMENT', 25, 0, 'analytics-test', ?, 'staff', 'COUNT', '{}', ?)",
-    )
-      .bind(crypto.randomUUID(), crypto.randomUUID(), now)
-      .run();
-
-    await expect(
-      core.getMetricSeries({
-        requestId: crypto.randomUUID(),
-        headers: { cookie: reader.cookie },
+        ...request,
         metricCode: "inventory_adjustments_shrinkage",
-        window: {
-          startAt: "2026-08-16T00:00:00.000Z",
-          endAt: "2026-08-17T00:00:00.000Z",
-          timezone: "Asia/Manila",
-        },
+        definitionVersion: 2,
       }),
-    ).resolves.toMatchObject({
-      ok: true,
-      value: {
-        availability: "AVAILABLE",
+    ).resolves.toMatchObject({ ok: true, value: { availability: "UNAVAILABLE", points: [] } });
+    await expect(
+      core.getMetricSeries({ ...request, metricCode: "paid_product_quantity" }),
+    ).resolves.toMatchObject({ ok: true, value: { availability: "UNAVAILABLE", points: [] } });
+    await expect(
+      core.getMetricSeries({
+        ...request,
+        metricCode: "paid_product_quantity",
         dimensions: [{ key: "baseUnit", value: "GRAM" }],
-        points: [{ value: 25 }],
-      },
-    });
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
-
-  it("filters promotion redemptions by the requested promotion", async () => {
+  it("excludes historical redemptions not committed to paid Orders", async () => {
     const reader = await seedAnalyticsReader();
     const customerPrincipal = await signUp();
     const customerId = crypto.randomUUID();
@@ -555,7 +406,7 @@ describe("Core Analytics reads", () => {
       }),
     ).resolves.toMatchObject({
       ok: true,
-      value: { availability: "AVAILABLE", points: [{ value: 1 }] },
+      value: { availability: "AVAILABLE", points: [{ value: 0 }] },
     });
   });
 
@@ -569,7 +420,7 @@ describe("Core Analytics reads", () => {
     });
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) return;
-    expect(result.value.metrics).toHaveLength(30);
+    expect(result.value.metrics).toHaveLength(15);
     expect(
       result.value.metrics.find((metric) => metric.metricCode === "promotion_redemptions")
         ?.dimensions,

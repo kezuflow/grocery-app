@@ -21,6 +21,8 @@ async function GETHandler(request: Request) {
         window,
         dimensions,
         scope,
+        productSearch: params.get("productSearch") ?? undefined,
+        productCursor: params.get("productCursor") ?? undefined,
       }),
     );
   } catch (error) {
