@@ -18,7 +18,7 @@ is `no-reply@freshmarkets.ph`. It is configured in the ignored local Core
 `.dev.vars`, and must also be supplied to Core's deployment environment when
 that release is authorized. Sending-domain setup does not deploy a Worker,
 verify inbox delivery, or create the inbound `support@freshmarkets.ph` mailbox.
-Current acceptance and the outstanding test-recipient input are tracked only
+Current acceptance, including owner-confirmed test receipt, is tracked only
 in [the active checkpoint](checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md).
 
 ## Verify without bypassing auth
