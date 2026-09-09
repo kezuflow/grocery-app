@@ -3,13 +3,8 @@ import { env, exports } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
 import { createAuth } from "./auth/service";
 import { resolveAuthenticatedCustomer } from "./customer/principal";
-import type {
-  CoreServiceBinding,
-  RpcResult,
-  SubscriptionEligibility,
-} from "@freshmarkets/contracts";
 
-const core = exports.default as unknown as CoreServiceBinding;
+const core = exports.default;
 
 function requestId() {
   return crypto.randomUUID();
@@ -42,8 +37,8 @@ async function signIn(email: string) {
   return cookieHeader(response);
 }
 
-async function commerceContext(cookie: string): Promise<RpcResult<SubscriptionEligibility>> {
-  return core.getSubscriptionEligibility({ headers: { cookie }, requestId: requestId() });
+async function commerceContext(cookie: string) {
+  return core.getCart({ headers: { cookie }, requestId: requestId() });
 }
 
 describe("Phase 4A authenticated customer boundary", () => {
@@ -252,12 +247,22 @@ describe("Phase 4A authenticated customer boundary", () => {
     expect(rows.results).toHaveLength(2);
     expect(rows.results[0].id).not.toBe(rows.results[1].id);
 
-    const forged = await core.getSubscriptionEligibility({
+    const otherCustomer = rows.results.find((row) => row.auth_user_id === b.userId);
+    if (!otherCustomer) throw new Error("Missing other customer");
+    const forgedInput = {
       headers: { cookie: aCookie },
       requestId: requestId(),
-      customerId: rows.results[1].id,
-    } as unknown as Parameters<CoreServiceBinding["getSubscriptionEligibility"]>[0]);
+      customerId: otherCustomer.id,
+    };
+    const forged = await core.getCart(forgedInput);
     expect(forged.ok).toBe(true);
-    if (forged.ok) expect(forged.value.state).toBeNull();
+    if (forged.ok)
+      expect(
+        await env.DB.prepare(
+          "SELECT customer.auth_user_id FROM cart JOIN customer ON customer.id=cart.customer_id WHERE cart.id=?",
+        )
+          .bind(forged.value.id)
+          .first(),
+      ).toEqual({ auth_user_id: a.userId });
   });
 });

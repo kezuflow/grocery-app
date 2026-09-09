@@ -19,7 +19,7 @@ describe("commerce state machines", () => {
       READY_TO_PACK: ["PACKING", "SHORTED"],
       PACKING: ["PACKED", "SHORTED"],
       PACKED: ["HANDED_OFF"],
-      HANDED_OFF: ["COMPLETED"],
+      HANDED_OFF: ["COMPLETED", "PACKED"],
       SHORTED: ["PICKING", "READY_TO_PACK", "CANCELED", "ESCALATED"],
     });
     expect(() => transition("COMPLETED", "PICKING", fulfillmentTransitions)).toThrow(

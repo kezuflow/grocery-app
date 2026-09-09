@@ -83,6 +83,7 @@ export async function manageManualDelivery(
       COALESCE((SELECT SUM(delivery_subtotal_minor-delivery_discount_minor) FROM paid_order_amendment WHERE order_id=grocery.id AND status='COMMITTED'),0) AS customer_charge,
     fulfillment.status AS fulfillment_status,fulfillment.version AS fulfillment_version,
     attempt.id AS dispatch_id,attempt.method,attempt.status AS attempt_status,attempt.version AS attempt_version,
+    EXISTS (SELECT 1 FROM delivery_promise_revision revision WHERE revision.dispatch_id=attempt.id AND revision.return_inspected_at IS NOT NULL) AS returned_goods_inspected,
     attempt.handed_over_at,COALESCE(attempt.attempt_sequence,0) AS attempt_sequence,
     EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch d ON d.id=c.dispatch_id
       WHERE d.delivery_job_id=job.id AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')) AS pending_cancel
@@ -109,6 +110,7 @@ export async function manageManualDelivery(
       handed_over_at: number | null;
       attempt_sequence: number;
       pending_cancel: number;
+      returned_goods_inspected: number;
     }>();
   const fail = (
     code:
@@ -141,6 +143,7 @@ export async function manageManualDelivery(
   if (prior) return prior;
   const actions = manualDeliveryActions({
     mode: row.fulfillment_mode,
+    returnedGoodsInspected: Boolean(row.returned_goods_inspected),
     jobStatus: row.status,
     orderStatus: row.order_status,
     fulfillmentStatus: row.fulfillment_status,

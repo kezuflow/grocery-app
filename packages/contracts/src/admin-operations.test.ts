@@ -134,6 +134,7 @@ describe("admin operations contracts", () => {
       manualDelivery: null,
       manualActions: [],
       canRevisePromise: false,
+      canInspectReturnedGoods: false,
       courierPickup: { allowedKinds: [], unavailableReason: null },
       deliveredAtIso: null,
       version: 1,

@@ -20,16 +20,24 @@ export function DeliveryPromiseForm({
   const [open, setOpen] = useState(false);
   const [time, setTime] = useState("");
   const [note, setNote] = useState("");
+  const [inspectionNote, setInspectionNote] = useState("");
+  const [inspected, setInspected] = useState(false);
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  if (!item.canRevisePromise) return null;
+  if (!item.canRevisePromise && !item.canInspectReturnedGoods) return null;
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (pending) return;
     const timestamp = Date.parse(time);
     if (!saved && (!Number.isFinite(timestamp) || !note.trim())) {
       setMessage("Enter the agreed time and a short agreement note.");
+      return;
+    }
+    if (!saved && item.canInspectReturnedGoods && (!inspected || !inspectionNote.trim())) {
+      setMessage(
+        "Confirm the returned groceries are inspected, suitable and packed, and record the inspection.",
+      );
       return;
     }
     const request = saved ?? {
@@ -40,6 +48,9 @@ export function DeliveryPromiseForm({
         expectedVersion: item.version,
         promisedAt: new Date(timestamp).toISOString(),
         agreementNote: note,
+        ...(item.canInspectReturnedGoods
+          ? { returnInspection: { allGoodsSuitableAndPacked: true, note: inspectionNote } }
+          : {}),
       }),
     };
     setSaved(request);
@@ -55,7 +66,11 @@ export function DeliveryPromiseForm({
       setSaved(null);
       if (result.ok) {
         setOpen(false);
-        setMessage("Agreed delivery time saved.");
+        setMessage(
+          item.canInspectReturnedGoods
+            ? "Return inspection and redelivery agreement saved."
+            : "Agreed delivery time saved.",
+        );
         onChanged();
       } else setMessage(result.error.message);
     } catch {
@@ -68,7 +83,7 @@ export function DeliveryPromiseForm({
     <div className="space-y-2">
       {!open ? (
         <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-          Record agreed delivery time
+          {item.canInspectReturnedGoods ? "Inspect returned order" : "Record agreed delivery time"}
         </Button>
       ) : (
         <form onSubmit={submit} className="space-y-3 rounded border p-3">
@@ -76,6 +91,36 @@ export function DeliveryPromiseForm({
             Contact the customer first. This records their agreement and keeps the original promise
             and paid amount.
           </p>
+          {item.canInspectReturnedGoods && (
+            <div className="space-y-3">
+              <p className="text-sm">
+                If any groceries are missing or unsuitable, keep the order under review. This does
+                not restock goods, issue a refund or add a charge.
+              </p>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  required
+                  className="mt-1 size-4 shrink-0"
+                  checked={inspected}
+                  disabled={pending || saved !== null}
+                  onChange={(event) => setInspected(event.target.checked)}
+                />
+                All groceries are back at the facility, inspected, suitable and packed for
+                redelivery.
+              </label>
+              <label className="block text-sm">
+                Return inspection
+                <Input
+                  required
+                  maxLength={1000}
+                  value={inspectionNote}
+                  disabled={pending || saved !== null}
+                  onChange={(event) => setInspectionNote(event.target.value)}
+                />
+              </label>
+            </div>
+          )}
           <label className="block text-sm">
             Deliver by (your local time)
             <Input
@@ -98,7 +143,13 @@ export function DeliveryPromiseForm({
             />
           </label>
           <Button type="submit" disabled={pending}>
-            {pending ? "Saving…" : saved ? "Check saved agreement" : "Save agreed time"}
+            {pending
+              ? "Saving…"
+              : saved
+                ? "Check saved agreement"
+                : item.canInspectReturnedGoods
+                  ? "Save inspection and agreed time"
+                  : "Save agreed time"}
           </Button>
           {!saved && (
             <Button

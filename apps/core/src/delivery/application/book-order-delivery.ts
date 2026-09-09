@@ -11,7 +11,7 @@ import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resol
 import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 import { requestProviderDelivery, type ProviderDispatchView } from "./request-provider-delivery";
 import type { DeliveryProvider } from "../ports/delivery-provider";
-import { preHandoverRetrySql } from "./pre-handover-retry";
+import { deliveryRetryReadySql } from "./delivery-retry-readiness";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -297,7 +297,7 @@ export async function bookOrderDelivery(
   if (
     retry &&
     !(await deps.db
-      .prepare(`SELECT 1 FROM delivery_job job WHERE job.id=? AND ${preHandoverRetrySql}`)
+      .prepare(`SELECT 1 FROM delivery_job job WHERE job.id=? AND ${deliveryRetryReadySql}`)
       .bind(row.job_id)
       .first())
   )

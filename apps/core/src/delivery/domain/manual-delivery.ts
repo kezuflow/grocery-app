@@ -8,17 +8,18 @@ export function manualDeliveryActions(facts: {
   fulfillmentStatus: string;
   attempt: { method: string; status: string; handedOverAt: number | null } | null;
   pendingCancellation: boolean;
+  returnedGoodsInspected?: boolean;
 }): ManualDeliveryAction[] {
   if (facts.mode !== "SCHEDULED" || facts.pendingCancellation) return [];
   const attempt = facts.attempt;
   if (!attempt || ["CANCELED", "RETURNED", "FAILED"].includes(attempt.status)) {
-    const closedBeforeHandover =
+    const closedWithAvailableGoods =
       attempt !== null &&
-      ["CANCELED", "FAILED"].includes(attempt.status) &&
-      attempt.handedOverAt === null;
-    return (!attempt || closedBeforeHandover) &&
+      ((["CANCELED", "FAILED"].includes(attempt.status) && attempt.handedOverAt === null) ||
+        facts.returnedGoodsInspected === true);
+    return (!attempt || closedWithAvailableGoods) &&
       (["UNASSIGNED", "RETRY_SCHEDULED"].includes(facts.jobStatus) ||
-        (facts.jobStatus === "FAILED" && closedBeforeHandover)) &&
+        (facts.jobStatus === "FAILED" && closedWithAvailableGoods)) &&
       ["COMMITTED", "FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(facts.orderStatus) &&
       ["NOT_STARTED", "PICKING", "READY_TO_PACK", "PACKING", "PACKED"].includes(
         facts.fulfillmentStatus,

@@ -2169,3 +2169,314 @@ describe("customer-agreed delivery times", () => {
     },
   );
 });
+
+describe("inspected physical-return recovery", () => {
+  it.each(["SCHEDULED", "INSTANT"] as const)(
+    "restores %s custody once without restocking or reusing an earlier inspection",
+    async (mode) => {
+      let clock = Date.now();
+      const deps = { ...dependencies(["delivery.read", "delivery.manage"]), now: () => clock };
+      const delivery = await seedScheduledDelivery(clock, mode);
+      await upsertLocationDeliveryProfile(deps, profileRequest(0));
+      await env.DB.prepare("UPDATE delivery_job SET promised_at=? WHERE id=?")
+        .bind(clock + 3600000, delivery.jobId)
+        .run();
+      if (mode === "SCHEDULED") await receiveScheduledTestGoods(delivery, clock);
+      else
+        expect(
+          await advanceFulfillment(
+            env.DB,
+            {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              orderId: delivery.orderId,
+              action: "START_PICKING",
+              expectedVersion: 1,
+              idempotencyKey: crypto.randomUUID(),
+            },
+            { authorize: async () => true },
+          ),
+        ).toMatchObject({ ok: true });
+      for (const [index, action] of (["MARK_READY_TO_PACK", "START_PACKING"] as const).entries()) {
+        expect(
+          await advanceFulfillment(
+            env.DB,
+            {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              orderId: delivery.orderId,
+              action,
+              expectedVersion: index + 2,
+              idempotencyKey: crypto.randomUUID(),
+            },
+            { authorize: async () => true },
+          ),
+        ).toMatchObject({ ok: true });
+      }
+      if (mode === "SCHEDULED") {
+        // Real receiving and packing consumption precede manual custody and return.
+        expect(
+          await advanceFulfillment(
+            env.DB,
+            {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              orderId: delivery.orderId,
+              action: "MARK_PACKED",
+              expectedVersion: 4,
+              idempotencyKey: crypto.randomUUID(),
+            },
+            { authorize: async () => true },
+          ),
+        ).toMatchObject({ ok: true });
+      } else {
+        // Instant packing/paid reservation acceptance is covered by the browser journey;
+        // seed that boundary here to exercise actual external pickup/return commands.
+        await env.DB.batch([
+          env.DB.prepare(
+            "UPDATE fulfillment_record SET status='PACKED',version=version+1 WHERE order_id=?",
+          ).bind(delivery.orderId),
+          env.DB.prepare(
+            "UPDATE grocery_order SET status='FULFILLMENT_READY',version=version+1 WHERE id=?",
+          ).bind(delivery.orderId),
+        ]);
+      }
+      const currentJob = async () => {
+        const row = await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+          .bind(delivery.jobId)
+          .first<{ status: string; version: number }>();
+        if (!row) throw new Error("Missing delivery");
+        return row;
+      };
+      const latestAttempt = async () => {
+        const row = await env.DB.prepare(
+          "SELECT id,version,merchant_order_id,provider_delivery_id FROM delivery_provider_dispatch WHERE delivery_job_id=? ORDER BY attempt_sequence DESC LIMIT 1",
+        )
+          .bind(delivery.jobId)
+          .first<{
+            id: string;
+            version: number;
+            merchant_order_id: string;
+            provider_delivery_id: string | null;
+          }>();
+        if (!row) throw new Error("Missing attempt");
+        return row;
+      };
+      let providerStatus: "IN_DELIVERY" | "RETURNED" = "IN_DELIVERY";
+      const provider: DeliveryProvider = {
+        ...createMockDeliveryProvider(() => clock),
+        get: async () => {
+          const attempt = await latestAttempt();
+          return {
+            ok: true,
+            value: {
+              providerDeliveryId: attempt.provider_delivery_id ?? "missing-provider",
+              merchantOrderId: attempt.merchant_order_id,
+              status: providerStatus,
+              trackingUrl: null,
+              pickupPin: null,
+              quote: null,
+            },
+          };
+        },
+      };
+      const bookingDeps = { ...deps, provider, configuredServiceType: "MOTORCYCLE" };
+      async function sendAndFail() {
+        const job = await currentJob();
+        if (mode === "SCHEDULED") {
+          const assigned = await manageManualDelivery(deps, {
+            headers: {},
+            requestId: crypto.randomUUID(),
+            locationId: LOCATION,
+            jobId: delivery.jobId,
+            expectedVersion: job.version,
+            idempotencyKey: crypto.randomUUID(),
+            action: "ASSIGN",
+            personName: "Delivery helper",
+            phoneE164: "+639171110000",
+            reason: "Customer agreed to manual delivery",
+          });
+          if (!assigned.ok) throw new Error(assigned.error.message);
+          const handover = await manageManualDelivery(deps, {
+            headers: {},
+            requestId: crypto.randomUUID(),
+            locationId: LOCATION,
+            jobId: delivery.jobId,
+            expectedVersion: assigned.value.version,
+            dispatchId: assigned.value.dispatchId,
+            idempotencyKey: crypto.randomUUID(),
+            action: "HAND_OVER",
+          });
+          if (!handover.ok) throw new Error(handover.error.message);
+          expect(
+            await manageManualDelivery(deps, {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              locationId: LOCATION,
+              jobId: delivery.jobId,
+              expectedVersion: handover.value.version,
+              dispatchId: assigned.value.dispatchId,
+              idempotencyKey: crypto.randomUUID(),
+              action: "FAIL",
+              actualCostMinor: null,
+              reason: "Delivery failed; goods brought back for review",
+            }),
+          ).toMatchObject({ ok: true });
+        } else {
+          expect(
+            await requestExternalDelivery(bookingDeps, {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              locationId: LOCATION,
+              jobId: delivery.jobId,
+              expectedVersion: job.version,
+              idempotencyKey: crypto.randomUUID(),
+              providerCode: "lalamove",
+              pickup: { kind: "IMMEDIATE" },
+            }),
+          ).toMatchObject({ ok: true });
+          for (const status of ["IN_DELIVERY", "RETURNED"] as const) {
+            providerStatus = status;
+            clock++;
+            const attempt = await latestAttempt();
+            expect(
+              await refreshExternalDelivery(bookingDeps, {
+                headers: {},
+                requestId: crypto.randomUUID(),
+                locationId: LOCATION,
+                dispatchId: attempt.id,
+                expectedVersion: attempt.version,
+                idempotencyKey: crypto.randomUUID(),
+              }),
+            ).toMatchObject({ ok: true });
+          }
+        }
+      }
+      await sendAndFail();
+      const firstAttempt = await latestAttempt();
+      const failed = await currentJob();
+      expect(failed.status).toBe("FAILED");
+      const stockAndMoney = () =>
+        env.DB.prepare(`SELECT
+      (SELECT COUNT(*) FROM inventory_ledger_entries WHERE reference_id=?) AS inventory_events,
+      (SELECT SUM(on_hand) FROM inventory_balance) AS on_hand,
+      (SELECT SUM(reserved) FROM inventory_balance) AS reserved,
+      (SELECT SUM(packed_base) FROM cycle_goods_balance) AS packed,
+      (SELECT COUNT(*) FROM cycle_goods_movement WHERE order_id=?) AS cycle_events,
+      (SELECT COUNT(*) FROM order_cancellation) AS cancellations,
+      (SELECT COUNT(*) FROM refund) AS refunds,(SELECT COUNT(*) FROM payment_refund) AS payment_refunds`)
+          .bind(delivery.orderId, delivery.orderId)
+          .first();
+      const unchanged = await stockAndMoney();
+      const request = {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: delivery.jobId,
+        expectedVersion: failed.version,
+        idempotencyKey: crypto.randomUUID(),
+        promisedAt: new Date(clock + 2 * 3600000).toISOString(),
+        agreementNote: "Customer agreed by phone to another delivery",
+        returnInspection: {
+          allGoodsSuitableAndPacked: true as const,
+          note: "All groceries physically returned, checked and packed for the same customer",
+        },
+      };
+      expect(
+        await reviseDeliveryPromise(deps, { ...request, returnInspection: undefined }),
+      ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+      expect(
+        await reviseDeliveryPromise(deps, {
+          ...request,
+          returnInspection: { ...request.returnInspection, note: " " },
+        }),
+      ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+      const queueRequest = {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        limit: 100,
+      };
+      const beforeQueue = await listAdminDeliveryOperations(deps, queueRequest);
+      if (!beforeQueue.ok) throw new Error(beforeQueue.error.message);
+      expect(beforeQueue.value.items.find((item) => item.jobId === delivery.jobId)).toMatchObject({
+        canInspectReturnedGoods: true,
+        canRevisePromise: false,
+        manualActions: [],
+      });
+      await env.DB.exec(
+        "CREATE TRIGGER omit_return_custody BEFORE UPDATE ON fulfillment_record WHEN NEW.status='PACKED' BEGIN SELECT RAISE(IGNORE); END",
+      );
+      try {
+        expect(await reviseDeliveryPromise(deps, request)).toMatchObject({ ok: false });
+        expect(await currentJob()).toEqual(failed);
+        expect(
+          await env.DB.prepare("SELECT id FROM delivery_promise_revision WHERE delivery_job_id=?")
+            .bind(delivery.jobId)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare(
+            "SELECT 1 FROM idempotency_records WHERE scope='delivery.promiseRevision' AND idempotency_key=?",
+          )
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toBeNull();
+      } finally {
+        await env.DB.exec("DROP TRIGGER omit_return_custody");
+      }
+      const requests = [request, { ...request, idempotencyKey: crypto.randomUUID() }];
+      const outcomes = await Promise.all(
+        requests.map((input) => reviseDeliveryPromise(deps, input)),
+      );
+      expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+      const winner = outcomes.findIndex((result) => result.ok);
+      const winnerRequest = requests[winner];
+      const winnerResult = outcomes[winner];
+      if (!winnerRequest || !winnerResult?.ok) throw new Error("Missing inspection winner");
+      expect(await stockAndMoney()).toEqual(unchanged);
+      expect(
+        await env.DB.prepare("SELECT status FROM fulfillment_record WHERE order_id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual({ status: "PACKED" });
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual({ status: "FULFILLMENT_READY" });
+      const afterQueue = await listAdminDeliveryOperations(deps, queueRequest);
+      if (!afterQueue.ok) throw new Error(afterQueue.error.message);
+      expect(afterQueue.value.items.find((item) => item.jobId === delivery.jobId)).toMatchObject({
+        canInspectReturnedGoods: false,
+        canRevisePromise: true,
+        manualActions: mode === "SCHEDULED" ? ["ASSIGN"] : [],
+      });
+      expect(
+        await env.DB.prepare(
+          "SELECT dispatch_id,return_inspection_note,return_inspected_at FROM delivery_promise_revision WHERE id=?",
+        )
+          .bind(winnerResult.value.revisionId)
+          .first(),
+      ).toMatchObject({
+        dispatch_id: firstAttempt.id,
+        return_inspection_note: request.returnInspection.note,
+        return_inspected_at: clock,
+      });
+      await sendAndFail();
+      expect((await latestAttempt()).id).not.toBe(firstAttempt.id);
+      const failedAgain = await currentJob();
+      expect(await reviseDeliveryPromise(deps, winnerRequest)).toEqual(winnerResult);
+      expect(await currentJob()).toEqual(failedAgain);
+      expect(
+        await reviseDeliveryPromise(deps, {
+          ...request,
+          expectedVersion: failedAgain.version,
+          idempotencyKey: crypto.randomUUID(),
+          returnInspection: undefined,
+        }),
+      ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+      expect(await stockAndMoney()).toEqual(unchanged);
+    },
+  );
+});

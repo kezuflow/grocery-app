@@ -10,7 +10,7 @@ import {
 } from "../../admin/application/operations-administration-access";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
-import { preHandoverRetrySql } from "./pre-handover-retry";
+import { deliveryRetryReadySql, returnedDeliveryInspectionSql } from "./delivery-retry-readiness";
 
 const identity = z.string().trim().min(1).max(200);
 const schema = z.object({
@@ -19,6 +19,12 @@ const schema = z.object({
   expectedVersion: z.number().int().positive(),
   promisedAt: z.string().datetime(),
   agreementNote: z.string().trim().min(1).max(1000),
+  returnInspection: z
+    .object({
+      allGoodsSuitableAndPacked: z.literal(true),
+      note: z.string().trim().min(1).max(1000),
+    })
+    .optional(),
   idempotencyKey: identity,
 });
 const resultSchema = z.object({
@@ -63,12 +69,13 @@ export async function reviseDeliveryPromise(
   if (!access.ok) return access;
   const db = deps.db;
   const row = await db
-    .prepare(`SELECT job.version,job.order_id,
+    .prepare(`SELECT job.version,job.order_id,grocery.version AS order_version,grocery.status AS order_status,fulfillment.version AS fulfillment_version,fulfillment.status AS fulfillment_status,
     COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),
       CASE WHEN job.fulfillment_mode='INSTANT' THEN snapshot.promised_at ELSE COALESCE(delivery_window.ends_at,snapshot.delivery_date) END) AS promised_at,
     attempt.id AS dispatch_id,attempt.version AS dispatch_version,
-    (${preHandoverRetrySql}) AS eligible
+    (${deliveryRetryReadySql}) AS eligible, (${returnedDeliveryInspectionSql}) AS return_eligible
     FROM delivery_job job JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=job.order_id
+    JOIN grocery_order grocery ON grocery.id=job.order_id JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id AND fulfillment.location_id=job.location_id
     LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=job.order_id
     LEFT JOIN delivery_provider_dispatch attempt ON attempt.id=(SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=job.id ORDER BY attempt_sequence DESC LIMIT 1)
     WHERE job.id=? AND job.location_id=?`)
@@ -80,6 +87,11 @@ export async function reviseDeliveryPromise(
       dispatch_id: string | null;
       dispatch_version: number | null;
       eligible: number;
+      return_eligible: number;
+      order_version: number;
+      order_status: string;
+      fulfillment_version: number;
+      fulfillment_status: string;
     }>();
   if (!row) return fail("NOT_FOUND", "Delivery is unavailable");
   const hash = await requestHash({ ...command, actorUserId: access.value.authUserId });
@@ -100,14 +112,20 @@ export async function reviseDeliveryPromise(
   if (prior) return prior;
   if (row.version !== command.expectedVersion)
     return fail("STALE_VERSION", "Delivery changed; refresh before recording the agreement");
-  if (!row.eligible || !row.dispatch_id || row.promised_at === null)
+  const inspectingReturn = command.returnInspection !== undefined;
+  const eligibilitySql = inspectingReturn ? returnedDeliveryInspectionSql : deliveryRetryReadySql;
+  if (
+    !(inspectingReturn ? row.return_eligible : row.eligible) ||
+    !row.dispatch_id ||
+    row.promised_at === null
+  )
     return fail(
       "ILLEGAL_TRANSITION",
       "Close the prior courier attempt before changing the delivery time; returned goods require inspection first",
     );
   const now = (deps.now ?? Date.now)();
   const promisedAt = Date.parse(command.promisedAt);
-  if (promisedAt <= now || promisedAt === row.promised_at)
+  if (promisedAt <= now || (!inspectingReturn && promisedAt === row.promised_at))
     return fail("VALIDATION_FAILED", "Choose a new agreed delivery time in the future");
   const result = {
     revisionId: crypto.randomUUID(),
@@ -127,7 +145,7 @@ export async function reviseDeliveryPromise(
         .bind(command.locationId, access.value.authUserId),
       // Preserve the delivery-status timestamp; agreement time lives in its own record.
       db
-        .prepare(`UPDATE delivery_job AS job SET promised_at=?,version=version+1 WHERE job.id=? AND job.location_id=? AND job.version=? AND ${preHandoverRetrySql}
+        .prepare(`UPDATE delivery_job AS job SET promised_at=?,version=version+1 WHERE job.id=? AND job.location_id=? AND job.version=? AND ${eligibilitySql}
         AND EXISTS (SELECT 1 FROM delivery_provider_dispatch attempt WHERE attempt.id=? AND attempt.version=? AND attempt.attempt_sequence=(SELECT MAX(attempt_sequence) FROM delivery_provider_dispatch WHERE delivery_job_id=job.id))`)
         .bind(
           promisedAt,
@@ -140,7 +158,7 @@ export async function reviseDeliveryPromise(
       guard(),
       db
         .prepare(
-          `INSERT INTO delivery_promise_revision(id,delivery_job_id,dispatch_id,job_version,previous_promised_at,promised_at,agreement_note,actor_user_id,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO delivery_promise_revision(id,delivery_job_id,dispatch_id,job_version,previous_promised_at,promised_at,agreement_note,actor_user_id,recorded_at,return_inspection_note,return_inspected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .bind(
           result.revisionId,
@@ -152,11 +170,36 @@ export async function reviseDeliveryPromise(
           command.agreementNote,
           access.value.authUserId,
           now,
+          command.returnInspection?.note ?? null,
+          inspectingReturn ? now : null,
         ),
       guard(),
+      ...(inspectingReturn
+        ? [
+            // Reuse the original packing consumption; inspection never credits stock or packs twice.
+            db
+              .prepare(
+                "UPDATE fulfillment_record SET status='PACKED',version=version+1,updated_at=? WHERE order_id=? AND location_id=? AND status=? AND version=?",
+              )
+              .bind(
+                now,
+                row.order_id,
+                command.locationId,
+                row.fulfillment_status,
+                row.fulfillment_version,
+              ),
+            guard(),
+            db
+              .prepare(
+                "UPDATE grocery_order SET status='FULFILLMENT_READY',version=version+1 WHERE id=? AND status=? AND version=?",
+              )
+              .bind(row.order_id, row.order_status, row.order_version),
+            guard(),
+          ]
+        : []),
       auditEventStatement(db, {
         actorUserId: access.value.authUserId,
-        action: "DELIVERY.PROMISE_REVISED",
+        action: inspectingReturn ? "DELIVERY.RETURN_INSPECTED" : "DELIVERY.PROMISE_REVISED",
         resourceType: "delivery_job",
         resourceId: command.jobId,
         locationId: command.locationId,

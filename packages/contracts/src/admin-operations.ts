@@ -119,6 +119,7 @@ export type AdminDeliveryOperationView = {
   status: string;
   manualActions: ReadonlyArray<ManualDeliveryAction>;
   canRevisePromise: boolean;
+  canInspectReturnedGoods: boolean;
   courierPickup: {
     allowedKinds: ReadonlyArray<"IMMEDIATE" | "SCHEDULED">;
     unavailableReason: string | null;
@@ -130,6 +131,7 @@ export type AdminDeliveryOperationView = {
     reason: string;
     status: string;
     handedOverAt: number | null;
+    returnInspectedAt: number | null;
     actualCostMinor: number | null;
     currency: string | null;
     version: number;
@@ -199,6 +201,7 @@ export type ReviseDeliveryPromiseRequest = AdminOperationsLocationRequest & {
   expectedVersion: number;
   promisedAt: string;
   agreementNote: string;
+  returnInspection?: { allGoodsSuitableAndPacked: true; note: string };
   idempotencyKey: string;
 };
 export type ReviseDeliveryPromiseResult = {

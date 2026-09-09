@@ -97,7 +97,11 @@ export function ManualDeliveryControls({
           <p>{manual.reason}</p>
           <p>
             {manual.status}
-            {manual.handedOverAt !== null ? " · Handed over" : ""}
+            {manual.returnInspectedAt !== null
+              ? " · Returned and inspected"
+              : manual.handedOverAt !== null
+                ? " · Handed over"
+                : ""}
           </p>
           {manual.status !== "ACTIVE" ? (
             <p>

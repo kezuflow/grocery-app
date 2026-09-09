@@ -1,11 +1,12 @@
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { manualDeliveryActions } from "../domain/manual-delivery";
 import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
-import { preHandoverRetrySql } from "./pre-handover-retry";
+import { deliveryRetryReadySql, returnedDeliveryInspectionSql } from "./delivery-retry-readiness";
 
 type DispatchRow = {
   manualActions: AdminDeliveryOperationView["manualActions"];
   canRevisePromise: boolean;
+  canInspectReturnedGoods: boolean;
   courierPickup: AdminDeliveryOperationView["courierPickup"];
   manualDelivery: AdminDeliveryOperationView["manualDelivery"];
   jobId: string;
@@ -119,7 +120,9 @@ export async function listDeliveryDispatch(
               dispatch.version AS external_version,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
               dispatch.manual_reason,dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
               o.status AS order_status,f.status AS fulfillment_status,d.promised_at,
-              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${preHandoverRetrySql}) AS retry_ready,
+              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${deliveryRetryReadySql}) AS retry_ready,
+              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${returnedDeliveryInspectionSql}) AS return_eligible,
+              (SELECT MAX(revision.return_inspected_at) FROM delivery_promise_revision revision WHERE revision.dispatch_id=dispatch.id) AS returned_goods_inspected,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${scheduledDeliveryGoodsReadySql}) AS scheduled_goods_ready,
               (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=d.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
                 LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
@@ -146,6 +149,8 @@ export async function listDeliveryDispatch(
       delivery_currency: string | null;
       order_status: string;
       retry_ready: number;
+      return_eligible: number;
+      returned_goods_inspected: number | null;
       promised_at: number | null;
       fulfillment_status: string;
       pending_cancel: number;
@@ -171,9 +176,11 @@ export async function listDeliveryDispatch(
   return rows.results.map((r) => ({
     courierPickup: courierPickupDecision(r),
     canRevisePromise: Boolean(r.can_manage && r.retry_ready),
+    canInspectReturnedGoods: Boolean(r.can_manage && r.return_eligible),
     manualActions: r.can_manage
       ? manualDeliveryActions({
           mode: r.fulfillment_mode,
+          returnedGoodsInspected: Boolean(r.returned_goods_inspected),
           jobStatus: r.status,
           orderStatus: r.order_status,
           fulfillmentStatus: r.fulfillment_status,
@@ -199,6 +206,7 @@ export async function listDeliveryDispatch(
             reason: r.manual_reason,
             status: r.external_status,
             handedOverAt: r.handed_over_at,
+            returnInspectedAt: r.returned_goods_inspected,
             actualCostMinor: r.final_payable_minor,
             currency: r.delivery_currency,
             version: r.external_version,

@@ -160,7 +160,10 @@ export async function advanceFulfillment(
       "Order preparation has already started",
       command.requestId,
     );
-  if (command.action === "MARK_PACKED" && order.status !== "FULFILLMENT_PENDING")
+  if (
+    command.action === "MARK_PACKED" &&
+    (order.status !== "FULFILLMENT_PENDING" || row.status !== "PACKING")
+  )
     return failure("ILLEGAL_TRANSITION", "Order is not being prepared", command.requestId);
   const transitionResult = transitionToResult(
     row.status,

@@ -1,7 +1,7 @@
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
 import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
-import { preHandoverRetrySql } from "./pre-handover-retry";
+import { deliveryRetryReadySql } from "./delivery-retry-readiness";
 
 type DispatchStatus =
   | "PENDING"
@@ -150,7 +150,7 @@ export async function requestProviderDelivery(
            AND pending.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')
        ) AND (
          ? IS NULL OR (
-           job.version=? AND (job.status IN ('UNASSIGNED','RETRY_SCHEDULED') OR (?=1 AND ${preHandoverRetrySql}))
+           job.version=? AND (job.status IN ('UNASSIGNED','RETRY_SCHEDULED') OR (?=1 AND ${deliveryRetryReadySql}))
            AND (?=0 OR (job.promised_at IS NOT NULL AND job.promised_at>=? OR job.fulfillment_mode='SCHEDULED'))
            AND job.batch_id IS NULL AND job.rider_id IS NULL
            AND (job.fulfillment_mode!='INSTANT' OR EXISTS (

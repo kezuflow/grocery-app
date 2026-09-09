@@ -14,6 +14,12 @@ const schema = z.object({
   expectedVersion: z.number().int().positive(),
   promisedAt: z.string().datetime(),
   agreementNote: z.string().trim().min(1).max(1000),
+  returnInspection: z
+    .object({
+      allGoodsSuitableAndPacked: z.literal(true),
+      note: z.string().trim().min(1).max(1000),
+    })
+    .optional(),
   idempotencyKey: identity.optional(),
 });
 async function POSTHandler(request: Request) {

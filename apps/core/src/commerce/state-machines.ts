@@ -64,7 +64,7 @@ export const fulfillmentTransitions: StateMap = {
   READY_TO_PACK: ["PACKING", "SHORTED"],
   PACKING: ["PACKED", "SHORTED"],
   PACKED: ["HANDED_OFF"],
-  HANDED_OFF: ["COMPLETED"],
+  HANDED_OFF: ["COMPLETED", "PACKED"],
   SHORTED: ["PICKING", "READY_TO_PACK", "CANCELED", "ESCALATED"],
 };
 export const deliveryJobTransitions: StateMap = {

@@ -512,6 +512,82 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`scheduled-manual-handover-${width}.png`),
       fullPage: true,
     });
+    await manualRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
+    await manualRow
+      .getByLabel("What went wrong", { exact: true })
+      .fill("Customer unavailable; goods returned for review");
+    await manualRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
+    await expect(manualRow).toContainText("FAILED");
+    await expect(
+      manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }),
+    ).toHaveCount(0);
+    await manualRow.getByRole("button", { name: "Inspect returned order", exact: true }).click();
+    await manualRow
+      .getByRole("checkbox", {
+        name: "All groceries are back at the facility, inspected, suitable and packed for redelivery.",
+        exact: true,
+      })
+      .check();
+    await manualRow
+      .getByLabel("Return inspection", { exact: true })
+      .fill("All groceries returned, checked and packed for the same customer");
+    await manualRow
+      .getByLabel("Customer agreement", { exact: true })
+      .fill("Customer agreed by phone to redelivery this evening");
+    const redeliveryAt = new Date(Date.now() + 2 * 3600000);
+    await manualRow
+      .getByLabel("Deliver by (your local time)")
+      .fill(
+        new Date(redeliveryAt.getTime() - redeliveryAt.getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16),
+      );
+    await manualRow.scrollIntoViewIfNeeded();
+    await admin.screenshot({
+      path: testInfo.outputPath(`scheduled-return-inspection-${width}.png`),
+      fullPage: true,
+    });
+    await manualRow
+      .getByRole("button", { name: "Save inspection and agreed time", exact: true })
+      .click();
+    await expect(manualRow).toContainText("Returned and inspected");
+    expect(
+      z
+        .object({
+          inventoryPool: z.object({
+            position: z
+              .object({
+                onHandBase: z.number(),
+                reservedBase: z.number(),
+                availableBase: z.number(),
+              })
+              .nullable(),
+          }),
+        })
+        .parse(
+          await read(
+            admin,
+            `/api/admin/catalog/products/product-red-onion?scopeKind=LOCATION&marketId=${marketId}&locationId=${locationId}`,
+          ),
+        ).inventoryPool.position,
+    ).toEqual(finalStock.inventoryPool.position);
+    await page.goto(`/orders/${orderId}`);
+    await expect(page.getByText("Original promise", { exact: true })).toBeVisible();
+    await expect(page.getByText("Agreed delivery time", { exact: true })).toBeVisible();
+    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await manualRow
+      .getByLabel("Person delivering", { exact: true })
+      .fill("Synthetic redelivery helper");
+    await manualRow
+      .getByLabel("Phone including country code", { exact: true })
+      .fill("+639171110004");
+    await manualRow
+      .getByLabel("Reason for manual delivery", { exact: true })
+      .fill("Customer agreed after return inspection");
+    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
+    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
+    await expect(manualRow).toContainText("Handed over");
     let completedBody: string | null = null;
     let completedKey: string | undefined;
     let completionCalls = 0;
