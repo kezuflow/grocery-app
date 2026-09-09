@@ -44,3 +44,4 @@ export * from "./promotion-media";
 export * from "./inventory-transfers";
 
 export * from "./admin-scheduled-week";
+export * from "./scheduled-counted-receipts";

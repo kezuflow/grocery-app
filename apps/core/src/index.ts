@@ -1,4 +1,5 @@
 import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
+import { recordScheduledCountedReceipt } from "./procurement/application/scheduled-counted-receipts";
 import {
   uploadAdminPromotionMedia,
   updateAdminPromotionMedia,
@@ -2268,6 +2269,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
   getAdminScheduledWeek(input: import("@freshmarkets/contracts").ScheduledWeekRequest) {
     return getAdminScheduledWeek(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  recordScheduledCountedReceipt(
+    input: import("@freshmarkets/contracts").RecordScheduledCountedReceiptRequest,
+  ) {
+    return recordScheduledCountedReceipt(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

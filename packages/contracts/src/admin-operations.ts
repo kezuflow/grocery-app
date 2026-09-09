@@ -56,6 +56,9 @@ export type ProcurementRequirementPage = {
 };
 
 export type ReceivingSessionView = {
+  productId?: string;
+  variantName?: string;
+  stockTracking?: "SHARED" | "COUNTED_SIZES";
   productName?: string;
   cycleName?: string;
   baseUnit?: string;
@@ -75,6 +78,7 @@ export type ReceivingSessionView = {
 };
 
 export type ReceivingSessionPage = {
+  countedReceipts?: readonly import("./scheduled-counted-receipts").ScheduledCountedReceiptView[];
   items: ReadonlyArray<ReceivingSessionView>;
   nextCursor: string | null;
 };

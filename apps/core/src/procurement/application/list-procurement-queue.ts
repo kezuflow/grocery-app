@@ -6,6 +6,9 @@
 export type ProcurementWorkbenchItem = {
   requirementId: string;
   productName: string;
+  productId: string | null;
+  variantName: string | null;
+  stockTracking: "SHARED" | "COUNTED_SIZES";
   cycleName: string;
   baseUnit: string;
   expectedQuantityBase: number;
@@ -53,7 +56,7 @@ export async function listProcurementQueue(
   if (query.receivingOnly) clauses.push("rr.id IS NOT NULL");
   const rows = await database
     .prepare(
-      `SELECT COALESCE(product.name,'Historical product') product_name,cycle.name cycle_name,unit.symbol base_unit,rr.expected_quantity,pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id,
+      `SELECT product.id product_id,sku.name variant_name,COALESCE(product.stock_tracking,'SHARED') stock_tracking,COALESCE(product.name,'Historical product') product_name,cycle.name cycle_name,unit.symbol base_unit,rr.expected_quantity,pr.id AS requirement_id, pr.delivery_cycle_id, pr.location_id, pr.inventory_pool_id,
        pr.sku_id,pr.committed_quantity_sellable,pr.shipping_weight_grams,
        pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version,
        rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity, rr.legacy_accepted_base, rr.shortage_base, rr.replacement_base,
@@ -71,6 +74,9 @@ export async function listProcurementQueue(
     .all<{
       requirement_id: string;
       product_name: string;
+      product_id: string | null;
+      variant_name: string | null;
+      stock_tracking: "SHARED" | "COUNTED_SIZES";
       cycle_name: string;
       base_unit: string;
       expected_quantity: number | null;
@@ -96,6 +102,9 @@ export async function listProcurementQueue(
   return rows.results.map((r) => ({
     requirementId: r.requirement_id,
     productName: r.product_name,
+    productId: r.product_id,
+    variantName: r.variant_name,
+    stockTracking: r.stock_tracking,
     cycleName: r.cycle_name,
     baseUnit: r.base_unit,
     expectedQuantityBase: r.expected_quantity ?? r.required_quantity,

@@ -43,6 +43,11 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
 type Result = { ok: true; value: ReceivingResult; requestId: string } | ReturnType<typeof failure>;
+type ReceivingPlan = {
+  result: ReceivingResult;
+  statements: D1PreparedStatement[];
+  recover: () => Promise<Result | null>;
+};
 type Receipt = {
   id: string;
   requirementId: string;
@@ -59,6 +64,7 @@ type Receipt = {
   version: number;
   requirementStatus: string;
   requirementVersion: number;
+  stockTracking: string;
 };
 
 /** Receiving owns accepted cycle goods; physical stock is only credited by inspected surplus release. */
@@ -66,6 +72,33 @@ export async function executeReceivingCommand(
   database: D1Database,
   command: ReceivingMutation,
 ): Promise<Result> {
+  const planned = await prepareReceivingCommand(database, command);
+  if (!planned.ok) return planned;
+  try {
+    if (planned.value.statements.length) await database.batch(planned.value.statements);
+  } catch (error) {
+    const raced = await planned.value.recover();
+    if (raced) return raced;
+    if (
+      error instanceof Error &&
+      /CHECK constraint failed|UNIQUE constraint failed/.test(error.message)
+    )
+      return failure(
+        "STALE_VERSION",
+        "Receipt, requirement or access changed; refresh and review",
+        command.requestId,
+      );
+    throw error;
+  }
+  return { ok: true, value: planned.value.result, requestId: command.requestId };
+}
+
+/** Compile the same guarded writes for a single receipt or one weighed group of size receipts. */
+export async function prepareReceivingCommand(
+  database: D1Database,
+  command: ReceivingMutation,
+  options: { beginIfNotStarted?: boolean; countedReceipt?: boolean } = {},
+): Promise<{ ok: true; value: ReceivingPlan } | ReturnType<typeof failure>> {
   if (
     !Number.isSafeInteger(command.expectedVersion) ||
     command.expectedVersion < 1 ||
@@ -103,8 +136,9 @@ export async function executeReceivingCommand(
     .prepare(`SELECT receipt.id,receipt.procurement_requirement_id requirementId,requirement.delivery_cycle_id cycleId,requirement.location_id locationId,requirement.inventory_pool_id inventoryPoolId,
     receipt.expected_quantity expectedBase,receipt.accepted_quantity acceptedBase,receipt.rejected_quantity rejectedBase,receipt.legacy_accepted_base legacyAcceptedBase,
     receipt.shortage_base shortageBase,receipt.replacement_base replacementBase,
-    receipt.status,receipt.version,requirement.status requirementStatus,requirement.version requirementVersion
+    receipt.status,receipt.version,requirement.status requirementStatus,requirement.version requirementVersion,COALESCE(product.stock_tracking,'SHARED') stockTracking
     FROM receiving_record receipt JOIN procurement_requirement requirement ON requirement.id=receipt.procurement_requirement_id
+    LEFT JOIN sku ON sku.id=requirement.sku_id LEFT JOIN product ON product.id=sku.product_id
     WHERE ${command.action === "START" ? "receipt.procurement_requirement_id" : "receipt.id"}=? ORDER BY receipt.rowid LIMIT 1`)
     .bind(command.action === "START" ? command.requirementId : command.receivingRecordId)
     .first<Receipt>();
@@ -168,14 +202,32 @@ export async function executeReceivingCommand(
     return null;
   }
   const prior = await replay();
-  if (prior) return prior;
+  if (prior)
+    return prior.ok
+      ? { ok: true, value: { result: prior.value, statements: [], recover: replay } }
+      : prior;
   if (row.version !== command.expectedVersion)
     return failure(
       "STALE_VERSION",
       "Receiving changed; refresh before retrying",
       command.requestId,
     );
+  if (recording && row.stockTracking === "COUNTED_SIZES" && !options.countedReceipt)
+    return failure(
+      "VALIDATION_FAILED",
+      "Use the weighed receipt form to record this product's actual size counts",
+      command.requestId,
+    );
   if (
+    !(
+      options.beginIfNotStarted &&
+      command.action === "RECORD" &&
+      row.status === "NOT_STARTED" &&
+      row.requirementStatus === "ORDERED" &&
+      row.acceptedBase === 0 &&
+      row.rejectedBase === 0 &&
+      row.shortageBase === 0
+    ) &&
     !receivingActions({
       status: row.status,
       requirementStatus: row.requirementStatus,
@@ -448,21 +500,5 @@ export async function executeReceivingCommand(
       .bind(JSON.stringify(result), now, scope, command.idempotencyKey, hash),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
   );
-  try {
-    await database.batch(statements);
-  } catch (error) {
-    const raced = await replay();
-    if (raced) return raced;
-    if (
-      error instanceof Error &&
-      /CHECK constraint failed|UNIQUE constraint failed/.test(error.message)
-    )
-      return failure(
-        "STALE_VERSION",
-        "Receipt, requirement or access changed; refresh and review",
-        command.requestId,
-      );
-    throw error;
-  }
-  return { ok: true, value: result, requestId: command.requestId };
+  return { ok: true, value: { result, statements, recover: replay } };
 }

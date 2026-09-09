@@ -1,4 +1,5 @@
 import { receivingActions } from "../../procurement/application/receiving-actions";
+import { latestScheduledCountedReceipts } from "../../procurement/application/scheduled-counted-receipts";
 import type {
   AdminDeliveryOperationsRequest,
   AdminFulfillmentQueueRequest,
@@ -154,6 +155,9 @@ export async function listAdminReceivingSessions(
     value: {
       items: pageRows.map((row) => ({
         receivingSessionId: row.receivingRecordId!,
+        productId: row.productId ?? undefined,
+        variantName: row.variantName ?? undefined,
+        stockTracking: row.stockTracking,
         requirementId: row.requirementId,
         cycleId: row.cycleId,
         locationId: row.locationId,
@@ -179,6 +183,11 @@ export async function listAdminReceivingSessions(
         status: row.receivingStatus!,
         version: row.receivingVersion!,
       })),
+      countedReceipts: await latestScheduledCountedReceipts(
+        deps.db,
+        request.locationId,
+        request.cycleId,
+      ),
       nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.requirementId),
     },
     requestId: request.requestId,

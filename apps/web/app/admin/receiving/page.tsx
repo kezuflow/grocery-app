@@ -1,12 +1,13 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   appErrorCodes,
   receivingRecordStates,
   type ReceivingSessionPage,
 } from "@freshmarkets/contracts";
-import { z } from "@freshmarkets/validation";
+import { z, scheduledCountedReceiptViewSchema } from "@freshmarkets/validation";
+import { ScheduledCountedReceiving } from "../../../components/admin/scheduled-counted-receiving";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -46,6 +47,9 @@ const sessionSchema = z.object({
   status: z.enum(receivingRecordStates),
   version: z.number().int().safe().positive(),
   productName: z.string().optional(),
+  productId: z.string().optional(),
+  variantName: z.string().optional(),
+  stockTracking: z.enum(["SHARED", "COUNTED_SIZES"]).optional(),
   cycleName: z.string().optional(),
   baseUnit: z.string().optional(),
   allowedActions: z.array(z.enum(["START", "RECORD", "REPLACE", "COMPLETE"])).optional(),
@@ -55,7 +59,11 @@ const pageResult = z.union([
   z.object({
     ok: z.literal(true),
     requestId: z.string(),
-    value: z.object({ items: z.array(sessionSchema), nextCursor: z.string().nullable() }),
+    value: z.object({
+      items: z.array(sessionSchema),
+      nextCursor: z.string().nullable(),
+      countedReceipts: z.array(scheduledCountedReceiptViewSchema).optional(),
+    }),
   }),
 ]);
 const commandResult = z.union([
@@ -75,8 +83,10 @@ export default function ReceivingPage() {
   >({});
   const commandIntent = useAdminCommandIntent();
   const pagination = useAdminPagination();
+  const latestLoad = useRef(0);
   const load = useCallback(
     async (cursor: string | null) => {
+      const generation = ++latestLoad.current;
       setState("loading");
       try {
         const payload = pageResult.parse(
@@ -86,6 +96,7 @@ export default function ReceivingPage() {
             )
           ).json(),
         );
+        if (generation !== latestLoad.current) return;
         if (!payload.ok) {
           setNotice(
             payload.error.code === "FORBIDDEN"
@@ -98,6 +109,7 @@ export default function ReceivingPage() {
         setPage(payload.value);
         setState("ready");
       } catch {
+        if (generation !== latestLoad.current) return;
         setNotice("Network error loading receiving sessions.");
         setState("error");
       }
@@ -106,6 +118,9 @@ export default function ReceivingPage() {
   );
   useEffect(() => {
     if (locationId) void load(pagination.cursor);
+    return () => {
+      latestLoad.current += 1;
+    };
   }, [load, locationId, pagination.cursor]);
 
   async function submit(intent: ReceivingIntent) {
@@ -196,6 +211,13 @@ export default function ReceivingPage() {
         description={`Record accepted and rejected base-unit quantities for ${label}.`}
       />
       <WorkspaceNavigation parentCode="procurement" label="Procurement administration" />
+      <ScheduledCountedReceiving
+        items={state === "ready" ? (page?.items ?? []) : []}
+        receipts={state === "ready" ? (page?.countedReceipts ?? []) : []}
+        locationLabel={label}
+        disabled={state !== "ready" || commandIntent.pending || unresolved !== null}
+        onSaved={() => void load(pagination.cursor)}
+      />
       {!locationId ? (
         <AdminPageState
           state="permission-empty"
@@ -268,6 +290,7 @@ export default function ReceivingPage() {
                       >
                         <TableCell className="col-span-2 sm:table-cell">
                           <p className="font-medium">{item.productName ?? "Historical product"}</p>
+                          {item.variantName ? <p className="text-sm">{item.variantName}</p> : null}
                           <p className="text-xs text-[var(--fm-text-muted)]">
                             {item.cycleName ?? "Retained cycle"}
                           </p>
@@ -306,7 +329,8 @@ export default function ReceivingPage() {
                           <StatusBadge>{item.status}</StatusBadge>
                         </TableCell>
                         <TableCell className="col-span-2 empty:hidden sm:table-cell sm:empty:table-cell">
-                          {item.allowedActions?.includes("START") ? (
+                          {item.stockTracking !== "COUNTED_SIZES" &&
+                          item.allowedActions?.includes("START") ? (
                             <Button
                               disabled={commandIntent.pending || unresolved !== null}
                               onClick={() => void start(item.requirementId, item.version)}
@@ -314,7 +338,8 @@ export default function ReceivingPage() {
                               Start receiving
                             </Button>
                           ) : null}
-                          {item.allowedActions?.some(
+                          {item.stockTracking !== "COUNTED_SIZES" &&
+                          item.allowedActions?.some(
                             (action) => action === "RECORD" || action === "REPLACE",
                           ) ? (
                             <fieldset

@@ -260,8 +260,27 @@ const receiptQuery = `SELECT rowid,${receiptColumns.join(",")} FROM receiving_re
 const retainedReceipts = database.prepare(receiptQuery).all();
 apply(
   database,
-  migrations.filter((name) => name >= "0089_"),
+  migrations.filter((name) => name >= "0089_" && name < "0090_"),
 );
+const beforeWeighedReceipts = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => {
+    const query = `SELECT rowid,* FROM ${quote(name)} ORDER BY rowid`;
+    return { name, query, rows: database.prepare(query).all() };
+  });
+apply(
+  database,
+  migrations.filter((name) => name >= "0090_"),
+);
+for (const snapshot of beforeWeighedReceipts)
+  assert.deepEqual(
+    database.prepare(snapshot.query).all(),
+    snapshot.rows,
+    `${snapshot.name}: weighed receipt upgrade preserves all existing rows`,
+  );
+for (const table of ["scheduled_counted_receipt", "scheduled_counted_receipt_line"])
+  assert.equal(database.prepare(`SELECT COUNT(*) count FROM ${quote(table)}`).get().count, 0);
 assert.deepEqual(
   database.prepare(receiptQuery).all(),
   retainedReceipts,
