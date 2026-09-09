@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import type { CartView, ReorderResultView, RpcResult } from "@freshmarkets/contracts";
+import type { ReorderResultView, RpcResult } from "@freshmarkets/contracts";
+import {
+  loadCartForLocation,
+  requestDeliveryLocation,
+} from "../../../lib/storefront/load-cart-for-location";
 
 function reasonLabel(reason: ReorderResultView["skippedLines"][number]["reason"]): string {
   return {
@@ -32,9 +36,9 @@ export function ReorderAction({ orderId, available }: { orderId: string; availab
   async function reorder() {
     setBusy(true);
     try {
-      const cartResponse = await fetch("/api/commerce/cart", { cache: "no-store" });
-      const cart = (await cartResponse.json()) as RpcResult<CartView>;
+      const cart = await loadCartForLocation();
       if (!cart.ok) {
+        if (cart.error.code === "DELIVERY_LOCATION_REQUIRED") requestDeliveryLocation();
         setMessage(cart.error.message);
         return;
       }

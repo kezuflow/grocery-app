@@ -16,6 +16,8 @@ import {
 } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 import { hasUnresolvedScheduledCommitment } from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
+import { getCart, setCartItem } from "../../checkout/application/cart";
+import { selectCartLocation } from "../../checkout/application/select-cart-location";
 
 const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
@@ -212,6 +214,245 @@ function paymentCommandForQuote(
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "completes an unchanged %s Cart once and preserves its successor on replay",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      expect(
+        await env.DB.prepare("SELECT cart_version FROM checkout_quote WHERE id=?")
+          .bind(quote.value.quoteId)
+          .first(),
+      ).toEqual({ cart_version: 3 });
+      const payment = await intentWithReaction(
+        quote.value.quoteId,
+        fixture.customerId,
+        quote.value.totalMinor,
+      );
+      const command = {
+        reactionId: payment.reactionId,
+        paymentIntentId: payment.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED" as const,
+      };
+      const committed = await applyCheckoutPaymentReaction(env.DB, command);
+      expect(committed).toMatchObject({ applied: true });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM cart WHERE id=?")
+          .bind(fixture.cartId)
+          .first(),
+      ).toEqual({ status: "CONVERTED", version: 4 });
+      expect(
+        await env.DB.prepare("SELECT quantity FROM cart_item WHERE cart_id=?")
+          .bind(fixture.cartId)
+          .first(),
+      ).toEqual({ quantity: 4 });
+      const principal = {
+        customerId: fixture.customerId,
+        headers: {},
+        requestId: crypto.randomUUID(),
+      };
+      expect(await getCart(env.DB, principal)).toMatchObject({
+        ok: false,
+        error: { code: "DELIVERY_LOCATION_REQUIRED" },
+      });
+      const selected = await selectCartLocation(env.DB, {
+        ...principal,
+        latitude: 10.32,
+        longitude: 123.9,
+        expectedVersion: 0,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      if (!selected.ok) throw new Error(selected.error.message);
+      expect(selected.value.cartId).not.toBe(fixture.cartId);
+      const added = await setCartItem(env.DB, {
+        ...principal,
+        cartId: selected.value.cartId,
+        expectedVersion: selected.value.version,
+        skuId: fixture.skuId,
+        quantity: 1,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      expect(added).toMatchObject({ ok: true });
+      expect(await applyCheckoutPaymentReaction(env.DB, command)).toEqual({
+        ...committed,
+        reason: "ALREADY_APPLIED",
+      });
+      expect(await getCart(env.DB, principal)).toEqual(added);
+      expect(
+        await env.DB.prepare("SELECT quantity FROM order_item WHERE order_id=?")
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ quantity: 4 });
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "preserves a %s Cart edited at the payment write boundary",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const payment = await intentWithReaction(
+        quote.value.quoteId,
+        fixture.customerId,
+        quote.value.totalMinor,
+      );
+      const racing = new Proxy(env.DB, {
+        get(database, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await database.batch([
+                database
+                  .prepare("UPDATE cart SET version=version+1 WHERE id=?")
+                  .bind(fixture.cartId),
+                database
+                  .prepare("UPDATE cart_item SET quantity=9 WHERE cart_id=?")
+                  .bind(fixture.cartId),
+              ]);
+              return database.batch(statements);
+            };
+          const value = Reflect.get(database, property, database);
+          return typeof value === "function" ? value.bind(database) : value;
+        },
+      });
+      const command = {
+        reactionId: payment.reactionId,
+        paymentIntentId: payment.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED" as const,
+      };
+      const committed = await applyCheckoutPaymentReaction(racing, command);
+      expect(committed).toMatchObject({ applied: true });
+      expect(
+        await env.DB.prepare(
+          "SELECT c.status,c.version,ci.quantity FROM cart c JOIN cart_item ci ON ci.cart_id=c.id WHERE c.id=?",
+        )
+          .bind(fixture.cartId)
+          .first(),
+      ).toEqual({ status: "ACTIVE", version: 4, quantity: 9 });
+      expect(
+        await env.DB.prepare("SELECT quantity FROM order_item WHERE order_id=?")
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ quantity: 4 });
+      expect(await applyCheckoutPaymentReaction(env.DB, command)).toEqual({
+        ...committed,
+        reason: "ALREADY_APPLIED",
+      });
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "keeps the Cart for a retained %s Quote without a recorded version",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      await env.DB.prepare("UPDATE checkout_quote SET cart_version=NULL WHERE id=?")
+        .bind(quote.value.quoteId)
+        .run();
+      const payment = await intentWithReaction(
+        quote.value.quoteId,
+        fixture.customerId,
+        quote.value.totalMinor,
+      );
+      expect(
+        await applyCheckoutPaymentReaction(env.DB, {
+          reactionId: payment.reactionId,
+          paymentIntentId: payment.intentId,
+          checkoutAttemptId: quote.value.quoteId,
+          canonicalPaymentState: "SUCCEEDED",
+        }),
+      ).toMatchObject({ applied: true });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM cart WHERE id=?")
+          .bind(fixture.cartId)
+          .first(),
+      ).toEqual({ status: "ACTIVE", version: 3 });
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "rolls back the complete %s commitment if required Cart completion is suppressed",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const payment = await intentWithReaction(
+        quote.value.quoteId,
+        fixture.customerId,
+        quote.value.totalMinor,
+      );
+      const command = {
+        reactionId: payment.reactionId,
+        paymentIntentId: payment.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED" as const,
+      };
+      await env.DB.exec(
+        "CREATE TRIGGER suppress_cart_completion BEFORE UPDATE OF status ON cart WHEN NEW.status='CONVERTED' BEGIN SELECT RAISE(IGNORE); END;",
+      );
+      try {
+        expect(await applyCheckoutPaymentReaction(env.DB, command)).toMatchObject({
+          applied: false,
+        });
+        expect(
+          await env.DB.prepare(
+            "SELECT (SELECT status FROM cart WHERE id=?) cartStatus,(SELECT status FROM checkout_quote WHERE id=?) quoteStatus,(SELECT COUNT(*) FROM grocery_order WHERE customer_id=?) orders,(SELECT COUNT(*) FROM order_payment_reaction WHERE payment_intent_id=?) receipts",
+          )
+            .bind(fixture.cartId, quote.value.quoteId, fixture.customerId, payment.intentId)
+            .first(),
+        ).toEqual({ cartStatus: "ACTIVE", quoteStatus: "ACTIVE", orders: 0, receipts: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER suppress_cart_completion;");
+      }
+      expect(await applyCheckoutPaymentReaction(env.DB, command)).toMatchObject({ applied: true });
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "rejects a Cart edit during %s quoting without a Quote or hold",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const racing = new Proxy(env.DB, {
+        get(database, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              await database
+                .prepare("UPDATE cart SET version=version+1 WHERE id=?")
+                .bind(fixture.cartId)
+                .run();
+              return database.batch(statements);
+            };
+          const value = Reflect.get(database, property, database);
+          return typeof value === "function" ? value.bind(database) : value;
+        },
+      });
+      expect(
+        await createCheckoutQuote(
+          racing,
+          {
+            ...fixture,
+            cartVersion: 3,
+            deliveryCycleId: fulfillmentMode === "SCHEDULED" ? "cycle-next-cebu" : null,
+            idempotencyKey: crypto.randomUUID(),
+            requestId: crypto.randomUUID(),
+          },
+          quoteDependencies,
+        ),
+      ).toMatchObject({ ok: false, error: { code: "CART_VERSION_CONFLICT" } });
+      expect(
+        await env.DB.prepare(
+          "SELECT (SELECT COUNT(*) FROM checkout_quote WHERE customer_id=?) quotes,(SELECT COUNT(*) FROM checkout_inventory_holds WHERE inventory_pool_id=?) holds",
+        )
+          .bind(fixture.customerId, fixture.poolId)
+          .first(),
+      ).toEqual({ quotes: 0, holds: 0 });
+    },
+  );
+
   it("rejects a retained overweight quote before creating payment intent", async () => {
     const fixture = await seededCheckout();
     const quote = await createCheckoutQuote(

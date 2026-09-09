@@ -12,6 +12,10 @@ External provider events are not client commands and never supply or invent an `
 
 A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid Orders and paid additions. For the current release, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, delivery-cycle cutoff is the later operational/procurement commitment boundary. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate. Global `OPEN|PAUSED` selling state is a separate versioned lifecycle: `PAUSED` blocks new options, Quotes, and payment initiation but does not prevent reconciliation or exactly-once commitment of an already-started payment.
 
+## Cart
+
+An explicitly located Cart is `ACTIVE`. A new Quote records its Cart version and guards that version when storing the Quote and related holds/claims. Successful paid-Order commitment changes that Cart to `CONVERTED` in the same transaction only when the Cart remains active at the recorded version. Keep its rows and quantities as history. A changed Cart or a retained Quote without version evidence stays intact; payment success still commits the accepted Order snapshot. Rejected commitment rolls back Cart completion, and payment replay never completes a later Cart. A subsequent Cart is created through explicit current location selection.
+
 ## Global Commerce Configuration
 
 ```text

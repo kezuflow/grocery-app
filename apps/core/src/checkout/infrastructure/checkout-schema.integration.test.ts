@@ -14,6 +14,7 @@ describe("checkout/orders schema", () => {
         "attempt_id",
         "customer_id",
         "cart_id",
+        "cart_version",
         "address_id",
         "delivery_cycle_id",
         "total_minor",
@@ -56,6 +57,12 @@ describe("checkout/orders schema", () => {
         .bind(id, attemptId, addressId, cycleId, key)
         .run();
     await insertQuote("q1", "a1", "ik1");
+    expect(
+      await env.DB.prepare("SELECT cart_version FROM checkout_quote WHERE id='q1'").first(),
+    ).toEqual({ cart_version: null });
+    await expect(
+      env.DB.prepare("UPDATE checkout_quote SET cart_version=0 WHERE id='q1'").run(),
+    ).rejects.toThrow();
     await expect(insertQuote("q2", "a2", "ik1")).rejects.toThrow();
   });
 

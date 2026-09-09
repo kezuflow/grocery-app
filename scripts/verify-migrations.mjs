@@ -29,6 +29,12 @@ function apply(database, selected) {
 }
 
 function assertFinalSchema(database) {
+  assert.ok(
+    database
+      .prepare("PRAGMA table_info(checkout_quote)")
+      .all()
+      .some((column) => column.name === "cart_version"),
+  );
   const indexes = database
     .prepare(
       "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('checkout_quote','grocery_order')",
@@ -391,6 +397,12 @@ apply(
   migrations.filter((migration) => migration.name > "0021_instant_mode.sql"),
 );
 assertFinalSchema(populated);
+assert.equal(
+  populated.prepare("SELECT cart_version FROM checkout_quote WHERE id='upgrade-quote'").get()
+    .cart_version,
+  null,
+  "retained Cart versions must not be guessed",
+);
 assertProduceLaunch(populated);
 assert.equal(
   populated.prepare("SELECT fulfillment_mode FROM grocery_order WHERE id='upgrade-order'").get()

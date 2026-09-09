@@ -250,9 +250,16 @@ for (const width of [1440, 390]) {
     }
     async function checkout(quantity: number) {
       const before = orders.parse(await read(page, "/api/commerce/orders"));
+      const loadedCart = page.waitForResponse(
+        async (response) =>
+          response.url().endsWith("/api/commerce/cart") &&
+          response.request().method() === "GET" &&
+          (await response.json()).ok === true,
+      );
+      await page.goto("/cart");
       const cart = z
         .object({ id: z.string(), version: z.number() })
-        .parse(await read(page, "/api/commerce/cart"));
+        .parse(await value(await loadedCart));
       await post(page, "/api/commerce/cart", {
         cartId: cart.id,
         expectedVersion: cart.version,

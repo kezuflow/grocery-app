@@ -220,11 +220,19 @@ for (const width of [1440, 390]) {
       expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
       await page.goto(url.searchParams.get("returnTo") ?? "/orders");
     }
+    const paidCartIds = new Set<string>();
     async function checkout(quantity: number, itemDiscountMinor = 0) {
       const before = orders.parse(await read(page, "/api/commerce/orders"));
+      const loadedCart = page.waitForResponse(
+        async (response) =>
+          response.url().endsWith("/api/commerce/cart") &&
+          response.request().method() === "GET" &&
+          (await response.json()).ok === true,
+      );
+      await page.goto("/cart");
       const cart = z
         .object({ id: z.string(), version: z.number() })
-        .parse(await read(page, "/api/commerce/cart"));
+        .parse(await value(await loadedCart));
       await post(page, "/api/commerce/cart", {
         cartId: cart.id,
         expectedVersion: cart.version,
@@ -277,6 +285,7 @@ for (const width of [1440, 390]) {
       expect(created).toHaveLength(1);
       const order = created[0];
       if (!order) throw new Error("Missing committed Order");
+      paidCartIds.add(cart.id);
       return order.id;
     }
     expect(product.inventoryPool.position?.availableBase ?? 0).toBeGreaterThanOrEqual(1000);
@@ -712,11 +721,19 @@ for (const width of [1440, 390]) {
       version: z.number(),
     });
     const beforeReorder = historical.parse(await read(page, `/api/commerce/orders/${orderId}`));
-    const existingCart = z
-      .object({ items: z.array(z.object({ skuId: z.string(), quantity: z.number() })) })
-      .parse(await read(page, "/api/commerce/cart"));
-    const reorderedQuantity =
-      (existingCart.items.find((item) => item.skuId === skuId)?.quantity ?? 0) + 2;
+    const successorLoaded = page.waitForResponse(
+      async (response) =>
+        response.url().endsWith("/api/commerce/cart") &&
+        response.request().method() === "GET" &&
+        (await response.json()).ok === true,
+    );
+    await page.goto("/cart");
+    const successor = z
+      .object({ id: z.string(), items: z.array(z.unknown()) })
+      .parse(await value(await successorLoaded));
+    expect(successor.items).toEqual([]);
+    expect(paidCartIds.has(successor.id)).toBe(false);
+    const reorderedQuantity = 2;
     const currentProduct = z
       .object({
         skus: z.array(z.object({ skuId: z.string(), priceVersion: z.number().nullable() })),
@@ -771,8 +788,27 @@ for (const width of [1440, 390]) {
     expect(historical.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
       beforeReorder,
     );
+    // A separate Buy again action must add to this successor Cart's existing
+    // quantities, while the paid Order remains the same historical snapshot.
+    await page.goto(`/orders/${orderId}`);
+    const addedAgain = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/orders/${orderId}/reorder`) &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Buy again", exact: true }).click();
+    expect(await value(await addedAgain)).toMatchObject({
+      addedLines: [{ skuId, quantityAdded: 2, newQuantity: 4, currentUnitPriceMinor: 125 }],
+    });
+    await page.getByRole("link", { name: "Review current cart", exact: true }).click();
+    expect(await read(page, "/api/commerce/cart")).toMatchObject({
+      items: [{ skuId, quantity: 4, unitPriceMinor: 125, lineTotalMinor: 500 }],
+    });
+    expect(historical.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
+      beforeReorder,
+    );
     await page.screenshot({
-      path: testInfo.outputPath(`ca72-current-price-cart-${width}.png`),
+      path: testInfo.outputPath(`ca74-current-price-cart-${width}.png`),
       fullPage: true,
     });
   });

@@ -293,6 +293,7 @@ export async function createInstantQuote(
   const evidence = decision.evidence!;
   try {
     await database.batch([
+      repository.guardCartVersion(command.cartId, command.customerId, command.cartVersion),
       quoteRefreshPaymentGuard(database, command.cartId),
       geographyQuoteGuard(database, routing),
       operatingScheduleGuard(database, routing, routing.openInterval),
@@ -327,6 +328,7 @@ export async function createInstantQuote(
           attemptId: quoteId,
           customerId: command.customerId,
           cartId: command.cartId,
+          cartVersion: command.cartVersion,
           addressId: command.addressId,
           deliveryCycleId: null,
           fulfillmentMode: "INSTANT",
@@ -393,6 +395,16 @@ export async function createInstantQuote(
       const replayed = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
       if (replayed) return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
     }
+    const currentCart = await database
+      .prepare("SELECT version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'")
+      .bind(command.cartId, command.customerId)
+      .first<{ version: number }>();
+    if (currentCart?.version !== command.cartVersion)
+      return failure(
+        "CART_VERSION_CONFLICT",
+        "Your cart changed. Review it before requesting a new total.",
+        command.requestId,
+      );
     const refreshed = (
       await operationalCandidates(database, address, {
         mode: routing.mode,

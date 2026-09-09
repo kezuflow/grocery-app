@@ -16,6 +16,7 @@ export type CheckoutQuoteRow = {
   attemptId: string;
   customerId: string;
   cartId: string;
+  cartVersion: number | null;
   addressId: string;
   deliveryCycleId: string | null;
   fulfillmentMode?: "INSTANT" | "SCHEDULED";
@@ -43,13 +44,14 @@ export type CheckoutQuoteRow = {
 };
 
 const COLUMNS =
-  "id, attempt_id, customer_id, cart_id, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, pre_service_fee_total_minor, service_fee_configuration_id, service_fee_snapshot_json, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, requested_promotion_codes_json, promotion_feedback_json, promotion_applications_json, price_acceptance_version, status, version, expires_at";
+  "id, attempt_id, customer_id, cart_id, cart_version, address_id, delivery_cycle_id, fulfillment_mode, currency, subtotal_minor, discount_minor, delivery_fee_minor, total_minor, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_subtotal_minor, delivery_discount_minor, service_fee_minor, tax_minor, pre_service_fee_total_minor, service_fee_configuration_id, service_fee_snapshot_json, lines_json, address_snapshot_json, cycle_snapshot_json, fulfillment_snapshot_json, delivery_fee_snapshot_json, requested_promotion_codes_json, promotion_feedback_json, promotion_applications_json, price_acceptance_version, status, version, expires_at";
 
 type RawRow = {
   id: string;
   attempt_id: string;
   customer_id: string;
   cart_id: string;
+  cart_version: number | null;
   address_id: string;
   delivery_cycle_id: string | null;
   fulfillment_mode: "INSTANT" | "SCHEDULED";
@@ -88,6 +90,7 @@ function map(row: RawRow): CheckoutQuoteRow {
     attemptId: row.attempt_id,
     customerId: row.customer_id,
     cartId: row.cart_id,
+    cartVersion: row.cart_version,
     addressId: row.address_id,
     deliveryCycleId: row.delivery_cycle_id,
     fulfillmentMode: row.fulfillment_mode ?? "SCHEDULED",
@@ -137,6 +140,13 @@ function map(row: RawRow): CheckoutQuoteRow {
 
 export function createCheckoutRepository(database: D1Database) {
   return {
+    guardCartVersion(cartId: string, customerId: string, version: number): D1PreparedStatement {
+      return database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -6 WHERE NOT EXISTS (SELECT 1 FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE' AND version=?)",
+        )
+        .bind(cartId, customerId, version);
+    },
     async findQuoteByIdempotencyKey(key: string): Promise<CheckoutQuoteRow | null> {
       const row = await database
         .prepare(`SELECT ${COLUMNS} FROM checkout_quote WHERE idempotency_key=?`)
@@ -191,9 +201,9 @@ export function createCheckoutRepository(database: D1Database) {
             delivery_fee_snapshot_json, requested_promotion_codes_json,
             promotion_feedback_json, promotion_applications_json,
             price_acceptance_version, status, version, expires_at,
-            idempotency_key, created_at, updated_at
+            idempotency_key, created_at, updated_at, cart_version
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           input.id,
@@ -233,6 +243,7 @@ export function createCheckoutRepository(database: D1Database) {
           input.idempotencyKey,
           now,
           now,
+          input.cartVersion,
         );
     },
     supersedeQuotesForCart(
