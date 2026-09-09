@@ -73,7 +73,10 @@ describe("cart aggregate", () => {
       idempotencyKey: `cart-set-${crypto.randomUUID()}`,
     };
     const applied = await setCartItem(env.DB, command);
-    expect(applied).toMatchObject({ ok: true, value: { version: 2 } });
+    expect(applied).toMatchObject({
+      ok: true,
+      value: { version: 2, items: [{ name: "Red onion · 500 g" }] },
+    });
     const replay = await setCartItem(env.DB, command);
     expect(replay).toMatchObject({ ok: true, value: { version: 2 } });
     const conflict = await setCartItem(env.DB, { ...command, quantity: 3 });

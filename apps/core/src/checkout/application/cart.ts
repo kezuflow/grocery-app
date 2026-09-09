@@ -87,7 +87,7 @@ export async function getCart(
   const now = Date.now();
   const rows = await database
     .prepare(
-      `SELECT ci.sku_id, ci.quantity, s.name,p.id product_id,p.category_id,
+      `SELECT ci.sku_id, ci.quantity, p.name || ' · ' || s.name AS name,p.id product_id,p.category_id,
          ${productMediaProjectionSql} AS media_json,
          s.status AS sku_status, p.status AS product_status, sla.availability_status,
          (
@@ -515,7 +515,7 @@ export async function addCartItemsBatch(
         }
       : await database
           .prepare(
-            `SELECT s.id AS skuId, s.name, s.status AS skuStatus, p.status AS productStatus,
+            `SELECT s.id AS skuId, p.name || ' · ' || s.name AS name, s.status AS skuStatus, p.status AS productStatus,
                     sla.availability_status AS availabilityStatus,
                     COALESCE(ci.quantity,0) AS existingQuantity,
                     (

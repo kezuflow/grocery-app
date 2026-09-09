@@ -133,7 +133,14 @@ describe("reorderOrder", () => {
       ok: true,
       value: {
         outcome: "PARTIAL",
-        addedLines: [{ skuId: "sku-red-onion-500g", quantityAdded: 2, newQuantity: 3 }],
+        addedLines: [
+          {
+            skuId: "sku-red-onion-500g",
+            name: "Red onion · 500 g",
+            quantityAdded: 2,
+            newQuantity: 3,
+          },
+        ],
         requiresFulfillmentReview: true,
         requiresAddressReview: true,
       },

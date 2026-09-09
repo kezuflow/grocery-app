@@ -706,5 +706,74 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`ca71-commerce-reports-${width}.png`),
       fullPage: true,
     });
+    const historical = z.object({
+      items: z.array(z.unknown()),
+      financial: z.unknown(),
+      version: z.number(),
+    });
+    const beforeReorder = historical.parse(await read(page, `/api/commerce/orders/${orderId}`));
+    const existingCart = z
+      .object({ items: z.array(z.object({ skuId: z.string(), quantity: z.number() })) })
+      .parse(await read(page, "/api/commerce/cart"));
+    const reorderedQuantity =
+      (existingCart.items.find((item) => item.skuId === skuId)?.quantity ?? 0) + 2;
+    const currentProduct = z
+      .object({
+        skus: z.array(z.object({ skuId: z.string(), priceVersion: z.number().nullable() })),
+      })
+      .parse(
+        await read(
+          admin,
+          `/api/admin/catalog/products/product-red-onion?scopeKind=LOCATION&marketId=${marketId}&locationId=${locationId}`,
+        ),
+      );
+    await post(admin, `/api/admin/catalog/skus/${skuId}/price`, {
+      marketId,
+      locationId,
+      currency: "PHP",
+      amountMinor: 125,
+      validFrom: Date.now(),
+      expectedVersion: currentProduct.skus.find((item) => item.skuId === skuId)!.priceVersion,
+    });
+    await page.goto(`/orders/${orderId}`);
+    const reordered = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/orders/${orderId}/reorder`) &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Buy again", exact: true }).click();
+    expect(await value(await reordered)).toMatchObject({
+      outcome: "COMPLETE",
+      requiresAddressReview: true,
+      requiresFulfillmentReview: true,
+      addedLines: [
+        {
+          skuId,
+          name: "Red onion · 500 g",
+          quantityAdded: 2,
+          newQuantity: reorderedQuantity,
+          currentUnitPriceMinor: 125,
+        },
+      ],
+    });
+    await page.getByRole("link", { name: "Review current cart", exact: true }).click();
+    await expect(page.getByText("Red onion · 500 g", { exact: true })).toBeVisible();
+    expect(await read(page, "/api/commerce/cart")).toMatchObject({
+      items: [
+        {
+          skuId,
+          quantity: reorderedQuantity,
+          unitPriceMinor: 125,
+          lineTotalMinor: reorderedQuantity * 125,
+        },
+      ],
+    });
+    expect(historical.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
+      beforeReorder,
+    );
+    await page.screenshot({
+      path: testInfo.outputPath(`ca72-current-price-cart-${width}.png`),
+      fullPage: true,
+    });
   });
 }
