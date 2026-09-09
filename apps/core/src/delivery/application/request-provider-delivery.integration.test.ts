@@ -69,6 +69,15 @@ function request(merchantOrderId: string): CreateDeliveryRequest {
 
 async function deliveryJob(id: string): Promise<void> {
   await seedTestInstantOrder(env.DB, `order-${id}`);
+  // Operational fixture; the Admin integration suite reaches packing through commands.
+  await env.DB.batch([
+    env.DB.prepare("UPDATE grocery_order SET status='FULFILLMENT_PENDING' WHERE id=?").bind(
+      `order-${id}`,
+    ),
+    env.DB.prepare(
+      "INSERT INTO fulfillment_record(id,order_id,location_id,status,updated_at) VALUES (?,?,'location-cebu-central','PACKING',1)",
+    ).bind(`fulfillment-${id}`, `order-${id}`),
+  ]);
   await env.DB.prepare(
     `INSERT INTO delivery_job
      (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status,
@@ -102,6 +111,129 @@ function provider(
 }
 
 describe("requestProviderDelivery", () => {
+  it.each(["ALLOCATING", "PENDING_PICKUP"] as const)(
+    "applies create evidence %s without inventing rider acceptance",
+    async (status) => {
+      const id = `job-create-state-${crypto.randomUUID()}`;
+      await deliveryJob(id);
+      const input = request(`merchant-${id}`);
+      const courier = provider({
+        ok: true,
+        value: {
+          providerDeliveryId: `provider-${id}`,
+          merchantOrderId: input.merchantOrderId,
+          status,
+          trackingUrl: null,
+          pickupPin: null,
+          quote: null,
+        },
+      });
+      const command = {
+        requestId: crypto.randomUUID(),
+        deliveryJobId: id,
+        expectedDeliveryJobVersion: 1,
+        request: input,
+      };
+      expect((await requestProviderDelivery(env.DB, courier, command)).ok).toBe(true);
+      expect(
+        await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?").bind(id).first(),
+      ).toEqual({ status: status === "ALLOCATING" ? "UNASSIGNED" : "ASSIGNED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT processing_status FROM delivery_provider_event_inbox WHERE provider_delivery_id=?",
+        )
+          .bind(`provider-${id}`)
+          .first(),
+      ).toEqual({ processing_status: "APPLIED" });
+      expect((await requestProviderDelivery(env.DB, courier, command)).ok).toBe(true);
+      expect(courier.create).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("retains premature pickup evidence without fabricating packed goods or delivery", async () => {
+    const id = `job-create-pickup-${crypto.randomUUID()}`;
+    await deliveryJob(id);
+    const input = request(`merchant-${id}`);
+    const courier = provider({
+      ok: true,
+      value: {
+        providerDeliveryId: `provider-${id}`,
+        merchantOrderId: input.merchantOrderId,
+        status: "IN_DELIVERY",
+        trackingUrl: null,
+        pickupPin: null,
+        quote: null,
+      },
+    });
+    expect(
+      await requestProviderDelivery(env.DB, courier, {
+        requestId: crypto.randomUUID(),
+        deliveryJobId: id,
+        expectedDeliveryJobVersion: 1,
+        request: input,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "DELIVERY_RECONCILIATION_REQUIRED" } });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?").bind(id).first(),
+    ).toEqual({ status: "UNASSIGNED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT processing_status,last_error_code FROM delivery_provider_event_inbox WHERE provider_delivery_id=?",
+      )
+        .bind(`provider-${id}`)
+        .first(),
+    ).toEqual({
+      processing_status: "RECONCILIATION_REQUIRED",
+      last_error_code: "DELIVERY_PACKING_NOT_COMPLETE",
+    });
+  });
+
+  it("rolls back provider identity when its create evidence is omitted and never resubmits the uncertain create", async () => {
+    const id = `job-create-rollback-${crypto.randomUUID()}`;
+    await deliveryJob(id);
+    const input = request(`merchant-${id}`);
+    const courier = provider({
+      ok: true,
+      value: {
+        providerDeliveryId: `provider-${id}`,
+        merchantOrderId: input.merchantOrderId,
+        status: "ALLOCATING",
+        trackingUrl: null,
+        pickupPin: null,
+        quote: null,
+      },
+    });
+    const command = {
+      requestId: crypto.randomUUID(),
+      deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
+      request: input,
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER omit_create_evidence BEFORE INSERT ON delivery_provider_event_inbox BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await requestProviderDelivery(env.DB, courier, command)).toMatchObject({
+        ok: false,
+        error: { code: "DELIVERY_RECONCILIATION_REQUIRED" },
+      });
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_create_evidence");
+    }
+    expect(
+      await env.DB.prepare(
+        "SELECT status,provider_delivery_id FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ status: "CREATING", provider_delivery_id: null });
+    expect(await requestProviderDelivery(env.DB, courier, command)).toMatchObject({
+      ok: false,
+      error: { code: "DELIVERY_RECONCILIATION_REQUIRED" },
+    });
+    expect(courier.create).toHaveBeenCalledOnce();
+  });
+
   it("keeps failed attempts, blocks uncertain replacements and quarantines late observations from an older attempt", async () => {
     const id = `job-history-${crypto.randomUUID()}`;
     await deliveryJob(id);

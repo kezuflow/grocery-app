@@ -118,6 +118,7 @@ export type AdminDeliveryOperationView = {
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
   externalDispatch: {
+    providerStatus: string | null;
     dispatchId: string;
     provider: "lalamove" | "grab-express";
     status: string;

@@ -13,6 +13,10 @@ export interface ScheduledJobOutcome {
 /** Dependencies handed to every scheduled job; no business policy lives here. */
 export interface ScheduledJobContext {
   readonly database: D1Database;
+  readonly deliveryProviders?: () => ReadonlyMap<
+    string,
+    import("../delivery/ports/delivery-provider").DeliveryProvider
+  >;
   /** Configured provider adapters for jobs that must observe provider truth. */
   readonly registry: PaymentProviderRegistry;
   readonly emailDelivery: EmailDeliveryPort;

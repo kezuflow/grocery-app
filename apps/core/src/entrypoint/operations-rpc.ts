@@ -1,3 +1,4 @@
+import { bookAutomaticInstantDeliveries } from "../delivery/application/book-automatic-instant-deliveries";
 import type {
   FulfillmentCommandRequest,
   InventoryAdjustmentRequest,
@@ -108,6 +109,13 @@ export function createOperationsRpc(context: CoreRpcContext) {
         authorize: (locationId) =>
           context.access.requireOperationalAccess(input, "fulfillment.manage", locationId),
       });
+      if (result.ok && (input.action === "START_PACKING" || input.action === "MARK_PACKED"))
+        await bookAutomaticInstantDeliveries(
+          context.env.DB,
+          () => context.deliveryProviders(),
+          context.access.now(),
+          input.orderId,
+        );
       return result.ok
         ? {
             ok: true as const,

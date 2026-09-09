@@ -271,6 +271,7 @@ export async function listAdminDeliveryOperations(
             dispatchId: row.externalDispatchId,
             provider: row.externalProvider,
             status: row.externalStatus,
+            providerStatus: row.externalProviderStatus,
             trackingUrl: row.externalTrackingUrl,
             providerDeliveryId: row.externalProviderDeliveryId,
             version: row.externalVersion,

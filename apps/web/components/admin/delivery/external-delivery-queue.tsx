@@ -117,7 +117,9 @@ export function ExternalDeliveryQueue() {
                               {item.externalDispatch.provider} ·{" "}
                               {item.externalDispatch.status === "OUTCOME_UNKNOWN"
                                 ? "Awaiting provider confirmation"
-                                : item.externalDispatch.status}
+                                : item.externalDispatch.providerStatus === "ALLOCATING"
+                                  ? "Finding rider"
+                                  : item.externalDispatch.status}
                             </p>
                             {item.externalDispatch.trackingUrl ? (
                               <a
@@ -170,6 +172,11 @@ export function ExternalDeliveryQueue() {
                               </Button>
                             ) : null}
                           </div>
+                        ) : item.fulfillmentMode === "INSTANT" ? (
+                          <p className="text-sm">
+                            The selected courier is requested automatically when all items are
+                            checked and final packing starts.
+                          </p>
                         ) : (
                           <ExternalDeliveryBooking
                             locationId={item.locationId}

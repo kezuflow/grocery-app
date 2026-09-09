@@ -1,3 +1,4 @@
+import { bookAutomaticInstantDeliveries } from "./delivery/application/book-automatic-instant-deliveries";
 import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
 import { recordScheduledCountedReceipt } from "./procurement/application/scheduled-counted-receipts";
 import { releaseScheduledSurplus } from "./procurement/application/scheduled-surplus";
@@ -2342,10 +2343,18 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminFulfillmentAdvanceSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return advanceAdminFulfillment(
+    const result = await advanceAdminFulfillment(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+    if (result.ok && (input.action === "START_PACKING" || input.action === "MARK_PACKED"))
+      await bookAutomaticInstantDeliveries(
+        this.env.DB,
+        () => this.rpcContext.deliveryProviders(),
+        this.context.now(),
+        input.orderId,
+      );
+    return result;
   }
   async resolveAdminOperationalException(
     input: import("@freshmarkets/contracts").ResolveAdminOperationalExceptionRequest,

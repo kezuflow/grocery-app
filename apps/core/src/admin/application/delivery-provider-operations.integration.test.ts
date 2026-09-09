@@ -1,3 +1,4 @@
+import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth, type AuthEnvironment } from "../../auth/service";
@@ -150,7 +151,7 @@ describe("location delivery profiles", () => {
   });
 });
 
-async function seedScheduledDelivery(now: number) {
+async function seedScheduledDelivery(now: number, mode: "INSTANT" | "SCHEDULED" = "SCHEDULED") {
   const suffix = crypto.randomUUID();
   const customerId = `customer-provider-${suffix}`;
   const paymentId = `payment-provider-${suffix}`;
@@ -178,8 +179,16 @@ async function seedScheduledDelivery(now: number) {
       "INSERT INTO payment_attempt (id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at,version) VALUES (?,?,12500,'PHP','SUCCEEDED','mock',?,?,?,1)",
     ).bind(paymentId, customerId, `payment-key-${suffix}`, now, now),
     env.DB.prepare(
-      "INSERT INTO grocery_order (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,version,created_at) VALUES (?,?,'cycle-next-cebu','SCHEDULED',?,'COMMITTED',12500,'PHP',?,1,?)",
-    ).bind(orderId, customerId, addressSnapshot, paymentId, now),
+      "INSERT INTO grocery_order (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,version,created_at) VALUES (?,?,?,?,?,'COMMITTED',12500,'PHP',?,1,?)",
+    ).bind(
+      orderId,
+      customerId,
+      mode === "SCHEDULED" ? "cycle-next-cebu" : null,
+      mode,
+      addressSnapshot,
+      paymentId,
+      now,
+    ),
     env.DB.prepare(
       "INSERT INTO fulfillment_record (id,order_id,location_id,status,updated_at) VALUES (?, ?, ?, 'NOT_STARTED', ?)",
     ).bind(`fulfillment-${suffix}`, orderId, LOCATION, now),
@@ -187,17 +196,19 @@ async function seedScheduledDelivery(now: number) {
       `INSERT INTO order_fulfillment_snapshot
        (order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,promised_at,
         fulfillment_mode,sourcing_modes_json,delivery_execution_snapshot_json,created_at)
-       VALUES (?,?,'cycle-next-cebu','zone-cebu-city-core',?,?,NULL,'SCHEDULED','[]',?,?)`,
+       VALUES (?,?,?,'zone-cebu-city-core',?,?,NULL,?,'[]',?,?)`,
     ).bind(
       orderId,
       LOCATION,
-      now + 60_000,
-      now + 24 * 60 * 60_000,
+      mode === "SCHEDULED" ? "cycle-next-cebu" : null,
+      mode === "SCHEDULED" ? now + 60_000 : null,
+      mode === "SCHEDULED" ? now + 24 * 60 * 60_000 : null,
+      mode,
       JSON.stringify({
-        selectedBy: "OPERATIONS",
-        method: null,
-        providerCode: null,
-        providerServiceType: null,
+        selectedBy: mode === "INSTANT" ? "CUSTOMER" : "OPERATIONS",
+        method: mode === "INSTANT" ? "EXTERNAL_PROVIDER" : null,
+        providerCode: mode === "INSTANT" ? "lalamove" : null,
+        providerServiceType: mode === "INSTANT" ? "MOTORCYCLE" : null,
       }),
       now,
     ),
@@ -205,9 +216,18 @@ async function seedScheduledDelivery(now: number) {
       `INSERT INTO delivery_job
        (id,order_id,cycle_id,fulfillment_mode,location_id,zone_id,rider_id,status,
         context_resolution_status,address_snapshot_json,version,created_at,updated_at)
-       VALUES (?,?,'cycle-next-cebu','SCHEDULED',?,'zone-cebu-city-core',NULL,'UNASSIGNED',
+       VALUES (?,?,?,?,?,'zone-cebu-city-core',NULL,'UNASSIGNED',
                'RESOLVED',?,1,?,?)`,
-    ).bind(jobId, orderId, LOCATION, addressSnapshot, now, now),
+    ).bind(
+      jobId,
+      orderId,
+      mode === "SCHEDULED" ? "cycle-next-cebu" : null,
+      mode,
+      LOCATION,
+      addressSnapshot,
+      now,
+      now,
+    ),
     env.DB.prepare(
       `INSERT INTO delivery_stop
        (id,delivery_job_id,batch_id,sequence,latitude,longitude,address_snapshot_json,
@@ -245,6 +265,216 @@ async function seedActiveDispatch(now: number) {
 }
 
 describe("external delivery request", () => {
+  it("keeps automatic booking uncertain when its required audit is omitted", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const instant = await seedScheduledDelivery(now, "INSTANT");
+    for (const [index, action] of (
+      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+    ).entries()) {
+      expect(
+        (
+          await advanceFulfillment(
+            env.DB,
+            {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              orderId: instant.orderId,
+              action,
+              expectedVersion: index + 1,
+              idempotencyKey: crypto.randomUUID(),
+            },
+            { authorize: async () => true },
+          )
+        ).ok,
+      ).toBe(true);
+    }
+    const provider = createMockDeliveryProvider();
+    const create = vi.spyOn(provider, "create");
+    const providers = () => new Map([["lalamove", provider]]);
+    await env.DB.exec(
+      "CREATE TRIGGER omit_booking_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.EXTERNAL_PROVIDER_REQUESTED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(
+        await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+      ).toMatchObject({ submitted: 0, deferred: 1 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_booking_audit");
+    }
+    expect(
+      await env.DB.prepare(
+        "SELECT status,provider_delivery_id FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(instant.jobId)
+        .first(),
+    ).toEqual({ status: "CREATING", provider_delivery_id: null });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+      )
+        .bind(`auto-book:${instant.jobId}`)
+        .first(),
+    ).toEqual({ status: "PROCESSING" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM delivery_provider_event_inbox WHERE merchant_order_id=?",
+      )
+        .bind(`fm-auto-${instant.jobId}`)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ).toMatchObject({ attempted: 0 });
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks revoked delivery permission before persisting a provider attempt", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(now);
+    const provider = createMockDeliveryProvider();
+    const create = vi.spyOn(provider, "create");
+    await env.DB.prepare(
+      "DELETE FROM role_permission WHERE role_id='role-delivery-test' AND permission_id=(SELECT id FROM permission WHERE code='delivery.manage')",
+    ).run();
+    const key = crypto.randomUUID();
+    expect(
+      (
+        await requestExternalDelivery(
+          { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
+          {
+            headers: {},
+            requestId: crypto.randomUUID(),
+            locationId: LOCATION,
+            jobId: delivery.jobId,
+            expectedVersion: 1,
+            providerCode: "lalamove",
+            pickup: { kind: "IMMEDIATE" },
+            idempotencyKey: key,
+          },
+        )
+      ).ok,
+    ).toBe(false);
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=? AND status='SUCCEEDED'",
+      )
+        .bind(key)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("automatically books Instant only after checked items enter packing and never books Scheduled or a replacement", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const instant = await seedScheduledDelivery(now, "INSTANT");
+    const scheduled = await seedScheduledDelivery(now);
+    const provider = createMockDeliveryProvider();
+    const create = vi.spyOn(provider, "create");
+    const providers = () => new Map([["lalamove", provider]]);
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ).toMatchObject({ attempted: 0 });
+    for (const delivery of [instant, scheduled]) {
+      for (const [index, action] of (
+        ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+      ).entries()) {
+        expect(
+          (
+            await advanceFulfillment(
+              env.DB,
+              {
+                headers: {},
+                requestId: crypto.randomUUID(),
+                orderId: delivery.orderId,
+                action,
+                expectedVersion: index + 1,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              { authorize: async () => true },
+            )
+          ).ok,
+        ).toBe(true);
+        if (delivery === instant && action !== "START_PACKING")
+          expect(
+            await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+          ).toMatchObject({ attempted: 0 });
+      }
+    }
+    // Interrupt after the durable request exists, before the external submission claim.
+    await env.DB.exec(
+      "CREATE TRIGGER interrupt_auto_submit BEFORE UPDATE ON delivery_provider_dispatch WHEN NEW.status='CREATING' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(
+        await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+      ).toMatchObject({ submitted: 0, deferred: 1 });
+      expect(create).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+        )
+          .bind(instant.jobId)
+          .first(),
+      ).toEqual({ status: "PENDING" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER interrupt_auto_submit");
+    }
+    const results = await Promise.all([
+      bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+      bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ]);
+    expect(results.some((result) => result.submitted === 1)).toBe(true);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+      )
+        .bind(`auto-book:${instant.jobId}`)
+        .first(),
+    ).toEqual({ status: "SUCCEEDED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE action='DELIVERY.EXTERNAL_PROVIDER_REQUESTED' AND idempotency_key=?",
+      )
+        .bind(`auto-book:${instant.jobId}`)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(create).toHaveBeenCalledOnce();
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, scheduled.orderId),
+    ).toMatchObject({ attempted: 0 });
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ).toMatchObject({ attempted: 0 });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?")
+        .bind(instant.jobId)
+        .first(),
+    ).toEqual({ status: "UNASSIGNED" });
+    expect(
+      await env.DB.prepare("SELECT status FROM fulfillment_record WHERE order_id=?")
+        .bind(instant.orderId)
+        .first(),
+    ).toEqual({ status: "PACKING" });
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      merchantOrderId: `fm-auto-${instant.jobId}`,
+      serviceType: "MOTORCYCLE",
+      schedule: null,
+    });
+  });
+
   it("recovers an uncertain booking only from matching provider metadata and replays the original command", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);
@@ -600,7 +830,7 @@ describe("external delivery request", () => {
       env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
         .bind(delivery.jobId)
         .first(),
-    ).resolves.toEqual({ status: "ASSIGNED", version: 2 });
+    ).resolves.toEqual({ status: "UNASSIGNED", version: 1 });
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       merchantOrderId: expect.stringMatching(/^fm-/),
       serviceType: "MOTORCYCLE",
@@ -634,7 +864,7 @@ describe("external delivery request", () => {
     ).toEqual({ status: "COMMITTED" });
     expect(
       await env.DB.prepare(
-        "SELECT last_error_code FROM delivery_provider_event_inbox WHERE dispatch_id=?",
+        "SELECT last_error_code FROM delivery_provider_event_inbox WHERE dispatch_id=? AND processing_status='RECONCILIATION_REQUIRED'",
       )
         .bind(result.value.dispatchId)
         .first(),
@@ -720,7 +950,7 @@ describe("external delivery request", () => {
         await env.DB.prepare("SELECT version FROM delivery_provider_dispatch WHERE id=?")
           .bind(result.value.dispatchId)
           .first(),
-      ).toEqual({ version: 3 });
+      ).toEqual({ version: result.value.version });
     } finally {
       await env.DB.prepare("DROP TRIGGER reject_refresh_projection").run();
     }
@@ -740,7 +970,7 @@ describe("external delivery request", () => {
     ).toEqual({ count: 1 });
     expect(refreshed).toMatchObject({
       ok: true,
-      value: { providerStatus: "IN_DELIVERY", version: 5 },
+      value: { providerStatus: "IN_DELIVERY", version: result.value.version + 2 },
     });
     expect(
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
@@ -764,7 +994,10 @@ describe("external delivery request", () => {
         idempotencyKey: crypto.randomUUID(),
       },
     );
-    expect(canceled).toMatchObject({ ok: true, value: { status: "CANCELED", version: 7 } });
+    expect(canceled).toMatchObject({
+      ok: true,
+      value: { status: "CANCELED", version: refreshed.value.version + 2 },
+    });
     expect(
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
         .bind(delivery.orderId)
@@ -779,7 +1012,10 @@ describe("external delivery request", () => {
       { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now + 3 },
       { ...bookingRequest, requestId: crypto.randomUUID() },
     );
-    expect(replay).toMatchObject({ ok: true, value: { status: "CANCELED", version: 7 } });
+    expect(replay).toMatchObject({
+      ok: true,
+      value: { status: "CANCELED", version: refreshed.value.version + 2 },
+    });
     expect(create).toHaveBeenCalledOnce();
   });
 });

@@ -1,3 +1,7 @@
+import {
+  buildDeliveryProviderRegistry,
+  type RuntimeDeliveryProviderEnvironment,
+} from "../delivery/infrastructure/runtime-delivery-provider";
 import { log } from "../observability";
 import { buildProviderRegistry } from "../payments/infrastructure/providers/runtime-providers";
 import {
@@ -73,6 +77,7 @@ export async function runRegisteredJobs(
   notificationQueue?: NotificationQueueProducer,
   applicationOrigin?: string,
   productMedia?: R2Bucket,
+  deliveryProviders?: import("./types").ScheduledJobContext["deliveryProviders"],
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
@@ -86,6 +91,7 @@ export async function runRegisteredJobs(
         notificationQueue,
         applicationOrigin,
         productMedia,
+        deliveryProviders,
       });
     } catch (error) {
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
@@ -99,6 +105,7 @@ export async function runRegisteredJobs(
 /** Entrypoint-facing wrapper resolving the registry for a fired cron expression. */
 export async function runScheduledJobs(
   env: CoreRuntimeEnvironment &
+    RuntimeDeliveryProviderEnvironment &
     EmailDeliveryEnvironment & {
       DB: D1Database;
       NOTIFICATION_QUEUE?: NotificationQueueProducer;
@@ -118,5 +125,6 @@ export async function runScheduledJobs(
     env.NOTIFICATION_QUEUE,
     runtime.auth.baseUrl,
     env.PRODUCT_MEDIA,
+    () => buildDeliveryProviderRegistry(env),
   );
 }

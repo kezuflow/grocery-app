@@ -1,4 +1,5 @@
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
+import { applyProviderObservation } from "./apply-provider-observation";
 
 type DispatchStatus =
   | "PENDING"
@@ -106,6 +107,10 @@ export async function requestProviderDelivery(
     /** Optional atomic eligibility claim used by operator dispatch commands. */
     expectedDeliveryJobVersion?: number;
     clientIdempotencyKey?: string;
+    actorAuthUserId?: string;
+    now?: () => number;
+    /** Owning command receipt/audit, committed atomically with provider identity and evidence. */
+    completionStatements?: readonly D1PreparedStatement[];
     request: CreateDeliveryRequest;
   }>,
 ): Promise<RequestProviderDeliveryResult> {
@@ -138,8 +143,21 @@ export async function requestProviderDelivery(
          ? IS NULL OR (
            job.version=? AND job.status IN ('UNASSIGNED','RETRY_SCHEDULED')
            AND job.batch_id IS NULL AND job.rider_id IS NULL
+           AND (job.fulfillment_mode!='INSTANT' OR EXISTS (
+             SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
+             WHERE grocery.id=job.order_id AND fulfillment.location_id=job.location_id
+               AND grocery.status IN ('FULFILLMENT_PENDING','FULFILLMENT_READY')
+               AND fulfillment.status IN ('PACKING','PACKED')
+           ))
          )
-       )`,
+       ) AND (? IS NULL OR EXISTS (
+         SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
+         JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission permission ON permission.id=rp.permission_id
+         JOIN staff_scope scope ON scope.staff_id=staff.id JOIN fulfillment_location location ON location.id=job.location_id
+         WHERE staff.auth_user_id=? AND staff.status='active' AND permission.code='delivery.manage'
+           AND (scope.scope_kind='global' OR (scope.scope_kind='market' AND scope.market_id=location.market_id)
+             OR (scope.scope_kind='location' AND scope.location_id=location.id))
+       ))`,
     )
     .bind(
       dispatchId,
@@ -154,6 +172,8 @@ export async function requestProviderDelivery(
       command.deliveryJobId,
       command.expectedDeliveryJobVersion ?? null,
       command.expectedDeliveryJobVersion ?? null,
+      command.actorAuthUserId ?? null,
+      command.actorAuthUserId ?? null,
     )
     .run();
 
@@ -238,7 +258,10 @@ export async function requestProviderDelivery(
     );
   }
 
-  const saved = await database
+  const observedAt = command.now?.() ?? Date.now();
+  const inboxId = `create-observation:${dispatchId}`;
+  const observationJson = JSON.stringify(created.value);
+  const save = database
     .prepare(
       `UPDATE delivery_provider_dispatch
        SET provider_delivery_id=?, status='ACTIVE', provider_status=?,
@@ -253,43 +276,63 @@ export async function requestProviderDelivery(
       created.value.pickupPin,
       created.value.quote?.amountMinor ?? null,
       created.value.quote?.currency ?? null,
-      Date.now(),
+      observedAt,
       dispatchId,
       claimedRow.version,
-    )
-    .run();
-  if ((saved.meta?.changes ?? 0) !== 1)
+    );
+  try {
+    await database.batch([
+      save,
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()<>1"),
+      database
+        .prepare(`INSERT INTO delivery_provider_event_inbox
+        (id,provider,provider_event_id,dispatch_id,provider_delivery_id,merchant_order_id,observed_at,
+         provider_status,payload_hash,raw_payload,processing_status,received_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,'RECEIVED',?)`)
+        .bind(
+          inboxId,
+          provider.code,
+          inboxId,
+          dispatchId,
+          created.value.providerDeliveryId,
+          command.request.merchantOrderId,
+          observedAt,
+          created.value.status,
+          await sha256(observationJson),
+          observationJson,
+          observedAt,
+        ),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()<>1"),
+      ...(command.completionStatements ?? []),
+    ]);
+  } catch {
     return failure(
       "DELIVERY_RECONCILIATION_REQUIRED",
       "The provider accepted the booking but its local record needs reconciliation",
       command.requestId,
     );
-
-  if (command.expectedDeliveryJobVersion !== undefined) {
-    const assigned = await database
-      .prepare(
-        `UPDATE delivery_job SET status='ASSIGNED',version=version+1,updated_at=?
-         WHERE id=? AND version=? AND status IN ('UNASSIGNED','RETRY_SCHEDULED')
-           AND batch_id IS NULL AND rider_id IS NULL`,
-      )
-      .bind(Date.now(), command.deliveryJobId, command.expectedDeliveryJobVersion)
-      .run();
-    if ((assigned.meta?.changes ?? 0) !== 1) {
-      await database
-        .prepare(
-          `UPDATE delivery_provider_dispatch
-           SET status='RECONCILIATION_REQUIRED',last_error_code='LOCAL_JOB_CLAIM_FAILED',
-               version=version+1,updated_at=? WHERE id=? AND status='ACTIVE'`,
-        )
-        .bind(Date.now(), dispatchId)
-        .run();
-      return failure(
-        "DELIVERY_RECONCILIATION_REQUIRED",
-        "The provider accepted the booking but the delivery job claim needs reconciliation",
-        command.requestId,
-      );
-    }
   }
+
+  // A successful create is provider evidence, not proof that a rider accepted.
+  // Use the same transition boundary as refresh/webhooks, including packing
+  // checks when the first observation already reports pickup or completion.
+  const applied = await applyProviderObservation(
+    database,
+    {
+      dispatchId,
+      status: created.value.status,
+      observedAt,
+      trackingUrl: created.value.trackingUrl,
+      pickupPin: created.value.pickupPin,
+    },
+    { inboxId },
+  );
+  if (applied.outcome === "RECONCILIATION_REQUIRED")
+    return failure(
+      "DELIVERY_RECONCILIATION_REQUIRED",
+      "Provider evidence is saved and requires reconciliation",
+      command.requestId,
+    );
 
   const completed = await readDispatch(database, dispatchId);
   return completed

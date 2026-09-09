@@ -11,6 +11,7 @@ type DispatchRow = {
   externalProviderDeliveryId: string | null;
   externalDispatchId: string | null;
   externalStatus: string | null;
+  externalProviderStatus: string | null;
   externalTrackingUrl: string | null;
   externalVersion: number | null;
 };
@@ -40,7 +41,7 @@ export async function listDeliveryDispatch(
               d.delivered_at,d.version,o.cycle_id,d.fulfillment_mode,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
               dispatch.provider_delivery_id AS external_provider_delivery_id,
-              dispatch.status AS external_status,dispatch.tracking_url AS external_tracking_url,
+              dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
               dispatch.version AS external_version
        FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
        LEFT JOIN grocery_order o ON o.id=d.order_id
@@ -64,6 +65,7 @@ export async function listDeliveryDispatch(
       external_provider_delivery_id: string | null;
       external_dispatch_id: string | null;
       external_status: string | null;
+      external_provider_status: string | null;
       external_tracking_url: string | null;
       external_version: number | null;
     }>();
@@ -80,6 +82,7 @@ export async function listDeliveryDispatch(
     externalDispatchId: r.external_dispatch_id,
     externalProviderDeliveryId: r.external_provider_delivery_id,
     externalStatus: r.external_status,
+    externalProviderStatus: r.external_provider_status,
     externalTrackingUrl: r.external_tracking_url,
     externalVersion: r.external_version,
   }));

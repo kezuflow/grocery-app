@@ -1,3 +1,4 @@
+import { instantDeliveryBookingJob } from "./jobs/instant-delivery-booking";
 import type { ScheduledJob } from "./types";
 import { productMediaCleanupJob } from "./jobs/product-media-cleanup";
 import { deliveryObservationRedriveJob } from "./jobs/delivery-observation-redrive";
@@ -25,6 +26,7 @@ const EVERY_FIFTEEN_MINUTES = "*/15 * * * *";
 const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
   [EVERY_MINUTE]: [
     checkoutHoldExpiryJob,
+    instantDeliveryBookingJob,
     orderCancellationRefundsJob,
     refundReconciliationJob,
     membershipScheduledCancellationsJob,
