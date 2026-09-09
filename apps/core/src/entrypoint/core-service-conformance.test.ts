@@ -36,4 +36,22 @@ describe("Core Service Binding conformance", () => {
       missingMethods([...coreServiceMethodNames, "advertisedButMissing"], CoreEntrypoint.prototype),
     ).toEqual(["advertisedButMissing"]);
   });
+
+  it("validates the manual delivery request envelope before resolving its actor", async () => {
+    const service = new CoreEntrypoint({} as ExecutionContext, env);
+    expect(
+      await service.manageManualDelivery({
+        requestId: "",
+        headers: {},
+        locationId: "location-cebu-central",
+        jobId: "job",
+        action: "ASSIGN",
+        expectedVersion: 1,
+        idempotencyKey: "manual-request",
+        personName: "Delivery helper",
+        phoneE164: "+639171110000",
+        reason: "Courier unavailable",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
 });

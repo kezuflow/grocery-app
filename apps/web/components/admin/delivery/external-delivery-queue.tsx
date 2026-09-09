@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { ListPageSection, PageHeader, StatusBadge } from "../admin-shell";
 import { useAdminLocation } from "../use-admin-location";
 import { ExternalDeliveryBooking } from "./external-delivery-booking";
+import { ManualDeliveryControls } from "./manual-delivery-controls";
 
 export function ExternalDeliveryQueue() {
   const { locationId, label } = useAdminLocation();
@@ -73,8 +74,8 @@ export function ExternalDeliveryQueue() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="External delivery"
-        description={`Book and track store-scoped courier work for ${label}.`}
+        title="Delivery"
+        description={`Track courier and manual deliveries for ${label}.`}
       />
       {message ? (
         <Alert variant="warning">
@@ -85,8 +86,8 @@ export function ExternalDeliveryQueue() {
       {loading ? <Skeleton className="h-32 w-full" /> : null}
       {summary ? (
         <ListPageSection
-          title="Courier queue"
-          description="Each customer delivery is booked separately. Live driver maps and internal fleet assignment are not part of active operations."
+          title="Delivery queue"
+          description="Track each order and its current delivery progress."
         >
           {summary.items.length === 0 ? (
             <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open courier work.</p>
@@ -132,6 +133,8 @@ export function ExternalDeliveryQueue() {
                               </a>
                             ) : null}
                           </div>
+                        ) : item.manualDelivery ? (
+                          "Manual delivery"
                         ) : (
                           "Not booked"
                         )}
@@ -172,7 +175,7 @@ export function ExternalDeliveryQueue() {
                               </Button>
                             ) : null}
                           </div>
-                        ) : item.fulfillmentMode === "INSTANT" ? (
+                        ) : item.manualDelivery ? null : item.fulfillmentMode === "INSTANT" ? (
                           <p className="text-sm">
                             The selected courier is requested automatically when all items are
                             checked and final packing starts.
@@ -193,6 +196,7 @@ export function ExternalDeliveryQueue() {
                             }}
                           />
                         )}
+                        <ManualDeliveryControls item={item} onChanged={() => void load()} />
                       </TableCell>
                     </TableRow>
                   ))}

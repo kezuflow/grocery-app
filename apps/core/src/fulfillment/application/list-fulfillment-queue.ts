@@ -37,7 +37,14 @@ export function legalFulfillmentTransitions(): StateMap {
 export async function listFulfillmentQueue(
   database: D1Database,
   query: { locationId: string; cycleId?: string; cursorId?: string; limit?: number },
-): Promise<Array<Omit<FulfillmentQueueItem, "allowedActions"> & { cycleId: string | null }>> {
+): Promise<
+  Array<
+    Omit<FulfillmentQueueItem, "allowedActions"> & {
+      cycleId: string | null;
+      manualCustody: boolean;
+    }
+  >
+> {
   const limit = query.limit ?? 200;
   const clauses = ["f.location_id=?", "f.status NOT IN ('CANCELED','COMPLETED')"];
   const binds: unknown[] = [query.locationId];
@@ -51,7 +58,10 @@ export async function listFulfillmentQueue(
   }
   const rows = await database
     .prepare(
-      `SELECT f.order_id, f.status, f.location_id, f.version, o.cycle_id FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE ${clauses.join(" AND ")} ORDER BY f.order_id DESC LIMIT ?`,
+      `SELECT f.order_id, f.status, f.location_id, f.version, o.cycle_id,
+       EXISTS (SELECT 1 FROM delivery_provider_dispatch attempt JOIN delivery_job job ON job.id=attempt.delivery_job_id
+         WHERE job.order_id=f.order_id AND attempt.method='MANUAL' AND attempt.status='ACTIVE') AS manual_custody
+       FROM fulfillment_record f LEFT JOIN grocery_order o ON o.id=f.order_id WHERE ${clauses.join(" AND ")} ORDER BY f.order_id DESC LIMIT ?`,
     )
     .bind(...binds, limit)
     .all<{
@@ -60,6 +70,7 @@ export async function listFulfillmentQueue(
       location_id: string;
       version: number;
       cycle_id: string | null;
+      manual_custody: number;
     }>();
   return rows.results.map((r) => ({
     orderId: r.order_id,
@@ -67,5 +78,6 @@ export async function listFulfillmentQueue(
     locationId: r.location_id,
     version: r.version,
     cycleId: r.cycle_id,
+    manualCustody: r.manual_custody !== 0,
   }));
 }

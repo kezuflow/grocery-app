@@ -117,6 +117,18 @@ export type AdminDeliveryOperationView = {
   locationId: string;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
+  manualActions: ReadonlyArray<ManualDeliveryAction>;
+  manualDelivery: {
+    dispatchId: string;
+    personName: string;
+    phoneE164: string;
+    reason: string;
+    status: string;
+    handedOverAt: number | null;
+    actualCostMinor: number | null;
+    currency: string | null;
+    version: number;
+  } | null;
   externalDispatch: {
     providerStatus: string | null;
     dispatchId: string;
@@ -175,6 +187,25 @@ export type RequestExternalDeliveryRequest = AdminOperationsLocationRequest & {
   providerCode: "lalamove";
   pickup: { kind: "IMMEDIATE" } | { kind: "SCHEDULED"; pickupAt: string };
   idempotencyKey: string;
+};
+
+export type ManualDeliveryAction = "ASSIGN" | "HAND_OVER" | "COMPLETE" | "FAIL";
+export type ManualDeliveryRequest = AdminOperationsLocationRequest & {
+  jobId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+} & (
+    | { action: "ASSIGN"; reason: string; personName: string; phoneE164: string }
+    | { action: "HAND_OVER"; dispatchId: string }
+    | { action: "COMPLETE"; dispatchId: string; actualCostMinor: number | null }
+    | { action: "FAIL"; dispatchId: string; reason: string; actualCostMinor: number | null }
+  );
+
+export type ManualDeliveryResult = {
+  dispatchId: string;
+  jobId: string;
+  status: "ACTIVE" | "COMPLETED" | "FAILED";
+  version: number;
 };
 
 export type ExternalDeliveryMutationRequest = AdminOperationsLocationRequest & {
@@ -371,6 +402,7 @@ export type AdminOperationsService = {
   requestExternalDelivery(
     request: RequestExternalDeliveryRequest,
   ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
+  manageManualDelivery(request: ManualDeliveryRequest): Promise<RpcResult<ManualDeliveryResult>>;
   refreshExternalDelivery(
     request: RefreshExternalDeliveryRequest,
   ): Promise<RpcResult<ExternalDeliveryDispatchView>>;

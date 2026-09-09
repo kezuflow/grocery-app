@@ -20,7 +20,7 @@ const locationId = "location-cebu-central",
 const reason = "Synthetic Scheduled customer journey";
 
 for (const width of [1440, 390]) {
-  test(`Scheduled checkout, paid addition, cancellation, purchase and packing at ${width}px`, async ({
+  test(`Scheduled checkout, paid addition, packing and manual delivery at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
   }, testInfo) => {
@@ -379,6 +379,23 @@ for (const width of [1440, 390]) {
     await row.getByLabel(/^Receiving reason /).fill("Inspected all purchased goods");
     await row.getByRole("button", { name: "Record line", exact: true }).click();
     await expect(row).toContainText("1500 / 0");
+    await admin.goto("/admin/delivery");
+    const manualRow = admin.getByRole("row").filter({ hasText: orderId });
+    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await manualRow
+      .getByLabel("Person delivering", { exact: true })
+      .fill("Synthetic delivery helper");
+    await manualRow
+      .getByLabel("Phone including country code", { exact: true })
+      .fill("+639171110000");
+    await manualRow
+      .getByLabel("Reason for manual delivery", { exact: true })
+      .fill("Synthetic courier unavailability");
+    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await expect(manualRow).toContainText("Manual · Synthetic delivery helper");
+    await expect(
+      manualRow.getByRole("button", { name: "Hand over packed order", exact: true }),
+    ).toHaveCount(0);
     await admin.goto("/admin/fulfillment");
     const fulfillment = admin.getByRole("row").filter({ hasText: orderId });
     for (const name of [
@@ -412,5 +429,46 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`scheduled-customer-packed-${width}.png`),
       fullPage: true,
     });
+    await expect(fulfillment.getByRole("button", { name: "Hand off", exact: true })).toHaveCount(0);
+    await admin.goto("/admin/delivery");
+    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
+    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
+    await expect(manualRow).toContainText("Handed over");
+    await manualRow.scrollIntoViewIfNeeded();
+    await admin.screenshot({
+      path: testInfo.outputPath(`scheduled-manual-handover-${width}.png`),
+      fullPage: true,
+    });
+    let completedBody: string | null = null;
+    let completedKey: string | undefined;
+    let completionCalls = 0;
+    await admin.route("**/api/admin/manual-deliveries", async (route) => {
+      completionCalls++;
+      const body = route.request().postData();
+      const key = route.request().headers()["idempotency-key"];
+      if (completionCalls === 1) {
+        completedBody = body;
+        completedKey = key;
+        const response = await route.fetch();
+        expect(response.ok()).toBe(true);
+        await route.abort("failed");
+      } else {
+        expect(body).toBe(completedBody);
+        expect(key).toBe(completedKey);
+        await route.continue();
+      }
+    });
+    await manualRow.getByRole("button", { name: "Record delivered", exact: true }).click();
+    // Blank actual cost must remain unknown; the accepted customer charge stays fixed.
+    await manualRow.getByRole("button", { name: "Record delivered", exact: true }).click();
+    await expect(manualRow).toContainText("The result is unknown");
+    await manualRow.getByRole("button", { name: "Retry saved request", exact: true }).click();
+    await expect(manualRow).toHaveCount(0);
+    expect(completionCalls).toBe(2);
+    expect(
+      z
+        .object({ status: z.literal("DELIVERED") })
+        .parse(await read(page, `/api/commerce/orders/${orderId}`)).status,
+    ).toBe("DELIVERED");
   });
 }

@@ -120,6 +120,15 @@ export async function advanceFulfillment(
   }
   const prior = await replay();
   if (prior) return prior;
+  const custodyAction = command.action === "HAND_OFF" || command.action === "COMPLETE";
+  const manualCustodySql = `SELECT 1 FROM delivery_provider_dispatch attempt JOIN delivery_job job ON job.id=attempt.delivery_job_id
+    WHERE job.order_id=? AND attempt.method='MANUAL' AND attempt.status='ACTIVE'`;
+  if (custodyAction && (await database.prepare(manualCustodySql).bind(command.orderId).first()))
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Use the manual delivery action to record handover or completion",
+      command.requestId,
+    );
   if (row.version !== command.expectedVersion)
     return failure(
       "STALE_VERSION",
@@ -171,6 +180,15 @@ export async function advanceFulfillment(
   try {
     const now = Date.now();
     const statements: D1PreparedStatement[] = [
+      ...(custodyAction
+        ? [
+            database
+              .prepare(
+                `INSERT INTO commitment_abort(id) SELECT -30 WHERE EXISTS (${manualCustodySql})`,
+              )
+              .bind(command.orderId),
+          ]
+        : []),
       ...(ports.actorAuthUserId
         ? [
             database

@@ -1,4 +1,6 @@
 import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
+import { manageManualDelivery } from "../../delivery/application/manage-manual-delivery";
+import { listAdminDeliveryOperations } from "./operations-reads";
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth, type AuthEnvironment } from "../../auth/service";
@@ -1017,5 +1019,316 @@ describe("external delivery request", () => {
       value: { status: "CANCELED", version: refreshed.value.version + 2 },
     });
     expect(create).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Scheduled manual delivery", () => {
+  function assign(jobId: string) {
+    return {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      jobId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      action: "ASSIGN" as const,
+      reason: "Courier unavailable",
+      personName: "Delivery helper",
+      phoneE164: "+639171110000",
+    };
+  }
+
+  it("rejects Instant, unresolved courier work, invalid contact, and missing capability without a receipt", async () => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const instant = await seedScheduledDelivery(Date.now(), "INSTANT");
+    expect(await manageManualDelivery(deps, assign(instant.jobId))).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
+    for (const action of ["HAND_OVER", "COMPLETE", "FAIL"] as const) {
+      expect(
+        await manageManualDelivery(deps, {
+          ...assign(instant.jobId),
+          action,
+          dispatchId: "unused",
+          actualCostMinor: null,
+        }),
+      ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    }
+    const external = await seedActiveDispatch(Date.now());
+    expect(await manageManualDelivery(deps, assign(external.jobId))).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
+    await env.DB.prepare(
+      "UPDATE delivery_provider_dispatch SET status='OUTCOME_UNKNOWN' WHERE id=?",
+    )
+      .bind(external.dispatchId)
+      .run();
+    expect(await manageManualDelivery(deps, assign(external.jobId))).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
+    const delivery = await seedScheduledDelivery(Date.now());
+    const request = assign(delivery.jobId);
+    expect(await manageManualDelivery(deps, { ...request, phoneE164: "123" })).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    expect(await manageManualDelivery(dependencies(["delivery.read"]), request)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM idempotency_records WHERE scope='delivery.manual' AND idempotency_key=?",
+      )
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+
+  it("saves one assignment under concurrent replay, enforces custody, and returns frozen receipts after completion", async () => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const delivery = await seedScheduledDelivery(Date.now());
+    const request = assign(delivery.jobId);
+    const [assigned, duplicate] = await Promise.all([
+      manageManualDelivery(deps, request),
+      manageManualDelivery(deps, request),
+    ]);
+    expect(assigned).toMatchObject({ ok: true, value: { status: "ACTIVE", version: 1 } });
+    expect(duplicate).toEqual(assigned);
+    if (!assigned.ok) throw new Error("Assignment failed");
+    const base = {
+      ...request,
+      dispatchId: assigned.value.dispatchId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(
+      await manageManualDelivery(deps, { ...base, action: "COMPLETE", actualCostMinor: null }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(await manageManualDelivery(deps, { ...base, action: "HAND_OVER" })).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKED',version=version+1 WHERE order_id=?",
+      ).bind(delivery.orderId),
+      env.DB.prepare(
+        "UPDATE grocery_order SET status='FULFILLMENT_READY',version=version+1 WHERE id=?",
+      ).bind(delivery.orderId),
+    ]);
+    const queue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+    });
+    expect(
+      queue.ok && queue.value.items.find((item) => item.jobId === delivery.jobId),
+    ).toMatchObject({
+      manualActions: ["HAND_OVER", "FAIL"],
+      manualDelivery: { personName: "Delivery helper" },
+      externalDispatch: null,
+    });
+    expect(
+      await advanceFulfillment(
+        env.DB,
+        {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          orderId: delivery.orderId,
+          action: "HAND_OFF",
+          expectedVersion: 2,
+          idempotencyKey: crypto.randomUUID(),
+        },
+        { authorize: async () => true },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    const handedOver = await manageManualDelivery(deps, { ...base, action: "HAND_OVER" });
+    expect(handedOver).toMatchObject({ ok: true, value: { version: 2 } });
+    const completed = await manageManualDelivery(deps, {
+      ...base,
+      idempotencyKey: crypto.randomUUID(),
+      action: "COMPLETE",
+      expectedVersion: 2,
+      actualCostMinor: null,
+    });
+    expect(completed).toMatchObject({ ok: true, value: { status: "COMPLETED", version: 3 } });
+    expect(await manageManualDelivery(deps, request)).toEqual(assigned);
+    expect(
+      await manageManualDelivery(deps, { ...request, personName: "Another person" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await env.DB.prepare(
+        "SELECT status,final_payable_minor,courier_variance_minor FROM delivery_provider_dispatch WHERE id=?",
+      )
+        .bind(assigned.value.dispatchId)
+        .first(),
+    ).toEqual({ status: "COMPLETED", final_payable_minor: null, courier_variance_minor: null });
+    expect(
+      await env.DB.prepare(
+        "SELECT o.status AS order_status,f.status AS fulfillment_status,j.status AS delivery_status FROM grocery_order o JOIN fulfillment_record f ON f.order_id=o.id JOIN delivery_job j ON j.order_id=o.id WHERE o.id=?",
+      )
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({
+      order_status: "DELIVERED",
+      fulfillment_status: "COMPLETED",
+      delivery_status: "DELIVERED",
+    });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_event WHERE aggregate_id=?")
+        .bind(assigned.value.dispatchId)
+        .first(),
+    ).toEqual({ n: 3 });
+  });
+
+  it("rolls back every assignment effect when its audit is omitted, and revalidates current permission", async () => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const delivery = await seedScheduledDelivery(Date.now());
+    const request = assign(delivery.jobId);
+    await env.DB.exec(
+      "CREATE TRIGGER omit_manual_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.MANUAL_ASSIGN' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await manageManualDelivery(deps, request)).toMatchObject({
+        ok: false,
+        error: { code: "STALE_VERSION" },
+      });
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_manual_audit");
+    }
+    expect(
+      await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ status: "UNASSIGNED", version: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM idempotency_records WHERE scope='delivery.manual' AND idempotency_key=?",
+      )
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
+    await env.DB.prepare(
+      "DELETE FROM role_permission WHERE role_id='role-delivery-test' AND permission_id=(SELECT id FROM permission WHERE code='delivery.manage')",
+    ).run();
+    expect(await manageManualDelivery(deps, request)).toMatchObject({
+      ok: false,
+      error: { code: "STALE_VERSION" },
+    });
+  });
+
+  it("records failure and known cost without inventing delivery or refund success", async () => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const delivery = await seedScheduledDelivery(Date.now());
+    const request = assign(delivery.jobId);
+    const assigned = await manageManualDelivery(deps, request);
+    if (!assigned.ok) throw new Error("Assignment failed");
+    await env.DB.prepare("UPDATE grocery_order SET delivery_subtotal_minor=500 WHERE id=?")
+      .bind(delivery.orderId)
+      .run();
+    const failed = await manageManualDelivery(deps, {
+      ...request,
+      action: "FAIL",
+      dispatchId: assigned.value.dispatchId,
+      reason: "Vehicle unavailable before handover",
+      actualCostMinor: 2500,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(failed).toMatchObject({ ok: true, value: { status: "FAILED", version: 2 } });
+    expect(
+      await env.DB.prepare(
+        "SELECT status,final_payable_minor,handed_over_at,completed_at FROM delivery_provider_dispatch WHERE id=?",
+      )
+        .bind(assigned.value.dispatchId)
+        .first(),
+    ).toEqual({
+      status: "FAILED",
+      final_payable_minor: 2500,
+      handed_over_at: null,
+      completed_at: null,
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT customer_delivery_charge_minor,courier_variance_minor,delivery_currency FROM delivery_provider_dispatch WHERE id=?",
+      )
+        .bind(assigned.value.dispatchId)
+        .first(),
+    ).toEqual({
+      customer_delivery_charge_minor: 500,
+      courier_variance_minor: 2000,
+      delivery_currency: "PHP",
+    });
+  });
+
+  it("admits only one of two different assignments", async () => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const delivery = await seedScheduledDelivery(Date.now());
+    const results = await Promise.all([
+      manageManualDelivery(deps, assign(delivery.jobId)),
+      manageManualDelivery(deps, assign(delivery.jobId)),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ n: 1 });
+  });
+
+  it.each([
+    "delivery_job",
+    "delivery_stop",
+    "delivery_provider_dispatch",
+    "idempotency_records",
+  ] as const)("rolls back when the required %s assignment effect is omitted", async (table) => {
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const delivery = await seedScheduledDelivery(Date.now());
+    const request = assign(delivery.jobId);
+    const operation = table === "delivery_provider_dispatch" ? "INSERT" : "UPDATE";
+    await env.DB.exec(
+      `CREATE TRIGGER omit_manual_effect BEFORE ${operation} ON ${table} BEGIN SELECT RAISE(IGNORE); END`,
+    );
+    try {
+      expect((await manageManualDelivery(deps, request)).ok).toBe(false);
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_manual_effect");
+    }
+    expect(
+      await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ status: "UNASSIGNED", version: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM idempotency_records WHERE scope='delivery.manual' AND idempotency_key=?",
+      )
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
   });
 });

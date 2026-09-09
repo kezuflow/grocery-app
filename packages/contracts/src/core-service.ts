@@ -266,6 +266,7 @@ export const coreServiceMethodNames = [
   "getLocationDeliveryProfile",
   "upsertLocationDeliveryProfile",
   "requestExternalDelivery",
+  "manageManualDelivery",
   "refreshExternalDelivery",
   "cancelExternalDelivery",
   "listOperationalExceptions",

@@ -230,7 +230,9 @@ export async function listAdminFulfillmentQueue(
         locationId: row.locationId,
         status: row.status,
         version: row.version,
-        allowedActions: allowedFulfillmentActions(row.status),
+        allowedActions: allowedFulfillmentActions(row.status).filter(
+          (action) => !row.manualCustody || (action !== "HAND_OFF" && action !== "COMPLETE"),
+        ),
       })),
       nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.orderId),
     },
@@ -252,6 +254,7 @@ export async function listAdminDeliveryOperations(
   const page = pageRequest(request);
   if (isPageError(page)) return page;
   const rows = await listDeliveryDispatch(deps.db, {
+    actorAuthUserId: access.value.authUserId,
     locationId: request.locationId,
     cycleId: request.cycleId,
     cursorId: page.cursorId,
@@ -277,6 +280,8 @@ export async function listAdminDeliveryOperations(
             version: row.externalVersion,
           }
         : null,
+    manualDelivery: row.manualDelivery,
+    manualActions: row.manualActions,
     deliveredAtIso: row.deliveredAtIso,
     version: row.version,
   }));

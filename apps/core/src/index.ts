@@ -151,6 +151,7 @@ import {
   upsertLocationDeliveryProfile as upsertLocationDeliveryProfileCommand,
 } from "./admin/application/delivery-provider-operations";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
+import { manageManualDelivery } from "./delivery/application/manage-manual-delivery";
 import { getAdminBootstrap as getAdminBootstrapQuery } from "./admin/application/admin-bootstrap";
 import { listAdminScopes as listAdminScopesQuery } from "./admin/application/list-admin-scopes";
 import { listAdminAuditEvents as listAdminAuditEventsQuery } from "./audit/application/list-audit-events";
@@ -2431,6 +2432,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return upsertLocationDeliveryProfileCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async manageManualDelivery(input: import("@freshmarkets/contracts").ManualDeliveryRequest) {
+    const validation = adminOperationsLocationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return manageManualDelivery(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      { ...input, ...validation.data },
     );
   }
   async requestExternalDelivery(

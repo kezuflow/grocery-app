@@ -193,6 +193,8 @@ Lalamove prices and normally executes both modes. Customers may choose an availa
 
 One active/uncertain execution attempt is allowed per job. Scheduled manual fallback requires definite prior-attempt closure and reason/name/phone. Instant manual delivery is rejected in Core. Searching is distinct from rider assignment; refresh, webhook and inbox recovery share one normalized applying path. Provider cancellation never cancels a grocery Order.
 
+Manual assignment creates an ACTIVE attempt and ASSIGNED job. Handover keeps the attempt ACTIVE, records its handover time, and atomically advances packed fulfillment to HANDED_OFF, the job/stop to EN_ROUTE and the ready Order to OUT_FOR_DELIVERY. Completion requires that custody evidence and advances the attempt/fulfillment to COMPLETED and job/stop/Order to DELIVERED. Failure closes the attempt as FAILED and records a reason plus known cost or null; job/stop become FAILED while fulfillment/Order custody remains unchanged. Recovery does not follow automatically. Generic fulfillment handover/completion is unavailable while the manual attempt is ACTIVE.
+
 ```text
 PENDING -> CREATING -> ACTIVE -> COMPLETED
                     -> FAILED

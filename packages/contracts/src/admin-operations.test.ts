@@ -131,6 +131,8 @@ describe("admin operations contracts", () => {
       fulfillmentMode: "SCHEDULED",
       status: "UNASSIGNED",
       externalDispatch: null,
+      manualDelivery: null,
+      manualActions: [],
       deliveredAtIso: null,
       version: 1,
     } satisfies AdminDeliveryOperationView);
