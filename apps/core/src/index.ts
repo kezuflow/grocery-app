@@ -698,6 +698,7 @@ const catalogProductMediaMetadataSchema = authenticatedRequestSchema.extend({
 const catalogProductMediaUploadSchema = catalogProductMediaMetadataSchema
   .omit({ mediaId: true })
   .extend({
+    replaceMediaId: validationSchema.string().trim().min(1).max(200).optional(),
     bytes: validationSchema.instanceof(ArrayBuffer),
     mimeType: validationSchema.enum(["image/jpeg", "image/png", "image/webp"]),
   });

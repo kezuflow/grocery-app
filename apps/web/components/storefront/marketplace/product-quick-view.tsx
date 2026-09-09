@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { ProductMedia } from "../product-media";
+import { ProductGallery } from "../product-gallery";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { formatMoney, toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../../lib/storefront/catalog-presentation";
@@ -169,7 +170,10 @@ export function ProductQuickView({
           </div>
           <div className="grid gap-6 p-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:p-6">
             <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
-              <ProductMedia media={presentation.media} name={presentation.name} />
+              <ProductGallery
+                images={view?.images ?? (presentation.media ? [presentation.media] : [])}
+                name={presentation.name}
+              />
             </div>
             <div>
               <h2 className="text-[32px] leading-[42px] font-semibold">{presentation.name}</h2>

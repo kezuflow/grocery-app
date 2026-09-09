@@ -11,7 +11,7 @@ export const catalogErrorSchema = z.object({
     requestId: z.string(),
   }),
 });
-type Intent = { url: string; body: string; method: "POST" | "PATCH"; key: string };
+type Intent = { url: string; body: string; method: "POST" | "PATCH" | "DELETE"; key: string };
 export function catalogResultSchema<T>(schema: z.ZodType<T>) {
   return z.union([
     z.object({ ok: z.literal(true), value: schema, requestId: z.string() }),

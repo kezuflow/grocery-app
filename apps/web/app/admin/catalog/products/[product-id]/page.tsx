@@ -4,11 +4,7 @@ import { catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type {
-  AdminProductDetail,
-  AdminProductMediaView,
-  AdminUnitSummary,
-} from "@freshmarkets/contracts";
+import type { AdminProductDetail, AdminUnitSummary } from "@freshmarkets/contracts";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
 import { Skeleton } from "../../../../../components/ui/skeleton";
@@ -28,7 +24,7 @@ import {
 } from "../../../../../components/admin/admin-shell";
 import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
-import { ProductMediaUpload } from "@/components/admin/product-media-upload";
+import { ProductImagesEditor } from "@/components/admin/product-images-editor";
 import { GlobalPricePanel } from "../../../../../components/admin/global-price-panel";
 import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
@@ -60,12 +56,11 @@ export default function ProductDetailPage({
   const searchParams = useSearchParams();
   const adminContext = useAdminContext();
   const [state, setState] = useState<LoadState>({ phase: "loading" });
+  const [imageBusy, setImageBusy] = useState(false);
   const loadRequest = useRef(0);
   const [reason, setReason] = useState("");
   const [confirmingStatus, setConfirmingStatus] = useState(false);
   const statusTrigger = useRef<HTMLButtonElement>(null);
-  const mediaTrigger = useRef<HTMLButtonElement | null>(null);
-  const [mediaToRemove, setMediaToRemove] = useState<AdminProductMediaView | null>(null);
   const [newSku, setNewSku] = useState({
     code: "",
     name: "",
@@ -85,7 +80,8 @@ export default function ProductDetailPage({
   const command = useAdminCommand();
   const skuCommand = useAdminCommand();
   const commandIntent = {
-    pending: command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain,
+    pending:
+      imageBusy || command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain,
   };
   const variantNotice = skuCommand.uncertain
     ? "The variant could not be confirmed. Select Add variant to try again."
@@ -101,6 +97,7 @@ export default function ProductDetailPage({
       : null;
 
   const load = useCallback(() => {
+    if (imageBusy) return;
     if (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION") return;
     const requestNumber = loadRequest.current + 1;
     loadRequest.current = requestNumber;
@@ -159,7 +156,7 @@ export default function ProductDetailPage({
         });
       }
     })();
-  }, [productId, selectedScope]);
+  }, [productId, selectedScope, imageBusy]);
 
   useEffect(() => load(), [load]);
 
@@ -303,138 +300,36 @@ export default function ProductDetailPage({
       </div>
 
       <div id="product-media" className="scroll-mt-32">
-        <ListPageSection
-          title="Product media"
-          description="Manage product images, descriptions and display order."
-        >
-          {canManageProduct ? (
-            <ProductMediaUpload
+        {canManageProduct ? (
+          <fieldset
+            disabled={command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain}
+          >
+            <ProductImagesEditor
               productId={productId}
-              productVersion={product.version}
+              version={product.version}
+              images={product.media}
+              onBusyChange={setImageBusy}
               onComplete={() => {
-                setNotice("Media uploaded.");
+                setNotice("Images updated.");
                 load();
               }}
             />
-          ) : null}
-          {product.media.length ? (
-            <ul className="divide-y divide-[var(--fm-border)]">
-              {product.media.map((media) => (
-                <li key={`${media.mediaId}-${media.version}`} className="p-4 text-sm">
-                  {canManageProduct ? (
-                    <form
-                      className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_7rem_8rem_auto_auto] md:items-end"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        const fields = new FormData(event.currentTarget);
-                        void run(
-                          `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
-                          "PATCH",
-                          {
-                            altText: String(fields.get("altText") ?? ""),
-                            isPrimary: fields.get("isPrimary") === "true",
-                            sortOrder: Number(fields.get("sortOrder")),
-                            expectedProductVersion: product.version,
-                          },
-                          "Media updated.",
-                        );
-                      }}
-                    >
-                      <label className="grid gap-1 font-medium">
-                        Alt text for {media.altText}
-                        <Input
-                          name="altText"
-                          defaultValue={media.altText}
-                          maxLength={300}
-                          required
-                        />
-                      </label>
-                      <label className="grid gap-1 font-medium">
-                        Order for {media.altText}
-                        <Input
-                          name="sortOrder"
-                          type="number"
-                          min={0}
-                          max={10000}
-                          defaultValue={media.sortOrder}
-                          required
-                        />
-                      </label>
-                      <label className="flex h-10 items-center gap-2 font-medium">
-                        <input
-                          name="isPrimary"
-                          type="checkbox"
-                          value="true"
-                          defaultChecked={media.isPrimary}
-                        />
-                        Primary
-                      </label>
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="outline"
-                        disabled={commandIntent.pending}
-                        aria-label={`Save ${media.altText}`}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        disabled={commandIntent.pending}
-                        aria-label={`Review remove ${media.altText}`}
-                        onClick={(event) => {
-                          mediaTrigger.current = event.currentTarget;
-                          setMediaToRemove(media);
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </form>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{media.altText}</span>
-                      <span>{media.isPrimary ? "Primary" : `Order ${media.sortOrder}`}</span>
-                    </div>
-                  )}
-                  <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
-                    {media.mimeType} · attachment v{media.version}
-                    {media.isPrimary ? " · Current primary" : ""}
-                  </p>
-                </li>
+          </fieldset>
+        ) : (
+          <ListPageSection title="Product images" description="Product photos and display order.">
+            <div className="flex flex-wrap gap-4 p-4">
+              {product.media.map((image) => (
+                <img
+                  key={image.mediaId}
+                  src={`${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(image.mediaId)}/content?version=${image.version}`}
+                  alt={image.altText}
+                  className="size-28 object-contain"
+                />
               ))}
-            </ul>
-          ) : (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No canonical media attached.</p>
-          )}
-        </ListPageSection>
+            </div>
+          </ListPageSection>
+        )}
       </div>
-      <ConfirmCommandDialog
-        open={mediaToRemove !== null}
-        title={`Remove ${mediaToRemove?.altText ?? "media"}?`}
-        resource={mediaToRemove?.altText ?? "Product media"}
-        scope={`${product.name} · canonical media`}
-        consequence="This deactivates the canonical attachment before deleting its stored image. The image disappears from active Product media and cannot be edited afterward."
-        reasonRequired={false}
-        confirmLabel="Confirm media removal"
-        cancelLabel="Cancel"
-        pending={commandIntent.pending}
-        restoreFocusRef={mediaTrigger}
-        onCancel={() => setMediaToRemove(null)}
-        onConfirm={() => {
-          const media = mediaToRemove;
-          setMediaToRemove(null);
-          if (!media) return;
-          void run(
-            `${BASE}/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(media.mediaId)}`,
-            "DELETE",
-            { expectedProductVersion: product.version },
-            "Media removed.",
-          );
-        }}
-      />
-
       {product.allowedActions.includes("SET_STATUS") ? (
         <div id="product-status" className="scroll-mt-32">
           <ListPageSection
@@ -664,7 +559,7 @@ export default function ProductDetailPage({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={command.busy || command.uncertain || skuCommand.busy}
+                  disabled={imageBusy || command.busy || command.uncertain || skuCommand.busy}
                   className="sm:col-span-2 lg:col-span-1"
                 >
                   {skuCommand.busy ? "Adding variant…" : "Add variant"}

@@ -166,6 +166,7 @@ export type AdminProductMediaView = {
 export const adminProductMediaMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 export type AdminProductMediaMimeType = (typeof adminProductMediaMimeTypes)[number];
 export const adminProductMediaMaxBytes = 5 * 1024 * 1024;
+export const adminProductMediaMaxCount = 5;
 
 export type AdminProductInventoryPoolView = {
   stockTracking?: "SHARED" | "COUNTED_SIZES";
@@ -333,6 +334,7 @@ export type AdminProductStatusRequest = AuthenticatedRequest & {
 
 export type AdminProductMediaUploadRequest = AuthenticatedRequest & {
   productId: string;
+  replaceMediaId?: string;
   bytes: ArrayBuffer;
   mimeType: AdminProductMediaMimeType;
   altText: string;

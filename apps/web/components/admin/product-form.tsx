@@ -6,6 +6,8 @@ import type {
   AdminUnitSummary,
 } from "@freshmarkets/contracts";
 import { ImagePlus, Plus, Trash2 } from "lucide-react";
+import { adminProductMediaMaxCount } from "@freshmarkets/contracts";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,22 @@ export type ProductMediaDraft = {
   altText: string;
   isPrimary: boolean;
 };
+
+function ImageDraftPreview({ file }: { file: File | null }) {
+  const [src, setSrc] = useState<string>();
+  useEffect(() => {
+    if (!file) {
+      setSrc(undefined);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return src ? (
+    <img src={src} alt="Selected product photo" className="size-24 object-contain" />
+  ) : null;
+}
 
 export type ProductVariantDraft = {
   id: string;
@@ -138,7 +156,9 @@ export function ProductForm({
               <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
                 <CardHeader className="border-b px-4 py-4 sm:px-5">
                   <CardTitle>Product images</CardTitle>
-                  <CardDescription>Add JPEG, PNG, or WebP images up to 5 MiB each.</CardDescription>
+                  <CardDescription>
+                    Add up to five JPEG, PNG, or WebP images, up to 5 MiB each.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 px-4 py-5 sm:px-5">
                   {value.media.map((media, index) => (
@@ -146,6 +166,7 @@ export function ProductForm({
                       key={media.id}
                       className="grid gap-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto_auto] md:items-end"
                     >
+                      <ImageDraftPreview file={media.file} />
                       <label className="grid gap-1 text-sm font-medium">
                         <span>Image {index + 1}</span>
                         <Input
@@ -188,6 +209,22 @@ export function ProductForm({
                       </label>
                       <Button
                         type="button"
+                        variant="outline"
+                        disabled={index === 0}
+                        aria-label={`Move image ${index + 1} earlier`}
+                        onClick={() => {
+                          const images = [...(value.media ?? [])];
+                          const current = images[index],
+                            previous = images[index - 1];
+                          if (!current || !previous) return;
+                          [images[index - 1], images[index]] = [current, previous];
+                          onChange({ ...value, media: images });
+                        }}
+                      >
+                        Move earlier
+                      </Button>
+                      <Button
+                        type="button"
                         size="icon"
                         variant="ghost"
                         aria-label={`Remove image ${index + 1}`}
@@ -210,6 +247,7 @@ export function ProductForm({
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={value.media.length >= adminProductMediaMaxCount}
                     onClick={() =>
                       onChange({
                         ...value,

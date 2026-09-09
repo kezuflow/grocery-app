@@ -74,6 +74,7 @@ export type MarketplaceHomeRequest = RequestMeta & {
 
 export type MarketplaceProductView = {
   product: CatalogProduct;
+  images: ReadonlyArray<CatalogMedia>;
   deliveryContext: { locationAware: boolean };
 };
 

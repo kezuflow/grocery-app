@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { ProductMedia } from "../../../components/storefront/catalog-components";
-import { toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
+import { ProductGallery } from "../../../components/storefront/product-gallery";
 import { addToCart, announceToast } from "../../../lib/storefront/cart-client";
 
 export function ProductView({ slug }: { slug: string }) {
@@ -113,7 +112,10 @@ export function ProductView({ slug }: { slug: string }) {
   return (
     <div className="grid gap-8 md:grid-cols-[1fr_1.1fr]">
       <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-6">
-        <ProductMedia media={toPresentationProduct(view.product).media} name={view.product.name} />
+        <ProductGallery
+          images={view.images ?? (view.product.media ? [view.product.media] : [])}
+          name={view.product.name}
+        />
       </div>
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-[var(--fm-primary-dark)]">

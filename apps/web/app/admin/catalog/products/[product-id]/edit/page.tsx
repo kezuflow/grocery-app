@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import type { AdminProductDetail } from "@freshmarkets/contracts";
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
+import { ProductImagesEditor } from "@/components/admin/product-images-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext } from "../../../../admin-context-provider";
@@ -25,7 +26,13 @@ export default function EditProductPage() {
   const categories = useCategoryOptions();
   const [value, setValue] = useState<ProductFormValue | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [reload, setReload] = useState(0);
+  const loadedScope = useRef("");
+  const editVersion = useRef<number | null>(null);
   useEffect(() => {
+    // Keep the complete image intent mounted while its outcome is unknown.
+    if (imageBusy) return;
     if (!productId || (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION"))
       return;
     const scopeParams = new URLSearchParams(
@@ -38,9 +45,14 @@ export default function EditProductPage() {
         : { scopeKind: "GLOBAL" },
     );
     let current = true;
+    const scopeKey = `${productId}:${scopeParams}`;
+    if (loadedScope.current !== scopeKey) {
+      loadedScope.current = scopeKey;
+      setDetail(null);
+      setValue(null);
+      editVersion.current = null;
+    }
     setError(null);
-    setDetail(null);
-    setValue(null);
     void fetch(`/api/admin/catalog/products/${productId}?${scopeParams}`)
       .then(async (r) => catalogResultSchema(adminProductDetailSchema).parse(await r.json()))
       .then((product) => {
@@ -57,19 +69,23 @@ export default function EditProductPage() {
           return;
         }
         setDetail(product.value);
-        setValue({
-          name: product.value.name,
-          slug: product.value.slug,
-          description: product.value.description,
-          categoryId: product.value.categoryId,
-          customerDetails: product.value.customerDetails.map(
-            ({ label, value: detailValue, sortOrder }) => ({
-              label,
-              value: detailValue,
-              sortOrder,
-            }),
-          ),
-        });
+        editVersion.current ??= product.value.version;
+        setValue(
+          (currentValue) =>
+            currentValue ?? {
+              name: product.value.name,
+              slug: product.value.slug,
+              description: product.value.description,
+              categoryId: product.value.categoryId,
+              customerDetails: product.value.customerDetails.map(
+                ({ label, value: detailValue, sortOrder }) => ({
+                  label,
+                  value: detailValue,
+                  sortOrder,
+                }),
+              ),
+            },
+        );
       })
       .catch(() => {
         if (current) setError("Product could not be loaded. Refresh to retry.");
@@ -77,7 +93,7 @@ export default function EditProductPage() {
     return () => {
       current = false;
     };
-  }, [productId, selectedScope]);
+  }, [productId, selectedScope, reload, imageBusy]);
   async function save(retry = false) {
     if (!retry && (!detail || !value)) return;
     setError(null);
@@ -87,7 +103,7 @@ export default function EditProductPage() {
         : detail && value
           ? await intent.submit(
               `/api/admin/catalog/products/${productId}`,
-              { ...value, expectedVersion: detail.version },
+              { ...value, expectedVersion: editVersion.current ?? detail.version },
               "PATCH",
             )
           : null;
@@ -134,17 +150,14 @@ export default function EditProductPage() {
   if (!detail || !value) return <Skeleton className="h-80 w-full" />;
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Edit product"
-        description="Identity and customer details are version-guarded and audited; variants remain separate commands."
-      />
+      <PageHeader title="Edit product" description="Update product details and photos." />
       {error || categories.error ? (
         <Alert variant="destructive">
           <AlertDescription>{error ?? categories.error}</AlertDescription>
         </Alert>
       ) : null}
       <section className="max-w-3xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6">
-        <fieldset disabled={intent.pending || intent.uncertain}>
+        <fieldset disabled={intent.pending || intent.uncertain || imageBusy}>
           <ProductForm
             value={value}
             categories={categories.items}
@@ -166,6 +179,20 @@ export default function EditProductPage() {
           </Button>
         ) : null}
       </section>
+      <fieldset disabled={intent.pending || intent.uncertain}>
+        <ProductImagesEditor
+          productId={detail.productId}
+          version={detail.version}
+          images={detail.media}
+          onBusyChange={setImageBusy}
+          onComplete={() => {
+            // Only our own image write advances the version of the unsaved
+            // identity draft. A concurrent edit must still reject that draft.
+            if (editVersion.current === detail.version) editVersion.current++;
+            setReload((value) => value + 1);
+          }}
+        />
+      </fieldset>
     </div>
   );
 }

@@ -83,6 +83,9 @@ async function POSTHandler(
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     productId,
+    ...(typeof form.get("replaceMediaId") === "string"
+      ? { replaceMediaId: String(form.get("replaceMediaId")) }
+      : {}),
     bytes: await file.arrayBuffer(),
     mimeType: mime.data,
     altText: altText.trim(),

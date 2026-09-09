@@ -601,7 +601,19 @@ export async function getProduct(
   const hydrated = await hydrateProducts(database, [row], context, nowMs);
   const product = hydrated.get(row.productId);
   if (!product) return null;
-  return { product, deliveryContext: { locationAware: Boolean(locationId) } };
+  const media = await rawAll<{ mediaId: string; version: number; altText: string }>(
+    database,
+    `SELECT m.id mediaId,m.version,m.alt_text altText FROM product_media m
+      JOIN product p ON p.id=m.product_id AND p.status='active'
+      JOIN category c ON c.id=p.category_id AND c.status='active'
+      WHERE m.product_id=? AND m.status='active' ORDER BY m.is_primary DESC,m.sort_order,m.id LIMIT 5`,
+    [product.id],
+  );
+  const images = media.flatMap((row) => {
+    const image = publishedProductMediaView(JSON.stringify(row));
+    return image ? [image] : [];
+  });
+  return { product, images, deliveryContext: { locationAware: Boolean(locationId) } };
 }
 
 /**

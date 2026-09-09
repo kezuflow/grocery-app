@@ -50,7 +50,7 @@ These are additional acceptance obligations against the changed product target, 
 | --- | --- |
 | GD-D01, GD-D21 | Phase 7: anonymous cart survives sign-in; approved customer/contact/address operations and first-visit location flow work without a default fabricated location. |
 | GD-D03, GD-D10 | Phases 6–7: available verified courier selection, automatic Instant booking at readiness, complete-order grams limit including additions, and honest disabled payment choices; actual provider activation remains separate. |
-| GD-D05 | Phase 3 follow-up / Phase 7: Add/Edit Product supports up to five images, replacement and customer gallery; ordinary cleanup stays internal. |
+| GD-D05 | CA-3.3 locally verified: Add/Edit Product supports up to five images, replacement, and detail/quick-view galleries; cleanup stays internal. Aggregate, Worker/D1 and two-width browser evidence is in the active checkpoint/history; release acceptance remains separate. |
 | GD-D06–07 | Phase 3 follow-up / Phase 7: selected-item percentage/fixed-unit sales, full-price grocery-code stacking, one delivery benefit, overlap rejection, complete-item sale quantity and atomic depletion/cancellation restoration. |
 | GD-D08 | Commerce-correctness follow-up / Phase 7: a small eligible nonempty cart is not blocked by a general minimum; promotion conditions remain separate. |
 | GD-D11, GD-D13 | Phase 7: order-level report, scoped administrator Problems handling, separate refund approval and approved purchase/financial/product/promotion/delivery reports reconcile with owning records. |
@@ -86,7 +86,7 @@ Every numbered criterion is preserved in the archived Product Scope. This table 
 | 18 | CA-7 immutable delivery instructions. |
 | 19 | CA-6 no active membership UI/Core/jobs. |
 | 20 | CA-7 notification independence. |
-| 21 | CA-3 R2 publication; GD-D05 five-image CRUD/gallery gap. |
+| 21 | CA-3 R2 publication; CA-3.3 closes local GD-D05 five-image CRUD/gallery acceptance. |
 | 22 | CA-7 current-state reorder. |
 | 23 | CA-7 issue intake without refund authority; GD-D11 order-level/admin handling. |
 | 24 | CA-0–2 / CA-7 closure with retained history; irreversible erasure policy open. |

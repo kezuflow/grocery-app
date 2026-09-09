@@ -18,6 +18,25 @@ async function fixture() {
     "SELECT p.id,p.version FROM product p JOIN sku s ON s.product_id=p.id WHERE s.id='sku-red-onion-500g'",
   ).first<{ id: string; version: number }>();
   if (!product) throw new Error("Missing catalog fixture");
+  // This Worker suite shares retained fixture state between tests. Start each
+  // scenario with an empty gallery through the normal removal command.
+  const existing = await env.DB.prepare(
+    "SELECT id FROM product_media WHERE product_id=? AND status='active'",
+  )
+    .bind(product.id)
+    .all<{ id: string }>();
+  for (const image of existing.results) {
+    const removed = await exports.default.removeAdminProductMedia({
+      headers: manager.headers,
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      productId: product.id,
+      mediaId: image.id,
+      expectedProductVersion: product.version,
+    });
+    if (!removed.ok) throw new Error(removed.error.message);
+    product.version++;
+  }
   return {
     manager,
     request: {
@@ -35,6 +54,86 @@ async function fixture() {
   };
 }
 describe("Product media durable recovery", () => {
+  it("caps active images at five and atomically replaces at capacity with exact replay", async () => {
+    const { request } = await fixture();
+    const ids: string[] = [];
+    for (let index = 0; index < 5; index++) {
+      const result = await exports.default.uploadAdminProductMedia({
+        ...request,
+        expectedProductVersion: request.expectedProductVersion + index,
+        idempotencyKey: crypto.randomUUID(),
+        isPrimary: index === 0,
+        sortOrder: index,
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      ids.push(result.value.mediaId);
+    }
+    const sixth = {
+      ...request,
+      expectedProductVersion: request.expectedProductVersion + 5,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(await exports.default.uploadAdminProductMedia(sixth)).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    const replacement = {
+      ...sixth,
+      replaceMediaId: ids[0],
+      idempotencyKey: crypto.randomUUID(),
+      altText: "Replacement onions",
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER suppress_replacement_cleanup BEFORE INSERT ON product_media_cleanup BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await exports.default.uploadAdminProductMedia(replacement)).toMatchObject({
+        ok: false,
+      });
+      expect(
+        await env.DB.prepare("SELECT status FROM product_media WHERE id=?").bind(ids[0]).first(),
+      ).toEqual({ status: "active" });
+      expect(
+        await env.DB.prepare("SELECT version FROM product WHERE id=?")
+          .bind(request.productId)
+          .first(),
+      ).toEqual({ version: sixth.expectedProductVersion });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM idempotency_records WHERE idempotency_key=? AND status='SUCCEEDED'",
+        )
+          .bind(replacement.idempotencyKey)
+          .first(),
+      ).toEqual({ n: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER suppress_replacement_cleanup");
+    }
+    const result = await exports.default.uploadAdminProductMedia(replacement);
+    expect(result).toMatchObject({
+      ok: true,
+      value: { altText: "Replacement onions", isPrimary: true },
+    });
+    expect(await exports.default.uploadAdminProductMedia(replacement)).toEqual(result);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM product_media WHERE product_id=? AND status='active'",
+      )
+        .bind(request.productId)
+        .first(),
+    ).toEqual({ n: 5 });
+    expect(
+      await env.DB.prepare("SELECT status,is_primary FROM product_media WHERE id=?")
+        .bind(ids[0])
+        .first(),
+    ).toEqual({ status: "inactive", is_primary: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT c.status FROM product_media_cleanup c JOIN product_media m ON m.object_key=c.object_key WHERE m.id=?",
+      )
+        .bind(ids[0])
+        .first(),
+    ).toEqual({ status: "PENDING" });
+  });
   it("replays a retained identity-only upload receipt from its minimal historical audit", async () => {
     const { manager, request } = await fixture();
     const uploaded = await exports.default.uploadAdminProductMedia(request);
@@ -228,6 +327,15 @@ describe("Product media durable recovery", () => {
   );
   it("serializes competing upload publications and preserves the winning object", async () => {
     const { request } = await fixture();
+    for (let index = 0; index < 4; index++) {
+      const result = await exports.default.uploadAdminProductMedia({
+        ...request,
+        expectedProductVersion: request.expectedProductVersion + index,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    }
+    request.expectedProductVersion += 4;
     const competing = {
       ...request,
       idempotencyKey: crypto.randomUUID(),
@@ -238,6 +346,13 @@ describe("Product media durable recovery", () => {
       exports.default.uploadAdminProductMedia(competing),
     ]);
     expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM product_media WHERE product_id=? AND status='active'",
+      )
+        .bind(request.productId)
+        .first(),
+    ).toEqual({ n: 5 });
     const winnerIndex = results.findIndex((result) => result.ok);
     const winningRequest = winnerIndex === 0 ? request : competing;
     const winner = results[winnerIndex];
@@ -530,7 +645,10 @@ describe("Product media durable recovery", () => {
         .bind(request.idempotencyKey)
         .first(),
     ).toEqual({ count: 0 });
-    expect(await cleanProductMedia(env.DB, env.PRODUCT_MEDIA, Date.now() + 86400001)).toBe(1);
+    // Other scenarios retain cleanup intents; this scenario's identity is checked below.
+    expect(
+      await cleanProductMedia(env.DB, env.PRODUCT_MEDIA, Date.now() + 86400001),
+    ).toBeGreaterThanOrEqual(1);
     const expired = await env.DB.prepare(
       "SELECT status,object_key FROM product_media_upload WHERE idempotency_key=?",
     )

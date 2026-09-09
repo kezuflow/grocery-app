@@ -1,5 +1,6 @@
 import {
   adminProductMediaMaxBytes,
+  adminProductMediaMaxCount,
   adminProductMediaMimeTypes,
   type AdminProductMediaUploadRequest,
   type AdminProductMediaUpdateRequest,
@@ -43,6 +44,7 @@ const metadata = {
 };
 const uploadSchema = base.extend({
   ...metadata,
+  replaceMediaId: identifierSchema.optional(),
   bytes: z.instanceof(ArrayBuffer),
   mimeType: z.enum(adminProductMediaMimeTypes),
 });
@@ -143,6 +145,7 @@ export async function uploadAdminProductMedia(
     .join("");
   const canonical = {
     productId: request.productId,
+    ...(request.replaceMediaId ? { replaceMediaId: request.replaceMediaId } : {}),
     contentDigest,
     byteSize: bytes.length,
     mimeType: request.mimeType,
@@ -161,6 +164,41 @@ export async function uploadAdminProductMedia(
     request.requestId,
   );
   if (prior) return prior;
+  const currentVersion = await productVersion(deps.db, request.productId);
+  if (currentVersion === null) return failure("NOT_FOUND", "Product not found", request.requestId);
+  // Product version serializes all image mutations; recheck capacity and the
+  // replacement's ownership inside publication as well as before storing bytes.
+  const capacitySql = `SELECT 1 FROM product WHERE id=?
+    AND (SELECT COUNT(*) FROM product_media WHERE product_id=? AND status='active' AND id!=?) < ?
+    AND (? IS NULL OR EXISTS (SELECT 1 FROM product_media WHERE id=? AND product_id=? AND status='active'))`;
+  const capacityArgs = [
+    request.productId,
+    request.productId,
+    request.replaceMediaId ?? "",
+    adminProductMediaMaxCount,
+    request.replaceMediaId ?? null,
+    request.replaceMediaId ?? null,
+    request.productId,
+  ];
+  if (
+    !(await deps.db
+      .prepare(capacitySql)
+      .bind(...capacityArgs)
+      .first())
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Use up to five images and replace only an existing image on this product",
+      request.requestId,
+    );
+  const replaced = request.replaceMediaId
+    ? await deps.db
+        .prepare(
+          "SELECT object_key FROM product_media WHERE id=? AND product_id=? AND status='active'",
+        )
+        .bind(request.replaceMediaId, request.productId)
+        .first<{ object_key: string }>()
+    : null;
   let upload = await readMediaUpload(deps.db, UPLOAD, request.idempotencyKey);
   if (!upload) {
     if (await findIdempotencyRecord(deps.db, UPLOAD, request.idempotencyKey))
@@ -169,9 +207,7 @@ export async function uploadAdminProductMedia(
         "Historical unfinished upload requires recovery review",
         request.requestId,
       );
-    const version = await productVersion(deps.db, request.productId);
-    if (version === null) return failure("NOT_FOUND", "Product not found", request.requestId);
-    if (version !== request.expectedProductVersion)
+    if (currentVersion !== request.expectedProductVersion)
       return failure(
         "STALE_VERSION",
         "Product changed; refresh before uploading",
@@ -259,6 +295,9 @@ export async function uploadAdminProductMedia(
     await deps.db.batch([
       mediaAuthorityGuard(deps.db, access.value),
       deps.db
+        .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (${capacitySql})`)
+        .bind(...capacityArgs),
+      deps.db
         .prepare(
           "INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (SELECT 1 FROM idempotency_records WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING')",
         )
@@ -272,6 +311,18 @@ export async function uploadAdminProductMedia(
         .prepare("UPDATE product SET version=version+1,updated_at=? WHERE id=? AND version=?")
         .bind(now, request.productId, request.expectedProductVersion),
       required(deps.db),
+      ...(request.replaceMediaId && replaced
+        ? [
+            deps.db
+              .prepare(
+                "UPDATE product_media SET status='inactive',is_primary=0,version=version+1,updated_at=? WHERE id=? AND product_id=? AND status='active'",
+              )
+              .bind(now, request.replaceMediaId, request.productId),
+            required(deps.db),
+            mediaCleanupIntent(deps.db, request.productId, replaced.object_key, now),
+            required(deps.db),
+          ]
+        : []),
       ...(request.isPrimary
         ? [
             deps.db

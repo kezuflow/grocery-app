@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { adminProductMediaMaxBytes } from "@freshmarkets/contracts";
+import { adminProductMediaMaxBytes, type AdminProductMediaView } from "@freshmarkets/contracts";
 import { adminProductMediaViewSchema, z } from "@freshmarkets/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,16 +16,20 @@ export function ProductMediaUpload({
   productId,
   productVersion,
   onComplete,
+  replacement,
+  onBusyChange,
 }: {
   productId: string;
   productVersion: number;
   onComplete(): void;
+  replacement?: AdminProductMediaView;
+  onBusyChange?(busy: boolean): void;
 }) {
   const intent = useRef<{ key: string; body: FormData } | null>(null);
   const active = useRef(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [primary, setPrimary] = useState(false);
+  const [primary, setPrimary] = useState(replacement?.isPrimary ?? false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   useEffect(() => {
@@ -51,10 +55,12 @@ export function ProductMediaUpload({
       fields.set("file", file);
       fields.set("isPrimary", String(primary));
       fields.set("expectedProductVersion", String(productVersion));
+      if (replacement) fields.set("replaceMediaId", replacement.mediaId);
       intent.current = { key: crypto.randomUUID(), body: fields };
     }
     active.current = true;
     setPending(true);
+    onBusyChange?.(true);
     setMessage("Uploading image…");
     try {
       const saved = intent.current;
@@ -78,6 +84,7 @@ export function ProductMediaUpload({
         setPrimary(false);
         form.reset();
         setMessage("Image uploaded.");
+        onBusyChange?.(false);
         onComplete();
       } else {
         setMessage(
@@ -90,6 +97,7 @@ export function ProductMediaUpload({
           result.error.code === "MEDIA_UPLOAD_ABANDONED"
         ) {
           intent.current = null;
+          onBusyChange?.(false);
         }
       }
     } catch {
@@ -102,7 +110,7 @@ export function ProductMediaUpload({
   return (
     <form onSubmit={submit} className="space-y-3 border-b p-4">
       <fieldset
-        disabled={pending}
+        disabled={pending || intent.current !== null}
         onChange={() => {
           intent.current = null;
           setMessage(null);
@@ -121,11 +129,18 @@ export function ProductMediaUpload({
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Media alt text
-          <Input name="altText" maxLength={300} required />
+          <Input name="altText" maxLength={300} defaultValue={replacement?.altText} required />
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Media sort order
-          <Input name="sortOrder" type="number" min={0} max={10000} defaultValue={0} required />
+          <Input
+            name="sortOrder"
+            type="number"
+            min={0}
+            max={10000}
+            defaultValue={replacement?.sortOrder ?? 0}
+            required
+          />
         </label>
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={primary} onCheckedChange={(checked) => setPrimary(checked === true)} />
@@ -145,7 +160,13 @@ export function ProductMediaUpload({
         </p>
       ) : null}
       <Button type="submit" disabled={pending}>
-        {pending ? "Uploading…" : "Upload image"}
+        {pending
+          ? "Uploading…"
+          : intent.current
+            ? "Retry image upload"
+            : replacement
+              ? "Replace image"
+              : "Upload image"}
       </Button>
     </form>
   );

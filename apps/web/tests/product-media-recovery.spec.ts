@@ -20,6 +20,22 @@ for (const width of [1440, 390]) {
     await page.getByLabel("Variant name").fill("250 g");
     await page.getByLabel("Sell unit").selectOption("unit-gram");
     await page.getByLabel("Quantity", { exact: true }).fill("250");
+    for (let index = 1; index <= 4; index++) {
+      await page.getByRole("button", { name: "Add image", exact: true }).click();
+      await page
+        .getByLabel(`Image ${index}`, { exact: true })
+        .setInputFiles(resolve("public/produce/abiu.webp"));
+      await page
+        .getByLabel("Alt text", { exact: true })
+        .nth(index - 1)
+        .fill(`Abiu photo ${index}`);
+    }
+    await expect(
+      page.getByRole("img", { name: "Selected product photo", exact: true }),
+    ).toHaveCount(4);
+    await page.getByRole("button", { name: "Add image", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Add image", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Remove image 5", exact: true }).click();
     await page.getByRole("button", { name: "Create product", exact: true }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: `Image recovery ${width}` }),
@@ -58,7 +74,8 @@ for (const width of [1440, 390]) {
     await page.getByLabel("Media alt text").fill("Fresh abiu preview");
     await page.getByLabel("Primary image", { exact: true }).check();
     await page.getByRole("button", { name: "Upload image", exact: true }).click();
-    await expect(page.getByText("Media uploaded.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Images updated.", { exact: true })).toBeVisible();
+    await expect(page.getByText("All five photo spaces are used.", { exact: false })).toBeVisible();
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
     await page.getByRole("combobox", { name: "Price location", exact: true }).click();
@@ -74,7 +91,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
-    await expect(page.getByLabel("Product media image")).toBeVisible();
+    await expect(page.getByText("All five photo spaces are used.", { exact: false })).toBeVisible();
     // Cart population uses its real HTTP command; checkout/cycle acceptance is separate.
     const productId = new URL(page.url()).pathname.split("/").at(-1);
     const detail = z
@@ -139,12 +156,55 @@ for (const width of [1440, 390]) {
         path: testInfo.outputPath("published-product-image.png"),
         fullPage: true,
       });
-      await page.getByRole("button", { name: "Review remove Fresh abiu preview" }).click();
-      await page.getByRole("button", { name: "Confirm media removal" }).click();
-      await expect(page.getByText("Media removed.", { exact: true })).toBeVisible();
+      await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(5);
+      await customer
+        .getByRole("button", { name: "Show photo 2: Abiu photo 1", exact: true })
+        .click();
+      await expect(customer.getByRole("img", { name: "Abiu photo 1", exact: true })).toBeVisible();
+      await page.goto(`/admin/catalog/products/${productId}/edit`);
+      await page.getByRole("button", { name: "Replace Fresh abiu preview", exact: true }).click();
+      await page
+        .getByLabel("Product media image", { exact: true })
+        .setInputFiles(resolve("public/produce/abiu.webp"));
+      await page.getByLabel("Media alt text", { exact: true }).fill("Fresh abiu replacement");
+      await page.getByRole("button", { name: "Replace image", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Replace Fresh abiu replacement", exact: true }),
+      ).toBeVisible();
+      await customer.reload();
+      await expect(
+        customer.getByRole("img", { name: "Fresh abiu replacement", exact: true }),
+      ).toBeVisible();
+      await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(5);
+      await page
+        .getByRole("button", { name: "Remove Fresh abiu replacement", exact: true })
+        .click();
+      await expect(page.getByText("Image removed.", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Product media image", { exact: true })).toBeVisible();
+      const lastPhoto = page
+        .locator("form")
+        .filter({ has: page.getByRole("button", { name: "Save Abiu photo 4", exact: true }) });
+      await lastPhoto.getByLabel("Main photo", { exact: true }).check();
+      await lastPhoto.getByLabel("Order for Abiu photo 4", { exact: true }).fill("0");
+      await lastPhoto.getByRole("button", { name: "Save Abiu photo 4", exact: true }).click();
+      await expect(page.getByText("Image saved.", { exact: true })).toBeVisible();
       await expect(page.getByRole("region", { name: "Image recovery", exact: true })).toHaveCount(
         0,
       );
+      const previews = page
+        .getByRole("region", { name: "Product images", exact: true })
+        .locator("img");
+      await expect(previews).toHaveCount(4);
+      await expect
+        .poll(() =>
+          previews.evaluateAll((images) =>
+            images.every(
+              (image) =>
+                image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0,
+            ),
+          ),
+        )
+        .toBe(true);
       await page.screenshot({
         path: testInfo.outputPath("product-image-controls.png"),
         fullPage: true,
@@ -157,9 +217,28 @@ for (const width of [1440, 390]) {
         ).status(),
       ).toBe(404);
       await customer.reload();
+      await expect(customer.getByRole("img", { name: "Abiu photo 4", exact: true })).toBeVisible();
+      await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(4);
       await expect(
         customer.getByRole("img", { name: "Fresh abiu preview", exact: true }),
       ).toHaveCount(0);
+      await customer.goto(`/?q=${encodeURIComponent(`Image recovery ${width}`)}`);
+      await customer
+        .getByRole("link", { name: `Image recovery ${width} details`, exact: true })
+        .click();
+      const quickView = customer.getByRole("dialog", {
+        name: `Image recovery ${width} details`,
+        exact: true,
+      });
+      await expect(quickView.getByRole("button", { name: /^Show photo/ })).toHaveCount(4);
+      await quickView
+        .getByRole("button", { name: "Show photo 2: Abiu photo 1", exact: true })
+        .click();
+      await expect(quickView.getByRole("img", { name: "Abiu photo 1", exact: true })).toBeVisible();
+      await customer.screenshot({
+        path: testInfo.outputPath("quick-view-gallery.png"),
+        fullPage: true,
+      });
     } finally {
       await customerContext.close();
     }
