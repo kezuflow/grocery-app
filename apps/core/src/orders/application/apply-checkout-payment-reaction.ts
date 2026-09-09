@@ -9,6 +9,11 @@ import type { PaymentDomainState } from "../../payments/domain/payment";
 import { createCheckoutRepository } from "../../checkout/infrastructure/d1-checkout-repository";
 import { recordFinancialEvent } from "../../payments/application/financial-observability";
 import { permitsPromotionStack } from "../../promotions/domain/checkout-promotion";
+import {
+  parseProductSaleSnapshot,
+  consumeProductSaleStatements,
+  capProductSaleAllowanceStatements,
+} from "../../promotions/application/product-sales";
 import { resolveCommittedFinanceExceptionStatements } from "./resolve-committed-finance-exceptions";
 
 export type ApplyCheckoutPaymentReactionInput = {
@@ -102,23 +107,47 @@ export async function applyCheckoutPaymentReaction(
       grant_id: string | null;
       snapshot_json: string;
     }>();
+  const saleClaims = new Map(
+    promotionClaims.results.map((claim) => [
+      claim.id,
+      parseProductSaleSnapshot(claim.snapshot_json),
+    ]),
+  );
   if (
     !permitsPromotionStack(quote.promotionApplications) ||
     !permitsPromotionStack(
-      promotionClaims.results.map((claim) => ({ component: claim.price_component })),
+      promotionClaims.results.map((claim) => ({
+        component: claim.price_component,
+        ...saleClaims.get(claim.id),
+      })),
     ) ||
     promotionClaims.results.length !== quote.promotionApplications.length
   )
     return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
   for (const claim of promotionClaims.results) {
     const application = quote.promotionApplications.find(
-      (item) => item.component === claim.price_component,
+      (item) => item.component === claim.price_component && item.promotionId === claim.promotion_id,
     );
+    const sale = saleClaims.get(claim.id);
     if (
       !application ||
       application.promotionId !== claim.promotion_id ||
       application.amountMinor !== claim.amount_minor ||
-      application.benefitType !== claim.benefit_type
+      application.benefitType !== claim.benefit_type ||
+      (sale
+        ? application.kind !== "PRODUCT_SALE" ||
+          JSON.stringify(application.lines) !== JSON.stringify(sale.lines) ||
+          sale.fulfillmentMode !== (quote.fulfillmentMode ?? "SCHEDULED") ||
+          sale.lines.reduce((sum, line) => sum + line.amountMinor, 0) !== claim.amount_minor ||
+          sale.lines.some((line) => {
+            const quoted = quote.lines.find((item) => item.skuId === line.skuId);
+            return (
+              !quoted ||
+              quoted.quantity !== line.quantity ||
+              line.amountMinor > quoted.lineTotalMinor
+            );
+          })
+        : application.kind !== undefined)
     )
       return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
   }
@@ -139,6 +168,8 @@ export async function applyCheckoutPaymentReaction(
   } else if (!routingSnapshot)
     return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
   const cycleSnapshot = routingSnapshot;
+  if ([...saleClaims.values()].some((sale) => sale && sale.locationId !== cycleSnapshot.locationId))
+    return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
 
   // Per-pool requested base units. Supply behavior comes only from the
   // snapshotted global fulfillment mode.
@@ -373,20 +404,34 @@ export async function applyCheckoutPaymentReaction(
       (SELECT COUNT(*) FROM checkout_promotion_claim WHERE checkout_quote_id=? AND status='UNCOMMITTED') != ?
       OR EXISTS (SELECT price_component FROM checkout_promotion_claim
         WHERE checkout_quote_id=? AND status='UNCOMMITTED'
+          AND COALESCE(json_extract(snapshot_json,'$.kind'),'')!='PRODUCT_SALE'
         GROUP BY price_component HAVING COUNT(*)>1)`)
       .bind(quote.id, promotionClaims.results.length, quote.id),
   );
   for (const claim of promotionClaims.results) {
+    const sale = saleClaims.get(claim.id);
     const systemGrantId = `order-promotion-${claim.promotion_id}`;
     const grantId = claim.grant_id ?? systemGrantId;
     statements.push(
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -8 WHERE NOT EXISTS (
+        SELECT 1 FROM checkout_promotion_claim WHERE id=? AND checkout_quote_id=? AND status='UNCOMMITTED'
+          AND promotion_id=? AND price_component=? AND amount_minor=? AND snapshot_json=?)`)
+        .bind(
+          claim.id,
+          quote.id,
+          claim.promotion_id,
+          claim.price_component,
+          claim.amount_minor,
+          claim.snapshot_json,
+        ),
       database
         .prepare(
           `INSERT INTO commitment_abort (id)
            SELECT -8 WHERE NOT EXISTS (
              SELECT 1 FROM promotion p
-             WHERE p.id=? AND p.status='ACTIVE' AND p.version=? AND p.starts_at<=?
-               AND (p.ends_at IS NULL OR p.ends_at>?)
+             WHERE p.id=? AND (?=1 OR (p.status='ACTIVE' AND p.version=? AND p.starts_at<=?
+               AND (p.ends_at IS NULL OR p.ends_at>?)))
                AND (p.global_usage_limit IS NULL OR (
                  SELECT COUNT(*) FROM promotion_redemption pr WHERE pr.promotion_id=p.id
                ) < p.global_usage_limit)
@@ -396,7 +441,15 @@ export async function applyCheckoutPaymentReaction(
                ) < p.per_customer_usage_limit)
            )`,
         )
-        .bind(claim.promotion_id, claim.definition_version, now, now, quote.customerId),
+        .bind(
+          claim.promotion_id,
+          sale ? 1 : 0,
+          claim.definition_version,
+          now,
+          now,
+          quote.customerId,
+        ),
+      ...(sale ? consumeProductSaleStatements(database, claim.promotion_id, quote.id, sale) : []),
     );
     if (claim.grant_id === null) {
       statements.push(
@@ -573,6 +626,14 @@ export async function applyCheckoutPaymentReaction(
   const expectedReservationRows = instant
     ? [...pools.values()].filter((plan) => plan.requestedBase > 0).length
     : 0;
+  if (instant)
+    for (const plan of pools.values())
+      statements.push(
+        ...capProductSaleAllowanceStatements(database, {
+          locationId: cycleSnapshot.locationId,
+          inventoryPoolId: plan.poolId,
+        }),
+      );
   statements.push(
     createInvoiceReadinessStatement(database, {
       id: crypto.randomUUID(),

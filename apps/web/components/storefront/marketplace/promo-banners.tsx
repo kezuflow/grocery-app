@@ -174,7 +174,11 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampa
               <div className="space-y-1 p-4">
                 <h3 className="font-semibold">{promo.name}</h3>
                 <p className="text-sm">{promo.description}</p>
-                <p className="break-all text-sm font-medium">Code: {promo.code}</p>
+                <p className="break-all text-sm font-medium">
+                  {promo.productSale
+                    ? "Automatic sale on selected items and locations"
+                    : `Code: ${promo.code}`}
+                </p>
                 <p className="text-xs text-[var(--fm-text-muted)]">
                   Eligibility and final savings are checked at checkout.
                 </p>

@@ -56,6 +56,77 @@ function candidate(
 }
 
 describe("checkout promotion selection", () => {
+  it("combines a per-unit item sale with a grocery code only on full-price items", () => {
+    const sale = candidate({
+      id: "sale",
+      code: "SALE",
+      productTargets: [
+        { skuId: "sku-1", locationId: "location-1", quantityLimit: 3, remainingQuantity: 3 },
+      ],
+      benefit: {
+        type: "ORDER_FIXED_DISCOUNT",
+        discountMinor: 100,
+        percent: null,
+        maximumDiscountMinor: null,
+      },
+    });
+    const result = evaluateCheckoutPromotionCandidates(
+      {
+        ...context,
+        fulfillmentMode: "INSTANT",
+        requestedCodes: ["SAVE10"],
+        lineFacts: [
+          { ...context.lineFacts[0], quantity: 3, lineSubtotalMinor: 3000 },
+          { ...context.lineFacts[0], skuId: "sku-2", lineSubtotalMinor: 7000 },
+        ],
+      },
+      facts,
+      [sale, candidate()],
+    );
+    expect(
+      result.applications.map((application) => [application.promotionId, application.amountMinor]),
+    ).toEqual([
+      ["sale", 300],
+      ["promotion-a", 700],
+    ]);
+    expect(result.applications[0].lines).toEqual([
+      { skuId: "sku-1", quantity: 3, amountMinor: 300 },
+    ]);
+  });
+  it("requires the entire requested quantity to fit and otherwise keeps it eligible for the grocery code", () => {
+    const result = evaluateCheckoutPromotionCandidates(
+      {
+        ...context,
+        fulfillmentMode: "INSTANT",
+        lineFacts: [{ ...context.lineFacts[0], quantity: 4 }],
+      },
+      facts,
+      [
+        candidate({
+          id: "sale",
+          code: "SALE",
+          productTargets: [
+            { skuId: "sku-1", locationId: "location-1", quantityLimit: 3, remainingQuantity: 3 },
+          ],
+        }),
+        candidate(),
+      ],
+    );
+    expect(
+      result.applications.map((application) => [application.promotionId, application.amountMinor]),
+    ).toEqual([["promotion-a", 1000]]);
+  });
+  it("fails closed for overlapping item sales instead of inventing a winner", () => {
+    const productTargets = [
+      { skuId: "sku-1", locationId: "location-1", quantityLimit: null, remainingQuantity: null },
+    ];
+    expect(
+      evaluateCheckoutPromotionCandidates(context, facts, [
+        candidate({ id: "sale-a", productTargets }),
+        candidate({ id: "sale-b", productTargets }),
+      ]).applications,
+    ).toEqual([]);
+  });
   it("lets an explicitly requested valid benefit win each component", () => {
     const result = evaluateCheckoutPromotionCandidates(
       { ...context, requestedCodes: ["EXPLICIT", "SHIP"] },

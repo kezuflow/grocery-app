@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight, Leaf } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatMoney } from "../../lib/storefront/catalog-presentation";
+import { ProductPrice } from "./product-price";
 import type { PresentationProduct } from "../../lib/storefront/catalog-presentation";
 import { ProductMedia } from "./product-media";
 export { ProductMedia } from "./product-media";
@@ -60,9 +60,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
       >
         <h3 className="line-clamp-2 text-base leading-6 font-bold">{product.name}</h3>
         <p className="mt-0.5 text-sm leading-[22px] font-semibold tabular-nums">
-          {variant && variant.priceMinor !== null && variant.currency !== null
-            ? formatMoney(variant.priceMinor, variant.currency)
-            : "Unavailable"}
+          {variant ? <ProductPrice variant={variant} /> : "Unavailable"}
         </p>
       </Link>
     </article>

@@ -8,6 +8,7 @@ import type {
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { activeFulfillmentLocationId, activeMarketCode } from "../../geography/market-defaults";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
 import {
   productMediaProjectionSql,
   publishedProductMediaView,
@@ -68,10 +69,14 @@ export async function getCart(
 
   const currency = await database
     .prepare(
-      "SELECT COALESCE(mcp.currency, m.currency) AS currency FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id WHERE fl.id=?",
+      "SELECT COALESCE(mcp.currency, m.currency) AS currency,m.id marketId,configuration.fulfillment_mode fulfillmentMode FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id LEFT JOIN global_commerce_configuration configuration ON configuration.id='global' WHERE fl.id=?",
     )
     .bind(cart.location_id)
-    .first<{ currency: string }>();
+    .first<{
+      currency: string;
+      marketId: string;
+      fulfillmentMode: "INSTANT" | "SCHEDULED" | null;
+    }>();
   if (!currency)
     return failure(
       "CONFIGURATION_ERROR",
@@ -82,7 +87,7 @@ export async function getCart(
   const now = Date.now();
   const rows = await database
     .prepare(
-      `SELECT ci.sku_id, ci.quantity, s.name,
+      `SELECT ci.sku_id, ci.quantity, s.name,p.id product_id,p.category_id,
          ${productMediaProjectionSql} AS media_json,
          s.status AS sku_status, p.status AS product_status, sla.availability_status,
          (
@@ -114,6 +119,8 @@ export async function getCart(
       product_status: string;
       availability_status: string | null;
       unit_price_minor: number | null;
+      product_id: string;
+      category_id: string;
     }>();
 
   const items: CartView["items"][number][] = rows.results.map((row) => {
@@ -136,6 +143,40 @@ export async function getCart(
       lineTotalMinor: unitPriceMinor === null ? null : row.quantity * unitPriceMinor,
     };
   });
+  if (currency.fulfillmentMode) {
+    const evaluated = await evaluateCheckoutPromotions(database, {
+      customerId: input.customerId,
+      marketId: currency.marketId,
+      locationId: cart.location_id,
+      fulfillmentMode: currency.fulfillmentMode,
+      cartId: cart.id,
+      at: now,
+      merchandiseSubtotalMinor: items.reduce((sum, item) => sum + (item.lineTotalMinor ?? 0), 0),
+      deliverySubtotalMinor: 0,
+      requestedCodes: [],
+      lineFacts: rows.results
+        .filter((row) =>
+          items.some((item) => item.skuId === row.sku_id && item.availability === "AVAILABLE"),
+        )
+        .map((row) => ({
+          skuId: row.sku_id,
+          productId: row.product_id,
+          categoryId: row.category_id,
+          quantity: row.quantity,
+          lineSubtotalMinor: row.quantity * row.unit_price_minor!,
+        })),
+    });
+    for (const application of evaluated.applications) {
+      if (application.kind !== "PRODUCT_SALE") continue;
+      for (const line of application.lines ?? []) {
+        const item = items.find((candidate) => candidate.skuId === line.skuId);
+        if (item?.lineTotalMinor != null) {
+          item.regularLineTotalMinor = item.lineTotalMinor;
+          item.lineTotalMinor -= line.amountMinor;
+        }
+      }
+    }
+  }
   const blockingReasons = [
     ...(items.some((item) => item.availability === "UNAVAILABLE")
       ? (["ITEM_UNAVAILABLE"] as const)

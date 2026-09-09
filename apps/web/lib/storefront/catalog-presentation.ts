@@ -17,6 +17,7 @@ export type PresentationVariant = {
   id: string;
   label: string;
   priceMinor: number | null;
+  sale?: CatalogVariant["sale"];
   currency: string | null;
   /** Merchandising label from Core (`Pack`/`Bunch`) or null for fixed sizes. */
   merchandisingLabel: string | null;
@@ -60,6 +61,7 @@ function presentationVariant(variant: CatalogVariant): PresentationVariant {
     id: variant.id,
     label: variant.name,
     priceMinor: variant.priceMinor,
+    ...(variant.sale ? { sale: variant.sale } : {}),
     currency: variant.currency,
     merchandisingLabel: variant.merchandisingLabel,
     contentsNote: variant.contentsNote,

@@ -218,6 +218,7 @@ export async function revalidateCheckoutQuote(
     return rejected("PRICE_CHANGED", "Delivery quotation changed; accept a new quote");
   const promotions = await evaluateCheckoutPromotions(database, {
     customerId: quote.customerId,
+    quoteId: quote.id,
     marketId,
     locationId: snapshot.locationId,
     fulfillmentMode: quote.fulfillmentMode ?? "SCHEDULED",
@@ -234,6 +235,7 @@ export async function revalidateCheckoutQuote(
     at: now,
   });
   const projectedApplications = promotions.applications.map((application) => ({
+    ...(application.kind ? { kind: application.kind, lines: application.lines } : {}),
     promotionId: application.promotionId,
     code: application.code,
     name: application.name,
@@ -244,15 +246,17 @@ export async function revalidateCheckoutQuote(
   }));
   if (JSON.stringify(projectedApplications) !== JSON.stringify(quote.promotionApplications))
     return rejected("PRICE_CHANGED", "Promotion eligibility changed; accept a new quote");
-  const merchandiseDiscount =
-    promotions.applications.find((application) => application.component === "MERCHANDISE")
-      ?.amountMinor ?? 0;
+  const merchandiseDiscount = promotions.applications
+    .filter((application) => application.component === "MERCHANDISE")
+    .reduce((sum, application) => sum + application.amountMinor, 0);
+  const itemDiscount = promotions.applications
+    .filter((application) => application.kind === "PRODUCT_SALE")
+    .reduce((sum, application) => sum + application.amountMinor, 0);
   const deliveryDiscount =
     promotions.applications.find((application) => application.component === "DELIVERY")
       ?.amountMinor ?? 0;
   const preServiceFeeTotalMinor =
     subtotalMinor -
-    quote.financial.itemDiscountMinor -
     merchandiseDiscount +
     deliveryFee.feeMinor -
     deliveryDiscount +
@@ -266,8 +270,9 @@ export async function revalidateCheckoutQuote(
     return rejected("PRICE_CHANGED", "Legacy Service Fee evidence is not valid for new commerce");
   const currentFinancial = {
     ...quote.financial,
+    itemDiscountMinor: itemDiscount,
     merchandiseSubtotalMinor: subtotalMinor,
-    orderDiscountMinor: merchandiseDiscount,
+    orderDiscountMinor: merchandiseDiscount - itemDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
     serviceFeeMinor: 0,

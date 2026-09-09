@@ -1,4 +1,9 @@
 import { readPromotionRules } from "./promotion-audience";
+import {
+  activateProductSaleStatements,
+  replaceProductSaleTargets,
+  productSaleTargetsJsonSql,
+} from "../../promotions/application/product-sales";
 import type {
   AdminPromotionDetailRequest,
   AdminPromotionGrantPage,
@@ -77,7 +82,7 @@ function receipt(
 ) {
   const result = grant
     ? `SELECT json_object('grantId',id,'promotionId',json_extract(parameters_json,'$.promotionId'),'customerId',customer_id,'benefitType',benefit_type,'maxRedemptions',max_redemptions,'status',status,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',created_at/1000.0,'unixepoch')) FROM promotion_grant WHERE id=?`
-    : `SELECT json_object('promotionId',id,'code',code,'name',name,'description',description,'status',status,'benefitType',benefit_type,'discountMinor',discount_minor,'percent',percent,'maximumDiscountMinor',maximum_discount_minor,'minimumMinor',minimum_minor,'startsAt',strftime('%Y-%m-%dT%H:%M:%fZ',starts_at/1000.0,'unixepoch'),'endsAt',strftime('%Y-%m-%dT%H:%M:%fZ',ends_at/1000.0,'unixepoch'),'globalUsageLimit',global_usage_limit,'perCustomerUsageLimit',per_customer_usage_limit,'automatic',json(CASE WHEN automatic=1 THEN 'true' ELSE 'false' END),'priority',priority,'version',version,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',created_at/1000.0,'unixepoch'),'updatedAt',strftime('%Y-%m-%dT%H:%M:%fZ',updated_at/1000.0,'unixepoch')) FROM promotion WHERE id=?`;
+    : `SELECT json_object('promotionId',id,'code',code,'name',name,'description',description,'status',status,'benefitType',benefit_type,'discountMinor',discount_minor,'percent',percent,'maximumDiscountMinor',maximum_discount_minor,'minimumMinor',minimum_minor,'startsAt',strftime('%Y-%m-%dT%H:%M:%fZ',starts_at/1000.0,'unixepoch'),'endsAt',strftime('%Y-%m-%dT%H:%M:%fZ',ends_at/1000.0,'unixepoch'),'globalUsageLimit',global_usage_limit,'perCustomerUsageLimit',per_customer_usage_limit,'automatic',json(CASE WHEN automatic=1 THEN 'true' ELSE 'false' END),'priority',priority,'version',version,'createdAt',strftime('%Y-%m-%dT%H:%M:%fZ',created_at/1000.0,'unixepoch'),'updatedAt',strftime('%Y-%m-%dT%H:%M:%fZ',updated_at/1000.0,'unixepoch'),'productTargets',json(${productSaleTargetsJsonSql})) FROM promotion WHERE id=?`;
   return db
     .prepare(
       `UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(${result}),updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'`,
@@ -118,6 +123,14 @@ export async function createAdminPromotion(
     !validBenefit(request.benefitType, request.discountMinor, request.percent)
   )
     return invalid(input);
+  if (
+    request.productTargets?.length &&
+    (!request.benefitType.startsWith("ORDER_") ||
+      request.maximumDiscountMinor != null ||
+      new Set(request.productTargets.map((target) => `${target.locationId}:${target.skuId}`))
+        .size !== request.productTargets.length)
+  )
+    return invalid(input);
   const { headers: _headers, requestId: _requestId, idempotencyKey: _key, ...body } = request;
   const command = await identity("create", request, body);
   const replay = await promotionCommandReceipt(deps.db, command, adminPromotionSummarySchema);
@@ -148,13 +161,14 @@ export async function createAdminPromotion(
           request.endsAt ? Date.parse(request.endsAt) : null,
           request.globalUsageLimit ?? null,
           request.perCustomerUsageLimit ?? null,
-          request.automatic ? 1 : 0,
+          request.productTargets?.length || request.automatic ? 1 : 0,
           request.priority ?? 0,
           request.maximumDiscountMinor ?? null,
           now,
           now,
         ),
       required(db),
+      ...replaceProductSaleTargets(db, id, request.productTargets ?? []),
       auditEventStatement(db, {
         actorUserId: access.value.authUserId,
         action: "PROMOTION.CREATED",
@@ -210,6 +224,14 @@ export async function updateAdminPromotion(
   const discount = request.discountMinor ?? current.discount_minor;
   const percent = request.percent ?? current.percent;
   if (
+    request.productTargets?.length &&
+    (!current.benefit_type.startsWith("ORDER_") ||
+      request.maximumDiscountMinor != null ||
+      new Set(request.productTargets.map((target) => `${target.locationId}:${target.skuId}`))
+        .size !== request.productTargets.length)
+  )
+    return invalid(input);
+  if (
     !validBenefit(current.benefit_type, discount, percent) ||
     reservedPromotionCodes.some((code) => code === current.code)
   )
@@ -239,12 +261,21 @@ export async function updateAdminPromotion(
           request.globalUsageLimit ?? null,
           request.perCustomerUsageLimit !== undefined ? 1 : 0,
           request.perCustomerUsageLimit ?? null,
-          request.automatic === undefined ? null : request.automatic ? 1 : 0,
+          request.productTargets?.length
+            ? 1
+            : request.automatic === undefined
+              ? null
+              : request.automatic
+                ? 1
+                : 0,
           now,
           current.id,
           request.expectedVersion,
         ),
       required(db),
+      ...(request.productTargets === undefined
+        ? []
+        : replaceProductSaleTargets(db, current.id, request.productTargets)),
       auditEventStatement(db, {
         actorUserId: access.value.authUserId,
         action: "PROMOTION.UPDATED",
@@ -315,6 +346,22 @@ export async function changeAdminPromotionStatus(
       "Replace retired or invalid audience conditions before activating",
       request.requestId,
     );
+  if (request.action === "ACTIVATE") {
+    const overlap = await db
+      .prepare(`SELECT 1 FROM promotion_product_target target JOIN promotion p ON p.id=target.promotion_id
+      JOIN promotion_product_target other ON other.sku_id=target.sku_id AND other.location_id=target.location_id AND other.promotion_id!=p.id
+      JOIN promotion competing ON competing.id=other.promotion_id
+      WHERE p.id=? AND competing.status='ACTIVE' AND p.starts_at<COALESCE(competing.ends_at,9007199254740991)
+        AND competing.starts_at<COALESCE(p.ends_at,9007199254740991) LIMIT 1`)
+      .bind(current.id)
+      .first();
+    if (overlap)
+      return failure(
+        "VALIDATION_FAILED",
+        "Another active sale covers the same selling option and location during these dates. Stop that sale or change this draft's dates or options.",
+        request.requestId,
+      );
+  }
   const action = `PROMOTION.${request.action === "ACTIVATE" ? "ACTIVATED" : request.action === "DEACTIVATE" ? "DEACTIVATED" : "ARCHIVED"}`;
   return executePromotionCommand(
     db,
@@ -328,6 +375,7 @@ export async function changeAdminPromotionStatus(
         )
         .bind(transition.to, now, current.id, request.expectedVersion, current.status),
       required(db),
+      ...(request.action === "ACTIVATE" ? activateProductSaleStatements(db, current.id) : []),
       auditEventStatement(db, {
         actorUserId: access.value.authUserId,
         action,

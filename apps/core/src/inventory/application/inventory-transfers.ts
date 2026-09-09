@@ -1,4 +1,5 @@
 import { stockSortingStatements } from "../infrastructure/stock-sorting-repository";
+import { capProductSaleAllowanceStatements } from "../../promotions/application/product-sales";
 import type {
   AppErrorCode,
   InventoryTransferResult,
@@ -177,6 +178,10 @@ export function inventoryTransfers(
             reason: request.reason,
             line,
             effectKey: `transfer:dispatch:${idempotencyKey}:${line.lineId}`,
+          }),
+          ...capProductSaleAllowanceStatements(db, {
+            locationId: transfer.sourceLocationId,
+            inventoryPoolId: line.inventoryPoolId,
           }),
         );
     } else if (action === "receive") {

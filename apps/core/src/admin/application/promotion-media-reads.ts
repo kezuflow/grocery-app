@@ -23,6 +23,7 @@ const publicSchema = z.object({
   version: z.number().int().safe().positive(),
 });
 const campaignSchema = z.object({
+  productSale: z.number().optional(),
   promotionId: identifierSchema,
   code: z.string(),
   name: z.string(),
@@ -39,7 +40,7 @@ const campaignSchema = z.object({
 });
 // Publication announces a campaign; it never promises a customer-specific benefit.
 const publication = "p.status='ACTIVE' AND p.starts_at<=? AND (p.ends_at IS NULL OR p.ends_at>?)";
-const selection = `SELECT p.id promotionId,p.code,p.name,p.description,p.benefit_type benefitType,p.discount_minor discountMinor,p.percent,
+const selection = `SELECT EXISTS(SELECT 1 FROM promotion_product_target target WHERE target.promotion_id=p.id) productSale,p.id promotionId,p.code,p.name,p.description,p.benefit_type benefitType,p.discount_minor discountMinor,p.percent,
  p.minimum_minor minimumMinor,p.maximum_discount_minor maximumDiscountMinor,p.ends_at endsAt,m.id mediaId,m.version,m.alt_text altText
  FROM promotion p JOIN promotion_media m ON m.promotion_id=p.id AND m.status='active'`;
 function campaign(raw: unknown): PublishedPromotionCampaign | null {
@@ -56,6 +57,7 @@ function campaign(raw: unknown): PublishedPromotionCampaign | null {
   )
     return null;
   return {
+    ...(row.productSale === 1 ? { productSale: true } : {}),
     promotionId: row.promotionId,
     code: row.code,
     name: row.name,

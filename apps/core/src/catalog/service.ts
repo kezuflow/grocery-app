@@ -10,6 +10,7 @@ import type {
   MarketplaceProductView,
 } from "@freshmarkets/contracts";
 import { productMediaProjectionSql, publishedProductMediaView } from "./published-product-media";
+import { readPublicProductSalePrices } from "../promotions/application/product-sales";
 
 /**
  * Minimal raw D1 surface used by catalog reads; catalog queries bypass ORM
@@ -435,6 +436,18 @@ async function hydrateProducts(
   const inventoryBySku = new Map(inventoryRows.map((row) => [row.sku_id, row.available_base]));
   const activeMode = modeRow?.activeMode ?? "SCHEDULED";
   const modeAvailable = modeRow?.modeAvailable === 1;
+  const salePrices =
+    context && modeAvailable
+      ? await readPublicProductSalePrices(database, {
+          locationId: context.locationId,
+          fulfillmentMode: activeMode,
+          at: nowMs,
+          prices: priceRows.map((price) => ({
+            skuId: price.sku_id,
+            priceMinor: price.amount_minor,
+          })),
+        })
+      : new Map<string, NonNullable<CatalogVariant["sale"]>>();
   const detailsByProduct = new Map<string, CatalogDetail[]>();
   for (const detail of productDetailRows) {
     const bucket = detailsByProduct.get(detail.product_id) ?? [];
@@ -484,6 +497,9 @@ async function hydrateProducts(
                 ? (customerNotesBySku.get(sku.id) ?? null)
                 : null,
           priceMinor: price?.amount_minor ?? null,
+          ...(availability === "AVAILABLE" && salePrices.has(sku.id)
+            ? { sale: salePrices.get(sku.id) }
+            : {}),
           currency: price?.currency ?? null,
           priceVersion: price?.version ?? null,
           availability,

@@ -1,4 +1,6 @@
 import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
+import { productSaleTargetsJsonSql } from "../../promotions/application/product-sales";
+import { adminPromotionProductTargetSchema } from "@freshmarkets/validation";
 import { resolveCustomerAdministrationAccess } from "./customer-administration-access";
 import { manageableBenefitTypes } from "@freshmarkets/contracts";
 import {
@@ -24,6 +26,7 @@ import {
 } from "./promotion-administration-access";
 
 type PromotionRow = {
+  productTargetsJson: string;
   promotionId: string;
   code: string;
   name: string;
@@ -46,7 +49,7 @@ type PromotionRow = {
 };
 
 const PROMOTION_SELECT = `
-  SELECT id AS promotionId, code, name, description, status,
+  SELECT ${productSaleTargetsJsonSql} AS productTargetsJson, id AS promotionId, code, name, description, status,
          benefit_type AS benefitType, discount_minor AS discountMinor, percent, maximum_discount_minor AS maximumDiscountMinor,
          minimum_minor AS minimumMinor, starts_at AS startsAt, ends_at AS endsAt,
          global_usage_limit AS globalUsageLimit, per_customer_usage_limit AS perCustomerUsageLimit,
@@ -55,6 +58,9 @@ const PROMOTION_SELECT = `
 
 export function toPromotionSummary(row: PromotionRow): AdminPromotionSummary {
   return {
+    productTargets: adminPromotionProductTargetSchema
+      .array()
+      .parse(JSON.parse(row.productTargetsJson ?? "[]")),
     promotionId: row.promotionId,
     code: row.code,
     name: row.name,
@@ -192,6 +198,17 @@ export async function previewAdminPromotion(
     };
   }
 
+  if (toPromotionSummary(row).productTargets?.length) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message:
+          "A product sale depends on the selected items, quantities and location. Use checkout to confirm its discount; a subtotal alone cannot preview it.",
+        requestId: request.requestId,
+      },
+    };
+  }
   if (request.customerId !== undefined) {
     const customerAccess = await resolveCustomerAdministrationAccess(
       deps,

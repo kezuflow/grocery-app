@@ -1,3 +1,27 @@
+const pendingCartPaymentSql = `EXISTS (SELECT 1 FROM checkout_quote quote WHERE quote.cart_id=? AND quote.status='ACTIVE'
+  AND EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.subject_type='checkout_quote' AND payment.subject_id=quote.id
+    AND payment.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')))`;
+
+export async function cartHasUnsettledCheckout(
+  database: D1Database,
+  cartId: string,
+): Promise<boolean> {
+  return Boolean(
+    await database.prepare(`SELECT 1 WHERE ${pendingCartPaymentSql}`).bind(cartId).first(),
+  );
+}
+
+/** Refresh may replace unpaid quotes only. Keep paid/unknown holds and their
+ * sale claims until their existing payment or reconciliation flow settles them. */
+export function quoteRefreshPaymentGuard(
+  database: D1Database,
+  cartId: string,
+): D1PreparedStatement {
+  return database
+    .prepare(`INSERT INTO commitment_abort(id) SELECT -42 WHERE ${pendingCartPaymentSql}`)
+    .bind(cartId);
+}
+
 /** Checkout-owned entitlement release; the composing command supplies financial authority. */
 export function releaseUncommittedCheckoutStatements(
   database: D1Database,

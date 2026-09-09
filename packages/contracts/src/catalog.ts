@@ -15,6 +15,14 @@ export type CatalogVariant = {
   consumptionBaseQuantity: number;
   contentsNote: string | null;
   priceMinor: number | null;
+  /** Current public, unconditional price for one unit; checkout confirms quantities and eligibility. */
+  sale?: {
+    promotionId: string;
+    name: string;
+    priceMinor: number;
+    remainingQuantity: number | null;
+    endsAt: string | null;
+  };
   currency: string | null;
   priceVersion: number | null;
   availability: "AVAILABLE" | "OUT_OF_STOCK" | "PRICE_UNAVAILABLE" | "LOCATION_REQUIRED";

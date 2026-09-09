@@ -4,6 +4,10 @@ import type { AdminPromotionDetail, AdminPromotionUpdateRequest } from "@freshma
 import { adminPromotionUpdateBodySchema } from "@freshmarkets/validation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import {
+  PromotionProductTargetsEditor,
+  type SaleTargetSelection,
+} from "./promotion-product-targets-editor";
 
 function minor(text: string) {
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(text.trim());
@@ -25,11 +29,19 @@ export function PromotionDefinitionForm({
   ) => Promise<boolean>;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [productSale, setProductSale] = useState(Boolean(promotion.productTargets?.length));
+  const [productTargets, setProductTargets] = useState<SaleTargetSelection[]>([
+    ...(promotion.productTargets ?? []),
+  ]);
   return (
     <form
       className="space-y-4 p-4"
       onSubmit={(event) => {
         event.preventDefault();
+        if (productSale && !productTargets.length) {
+          setError("Add at least one selling option to the product sale.");
+          return;
+        }
         const data = new FormData(event.currentTarget);
         const startsAt = String(data.get("startsAt"));
         const endsAt = String(data.get("endsAt"));
@@ -41,12 +53,20 @@ export function PromotionDefinitionForm({
             : promotion.benefitType.endsWith("PERCENT_DISCOUNT")
               ? { percent: Number(data.get("discount")) }
               : {}),
-          maximumDiscountMinor: data.get("maximum") ? minor(String(data.get("maximum"))) : null,
+          maximumDiscountMinor:
+            !productSale && data.get("maximum") ? minor(String(data.get("maximum"))) : null,
+          productTargets: productSale
+            ? productTargets.map(({ skuId, locationId, quantityLimit }) => ({
+                skuId,
+                locationId,
+                quantityLimit,
+              }))
+            : [],
           globalUsageLimit: data.get("globalLimit") ? Number(data.get("globalLimit")) : null,
           perCustomerUsageLimit: data.get("customerLimit")
             ? Number(data.get("customerLimit"))
             : null,
-          automatic: data.get("automatic") === "on",
+          automatic: productSale || data.get("automatic") === "on",
           minimumMinor: minor(String(data.get("minimum"))),
           startsAt: `${startsAt}Z`,
           endsAt: endsAt ? `${endsAt}Z` : null,
@@ -133,6 +153,7 @@ export function PromotionDefinitionForm({
           Maximum discount (pesos, optional)
           <Input
             name="maximum"
+            disabled={productSale}
             aria-label="Campaign maximum discount"
             defaultValue={
               promotion.maximumDiscountMinor == null
@@ -165,10 +186,24 @@ export function PromotionDefinitionForm({
           />
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="automatic" defaultChecked={promotion.automatic} />
+          <input
+            type="checkbox"
+            name="automatic"
+            disabled={productSale}
+            defaultChecked={promotion.automatic}
+          />
           Apply automatically when eligible
         </label>
       </fieldset>
+      {promotion.benefitType.startsWith("ORDER_") ? (
+        <PromotionProductTargetsEditor
+          enabled={productSale}
+          onEnabledChange={setProductSale}
+          value={productTargets}
+          onChange={setProductTargets}
+          disabled={disabled}
+        />
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm">
           {error}

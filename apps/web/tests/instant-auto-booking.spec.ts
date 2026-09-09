@@ -29,7 +29,7 @@ for (const width of [1440, 390]) {
       process.env.E2E_PROVIDER_GATEWAY !== "1",
       "Requires the managed test-provider ingress.",
     );
-    test.setTimeout(300000);
+    test.setTimeout(420000);
     page.setDefaultTimeout(10000);
     admin.setDefaultTimeout(10000);
     await page.setViewportSize({ width, height: 1000 });
@@ -218,7 +218,7 @@ for (const width of [1440, 390]) {
       expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
       await page.goto(url.searchParams.get("returnTo") ?? "/orders");
     }
-    async function checkout(quantity: number) {
+    async function checkout(quantity: number, itemDiscountMinor = 0) {
       const before = orders.parse(await read(page, "/api/commerce/orders"));
       const cart = z
         .object({ id: z.string(), version: z.number() })
@@ -230,6 +230,15 @@ for (const width of [1440, 390]) {
         quantity,
         idempotencyKey: crypto.randomUUID(),
       });
+      if (itemDiscountMinor > 0) {
+        await page.goto("/cart");
+        await expect(page.getByLabel("Regular line price", { exact: true })).toHaveText("₱2.00");
+        await expect(page.getByLabel("Sale line price", { exact: true })).toHaveText("₱1.50");
+        await page.screenshot({
+          path: testInfo.outputPath(`ca34-cart-sale-${width}.png`),
+          fullPage: true,
+        });
+      }
       await page.goto("/checkout");
       await page.getByRole("radio").first().check();
       const quoteResponse = page.waitForResponse(
@@ -241,9 +250,14 @@ for (const width of [1440, 390]) {
         .first()
         .click();
       const quote = z
-        .object({ totalMinor: z.number(), merchandiseSubtotalMinor: z.number() })
+        .object({
+          totalMinor: z.number(),
+          merchandiseSubtotalMinor: z.number(),
+          itemDiscountMinor: z.number(),
+        })
         .parse(await value(await quoteResponse));
       expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100);
+      expect(quote.itemDiscountMinor).toBe(itemDiscountMinor);
       await page.getByRole("region", { name: "Order total review" }).screenshot({
         path: testInfo.outputPath(`checkout-delivery-policy-${width}.png`),
       });
@@ -277,6 +291,92 @@ for (const width of [1440, 390]) {
       ok: false,
       error: { code: "ILLEGAL_TRANSITION" },
     });
+    // CA-3.4: ordinary Admin authoring, Core-priced browsing/cart, paid checkout
+    // and customer cancellation. The existing signed fake-provider ingress is
+    // reused; no commerce response is mocked and no real provider is charged.
+    const saleCode = `SALE_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
+    await admin.goto("/admin/promotions");
+    await admin.getByLabel("Promotion code", { exact: true }).fill(saleCode);
+    await admin.getByLabel("Promotion name", { exact: true }).fill(`Onion sale ${width}`);
+    await admin.getByLabel("Fixed discount in pesos").fill("0.20");
+    await admin.getByLabel("Sale on selected products", { exact: true }).check();
+    await admin.getByLabel("Search sale products").fill("red onion");
+    await admin.getByRole("button", { name: "Search", exact: true }).click();
+    await admin.getByRole("combobox", { name: "Sale product", exact: true }).click();
+    await admin.getByRole("option", { name: /red onion/i }).click();
+    await admin.getByRole("combobox", { name: "Sale selling option", exact: true }).click();
+    await admin.getByRole("option", { name: /500/ }).click();
+    await admin.getByRole("combobox", { name: "Sale location", exact: true }).click();
+    await admin.getByRole("option", { name: "Central Cebu", exact: true }).click();
+    await admin.getByLabel("Sale quantity limit").fill("2");
+    await admin.getByRole("button", { name: "Add to sale", exact: true }).click();
+    const saleCreated = admin.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/promotions") && response.request().method() === "POST",
+    );
+    await admin.getByRole("button", { name: "Create draft", exact: true }).click();
+    const sale = z.object({ promotionId: z.string() }).parse(await value(await saleCreated));
+    const saleUrl = `/api/admin/promotions/${sale.promotionId}`;
+    const saleView = z.object({
+      version: z.number(),
+      productTargets: z.array(z.object({ remainingQuantity: z.number().nullable() })),
+    });
+    await admin.goto(`/admin/promotions/${sale.promotionId}`);
+    await admin.getByLabel("Campaign discount", { exact: true }).fill("0.25");
+    const saleSaved = admin.waitForResponse(
+      (response) => response.url().endsWith(saleUrl) && response.request().method() === "PATCH",
+    );
+    await admin.getByRole("button", { name: "Save campaign", exact: true }).click();
+    await value(await saleSaved);
+    await admin.getByLabel("Reason", { exact: true }).fill("Start chosen sale quantity");
+    const saleActivated = admin.waitForResponse(
+      (response) =>
+        response.url().endsWith(`${saleUrl}/status`) && response.request().method() === "POST",
+    );
+    await admin.getByRole("button", { name: "Activate", exact: true }).click();
+    await value(await saleActivated);
+    await page.goto("/products/red-onion");
+    await expect(page.getByLabel("Sale price", { exact: true })).toHaveText("₱0.75");
+    await expect(page.getByLabel("Regular price", { exact: true })).toHaveText("₱1.00");
+    await page.screenshot({
+      path: testInfo.outputPath(`ca34-product-sale-${width}.png`),
+      fullPage: true,
+    });
+    const oversizedCart = z
+      .object({ id: z.string(), version: z.number() })
+      .parse(await read(page, "/api/commerce/cart"));
+    await post(page, "/api/commerce/cart", {
+      cartId: oversizedCart.id,
+      expectedVersion: oversizedCart.version,
+      skuId,
+      quantity: 3,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await page.goto("/cart");
+    await expect(page.getByLabel("Regular line price", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Sale line price", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("₱3.00", { exact: true }).first()).toBeVisible();
+    const saleOrder = await checkout(2, 50);
+    expect(saleView.parse(await read(admin, saleUrl)).productTargets[0]?.remainingQuantity).toBe(0);
+    await page.goto(`/orders/${saleOrder}`);
+    await page.getByRole("button", { name: "Cancel order", exact: true }).click();
+    await page.getByLabel("Reason for cancellation").fill("Cancel before preparation");
+    const canceledSale = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/orders/${saleOrder}/cancel`) &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
+    await value(await canceledSale);
+    const restoredSale = saleView.parse(await read(admin, saleUrl));
+    expect(restoredSale.productTargets[0]?.remainingQuantity).toBe(2);
+    await post(admin, `${saleUrl}/status`, {
+      action: "DEACTIVATE",
+      reason: "End completed sale test",
+      expectedVersion: restoredSale.version,
+    });
+    await page.goto("/products/red-onion");
+    await expect(page.getByLabel("Sale price", { exact: true })).toHaveCount(0);
     const orderId = await checkout(2);
     const deliverySchema = z.object({
       items: z.array(

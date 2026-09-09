@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { ProductMedia } from "../product-media";
 import { ProductGallery } from "../product-gallery";
+import { ProductPrice } from "../product-price";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { formatMoney, toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../../lib/storefront/catalog-presentation";
@@ -225,16 +226,25 @@ export function ProductQuickView({
                         <span className="font-semibold">{variant.label}</span>
                       </span>
                       <span className="fm-font-display text-base font-bold tabular-nums">
-                        {variant.availability === "OUT_OF_STOCK"
-                          ? "Out of stock"
-                          : variant.priceMinor === null || variant.currency === null
-                            ? "Unavailable"
-                            : formatMoney(variant.priceMinor, variant.currency)}
+                        {variant.availability === "OUT_OF_STOCK" ? (
+                          "Out of stock"
+                        ) : (
+                          <ProductPrice variant={variant} />
+                        )}
                       </span>
                     </label>
                   ))}
                 </div>
               </fieldset>
+              {selected?.sale ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Sale price is per selling unit.{" "}
+                  {selected.sale.remainingQuantity !== null
+                    ? `Up to ${selected.sale.remainingQuantity} units remain; your full quantity must fit to get the sale.`
+                    : ""}{" "}
+                  Cart and checkout confirm current savings.
+                </p>
+              ) : null}
               {selected?.contentsNote ? (
                 <p className="mt-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
                   {selected.contentsNote}
@@ -331,9 +341,11 @@ export function ProductQuickView({
               }
               className="inline-flex h-11 flex-1 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-4 text-sm font-bold text-[var(--fm-primary-dark)] transition-colors hover:bg-[#a9e83f] disabled:opacity-60 sm:flex-none sm:px-6"
             >
-              {selected && selected.priceMinor !== null && selected.currency
-                ? `Add to cart · ${formatMoney(selected.priceMinor * quantity, selected.currency)}`
-                : "Add to cart"}
+              {selected?.sale
+                ? "Add to cart · Check current savings"
+                : selected && selected.priceMinor !== null && selected.currency
+                  ? `Add to cart · ${formatMoney(selected.priceMinor * quantity, selected.currency)}`
+                  : "Add to cart"}
             </button>
           </div>
         </div>

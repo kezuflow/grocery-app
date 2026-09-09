@@ -1,4 +1,5 @@
 import { zeroRefundCancellationStatements } from "./complete-zero-refund-cancellation";
+import { restoreCanceledProductSaleStatements } from "../../promotions/application/product-sales";
 import type { RefundState } from "@freshmarkets/contracts";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { z } from "@freshmarkets/validation";
@@ -657,6 +658,7 @@ function releaseOperationalEffectStatements(
         "UPDATE inventory_balance SET reserved=reserved-(SELECT COALESCE(SUM(quantity),0) FROM inventory_reservation r WHERE r.order_id=? AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id AND r.status='RESERVED'),version=version+1 WHERE EXISTS (SELECT 1 FROM inventory_reservation r WHERE r.order_id=? AND r.status='RESERVED' AND r.location_id=inventory_balance.location_id AND r.inventory_pool_id=inventory_balance.inventory_pool_id)",
       )
       .bind(orderId, orderId),
+    ...restoreCanceledProductSaleStatements(database, orderId),
     database
       .prepare(
         "UPDATE inventory_reservation SET status='RELEASED',version=version+1 WHERE order_id=? AND status='RESERVED'",

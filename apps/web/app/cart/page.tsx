@@ -119,7 +119,7 @@ export default function CartPage() {
                           ? item.availability === "PRICE_UNAVAILABLE"
                             ? "Price unavailable"
                             : "Unavailable"
-                          : `${money(item.unitPriceMinor)} each · fixed pack`}
+                          : `${item.regularLineTotalMinor !== undefined ? "Regular " : ""}${money(item.unitPriceMinor)} each · fixed pack`}
                       </p>
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                         <div className="inline-flex h-10 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
@@ -143,7 +143,23 @@ export default function CartPage() {
                           </button>
                         </div>
                         <strong className="tabular-nums">
-                          {item.lineTotalMinor === null ? "—" : money(item.lineTotalMinor)}
+                          {item.regularLineTotalMinor !== undefined ? (
+                            <del
+                              className="mr-2 text-xs font-normal text-muted-foreground"
+                              aria-label="Regular line price"
+                            >
+                              {money(item.regularLineTotalMinor)}
+                            </del>
+                          ) : null}
+                          <span
+                            aria-label={
+                              item.regularLineTotalMinor !== undefined
+                                ? "Sale line price"
+                                : undefined
+                            }
+                          >
+                            {item.lineTotalMinor === null ? "—" : money(item.lineTotalMinor)}
+                          </span>
                         </strong>
                       </div>
                     </div>

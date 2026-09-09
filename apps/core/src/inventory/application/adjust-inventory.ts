@@ -1,4 +1,5 @@
 import type { AppErrorCode } from "@freshmarkets/contracts";
+import { capProductSaleAllowanceStatements } from "../../promotions/application/product-sales";
 import { z } from "@freshmarkets/validation";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { createInventoryRepository } from "../infrastructure/inventory-repository";
@@ -159,6 +160,12 @@ export async function adjustInventory(
       .bind(SCOPE, command.idempotencyKey, hash, now, now, hash, legacyHash),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -39 WHERE changes()<>1"),
     ...repository.adjustmentStatements(command, ledgerEntryId, now),
+    ...(command.deltaBase < 0
+      ? capProductSaleAllowanceStatements(database, {
+          locationId: command.locationId,
+          inventoryPoolId: command.inventoryPoolId,
+        })
+      : []),
     database
       .prepare(
         "INSERT INTO commitment_abort(id) SELECT -39 WHERE NOT EXISTS (SELECT 1 FROM inventory_balance WHERE location_id=? AND inventory_pool_id=? AND on_hand=? AND reserved=? AND version=?)",

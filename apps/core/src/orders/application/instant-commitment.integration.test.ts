@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import { createPayment } from "../../payments/application/create-payment";
 import { redrivePaymentReactions } from "../../payments/application/redrive-payment-reactions";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
@@ -18,6 +18,9 @@ import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-d
 import { adjustInventory } from "../../inventory/application/adjust-inventory";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { requestOrderCancellation } from "./cancel-order";
+import { getProduct } from "../../catalog/service";
+import { getCart } from "../../checkout/application/cart";
+import { abandonCheckoutAttempt } from "../../checkout/application/abandon-checkout-attempt";
 
 const LOCATION = "location-cebu-central";
 const deliveryProvider = createMockDeliveryProvider();
@@ -61,6 +64,8 @@ async function configureInstant(maxOrders = 25): Promise<void> {
 async function seededInstantQuote(
   member = true,
   secondPool = false,
+  promotionCodes: readonly string[] = [],
+  quantity = 5,
 ): Promise<{ quoteId: string; customerId: string }> {
   const customerId = `cust-cmt-${++counter}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
@@ -103,9 +108,9 @@ async function seededInstantQuote(
     .bind(cartId, customerId, LOCATION, now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-red-onion-500g', 5)",
+    "INSERT INTO cart_item (cart_id, sku_id, quantity) VALUES (?, 'sku-red-onion-500g', ?)",
   )
-    .bind(cartId)
+    .bind(cartId, quantity)
     .run();
   if (secondPool) {
     await env.DB.batch([
@@ -131,6 +136,7 @@ async function seededInstantQuote(
       customerId,
       cartId,
       cartVersion: 1,
+      promotionCodes,
       addressId,
       deliveryCycleId: null,
       fulfillmentOptionId: "opaque-lalamove-option",
@@ -251,6 +257,380 @@ async function refundedUncommittedFixture(partial = false) {
 }
 
 describe("instant order commitment", () => {
+  it("holds item-sale quantities, preserves paid prices after stopping, and restores only with cancellation stock release", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_balance SET on_hand=1000000 WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION)
+      .run();
+    const manager = await locationManager();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('promotions.manage','promotions.read','inventory.adjust')",
+    )
+      .bind(manager.id)
+      .run();
+    const meta = { headers: manager.headers, requestId: crypto.randomUUID() };
+    const ids: string[] = [];
+    onTestFinished(async () => {
+      for (const promotionId of ids) {
+        const row = await env.DB.prepare("SELECT version,status FROM promotion WHERE id=?")
+          .bind(promotionId)
+          .first<{ version: number; status: string }>();
+        if (row?.status === "ACTIVE")
+          await exports.default.changeAdminPromotionStatus({
+            ...meta,
+            promotionId,
+            expectedVersion: row.version,
+            action: "DEACTIVATE",
+            reason: "End test sale",
+            idempotencyKey: crypto.randomUUID(),
+          });
+      }
+    });
+    const definition = {
+      ...meta,
+      code: `SALE_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`,
+      name: "Onion sale",
+      description: "",
+      benefitType: "ORDER_FIXED_DISCOUNT" as const,
+      discountMinor: 100,
+      minimumMinor: 0,
+      startsAt: new Date(Date.now() - 1000).toISOString(),
+      endsAt: new Date(Date.now() + 86400000).toISOString(),
+      productTargets: [{ skuId: "sku-red-onion-500g", locationId: LOCATION, quantityLimit: 5 }],
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const created = await exports.default.createAdminPromotion(definition);
+    if (!created.ok) throw new Error(created.error.message);
+    const saleId = created.value.promotionId;
+    ids.push(saleId);
+    expect(created.value.productTargets).toMatchObject([
+      { quantityLimit: 5, remainingQuantity: 5 },
+    ]);
+    expect(await exports.default.createAdminPromotion(definition)).toEqual(created);
+    const activated = await exports.default.changeAdminPromotionStatus({
+      ...meta,
+      promotionId: saleId,
+      expectedVersion: created.value.version,
+      action: "ACTIVATE",
+      reason: "Start sale",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!activated.ok) throw new Error(activated.error.message);
+    const publicSale = (await getProduct(env.DB, "red-onion", LOCATION))?.product.variants.find(
+      (variant) => variant.id === "sku-red-onion-500g",
+    );
+    expect(publicSale?.sale).toMatchObject({
+      promotionId: saleId,
+      priceMinor: publicSale!.priceMinor! - 100,
+      remainingQuantity: 5,
+    });
+    expect(
+      await exports.default.previewAdminPromotion({
+        ...meta,
+        promotionId: saleId,
+        subtotalMinor: 10000,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    const overlap = await exports.default.createAdminPromotion({
+      ...definition,
+      code: `OTHER_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!overlap.ok) throw new Error(overlap.error.message);
+    ids.push(overlap.value.promotionId);
+    expect(
+      await exports.default.changeAdminPromotionStatus({
+        ...meta,
+        promotionId: overlap.value.promotionId,
+        expectedVersion: 1,
+        action: "ACTIVATE",
+        reason: "Try overlap",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT status FROM promotion WHERE id=?")
+        .bind(overlap.value.promotionId)
+        .first(),
+    ).toEqual({ status: "DRAFT" });
+    const groceryCode = `GROCERY_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
+    const grocery = await exports.default.createAdminPromotion({
+      ...definition,
+      code: groceryCode,
+      name: "Full-price groceries",
+      benefitType: "ORDER_PERCENT_DISCOUNT",
+      discountMinor: undefined,
+      percent: 10,
+      productTargets: [],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!grocery.ok) throw new Error(grocery.error.message);
+    ids.push(grocery.value.promotionId);
+    expect(
+      await exports.default.changeAdminPromotionStatus({
+        ...meta,
+        promotionId: grocery.value.promotionId,
+        expectedVersion: 1,
+        action: "ACTIVATE",
+        reason: "Start full-price grocery code",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const { quoteId, customerId } = await seededInstantQuote(false, true, [groceryCode]);
+    expect(
+      await env.DB.prepare("SELECT item_discount_minor FROM checkout_quote WHERE id=?")
+        .bind(quoteId)
+        .first(),
+    ).toEqual({ item_discount_minor: 500 });
+    const fullPriceBasis = await env.DB.prepare(
+      "SELECT json_extract(line.value,'$.lineTotalMinor') line_subtotal_minor FROM checkout_quote quote, json_each(quote.lines_json) line WHERE quote.id=? AND json_extract(line.value,'$.skuId')='sku-potato-500g'",
+    )
+      .bind(quoteId)
+      .first<{ line_subtotal_minor: number }>();
+    expect(
+      await env.DB.prepare("SELECT order_discount_minor FROM checkout_quote WHERE id=?")
+        .bind(quoteId)
+        .first(),
+    ).toEqual({ order_discount_minor: Math.floor(fullPriceBasis!.line_subtotal_minor / 10) });
+    const cartView = await getCart(env.DB, {
+      customerId,
+      headers: {},
+      requestId: crypto.randomUUID(),
+    });
+    if (!cartView.ok) throw new Error(cartView.error.message);
+    const cartOnion = cartView.value.items.find((item) => item.skuId === "sku-red-onion-500g")!;
+    expect(cartOnion.regularLineTotalMinor! - cartOnion.lineTotalMinor!).toBe(500);
+    expect(
+      (await getProduct(env.DB, "red-onion", LOCATION))?.product.variants.find(
+        (variant) => variant.id === "sku-red-onion-500g",
+      )?.sale,
+    ).toBeUndefined();
+    const second = await seededInstantQuote(false);
+    expect(
+      await env.DB.prepare("SELECT item_discount_minor FROM checkout_quote WHERE id=?")
+        .bind(second.quoteId)
+        .first(),
+    ).toEqual({ item_discount_minor: 0 });
+    const { intentId, reactionId } = await seedReaction(quoteId);
+    for (const paymentState of ["PROCESSING", "SUCCEEDED"]) {
+      await env.DB.prepare("UPDATE payment_intent SET status=? WHERE id=?")
+        .bind(paymentState, intentId)
+        .run();
+      expect(
+        await createCheckoutQuote(
+          env.DB,
+          {
+            customerId,
+            cartId: `cart-${customerId}`,
+            cartVersion: 1,
+            addressId: `addr-${customerId}`,
+            deliveryCycleId: null,
+            fulfillmentOptionId: "opaque-lalamove-option",
+            idempotencyKey: crypto.randomUUID(),
+            requestId: crypto.randomUUID(),
+          },
+          quoteDependencies,
+        ),
+      ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM checkout_inventory_holds WHERE checkout_attempt_id=? AND status='HELD'",
+        )
+          .bind(quoteId)
+          .first(),
+      ).toEqual({ n: 2 });
+      expect(
+        await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?").bind(quoteId).first(),
+      ).toEqual({ status: "ACTIVE" });
+    }
+    expect(
+      await exports.default.changeAdminPromotionStatus({
+        ...meta,
+        promotionId: saleId,
+        expectedVersion: activated.value.version,
+        action: "DEACTIVATE",
+        reason: "Stop new sales",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const input = {
+      reactionId,
+      paymentIntentId: intentId,
+      checkoutAttemptId: quoteId,
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    const committed = await applyCheckoutPaymentReaction(env.DB, input);
+    if (!committed.applied || !committed.orderId)
+      throw new Error("Discounted order did not commit");
+    expect(await applyCheckoutPaymentReaction(env.DB, input)).toMatchObject({
+      applied: true,
+      orderId: committed.orderId,
+    });
+    const remaining = () =>
+      env.DB.prepare("SELECT remaining_quantity FROM promotion_product_target WHERE promotion_id=?")
+        .bind(saleId)
+        .first();
+    expect(await remaining()).toEqual({ remaining_quantity: 0 });
+    const refundProvider = createMockPaymentProvider();
+    const refundRegistry = new ProviderRegistry("test", [refundProvider]);
+    const refundKey = crypto.randomUUID();
+    expect(
+      await requestRefund(env.DB, refundRegistry, {
+        paymentIntentId: intentId,
+        amountMinor: 1,
+        reason: "Partial financial remedy without returning goods",
+        idempotencyKey: refundKey,
+        actorId: manager.id,
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    if (!refundProvider.lookupRefund) throw new Error("Missing local refund lookup");
+    const refundObservation = await refundProvider.lookupRefund({
+      providerReference: `mock_pay_${intentId}`,
+      providerRefundReference: null,
+      refundProviderIdempotencyKey: refundKey,
+    });
+    if (refundObservation.outcome !== "FOUND") throw new Error("Missing local refund observation");
+    setMockRefundObservation(refundProvider, refundKey, {
+      outcome: "FOUND",
+      refund: { ...refundObservation.refund, canonicalState: "SUCCEEDED", observedAt: Date.now() },
+    });
+    await reconcileRefunds(env.DB, refundRegistry, Date.now() + 120000);
+    expect(await remaining()).toEqual({ remaining_quantity: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM inventory_reservation WHERE order_id=? AND status='RESERVED'",
+      )
+        .bind(committed.orderId)
+        .first(),
+    ).toEqual({ n: 2 });
+    const cancellation = {
+      orderId: committed.orderId,
+      customerId,
+      expectedVersion: 1,
+      reason: "Cancel before preparation",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER suppress_sale_restore BEFORE UPDATE ON promotion_product_target WHEN NEW.remaining_quantity>OLD.remaining_quantity BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await requestOrderCancellation(env.DB, cancellation)).toMatchObject({ ok: false });
+      expect(await remaining()).toEqual({ remaining_quantity: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM inventory_reservation WHERE order_id=? AND status='RESERVED'",
+        )
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ n: 2 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER suppress_sale_restore");
+    }
+    const canceled = await requestOrderCancellation(env.DB, cancellation);
+    expect(canceled).toMatchObject({ ok: true });
+    expect(await remaining()).toEqual({ remaining_quantity: 5 });
+    expect(await requestOrderCancellation(env.DB, cancellation)).toEqual(canceled);
+    expect(await remaining()).toEqual({ remaining_quantity: 5 });
+    expect(
+      await abandonCheckoutAttempt(env.DB, {
+        ...second,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const actor = await env.DB.prepare("SELECT auth_user_id FROM staff_identity WHERE id=?")
+      .bind(manager.id)
+      .first<{ auth_user_id: string }>();
+    if (!actor) throw new Error("Missing stock operator");
+    const stock = () =>
+      env.DB.prepare(
+        "SELECT on_hand,reserved,version FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
+      )
+        .bind(LOCATION)
+        .first<{ on_hand: number; reserved: number; version: number }>();
+    const before = (await stock())!;
+    const reduction = {
+      actorId: manager.id,
+      actorAuthUserId: actor.auth_user_id,
+      locationId: LOCATION,
+      inventoryPoolId: "pool-red-onion",
+      deltaBase: -(before.on_hand - before.reserved - 1000),
+      expectedVersion: before.version,
+      reason: "Remove unsellable onions",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER suppress_sale_cap BEFORE UPDATE ON promotion_product_target WHEN NEW.remaining_quantity<OLD.remaining_quantity BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await adjustInventory(env.DB, reduction)).toMatchObject({ ok: false });
+      expect(await stock()).toEqual(before);
+      expect(await remaining()).toEqual({ remaining_quantity: 5 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER suppress_sale_cap");
+    }
+    expect(await adjustInventory(env.DB, reduction)).toMatchObject({ ok: true });
+    expect(await remaining()).toEqual({ remaining_quantity: 2 });
+    expect(
+      await adjustInventory(env.DB, {
+        ...reduction,
+        deltaBase: 5000,
+        expectedVersion: (await stock())!.version,
+        reason: "New stock",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await remaining()).toEqual({ remaining_quantity: 2 });
+    const restartVersion = await env.DB.prepare("SELECT version FROM promotion WHERE id=?")
+      .bind(saleId)
+      .first<{ version: number }>();
+    expect(
+      await exports.default.changeAdminPromotionStatus({
+        ...meta,
+        promotionId: saleId,
+        expectedVersion: restartVersion!.version,
+        action: "ACTIVATE",
+        reason: "Restart remaining two units",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const competing = await Promise.allSettled([
+      seededInstantQuote(false, false, [], 2),
+      seededInstantQuote(false, false, [], 2),
+    ]);
+    const completedQuotes = competing.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    expect(completedQuotes.length).toBeGreaterThanOrEqual(1);
+    const claims = await env.DB.prepare(
+      "SELECT claim.checkout_quote_id quoteId FROM checkout_promotion_claim claim JOIN checkout_inventory_holds hold ON hold.checkout_attempt_id=claim.checkout_quote_id AND hold.status='HELD' WHERE claim.promotion_id=? AND claim.status='UNCOMMITTED'",
+    )
+      .bind(saleId)
+      .all<{ quoteId: string }>();
+    expect(claims.results).toHaveLength(1);
+    const winner = completedQuotes.find((quote) => quote.quoteId === claims.results[0]?.quoteId);
+    expect(winner).toBeDefined();
+    for (const quote of completedQuotes)
+      expect(
+        await abandonCheckoutAttempt(env.DB, {
+          ...quote,
+          expectedVersion: 1,
+          idempotencyKey: crypto.randomUUID(),
+          requestId: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+    expect(
+      (await getProduct(env.DB, "red-onion", LOCATION))?.product.variants.find(
+        (variant) => variant.id === "sku-red-onion-500g",
+      )?.sale?.remainingQuantity,
+    ).toBe(2);
+  });
   it("cleans retained failed commitment work only after verified full refund", async () => {
     const f = await refundedUncommittedFixture();
     await env.DB.prepare("UPDATE payment_reaction SET status='FAILED' WHERE id=?")

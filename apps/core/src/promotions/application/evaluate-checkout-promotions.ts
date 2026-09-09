@@ -1,4 +1,5 @@
 import { promotionRuleSchema } from "@freshmarkets/validation";
+import { readProductSaleTargets, heldProductSaleQuantitySql } from "./product-sales";
 import {
   evaluateCheckoutPromotionCandidates,
   permitsPromotionStack,
@@ -88,10 +89,10 @@ export async function evaluateCheckoutPromotions<T extends PromotionEvaluationCo
     const rules = await database
       .prepare(
         `SELECT promotion_id, rule_type, parameters_json FROM promotion_rule
-         WHERE promotion_id IN (${promotionIds.map(() => "?").join(",")})
+         WHERE promotion_id IN (SELECT value FROM json_each(?))
          ORDER BY promotion_id, sort_order, id`,
       )
-      .bind(...promotionIds)
+      .bind(JSON.stringify(promotionIds))
       .all<{ promotion_id: string; rule_type: string; parameters_json: string }>();
     for (const row of rules.results) {
       const parsed = safeRule(row);
@@ -102,7 +103,7 @@ export async function evaluateCheckoutPromotions<T extends PromotionEvaluationCo
     }
   }
 
-  const [orderCount, segments] = await Promise.all([
+  const [orderCount, segments, productTargets] = await Promise.all([
     database
       .prepare("SELECT COUNT(*) AS count FROM grocery_order WHERE customer_id=?")
       .bind(context.customerId)
@@ -115,9 +116,14 @@ export async function evaluateCheckoutPromotions<T extends PromotionEvaluationCo
       )
       .bind(context.customerId)
       .all<{ segment_id: string }>(),
+    readProductSaleTargets(database, promotionIds, {
+      quoteId: context.quoteId,
+      cartId: context.cartId,
+    }),
   ]);
 
   const candidates: CheckoutPromotionCandidate[] = rows.results.map((row) => ({
+    productTargets: productTargets.filter((target) => target.promotionId === row.id),
     id: row.id,
     code: row.code,
     name: row.name,
@@ -171,7 +177,27 @@ export function promotionClaimStatements(
   now: number,
 ): D1PreparedStatement[] {
   if (!permitsPromotionStack(applications)) throw new Error("PROMOTION_STACK_NOT_PERMITTED");
-  return applications.map((application) =>
+  return applications.flatMap((application) => [
+    ...(application.kind === "PRODUCT_SALE"
+      ? (application.lines ?? []).map((line) =>
+          database
+            .prepare(`INSERT INTO commitment_abort(id)
+      SELECT -8 WHERE NOT EXISTS (SELECT 1 FROM promotion_product_target target JOIN promotion p ON p.id=target.promotion_id
+        WHERE target.promotion_id=? AND target.sku_id=? AND target.location_id=? AND p.status='ACTIVE' AND p.version=?
+          AND (target.remaining_quantity IS NULL OR target.remaining_quantity-${heldProductSaleQuantitySql}>=?))`)
+            .bind(
+              application.promotionId,
+              line.skuId,
+              application.snapshot.locationId,
+              application.definitionVersion,
+              quoteId,
+              quoteId,
+              null,
+              null,
+              line.quantity,
+            ),
+        )
+      : []),
     database
       .prepare(
         `INSERT INTO checkout_promotion_claim (
@@ -193,5 +219,6 @@ export function promotionClaimStatements(
         JSON.stringify(application.snapshot),
         now,
       ),
-  );
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -8 WHERE changes()<>1"),
+  ]);
 }

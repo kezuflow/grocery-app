@@ -47,7 +47,22 @@ export type AdminPromotionSummary = {
   version: number;
   createdAt: string;
   updatedAt: string;
+  productTargets?: ReadonlyArray<AdminPromotionProductTarget>;
 };
+
+export type AdminPromotionProductTarget = {
+  skuId: string;
+  locationId: string;
+  quantityLimit: number | null;
+  remainingQuantity: number | null;
+  productName?: string;
+  skuName?: string;
+  locationName?: string;
+};
+export type AdminPromotionProductTargetInput = Omit<
+  AdminPromotionProductTarget,
+  "remainingQuantity" | "productName" | "skuName" | "locationName"
+>;
 
 export type AdminPromotionDetail = AdminPromotionSummary;
 
@@ -66,6 +81,7 @@ export type AdminPromotionDetailRequest = AuthenticatedRequest & {
 };
 
 export type AdminPromotionCreateRequest = AuthenticatedRequest & {
+  productTargets?: ReadonlyArray<AdminPromotionProductTargetInput>;
   code: string;
   name: string;
   description: string;
@@ -84,6 +100,7 @@ export type AdminPromotionCreateRequest = AuthenticatedRequest & {
 };
 
 export type AdminPromotionUpdateRequest = AuthenticatedRequest & {
+  productTargets?: ReadonlyArray<AdminPromotionProductTargetInput>;
   promotionId: string;
   name: string;
   description: string;

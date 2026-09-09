@@ -142,6 +142,8 @@ export type PromotionCodeFeedback = {
 };
 
 export type CheckoutPromotionApplicationView = {
+  kind?: "PRODUCT_SALE";
+  lines?: readonly { skuId: string; quantity: number; amountMinor: number }[];
   promotionId: string;
   code: string;
   name: string;
@@ -209,6 +211,8 @@ export type CartView = {
     availability: "AVAILABLE" | "UNAVAILABLE" | "PRICE_UNAVAILABLE";
     unitPriceMinor: number | null;
     lineTotalMinor: number | null;
+    /** Present only when Core applied a current item sale to the complete line. */
+    regularLineTotalMinor?: number;
   }>;
   totalMinor: number;
   currency: string;

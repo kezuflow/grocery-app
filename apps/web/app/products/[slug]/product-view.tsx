@@ -5,6 +5,7 @@ import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { ProductGallery } from "../../../components/storefront/product-gallery";
+import { ProductPrice } from "../../../components/storefront/product-price";
 import { addToCart, announceToast } from "../../../lib/storefront/cart-client";
 
 export function ProductView({ slug }: { slug: string }) {
@@ -164,18 +165,24 @@ export function ProductView({ slug }: { slug: string }) {
                 </span>
               </span>
               <span className="fm-font-display shrink-0 text-right text-base font-bold">
-                {variant.availability === "OUT_OF_STOCK"
-                  ? "Out of stock"
-                  : variant.priceMinor === null
-                    ? "Unavailable"
-                    : new Intl.NumberFormat("en-PH", {
-                        style: "currency",
-                        currency: variant.currency ?? "PHP",
-                      }).format(variant.priceMinor / 100)}
+                {variant.availability === "OUT_OF_STOCK" ? (
+                  "Out of stock"
+                ) : (
+                  <ProductPrice variant={variant} />
+                )}
               </span>
             </label>
           ))}
         </fieldset>
+        {selectedVariant?.sale ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Sale price is per selling unit.{" "}
+            {selectedVariant.sale.remainingQuantity !== null
+              ? `Up to ${selectedVariant.sale.remainingQuantity} units remain; your full quantity must fit to get the sale.`
+              : ""}{" "}
+            Cart and checkout confirm current savings.
+          </p>
+        ) : null}
         <div className="mt-5 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">

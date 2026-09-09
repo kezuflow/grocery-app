@@ -11,7 +11,19 @@ const manageableBenefitTypes = [
 const promotionStatuses = ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 const integer = z.number().int().safe();
 const id = z.string().min(1).max(200);
+export const adminPromotionProductTargetInputSchema = z.object({
+  skuId: id,
+  locationId: id,
+  quantityLimit: integer.positive().nullable(),
+});
+export const adminPromotionProductTargetSchema = adminPromotionProductTargetInputSchema.extend({
+  remainingQuantity: integer.nonnegative().nullable(),
+  productName: z.string().optional(),
+  skuName: z.string().optional(),
+  locationName: z.string().optional(),
+});
 const editable = {
+  productTargets: z.array(adminPromotionProductTargetInputSchema).max(100).optional(),
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(2000).default(""),
   discountMinor: integer.positive().optional(),
@@ -51,6 +63,7 @@ export const adminPromotionGrantBodySchema = z.object({
   maxRedemptions: integer.positive(),
 });
 export const adminPromotionSummarySchema = z.object({
+  productTargets: z.array(adminPromotionProductTargetSchema).optional(),
   promotionId: id,
   code: z.string(),
   name: z.string(),

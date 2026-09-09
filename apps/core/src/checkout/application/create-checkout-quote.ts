@@ -13,6 +13,7 @@ import {
 import type { AppErrorCode, FulfillmentOptionView } from "@freshmarkets/contracts";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
+import { cartHasUnsettledCheckout, quoteRefreshPaymentGuard } from "./release-uncommitted-checkout";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
 import { resolveLineShippingWeightGrams } from "../../fulfillment/domain/delivery-package";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
@@ -147,6 +148,12 @@ export async function createCheckoutQuote(
     .first<{ id: string; customer_id: string; version: number }>();
   if (!cart || cart.customer_id !== command.customerId)
     return failure("NOT_FOUND", "Active cart not found", command.requestId);
+  if (await cartHasUnsettledCheckout(database, command.cartId))
+    return failure(
+      "CONFLICT",
+      "A payment for this cart is still being settled. Check that checkout before requesting a new total.",
+      command.requestId,
+    );
   if (cart.version !== command.cartVersion)
     return failure(
       "CART_VERSION_CONFLICT",
@@ -392,6 +399,7 @@ async function createScheduledQuote(
     code.trim().toUpperCase(),
   );
   const promotion = await evaluateCheckoutPromotions(database, {
+    cartId: command.cartId,
     customerId: command.customerId,
     marketId: cycle.market_id,
     locationId: routing.location_id,
@@ -408,13 +416,17 @@ async function createScheduledQuote(
     requestedCodes: requestedPromotionCodes,
     at: now2,
   });
-  const merchandiseDiscount =
-    promotion.applications.find((application) => application.component === "MERCHANDISE")
-      ?.amountMinor ?? 0;
+  const merchandiseDiscount = promotion.applications
+    .filter((application) => application.component === "MERCHANDISE")
+    .reduce((sum, application) => sum + application.amountMinor, 0);
+  const itemDiscount = promotion.applications
+    .filter((application) => application.kind === "PRODUCT_SALE")
+    .reduce((sum, application) => sum + application.amountMinor, 0);
   const deliveryDiscount =
     promotion.applications.find((application) => application.component === "DELIVERY")
       ?.amountMinor ?? 0;
   const promotionApplications = promotion.applications.map((application) => ({
+    ...(application.kind ? { kind: application.kind, lines: application.lines } : {}),
     promotionId: application.promotionId,
     code: application.code,
     name: application.name,
@@ -425,8 +437,8 @@ async function createScheduledQuote(
   }));
   const financial = {
     merchandiseSubtotalMinor: subtotalMinor,
-    itemDiscountMinor: 0,
-    orderDiscountMinor: merchandiseDiscount,
+    itemDiscountMinor: itemDiscount,
+    orderDiscountMinor: merchandiseDiscount - itemDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
     serviceFeeMinor: 0,
@@ -477,6 +489,7 @@ async function createScheduledQuote(
   const evidence = decision.evidence!;
   try {
     await database.batch([
+      quoteRefreshPaymentGuard(database, command.cartId),
       geographyQuoteGuard(database, routing, cycle),
       operatingScheduleGuard(database, routing, openInterval, Date.parse(window.pickupAt)),
       scheduledWindowGuard(database, cycle.id, window),

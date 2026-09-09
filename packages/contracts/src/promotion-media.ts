@@ -38,6 +38,7 @@ export type PublishedPromotionMediaRequest = {
   version: number;
 };
 export type PublishedPromotionCampaign = {
+  productSale?: boolean;
   promotionId: string;
   code: string;
   name: string;

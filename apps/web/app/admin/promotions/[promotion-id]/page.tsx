@@ -239,7 +239,17 @@ export default function PromotionDetailPage({
                 : promotion.benefitType === "DELIVERY_FEE_WAIVER"
                   ? "Free delivery"
                   : `Discount: ${promotion.percent}%`}
+              {promotion.productTargets?.length ? " per selected selling unit" : ""}
             </p>
+            {promotion.productTargets?.map((target) => (
+              <p key={`${target.skuId}:${target.locationId}`}>
+                {target.productName ?? "Selected product"} · {target.skuName ?? "Selling option"} ·{" "}
+                {target.locationName ?? "Selected location"}:{" "}
+                {target.quantityLimit === null
+                  ? "No sale quantity limit"
+                  : `${target.remainingQuantity} of ${target.quantityLimit} sale units remaining (Instant only)`}
+              </p>
+            ))}
             <p>Minimum purchase: PHP {(promotion.minimumMinor / 100).toFixed(2)}</p>
             <p>
               Maximum discount:{" "}
@@ -343,102 +353,108 @@ export default function PromotionDetailPage({
 
       <ListPageSection
         title="Preview"
-        description="Select a customer to check eligibility and current usage. Without a customer, this is an amount estimate. Checkout confirms the final result."
+        description={
+          promotion.productTargets?.length
+            ? "This sale depends on the selected items, quantities and location. Checkout confirms the discount; a subtotal alone cannot preview it."
+            : "Select a customer to check eligibility and current usage. Without a customer, this is an amount estimate. Checkout confirms the final result."
+        }
       >
-        <div className="space-y-3 p-4">
-          <CustomerPicker
-            label="Preview customer"
-            value={previewCustomer}
-            disabled={previewPending}
-            onChange={(value) => {
-              setPreviewCustomer(value);
-              setPreviewResult(null);
-            }}
-          />
-          <Input
-            aria-label="Subtotal in pesos"
-            placeholder="subtotal ₱"
-            value={previewSubtotal}
-            onChange={(event) => {
-              setPreviewSubtotal(event.target.value);
-              setPreviewResult(null);
-            }}
-            disabled={previewPending}
-            className="sm:w-44"
-          />
-          {promotion.benefitType.startsWith("DELIVERY") ? (
+        {!promotion.productTargets?.length ? (
+          <div className="space-y-3 p-4">
+            <CustomerPicker
+              label="Preview customer"
+              value={previewCustomer}
+              disabled={previewPending}
+              onChange={(value) => {
+                setPreviewCustomer(value);
+                setPreviewResult(null);
+              }}
+            />
             <Input
-              aria-label="Delivery fee in pesos"
-              placeholder="delivery fee PHP"
-              value={deliverySubtotal}
+              aria-label="Subtotal in pesos"
+              placeholder="subtotal ₱"
+              value={previewSubtotal}
               onChange={(event) => {
-                setDeliverySubtotal(event.target.value);
+                setPreviewSubtotal(event.target.value);
                 setPreviewResult(null);
               }}
               disabled={previewPending}
+              className="sm:w-44"
             />
-          ) : null}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={previewPending}
-            onClick={() => {
-              const pesos = Number(previewSubtotal);
-              if (
-                !/^\d+(\.\d{1,2})?$/.test(previewSubtotal.trim()) ||
-                (promotion.benefitType.startsWith("DELIVERY") &&
-                  !/^\d+(\.\d{1,2})?$/.test(deliverySubtotal.trim()))
-              ) {
-                setNotice(
-                  "Enter the merchandise subtotal and delivery fee where required, with at most two decimal places.",
-                );
-                return;
-              }
-              setPreviewPending(true);
-              setPreviewResult(null);
-              void (async () => {
-                try {
-                  const response = await fetch(
-                    `${BASE}/${encodeURIComponent(promotionId)}/preview`,
-                    {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({
-                        subtotalMinor: Math.round(pesos * 100),
-                        ...(previewCustomer ? { customerId: previewCustomer.customerId } : {}),
-                        ...(promotion.benefitType.startsWith("DELIVERY")
-                          ? { deliverySubtotalMinor: Math.round(Number(deliverySubtotal) * 100) }
-                          : {}),
-                      }),
-                    },
+            {promotion.benefitType.startsWith("DELIVERY") ? (
+              <Input
+                aria-label="Delivery fee in pesos"
+                placeholder="delivery fee PHP"
+                value={deliverySubtotal}
+                onChange={(event) => {
+                  setDeliverySubtotal(event.target.value);
+                  setPreviewResult(null);
+                }}
+                disabled={previewPending}
+              />
+            ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={previewPending}
+              onClick={() => {
+                const pesos = Number(previewSubtotal);
+                if (
+                  !/^\d+(\.\d{1,2})?$/.test(previewSubtotal.trim()) ||
+                  (promotion.benefitType.startsWith("DELIVERY") &&
+                    !/^\d+(\.\d{1,2})?$/.test(deliverySubtotal.trim()))
+                ) {
+                  setNotice(
+                    "Enter the merchandise subtotal and delivery fee where required, with at most two decimal places.",
                   );
-                  const payload = catalogResultSchema(adminPromotionPreviewViewSchema).parse(
-                    await response.json(),
-                  );
-                  setPreviewResult(payload.ok ? payload.value : null);
-                  setNotice(payload.ok ? null : payload.error.message);
-                } catch {
-                  setNotice("Preview could not be loaded. Try again.");
-                } finally {
-                  setPreviewPending(false);
+                  return;
                 }
-              })();
-            }}
-          >
-            {previewPending ? "Checking..." : "Preview"}
-          </Button>
-          {previewResult ? (
-            <span className="text-sm" role="status">
-              {previewResult.eligible
-                ? `${previewResult.eligibilityChecked ? "Eligible discount" : "Estimated discount"} ₱${((previewResult.discountMinor ?? 0) / 100).toFixed(2)}`
-                : previewResult.reasonCode === "CUSTOMER_UNAVAILABLE"
-                  ? "Customer is unavailable for new commerce."
-                  : previewResult.reasonCode === "CUSTOMER_INELIGIBLE"
-                    ? "Customer is not eligible under the campaign rules or current usage limits."
-                    : "Campaign is unavailable for these totals or dates."}
-            </span>
-          ) : null}
-        </div>
+                setPreviewPending(true);
+                setPreviewResult(null);
+                void (async () => {
+                  try {
+                    const response = await fetch(
+                      `${BASE}/${encodeURIComponent(promotionId)}/preview`,
+                      {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({
+                          subtotalMinor: Math.round(pesos * 100),
+                          ...(previewCustomer ? { customerId: previewCustomer.customerId } : {}),
+                          ...(promotion.benefitType.startsWith("DELIVERY")
+                            ? { deliverySubtotalMinor: Math.round(Number(deliverySubtotal) * 100) }
+                            : {}),
+                        }),
+                      },
+                    );
+                    const payload = catalogResultSchema(adminPromotionPreviewViewSchema).parse(
+                      await response.json(),
+                    );
+                    setPreviewResult(payload.ok ? payload.value : null);
+                    setNotice(payload.ok ? null : payload.error.message);
+                  } catch {
+                    setNotice("Preview could not be loaded. Try again.");
+                  } finally {
+                    setPreviewPending(false);
+                  }
+                })();
+              }}
+            >
+              {previewPending ? "Checking..." : "Preview"}
+            </Button>
+            {previewResult ? (
+              <span className="text-sm" role="status">
+                {previewResult.eligible
+                  ? `${previewResult.eligibilityChecked ? "Eligible discount" : "Estimated discount"} ₱${((previewResult.discountMinor ?? 0) / 100).toFixed(2)}`
+                  : previewResult.reasonCode === "CUSTOMER_UNAVAILABLE"
+                    ? "Customer is unavailable for new commerce."
+                    : previewResult.reasonCode === "CUSTOMER_INELIGIBLE"
+                      ? "Customer is not eligible under the campaign rules or current usage limits."
+                      : "Campaign is unavailable for these totals or dates."}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </ListPageSection>
 
       <ListPageSection

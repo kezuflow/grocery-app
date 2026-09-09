@@ -9,6 +9,7 @@ import {
 } from "../infrastructure/d1-checkout-repository";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
+import { quoteRefreshPaymentGuard } from "./release-uncommitted-checkout";
 import {
   type CheckoutQuoteDependencies,
   type CreateCheckoutQuoteCommand,
@@ -202,6 +203,7 @@ export async function createInstantQuote(
     code.trim().toUpperCase(),
   );
   const promotion = await evaluateCheckoutPromotions(database, {
+    cartId: command.cartId,
     customerId: command.customerId,
     marketId: routing.market_id,
     locationId: routing.location_id,
@@ -218,13 +220,17 @@ export async function createInstantQuote(
     requestedCodes: requestedPromotionCodes,
     at: now,
   });
-  const merchandiseDiscount =
-    promotion.applications.find((application) => application.component === "MERCHANDISE")
-      ?.amountMinor ?? 0;
+  const merchandiseDiscount = promotion.applications
+    .filter((application) => application.component === "MERCHANDISE")
+    .reduce((sum, application) => sum + application.amountMinor, 0);
+  const itemDiscount = promotion.applications
+    .filter((application) => application.kind === "PRODUCT_SALE")
+    .reduce((sum, application) => sum + application.amountMinor, 0);
   const deliveryDiscount =
     promotion.applications.find((application) => application.component === "DELIVERY")
       ?.amountMinor ?? 0;
   const promotionApplications = promotion.applications.map((application) => ({
+    ...(application.kind ? { kind: application.kind, lines: application.lines } : {}),
     promotionId: application.promotionId,
     code: application.code,
     name: application.name,
@@ -237,8 +243,8 @@ export async function createInstantQuote(
     subtotalMinor - merchandiseDiscount + deliveryFee.feeMinor - deliveryDiscount;
   const financial = {
     merchandiseSubtotalMinor: subtotalMinor,
-    itemDiscountMinor: 0,
-    orderDiscountMinor: merchandiseDiscount,
+    itemDiscountMinor: itemDiscount,
+    orderDiscountMinor: merchandiseDiscount - itemDiscount,
     deliverySubtotalMinor: deliveryFee.feeMinor,
     deliveryDiscountMinor: deliveryDiscount,
     serviceFeeMinor: 0,
@@ -287,6 +293,7 @@ export async function createInstantQuote(
   const evidence = decision.evidence!;
   try {
     await database.batch([
+      quoteRefreshPaymentGuard(database, command.cartId),
       geographyQuoteGuard(database, routing),
       operatingScheduleGuard(database, routing, routing.openInterval),
       database

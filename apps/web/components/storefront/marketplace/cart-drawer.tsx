@@ -146,6 +146,14 @@ export function CartDrawer() {
                       <p className="line-clamp-2 text-sm font-semibold">{item.name}</p>
                       <p className="mt-1 text-xs text-[var(--fm-text-muted)]">Fixed pack</p>
                       <p className="mt-1 text-sm font-bold tabular-nums">
+                        {item.regularLineTotalMinor !== undefined ? (
+                          <del
+                            className="mr-2 text-xs font-normal text-muted-foreground"
+                            aria-label="Regular line price"
+                          >
+                            {money(item.regularLineTotalMinor, cart.currency)}
+                          </del>
+                        ) : null}
                         {item.lineTotalMinor === null
                           ? item.availability === "PRICE_UNAVAILABLE"
                             ? "Price unavailable"

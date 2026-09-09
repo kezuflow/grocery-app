@@ -29,6 +29,10 @@ import { PageHeader, ListPageSection, StatusBadge } from "../../../components/ad
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
+  PromotionProductTargetsEditor,
+  type SaleTargetSelection,
+} from "@/components/admin/promotion-product-targets-editor";
+import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
@@ -45,6 +49,8 @@ export default function PromotionsPage() {
   const [name, setName] = useState("");
   const [benefit, setBenefit] = useState<ManageableBenefitType>("ORDER_FIXED_DISCOUNT");
   const [discount, setDiscount] = useState("");
+  const [productSale, setProductSale] = useState(false);
+  const [productTargets, setProductTargets] = useState<SaleTargetSelection[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const createIntent = useCatalogCommand(adminPromotionSummarySchema);
   const pagination = useAdminPagination();
@@ -80,6 +86,10 @@ export default function PromotionsPage() {
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
+    if (productSale && benefit.startsWith("ORDER_") && !productTargets.length) {
+      setNotice("Add at least one selling option to the product sale.");
+      return;
+    }
     if (code.trim() === "" || name.trim() === "" || Number.isNaN(Number(discount))) {
       setNotice("A code, name, and numeric discount are required.");
       return;
@@ -113,6 +123,16 @@ export default function PromotionsPage() {
               ? { percent: Number(discount) }
               : {}),
           minimumMinor: 0,
+          ...(productSale && benefit.startsWith("ORDER_")
+            ? {
+                productTargets: productTargets.map(({ skuId, locationId, quantityLimit }) => ({
+                  skuId,
+                  locationId,
+                  quantityLimit,
+                })),
+                automatic: true,
+              }
+            : {}),
           startsAt: new Date().toISOString(),
         })
         .catch(() => createIntent.retry());
@@ -122,6 +142,8 @@ export default function PromotionsPage() {
         setCode("");
         setName("");
         setDiscount("");
+        setProductTargets([]);
+        setProductSale(false);
         pagination.reset();
         load(null);
       }
@@ -233,6 +255,15 @@ export default function PromotionsPage() {
                   onChange={(event) => setDiscount(event.target.value)}
                 />
               ) : null}
+              {benefit.startsWith("ORDER_") ? (
+                <PromotionProductTargetsEditor
+                  enabled={productSale}
+                  onEnabledChange={setProductSale}
+                  value={productTargets}
+                  onChange={setProductTargets}
+                  disabled={createIntent.pending || createIntent.uncertain}
+                />
+              ) : null}
               <Button type="submit" size="sm" disabled={createIntent.pending}>
                 {createIntent.pending ? "Creating…" : "Create draft"}
               </Button>
@@ -281,6 +312,7 @@ export default function PromotionsPage() {
                           : promotion.benefitType === "DELIVERY_FEE_WAIVER"
                             ? "Free delivery"
                             : `PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                        {promotion.productTargets?.length ? " per selected selling unit" : ""}
                       </TableCell>
                       <TableCell>
                         <Link

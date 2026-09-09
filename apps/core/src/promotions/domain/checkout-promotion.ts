@@ -20,7 +20,12 @@ export type PromotionCheckoutContext = {
 export type PromotionEvaluationContext = Pick<
   PromotionCheckoutContext,
   "customerId" | "merchandiseSubtotalMinor" | "deliverySubtotalMinor" | "requestedCodes" | "at"
->;
+> &
+  Partial<Pick<PromotionCheckoutContext, "locationId" | "fulfillmentMode" | "lineFacts">> & {
+    discountableSubtotalMinor?: number;
+    quoteId?: string;
+    cartId?: string;
+  };
 
 export type PromotionEligibilityFacts = {
   firstOrder: boolean;
@@ -39,6 +44,12 @@ export type CheckoutPromotionRule = {
 };
 
 export type CheckoutPromotionCandidate = {
+  productTargets?: readonly {
+    skuId: string;
+    locationId: string;
+    quantityLimit: number | null;
+    remainingQuantity: number | null;
+  }[];
   id: string;
   code: string;
   name: string;
@@ -68,6 +79,8 @@ export type CheckoutPromotionCandidate = {
 };
 
 export type CheckoutPromotionApplication = {
+  kind?: "PRODUCT_SALE";
+  lines?: readonly ProductSaleLine[];
   promotionId: string;
   code: string;
   name: string;
@@ -79,6 +92,8 @@ export type CheckoutPromotionApplication = {
   grantId: string | null;
   snapshot: Readonly<Record<string, unknown>>;
 };
+
+export type ProductSaleLine = { skuId: string; quantity: number; amountMinor: number };
 
 export type PromotionCodeFeedback = {
   code: string;
@@ -185,7 +200,10 @@ function evaluate(
     !candidate.rules.every((rule) => ruleMatches(rule, context, facts))
   )
     return { candidate, application: null, eligible: false, reason: "INELIGIBLE" };
-  const { component, amountMinor } = calculatePromotionDiscount(candidate, context);
+  const { component, amountMinor } = calculatePromotionDiscount(candidate, {
+    ...context,
+    merchandiseSubtotalMinor: context.discountableSubtotalMinor ?? context.merchandiseSubtotalMinor,
+  });
   if (amountMinor <= 0)
     return { candidate, application: null, eligible: false, reason: "INELIGIBLE" };
   return {
@@ -216,13 +234,91 @@ function evaluate(
   };
 }
 
-/** Current-release stacking policy; persistence identifies benefits independently. */
+function evaluateProductSale(
+  candidate: CheckoutPromotionCandidate,
+  context: PromotionEvaluationContext,
+  facts: PromotionEligibilityFacts,
+): Evaluated {
+  const evaluated = evaluate(candidate, context, facts);
+  if (!evaluated.application) return evaluated;
+  if (evaluated.application.component !== "MERCHANDISE")
+    return { ...evaluated, eligible: false, application: null, reason: "INELIGIBLE" };
+  const lines: ProductSaleLine[] = [];
+  for (const line of context.lineFacts ?? []) {
+    const target = candidate.productTargets?.find(
+      (target) => target.skuId === line.skuId && target.locationId === context.locationId,
+    );
+    if (
+      !target ||
+      (target.quantityLimit !== null &&
+        (context.fulfillmentMode !== "INSTANT" ||
+          target.remainingQuantity === null ||
+          line.quantity > target.remainingQuantity))
+    )
+      continue;
+    if (
+      !Number.isSafeInteger(line.quantity) ||
+      line.quantity <= 0 ||
+      !Number.isSafeInteger(line.lineSubtotalMinor) ||
+      line.lineSubtotalMinor <= 0
+    )
+      continue;
+    const amountMinor =
+      candidate.benefit.type === "ORDER_FIXED_DISCOUNT"
+        ? Number(
+            [
+              BigInt(line.lineSubtotalMinor),
+              BigInt(candidate.benefit.discountMinor ?? 0) * BigInt(line.quantity),
+            ].reduce((a, b) => (a < b ? a : b)),
+          )
+        : Number((BigInt(line.lineSubtotalMinor) * BigInt(candidate.benefit.percent ?? 0)) / 100n);
+    if (amountMinor > 0) lines.push({ skuId: line.skuId, quantity: line.quantity, amountMinor });
+  }
+  if (!lines.length)
+    return { ...evaluated, eligible: false, application: null, reason: "INELIGIBLE" };
+  const amountMinor = lines.reduce((total, line) => total + line.amountMinor, 0);
+  return {
+    ...evaluated,
+    application: {
+      ...evaluated.application,
+      kind: "PRODUCT_SALE",
+      lines,
+      amountMinor,
+      snapshot: {
+        ...evaluated.application.snapshot,
+        kind: "PRODUCT_SALE",
+        lines,
+        locationId: context.locationId,
+        fulfillmentMode: context.fulfillmentMode,
+        calculatedAmountMinor: amountMinor,
+      },
+    },
+  };
+}
+
+/** Distinct item sales, one full-price grocery offer, and one delivery benefit. */
 export function permitsPromotionStack(
-  applications: readonly { component: "MERCHANDISE" | "DELIVERY" }[],
+  applications: readonly {
+    component: "MERCHANDISE" | "DELIVERY";
+    kind?: "PRODUCT_SALE";
+    lines?: readonly { skuId: string }[];
+  }[],
 ): boolean {
-  return (
-    new Set(applications.map((application) => application.component)).size === applications.length
-  );
+  const components = new Set<string>(),
+    items = new Set<string>();
+  for (const application of applications) {
+    if (application.kind === "PRODUCT_SALE") {
+      if (application.component !== "MERCHANDISE" || !application.lines?.length) return false;
+      for (const line of application.lines) {
+        if (items.has(line.skuId)) return false;
+        items.add(line.skuId);
+      }
+    } else {
+      if (components.has(application.component)) return false;
+      components.add(application.component);
+    }
+  }
+  return true;
 }
 
 export function evaluateCheckoutPromotionCandidates(
@@ -236,11 +332,42 @@ export function evaluateCheckoutPromotionCandidates(
     if (!firstRequestedIndex.has(code)) firstRequestedIndex.set(code, index);
   });
   const byCode = new Map(candidates.map((candidate) => [candidate.code.toUpperCase(), candidate]));
+  const sales = candidates
+    .filter((candidate) => candidate.productTargets?.length)
+    .map((candidate) => evaluateProductSale(candidate, context, facts));
+  // Activation prevents overlap. Retained/corrupt overlap must never silently
+  // award two discounts on the same item or choose an invented precedence.
+  const saleSkuCounts = new Map<string, number>();
+  for (const sale of sales)
+    for (const line of sale.application?.lines ?? [])
+      saleSkuCounts.set(line.skuId, (saleSkuCounts.get(line.skuId) ?? 0) + 1);
+  for (const sale of sales)
+    if (sale.application?.lines?.some((line) => (saleSkuCounts.get(line.skuId) ?? 0) > 1)) {
+      sale.application = null;
+      sale.eligible = false;
+      sale.reason = "INELIGIBLE";
+    }
+  const saleApplications = sales.flatMap((sale) => (sale.application ? [sale.application] : []));
+  const discountedSkus = new Set(
+    saleApplications.flatMap((sale) => sale.lines?.map((line) => line.skuId) ?? []),
+  );
+  const discountableSubtotalMinor =
+    saleApplications.length > 0 && context.lineFacts
+      ? context.lineFacts
+          .filter((line) => !discountedSkus.has(line.skuId))
+          .reduce((sum, line) => sum + line.lineSubtotalMinor, 0)
+      : context.merchandiseSubtotalMinor;
   const evaluated = new Map(
-    candidates.map((candidate) => [candidate.id, evaluate(candidate, context, facts)]),
+    candidates.map((candidate) => [
+      candidate.id,
+      candidate.productTargets?.length
+        ? (sales.find((sale) => sale.candidate.id === candidate.id) ??
+          evaluateProductSale(candidate, context, facts))
+        : evaluate(candidate, { ...context, discountableSubtotalMinor }, facts),
+    ]),
   );
 
-  const winners: CheckoutPromotionApplication[] = [];
+  const winners: CheckoutPromotionApplication[] = [...saleApplications];
   for (const component of ["MERCHANDISE", "DELIVERY"] as const) {
     const explicit = [...firstRequestedIndex]
       .map(([code, index]) => ({ index, candidate: byCode.get(code) }))
@@ -250,7 +377,10 @@ export function evaluateCheckoutPromotionCandidates(
       )
       .map((entry) => ({ index: entry.index, evaluated: evaluated.get(entry.candidate.id)! }))
       .filter(
-        (entry) => entry.evaluated.eligible && entry.evaluated.application?.component === component,
+        (entry) =>
+          entry.evaluated.eligible &&
+          entry.evaluated.application?.component === component &&
+          !entry.evaluated.application.kind,
       )
       .sort(
         (left, right) =>
@@ -262,7 +392,10 @@ export function evaluateCheckoutPromotionCandidates(
       continue;
     }
     const fallback = [...evaluated.values()]
-      .filter((entry) => entry.eligible && entry.application?.component === component)
+      .filter(
+        (entry) =>
+          entry.eligible && entry.application?.component === component && !entry.application.kind,
+      )
       .sort(
         (left, right) =>
           (right.application?.amountMinor ?? 0) - (left.application?.amountMinor ?? 0) ||
