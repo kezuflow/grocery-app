@@ -104,7 +104,7 @@ export class MapboxGeocoder implements GeocoderPort {
       "MAPBOX_GEOCODER_REVERSE_PERMANENT",
       this.telemetry,
       async () => {
-        const mapped = await this.reverse(input.coordinate, false);
+        const mapped = await this.reverse(input.coordinate, true);
         return {
           provider: "MAPBOX",
           providerReference: mapped.providerReference,

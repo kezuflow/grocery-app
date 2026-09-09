@@ -1,6 +1,6 @@
 import type { Coordinate } from "@freshmarkets/contracts";
 
-export const BROWSING_LOCATION_COOKIE = "freshmarkets_browse_point";
+export const BROWSING_LOCATION_COOKIE = "freshmarkets_browse_point_v2";
 export const DELIVERY_LOCATION_REQUEST_EVENT = "fm:choose-delivery-location";
 
 /** Remember coordinates, never a client-asserted fulfillment-site authority. */

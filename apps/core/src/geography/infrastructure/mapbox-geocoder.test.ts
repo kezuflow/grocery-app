@@ -110,7 +110,7 @@ describe("Mapbox geocoder adapter", () => {
     expect(requestedUrl?.searchParams.get("limit")).toBe("5");
   });
 
-  it("uses temporary Philippines reverse geocoding for finalization", async () => {
+  it("uses permanent Philippines reverse geocoding for retained finalization", async () => {
     let requested: Request | undefined;
     const adapter = new MapboxGeocoder("test-token", async (input, init) => {
       requested = new Request(input, init);
@@ -127,7 +127,7 @@ describe("Mapbox geocoder adapter", () => {
       longitude: "123.8854",
       latitude: "10.3157",
       country: "PH",
-      permanent: "false",
+      permanent: "true",
       access_token: "test-token",
     });
     expect(finalized).toEqual({

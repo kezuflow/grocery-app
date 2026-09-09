@@ -169,6 +169,108 @@ describe("AddressEditor", () => {
     vi.restoreAllMocks();
   });
 
+  it("retains a failed browsing selection for retry and exposes only permanent confirmation", async () => {
+    const confirmed = vi.fn();
+    let attempts = 0;
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url === "/api/commerce/address-search") return response({ ok: true, value: [candidate] });
+      if (url === "/api/serviceability") return response({ ok: true, value: serviceable });
+      expect(url).toBe("/api/commerce/browsing-location");
+      expect(JSON.parse(String(init?.body))).toEqual({ coordinate: candidate.coordinate });
+      attempts++;
+      return attempts === 1
+        ? response({ ok: false, error: { code: "GEOCODER_UNAUTHORIZED" } }, 503)
+        : response({
+            ok: true,
+            value: {
+              displayAddress: "Permanently confirmed address",
+              coordinate: candidate.coordinate,
+              serviceability: serviceable,
+            },
+          });
+    });
+    const { container, root } = mount({
+      purpose: "serviceability",
+      onServiceabilityConfirmed: confirmed,
+      fetchImpl: fetchMock,
+    });
+    await selectCandidate(container, fetchMock);
+    const deliver = () =>
+      Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Deliver here",
+      )!;
+    expect(confirmed).not.toHaveBeenCalled();
+    click(deliver());
+    await flush();
+    expect(container.textContent).toContain("Address confirmation is temporarily unavailable");
+    expect(confirmed).not.toHaveBeenCalled();
+    click(deliver());
+    await flush();
+    expect(confirmed).toHaveBeenCalledExactlyOnceWith({
+      displayAddress: "Permanently confirmed address",
+      coordinate: candidate.coordinate,
+      serviceability: serviceable,
+    });
+    act(() => root.unmount());
+  });
+
+  it.each(["move", "close", "coverage"] as const)(
+    "does not retain confirmation after %s changes",
+    async (changeKind) => {
+      let finish: ((value: Response) => void) | undefined;
+      const confirmed = vi.fn();
+      const adapter = new FakeMapAdapter();
+      const fetchMock = vi.fn((url: string | URL | Request) => {
+        if (url === "/api/commerce/browsing-location")
+          return new Promise<Response>((resolve) => {
+            finish = resolve;
+          });
+        return Promise.resolve(
+          response({
+            ok: true,
+            value:
+              url === "/api/commerce/address-search"
+                ? [candidate]
+                : url === "/api/serviceability"
+                  ? serviceable
+                  : candidate,
+          }),
+        );
+      });
+      const { container, root } = mount({
+        purpose: "serviceability",
+        onServiceabilityConfirmed: confirmed,
+        fetchImpl: fetchMock,
+        mapAdapter: adapter,
+      });
+      await selectCandidate(container, fetchMock);
+      click(
+        Array.from(container.querySelectorAll("button")).find(
+          (button) => button.textContent === "Deliver here",
+        )!,
+      );
+      await flush();
+      if (changeKind === "move") {
+        act(() =>
+          adapter.initializations.at(-1)?.onPinMove?.({ latitude: 10.33, longitude: 123.91 }),
+        );
+      } else if (changeKind === "close") act(() => root.unmount());
+      finish?.(
+        response({
+          ok: true,
+          value: {
+            displayAddress: "Permanent old point",
+            coordinate: candidate.coordinate,
+            serviceability: { ...serviceable, serviceable: changeKind !== "coverage" },
+          },
+        }),
+      );
+      await flush();
+      expect(confirmed).not.toHaveBeenCalled();
+      if (changeKind !== "close") act(() => root.unmount());
+    },
+  );
+
   it("starts with a centered draggable Cebu pin without treating it as confirmed", async () => {
     const adapter = new FakeMapAdapter();
     const fetchImpl = vi.fn() as unknown as typeof fetch;

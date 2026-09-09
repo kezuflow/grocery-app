@@ -29,6 +29,13 @@ export type AddressReverseRequest = RequestMeta & {
   coordinate: Coordinate;
 };
 
+/** Permanently finalized browsing choice, not a saved checkout address. */
+export type ConfirmedBrowsingLocation = {
+  displayAddress: string;
+  coordinate: Coordinate;
+  serviceability: ServiceabilityResult;
+};
+
 export type AddressSearchCandidate = {
   candidateKey: string;
   displayAddress: string;

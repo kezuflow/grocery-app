@@ -9,6 +9,7 @@ import type {
   AddressReverseRequest,
   AddressSearchCandidate,
   AddressSearchRequest,
+  ConfirmedBrowsingLocation,
 } from "./geography";
 import type { AdminFoundationService } from "./admin-foundation";
 import type { AdminLocationsService } from "./admin-locations";
@@ -113,6 +114,9 @@ export interface CoreServiceBinding extends ImplementedCoreService {
   reverseAddressCandidate(
     request: AddressReverseRequest,
   ): Promise<RpcResult<AddressSearchCandidate>>;
+  confirmBrowsingLocation(
+    request: AddressReverseRequest,
+  ): Promise<RpcResult<ConfirmedBrowsingLocation>>;
   /** Canonical quote creation resolved against the authenticated customer. */
   createCheckoutQuote(request: CheckoutQuoteCommandRequest): Promise<RpcResult<CheckoutQuoteView>>;
   listFulfillmentOptions(
@@ -293,6 +297,7 @@ export const coreServiceMethodNames = [
   "resolveServiceability",
   "searchAddressCandidates",
   "reverseAddressCandidate",
+  "confirmBrowsingLocation",
   "searchCatalog",
   "getMarketplaceHome",
   "getCatalogProduct",

@@ -117,6 +117,8 @@ import { log, observeCoreRpc, requestId } from "./observability";
 import { createAuth, type AuthEnvironment } from "./auth/service";
 import { resolveServiceability } from "./geography/serviceability";
 import { buildGeocoderPort } from "./geography/infrastructure/runtime-geocoder";
+import { confirmBrowsingLocation } from "./geography/application/confirm-browsing-location";
+import type { GeocoderPort } from "./geography/ports/geocoder";
 import { GeocoderError } from "./geography/infrastructure/mapbox-geocoder";
 import {
   createCustomerAddress,
@@ -1016,6 +1018,9 @@ export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness
  * domain behavior lives beside its context, never here.
  */
 export class CoreEntrypoint extends WorkerEntrypoint<Env> {
+  protected get geocoderPort(): GeocoderPort {
+    return buildGeocoderPort(this.env);
+  }
   private readonly rpcContext = createCoreRpcContext(
     this.env as Env & AuthEnvironment,
     systemClock,
@@ -2842,6 +2847,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       });
       return fail(error.code, "Address details are temporarily unavailable", input.requestId);
     }
+  }
+  async confirmBrowsingLocation(input: import("@freshmarkets/contracts").AddressReverseRequest) {
+    const validation = addressReverseRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return confirmBrowsingLocation(
+      { db: this.env.DB, geocoder: this.geocoderPort },
+      validation.data,
+    );
   }
   async searchCatalog(input: import("@freshmarkets/contracts").CatalogSearchRequest) {
     return this.catalogRpc.searchCatalog(input);

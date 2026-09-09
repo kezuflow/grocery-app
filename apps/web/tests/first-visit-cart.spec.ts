@@ -3,6 +3,7 @@ import type { APIResponse, Page } from "@playwright/test";
 import { test, expect } from "./admin-authenticated-fixture";
 
 test.use({ actionTimeout: 15_000 });
+test.describe.configure({ timeout: 240000 });
 
 async function value(response: APIResponse): Promise<unknown> {
   const result = z
@@ -40,7 +41,6 @@ for (const width of [1440, 390]) {
     adminPage: admin,
     signedInPage: account,
   }, testInfo) => {
-    test.setTimeout(240000);
     await page.setViewportSize({ width, height: 950 });
     const read = async (target: Page, path: string) => value(await target.request.get(path));
     const post = async (target: Page, path: string, data: unknown) =>
@@ -108,8 +108,8 @@ for (const width of [1440, 390]) {
       .object({ user: z.object({ email: z.string() }) })
       .parse(await (await account.request.get("/api/auth/get-session")).json());
 
-    // Only external geocoder search is substituted. Serviceability, catalog,
-    // Cart commands and sign-in reach the real local Web/Core services.
+    // Search is transient. Confirmation runs the real Core application/adapter
+    // through the test-only provider transport, requiring permanent=true.
     await page.route("**/api/commerce/address-search", (route) =>
       route.fulfill({
         status: 200,
@@ -117,12 +117,39 @@ for (const width of [1440, 390]) {
         body: JSON.stringify({ ok: true, value: [candidate], requestId: "synthetic-geocoder" }),
       }),
     );
+    await page.context().addCookies([
+      {
+        name: "freshmarkets_browse_point",
+        value: encodeURIComponent(JSON.stringify(candidate.coordinate)),
+        url: testInfo.project.use.baseURL ?? "http://localhost:3100",
+      },
+    ]);
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem("ca75-legacy-seeded")) {
+        localStorage.setItem(
+          "freshmarkets.delivery-location.v1",
+          JSON.stringify({
+            displayAddress: "Old temporary result",
+            coordinate: { latitude: 10.32, longitude: 123.9 },
+          }),
+        );
+        sessionStorage.setItem("ca75-legacy-seeded", "1");
+      }
+    });
     await page.goto("/");
     const locationDialog = page.getByRole("dialog", {
       name: "Choose delivery address",
       exact: true,
     });
     await expect(locationDialog).toBeVisible();
+    expect(
+      await page.evaluate(() => localStorage.getItem("freshmarkets.delivery-location.v1")),
+    ).toBeNull();
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === "freshmarkets_browse_point",
+      ),
+    ).toBe(false);
     await locationDialog
       .getByRole("button", { name: "Skip for now — browse groceries", exact: true })
       .click();
@@ -146,7 +173,7 @@ for (const width of [1440, 390]) {
       ),
     ).toBe(true);
     await page.screenshot({
-      path: testInfo.outputPath(`ca73-unlocated-${width}.png`),
+      path: testInfo.outputPath(`ca75-unlocated-${width}.png`),
       fullPage: true,
     });
     await page.getByRole("button", { name: "Choose delivery address", exact: true }).click();
@@ -157,11 +184,42 @@ for (const width of [1440, 390]) {
       .getByRole("button", { name: candidate.displayAddress, exact: true })
       .click();
     await expect(locationDialog.getByText("Delivery is available", { exact: true })).toBeVisible();
+    await page.route("**/api/commerce/browsing-location", (route) => route.abort(), { times: 1 });
+    await locationDialog.getByRole("button", { name: "Deliver here", exact: true }).click();
+    await expect(locationDialog.getByRole("alert")).toContainText(
+      "Address confirmation is temporarily unavailable",
+    );
+    expect(
+      await page.evaluate(() => localStorage.getItem("freshmarkets.delivery-location.v2")),
+    ).toBeNull();
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === "freshmarkets_browse_point_v2",
+      ),
+    ).toBe(false);
+    let confirmation: unknown;
+    await page.route(
+      "**/api/commerce/browsing-location",
+      async (route) => {
+        const response = await route.fetch();
+        confirmation = await response.json();
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
     await locationDialog.getByRole("button", { name: "Deliver here", exact: true }).click();
     await expect(locationDialog).toHaveCount(0);
+    expect(confirmation).toMatchObject({
+      ok: true,
+      value: {
+        displayAddress: "Confirmed delivery entrance, Cebu",
+        coordinate: candidate.coordinate,
+        serviceability: { serviceable: true },
+      },
+    });
     await expect(
       page.getByRole("button", { name: "Choose delivery address", exact: true }),
-    ).toContainText("Test delivery entrance");
+    ).toContainText("Confirmed delivery entrance");
     await page.getByRole("radio", { name: /500 g/ }).check();
     await page.getByRole("button", { name: "Increase quantity", exact: true }).click();
     await page.getByRole("button", { name: "Add to cart", exact: true }).click();
@@ -217,7 +275,7 @@ for (const width of [1440, 390]) {
       true,
     );
     await page.screenshot({
-      path: testInfo.outputPath(`ca73-carryover-${width}.png`),
+      path: testInfo.outputPath(`ca75-carryover-${width}.png`),
       fullPage: true,
     });
   });

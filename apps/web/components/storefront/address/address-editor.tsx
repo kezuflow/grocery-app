@@ -15,6 +15,7 @@ import type {
   AppError,
   Coordinate,
   CoordinateConfirmationSource,
+  ConfirmedBrowsingLocation,
   CustomerAddressView,
   DeliveryInstructions,
   RpcResult,
@@ -58,12 +59,7 @@ export type AddressEditorProps = Readonly<{
   geolocation?: Geolocation;
 }>;
 
-export type ServiceabilitySelection = Readonly<{
-  displayAddress: string;
-  coordinate: Coordinate;
-  components: AddressComponents;
-  serviceability: ServiceabilityResult;
-}>;
+export type ServiceabilitySelection = Readonly<ConfirmedBrowsingLocation>;
 
 function nullable(value: string): string | null {
   const trimmed = value.trim();
@@ -218,6 +214,7 @@ export function AddressEditor({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const serviceabilityAbortRef = useRef<AbortController | null>(null);
   const reverseAbortRef = useRef<AbortController | null>(null);
+  const confirmationAbortRef = useRef<AbortController | null>(null);
   const serviceabilityGenerationRef = useRef(0);
   const coordinateActionGenerationRef = useRef(0);
   const initialMapCenterRef = useRef<Coordinate>(coordinate ?? CEBU_CENTER);
@@ -280,6 +277,7 @@ export function AddressEditor({
       coordinateActionGenerationRef.current += 1;
       serviceabilityGenerationRef.current += 1;
       reverseAbortRef.current?.abort();
+      confirmationAbortRef.current?.abort();
       serviceabilityAbortRef.current?.abort();
     },
     [],
@@ -455,6 +453,45 @@ export function AddressEditor({
       [key]: value,
     }));
     setComponentsSource("FIRST_PARTY");
+  }
+
+  async function confirmBrowsing(): Promise<void> {
+    if (!coordinate || !serviceability?.serviceable || saveState === "saving") return;
+    const generation = coordinateActionGenerationRef.current;
+    const controller = new AbortController();
+    confirmationAbortRef.current?.abort();
+    confirmationAbortRef.current = controller;
+    const isCurrent = () =>
+      !controller.signal.aborted && generation === coordinateActionGenerationRef.current;
+    setSaveState("saving");
+    setSaveError("");
+    try {
+      const response = await fetchImpl("/api/commerce/browsing-location", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ coordinate }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const result = (await response.json()) as RpcResult<ConfirmedBrowsingLocation>;
+      if (!isCurrent()) return;
+      if (!response.ok || !result.ok) {
+        setSaveError("Address confirmation is temporarily unavailable. Please try again.");
+        return;
+      }
+      if (!result.value.serviceability.serviceable) {
+        setServiceability(result.value.serviceability);
+        setSaveError("Delivery coverage changed. Choose another address to continue.");
+        return;
+      }
+      onServiceabilityConfirmed?.(result.value);
+    } catch {
+      if (isCurrent())
+        setSaveError("Address confirmation is temporarily unavailable. Please try again.");
+    } finally {
+      if (!controller.signal.aborted) setSaveState("idle");
+    }
   }
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -650,18 +687,17 @@ export function AddressEditor({
           selectedDisplayAddress ? (
             <button
               type="button"
-              onClick={() =>
-                onServiceabilityConfirmed({
-                  displayAddress: selectedDisplayAddress,
-                  coordinate,
-                  components,
-                  serviceability,
-                })
-              }
+              disabled={saveState === "saving" || serviceabilityState !== "ready"}
+              onClick={() => void confirmBrowsing()}
               className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
             >
-              Deliver here
+              {saveState === "saving" ? "Confirming address…" : "Deliver here"}
             </button>
+          ) : null}
+          {saveError ? (
+            <p role="alert" className="text-sm text-red-700">
+              {saveError}
+            </p>
           ) : null}
         </div>
       ) : (

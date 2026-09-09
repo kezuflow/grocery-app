@@ -11,17 +11,13 @@ import {
 import { useStorefrontRuntime } from "../storefront-runtime";
 import { AddressEditor, type ServiceabilitySelection } from "./address-editor";
 
-const SESSION_SELECTION_KEY = "freshmarkets.delivery-location.v1";
+const SESSION_SELECTION_KEY = "freshmarkets.delivery-location.v2";
 
 type BrowsingLocation = Pick<ServiceabilitySelection, "displayAddress" | "coordinate">;
 
 function readSelection(): BrowsingLocation | null {
   try {
-    const value = JSON.parse(
-      localStorage.getItem(SESSION_SELECTION_KEY) ??
-        sessionStorage.getItem(SESSION_SELECTION_KEY) ??
-        "null",
-    ) as unknown;
+    const value = JSON.parse(localStorage.getItem(SESSION_SELECTION_KEY) ?? "null") as unknown;
     if (!value || typeof value !== "object") return null;
     const candidate = value as Partial<BrowsingLocation>;
     if (
@@ -50,6 +46,11 @@ export function DeliveryAddressDialog() {
   const [selection, setSelection] = useState<BrowsingLocation | null>(null);
 
   useEffect(() => {
+    // The previous keys could contain temporary provider outputs. Never migrate
+    // them as confirmed data; let the customer confirm a location again.
+    localStorage.removeItem("freshmarkets.delivery-location.v1");
+    sessionStorage.removeItem("freshmarkets.delivery-location.v1");
+    document.cookie = "freshmarkets_browse_point=; Path=/; Max-Age=0; SameSite=Lax";
     setSelection(readSelection());
     setInteractive(true);
     const browsing = pathname === "/" || pathname.startsWith("/products/") || pathname === "/cart";

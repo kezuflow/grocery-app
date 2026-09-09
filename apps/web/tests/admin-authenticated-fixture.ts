@@ -22,7 +22,7 @@ async function selectFixtureLocation(page: Page): Promise<void> {
   const point = { latitude: 10.32, longitude: 123.9 };
   await page.context().addCookies([
     {
-      name: "freshmarkets_browse_point",
+      name: "freshmarkets_browse_point_v2",
       value: encodeURIComponent(JSON.stringify(point)),
       url: appBaseUrl,
       sameSite: "Lax",
