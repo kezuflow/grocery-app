@@ -6,6 +6,183 @@ import { createAuth } from "../../auth/service";
 import { recordAdminReceivedLine } from "../../admin/application/operations-commands";
 const core = exports.default;
 const locationId = "location-cebu-central";
+
+it("preserves missing/rejected evidence while replacements fill only the outstanding paid quantity", async () => {
+  const { request, id, cycleId } = await fixture();
+  const before = await env.DB.prepare(
+    "SELECT * FROM inventory_balance ORDER BY location_id,inventory_pool_id",
+  ).all();
+  const initial = await core.recordAdminReceivedLine({
+    ...request,
+    acceptedBase: 7,
+    rejectedBase: 1,
+    shortageBase: 2,
+  });
+  expect(initial).toMatchObject({
+    ok: true,
+    value: {
+      acceptedBase: 7,
+      rejectedBase: 1,
+      shortageBase: 2,
+      replacementBase: 0,
+      status: "DISCREPANCY",
+      version: 3,
+    },
+  });
+  const replacement = {
+    ...request,
+    receiptKind: "REPLACEMENT" as const,
+    acceptedBase: 1,
+    rejectedBase: 0,
+    expectedVersion: 3,
+    idempotencyKey: crypto.randomUUID(),
+  };
+  const partial = await core.recordAdminReceivedLine(replacement);
+  expect(partial).toMatchObject({
+    ok: true,
+    value: { acceptedBase: 8, rejectedBase: 1, shortageBase: 2, replacementBase: 1, version: 4 },
+  });
+  expect(await core.recordAdminReceivedLine(replacement)).toEqual(partial);
+  expect(await core.recordAdminReceivedLine({ ...replacement, acceptedBase: 2 })).toMatchObject({
+    ok: false,
+    error: { code: "IDEMPOTENCY_CONFLICT" },
+  });
+  expect(
+    await core.recordAdminReceivedLine({
+      ...replacement,
+      expectedVersion: 4,
+      acceptedBase: 3,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  const final = await core.recordAdminReceivedLine({
+    ...replacement,
+    expectedVersion: 4,
+    acceptedBase: 2,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  expect(final).toMatchObject({
+    ok: true,
+    value: {
+      acceptedBase: 10,
+      rejectedBase: 1,
+      shortageBase: 2,
+      replacementBase: 3,
+      status: "COMPLETED",
+    },
+  });
+  expect(
+    await env.DB.prepare(
+      "SELECT kind,affected_quantity,status,resolution FROM supply_exception WHERE requirement_id=? ORDER BY kind",
+    )
+      .bind(id)
+      .all(),
+  ).toMatchObject({
+    results: [
+      {
+        kind: "QUALITY",
+        affected_quantity: 1,
+        status: "RESOLVED",
+        resolution: "REPLACEMENT_RECEIVED",
+      },
+      {
+        kind: "SHORTAGE",
+        affected_quantity: 2,
+        status: "RESOLVED",
+        resolution: "REPLACEMENT_RECEIVED",
+      },
+    ],
+  });
+  expect(
+    await env.DB.prepare("SELECT received_base FROM cycle_goods_balance WHERE cycle_id=?")
+      .bind(cycleId)
+      .first(),
+  ).toEqual({ received_base: 10 });
+  await expect(
+    env.DB.prepare("UPDATE receiving_event SET accepted_delta=1 WHERE receiving_record_id=?")
+      .bind(id)
+      .run(),
+  ).rejects.toThrow("IMMUTABLE_RECEIVING_EVIDENCE");
+  await expect(
+    env.DB.prepare("DELETE FROM receiving_event WHERE receiving_record_id=?").bind(id).run(),
+  ).rejects.toThrow("IMMUTABLE_RECEIVING_EVIDENCE");
+  await expect(
+    env.DB.prepare("UPDATE supply_exception SET affected_quantity=9 WHERE requirement_id=?")
+      .bind(id)
+      .run(),
+  ).rejects.toThrow("IMMUTABLE_SUPPLY_OBSERVATION");
+  expect(
+    await env.DB.prepare(
+      "SELECT * FROM inventory_balance ORDER BY location_id,inventory_pool_id",
+    ).all(),
+  ).toMatchObject({ results: before.results });
+});
+
+it.each([
+  "supply_exception",
+  "receiving_event",
+  "cycle_goods_balance",
+  "cycle_goods_movement",
+  "audit_event",
+])("rolls back a silently omitted %s during discrepancy receiving", async (table) => {
+  const { request, id, cycleId } = await fixture();
+  const trigger = `ignore_receiving_${table}`;
+  await env.DB.exec(
+    `CREATE TRIGGER ${trigger} BEFORE INSERT ON ${table} BEGIN SELECT RAISE(IGNORE); END`,
+  );
+  try {
+    expect(
+      await core.recordAdminReceivedLine({
+        ...request,
+        acceptedBase: 7,
+        rejectedBase: 1,
+        shortageBase: 2,
+      }),
+    ).toMatchObject({ ok: false });
+    await noEffects(id, cycleId, request.idempotencyKey);
+    expect(
+      await env.DB.prepare("SELECT id FROM supply_exception WHERE requirement_id=?")
+        .bind(id)
+        .first(),
+    ).toBeNull();
+  } finally {
+    await env.DB.exec(`DROP TRIGGER ${trigger}`);
+  }
+});
+
+it("serializes replacement receipts and recovers a lost committed database reply", async () => {
+  const { request, cycleId } = await fixture();
+  expect(await core.recordAdminReceivedLine(request)).toMatchObject({ ok: true });
+  const replacement = {
+    ...request,
+    receiptKind: "REPLACEMENT" as const,
+    acceptedBase: 3,
+    rejectedBase: 0,
+    expectedVersion: 3,
+    idempotencyKey: crypto.randomUUID(),
+  };
+  const database = new Proxy(env.DB, {
+    get(target, key) {
+      if (key === "batch")
+        return async (statements: D1PreparedStatement[]) => {
+          await target.batch(statements);
+          throw new Error("Synthetic lost reply");
+        };
+      const value = Reflect.get(target, key);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const outcomes = await Promise.all([
+    recordAdminReceivedLine({ db: database, auth: createAuth(env) }, replacement),
+    core.recordAdminReceivedLine({ ...replacement, idempotencyKey: crypto.randomUUID() }),
+  ]);
+  expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+  expect(
+    await env.DB.prepare("SELECT received_base FROM cycle_goods_balance WHERE cycle_id=?")
+      .bind(cycleId)
+      .first(),
+  ).toEqual({ received_base: 10 });
+});
 async function fixture() {
   const manager = await locationManager("location"),
     id = crypto.randomUUID(),

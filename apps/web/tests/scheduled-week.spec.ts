@@ -95,15 +95,45 @@ for (const width of [1440, 390])
     if (!receipt) throw new Error("Missing purchase receipt");
     await row
       .getByLabel(`Accepted quantity ${receipt.receivingSessionId}`, { exact: true })
-      .fill("1000");
+      .fill("700");
     await row
       .getByLabel(`Rejected quantity ${receipt.receivingSessionId}`, { exact: true })
-      .fill("0");
+      .fill("100");
+    await row
+      .getByLabel(`Missing quantity ${receipt.receivingSessionId}`, { exact: true })
+      .fill("200");
     await row
       .getByLabel(`Receiving reason ${receipt.receivingSessionId}`, { exact: true })
       .fill("Inspected supplier goods");
     await row.getByRole("button", { name: "Record line", exact: true }).click();
-    await expect(row).toContainText("1000 / 0");
+    await expect(row).toContainText("700 / 100");
+    await expect(row).toContainText("Missing: 200");
+    const replacements: { body: string | null; key: string | undefined }[] = [];
+    await page.route("**/api/admin/receiving/record-line", async (route) => {
+      replacements.push({
+        body: route.request().postData(),
+        key: route.request().headers()["idempotency-key"],
+      });
+      if (replacements.length > 1) return route.continue();
+      const response = await route.fetch();
+      expect(await response.json()).toMatchObject({ ok: true });
+      await route.abort("failed");
+    });
+    await row
+      .getByLabel(`Accepted quantity ${receipt.receivingSessionId}`, { exact: true })
+      .fill("300");
+    await row
+      .getByLabel(`Receiving reason ${receipt.receivingSessionId}`, { exact: true })
+      .fill("Inspected replacement goods received from supplier");
+    await row.getByRole("button", { name: "Receive replacement", exact: true }).click();
+    await expect(
+      page.getByText("The receiving result is unknown.", { exact: false }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Retry saved receipt", exact: true }).click();
+    await expect(row).toContainText("1000 / 100");
+    await expect(row).toContainText("Replacements accepted: 300");
+    expect(replacements).toHaveLength(2);
+    expect(replacements[1]).toEqual(replacements[0]);
     await page.goto("/admin/procurement");
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
     await expect(demand).toContainText("Accepted 1,000 g");

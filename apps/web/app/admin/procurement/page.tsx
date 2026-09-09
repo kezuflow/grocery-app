@@ -244,6 +244,17 @@ export default function ProcurementPage() {
                               {amount(item.rejectedBase, item.baseUnit)}
                             </p>
                             <StatusBadge>{plain(item.status)}</StatusBadge>
+                            {item.shortageBase > 0 ? (
+                              <p className="text-sm">
+                                Reported missing: {amount(item.shortageBase, item.baseUnit)}
+                              </p>
+                            ) : null}
+                            {item.replacementBase > 0 ? (
+                              <p className="text-sm">
+                                Replacement goods accepted:{" "}
+                                {amount(item.replacementBase, item.baseUnit)}
+                              </p>
+                            ) : null}
                             {item.receivingStatus ? (
                               <span className="ml-2 text-sm">
                                 Receiving: {plain(item.receivingStatus)}

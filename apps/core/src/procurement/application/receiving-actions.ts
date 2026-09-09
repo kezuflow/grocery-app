@@ -5,11 +5,29 @@ export function receivingActions(input: {
   expected: number;
   accepted: number;
   rejected: number;
-}): Array<"START" | "RECORD" | "COMPLETE"> {
+  shortage?: number;
+  replacement?: number;
+  replacementAllowed?: boolean;
+}): Array<"START" | "RECORD" | "REPLACE" | "COMPLETE"> {
+  const accounted =
+    input.accepted + input.rejected + (input.shortage ?? 0) - (input.replacement ?? 0);
+  if (
+    ["DISCREPANCY", "COMPLETED"].includes(input.status) &&
+    ["RECEIVED", "EXCEPTION", "PARTIALLY_RECEIVED"].includes(input.requirementStatus) &&
+    accounted === input.expected &&
+    input.accepted < input.expected
+  )
+    return input.replacementAllowed === false
+      ? input.status === "DISCREPANCY"
+        ? ["COMPLETE"]
+        : []
+      : input.status === "DISCREPANCY"
+        ? ["REPLACE", "COMPLETE"]
+        : ["REPLACE"];
   if (
     input.status === "DISCREPANCY" &&
     ["RECEIVED", "EXCEPTION"].includes(input.requirementStatus) &&
-    input.accepted + input.rejected === input.expected
+    accounted === input.expected
   )
     return ["COMPLETE"];
   if (!["ORDERED", "PARTIALLY_RECEIVED"].includes(input.requirementStatus)) return [];
@@ -20,10 +38,7 @@ export function receivingActions(input: {
     input.expected > 0
   )
     return ["START"];
-  if (
-    ["IN_PROGRESS", "DISCREPANCY"].includes(input.status) &&
-    input.accepted + input.rejected < input.expected
-  )
+  if (["IN_PROGRESS", "DISCREPANCY"].includes(input.status) && accounted < input.expected)
     return ["RECORD"];
   return [];
 }

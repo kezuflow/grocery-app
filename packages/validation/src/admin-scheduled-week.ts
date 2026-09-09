@@ -44,6 +44,8 @@ export const scheduledWeekViewSchema = z.object({
           status: z.string(),
           acceptedBase: integer,
           rejectedBase: integer,
+          shortageBase: integer,
+          replacementBase: integer,
           receivingStatus: z.string().nullable(),
           canConfirmPurchase: z.boolean(),
         }),

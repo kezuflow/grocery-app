@@ -93,7 +93,7 @@ export async function getAdminScheduledWeek(
       FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE' GROUP BY sku_id,inventory_pool_id
     ) SELECT d.sku_id skuId,d.inventory_pool_id inventoryPoolId,p.name productName,s.name variantName,d.quantitySellable,d.quantityBase,d.shippingGrams,d.baseUnit,
       pr.id requirementId,COALESCE(pr.version,0) requirementVersion,COALESCE(pr.status,'NOT_PURCHASED') status,
-      COALESCE(rr.accepted_quantity,0) acceptedBase,COALESCE(rr.rejected_quantity,0) rejectedBase,rr.status receivingStatus
+      COALESCE(rr.accepted_quantity,0) acceptedBase,COALESCE(rr.rejected_quantity,0) rejectedBase,COALESCE(rr.shortage_base,0) shortageBase,COALESCE(rr.replacement_base,0) replacementBase,rr.status receivingStatus
       FROM demand d JOIN sku s ON s.id=d.sku_id JOIN product p ON p.id=s.product_id
       LEFT JOIN procurement_run run ON run.delivery_cycle_id=? AND run.destination_location_id=?
       LEFT JOIN procurement_requirement pr ON pr.procurement_run_id=run.id AND pr.sku_id=d.sku_id

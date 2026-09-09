@@ -273,3 +273,7 @@ A dispatched transfer stays `IN_TRANSIT` while none has been accepted, or `PARTI
 ### Actual size counting
 
 Counting is an atomic inventory movement, not a new lifecycle. An authorized count consumes measured bulk grams and credits staff-recorded pieces/packs for the same Product/location. It rechecks the bulk version, unreserved/unheld quantity, active size identities and every balance/ledger/evidence/audit/success effect. Linked transfer receiving and counting share that transaction; a rejected count leaves the receipt unchanged. Replays return the original result. Approximate shipping grams never determine counts. Scheduled allocation receiving remains separate from physical Instant stock.
+
+### Scheduled replacement receiving
+
+A receipt with reported rejected/missing quantities stays `DISCREPANCY` until inspection is closed or the outstanding goods are replaced. Closing inspection does not resolve an OPEN supply exception or create accepted goods. `REPLACE` is available only for a fully accounted original receipt with outstanding quantity and tracked OPEN discrepancy evidence; retained physical-stock receipts require separate evidence review. Partial inspected replacement stays `DISCREPANCY`; when accepted reaches the original expected quantity, the receipt is `COMPLETED` and its tracked exceptions become `RESOLVED / REPLACEMENT_RECEIVED`. Original rejection/missing counts remain visible. Packing still requires sufficient accepted cycle goods; receipt completion never proves fulfillment or financial resolution.

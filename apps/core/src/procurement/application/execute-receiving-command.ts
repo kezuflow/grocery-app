@@ -15,10 +15,11 @@ type Common = {
 export type ReceivingMutation =
   | (Common & { action: "START"; requirementId: string })
   | (Common & {
-      action: "RECORD";
+      action: "RECORD" | "REPLACE";
       receivingRecordId: string;
       acceptedDeltaBase: number;
       rejectedDeltaBase: number;
+      shortageDeltaBase?: number;
     })
   | (Common & { action: "COMPLETE"; receivingRecordId: string });
 const resultSchema = z.object({
@@ -31,6 +32,8 @@ const resultSchema = z.object({
   status: z.enum(receivingRecordStates),
   acceptedBase: z.number().int().safe().nonnegative(),
   rejectedBase: z.number().int().safe().nonnegative(),
+  shortageBase: z.number().int().safe().nonnegative().default(0),
+  replacementBase: z.number().int().safe().nonnegative().default(0),
   remainingBase: z.number().int().safe().nonnegative(),
   version: z.number().int().safe().positive(),
   inventoryVersion: z.null(),
@@ -49,6 +52,8 @@ type Receipt = {
   expectedBase: number;
   acceptedBase: number;
   rejectedBase: number;
+  shortageBase: number;
+  replacementBase: number;
   legacyAcceptedBase: number;
   status: string;
   version: number;
@@ -72,16 +77,22 @@ export async function executeReceivingCommand(
       "A receipt version and stable command key are required",
       command.requestId,
     );
-  const accepted = command.action === "RECORD" ? command.acceptedDeltaBase : 0,
-    rejected = command.action === "RECORD" ? command.rejectedDeltaBase : 0;
+  const recording = command.action === "RECORD" || command.action === "REPLACE";
+  const accepted = recording ? command.acceptedDeltaBase : 0,
+    rejected = recording ? command.rejectedDeltaBase : 0,
+    shortage = recording ? (command.shortageDeltaBase ?? 0) : 0;
   if (
-    command.action === "RECORD" &&
+    recording &&
     (!Number.isSafeInteger(accepted) ||
       !Number.isSafeInteger(rejected) ||
       accepted < 0 ||
       rejected < 0 ||
-      !Number.isSafeInteger(accepted + rejected) ||
-      accepted + rejected === 0)
+      !Number.isSafeInteger(shortage) ||
+      shortage < 0 ||
+      !Number.isSafeInteger(accepted + rejected + shortage) ||
+      accepted + rejected + shortage === 0 ||
+      (command.action === "REPLACE" && (rejected !== 0 || shortage !== 0 || accepted === 0)) ||
+      ((shortage > 0 || command.action === "REPLACE") && !command.reason?.trim()))
   )
     return failure(
       "VALIDATION_FAILED",
@@ -91,6 +102,7 @@ export async function executeReceivingCommand(
   const row = await database
     .prepare(`SELECT receipt.id,receipt.procurement_requirement_id requirementId,requirement.delivery_cycle_id cycleId,requirement.location_id locationId,requirement.inventory_pool_id inventoryPoolId,
     receipt.expected_quantity expectedBase,receipt.accepted_quantity acceptedBase,receipt.rejected_quantity rejectedBase,receipt.legacy_accepted_base legacyAcceptedBase,
+    receipt.shortage_base shortageBase,receipt.replacement_base replacementBase,
     receipt.status,receipt.version,requirement.status requirementStatus,requirement.version requirementVersion
     FROM receiving_record receipt JOIN procurement_requirement requirement ON requirement.id=receipt.procurement_requirement_id
     WHERE ${command.action === "START" ? "receipt.procurement_requirement_id" : "receipt.id"}=? ORDER BY receipt.rowid LIMIT 1`)
@@ -101,17 +113,20 @@ export async function executeReceivingCommand(
   const scope =
     command.action === "START"
       ? "procurement.startReceiving"
-      : command.action === "RECORD"
-        ? "procurement.recordReceivedLine"
-        : "procurement.completeReceiving";
+      : command.action === "REPLACE"
+        ? "procurement.receiveReplacement"
+        : command.action === "RECORD"
+          ? "procurement.recordReceivedLine"
+          : "procurement.completeReceiving";
   const legacyPayload =
     command.action === "START"
       ? { requirementId: command.requirementId, expectedVersion: command.expectedVersion }
-      : command.action === "RECORD"
+      : recording
         ? {
             receivingRecordId: command.receivingRecordId,
             acceptedDeltaBase: accepted,
             rejectedDeltaBase: rejected,
+            ...(shortage > 0 ? { shortageDeltaBase: shortage } : {}),
             reason: command.reason ?? "",
             expectedVersion: command.expectedVersion,
           }
@@ -167,6 +182,8 @@ export async function executeReceivingCommand(
       expected: row.expectedBase,
       accepted: row.acceptedBase,
       rejected: row.rejectedBase,
+      shortage: row.shortageBase,
+      replacement: row.replacementBase,
     }).includes(command.action)
   )
     return failure(
@@ -175,25 +192,31 @@ export async function executeReceivingCommand(
       command.requestId,
     );
   const acceptedBase = row.acceptedBase + accepted,
-    rejectedBase = row.rejectedBase + rejected;
+    rejectedBase = row.rejectedBase + rejected,
+    shortageBase = row.shortageBase + shortage,
+    replacementBase = row.replacementBase + (command.action === "REPLACE" ? accepted : 0);
+  const accounted = acceptedBase + rejectedBase + shortageBase - replacementBase;
   if (
-    !Number.isSafeInteger(acceptedBase + rejectedBase) ||
-    acceptedBase + rejectedBase > row.expectedBase
+    ![acceptedBase, rejectedBase, shortageBase, replacementBase, accounted].every(
+      Number.isSafeInteger,
+    ) ||
+    accounted > row.expectedBase ||
+    acceptedBase > row.expectedBase
   )
     return failure(
       "VALIDATION_FAILED",
       "Received quantities exceed the expected quantity",
       command.requestId,
     );
-  const complete = acceptedBase + rejectedBase === row.expectedBase;
+  const complete = accounted === row.expectedBase;
   const status =
     command.action === "START"
       ? "IN_PROGRESS"
       : command.action === "COMPLETE"
         ? "COMPLETED"
-        : complete && rejectedBase === 0
+        : complete && acceptedBase === row.expectedBase
           ? "COMPLETED"
-          : rejectedBase > 0
+          : rejectedBase > 0 || shortageBase > 0
             ? "DISCREPANCY"
             : "IN_PROGRESS";
   const result: ReceivingResult = {
@@ -206,12 +229,30 @@ export async function executeReceivingCommand(
     status,
     acceptedBase,
     rejectedBase,
-    remainingBase: row.expectedBase - acceptedBase - rejectedBase,
+    shortageBase,
+    replacementBase,
+    remainingBase: row.expectedBase - accounted,
     version: row.version + 1,
     inventoryVersion: null,
   };
   const now = Date.now(),
     statements: D1PreparedStatement[] = [];
+  const exceptionPrefix = `receipt:${row.id}:`;
+  const openExceptions =
+    command.action === "REPLACE"
+      ? await database
+          .prepare(
+            "SELECT COUNT(*) count FROM supply_exception WHERE requirement_id=? AND status='OPEN' AND substr(id,1,?)=?",
+          )
+          .bind(row.requirementId, exceptionPrefix.length, exceptionPrefix)
+          .first<{ count: number }>()
+      : null;
+  if (command.action === "REPLACE" && (!openExceptions?.count || row.legacyAcceptedBase > 0))
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "This retained receipt needs its original stock and discrepancy evidence reviewed before replacement receiving",
+      command.requestId,
+    );
   if (command.authority)
     statements.push(
       database
@@ -220,6 +261,19 @@ export async function executeReceivingCommand(
     JOIN staff_scope scope ON scope.staff_id=staff.id JOIN fulfillment_location location ON location.id=?
     WHERE staff.auth_user_id=? AND staff.status='active' AND (scope.scope_kind='global' OR (scope.scope_kind='market' AND scope.market_id=location.market_id) OR (scope.scope_kind='location' AND scope.location_id=location.id)))`)
         .bind(row.locationId, command.authority.authUserId),
+    );
+  if (command.action === "REPLACE")
+    statements.push(
+      database
+        .prepare(
+          "INSERT INTO commitment_abort(id) SELECT -36 WHERE (SELECT COUNT(*) FROM supply_exception WHERE requirement_id=? AND status='OPEN' AND substr(id,1,?)=?)<>?",
+        )
+        .bind(
+          row.requirementId,
+          exceptionPrefix.length,
+          exceptionPrefix,
+          openExceptions?.count ?? 0,
+        ),
     );
   statements.push(
     database
@@ -242,11 +296,13 @@ export async function executeReceivingCommand(
       ),
     database
       .prepare(
-        "UPDATE receiving_record SET accepted_quantity=?,rejected_quantity=?,status=?,version=version+1,updated_at=? WHERE id=? AND procurement_requirement_id=? AND version=? AND status=? AND accepted_quantity=? AND rejected_quantity=? AND expected_quantity=?",
+        "UPDATE receiving_record SET accepted_quantity=?,rejected_quantity=?,shortage_base=?,replacement_base=?,status=?,version=version+1,updated_at=? WHERE id=? AND procurement_requirement_id=? AND version=? AND status=? AND accepted_quantity=? AND rejected_quantity=? AND expected_quantity=? AND shortage_base=? AND replacement_base=?",
       )
       .bind(
         acceptedBase,
         rejectedBase,
+        shortageBase,
+        replacementBase,
         status,
         now,
         row.id,
@@ -256,29 +312,33 @@ export async function executeReceivingCommand(
         row.acceptedBase,
         row.rejectedBase,
         row.expectedBase,
+        row.shortageBase,
+        row.replacementBase,
       ),
     database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
   );
-  if (command.action === "RECORD") {
+  if (recording) {
     const eventId = crypto.randomUUID();
-    statements.push(
-      database
-        .prepare(
-          "INSERT INTO receiving_event(id,receiving_record_id,procurement_requirement_id,location_id,inventory_pool_id,accepted_delta,rejected_delta,reason,idempotency_key,occurred_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        )
-        .bind(
-          eventId,
-          row.id,
-          row.requirementId,
-          row.locationId,
-          row.inventoryPoolId,
-          accepted,
-          rejected,
-          command.reason ?? null,
-          command.idempotencyKey,
-          now,
-        ),
-    );
+    if (accepted + rejected > 0)
+      statements.push(
+        database
+          .prepare(
+            "INSERT INTO receiving_event(id,receiving_record_id,procurement_requirement_id,location_id,inventory_pool_id,accepted_delta,rejected_delta,reason,idempotency_key,occurred_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          )
+          .bind(
+            eventId,
+            row.id,
+            row.requirementId,
+            row.locationId,
+            row.inventoryPoolId,
+            accepted,
+            rejected,
+            command.reason ?? null,
+            command.idempotencyKey,
+            now,
+          ),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
+      );
     if (accepted > 0)
       statements.push(
         database
@@ -286,6 +346,7 @@ export async function executeReceivingCommand(
             "INSERT INTO cycle_goods_balance(cycle_id,location_id,inventory_pool_id,received_base,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(cycle_id,location_id,inventory_pool_id) DO UPDATE SET received_base=received_base+excluded.received_base,version=version+1,updated_at=excluded.updated_at",
           )
           .bind(row.cycleId, row.locationId, row.inventoryPoolId, accepted, now),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
         database
           .prepare(
             "INSERT INTO cycle_goods_movement(id,cycle_id,location_id,inventory_pool_id,movement_type,quantity_base,receiving_event_id,actor_user_id,reason,idempotency_key,occurred_at) VALUES (?,?,?,?,'RECEIPT',?,?,?,?,?,?)",
@@ -302,7 +363,34 @@ export async function executeReceivingCommand(
             `receipt:${eventId}`,
             now,
           ),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
       );
+    for (const [kind, quantity] of [
+      ["QUALITY", rejected],
+      ["SHORTAGE", shortage],
+    ] as const) {
+      if (quantity === 0) continue;
+      statements.push(
+        database
+          .prepare(
+            "INSERT INTO supply_exception(id,requirement_id,kind,affected_quantity,status,resolution,created_at,version) VALUES (?,?,?,?,'OPEN',NULL,?,1)",
+          )
+          .bind(`receipt:${row.id}:${kind}:${eventId}`, row.requirementId, kind, quantity, now),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
+      );
+    }
+    if (command.action === "REPLACE" && acceptedBase === row.expectedBase) {
+      statements.push(
+        database
+          .prepare(
+            "UPDATE supply_exception SET status='RESOLVED',resolution='REPLACEMENT_RECEIVED',version=version+1 WHERE requirement_id=? AND status='OPEN' AND substr(id,1,?)=?",
+          )
+          .bind(row.requirementId, exceptionPrefix.length, exceptionPrefix),
+        database
+          .prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>?")
+          .bind(openExceptions?.count ?? 0),
+      );
+    }
     const requirementStatus = !complete
       ? "PARTIALLY_RECEIVED"
       : acceptedBase === 0
@@ -323,9 +411,11 @@ export async function executeReceivingCommand(
       action:
         command.action === "START"
           ? "OPERATIONS.RECEIVING_STARTED"
-          : command.action === "RECORD"
-            ? "OPERATIONS.RECEIVING_LINE_RECORDED"
-            : "OPERATIONS.RECEIVING_COMPLETED",
+          : command.action === "REPLACE"
+            ? "OPERATIONS.REPLACEMENT_RECEIVED"
+            : command.action === "RECORD"
+              ? "OPERATIONS.RECEIVING_LINE_RECORDED"
+              : "OPERATIONS.RECEIVING_COMPLETED",
       resourceType: "receiving_record",
       resourceId: row.id,
       locationId: row.locationId,
@@ -338,9 +428,19 @@ export async function executeReceivingCommand(
         version: row.version,
         acceptedBase: row.acceptedBase,
         rejectedBase: row.rejectedBase,
+        shortageBase: row.shortageBase,
+        replacementBase: row.replacementBase,
       },
-      after: { status, version: result.version, acceptedBase, rejectedBase },
+      after: {
+        status,
+        version: result.version,
+        acceptedBase,
+        rejectedBase,
+        shortageBase,
+        replacementBase,
+      },
     }),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -36 WHERE changes()<>1"),
     database
       .prepare(
         "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",

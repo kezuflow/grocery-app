@@ -40,13 +40,15 @@ const sessionSchema = z.object({
   expectedBase: z.number().int().safe().nonnegative(),
   acceptedBase: z.number().int().safe().nonnegative(),
   rejectedBase: z.number().int().safe().nonnegative(),
+  shortageBase: z.number().int().safe().nonnegative().optional(),
+  replacementBase: z.number().int().safe().nonnegative().optional(),
   legacyAcceptedBase: z.number().int().safe().nonnegative().optional(),
   status: z.enum(receivingRecordStates),
   version: z.number().int().safe().positive(),
   productName: z.string().optional(),
   cycleName: z.string().optional(),
   baseUnit: z.string().optional(),
-  allowedActions: z.array(z.enum(["START", "RECORD", "COMPLETE"])).optional(),
+  allowedActions: z.array(z.enum(["START", "RECORD", "REPLACE", "COMPLETE"])).optional(),
 });
 const pageResult = z.union([
   errorResult,
@@ -69,7 +71,7 @@ export default function ReceivingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [unresolved, setUnresolved] = useState<ReceivingIntent | null>(null);
   const [lineValues, setLineValues] = useState<
-    Record<string, { accepted: string; rejected: string; reason: string }>
+    Record<string, { accepted: string; rejected: string; reason: string; shortage?: string }>
   >({});
   const commandIntent = useAdminCommandIntent();
   const pagination = useAdminPagination();
@@ -119,6 +121,7 @@ export default function ReceivingPage() {
       });
       setUnresolved(null);
       setNotice(payload.ok ? intent.success : payload.error.message);
+      if (payload.ok) setLineValues({});
       void load(pagination.cursor);
     } catch {
       setNotice(
@@ -138,18 +141,21 @@ export default function ReceivingPage() {
       "Receiving session started.",
     );
   }
-  async function recordLine(sessionId: string, expectedVersion: number) {
+  async function recordLine(sessionId: string, expectedVersion: number, replacement = false) {
     if (!locationId || commandIntent.pending) return;
     const values = lineValues[sessionId] ?? { accepted: "", rejected: "", reason: "" };
     const acceptedBase = Number(values.accepted);
-    const rejectedBase = Number(values.rejected);
+    const rejectedBase = replacement ? 0 : Number(values.rejected);
+    const shortageBase = replacement ? 0 : Number(values.shortage ?? "");
     if (
       !Number.isSafeInteger(acceptedBase) ||
       acceptedBase < 0 ||
       !Number.isSafeInteger(rejectedBase) ||
       rejectedBase < 0 ||
-      !Number.isSafeInteger(acceptedBase + rejectedBase) ||
-      acceptedBase + rejectedBase === 0
+      !Number.isSafeInteger(shortageBase) ||
+      shortageBase < 0 ||
+      !Number.isSafeInteger(acceptedBase + rejectedBase + shortageBase) ||
+      acceptedBase + rejectedBase + shortageBase === 0
     ) {
       setNotice(
         "Enter positive received quantities in the displayed base unit. Rejected goods are never sellable.",
@@ -163,6 +169,8 @@ export default function ReceivingPage() {
         receivingSessionId: sessionId,
         acceptedBase,
         rejectedBase,
+        ...(shortageBase > 0 ? { shortageBase } : {}),
+        ...(replacement ? { receiptKind: "REPLACEMENT" } : {}),
         expectedVersion,
         reason: values.reason.trim() || undefined,
       },
@@ -275,6 +283,18 @@ export default function ReceivingPage() {
                             Accepted / rejected
                           </span>
                           {item.acceptedBase} / {item.rejectedBase}
+                          {(item.shortageBase ?? 0) > 0 ? (
+                            <p>Missing: {item.shortageBase}</p>
+                          ) : null}
+                          {(item.replacementBase ?? 0) > 0 ? (
+                            <p>Replacements accepted: {item.replacementBase}</p>
+                          ) : null}
+                          {item.allowedActions?.includes("REPLACE") ? (
+                            <p className="text-sm">
+                              Still needed: {item.expectedBase - item.acceptedBase}. Contact your
+                              supplier, then record the inspected replacement goods here.
+                            </p>
+                          ) : null}
                           {(item.legacyAcceptedBase ?? 0) > 0 ? (
                             <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
                               {item.legacyAcceptedBase} accepted before cycle allocation tracking.
@@ -294,7 +314,9 @@ export default function ReceivingPage() {
                               Start receiving
                             </Button>
                           ) : null}
-                          {item.allowedActions?.includes("RECORD") ? (
+                          {item.allowedActions?.some(
+                            (action) => action === "RECORD" || action === "REPLACE",
+                          ) ? (
                             <fieldset
                               disabled={commandIntent.pending || unresolved !== null}
                               className="grid gap-1 sm:grid-cols-3"
@@ -318,25 +340,48 @@ export default function ReceivingPage() {
                                   }))
                                 }
                               />
-                              <Input
-                                aria-label={`Rejected quantity ${item.receivingSessionId}`}
-                                inputMode="numeric"
-                                placeholder="rejected"
-                                value={lineValues[item.receivingSessionId]?.rejected ?? ""}
-                                onChange={(event) =>
-                                  setLineValues((current) => ({
-                                    ...current,
-                                    [item.receivingSessionId]: {
-                                      ...(current[item.receivingSessionId] ?? {
-                                        accepted: "",
-                                        rejected: "",
-                                        reason: "",
-                                      }),
-                                      rejected: event.target.value,
-                                    },
-                                  }))
-                                }
-                              />
+                              {item.allowedActions?.includes("RECORD") ? (
+                                <Input
+                                  aria-label={`Rejected quantity ${item.receivingSessionId}`}
+                                  inputMode="numeric"
+                                  placeholder="rejected"
+                                  value={lineValues[item.receivingSessionId]?.rejected ?? ""}
+                                  onChange={(event) =>
+                                    setLineValues((current) => ({
+                                      ...current,
+                                      [item.receivingSessionId]: {
+                                        ...(current[item.receivingSessionId] ?? {
+                                          accepted: "",
+                                          rejected: "",
+                                          reason: "",
+                                        }),
+                                        rejected: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              ) : null}
+                              {item.allowedActions?.includes("RECORD") ? (
+                                <Input
+                                  aria-label={`Missing quantity ${item.receivingSessionId}`}
+                                  inputMode="numeric"
+                                  placeholder="missing"
+                                  value={lineValues[item.receivingSessionId]?.shortage ?? ""}
+                                  onChange={(event) =>
+                                    setLineValues((current) => ({
+                                      ...current,
+                                      [item.receivingSessionId]: {
+                                        ...(current[item.receivingSessionId] ?? {
+                                          accepted: "",
+                                          rejected: "",
+                                          reason: "",
+                                        }),
+                                        shortage: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              ) : null}
                               <Input
                                 aria-label={`Receiving reason ${item.receivingSessionId}`}
                                 placeholder="reason"
@@ -360,10 +405,16 @@ export default function ReceivingPage() {
                                 variant="outline"
                                 disabled={commandIntent.pending}
                                 onClick={() =>
-                                  void recordLine(item.receivingSessionId, item.version)
+                                  void recordLine(
+                                    item.receivingSessionId,
+                                    item.version,
+                                    item.allowedActions?.includes("REPLACE"),
+                                  )
                                 }
                               >
-                                Record line
+                                {item.allowedActions?.includes("REPLACE")
+                                  ? "Receive replacement"
+                                  : "Record line"}
                               </Button>
                             </fieldset>
                           ) : null}

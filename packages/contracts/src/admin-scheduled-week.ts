@@ -21,6 +21,8 @@ export type ScheduledDemandItem = {
   status: string;
   acceptedBase: number;
   rejectedBase: number;
+  shortageBase: number;
+  replacementBase: number;
   receivingStatus: string | null;
   canConfirmPurchase: boolean;
 };

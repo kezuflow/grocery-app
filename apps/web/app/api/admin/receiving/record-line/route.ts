@@ -6,6 +6,8 @@ import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 import { commandMeta, invalid } from "../../operations-route-utils";
 const schema = z.object({
+  receiptKind: z.enum(["DELIVERY", "REPLACEMENT"]).optional(),
+  shortageBase: z.number().int().safe().nonnegative().optional(),
   locationId: z.string().trim().min(1),
   receivingSessionId: z.string().trim().min(1),
   acceptedBase: z.number().int().nonnegative(),

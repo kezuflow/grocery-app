@@ -4,6 +4,8 @@ export type RecordReceivedLineCommand = {
   receivingRecordId: string;
   acceptedDeltaBase: number;
   rejectedDeltaBase: number;
+  shortageDeltaBase?: number;
+  receiptKind?: "DELIVERY" | "REPLACEMENT";
   reason: string;
   expectedVersion: number;
   idempotencyKey: string;
@@ -12,5 +14,8 @@ export type RecordReceivedLineCommand = {
   authority?: ReceivingAuthority;
 };
 export function recordReceivedLine(database: D1Database, command: RecordReceivedLineCommand) {
-  return executeReceivingCommand(database, { ...command, action: "RECORD" });
+  return executeReceivingCommand(database, {
+    ...command,
+    action: command.receiptKind === "REPLACEMENT" ? "REPLACE" : "RECORD",
+  });
 }

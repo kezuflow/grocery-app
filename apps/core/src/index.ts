@@ -843,6 +843,8 @@ const adminReceivingStartSchema = adminOperationsLocationSchema.extend({
   reason: validationSchema.string().trim().min(1).max(500).optional(),
 });
 const adminReceivingLineSchema = adminOperationsLocationSchema.extend({
+  receiptKind: validationSchema.enum(["DELIVERY", "REPLACEMENT"]).optional(),
+  shortageBase: validationSchema.number().int().safe().nonnegative().optional(),
   receivingSessionId: validationSchema.string().trim().min(1).max(200),
   acceptedBase: validationSchema.number().int().min(0),
   rejectedBase: validationSchema.number().int().min(0),

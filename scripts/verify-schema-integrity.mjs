@@ -234,7 +234,7 @@ const beforeCounts = database
   });
 apply(
   database,
-  migrations.filter((name) => name >= "0088_"),
+  migrations.filter((name) => name >= "0088_" && name < "0089_"),
 );
 for (const snapshot of beforeCounts)
   assert.deepEqual(
@@ -252,6 +252,29 @@ assert.equal(
 );
 for (const table of ["inventory_sort", "inventory_sort_output"])
   assert.equal(database.prepare(`SELECT COUNT(*) count FROM ${quote(table)}`).get().count, 0);
+const receiptColumns = database
+  .prepare("PRAGMA table_info(receiving_record)")
+  .all()
+  .map((row) => quote(row.name));
+const receiptQuery = `SELECT rowid,${receiptColumns.join(",")} FROM receiving_record ORDER BY rowid`;
+const retainedReceipts = database.prepare(receiptQuery).all();
+apply(
+  database,
+  migrations.filter((name) => name >= "0089_"),
+);
+assert.deepEqual(
+  database.prepare(receiptQuery).all(),
+  retainedReceipts,
+  "Receiving discrepancy upgrade preserves every original receipt field",
+);
+assert.equal(
+  database
+    .prepare(
+      "SELECT count(*) count FROM receiving_record WHERE shortage_base<>0 OR replacement_base<>0",
+    )
+    .get().count,
+  0,
+);
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 assert.equal(
   database
@@ -370,7 +393,9 @@ assert.deepEqual(
   database
     .prepare("SELECT rowid,* FROM receiving_record ORDER BY rowid")
     .all()
-    .map(({ legacy_accepted_base, ...row }) => {
+    .map(({ legacy_accepted_base, shortage_base, replacement_base, ...row }) => {
+      assert.equal(shortage_base, 0);
+      assert.equal(replacement_base, 0);
       assert.equal(legacy_accepted_base, row.accepted_quantity);
       return row;
     }),

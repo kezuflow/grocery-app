@@ -65,6 +65,8 @@ function receivingCommandView(result: ReceivingResult): ReceivingSessionView {
     status: result.status,
     version: result.version,
     legacyAcceptedBase: result.legacyAcceptedBase,
+    shortageBase: result.shortageBase,
+    replacementBase: result.replacementBase,
   };
 }
 
@@ -241,6 +243,8 @@ export async function recordAdminReceivedLine(
     receivingRecordId: request.receivingSessionId,
     acceptedDeltaBase: request.acceptedBase,
     rejectedDeltaBase: request.rejectedBase,
+    shortageDeltaBase: request.shortageBase,
+    receiptKind: request.receiptKind,
     reason: request.reason ?? "ADMIN_RECEIPT",
     expectedVersion: request.expectedVersion,
     idempotencyKey: request.idempotencyKey,

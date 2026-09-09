@@ -59,8 +59,10 @@ export type ReceivingSessionView = {
   productName?: string;
   cycleName?: string;
   baseUnit?: string;
-  allowedActions?: ReadonlyArray<"START" | "RECORD" | "COMPLETE">;
+  allowedActions?: ReadonlyArray<"START" | "RECORD" | "REPLACE" | "COMPLETE">;
   legacyAcceptedBase?: number;
+  shortageBase?: number;
+  replacementBase?: number;
   receivingSessionId: string;
   requirementId: string;
   cycleId: string;
@@ -276,6 +278,8 @@ export type StartAdminReceivingRequest = AdminOperationsLocationRequest & {
 };
 
 export type RecordAdminReceivedLineRequest = AdminOperationsLocationRequest & {
+  receiptKind?: "DELIVERY" | "REPLACEMENT";
+  shortageBase?: number;
   receivingSessionId: string;
   acceptedBase: number;
   rejectedBase: number;
