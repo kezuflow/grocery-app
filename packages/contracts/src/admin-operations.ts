@@ -78,6 +78,7 @@ export type ReceivingSessionView = {
 };
 
 export type ReceivingSessionPage = {
+  surplus?: readonly import("./scheduled-surplus").ScheduledSurplusView[];
   countedReceipts?: readonly import("./scheduled-counted-receipts").ScheduledCountedReceiptView[];
   items: ReadonlyArray<ReceivingSessionView>;
   nextCursor: string | null;

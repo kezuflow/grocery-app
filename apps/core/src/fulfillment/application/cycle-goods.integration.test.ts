@@ -115,6 +115,52 @@ async function fixture() {
   return { cycleId, receive, order };
 }
 describe("Scheduled receipt to packing commands", () => {
+  it.each(["movement", "balance"])(
+    "rolls back packing when one pool's %s write is omitted",
+    async (effect) => {
+      const fx = await fixture();
+      await fx.receive(0, 1000);
+      await fx.receive(1, 6);
+      const request = await fx.order();
+      const trigger =
+        effect === "movement"
+          ? "CREATE TRIGGER omit_cycle_pack BEFORE INSERT ON cycle_goods_movement WHEN NEW.movement_type='PACKING' AND NEW.inventory_pool_id='pool-eggs' BEGIN SELECT RAISE(IGNORE); END"
+          : "CREATE TRIGGER omit_cycle_pack BEFORE UPDATE ON cycle_goods_balance WHEN NEW.packed_base>OLD.packed_base AND NEW.inventory_pool_id='pool-eggs' BEGIN SELECT RAISE(IGNORE); END";
+      await env.DB.exec(trigger);
+      try {
+        expect(await core.advanceAdminFulfillment(request)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT status,version FROM fulfillment_record WHERE order_id=?")
+            .bind(request.orderId)
+            .first(),
+        ).toEqual({ status: "PACKING", version: 4 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM cycle_goods_movement WHERE order_id=?")
+            .bind(request.orderId)
+            .first(),
+        ).toEqual({ count: 0 });
+        expect(
+          await env.DB.prepare(
+            "SELECT SUM(packed_base) quantity FROM cycle_goods_balance WHERE cycle_id=?",
+          )
+            .bind(fx.cycleId)
+            .first(),
+        ).toEqual({ quantity: 0 });
+        expect(
+          await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare("SELECT id FROM audit_event WHERE idempotency_key=?")
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toBeNull();
+      } finally {
+        await env.DB.exec("DROP TRIGGER omit_cycle_pack");
+      }
+    },
+  );
   it("rejects missing goods without consuming another pool and recovers after receipt", async () => {
     const fx = await fixture();
     await fx.receive(0, 1000);

@@ -6,8 +6,13 @@ import {
   receivingRecordStates,
   type ReceivingSessionPage,
 } from "@freshmarkets/contracts";
-import { z, scheduledCountedReceiptViewSchema } from "@freshmarkets/validation";
+import {
+  z,
+  scheduledCountedReceiptViewSchema,
+  scheduledSurplusViewSchema,
+} from "@freshmarkets/validation";
 import { ScheduledCountedReceiving } from "../../../components/admin/scheduled-counted-receiving";
+import { ScheduledSurplus } from "../../../components/admin/scheduled-surplus";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -63,6 +68,7 @@ const pageResult = z.union([
       items: z.array(sessionSchema),
       nextCursor: z.string().nullable(),
       countedReceipts: z.array(scheduledCountedReceiptViewSchema).optional(),
+      surplus: z.array(scheduledSurplusViewSchema).optional(),
     }),
   }),
 ]);
@@ -215,6 +221,11 @@ export default function ReceivingPage() {
         items={state === "ready" ? (page?.items ?? []) : []}
         receipts={state === "ready" ? (page?.countedReceipts ?? []) : []}
         locationLabel={label}
+        disabled={state !== "ready" || commandIntent.pending || unresolved !== null}
+        onSaved={() => void load(pagination.cursor)}
+      />
+      <ScheduledSurplus
+        items={state === "ready" ? (page?.surplus ?? []) : []}
         disabled={state !== "ready" || commandIntent.pending || unresolved !== null}
         onSaved={() => void load(pagination.cursor)}
       />

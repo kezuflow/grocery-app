@@ -1,5 +1,6 @@
 import { receivingActions } from "../../procurement/application/receiving-actions";
 import { latestScheduledCountedReceipts } from "../../procurement/application/scheduled-counted-receipts";
+import { listScheduledSurplus } from "../../procurement/application/scheduled-surplus";
 import type {
   AdminDeliveryOperationsRequest,
   AdminFulfillmentQueueRequest,
@@ -187,6 +188,11 @@ export async function listAdminReceivingSessions(
         deps.db,
         request.locationId,
         request.cycleId,
+      ),
+      surplus: await listScheduledSurplus(
+        deps.db,
+        request.locationId,
+        pageRows.map((row) => row.requirementId),
       ),
       nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.requirementId),
     },

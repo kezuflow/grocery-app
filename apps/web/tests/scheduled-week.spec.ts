@@ -144,4 +144,59 @@ for (const width of [1440, 390])
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
+    // Attach synthetic canonical payment history, then release demand through the real
+    // Admin cancellation command. This does not assert provider refund acceptance.
+    executeAdminE2eSql(`
+      INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at)
+        VALUES ('intent-${id}','GROCERY_CHECKOUT','checkout_quote','quote-${id}','c-${id}',20000,'PHP','SUCCEEDED','intent-${id}',${now},${now});
+      UPDATE payment_attempt SET payment_intent_id='intent-${id}' WHERE id='p-${id}';
+      INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at)
+        VALUES ('paid-${id}','intent-${id}','reaction-${id}','o-${id}',${now});`);
+    expect(
+      await (
+        await page.request.post(`/api/admin/orders/o-${id}/cancel`, {
+          headers: { "idempotency-key": crypto.randomUUID() },
+          data: { expectedVersion: 1, reason: "Operational failure; inspect unused goods" },
+        })
+      ).json(),
+    ).toMatchObject({ ok: true });
+    await page.getByRole("link", { name: "Receiving", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`cycleId=${id}`));
+    const leftovers = page
+      .getByRole("region", { name: "Unused received goods" })
+      .getByRole("article")
+      .filter({ hasText: name });
+    await expect(leftovers).toContainText("1,000 g unused");
+    await expect(leftovers).toContainText("Red onion");
+    await leftovers.getByRole("button", { name: "Release inspected surplus", exact: true }).click();
+    const release = page.getByRole("dialog");
+    await release.getByLabel("Quantity to release (g)", { exact: true }).fill("400");
+    await release.getByLabel("Reason", { exact: true }).fill("Inspected after Order cancellation");
+    await release.getByLabel("I inspected these goods and they are suitable for sale.").check();
+    const releases: { body: string | null; key: string | undefined }[] = [];
+    await page.route("**/api/admin/receiving/surplus", async (route) => {
+      releases.push({
+        body: route.request().postData(),
+        key: route.request().headers()["idempotency-key"],
+      });
+      if (releases.length > 1) return route.continue();
+      expect(await (await route.fetch()).json()).toMatchObject({ ok: true });
+      await route.abort("failed");
+    });
+    await release.getByRole("button", { name: "Release to stock", exact: true }).click();
+    await expect(
+      release.getByText("The action could not be confirmed.", { exact: false }),
+    ).toBeVisible();
+    await release.getByRole("button", { name: "Release to stock", exact: true }).click();
+    await expect(release).toHaveCount(0);
+    expect(releases).toHaveLength(2);
+    expect(releases[1]).toEqual(releases[0]);
+    await expect(leftovers).toContainText("600 g unused · 400 g released to stock");
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-surplus-${width}.png`),
+      fullPage: true,
+    });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   });

@@ -1,5 +1,6 @@
 import type { AdminScheduledWeekService } from "./admin-scheduled-week";
 import type { ScheduledCountedReceiptsService } from "./scheduled-counted-receipts";
+import type { ScheduledSurplusService } from "./scheduled-surplus";
 import type { InventoryTransfersService } from "./inventory-transfers";
 import type { PromotionMediaService } from "./promotion-media";
 import type { RpcResult } from "./common";
@@ -78,6 +79,7 @@ export interface ImplementedCoreService
     AdminDeliveryCyclesService,
     AdminScheduledWeekService,
     ScheduledCountedReceiptsService,
+    ScheduledSurplusService,
     AdminServiceabilityService,
     AdminStaffAccessService,
     InitialAdministratorService,
@@ -250,6 +252,7 @@ export const coreServiceMethodNames = [
   "aggregateAdminProcurementDemand",
   "confirmAdminProcurementPurchase",
   "recordScheduledCountedReceipt",
+  "releaseScheduledSurplus",
   "getAdminScheduledWeek",
   "startAdminReceiving",
   "recordAdminReceivedLine",

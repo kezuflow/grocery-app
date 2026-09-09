@@ -34,10 +34,20 @@ export function consumeCycleGoodsStatements(
       FROM committed_demand WHERE order_id=? GROUP BY inventory_pool_id`)
       .bind(orderId, cycleId, locationId, orderId, actorUserId, orderId, now, orderId),
     database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -37 WHERE changes()<>(SELECT COUNT(DISTINCT inventory_pool_id) FROM committed_demand WHERE order_id=?)",
+      )
+      .bind(orderId),
+    database
       .prepare(`UPDATE cycle_goods_balance SET packed_base=packed_base+
       (SELECT SUM(quantity) FROM committed_demand d WHERE d.order_id=? AND d.inventory_pool_id=cycle_goods_balance.inventory_pool_id),
       version=version+1,updated_at=? WHERE cycle_id=? AND location_id=? AND inventory_pool_id IN
       (SELECT inventory_pool_id FROM committed_demand WHERE order_id=?)`)
       .bind(orderId, now, cycleId, locationId, orderId),
+    database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -37 WHERE changes()<>(SELECT COUNT(DISTINCT inventory_pool_id) FROM committed_demand WHERE order_id=?)",
+      )
+      .bind(orderId),
   ];
 }
