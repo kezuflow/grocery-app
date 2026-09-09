@@ -253,6 +253,12 @@ export type OpenSellingRequest = AuthenticatedRequest & {
   reason: string;
 };
 
+export type ConfirmAdminProcurementPurchaseRequest = AggregateAdminProcurementDemandRequest & {
+  reason: string;
+  expectedQuantityBase: number;
+  expectedQuantitySellable: number;
+};
+
 export type AggregateAdminProcurementDemandRequest = AdminOperationsLocationRequest & {
   cycleId: string;
   inventoryPoolId: string;
@@ -312,6 +318,9 @@ export type AdminOperationsService = {
     request: ActivateGlobalFulfillmentModeRequest,
   ): Promise<RpcResult<GlobalCommerceConfigurationView>>;
   openSelling(request: OpenSellingRequest): Promise<RpcResult<GlobalCommerceConfigurationView>>;
+  confirmAdminProcurementPurchase(
+    request: ConfirmAdminProcurementPurchaseRequest,
+  ): Promise<RpcResult<ProcurementRequirementView>>;
   aggregateAdminProcurementDemand(
     request: AggregateAdminProcurementDemandRequest,
   ): Promise<RpcResult<ProcurementRequirementView>>;

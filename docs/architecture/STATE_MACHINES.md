@@ -147,6 +147,8 @@ EXCEPTION -> REQUIREMENT_APPROVED / ORDERED / PARTIALLY_RECEIVED / CLOSED
 
 Commands include `AggregateCommittedDemand`, `ApproveProcurementRequirement`, `PlacePurchaseOrder`, `RecordProcurementException`, and `CloseProcurementRun`.
 
+The approved ordinary purchase-confirmation command coordinates exact-demand aggregation and `AGGREGATED -> ORDERED` for one selling option. It requires the reviewed paid quantities and current requirement version, records the manual supplier purchase in `purchase_order`, and creates or updates its not-started receiving record in the same guarded batch. It does not require a separate approval screen or contact the supplier. Existing aggregate-only callers retain their behavior. Rejected/stale confirmation leaves no requirement, receipt, purchase, audit-success or idempotency-success effect. Purchased quantities are not silently recalculated; later supply changes require the separate exception path.
+
 Rules:
 
 - Aggregation occurs at/after operational cutoff and copies exact paid Scheduled demand. It uses no usable inventory, incoming stock, safety buffer, forecasting, or capacity.

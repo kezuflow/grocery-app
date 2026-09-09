@@ -3,7 +3,10 @@ import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { seedTestCycle } from "../../test-commerce-fixtures";
 import { createAuth } from "../../auth/service";
-import { aggregateAdminProcurementDemand } from "../../admin/application/operations-commands";
+import {
+  aggregateAdminProcurementDemand,
+  confirmAdminProcurementPurchase,
+} from "../../admin/application/operations-commands";
 import { createProcurementRequirement } from "./create-procurement-requirement";
 const core = exports.default;
 async function fixture(cutoff = Date.now() - 1000) {
@@ -44,6 +47,8 @@ async function fixture(cutoff = Date.now() - 1000) {
       expectedVersion: 0,
       idempotencyKey: crypto.randomUUID(),
       reason: "Buy exact paid demand",
+      expectedQuantityBase: 500,
+      expectedQuantitySellable: 1,
     },
   };
 }
@@ -86,63 +91,71 @@ describe("procurement command transaction and recovery", () => {
         .first(),
     ).toEqual({ count: 1 });
   });
-  it.each(["scope", "permission", "staff", "demand", "cutoff", "late-failure"] as const)(
-    "rolls back every dependent effect on %s loss at the write boundary",
-    async (kind) => {
-      const { manager, id, request } = await fixture();
-      let reached = false;
-      const database = new Proxy(env.DB, {
-        get(target, key) {
-          if (key === "batch")
-            return async (statements: D1PreparedStatement[]) => {
-              reached = true;
-              if (kind === "scope")
-                await target
-                  .prepare("DELETE FROM staff_scope WHERE staff_id=?")
-                  .bind(manager.id)
-                  .run();
-              if (kind === "permission")
-                await target
-                  .prepare("DELETE FROM role_permission WHERE role_id=?")
-                  .bind(manager.id)
-                  .run();
-              if (kind === "staff")
-                await target
-                  .prepare("UPDATE staff_identity SET status='inactive' WHERE id=?")
-                  .bind(manager.id)
-                  .run();
-              if (kind === "demand")
-                await target
-                  .prepare(
-                    "UPDATE committed_demand SET status='CANCELED',version=version+1 WHERE id=?",
-                  )
-                  .bind(id)
-                  .run();
-              if (kind === "cutoff")
-                await target
-                  .prepare("UPDATE delivery_cycle SET cutoff_at=?,version=version+1 WHERE id=?")
-                  .bind(Date.now() + 60000, id)
-                  .run();
-              return target.batch(
-                kind === "late-failure"
-                  ? [...statements, target.prepare("INSERT INTO commitment_abort(id) VALUES (-99)")]
-                  : statements,
-              );
-            };
-          const value = Reflect.get(target, key);
-          return typeof value === "function" ? value.bind(target) : value;
+  describe.each([aggregateAdminProcurementDemand, confirmAdminProcurementPurchase])(
+    "%s guards",
+    (execute) => {
+      it.each(["scope", "permission", "staff", "demand", "cutoff", "late-failure"] as const)(
+        "rolls back every dependent effect on %s loss at the write boundary",
+        async (kind) => {
+          const { manager, id, request } = await fixture();
+          let reached = false;
+          const database = new Proxy(env.DB, {
+            get(target, key) {
+              if (key === "batch")
+                return async (statements: D1PreparedStatement[]) => {
+                  reached = true;
+                  if (kind === "scope")
+                    await target
+                      .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                      .bind(manager.id)
+                      .run();
+                  if (kind === "permission")
+                    await target
+                      .prepare("DELETE FROM role_permission WHERE role_id=?")
+                      .bind(manager.id)
+                      .run();
+                  if (kind === "staff")
+                    await target
+                      .prepare("UPDATE staff_identity SET status='inactive' WHERE id=?")
+                      .bind(manager.id)
+                      .run();
+                  if (kind === "demand")
+                    await target
+                      .prepare(
+                        "UPDATE committed_demand SET status='CANCELED',version=version+1 WHERE id=?",
+                      )
+                      .bind(id)
+                      .run();
+                  if (kind === "cutoff")
+                    await target
+                      .prepare("UPDATE delivery_cycle SET cutoff_at=?,version=version+1 WHERE id=?")
+                      .bind(Date.now() + 60000, id)
+                      .run();
+                  return target.batch(
+                    kind === "late-failure"
+                      ? [
+                          ...statements,
+                          target.prepare("INSERT INTO commitment_abort(id) VALUES (-99)"),
+                        ]
+                      : statements,
+                  );
+                };
+              const value = Reflect.get(target, key);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+          expect(await execute({ db: database, auth: createAuth(env) }, request)).toMatchObject({
+            ok: false,
+          });
+          expect(reached).toBe(true);
+          await noEffects(id, request.idempotencyKey);
+          if (kind === "late-failure")
+            expect(await core.aggregateAdminProcurementDemand(request)).toMatchObject({
+              ok: true,
+              value: { requiredQuantityBase: 500 },
+            });
         },
-      });
-      expect(
-        await aggregateAdminProcurementDemand({ db: database, auth: createAuth(env) }, request),
-      ).toMatchObject({ ok: false });
-      expect(reached).toBe(true);
-      await noEffects(id, request.idempotencyKey);
-      if (kind === "late-failure")
-        expect(await core.aggregateAdminProcurementDemand(request)).toMatchObject({
-          ok: true,
-          value: { requiredQuantityBase: 500 },
-        });
+      );
     },
   );
   it("allows aggregation exactly at cutoff and never before it", async () => {
@@ -217,4 +230,184 @@ describe("procurement command transaction and recovery", () => {
         .first(),
     ).toEqual({ count: 1 });
   });
+});
+
+describe("normal manual purchase confirmation", () => {
+  it("creates the exact purchase and makes the same requirement receivable once", async () => {
+    const { request, id } = await fixture();
+    const purchased = await core.confirmAdminProcurementPurchase(request);
+    expect(purchased).toMatchObject({
+      ok: true,
+      value: { status: "ORDERED", requiredQuantityBase: 500, version: 1 },
+    });
+    if (!purchased.ok) throw new Error(purchased.error.message);
+    expect(await core.confirmAdminProcurementPurchase(request)).toEqual(purchased);
+    expect(
+      await env.DB.prepare(
+        "SELECT ordered_quantity,status FROM purchase_order WHERE requirement_id=?",
+      )
+        .bind(purchased.value.requirementId)
+        .all(),
+    ).toMatchObject({ results: [{ ordered_quantity: 500, status: "ORDERED" }] });
+    expect(
+      await core.startAdminReceiving({
+        headers: request.headers,
+        requestId: crypto.randomUUID(),
+        locationId: request.locationId,
+        requirementId: purchased.value.requirementId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+        reason: "Supplier goods arrived",
+      }),
+    ).toMatchObject({ ok: true, value: { status: "IN_PROGRESS" } });
+    expect(
+      await core.confirmAdminProcurementPurchase({
+        ...request,
+        idempotencyKey: crypto.randomUUID(),
+        expectedVersion: 1,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM purchase_order po JOIN procurement_requirement pr ON pr.id=po.requirement_id WHERE pr.delivery_cycle_id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+  it("confirms an existing reviewed aggregation without another requirement", async () => {
+    const { request } = await fixture();
+    const aggregated = await core.aggregateAdminProcurementDemand(request);
+    if (!aggregated.ok) throw new Error(aggregated.error.message);
+    expect(
+      await core.confirmAdminProcurementPurchase({
+        ...request,
+        expectedVersion: aggregated.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { requirementId: aggregated.value.requirementId, status: "ORDERED", version: 2 },
+    });
+  });
+  it.each(["purchase_order", "receiving_record", "audit_event", "idempotency_records"])(
+    "rolls back a silently omitted %s effect",
+    async (table) => {
+      const { request, id } = await fixture();
+      const trigger = `ignore_purchase_${table}`;
+      await env.DB.exec(
+        `CREATE TRIGGER ${trigger} BEFORE INSERT ON ${table} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await core.confirmAdminProcurementPurchase(request)).toMatchObject({ ok: false });
+        await noEffects(id, request.idempotencyKey);
+        expect(
+          await env.DB.prepare(
+            "SELECT id FROM purchase_order WHERE requirement_id IN (SELECT id FROM procurement_requirement WHERE delivery_cycle_id=?)",
+          )
+            .bind(id)
+            .first(),
+        ).toBeNull();
+      } finally {
+        await env.DB.exec(`DROP TRIGGER ${trigger}`);
+      }
+    },
+  );
+  it("rejects before cutoff and allows one concurrent confirmation", async () => {
+    const early = await fixture(Date.now() + 60000);
+    expect(await core.confirmAdminProcurementPurchase(early.request)).toMatchObject({ ok: false });
+    await noEffects(early.id, early.request.idempotencyKey);
+    const { request } = await fixture();
+    const results = await Promise.all([
+      core.confirmAdminProcurementPurchase(request),
+      core.confirmAdminProcurementPurchase({ ...request, idempotencyKey: crypto.randomUUID() }),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+  });
+});
+
+it("rejects purchase quantities that differ from the reviewed paid demand", async () => {
+  const { request, id } = await fixture();
+  expect(
+    await core.confirmAdminProcurementPurchase({ ...request, expectedQuantityBase: 1000 }),
+  ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+  await noEffects(id, request.idempotencyKey);
+});
+it("shows scoped week demand, purchase and receiving progress without stock netting", async () => {
+  const { request, manager } = await fixture();
+  await env.DB.prepare(
+    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='procurement.read'",
+  )
+    .bind(manager.id)
+    .run();
+  const query = {
+    headers: request.headers,
+    requestId: crypto.randomUUID(),
+    locationId: request.locationId,
+    cycleId: request.cycleId,
+  };
+  expect(await core.getAdminScheduledWeek(query)).toMatchObject({
+    ok: true,
+    value: {
+      week: { cycleId: request.cycleId },
+      page: {
+        kind: "DEMAND",
+        items: [
+          {
+            quantityBase: 500,
+            quantitySellable: 1,
+            status: "NOT_PURCHASED",
+            canConfirmPurchase: true,
+          },
+        ],
+      },
+    },
+  });
+  expect(await core.confirmAdminProcurementPurchase(request)).toMatchObject({ ok: true });
+  expect(await core.getAdminScheduledWeek(query)).toMatchObject({
+    ok: true,
+    value: {
+      page: {
+        kind: "DEMAND",
+        items: [{ status: "ORDERED", canConfirmPurchase: false, receivingStatus: "NOT_STARTED" }],
+      },
+    },
+  });
+  expect(await core.getAdminScheduledWeek({ ...query, section: "ORDERS" })).toMatchObject({
+    ok: true,
+    value: { page: { kind: "ORDERS", denied: true, items: [] } },
+  });
+  expect(await core.getAdminScheduledWeek({ ...query, section: "OFFERS" })).toMatchObject({
+    ok: true,
+  });
+  expect(
+    await core.getAdminScheduledWeek({ ...query, locationId: "location-mandaue" }),
+  ).toMatchObject({ ok: false });
+});
+
+it("recovers a committed purchase when the D1 reply is lost", async () => {
+  const { request } = await fixture();
+  let committed = false;
+  const database = new Proxy(env.DB, {
+    get(target, key) {
+      if (key === "batch")
+        return async (statements: D1PreparedStatement[]) => {
+          await target.batch(statements);
+          committed = true;
+          throw new Error("Synthetic lost D1 reply");
+        };
+      const value = Reflect.get(target, key);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const result = await confirmAdminProcurementPurchase(
+    { db: database, auth: createAuth(env) },
+    request,
+  );
+  expect(committed).toBe(true);
+  expect(result).toMatchObject({ ok: true, value: { status: "ORDERED" } });
+  expect(await core.confirmAdminProcurementPurchase(request)).toEqual(result);
+  expect(
+    await core.confirmAdminProcurementPurchase({ ...request, reason: "Another purchase" }),
+  ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
 });

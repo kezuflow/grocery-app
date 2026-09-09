@@ -1,3 +1,4 @@
+import type { AdminScheduledWeekService } from "./admin-scheduled-week";
 import type { InventoryTransfersService } from "./inventory-transfers";
 import type { PromotionMediaService } from "./promotion-media";
 import type { RpcResult } from "./common";
@@ -74,6 +75,7 @@ export interface ImplementedCoreService
     LocationScheduleService,
     LocationFulfillmentService,
     AdminDeliveryCyclesService,
+    AdminScheduledWeekService,
     AdminServiceabilityService,
     AdminStaffAccessService,
     InitialAdministratorService,
@@ -244,6 +246,8 @@ export const coreServiceMethodNames = [
   "activateGlobalMode",
   "openSelling",
   "aggregateAdminProcurementDemand",
+  "confirmAdminProcurementPurchase",
+  "getAdminScheduledWeek",
   "startAdminReceiving",
   "recordAdminReceivedLine",
   "completeAdminReceiving",

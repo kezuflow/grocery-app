@@ -1,3 +1,4 @@
+import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
 import {
   uploadAdminPromotionMedia,
   updateAdminPromotionMedia,
@@ -130,6 +131,7 @@ import {
 import {
   activateAdminGlobalMode,
   aggregateAdminProcurementDemand,
+  confirmAdminProcurementPurchase,
   startAdminReceiving,
   recordAdminReceivedLine,
   completeAdminReceiving,
@@ -2258,6 +2260,29 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return aggregateAdminProcurementDemand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  getAdminScheduledWeek(input: import("@freshmarkets/contracts").ScheduledWeekRequest) {
+    return getAdminScheduledWeek(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async confirmAdminProcurementPurchase(
+    input: import("@freshmarkets/contracts").ConfirmAdminProcurementPurchaseRequest,
+  ) {
+    const validation = adminProcurementAggregateSchema
+      .extend({
+        reason: validationSchema.string().trim().min(1).max(500),
+        expectedQuantityBase: validationSchema.number().int().safe().positive(),
+        expectedQuantitySellable: validationSchema.number().int().safe().positive(),
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return confirmAdminProcurementPurchase(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

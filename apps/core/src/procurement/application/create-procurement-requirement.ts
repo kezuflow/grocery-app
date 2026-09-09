@@ -6,10 +6,9 @@ import type {
 import { z } from "@freshmarkets/validation";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-const SCOPE = "procurement.createRequirement";
 const resultSchema = z.object({
   id: z.string(),
-  status: z.literal("AGGREGATED"),
+  status: z.enum(["AGGREGATED", "ORDERED"]),
   view: z.object({
     requirementId: z.string(),
     cycleId: z.string(),
@@ -21,7 +20,7 @@ const resultSchema = z.object({
     requiredQuantityBase: z.number().int().safe().positive(),
     acceptedBase: z.literal(0),
     rejectedBase: z.literal(0),
-    status: z.literal("AGGREGATED"),
+    status: z.enum(["AGGREGATED", "ORDERED"]),
     version: z.number().int().safe().positive(),
   }),
 });
@@ -35,6 +34,8 @@ export type ProcurementCommandPorts = {
   actorAuthUserId?: string;
   reason?: string;
   now?: () => number;
+  expectedQuantityBase?: number;
+  expectedQuantitySellable?: number;
 };
 /** The exact demand snapshot, run, requirement, receipt, audit and result share one guarded batch. */
 export async function createProcurementRequirement(
@@ -42,6 +43,32 @@ export async function createProcurementRequirement(
   command: ProcurementCommandRequest,
   ports: ProcurementCommandPorts = {},
 ): Promise<CreateProcurementRequirementResult> {
+  return executeProcurementCommand(database, command, ports, "AGGREGATE");
+}
+
+/** Staff confirms the manual purchase; exact demand and receiving readiness commit together. */
+export function confirmProcurementPurchase(
+  database: D1Database,
+  command: ProcurementCommandRequest,
+  ports: ProcurementCommandPorts,
+): Promise<CreateProcurementRequirementResult> {
+  return executeProcurementCommand(database, command, ports, "CONFIRM_PURCHASE");
+}
+
+async function executeProcurementCommand(
+  database: D1Database,
+  command: ProcurementCommandRequest,
+  ports: ProcurementCommandPorts,
+  operation: "AGGREGATE" | "CONFIRM_PURCHASE",
+): Promise<CreateProcurementRequirementResult> {
+  const purchasing = operation === "CONFIRM_PURCHASE";
+  const SCOPE = purchasing ? "procurement.confirmPurchase" : "procurement.createRequirement";
+  if (purchasing && (!ports.actorAuthUserId || !ports.reason?.trim()))
+    return failure(
+      "VALIDATION_FAILED",
+      "Purchase confirmation requires staff identity and a reason",
+      command.requestId,
+    );
   if (
     !Number.isSafeInteger(command.expectedVersion) ||
     command.expectedVersion < 0 ||
@@ -59,6 +86,12 @@ export async function createProcurementRequirement(
     inventoryPoolId: command.inventoryPoolId,
     skuId: command.skuId,
     expectedVersion: command.expectedVersion,
+    ...(purchasing
+      ? {
+          expectedQuantityBase: ports.expectedQuantityBase,
+          expectedQuantitySellable: ports.expectedQuantitySellable,
+        }
+      : {}),
   };
   const legacyHash = await requestHash(payload),
     hash = await requestHash({
@@ -140,6 +173,16 @@ export async function createProcurementRequirement(
       "No valid exact paid demand is available for this requirement",
       command.requestId,
     );
+  if (
+    purchasing &&
+    (totals.quantity !== ports.expectedQuantityBase ||
+      totals.units !== ports.expectedQuantitySellable)
+  )
+    return failure(
+      "STALE_VERSION",
+      "Paid quantities changed; review the current purchase list",
+      command.requestId,
+    );
   const run = await database
     .prepare(
       "SELECT id,status,version FROM procurement_run WHERE delivery_cycle_id=? AND destination_location_id=?",
@@ -211,10 +254,10 @@ export async function createProcurementRequirement(
     requiredQuantityBase: totals.quantity,
     acceptedBase: 0,
     rejectedBase: 0,
-    status: "AGGREGATED",
+    status: purchasing ? "ORDERED" : "AGGREGATED",
     version: command.expectedVersion + 1,
   };
-  const result = resultSchema.parse({ id, status: "AGGREGATED", view });
+  const result = resultSchema.parse({ id, status: view.status, view });
   const statements: D1PreparedStatement[] = [];
   if (ports.actorAuthUserId)
     statements.push(
@@ -336,10 +379,31 @@ export async function createProcurementRequirement(
         )
         .bind(crypto.randomUUID(), id, totals.quantity, now, now),
     );
+  if (!active)
+    statements.push(
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -38 WHERE changes()<>1"),
+    );
+  if (purchasing)
+    statements.push(
+      database
+        .prepare(
+          "INSERT INTO purchase_order(id,requirement_id,supplier_id,status,ordered_quantity,created_at,version) SELECT ?,?,NULL,'ORDERED',?,?,1 WHERE NOT EXISTS(SELECT 1 FROM purchase_order WHERE requirement_id=?)",
+        )
+        .bind(crypto.randomUUID(), id, totals.quantity, now, id),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -38 WHERE changes()<>1"),
+      database
+        .prepare(
+          "UPDATE procurement_requirement SET status='ORDERED' WHERE id=? AND status='AGGREGATED' AND version=?",
+        )
+        .bind(id, command.expectedVersion + 1),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -38 WHERE changes()<>1"),
+    );
   statements.push(
     auditEventStatement(database, {
       actorUserId: ports.actorAuthUserId ?? null,
-      action: "OPERATIONS.PROCUREMENT_DEMAND_AGGREGATED",
+      action: purchasing
+        ? "OPERATIONS.PURCHASE_CONFIRMED"
+        : "OPERATIONS.PROCUREMENT_DEMAND_AGGREGATED",
       resourceType: "procurement_requirement",
       resourceId: id,
       locationId: command.locationId,
@@ -350,6 +414,7 @@ export async function createProcurementRequirement(
       before: active ? { status: active.status, version: active.version } : null,
       after: view,
     }),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -38 WHERE changes()<>1"),
     database
       .prepare(
         "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'",

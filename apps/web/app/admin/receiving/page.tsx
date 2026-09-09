@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   appErrorCodes,
   receivingRecordStates,
@@ -62,6 +63,7 @@ const commandResult = z.union([
 type ReceivingIntent = { path: string; body: string; success: string };
 export default function ReceivingPage() {
   const { locationId, label } = useAdminLocation();
+  const cycleId = useSearchParams().get("cycleId");
   const [page, setPage] = useState<ReceivingSessionPage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function ReceivingPage() {
         const payload = pageResult.parse(
           await (
             await fetch(
-              `/api/admin/receiving?locationId=${locationId ?? ""}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+              `/api/admin/receiving?locationId=${locationId ?? ""}&limit=50${cycleId ? `&cycleId=${encodeURIComponent(cycleId)}` : ""}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
             )
           ).json(),
         );
@@ -98,7 +100,7 @@ export default function ReceivingPage() {
         setState("error");
       }
     },
-    [locationId],
+    [locationId, cycleId],
   );
   useEffect(() => {
     if (locationId) void load(pagination.cursor);

@@ -42,3 +42,5 @@ export * from "./admin-promotions";
 export * from "./promotion-media";
 
 export * from "./inventory-transfers";
+
+export * from "./admin-scheduled-week";

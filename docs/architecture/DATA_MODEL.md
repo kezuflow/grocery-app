@@ -276,6 +276,8 @@ This specification records the authorized implementation target; CA-4.3's checkp
 
 Indexes: run/cycle/location/status, requirements/status, POs/supplier/status, receiving/location/status, open exceptions by cycle/location/type.
 
+CA-5.1 reuses the deployed singular `procurement_run`, `procurement_requirement`, `purchase_order` and `receiving_record` tables. A confirmed manual purchase records the exact requirement quantity in one `purchase_order` with a nullable supplier reference; supplier contact remains manual. The requirement becomes `ORDERED` in the same guarded batch as the purchase, receiving record, audit and command result. A run can contain other requirements still awaiting purchase; this command does not declare the entire run complete. The delivery-week view derives dates, exact demand, purchase/receiving progress and permission-filtered Orders from their owning records, without another week aggregate or physical-stock netting.
+
 ## Fulfillment and Delivery
 
 - `fulfillment_tasks(id PK, order_id FK UNIQUE, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, location_id FK, promise_snapshot_json, status, exception_code NULL, version, created_at, updated_at)`

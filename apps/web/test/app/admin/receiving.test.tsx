@@ -3,6 +3,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import ReceivingPage from "@/app/admin/receiving/page";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("cycleId=cycle") }));
 vi.mock("@/components/admin/use-admin-location", () => ({
   useAdminLocation: () => ({ locationId: "cebu", label: "Cebu" }),
 }));
@@ -47,7 +48,8 @@ afterEach(async () => {
 describe("Receiving command recovery", () => {
   it("uses the selected receipt version and retains the exact request after unknown outcome", async () => {
     const writes: RequestInit[] = [];
-    fetchMock.mockImplementation(async (_url, options) => {
+    fetchMock.mockImplementation(async (url, options) => {
+      if (!options?.method) expect(String(url)).toContain("cycleId=cycle");
       if (options?.method === "POST") {
         writes.push(options);
         if (writes.length === 1) throw new Error("lost response");

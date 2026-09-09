@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname),
       "next/link": "vinext/shims/link",
+      "next/navigation": "vinext/shims/navigation",
     },
   },
   test: {

@@ -1,6 +1,7 @@
 import type {
   AdvanceAdminFulfillmentRequest,
   AggregateAdminProcurementDemandRequest,
+  ConfirmAdminProcurementPurchaseRequest,
   CompleteAdminReceivingRequest,
   RecordAdminReceivedLineRequest,
   ResolveAdminOperationalExceptionRequest,
@@ -16,7 +17,10 @@ import type {
   ReceivingSessionView,
 } from "@freshmarkets/contracts";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
-import { createProcurementRequirement } from "../../procurement/application/create-procurement-requirement";
+import {
+  createProcurementRequirement,
+  confirmProcurementPurchase,
+} from "../../procurement/application/create-procurement-requirement";
 import type { ReceivingResult } from "../../procurement/application/execute-receiving-command";
 import { recordReceivedLine } from "../../procurement/application/record-received-line";
 import { startReceiving } from "../../procurement/application/start-receiving";
@@ -153,6 +157,35 @@ export async function aggregateAdminProcurementDemand(
       idempotencyKey: request.idempotencyKey,
     },
     { actorAuthUserId: permitted.value.authUserId, reason: request.reason },
+  );
+  if (!result.ok) return result;
+  return { ok: true, value: result.value.view, requestId: request.requestId };
+}
+
+export async function confirmAdminProcurementPurchase(
+  deps: OperationsAdministrationDeps,
+  request: ConfirmAdminProcurementPurchaseRequest,
+): Promise<RpcResult<ProcurementRequirementView>> {
+  const permitted = await access(deps, request, "procurement.manage");
+  if (!permitted.ok) return permitted;
+  const result = await confirmProcurementPurchase(
+    deps.db,
+    {
+      requestId: request.requestId,
+      headers: request.headers,
+      deliveryCycleId: request.cycleId,
+      locationId: request.locationId,
+      inventoryPoolId: request.inventoryPoolId,
+      skuId: request.skuId,
+      expectedVersion: request.expectedVersion,
+      idempotencyKey: request.idempotencyKey,
+    },
+    {
+      actorAuthUserId: permitted.value.authUserId,
+      reason: request.reason,
+      expectedQuantityBase: request.expectedQuantityBase,
+      expectedQuantitySellable: request.expectedQuantitySellable,
+    },
   );
   if (!result.ok) return result;
   return { ok: true, value: result.value.view, requestId: request.requestId };
