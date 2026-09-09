@@ -142,4 +142,32 @@ describe("customer order issue application", () => {
     }
     expect(hidden).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
+  it("accepts an order-level report without items and preserves its original replay after handling", async () => {
+    const data = await fixture();
+    const command = {
+      ...data,
+      category: "MISSING_ITEM" as const,
+      description: "Some groceries were missing",
+      affectedOrderItemIds: [],
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+      headers: {},
+    };
+    const submitted = await submitCustomerOrderIssue(env.DB, command);
+    if (!submitted.ok) throw new Error(submitted.error.message);
+    expect(submitted.value.affectedOrderItemIds).toEqual([]);
+    await env.DB.prepare(
+      "UPDATE order_issue SET status='RESOLVED',resolution='Staff-only note',version=3,updated_at=updated_at+1 WHERE id=?",
+    )
+      .bind(submitted.value.issueId)
+      .run();
+    expect(await submitCustomerOrderIssue(env.DB, command)).toEqual(submitted);
+    await env.DB.prepare("UPDATE grocery_order SET status='FULFILLMENT_READY' WHERE id=?")
+      .bind(data.orderId)
+      .run();
+    expect(
+      await submitCustomerOrderIssue(env.DB, { ...command, idempotencyKey: crypto.randomUUID() }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(await submitCustomerOrderIssue(env.DB, command)).toEqual(submitted);
+  });
 });

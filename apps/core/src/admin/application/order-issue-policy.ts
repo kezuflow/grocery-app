@@ -3,9 +3,9 @@ import type { OrderIssueAction, OrderIssueStatus } from "@freshmarkets/contracts
 const allowedActionsByStatus: Readonly<Record<OrderIssueStatus, ReadonlyArray<OrderIssueAction>>> =
   {
     SUBMITTED: ["CLAIM"],
-    CLAIMED: ["BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"],
-    INVESTIGATING: ["RESOLVE", "ESCALATE"],
-    ESCALATED: ["BEGIN_INVESTIGATION"],
+    CLAIMED: ["RESOLVE"],
+    INVESTIGATING: ["RESOLVE"],
+    ESCALATED: ["RESOLVE"],
     RESOLVED: [],
   };
 

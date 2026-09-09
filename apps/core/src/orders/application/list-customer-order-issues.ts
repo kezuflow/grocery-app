@@ -23,7 +23,6 @@ export type CustomerIssueStorageRow = {
 export function storageIssueStatusToCustomer(status: string): CustomerOrderIssueStatus {
   if (status === "SUBMITTED") return "SUBMITTED";
   if (status === "RESOLVED") return "RESOLVED";
-  if (status === "ESCALATED") return "ESCALATED";
   return "IN_REVIEW";
 }
 

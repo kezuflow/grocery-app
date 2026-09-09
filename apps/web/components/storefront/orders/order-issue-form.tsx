@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "../../ui/button";
 import type {
   CustomerOrderIssueCategory,
   CustomerOrderIssueView,
@@ -36,23 +37,27 @@ export function OrderIssueForm({
   const [affectedIds, setAffectedIds] = useState<string[]>([]);
   const [state, setState] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
-  const key = useRef<string | null>(null);
+  const key = useRef<{ id: string; body: string } | null>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!available || state === "submitting") return;
-    key.current ??= newKey();
+    key.current ??= {
+      id: newKey(),
+      body: JSON.stringify({ category, description, affectedOrderItemIds: affectedIds }),
+    };
     setState("submitting");
     setMessage("Submitting your issue…");
     try {
       const response = await fetch(`/api/commerce/orders/${encodeURIComponent(orderId)}/issues`, {
         method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": key.current },
-        body: JSON.stringify({ category, description, affectedOrderItemIds: affectedIds }),
+        headers: { "content-type": "application/json", "idempotency-key": key.current.id },
+        body: key.current.body,
       });
       const result = (await response.json()) as RpcResult<CustomerOrderIssueView>;
       if (!result.ok) {
+        key.current = null;
         setState("error");
         setMessage(result.error.message);
         return;
@@ -79,7 +84,7 @@ export function OrderIssueForm({
           id="issue-category"
           value={category}
           onChange={(event) => setCategory(event.target.value as CustomerOrderIssueCategory)}
-          disabled={!available || state === "submitting"}
+          disabled={!available || state === "submitting" || key.current !== null}
           className="mt-1 block w-full rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2"
         >
           {categories.map((option) => (
@@ -89,8 +94,8 @@ export function OrderIssueForm({
           ))}
         </select>
       </div>
-      <fieldset disabled={!available || state === "submitting"}>
-        <legend className="text-sm font-semibold">Affected items</legend>
+      <fieldset disabled={!available || state === "submitting" || key.current !== null}>
+        <legend className="text-sm font-semibold">Affected items (optional)</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {items.map((item) => (
             <label key={item.orderItemId} className="flex gap-2 text-sm">
@@ -121,7 +126,7 @@ export function OrderIssueForm({
           rows={4}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
-          disabled={!available || state === "submitting"}
+          disabled={!available || state === "submitting" || key.current !== null}
           aria-describedby="issue-character-count"
           className="mt-1 block w-full rounded-lg border border-[var(--fm-border)] px-3 py-2"
         />
@@ -129,13 +134,13 @@ export function OrderIssueForm({
           {description.length}/1000 characters
         </p>
       </div>
-      <button
+      <Button
         type="submit"
         disabled={!available || state === "submitting" || !description.trim()}
-        className="rounded-lg bg-[var(--fm-ink)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        className="min-h-11"
       >
-        {state === "submitting" ? "Submitting…" : "Submit issue"}
-      </button>
+        {state === "submitting" ? "Submitting…" : "Report a problem"}
+      </Button>
       {!available ? (
         <p className="text-sm text-[var(--fm-text-muted)]">Issue reporting is unavailable.</p>
       ) : null}

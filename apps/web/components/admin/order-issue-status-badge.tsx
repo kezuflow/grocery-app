@@ -3,8 +3,8 @@ import { AdminStatusPill, type AdminStatusTone } from "./admin-status-pill";
 const issueStatusTone: Readonly<Record<string, AdminStatusTone>> = {
   SUBMITTED: "neutral",
   CLAIMED: "info",
-  INVESTIGATING: "warning",
-  ESCALATED: "danger",
+  INVESTIGATING: "info",
+  ESCALATED: "info",
   RESOLVED: "success",
 };
 
@@ -15,5 +15,14 @@ export function OrderIssueStatusBadge({
   status: string;
   className?: string;
 }) {
-  return <AdminStatusPill status={status} tone={issueStatusTone[status]} className={className} />;
+  const label =
+    status === "SUBMITTED" ? "New" : status === "RESOLVED" ? "Resolved" : "Being handled";
+  return (
+    <AdminStatusPill
+      status={status}
+      label={label}
+      tone={issueStatusTone[status]}
+      className={className}
+    />
+  );
 }

@@ -1,3 +1,9 @@
+import { z } from "@freshmarkets/validation";
+import {
+  orderIssueCategories,
+  orderIssueStatuses,
+  orderIssueActions,
+} from "@freshmarkets/contracts";
 import { retryPaymentReaction } from "../../payments/application/retry-payment-reaction";
 import { retryProviderEvent } from "../../payments/application/retry-provider-event";
 import { recheckStaffPayment } from "../../payments/application/recheck-staff-payment";
@@ -8,7 +14,6 @@ import type {
   AdminMembershipSummary,
   AdminOrderCancelRequest,
   AdminOrderIssueActionRequest,
-  OrderIssueStatus,
   AdminOrderIssueView,
   AdminReconciliationCaseView,
   AdminRefundRequest,
@@ -21,9 +26,8 @@ import { cancelOrder } from "../../orders/application/cancel-order";
 import { requestStaffRefund } from "../../payments/application/request-staff-refund";
 import { requestRefund } from "../../payments/application/request-refund";
 import { cancelSubscription } from "../../membership/application/change-subscription";
-import { claimCommandIdempotency } from "../../idempotency";
+import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { log } from "../../observability";
 import {
   resolveFinanceAdministrationAccess,
   type FinanceAdministrationDeps,
@@ -31,15 +35,6 @@ import {
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
-}
-
-function idempotencyFailed(database: D1Database, scope: string, key: string): Promise<unknown> {
-  return database
-    .prepare(
-      "UPDATE idempotency_records SET status='FAILED', updated_at=? WHERE scope=? AND idempotency_key=? AND status='PROCESSING'",
-    )
-    .bind(Date.now(), scope, key)
-    .run();
 }
 
 /** Admin order cancellation through the canonical command. */
@@ -339,191 +334,166 @@ export async function changeAdminMembership(
   };
 }
 
-const ISSUE_TRANSITIONS: Record<
-  string,
-  { from: OrderIssueStatus[]; to: OrderIssueStatus; terminal: boolean }
-> = {
-  CLAIM: { from: ["SUBMITTED"], to: "CLAIMED", terminal: false },
-  BEGIN_INVESTIGATION: { from: ["CLAIMED", "ESCALATED"], to: "INVESTIGATING", terminal: false },
-  RESOLVE: { from: ["CLAIMED", "INVESTIGATING"], to: "RESOLVED", terminal: true },
-  ESCALATE: { from: ["CLAIMED", "INVESTIGATING"], to: "ESCALATED", terminal: false },
-};
+const issueReceiptSchema = z.object({
+  issueId: z.string(),
+  orderId: z.string(),
+  category: z.enum(orderIssueCategories),
+  status: z.enum(orderIssueStatuses),
+  details: z.string().nullable(),
+  assignedStaffId: z.string().nullable(),
+  resolution: z.string().nullable(),
+  allowedActions: z.array(z.enum(orderIssueActions)),
+  version: z.number().int(),
+  createdAt: z.string(),
+});
 
-/** Apply a closed issue action through the legal transition map. */
+/** Ordinary problem handling; historical investigation states remain resolvable. */
 export async function applyAdminOrderIssueAction(
   deps: FinanceAdministrationDeps,
   request: AdminOrderIssueActionRequest,
 ): Promise<RpcResult<AdminOrderIssueView>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "orders.manage");
   if (!access.ok) return access;
-  const reason = request.reason.trim();
-  if (reason === "") {
-    return failure("VALIDATION_FAILED", "A reason is required", request.requestId);
-  }
-
+  const parsed = z
+    .object({
+      issueId: z.string().min(1).max(200),
+      action: z.enum(orderIssueActions),
+      reason: z.string().trim().min(1).max(500),
+      expectedVersion: z.number().int().positive(),
+      idempotencyKey: z.string().min(1).max(200),
+    })
+    .safeParse(request);
+  if (!parsed.success)
+    return failure(
+      "VALIDATION_FAILED",
+      "Choose a valid action and add a short note",
+      request.requestId,
+    );
+  const command = parsed.data;
+  const scope = "admin.issues.action";
+  // Keep the existing intent hash so retained receipts still identify their original request.
+  const hash = await requestHash({
+    issueId: command.issueId,
+    action: command.action,
+    reason: command.reason,
+    expectedVersion: command.expectedVersion,
+  });
   const row = await deps.db
     .prepare(
-      "SELECT id, order_id, category, status, details, assigned_staff_id, resolution, version, created_at FROM order_issue WHERE id = ?",
+      "SELECT id AS issueId, order_id AS orderId, category, status, details, assigned_staff_id AS assignedStaffId, resolution, version, created_at AS createdAt FROM order_issue WHERE id=?",
     )
-    .bind(request.issueId)
-    .first<{
-      id: string;
-      order_id: string;
-      category: AdminOrderIssueView["category"];
-      status: OrderIssueStatus;
-      details: string | null;
-      assigned_staff_id: string | null;
-      resolution: string | null;
-      version: number;
-      created_at: number;
-    }>();
-  if (!row) return failure("NOT_FOUND", "Order issue not found", request.requestId);
-
-  const now = Date.now();
-  const claim = await claimCommandIdempotency(
-    deps.db,
-    () => now,
-    "admin.issues.action",
-    request.idempotencyKey,
-    {
-      issueId: request.issueId,
-      action: request.action,
-      reason,
-      expectedVersion: request.expectedVersion,
-    },
-  );
-  if (!claim.claimed) {
-    if (claim.existing && claim.existing.requestHash !== claim.hash) {
+    .bind(command.issueId)
+    .first<Omit<AdminOrderIssueView, "allowedActions" | "createdAt"> & { createdAt: number }>();
+  if (!row) return failure("NOT_FOUND", "Problem not found", request.requestId);
+  const replay = async (): Promise<RpcResult<AdminOrderIssueView> | null> => {
+    const prior = await findIdempotencyRecord(deps.db, scope, command.idempotencyKey);
+    if (!prior) return null;
+    if (prior.requestHash !== hash)
       return failure(
         "IDEMPOTENCY_CONFLICT",
-        "Idempotency key was used with a different request",
+        "This key belongs to another request",
         request.requestId,
       );
-    }
-    if (claim.existing?.status === "SUCCEEDED") {
-      const existing = await deps.db
-        .prepare(
-          "SELECT id, order_id, category, status, details, assigned_staff_id, resolution, version, created_at FROM order_issue WHERE id = ?",
-        )
-        .bind(request.issueId)
-        .first<Record<string, unknown>>();
-      if (existing) {
-        return {
-          ok: true,
-          value: {
-            issueId: existing.id as string,
-            orderId: existing.order_id as string,
-            category: existing.category as AdminOrderIssueView["category"],
-            status: existing.status as OrderIssueStatus,
-            details: existing.details as string | null,
-            assignedStaffId: existing.assigned_staff_id as string | null,
-            resolution: existing.resolution as string | null,
-            allowedActions: allowedOrderIssueActions(existing.status as OrderIssueStatus),
-            version: existing.version as number,
-            createdAt: new Date(existing.created_at as number).toISOString(),
-          },
-          requestId: request.requestId,
-        };
+    if (prior.status === "SUCCEEDED") {
+      if (prior.resultType === "order_issue_receipt" && prior.resultReference) {
+        const value = issueReceiptSchema.parse(JSON.parse(prior.resultReference));
+        return { ok: true, value, requestId: request.requestId };
       }
+      // Retained older commands stored only a report reference, not an immutable result.
+      if (prior.resultReference !== command.issueId)
+        return failure("CONFLICT", "The saved problem action needs review", request.requestId);
+      return {
+        ok: true,
+        value: {
+          ...row,
+          createdAt: new Date(row.createdAt).toISOString(),
+          allowedActions: allowedOrderIssueActions(row.status),
+        },
+        requestId: request.requestId,
+      };
     }
-    return failure("CONFLICT", "The issue action is still processing", request.requestId);
-  }
-
-  const transition = ISSUE_TRANSITIONS[request.action];
-  if (!transition || !transition.from.includes(row.status)) {
-    await idempotencyFailed(deps.db, "admin.issues.action", request.idempotencyKey);
+    if (prior.status === "PROCESSING")
+      return failure("CONFLICT", "The prior problem action needs review", request.requestId);
+    return null;
+  };
+  const previous = await replay();
+  if (previous) return previous;
+  if (row.version !== command.expectedVersion)
+    return failure("STALE_VERSION", "Problem changed; refresh before retrying", request.requestId);
+  if (!allowedOrderIssueActions(row.status).includes(command.action))
     return failure(
       "ILLEGAL_TRANSITION",
-      `${request.action} is not legal from ${row.status}`,
+      "This action is unavailable for the current problem",
+      request.requestId,
+    );
+  const status = command.action === "CLAIM" ? "CLAIMED" : "RESOLVED";
+  const view: AdminOrderIssueView = {
+    ...row,
+    status,
+    assignedStaffId: access.value.staffId,
+    resolution: command.action === "RESOLVE" ? command.reason : row.resolution,
+    allowedActions: allowedOrderIssueActions(status),
+    version: row.version + 1,
+    createdAt: new Date(row.createdAt).toISOString(),
+  };
+  const now = Date.now();
+  const guard = () =>
+    deps.db.prepare("INSERT INTO commitment_abort(id) SELECT -39 WHERE changes()<>1");
+  try {
+    await deps.db.batch([
+      deps.db
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -39 WHERE NOT EXISTS (
+        SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
+        JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id
+        JOIN staff_scope scope ON scope.staff_id=staff.id
+        WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active' AND scope.scope_kind='global' AND p.code='orders.manage')`)
+        .bind(access.value.staffId, access.value.authUserId),
+      deps.db
+        .prepare(
+          "UPDATE order_issue SET status=?,assigned_staff_id=?,resolution=?,updated_at=?,version=version+1 WHERE id=? AND status=? AND version=?",
+        )
+        .bind(
+          status,
+          access.value.staffId,
+          view.resolution,
+          now,
+          command.issueId,
+          row.status,
+          command.expectedVersion,
+        ),
+      guard(),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: `ISSUE.${command.action}`,
+        resourceType: "order_issue",
+        resourceId: command.issueId,
+        reason: command.reason,
+        before: { status: row.status },
+        after: { status },
+        correlationId: request.requestId,
+        occurredAt: now,
+      }),
+      guard(),
+      deps.db
+        .prepare(`INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,result_reference,created_at,updated_at)
+        VALUES (?,?,?,'SUCCEEDED','order_issue_receipt',?,?,?)
+        ON CONFLICT(scope,idempotency_key) DO UPDATE SET status='SUCCEEDED',result_type='order_issue_receipt',result_reference=excluded.result_reference,updated_at=excluded.updated_at
+        WHERE idempotency_records.status='FAILED' AND idempotency_records.request_hash=excluded.request_hash`)
+        .bind(scope, command.idempotencyKey, hash, JSON.stringify(view), now, now),
+      guard(),
+    ]);
+  } catch (error) {
+    const raced = await replay();
+    if (raced) return raced;
+    if (!(error instanceof Error) || !/constraint failed/i.test(error.message)) throw error;
+    return failure(
+      "STALE_VERSION",
+      "Problem or access changed; refresh before retrying",
       request.requestId,
     );
   }
-
-  const resolution = transition.terminal ? reason : row.resolution;
-  try {
-    const batchResult = await deps.db.batch([
-      auditEventStatement(
-        deps.db,
-        {
-          actorUserId: access.value.authUserId,
-          action: `ISSUE.${request.action}`,
-          resourceType: "order_issue",
-          resourceId: request.issueId,
-          reason,
-          before: { status: row.status },
-          after: { status: transition.to },
-          correlationId: request.requestId,
-          occurredAt: now,
-        },
-        {
-          clause: "EXISTS (SELECT 1 FROM order_issue WHERE id = ? AND version = ?)",
-          binds: [request.issueId, request.expectedVersion],
-        },
-      ),
-      deps.db
-        .prepare(
-          "UPDATE order_issue SET status=?, assigned_staff_id=?, resolution=?, updated_at=?, version=version+1 WHERE id=? AND status=? AND version=?",
-        )
-        .bind(
-          transition.to,
-          access.value.staffId,
-          resolution,
-          now,
-          request.issueId,
-          row.status,
-          request.expectedVersion,
-        ),
-      deps.db
-        .prepare(
-          `UPDATE idempotency_records SET status='SUCCEEDED', result_reference=?, updated_at=?
-           WHERE scope=? AND idempotency_key=? AND status='PROCESSING'
-             AND EXISTS (SELECT 1 FROM order_issue WHERE id=? AND status=? AND version=?)`,
-        )
-        .bind(
-          request.issueId,
-          now,
-          "admin.issues.action",
-          request.idempotencyKey,
-          request.issueId,
-          transition.to,
-          request.expectedVersion + 1,
-        ),
-    ]);
-    if ((batchResult[1]?.meta?.changes ?? 0) !== 1) {
-      await idempotencyFailed(deps.db, "admin.issues.action", request.idempotencyKey);
-      return failure("STALE_VERSION", "Issue changed; refresh before retrying", request.requestId);
-    }
-  } catch (error) {
-    log("error", "admin.issues.action_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await idempotencyFailed(deps.db, "admin.issues.action", request.idempotencyKey);
-    return failure("CONFLICT", "The issue action could not be applied", request.requestId);
-  }
-
-  const after = await deps.db
-    .prepare("SELECT version FROM order_issue WHERE id = ?")
-    .bind(request.issueId)
-    .first<{ version: number }>();
-  if (after?.version !== request.expectedVersion + 1) {
-    return failure("STALE_VERSION", "Issue changed; refresh before retrying", request.requestId);
-  }
-  const updated = await deps.db
-    .prepare(
-      "SELECT id, order_id AS orderId, category, status, details, assigned_staff_id AS assignedStaffId, resolution, version, created_at AS createdAt FROM order_issue WHERE id = ?",
-    )
-    .bind(request.issueId)
-    .first<Omit<AdminOrderIssueView, "allowedActions" | "createdAt"> & { createdAt: number }>();
-  if (!updated)
-    return failure("INTERNAL_ERROR", "The issue could not be read back", request.requestId);
-  const view: AdminOrderIssueView = {
-    ...updated,
-    allowedActions: allowedOrderIssueActions(updated.status),
-    createdAt: new Date(updated.createdAt).toISOString(),
-  };
   return { ok: true, value: view, requestId: request.requestId };
 }
-
 export async function recheckAdminRefund(
   deps: FinanceAdministrationDeps,
   request: import("@freshmarkets/contracts").AdminRefundRecheckRequest,

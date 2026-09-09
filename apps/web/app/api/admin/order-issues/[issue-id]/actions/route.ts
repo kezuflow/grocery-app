@@ -26,7 +26,7 @@ async function POSTHandler(request: Request, context: { params: Promise<{ "issue
     reason?: unknown;
     expectedVersion?: unknown;
   } | null;
-  const actions = ["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"] as const;
+  const actions = ["CLAIM", "RESOLVE"] as const;
   const action =
     typeof body?.action === "string" ? actions.find((value) => value === body.action) : undefined;
   if (!action || typeof body?.reason !== "string" || !Number.isInteger(body?.expectedVersion)) {

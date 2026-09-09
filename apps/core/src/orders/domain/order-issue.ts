@@ -32,7 +32,6 @@ type ValidationFailureCode =
   | "DESCRIPTION_REQUIRED"
   | "DESCRIPTION_TOO_LONG"
   | "OTHER_NOTES_REQUIRED"
-  | "AFFECTED_LINE_REQUIRED"
   | "TOO_MANY_AFFECTED_LINES"
   | "DUPLICATE_AFFECTED_LINE"
   | "ORDER_STATE_UNSUPPORTED"
@@ -76,31 +75,11 @@ export function validateCustomerOrderIssue(input: ValidationInput):
       code: "DUPLICATE_AFFECTED_LINE",
       message: "An affected line can be selected only once",
     };
-  if (
-    ["MISSING_ITEM", "WRONG_ITEM", "DAMAGED_ITEM", "POOR_QUALITY", "QUANTITY_DISCREPANCY"].includes(
-      input.category,
-    ) &&
-    affectedOrderItemIds.length === 0
-  )
-    return {
-      ok: false,
-      code: "AFFECTED_LINE_REQUIRED",
-      message: "Select at least one affected item",
-    };
-  if (
-    ![
-      "COMMITTED",
-      "IN_FULFILLMENT",
-      "PACKED",
-      "DISPATCHED",
-      "DELIVERED",
-      "DELIVERY_FAILED",
-    ].includes(input.orderStatus)
-  )
+  if (input.orderStatus !== "DELIVERED")
     return {
       ok: false,
       code: "ORDER_STATE_UNSUPPORTED",
-      message: "Issues cannot be submitted for this order state",
+      message: "You can report a problem after the order is delivered",
     };
   if (input.category === "DELIVERY_ISSUE" && input.deliveryStatus === "CANCELED")
     return {

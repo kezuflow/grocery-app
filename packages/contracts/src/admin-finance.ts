@@ -22,7 +22,7 @@ export const orderIssueStatuses = [
 ] as const;
 export type OrderIssueStatus = (typeof orderIssueStatuses)[number];
 
-export const orderIssueActions = ["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"] as const;
+export const orderIssueActions = ["CLAIM", "RESOLVE"] as const;
 export type OrderIssueAction = (typeof orderIssueActions)[number];
 
 export const reconciliationCaseCategories = [
@@ -440,6 +440,7 @@ export type AdminOrderIssueView = {
 };
 
 export type AdminOrderIssueContext = {
+  customerPhone: string | null;
   orderNumber: string | null;
   /** Recipient from the immutable Order address snapshot, not the auth profile. */
   customerName: string | null;

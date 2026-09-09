@@ -26,8 +26,9 @@ describe("OrderIssueForm", () => {
     expect(html).toContain('for="issue-category"');
     expect(html).toContain("Poor quality");
     expect(html).toContain("Red onion");
+    expect(html).toContain("Affected items (optional)");
     expect(html).toContain('maxLength="1000"');
     expect(html).toContain("0/1000 characters");
-    expect(html).toContain("Submit issue");
+    expect(html).toContain("Report a problem");
   });
 });

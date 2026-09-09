@@ -388,5 +388,77 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`instant-delivered-${width}.png`),
       fullPage: true,
     });
+    const beforeProblem = await read(page, `/api/commerce/orders/${orderId}`);
+    await expect(page.getByText("Affected items (optional)", { exact: true })).toBeVisible();
+    await page
+      .getByLabel("Describe the issue", { exact: true })
+      .fill("Some groceries were missing from this delivery.");
+    let reportBody: string | null = null;
+    let reportKey: string | undefined;
+    let reportCalls = 0;
+    await page.route(`**/api/commerce/orders/${orderId}/issues`, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      reportCalls++;
+      if (reportCalls === 1) {
+        reportBody = route.request().postData();
+        reportKey = route.request().headers()["idempotency-key"];
+        expect(JSON.parse(reportBody ?? "{}")).toMatchObject({ affectedOrderItemIds: [] });
+        expect((await route.fetch()).ok()).toBe(true);
+        await route.abort("failed");
+      } else {
+        expect(route.request().postData()).toBe(reportBody);
+        expect(route.request().headers()["idempotency-key"]).toBe(reportKey);
+        await route.continue();
+      }
+    });
+    await page.getByRole("button", { name: "Report a problem", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Retry to safely continue");
+    await expect(page.getByLabel("Describe the issue", { exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Report a problem", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Our team will review it" }),
+    ).toBeVisible();
+    expect(reportCalls).toBe(2);
+    await admin.goto("/admin/issues");
+    await expect(admin.getByRole("heading", { name: "Problems", exact: true })).toBeVisible();
+    const problemRow = admin.getByRole("row").filter({ hasText: orderId });
+    await expect(problemRow).toContainText("New");
+    await expect(problemRow.locator('a[href^="tel:"]')).toBeVisible();
+    await problemRow.getByRole("link", { name: "Missing Item", exact: true }).click();
+    await admin.getByRole("button", { name: "Start handling", exact: true }).click();
+    await admin.getByLabel("Confirmation reason", { exact: true }).fill("Contacting the customer");
+    await admin
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Start handling", exact: true })
+      .click();
+    await expect(admin.getByText("Being handled", { exact: true })).toBeVisible();
+    await expect(
+      admin.getByRole("button", { name: "Start investigation", exact: true }),
+    ).toHaveCount(0);
+    await admin.getByRole("button", { name: "Mark resolved", exact: true }).click();
+    await admin
+      .getByLabel("Confirmation reason", { exact: true })
+      .fill("Customer contacted and the reported problem was handled");
+    await admin
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Mark resolved", exact: true })
+      .click();
+    await expect(admin.getByText("Resolved", { exact: true })).toBeVisible();
+    await admin.screenshot({
+      path: testInfo.outputPath(`problem-resolved-${width}.png`),
+      fullPage: true,
+    });
+    const afterProblem = await read(page, `/api/commerce/orders/${orderId}`);
+    const commerce = z.object({
+      status: z.string(),
+      payments: z.array(z.unknown()),
+      refunds: z.array(z.unknown()),
+      financial: z.object({ totalMinor: z.number(), currency: z.string() }).passthrough(),
+    });
+    expect(commerce.parse(afterProblem)).toEqual(commerce.parse(beforeProblem));
+    await page.reload();
+    await expect(
+      page.getByText("Our team marked this issue resolved.", { exact: true }),
+    ).toBeVisible();
   });
 }

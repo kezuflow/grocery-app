@@ -264,7 +264,12 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               <ul className="mt-3 space-y-3">
                 {order.issues.map((issue) => (
                   <li key={issue.issueId} className="text-sm">
-                    <strong>{label(issue.category)}</strong> · {label(issue.status)}
+                    <strong>{label(issue.category)}</strong> ·{" "}
+                    {issue.status === "SUBMITTED"
+                      ? "New"
+                      : issue.status === "RESOLVED"
+                        ? "Resolved"
+                        : "Being handled"}
                     <p className="mt-1 text-[var(--fm-text-muted)]">{issue.description}</p>
                     {issue.resolutionMessage ? (
                       <p className="mt-1">{issue.resolutionMessage}</p>

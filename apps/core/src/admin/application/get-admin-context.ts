@@ -75,7 +75,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "orders-issues",
-    label: "Order issues",
+    label: "Problems",
     href: "/admin/issues",
     section: "commerce",
     parentCode: "orders",

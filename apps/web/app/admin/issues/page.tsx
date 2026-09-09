@@ -13,8 +13,6 @@ import {
   EllipsisVertical,
   Eye,
   PackageOpen,
-  Search,
-  ShieldAlert,
   UserCheck,
 } from "lucide-react";
 import Link from "next/link";
@@ -58,9 +56,7 @@ type PendingAction = {
 const issueViews: ReadonlyArray<{ label: string; status: OrderIssueStatus | "" }> = [
   { label: "All", status: "" },
   { label: "New", status: "SUBMITTED" },
-  { label: "Claimed", status: "CLAIMED" },
-  { label: "Investigating", status: "INVESTIGATING" },
-  { label: "Escalated", status: "ESCALATED" },
+  { label: "Being handled", status: "CLAIMED" },
   { label: "Resolved", status: "RESOLVED" },
 ];
 
@@ -71,28 +67,17 @@ const actionPresentation: Readonly<
   >
 > = {
   CLAIM: {
-    label: "Claim issue",
-    title: "Claim this issue?",
+    label: "Start handling",
+    title: "Start handling this problem?",
     consequence: "This assigns the issue to you so it can be reviewed.",
     icon: UserCheck,
   },
-  BEGIN_INVESTIGATION: {
-    label: "Start investigation",
-    title: "Start investigating?",
-    consequence: "This moves the issue into investigation and assigns it to you.",
-    icon: Search,
-  },
   RESOLVE: {
-    label: "Resolve issue",
-    title: "Resolve this issue?",
-    consequence: "Resolved issues are final and cannot be reopened. Add a clear resolution note.",
+    label: "Mark resolved",
+    title: "Mark this problem resolved?",
+    consequence:
+      "Record how this problem was handled. This does not issue a refund or change delivery.",
     icon: CheckCircle2,
-  },
-  ESCALATE: {
-    label: "Escalate issue",
-    title: "Escalate this issue?",
-    consequence: "This marks the issue for additional operational attention.",
-    icon: ShieldAlert,
   },
 };
 
@@ -194,7 +179,7 @@ export default function IssuesPage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      <PageHeader title="Order issues" />
+      <PageHeader title="Problems" />
       <AdminLiveRegion message={notice} />
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
@@ -232,7 +217,7 @@ export default function IssuesPage() {
           <div className="p-4">
             <AdminPageState
               state="error"
-              title="Order issues could not be loaded"
+              title="Problems could not be loaded"
               message={state.message}
               requestId={state.requestId}
               onRetry={() => void load(status, pagination.cursor)}
@@ -282,6 +267,11 @@ export default function IssuesPage() {
                   <TableCell>
                     <p className="font-medium">{issue.customerName ?? "Customer"}</p>
                     <p className="text-xs text-[var(--fm-text-muted)]">{issue.customerEmail}</p>
+                    {issue.customerPhone && (
+                      <a href={`tel:${issue.customerPhone}`} className="text-xs underline">
+                        {issue.customerPhone}
+                      </a>
+                    )}
                   </TableCell>
                   <TableCell className="max-w-72">
                     <Link

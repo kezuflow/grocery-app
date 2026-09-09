@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateCustomerOrderIssue } from "./order-issue";
 
 describe("customer order issue policy", () => {
-  it("normalizes controlled categories and requires affected lines for item issues", () => {
+  it("normalizes categories and accepts item problems without selecting lines", () => {
     expect(
       validateCustomerOrderIssue({
         category: "DAMAGED_ITEM",
@@ -27,7 +27,7 @@ describe("customer order issue policy", () => {
         orderStatus: "DELIVERED",
         deliveryStatus: "DELIVERED",
       }),
-    ).toMatchObject({ ok: false, code: "AFFECTED_LINE_REQUIRED" });
+    ).toMatchObject({ ok: true, value: { affectedOrderItemIds: [] } });
   });
 
   it("bounds description, requires useful OTHER notes, and rejects duplicate lines", () => {
@@ -59,7 +59,7 @@ describe("customer order issue policy", () => {
     ).toMatchObject({ ok: false, code: "DUPLICATE_AFFECTED_LINE" });
   });
 
-  it("accepts supported active/delivered states and fails closed for terminal orders or canceled delivery", () => {
+  it("allows post-delivery reports and rejects unavailable order or delivery states", () => {
     const base = {
       category: "DELIVERY_ISSUE" as const,
       description: "The delivery arrived much later than promised.",
@@ -68,7 +68,7 @@ describe("customer order issue policy", () => {
     expect(
       validateCustomerOrderIssue({
         ...base,
-        orderStatus: "DISPATCHED",
+        orderStatus: "DELIVERED",
         deliveryStatus: "EN_ROUTE",
       }),
     ).toMatchObject({ ok: true });

@@ -251,8 +251,8 @@ For every state machine, test all allowed transitions, representative illegal tr
 ## Customer Follow-up Supporting Lifecycles
 
 ```text
-OrderIssue: SUBMITTED -> CLAIMED -> INVESTIGATING -> RESOLVED
-                   \-----------------------------> ESCALATED
+OrderIssue: SUBMITTED -> CLAIMED -> RESOLVED
+Retained INVESTIGATING / ESCALATED -> RESOLVED
 
 Notification: PENDING -> QUEUED -> PROCESSING -> SENT
                    ^          ^          \-> PENDING (retry/redrive)
@@ -264,9 +264,9 @@ InvoiceReadiness: PENDING_TAX_CONFIGURATION -> READY_FOR_ISSUANCE -> ISSUED
 
 Notification publication and sending are separate persisted facts. A send lease and its required attempt record commit before contacting the provider. Definite pre-send rejection may return to PENDING with bounded backoff, at most five sends. An unknown send outcome stops automatic delivery with `FAILED` / `SEND_OUTCOME_UNKNOWN`; it is not proof that the recipient was not contacted. Expired in-flight attempts, including the fifth attempt, cannot produce a replacement send. A late known result may complete that same attempt atomically. `SENT` records provider acceptance, not verified inbox delivery.
 
-Issue submission is customer-owned, typed, idempotent, and version-safe; handling by administrators is a separate capability-based authority and does not imply a financial action. Customer projection collapses `CLAIMED` and `INVESTIGATING` to `IN_REVIEW` while preserving `SUBMITTED`, `RESOLVED`, and `ESCALATED`. Notification Queue retries never replay the source transition; each message is handled independently with conditional D1 leasing, idempotent send evidence, explicit acknowledgement/retry, bounded backoff, and dead-letter visibility. Invoice readiness advances only when the required approved accounting evidence exists; `ISSUED` additionally requires an immutable identifier, issue instant, seller snapshot, and tax breakdown.
+Issue submission is customer-owned, typed, idempotent, and version-safe; handling by administrators is a separate capability-based authority and does not imply a financial action. Customer projection collapses `CLAIMED`, `INVESTIGATING`, and `ESCALATED` to `IN_REVIEW` while preserving `SUBMITTED` and `RESOLVED`. Notification Queue retries never replay the source transition; each message is handled independently with conditional D1 leasing, idempotent send evidence, explicit acknowledgement/retry, bounded backoff, and dead-letter visibility. Invoice readiness advances only when the required approved accounting evidence exists; `ISSUED` additionally requires an immutable identifier, issue instant, seller snapshot, and tax breakdown.
 
-The approved administrator Problems list presents New / Being handled / Resolved with contact details and a short resolution note. Reconcile the internal issue vocabulary above with those ordinary actions without treating Resolved as refund or delivery success; retained escalation evidence remains truthful. The weekly view and receiving form similarly organize independently owned cycle, purchasing, receiving and fulfillment states rather than merging their authority.
+The approved administrator Problems list presents New / Being handled / Resolved with contact details and a short resolution note. The active actions are CLAIM and RESOLVE; retained in-progress states remain resolvable without treating Resolved as refund or delivery success; retained escalation evidence remains truthful. The weekly view and receiving form similarly organize independently owned cycle, purchasing, receiving and fulfillment states rather than merging their authority.
 
 The existing `OrderAmendment` lifecycle applies only to additive paid additions. A customer may draft one active amendment for a committed Scheduled Order before cutoff. Its dedicated `ORDER_AMENDMENT` Payment must reach canonical `SUCCEEDED` before the amendment commits. Failed/expired payment fails the amendment; duplicate provider reactions replay safely.
 

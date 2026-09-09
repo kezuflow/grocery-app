@@ -874,10 +874,7 @@ describe("finance administration", () => {
     });
     expect(illegal).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
 
-    async function act(
-      action: "CLAIM" | "BEGIN_INVESTIGATION" | "RESOLVE" | "ESCALATE",
-      version: number,
-    ) {
+    async function act(action: "CLAIM" | "RESOLVE", version: number) {
       const result = await core.applyAdminOrderIssueAction({
         requestId: crypto.randomUUID(),
         headers: { cookie: manager.cookie },
@@ -894,11 +891,8 @@ describe("finance administration", () => {
 
     const claimed = await act("CLAIM", 1);
     expect(claimed.status).toBe("CLAIMED");
-    expect(claimed.allowedActions).toEqual(["BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"]);
-    const investigating = await act("BEGIN_INVESTIGATION", claimed.version);
-    expect(investigating.status).toBe("INVESTIGATING");
-    expect(investigating.allowedActions).toEqual(["RESOLVE", "ESCALATE"]);
-    const resolved = await act("RESOLVE", investigating.version);
+    expect(claimed.allowedActions).toEqual(["RESOLVE"]);
+    const resolved = await act("RESOLVE", claimed.version);
     expect(resolved.status).toBe("RESOLVED");
     expect(resolved.resolution).toContain("RESOLVE");
     expect(resolved.allowedActions).toEqual([]);
@@ -926,5 +920,107 @@ describe("finance administration", () => {
       status: "RESOLVED",
       allowedActions: [],
     });
+  });
+  it("keeps problem handling atomic, replayable and separate from money and delivery", async () => {
+    const manager = await seedManager();
+    const local = await seedManager(FINANCE_CAPABILITIES, "location");
+    const { orderId, customerId } = await seedOrderWithPayment({ status: "DELIVERED" });
+    const issueId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO order_issue(id,order_id,customer_id,category,status,details,version,idempotency_key,created_at,updated_at) VALUES (?,?,?,'MISSING_ITEM','SUBMITTED','Missing groceries',1,?,1,1)",
+    )
+      .bind(issueId, orderId, customerId, crypto.randomUUID())
+      .run();
+    const input = {
+      headers: { cookie: manager.cookie },
+      requestId: crypto.randomUUID(),
+      issueId,
+      action: "CLAIM" as const,
+      reason: "Contacting customer",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const effects = () =>
+      env.DB.prepare(`SELECT status,version,
+      (SELECT COUNT(*) FROM audit_event WHERE aggregate_id=?) audits,
+      (SELECT COUNT(*) FROM payment_refund) refunds,
+      (SELECT status FROM grocery_order WHERE id=?) order_status
+      FROM order_issue WHERE id=?`)
+        .bind(issueId, orderId, issueId)
+        .first();
+    const before = await effects();
+    expect(
+      await core.applyAdminOrderIssueAction({ ...input, headers: { cookie: local.cookie } }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    await env.DB.exec(
+      "CREATE TRIGGER omit_problem_audit BEFORE INSERT ON audit_event WHEN NEW.aggregate_type='order_issue' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await core.applyAdminOrderIssueAction(input)).toMatchObject({ ok: false });
+      expect(await effects()).toEqual(before);
+      expect(
+        await env.DB.prepare(
+          "SELECT 1 FROM idempotency_records WHERE scope='admin.issues.action' AND idempotency_key=?",
+        )
+          .bind(input.idempotencyKey)
+          .first(),
+      ).toBeNull();
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_problem_audit");
+    }
+    const requests = [input, { ...input, idempotencyKey: crypto.randomUUID() }];
+    const results = await Promise.all(
+      requests.map((request) => core.applyAdminOrderIssueAction(request)),
+    );
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const winner = results.findIndex((result) => result.ok);
+    const winningRequest = requests[winner];
+    const claimed = results[winner];
+    if (!claimed?.ok || !winningRequest) throw new Error("Missing winner");
+    const resolved = await core.applyAdminOrderIssueAction({
+      ...input,
+      action: "RESOLVE",
+      reason: "Customer contacted; report handled separately from any refund",
+      expectedVersion: claimed.value.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(resolved).toMatchObject({ ok: true, value: { status: "RESOLVED", version: 3 } });
+    expect(await core.applyAdminOrderIssueAction(winningRequest)).toEqual(claimed);
+    expect(
+      await core.applyAdminOrderIssueAction({ ...winningRequest, reason: "Changed intent" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(await effects()).toMatchObject({
+      status: "RESOLVED",
+      version: 3,
+      audits: 2,
+      order_status: "DELIVERED",
+    });
+    expect((await effects())?.refunds).toBe(before?.refunds);
+    for (const status of ["INVESTIGATING", "ESCALATED"]) {
+      const legacyId = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO order_issue(id,order_id,customer_id,category,status,details,version,idempotency_key,created_at,updated_at) VALUES (?,?,?,'OTHER',?,'Retained report',1,?,1,1)",
+      )
+        .bind(legacyId, orderId, customerId, status, crypto.randomUUID())
+        .run();
+      const queue = await core.listAdminOrderIssues({
+        headers: input.headers,
+        requestId: input.requestId,
+        status: "CLAIMED",
+      });
+      if (!queue.ok) throw new Error("Missing Problems queue");
+      expect(queue.value.items.find((item) => item.issueId === legacyId)).toMatchObject({
+        status,
+        allowedActions: ["RESOLVE"],
+      });
+      expect(
+        await core.applyAdminOrderIssueAction({
+          ...input,
+          issueId: legacyId,
+          action: "RESOLVE",
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true, value: { status: "RESOLVED" } });
+    }
   });
 });

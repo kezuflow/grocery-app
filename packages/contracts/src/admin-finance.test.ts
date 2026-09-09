@@ -32,7 +32,7 @@ describe("finance contracts", () => {
       "RESOLVED",
       "ESCALATED",
     ]);
-    expect(orderIssueActions).toEqual(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"]);
+    expect(orderIssueActions).toEqual(["CLAIM", "RESOLVE"]);
     expect(orderIssueActions).not.toContain("REOPEN");
     expect(reconciliationCaseCategories).toEqual([
       "UNMAPPED_PROVIDER_REFERENCE",
@@ -93,6 +93,7 @@ describe("finance contracts", () => {
       issueId: "iss-1",
       orderId: "ord-1",
       orderNumber: "FM-2026-000001",
+      customerPhone: null,
       customerName: "Ana Santos",
       customerEmail: "c@example.com",
       category: "MISSING_ITEM",

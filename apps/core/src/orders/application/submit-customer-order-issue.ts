@@ -3,7 +3,7 @@ import type {
   CustomerOrderIssueView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { validateCustomerOrderIssue } from "../domain/order-issue";
+import { customerToStorageIssueCategory, validateCustomerOrderIssue } from "../domain/order-issue";
 import {
   toCustomerOrderIssueView,
   type CustomerIssueStorageRow,
@@ -69,7 +69,16 @@ function replayResult(
       "That idempotency key was already used for a different issue request",
       command.requestId,
     );
-  return { ok: true, value: toCustomerOrderIssueView(row), requestId: command.requestId };
+  return {
+    ok: true,
+    value: toCustomerOrderIssueView({
+      ...row,
+      status: "SUBMITTED",
+      version: 1,
+      updatedAt: row.createdAt,
+    }),
+    requestId: command.requestId,
+  };
 }
 
 export async function submitCustomerOrderIssue(
@@ -87,15 +96,6 @@ export async function submitCustomerOrderIssue(
     .first<{ status: string; deliveryStatus: string | null }>();
   if (!order) return failure("NOT_FOUND", "Order not found", command.requestId);
 
-  const validation = validateCustomerOrderIssue({
-    category: command.category,
-    description: command.description,
-    affectedOrderItemIds: command.affectedOrderItemIds,
-    orderStatus: order.status,
-    deliveryStatus: order.deliveryStatus,
-  });
-  if (!validation.ok) return failure("VALIDATION_FAILED", validation.message, command.requestId);
-
   const replay = await database
     .prepare(ISSUE_SELECT)
     .bind(command.idempotencyKey)
@@ -104,10 +104,19 @@ export async function submitCustomerOrderIssue(
     return replayResult(
       replay,
       command,
-      validation.value.storageCategory,
-      validation.value.description,
-      validation.value.affectedOrderItemIds,
+      customerToStorageIssueCategory[command.category],
+      command.description.trim(),
+      command.affectedOrderItemIds.map((id) => id.trim()),
     );
+
+  const validation = validateCustomerOrderIssue({
+    category: command.category,
+    description: command.description,
+    affectedOrderItemIds: command.affectedOrderItemIds,
+    orderStatus: order.status,
+    deliveryStatus: order.deliveryStatus,
+  });
+  if (!validation.ok) return failure("VALIDATION_FAILED", validation.message, command.requestId);
 
   if (validation.value.affectedOrderItemIds.length > 0) {
     const placeholders = validation.value.affectedOrderItemIds.map(() => "?").join(",");
@@ -133,7 +142,8 @@ export async function submitCustomerOrderIssue(
         `INSERT INTO order_issue
            (id, order_id, customer_id, category, status, details, assigned_staff_id,
             resolution, version, idempotency_key, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'SUBMITTED', ?, NULL, NULL, 1, ?, ?, ?)`,
+         SELECT ?, ?, ?, ?, 'SUBMITTED', ?, NULL, NULL, 1, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND customer_id=? AND status='DELIVERED')`,
       )
       .bind(
         issueId,
@@ -144,12 +154,18 @@ export async function submitCustomerOrderIssue(
         command.idempotencyKey,
         now,
         now,
+        command.orderId,
+        command.customerId,
       ),
-    ...validation.value.affectedOrderItemIds.map((orderItemId) =>
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -39 WHERE changes()<>1"),
+    ...validation.value.affectedOrderItemIds.flatMap((orderItemId) => [
       database
-        .prepare("INSERT INTO order_issue_line (issue_id, order_item_id) VALUES (?, ?)")
-        .bind(issueId, orderItemId),
-    ),
+        .prepare(
+          "INSERT INTO order_issue_line (issue_id, order_item_id) SELECT ?, id FROM order_item WHERE id=? AND order_id=?",
+        )
+        .bind(issueId, orderItemId, command.orderId),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -39 WHERE changes()<>1"),
+    ]),
   ];
   try {
     await database.batch(statements);

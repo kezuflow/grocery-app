@@ -16,24 +16,15 @@ const actionPresentation: Readonly<
   Record<OrderIssueAction, { label: string; title: string; consequence: string }>
 > = {
   CLAIM: {
-    label: "Claim issue",
-    title: "Claim this issue?",
+    label: "Start handling",
+    title: "Start handling this problem?",
     consequence: "This assigns the issue to you so it can be reviewed.",
   },
-  BEGIN_INVESTIGATION: {
-    label: "Start investigation",
-    title: "Start investigating?",
-    consequence: "This moves the issue into investigation and assigns it to you.",
-  },
   RESOLVE: {
-    label: "Resolve issue",
-    title: "Resolve this issue?",
-    consequence: "Resolved issues are final and cannot be reopened. Add a clear resolution note.",
-  },
-  ESCALATE: {
-    label: "Escalate issue",
-    title: "Escalate this issue?",
-    consequence: "This marks the issue for additional operational attention.",
+    label: "Mark resolved",
+    title: "Mark this problem resolved?",
+    consequence:
+      "Record how this problem was handled. This does not issue a refund or change delivery.",
   },
 };
 
@@ -125,7 +116,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Order issues
+        Problems
       </Link>
 
       {state === "loading" ? <AdminPageState state="loading" title="Loading issue" /> : null}
@@ -186,6 +177,13 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
                   <dt className="text-[var(--fm-text-muted)]">Customer</dt>
                   <dd className="mt-1 font-medium">{issue.customerName ?? "Customer"}</dd>
                   <dd className="text-[var(--fm-text-muted)]">{issue.customerEmail}</dd>
+                  {issue.customerPhone && (
+                    <dd>
+                      <a href={`tel:${issue.customerPhone}`} className="underline">
+                        {issue.customerPhone}
+                      </a>
+                    </dd>
+                  )}
                 </div>
               </dl>
               <dl className="space-y-3 text-sm">

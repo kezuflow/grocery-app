@@ -7,6 +7,6 @@ describe("customer issue status projection", () => {
     expect(storageIssueStatusToCustomer("CLAIMED")).toBe("IN_REVIEW");
     expect(storageIssueStatusToCustomer("INVESTIGATING")).toBe("IN_REVIEW");
     expect(storageIssueStatusToCustomer("RESOLVED")).toBe("RESOLVED");
-    expect(storageIssueStatusToCustomer("ESCALATED")).toBe("ESCALATED");
+    expect(storageIssueStatusToCustomer("ESCALATED")).toBe("IN_REVIEW");
   });
 });

@@ -120,7 +120,11 @@ function actions(input: {
     input.cutoffAt > Date.now();
   return [
     { action: "REORDER", available: true, disabledReason: null },
-    { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
+    {
+      action: "SUBMIT_ISSUE",
+      available: input.status === "DELIVERED",
+      disabledReason: input.status === "DELIVERED" ? null : "Available after delivery",
+    },
     {
       action: "REQUEST_AMENDMENT",
       available: amendable,

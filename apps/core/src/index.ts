@@ -1000,7 +1000,7 @@ const issueDetailSchema = authenticatedRequestSchema.extend({
 
 const issueActionSchema = authenticatedRequestSchema.extend({
   issueId: validationSchema.string().trim().min(1).max(200),
-  action: validationSchema.enum(["CLAIM", "BEGIN_INVESTIGATION", "RESOLVE", "ESCALATE"]),
+  action: validationSchema.enum(["CLAIM", "RESOLVE"]),
   reason: validationSchema.string().trim().min(1).max(500),
   expectedVersion: validationSchema.number().int().min(0),
   idempotencyKey: idempotencyKeySchema,

@@ -1311,8 +1311,12 @@ export async function listAdminOrderIssues(
   const clauses: string[] = [];
   const binds: unknown[] = [];
   if (request.status !== undefined) {
-    clauses.push("issue.status = ?");
-    binds.push(request.status);
+    clauses.push(
+      request.status === "CLAIMED"
+        ? "issue.status IN ('CLAIMED','INVESTIGATING','ESCALATED')"
+        : "issue.status = ?",
+    );
+    if (request.status !== "CLAIMED") binds.push(request.status);
   }
   if (cursor) {
     clauses.push("(issue.created_at < ? OR (issue.created_at = ? AND issue.id < ?))");
@@ -1355,6 +1359,7 @@ export async function listAdminOrderIssues(
     orderId: row.orderId,
     orderNumber: row.orderNumber,
     customerName: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).name,
+    customerPhone: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).phone,
     customerEmail: row.customerEmail,
     category: row.category,
     status: row.status,
@@ -1424,6 +1429,7 @@ export async function getAdminOrderIssue(
       orderId: row.orderId,
       orderNumber: row.orderNumber,
       customerName: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).name,
+      customerPhone: toOrderCustomer(row.addressSnapshotJson, row.customerEmail).phone,
       customerEmail: row.customerEmail,
       category: row.category,
       status: row.status,
