@@ -162,119 +162,230 @@ async function destinationDemand(
       "INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at) VALUES (?,?,?,?,'pool-red-onion',?,?,'EXACT_PAID_LINE',?,'sku-red-onion-500g',?,?,'GRAM',?,1)",
     ).bind(id, id, cycleId, locationId, quantity, status, id, units, quantity, quantity),
   ]);
+  return id;
 }
 
-it("reviews only a receiving requirement's Orders and retains released demand while refunds are pending", async () => {
-  const { id, request, manager } = await fixture();
-  const global = await locationManager("global");
-  for (const staffId of [manager.id, global.id])
-    await env.DB.prepare(
-      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('procurement.read','fulfillment.read','fulfillment.manage','orders.manage')",
-    )
-      .bind(staffId)
-      .run();
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','SUCCEEDED',?,1,1)",
-    ).bind(id, id, id, id),
-    env.DB.prepare(
-      "UPDATE payment_attempt SET payment_intent_id=?,provider_reference=? WHERE id=?",
-    ).bind(id, `mock_pay_${id}`, id),
-    env.DB.prepare(
-      "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,1)",
-    ).bind(id, id, id, id),
-    env.DB.prepare(
-      "INSERT INTO order_fulfillment_snapshot(order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,fulfillment_mode,sourcing_modes_json,created_at) VALUES (?,'location-cebu-central',?,'zone-cebu-city-core',1,2,'SCHEDULED','[]',1)",
-    ).bind(id, id),
-    env.DB.prepare(
-      "INSERT INTO fulfillment_record(id,order_id,location_id,status,version,updated_at) VALUES (?,?,'location-cebu-central','NOT_STARTED',1,1)",
-    ).bind(id, id),
-  ]);
-  const purchased = await core.confirmAdminProcurementPurchase(request);
-  if (!purchased.ok) throw new Error(JSON.stringify(purchased));
-  const started = await core.startAdminReceiving({
-    ...request,
-    requirementId: purchased.value.requirementId,
-    expectedVersion: purchased.value.version,
-    idempotencyKey: crypto.randomUUID(),
-  });
-  if (!started.ok) throw new Error(JSON.stringify(started));
-  const received = await core.recordAdminReceivedLine({
-    ...request,
-    receivingSessionId: started.value.receivingSessionId,
-    expectedVersion: started.value.version,
-    acceptedBase: 0,
-    rejectedBase: 100,
-    shortageBase: 400,
-    reason: "Supplier cannot replace these goods",
-    idempotencyKey: crypto.randomUUID(),
-  });
-  expect(received).toMatchObject({ ok: true, value: { rejectedBase: 100, shortageBase: 400 } });
-  const query = {
-    ...request,
-    section: "ORDERS" as const,
-    requirementId: purchased.value.requirementId,
-  };
-  expect(await core.getAdminScheduledWeek(query)).toMatchObject({
-    ok: true,
-    value: {
-      page: {
-        requirement: { id: purchased.value.requirementId },
-        items: [{ orderId: id, openQuantityBase: 500, cancellationStatus: null }],
-      },
-    },
-  });
-  const cancellation = {
-    headers: global.headers,
-    requestId: crypto.randomUUID(),
-    orderId: id,
-    expectedVersion: 1,
-    reason: "Supplier cannot replace missing and rejected goods",
-    idempotencyKey: crypto.randomUUID(),
-  };
-  expect(await core.cancelAdminOrder({ ...cancellation, headers: manager.headers })).toMatchObject({
-    ok: false,
-  });
-  const canceled = await core.cancelAdminOrder(cancellation);
-  expect(canceled).toMatchObject({ ok: true });
-  expect(await core.cancelAdminOrder(cancellation)).toEqual(canceled);
-  const after = await core.getAdminScheduledWeek(query);
-  expect(after).toMatchObject({
-    ok: true,
-    value: { page: { items: [{ orderId: id, openQuantityBase: 0 }] } },
-  });
-  if (!after.ok || after.value.page.kind !== "ORDERS")
-    throw new Error("Missing cancellation progress");
-  expect(after.value.page.items[0]?.cancellationStatus).toBe("REFUNDS_PROCESSING");
-  const fulfillment = await env.DB.prepare(
-    "SELECT version FROM fulfillment_record WHERE order_id=?",
-  )
-    .bind(id)
-    .first<{ version: number }>();
-  if (!fulfillment) throw new Error("Missing existing fulfillment");
-  expect(
-    await core.advanceAdminFulfillment({
+it.each([
+  "normal",
+  "skip-resolution",
+  "skip-audit",
+  "remaining-demand",
+  "two-cancellations",
+] as const)(
+  "resolves canceled supply with %s while retaining receipt and refund evidence",
+  async (scenario) => {
+    const { id, request, manager } = await fixture();
+    const remaining = scenario === "remaining-demand";
+    const multiple = remaining || scenario === "two-cancellations";
+    const otherOrderId = multiple ? await destinationDemand(id, request.locationId, 1) : null;
+    const global = await locationManager("global");
+    for (const staffId of [manager.id, global.id])
+      await env.DB.prepare(
+        "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('procurement.read','fulfillment.read','fulfillment.manage','orders.manage')",
+      )
+        .bind(staffId)
+        .run();
+    for (const paidOrderId of otherOrderId ? [id, otherOrderId] : [id])
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','SUCCEEDED',?,1,1)",
+        ).bind(paidOrderId, paidOrderId, id, paidOrderId),
+        env.DB.prepare(
+          "UPDATE payment_attempt SET payment_intent_id=?,provider_reference=? WHERE id=?",
+        ).bind(paidOrderId, `mock_pay_${paidOrderId}`, paidOrderId),
+        env.DB.prepare(
+          "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,1)",
+        ).bind(paidOrderId, paidOrderId, paidOrderId, paidOrderId),
+        env.DB.prepare(
+          "INSERT INTO order_fulfillment_snapshot(order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,fulfillment_mode,sourcing_modes_json,created_at) VALUES (?,'location-cebu-central',?,'zone-cebu-city-core',1,2,'SCHEDULED','[]',1)",
+        ).bind(paidOrderId, id),
+        env.DB.prepare(
+          "INSERT INTO fulfillment_record(id,order_id,location_id,status,version,updated_at) VALUES (?,?,'location-cebu-central','NOT_STARTED',1,1)",
+        ).bind(paidOrderId, paidOrderId),
+      ]);
+    const purchased = await core.confirmAdminProcurementPurchase({
+      ...request,
+      expectedQuantityBase: multiple ? 1000 : 500,
+      expectedQuantitySellable: multiple ? 2 : 1,
+    });
+    if (!purchased.ok) throw new Error(JSON.stringify(purchased));
+    const started = await core.startAdminReceiving({
+      ...request,
+      requirementId: purchased.value.requirementId,
+      expectedVersion: purchased.value.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!started.ok) throw new Error(JSON.stringify(started));
+    const received = await core.recordAdminReceivedLine({
+      ...request,
+      receivingSessionId: started.value.receivingSessionId,
+      expectedVersion: started.value.version,
+      acceptedBase: 0,
+      rejectedBase: 100,
+      shortageBase: multiple ? 900 : 400,
+      reason: "Supplier cannot replace these goods",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(received).toMatchObject({
+      ok: true,
+      value: { rejectedBase: 100, shortageBase: multiple ? 900 : 400 },
+    });
+    const query = {
+      ...request,
+      section: "ORDERS" as const,
+      requirementId: purchased.value.requirementId,
+    };
+    const before = await core.getAdminScheduledWeek(query);
+    if (!before.ok || before.value.page.kind !== "ORDERS")
+      throw new Error("Missing affected Orders");
+    expect(before.value.page.requirement?.id).toBe(purchased.value.requirementId);
+    expect(before.value.page.items.find((order) => order.orderId === id)).toMatchObject({
+      openQuantityBase: 500,
+      cancellationStatus: null,
+    });
+    const cancellation = {
       headers: global.headers,
       requestId: crypto.randomUUID(),
-      locationId: request.locationId,
       orderId: id,
-      action: "START_PICKING",
-      expectedVersion: fulfillment.version,
+      expectedVersion: 1,
+      reason: "Supplier cannot replace missing and rejected goods",
       idempotencyKey: crypto.randomUUID(),
-    }),
-  ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
-  expect(
-    await env.DB.prepare("SELECT rejected_quantity,shortage_base FROM receiving_record WHERE id=?")
-      .bind(started.value.receivingSessionId)
-      .first(),
-  ).toEqual({ rejected_quantity: 100, shortage_base: 400 });
-  expect(await core.getAdminScheduledWeek({ ...query, cycleId: "another-week" })).toMatchObject({
-    ok: false,
-  });
-  expect(
-    await core.getAdminScheduledWeek({ ...query, requirementId: "another-requirement" }),
-  ).toMatchObject({ ok: false });
-});
+    };
+    expect(
+      await core.cancelAdminOrder({ ...cancellation, headers: manager.headers }),
+    ).toMatchObject({
+      ok: false,
+    });
+    if (scenario === "skip-resolution" || scenario === "skip-audit") {
+      const trigger =
+        scenario === "skip-resolution"
+          ? "CREATE TRIGGER test_skip_supply BEFORE UPDATE ON supply_exception WHEN NEW.resolution LIKE 'ORDER_CANCELLATION:%' BEGIN SELECT RAISE(IGNORE); END"
+          : "CREATE TRIGGER test_skip_supply BEFORE INSERT ON audit_event WHEN NEW.action='PROCUREMENT.EXCEPTION_RESOLVED' BEGIN SELECT RAISE(IGNORE); END";
+      await env.DB.prepare(trigger).run();
+      try {
+        expect(await core.cancelAdminOrder(cancellation)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+            .bind(id)
+            .first(),
+        ).toEqual({ status: "COMMITTED", version: 1 });
+        expect(
+          await env.DB.prepare("SELECT status FROM committed_demand WHERE order_id=?")
+            .bind(id)
+            .first(),
+        ).toEqual({ status: "OPEN" });
+        expect(
+          await env.DB.prepare("SELECT id FROM order_cancellation WHERE order_id=?")
+            .bind(id)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare("SELECT id FROM payment_refund WHERE payment_intent_id=?")
+            .bind(id)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare(
+            "SELECT id FROM supply_exception WHERE requirement_id=? AND status!='OPEN'",
+          )
+            .bind(purchased.value.requirementId)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare(
+            "SELECT idempotency_key FROM idempotency_records WHERE idempotency_key=? AND status='SUCCEEDED'",
+          )
+            .bind(cancellation.idempotencyKey)
+            .first(),
+        ).toBeNull();
+      } finally {
+        await env.DB.prepare("DROP TRIGGER test_skip_supply").run();
+      }
+    }
+    const outcomes =
+      scenario === "two-cancellations" && otherOrderId
+        ? await Promise.all([
+            core.cancelAdminOrder(cancellation),
+            core.cancelAdminOrder({
+              ...cancellation,
+              orderId: otherOrderId,
+              idempotencyKey: crypto.randomUUID(),
+            }),
+          ])
+        : [await core.cancelAdminOrder(cancellation)];
+    for (const outcome of outcomes) expect(outcome).toMatchObject({ ok: true });
+    const canceled = outcomes[0];
+    if (!canceled) throw new Error("Missing cancellation result");
+    if (!canceled.ok) throw new Error(JSON.stringify(canceled));
+    expect(canceled).toMatchObject({ ok: true });
+    expect(await core.cancelAdminOrder(cancellation)).toEqual(canceled);
+    const after = await core.getAdminScheduledWeek(query);
+    if (!after.ok || after.value.page.kind !== "ORDERS")
+      throw new Error("Missing cancellation progress");
+    expect(after.value.page.items.find((order) => order.orderId === id)).toMatchObject({
+      openQuantityBase: 0,
+      cancellationStatus: "REFUNDS_PROCESSING",
+    });
+    const supply = await env.DB.prepare(
+      "SELECT status,affected_quantity FROM supply_exception WHERE requirement_id=? ORDER BY kind",
+    )
+      .bind(purchased.value.requirementId)
+      .all();
+    expect(supply.results).toEqual([
+      { status: remaining ? "OPEN" : "RESOLVED", affected_quantity: 100 },
+      { status: remaining ? "OPEN" : "RESOLVED", affected_quantity: multiple ? 900 : 400 },
+    ]);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE action='PROCUREMENT.EXCEPTION_RESOLVED' AND json_extract(details_json,'$.requirementId')=?",
+      )
+        .bind(purchased.value.requirementId)
+        .first(),
+    ).toEqual({ count: remaining ? 0 : 2 });
+    const receipts = await core.listReceivingSessions({ ...request, cycleId: id });
+    if (!receipts.ok) throw new Error("Missing receiving projection");
+    expect(
+      receipts.value.items.find(
+        (receipt) => receipt.requirementId === purchased.value.requirementId,
+      )?.resolvedByCancellation,
+    ).toBe(!remaining);
+    const issues = await core.listOperationalExceptions({ ...request });
+    if (!issues.ok) throw new Error("Missing operational projection");
+    expect(
+      issues.value.items.some((issue) => issue.referenceId === started.value.receivingSessionId),
+    ).toBe(remaining);
+    const fulfillment = await env.DB.prepare(
+      "SELECT version FROM fulfillment_record WHERE order_id=?",
+    )
+      .bind(id)
+      .first<{ version: number }>();
+    if (!fulfillment) throw new Error("Missing existing fulfillment");
+    expect(
+      await core.advanceAdminFulfillment({
+        headers: global.headers,
+        requestId: crypto.randomUUID(),
+        locationId: request.locationId,
+        orderId: id,
+        action: "START_PICKING",
+        expectedVersion: fulfillment.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(
+      await env.DB.prepare(
+        "SELECT rejected_quantity,shortage_base FROM receiving_record WHERE id=?",
+      )
+        .bind(started.value.receivingSessionId)
+        .first(),
+    ).toEqual({ rejected_quantity: 100, shortage_base: multiple ? 900 : 400 });
+    expect(await core.getAdminScheduledWeek({ ...query, cycleId: "another-week" })).toMatchObject({
+      ok: false,
+    });
+    expect(
+      await core.getAdminScheduledWeek({ ...query, requirementId: "another-requirement" }),
+    ).toMatchObject({ ok: false });
+  },
+);
 
 it("consolidates destinations only for Global readers and keeps purchase writes destination-specific", async () => {
   const { id, manager, request } = await fixture();

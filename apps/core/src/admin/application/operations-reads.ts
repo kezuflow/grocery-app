@@ -177,6 +177,7 @@ export async function listAdminReceivingSessions(
           replacementAllowed: row.replacementAllowed,
         }),
         legacyAcceptedBase: row.legacyAcceptedBase,
+        resolvedByCancellation: row.resolvedByCancellation,
         shortageBase: row.shortageBase,
         replacementBase: row.replacementBase,
         acceptedBase: row.acceptedBase,

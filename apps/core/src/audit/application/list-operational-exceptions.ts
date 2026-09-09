@@ -73,6 +73,10 @@ export async function listOperationalExceptionsForLocations(
          WHERE (rr.rejected_quantity>0
                 OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity))
            AND rr.status!='NOT_STARTED'
+           AND (NOT EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id
+                  AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':')
+             OR EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id AND se.status NOT IN ('RESOLVED','CLOSED')
+                  AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':'))
        ), keyed AS (
          SELECT *, printf('%013d', occurredAt)||':'||source||':'||referenceId AS queueKey
          FROM exception_rows

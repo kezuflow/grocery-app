@@ -20,6 +20,7 @@ import {
 } from "./resume-cancellation-refunds";
 import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
 import { projectOrderCancellationNotification } from "../../notifications/application/project-domain-notifications";
+import { resolveCanceledSupplyStatements } from "../../procurement/application/resolve-canceled-supply";
 
 export type CancelOrderCommand = {
   orderId: string;
@@ -453,6 +454,14 @@ export async function requestOrderCancellation(
           ),
       ),
       ...releaseOperationalEffectStatements(database, order.id),
+      ...resolveCanceledSupplyStatements(database, {
+        orderId: order.id,
+        cancellationId,
+        actorUserId: command.actorAuthUserId ?? null,
+        reason,
+        requestId: command.requestId,
+        occurredAt: now,
+      }),
       database
         .prepare(
           "UPDATE paid_order_amendment SET status='CANCELED',version=version+1,updated_at=? WHERE order_id=? AND status IN ('DRAFT','PENDING_PAYMENT')",

@@ -639,8 +639,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             open={confirming}
             title="Confirm order cancellation"
             resource={`Order ${order.orderNumber ?? order.orderId} · ${money(order.totalMinor, order.currency)}`}
-            scope="Core-authorized order scope"
-            consequence="Cancellation is a lifecycle transition and may initiate refund handling; it cannot be treated as an arbitrary edit."
+            scope="FreshMarkets order"
+            consequence="This cancels the whole order and requests refunds for its original payment and paid additions. Refunds remain pending until confirmed by the payment provider."
             pending={cancelIntent.pending}
             onCancel={() => setConfirming(false)}
             onConfirm={(confirmedReason) => void cancel(confirmedReason)}

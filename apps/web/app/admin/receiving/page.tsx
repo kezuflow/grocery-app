@@ -50,6 +50,7 @@ const sessionSchema = z.object({
   shortageBase: z.number().int().safe().nonnegative().optional(),
   replacementBase: z.number().int().safe().nonnegative().optional(),
   legacyAcceptedBase: z.number().int().safe().nonnegative().optional(),
+  resolvedByCancellation: z.boolean().optional(),
   status: z.enum(receivingRecordStates),
   version: z.number().int().safe().positive(),
   productName: z.string().optional(),
@@ -336,6 +337,11 @@ export default function ReceivingPage() {
                               </Link>
                             </p>
                           ) : null}
+                          {item.resolvedByCancellation ? (
+                            <p className="mt-2 text-sm">
+                              Resolved by order cancellation. Refunds may still be processing.
+                            </p>
+                          ) : null}
                           {(item.legacyAcceptedBase ?? 0) > 0 ? (
                             <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
                               {item.legacyAcceptedBase} accepted before cycle allocation tracking.
@@ -344,7 +350,9 @@ export default function ReceivingPage() {
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge>{item.status}</StatusBadge>
+                          <StatusBadge>
+                            {item.resolvedByCancellation ? "resolved" : item.status}
+                          </StatusBadge>
                         </TableCell>
                         <TableCell className="col-span-2 empty:hidden sm:table-cell sm:empty:table-cell">
                           {item.stockTracking !== "COUNTED_SIZES" &&
@@ -463,18 +471,20 @@ export default function ReceivingPage() {
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                              commandIntent.pending ||
-                              unresolved !== null ||
-                              !item.allowedActions?.includes("COMPLETE")
-                            }
-                            onClick={() => void complete(item.receivingSessionId, item.version)}
-                          >
-                            Complete
-                          </Button>
+                          {!item.resolvedByCancellation ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                commandIntent.pending ||
+                                unresolved !== null ||
+                                !item.allowedActions?.includes("COMPLETE")
+                              }
+                              onClick={() => void complete(item.receivingSessionId, item.version)}
+                            >
+                              Complete
+                            </Button>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

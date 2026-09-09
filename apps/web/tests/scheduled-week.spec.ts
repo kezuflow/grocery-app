@@ -33,7 +33,7 @@ for (const width of [1440, 390])
     INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at)
       VALUES ('pending-${id}','o-${id}','PENDING_PAYMENT','PHP',100,'pending-${id}','pending-${id}',${now},${now});
     INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at)
-      VALUES ('destination-${id}','market-metro-cebu','destination-${id}','Second destination','FULFILLMENT_CENTER',10,123,'active',${now},${now});
+      VALUES ('destination-${id}','market-metro-cebu','destination-${id}','Second destination ${width}','FULFILLMENT_CENTER',10,123,'active',${now},${now});
     INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at)
       VALUES ('p2-${id}','c-${id}',30000,'PHP','SUCCEEDED','mock','p2-${id}',${now},${now});
     INSERT INTO grocery_order(id,customer_id,payment_id,cycle_id,fulfillment_mode,status,total_minor,currency,address_snapshot_json,created_at)
@@ -271,6 +271,67 @@ for (const width of [1440, 390])
     await expect(leftovers).toContainText("600 g unused · 400 g released to stock");
     await page.screenshot({
       path: testInfo.outputPath(`scheduled-surplus-${width}.png`),
+      fullPage: true,
+    });
+    // A second destination cannot source replacements. Keep synthetic paid history
+    // explicit, then use the actual receiving -> Order -> cancellation UI path.
+    executeAdminE2eSql(`
+      INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at)
+        VALUES ('intent2-${id}','GROCERY_CHECKOUT','checkout_quote','quote2-${id}','c-${id}',30000,'PHP','SUCCEEDED','intent2-${id}',${now},${now});
+      UPDATE payment_attempt SET payment_intent_id='intent2-${id}',provider_reference='mock_pay_intent2-${id}' WHERE id='p2-${id}';
+      INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at)
+        VALUES ('paid2-${id}','intent2-${id}','reaction2-${id}','o2-${id}',${now});`);
+    await page.getByRole("combobox", { name: "Active admin scope" }).click();
+    await page.getByRole("option", { name: `Second destination ${width}`, exact: true }).click();
+    await row.getByRole("button", { name: "Start receiving", exact: true }).click();
+    const secondReceipts = z
+      .object({
+        ok: z.literal(true),
+        value: z.object({ items: z.array(z.object({ receivingSessionId: z.string() })) }),
+      })
+      .parse(
+        await (
+          await page.request.get(`/api/admin/receiving?locationId=destination-${id}&cycleId=${id}`)
+        ).json(),
+      );
+    const secondReceipt = secondReceipts.value.items[0];
+    if (!secondReceipt) throw new Error("Missing second destination receipt");
+    await row
+      .getByLabel(`Accepted quantity ${secondReceipt.receivingSessionId}`, { exact: true })
+      .fill("0");
+    await row
+      .getByLabel(`Rejected quantity ${secondReceipt.receivingSessionId}`, { exact: true })
+      .fill("500");
+    await row
+      .getByLabel(`Missing quantity ${secondReceipt.receivingSessionId}`, { exact: true })
+      .fill("1000");
+    await row
+      .getByLabel(`Receiving reason ${secondReceipt.receivingSessionId}`, { exact: true })
+      .fill("Supplier cannot replace these goods");
+    await row.getByRole("button", { name: "Record line", exact: true }).click();
+    await row.getByRole("link", { name: "Review affected orders", exact: true }).click();
+    await page.getByRole("link", { name: "View order 1", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel order", exact: true }).click();
+    const cancellationDialog = page.getByRole("alertdialog");
+    await cancellationDialog
+      .getByLabel("Confirmation reason", { exact: true })
+      .fill("Supplier cannot replace missing and rejected goods");
+    await cancellationDialog.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(
+      page.getByText("Cancellation accepted. Current refund progress is shown below.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.goto(`/admin/receiving?cycleId=${id}`);
+    await expect(row).toContainText("Resolved by order cancellation");
+    await expect(row).toContainText("0 / 500");
+    await expect(row).toContainText("Missing: 1000");
+    await expect(row.getByRole("button", { name: "Receive replacement", exact: true })).toHaveCount(
+      0,
+    );
+    await expect(row.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-canceled-supply-${width}.png`),
       fullPage: true,
     });
     expect(

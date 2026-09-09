@@ -25,6 +25,7 @@ export type ProcurementWorkbenchItem = {
   shortageBase: number;
   replacementBase: number;
   replacementAllowed: boolean;
+  resolvedByCancellation: boolean;
   requirementStatus: string;
   requirementVersion: number;
   receivingRecordId: string | null;
@@ -61,7 +62,8 @@ export async function listProcurementQueue(
        pr.required_quantity, pr.status AS requirement_status, pr.version AS requirement_version,
        rr.id AS receiving_record_id, rr.accepted_quantity, rr.rejected_quantity, rr.legacy_accepted_base, rr.shortage_base, rr.replacement_base,
        rr.status AS receiving_status, rr.version AS receiving_version,
-       EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id AND se.status='OPEN' AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':') tracked_discrepancy
+       EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id AND se.status='OPEN' AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':') tracked_discrepancy,
+       EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id AND se.status='RESOLVED' AND se.resolution LIKE 'ORDER_CANCELLATION:%' AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':') canceled_discrepancy
        FROM procurement_requirement pr LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id
        JOIN delivery_cycle cycle ON cycle.id=pr.delivery_cycle_id
        JOIN inventory_pool pool ON pool.id=pr.inventory_pool_id
@@ -96,6 +98,7 @@ export async function listProcurementQueue(
       shortage_base: number | null;
       replacement_base: number | null;
       tracked_discrepancy: number;
+      canceled_discrepancy: number;
       receiving_status: string | null;
       receiving_version: number | null;
     }>();
@@ -121,6 +124,7 @@ export async function listProcurementQueue(
     shortageBase: r.shortage_base ?? 0,
     replacementBase: r.replacement_base ?? 0,
     replacementAllowed: r.tracked_discrepancy === 1 && r.legacy_accepted_base === 0,
+    resolvedByCancellation: r.canceled_discrepancy === 1 && r.tracked_discrepancy === 0,
     requirementStatus: r.requirement_status,
     requirementVersion: r.requirement_version,
     receivingRecordId: r.receiving_record_id,

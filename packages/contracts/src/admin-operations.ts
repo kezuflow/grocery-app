@@ -64,6 +64,7 @@ export type ReceivingSessionView = {
   baseUnit?: string;
   allowedActions?: ReadonlyArray<"START" | "RECORD" | "REPLACE" | "COMPLETE">;
   legacyAcceptedBase?: number;
+  resolvedByCancellation?: boolean;
   shortageBase?: number;
   replacementBase?: number;
   receivingSessionId: string;
