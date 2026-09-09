@@ -2,6 +2,8 @@
 
 import type { DeliveryOperationsSummary, RpcResult } from "@freshmarkets/contracts";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -15,6 +17,7 @@ import { ManualDeliveryControls } from "./manual-delivery-controls";
 
 export function ExternalDeliveryQueue() {
   const { locationId, label } = useAdminLocation();
+  const orderId = useSearchParams().get("orderId");
   const [summary, setSummary] = useState<DeliveryOperationsSummary | null>(null);
   const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -25,7 +28,9 @@ export function ExternalDeliveryQueue() {
     setLoading(true);
     try {
       const result = (await (
-        await fetch(`/api/admin/delivery?locationId=${encodeURIComponent(locationId)}&limit=100`)
+        await fetch(
+          `/api/admin/delivery?locationId=${encodeURIComponent(locationId)}&limit=100${orderId ? `&orderId=${encodeURIComponent(orderId)}` : ""}`,
+        )
       ).json()) as RpcResult<DeliveryOperationsSummary>;
       if (result.ok) setSummary(result.value);
       else setMessage(result.error.message);
@@ -34,7 +39,7 @@ export function ExternalDeliveryQueue() {
     } finally {
       setLoading(false);
     }
-  }, [locationId]);
+  }, [locationId, orderId]);
 
   useEffect(() => {
     setSummary(null);
@@ -78,6 +83,11 @@ export function ExternalDeliveryQueue() {
         title="Delivery"
         description={`Track courier and manual deliveries for ${label}.`}
       />
+      {orderId ? (
+        <Link href="/admin/delivery" className="text-sm underline">
+          Show all delivery work
+        </Link>
+      ) : null}
       {message ? (
         <Alert variant="warning">
           <AlertTitle>Delivery update</AlertTitle>

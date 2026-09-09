@@ -17,6 +17,7 @@ async function GETHandler(request: Request) {
       requestId: webRequestId(request),
       headers: requestHeaders(request),
       locationId,
+      orderId: params.get("orderId") ?? undefined,
       cycleId: params.get("cycleId") ?? undefined,
       cursor: params.get("cursor") ?? undefined,
       limit,

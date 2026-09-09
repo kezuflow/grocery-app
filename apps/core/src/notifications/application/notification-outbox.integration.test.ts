@@ -398,7 +398,7 @@ describe("notification outbox", () => {
     ).toEqual({ status: "FAILED", attempts: 5 });
   });
 
-  it("projects a stable order-confirmed fact once", async () => {
+  it("projects order confirmation once without generating notices from retained membership payments", async () => {
     const suffix = crypto.randomUUID();
     const userId = `notification-user-${suffix}`;
     const customerId = `notification-project-${suffix}`;
@@ -419,6 +419,13 @@ describe("notification outbox", () => {
         "INSERT INTO grocery_order (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,version,created_at,order_number,committed_at) VALUES (?,?,'cycle-next-cebu','SCHEDULED','{}','COMMITTED',100,'PHP',?,1,?,'FM-NOTIFICATION',?)",
       ).bind(orderId, customerId, paymentId, now, now),
     ]);
+    for (const purpose of ["MEMBERSHIP_ENROLLMENT", "MEMBERSHIP_RENEWAL"]) {
+      await env.DB.prepare(
+        "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,'SUBSCRIPTION',?,?,100,'PHP','REQUIRES_ACTION',?,?,?)",
+      )
+        .bind(`${purpose}-${suffix}`, purpose, suffix, customerId, `${purpose}-${suffix}`, now, now)
+        .run();
+    }
     expect(await projectDomainNotifications(env.DB, now)).toBeGreaterThanOrEqual(1);
     await projectDomainNotifications(env.DB, now);
     expect(
@@ -426,6 +433,13 @@ describe("notification outbox", () => {
         .bind(`order-confirmed:${orderId}`)
         .first(),
     ).toEqual({ count: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM notification_outbox WHERE customer_id=? AND aggregate_type='PAYMENT'",
+      )
+        .bind(customerId)
+        .first(),
+    ).toEqual({ count: 0 });
   });
 
   it("deduplicates cancellation transitions and leaves commerce state unchanged on delivery failure", async () => {

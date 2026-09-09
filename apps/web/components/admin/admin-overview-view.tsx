@@ -1,6 +1,7 @@
 "use client";
 
-import type { AdminOverviewView } from "@freshmarkets/contracts";
+import type { AdminOverviewView, AdminSelectedScope } from "@freshmarkets/contracts";
+import Link from "next/link";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { AdminChartCard, AdminDashboardGrid, MetricCard } from "./admin-compositions";
@@ -13,12 +14,55 @@ function label(value: string) {
   return value.toLowerCase().replaceAll("_", " ");
 }
 
-export function AdminOverviewViewContent({ overview }: { overview: AdminOverviewView }) {
+export function AdminOverviewViewContent({
+  overview,
+  onSelectScope,
+}: {
+  overview: AdminOverviewView;
+  onSelectScope?: (scope: AdminSelectedScope) => void;
+}) {
   const freshness = `Computed ${new Date(overview.freshness.computedAt).toLocaleString("en-PH", {
     timeZone: overview.timezone,
   })}`;
   return (
     <div className="space-y-4">
+      <Card id="notifications" className="scroll-mt-20 gap-0 py-0">
+        <CardHeader className="border-b px-4 py-4">
+          <CardTitle>Recent notifications</CardTitle>
+        </CardHeader>
+        <CardContent className="px-0">
+          {overview.notifications.length ? (
+            <ul className="max-h-96 divide-y overflow-y-auto">
+              {overview.notifications.map((notice) => (
+                <li key={notice.id}>
+                  <Link
+                    href={notice.href}
+                    prefetch={false}
+                    onClick={() => {
+                      if (notice.scope) onSelectScope?.(notice.scope);
+                    }}
+                    className="flex min-h-11 flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  >
+                    <span className="min-w-0 break-words">
+                      <strong>{notice.label}</strong>
+                      <span className="block text-muted-foreground">{notice.orderNumber}</span>
+                    </span>
+                    <time dateTime={notice.occurredAt} className="text-xs text-muted-foreground">
+                      {new Date(notice.occurredAt).toLocaleString("en-PH", {
+                        timeZone: overview.timezone,
+                      })}
+                    </time>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="p-4 text-sm text-muted-foreground">
+              No recent notifications for your access and selected scope.
+            </p>
+          )}
+        </CardContent>
+      </Card>
       <AdminDashboardGrid ariaLabel="Operational metrics" className="xl:grid-cols-4">
         {overview.cards.map((card) => (
           <MetricCard

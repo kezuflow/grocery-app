@@ -86,28 +86,20 @@ export async function projectDomainNotifications(
   }
   const payments = await database
     .prepare(
-      `SELECT pi.id,pi.customer_id customerId,u.email,pi.purpose,pi.status,pi.updated_at
+      `SELECT pi.id,pi.customer_id customerId,u.email,pi.status,pi.updated_at
      FROM payment_intent pi JOIN customer c ON c.id=pi.customer_id JOIN user u ON u.id=c.auth_user_id
-     WHERE pi.status IN ('REQUIRES_ACTION','FAILED')`,
+     WHERE pi.status IN ('REQUIRES_ACTION','FAILED') AND pi.purpose IN ('GROCERY_CHECKOUT','ORDER_AMENDMENT')`,
     )
     .all<{
       id: string;
       customerId: string;
       email: string;
-      purpose: string;
       status: string;
       updated_at: number;
     }>();
   for (const payment of payments.results) {
-    const renewal = payment.purpose === "MEMBERSHIP_RENEWAL";
     const type: NotificationType =
-      payment.status === "REQUIRES_ACTION"
-        ? renewal
-          ? "RENEWAL_ACTION_REQUIRED"
-          : "PAYMENT_ACTION_REQUIRED"
-        : renewal
-          ? "RENEWAL_PAYMENT_FAILED"
-          : "PAYMENT_FAILED";
+      payment.status === "REQUIRES_ACTION" ? "PAYMENT_ACTION_REQUIRED" : "PAYMENT_FAILED";
     facts.push({
       type,
       aggregateType: "PAYMENT",
@@ -134,7 +126,6 @@ export async function projectDomainNotifications(
       recipient: fact.recipient,
       templateData: {
         orderNumber: fact.reference,
-        membershipReference: fact.reference,
         templateVersion: 1,
       },
       scheduledAt: fact.scheduledAt,

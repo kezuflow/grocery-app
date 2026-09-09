@@ -26,6 +26,7 @@ const overview: AdminOverviewView = {
   workloadStages: [{ code: "READY", label: "ready", count: 3 }],
   exceptions: [],
   recentOperations: [],
+  notifications: [],
   freshness: { computedAt: "2026-08-31T08:00:00.000Z", sourceWatermark: null },
   deniedSections: ["payments"],
 };

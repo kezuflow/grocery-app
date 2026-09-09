@@ -93,6 +93,7 @@ export async function listDeliveryDispatch(
   database: D1Database,
   query: {
     locationId: string;
+    orderId?: string;
     cycleId?: string;
     cursorId?: string;
     limit?: number;
@@ -100,8 +101,12 @@ export async function listDeliveryDispatch(
   },
 ): Promise<Array<DispatchRow>> {
   const limit = query.limit ?? 200;
-  const clauses = ["f.location_id=?", "d.status NOT IN ('CANCELED','DELIVERED','ESCALATED')"];
+  const clauses = ["f.location_id=?"];
   const binds: unknown[] = [query.locationId];
+  if (query.orderId) {
+    clauses.push("o.id=?");
+    binds.push(query.orderId);
+  } else clauses.push("d.status NOT IN ('CANCELED','DELIVERED','ESCALATED')");
   if (query.cycleId) {
     clauses.push("o.cycle_id=?");
     binds.push(query.cycleId);

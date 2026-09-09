@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import type { FulfillmentQueuePage, RpcResult } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
@@ -38,19 +40,20 @@ const actionLabels: Record<string, string> = {
 
 export default function FulfillmentPage() {
   const { locationId, label } = useAdminLocation();
+  const orderId = useSearchParams().get("orderId");
   const [page, setPage] = useState<FulfillmentQueuePage | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const actionIntent = useAdminCommandIntent();
-  const pagination = useAdminPagination();
+  const pagination = useAdminPagination(`${locationId}:${orderId}`);
   const load = useCallback(
     async (cursor: string | null) => {
       setState("loading");
       try {
         const payload = (await (
           await fetch(
-            `/api/admin/fulfillment?locationId=${locationId ?? ""}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+            `/api/admin/fulfillment?locationId=${locationId ?? ""}&limit=50${orderId ? `&orderId=${encodeURIComponent(orderId)}` : ""}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
           )
         ).json()) as RpcResult<FulfillmentQueuePage>;
         if (!payload.ok) {
@@ -69,7 +72,7 @@ export default function FulfillmentPage() {
         setState("error");
       }
     },
-    [locationId],
+    [locationId, orderId],
   );
   useEffect(() => {
     if (locationId) void load(pagination.cursor);
@@ -109,6 +112,11 @@ export default function FulfillmentPage() {
         title="Fulfillment"
         description="Accept paid orders, pick items and complete packing. Accepting an Instant order closes customer cancellation; Scheduled cancellation closes at cutoff."
       />
+      {orderId ? (
+        <Link href="/admin/fulfillment" className="text-sm underline">
+          Show all fulfillment work
+        </Link>
+      ) : null}
       {!locationId ? (
         <AdminPageState
           state="permission-empty"

@@ -99,6 +99,12 @@ export async function completeLocalCourierDelivery(
     }
   }
   const dispatchIdSql = `'${attempt.dispatchId.replaceAll("'", "''")}'`;
+  await admin.goto(`/admin/delivery?orderId=${encodeURIComponent(orderId)}`);
+  const completedRow = admin.getByRole("row").filter({ hasText: orderId });
+  await expect(completedRow).toHaveCount(1);
+  await expect(completedRow).toContainText("DELIVERED");
+  await admin.getByRole("link", { name: "Show all delivery work", exact: true }).click();
+  await expect(admin).toHaveURL(/\/admin\/delivery$/);
   // Read-only on success: fail the disposable DB assertion if either transition lost its intent.
   executeAdminE2eSql(`INSERT INTO commitment_abort(id) SELECT -39 WHERE
     (SELECT COUNT(*) FROM notification_outbox WHERE idempotency_key IN (

@@ -215,6 +215,7 @@ export async function listAdminFulfillmentQueue(
   const page = pageRequest(request);
   if (isPageError(page)) return page;
   const rows = await listFulfillmentRows(deps.db, {
+    orderId: request.orderId,
     locationId: request.locationId,
     cycleId: request.cycleId,
     cursorId: page.cursorId,
@@ -254,6 +255,7 @@ export async function listAdminDeliveryOperations(
   const page = pageRequest(request);
   if (isPageError(page)) return page;
   const rows = await listDeliveryDispatch(deps.db, {
+    orderId: request.orderId,
     actorAuthUserId: access.value.authUserId,
     locationId: request.locationId,
     cycleId: request.cycleId,

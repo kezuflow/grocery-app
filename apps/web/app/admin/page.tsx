@@ -24,7 +24,7 @@ function scopeQuery(scope: AdminSelectedScope, timezone: string) {
 }
 
 export default function AdminPage() {
-  const { state: context } = useAdminContext();
+  const { state: context, selectScope } = useAdminContext();
   const [attempt, setAttempt] = useState(0);
   const [loadedOverview, setLoadedOverview] = useState<{
     scopeKey: string;
@@ -59,7 +59,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!selectedScope) return;
     let active = true;
-    if (bootstrapMatchesSelection) {
+    if (bootstrapMatchesSelection && attempt === 0) {
       return () => {
         active = false;
       };
@@ -89,6 +89,17 @@ export default function AdminPage() {
       active = false;
     };
   }, [attempt, bootstrapMatchesSelection, selectedScope, timezone]);
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") setAttempt((value) => value + 1);
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -119,7 +130,7 @@ export default function AdminPage() {
       ) : null}
       {visibleOverview?.ok ? (
         <Suspense fallback={<AdminPageState state="loading" />}>
-          <AdminOverviewViewContent overview={visibleOverview.value} />
+          <AdminOverviewViewContent overview={visibleOverview.value} onSelectScope={selectScope} />
         </Suspense>
       ) : null}
     </div>

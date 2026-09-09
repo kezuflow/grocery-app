@@ -279,12 +279,14 @@ export type AdminReceivingSessionsRequest = AdminOperationsLocationRequest & {
 };
 
 export type AdminFulfillmentQueueRequest = AdminOperationsLocationRequest & {
+  orderId?: string;
   cycleId?: string;
   cursor?: string;
   limit?: number;
 };
 
 export type AdminDeliveryOperationsRequest = AdminOperationsLocationRequest & {
+  orderId?: string;
   cycleId?: string;
   cursor?: string;
   limit?: number;

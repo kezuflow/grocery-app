@@ -36,7 +36,13 @@ export function legalFulfillmentTransitions(): StateMap {
  */
 export async function listFulfillmentQueue(
   database: D1Database,
-  query: { locationId: string; cycleId?: string; cursorId?: string; limit?: number },
+  query: {
+    locationId: string;
+    orderId?: string;
+    cycleId?: string;
+    cursorId?: string;
+    limit?: number;
+  },
 ): Promise<
   Array<
     Omit<FulfillmentQueueItem, "allowedActions"> & {
@@ -46,8 +52,12 @@ export async function listFulfillmentQueue(
   >
 > {
   const limit = query.limit ?? 200;
-  const clauses = ["f.location_id=?", "f.status NOT IN ('CANCELED','COMPLETED')"];
+  const clauses = ["f.location_id=?"];
   const binds: unknown[] = [query.locationId];
+  if (query.orderId) {
+    clauses.push("f.order_id=?");
+    binds.push(query.orderId);
+  } else clauses.push("f.status NOT IN ('CANCELED','COMPLETED')");
   if (query.cycleId) {
     clauses.push("o.cycle_id=?");
     binds.push(query.cycleId);

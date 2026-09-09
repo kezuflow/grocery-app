@@ -419,6 +419,28 @@ for (const width of [1440, 390]) {
       page.getByRole("status").filter({ hasText: "Our team will review it" }),
     ).toBeVisible();
     expect(reportCalls).toBe(2);
+    await admin.goto("/admin");
+    await admin.reload();
+    const dashboard = z
+      .object({
+        notifications: z.array(
+          z.object({ orderId: z.string(), label: z.string(), href: z.string() }),
+        ),
+      })
+      .parse(await read(admin, "/api/admin/overview?scopeKind=GLOBAL&timezone=Asia%2FManila"));
+    const reportNotice = dashboard.notifications.find(
+      (item) => item.orderId === orderId && item.label === "Customer reported a problem",
+    );
+    if (!reportNotice) throw new Error("Missing administrator problem notification");
+    await expect(
+      admin.locator("#notifications").locator(`a[href="${reportNotice.href}"]`),
+    ).toBeVisible();
+    await admin.screenshot({
+      path: testInfo.outputPath(`dashboard-notifications-${width}.png`),
+      fullPage: true,
+    });
+    await admin.locator("#notifications").locator(`a[href="${reportNotice.href}"]`).click();
+    await expect(admin.getByRole("heading", { name: "Missing Item", exact: true })).toBeVisible();
     await admin.goto("/admin/issues");
     await expect(admin.getByRole("heading", { name: "Problems", exact: true })).toBeVisible();
     const problemRow = admin.getByRole("row").filter({ hasText: orderId });

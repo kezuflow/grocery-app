@@ -16,6 +16,7 @@ import { listAdminAuditEvents } from "../../audit/application/list-audit-events"
 import { listOperationalExceptionsForLocations } from "../../audit/application/list-operational-exceptions";
 import { iamSchema } from "../../iam/schema";
 import { setD1SpanAttributes, traceOperation } from "../../observability";
+import { readAdminNotifications } from "./admin-notifications";
 
 export type AdminOverviewDeps = {
   auth: AuthInstance;
@@ -165,6 +166,12 @@ export async function getAdminOverview(
     ...(!canReadAudit ? ["audit"] : []),
   ];
   const locationIds = locations.map((row) => row.locationId);
+  const notifications = await readAdminNotifications(deps.db, {
+    locationIds,
+    globalView: isGlobal,
+    globalStaff: context.value.scopes.some((scope) => scope.kind === "global"),
+    capabilities,
+  });
 
   const [openOrders, actionRequiredPayments, activeProducts] = await Promise.all([
     canReadOrders
@@ -300,6 +307,7 @@ export async function getAdminOverview(
     ok: true,
     value: {
       generatedAt,
+      notifications,
       selectedScope: selected,
       timezone: request.timezone,
       cards,

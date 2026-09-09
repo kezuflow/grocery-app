@@ -30,6 +30,7 @@ describe("Admin overview contracts", () => {
       workloadStages: [{ code: "FULFILLMENT_PENDING", label: "Fulfillment pending", count: 2 }],
       exceptions: [],
       recentOperations: [],
+      notifications: [],
       freshness: { computedAt: "2026-08-31T00:00:00.000Z", sourceWatermark: null },
       deniedSections: ["payments"],
     } satisfies AdminOverviewView;

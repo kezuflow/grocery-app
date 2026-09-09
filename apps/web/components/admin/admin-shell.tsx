@@ -204,9 +204,9 @@ function AdminHeader({
             aria-hidden="true"
           />
           <Link
-            href="/admin/issues/operational-exceptions"
+            href="/admin#notifications"
             prefetch={false}
-            aria-label="Open operational exceptions"
+            aria-label="Open notifications"
             className="inline-flex size-9 items-center justify-center rounded-lg hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
           >
             <Bell className="size-4" aria-hidden="true" />

@@ -2391,7 +2391,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async listFulfillmentQueue(
     input: import("@freshmarkets/contracts").AdminFulfillmentQueueRequest,
   ) {
-    const validation = adminOperationsCycleSchema.safeParse(input);
+    const validation = adminOperationsCycleSchema
+      .extend({ orderId: validationSchema.string().trim().min(1).max(200).optional() })
+      .safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminFulfillmentQueue(
@@ -2402,7 +2404,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async listDeliveryOperations(
     input: import("@freshmarkets/contracts").AdminDeliveryOperationsRequest,
   ) {
-    const validation = adminOperationsCycleSchema.safeParse(input);
+    const validation = adminOperationsCycleSchema
+      .extend({ orderId: validationSchema.string().trim().min(1).max(200).optional() })
+      .safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminDeliveryOperations(

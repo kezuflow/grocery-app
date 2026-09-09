@@ -27,6 +27,7 @@ export type AdminOverviewException = OperationalExceptionItem & {
 };
 
 export type AdminOverviewView = {
+  notifications: ReadonlyArray<AdminDashboardNotification>;
   generatedAt: string;
   selectedScope: AdminSelectedScope;
   timezone: string;
@@ -39,6 +40,17 @@ export type AdminOverviewView = {
     computedAt: string;
   };
   deniedSections: ReadonlyArray<string>;
+};
+
+export type AdminDashboardNotification = {
+  id: string;
+  label: string;
+  orderId: string;
+  orderNumber: string;
+  occurredAt: string;
+  href: string;
+  /** Selected operational scope for the authorized destination, if needed. */
+  scope: AdminSelectedScope | null;
 };
 
 export type AdminOverviewRequest = AuthenticatedRequest & {

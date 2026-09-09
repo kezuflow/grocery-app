@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { Capability, CoreServiceBinding } from "@freshmarkets/contracts";
+import { enqueueNotification } from "../../notifications/application/enqueue-notification";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -146,6 +147,168 @@ describe("Admin operational overview", () => {
     expect(result.value.deniedSections).not.toContain("operations");
     expect(result.value.cards.find((card) => card.code === "OPEN_ORDERS")).toMatchObject({
       value: null,
+    });
+  });
+  it("scopes dashboard notifications and their completed-order links without exposing administrator problems", async () => {
+    const otherLocation = `notice-location-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      "INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at) VALUES (?,'market-metro-cebu',?,'Other location','FULFILLMENT_CENTER',10,123,'active',1,1)",
+    )
+      .bind(otherLocation, otherLocation)
+      .run();
+    async function order(locationId: string) {
+      const id = crypto.randomUUID();
+      const customerId = `customer-${id}`;
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO customer(id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',1,1)",
+        ).bind(customerId, `auth-${id}`),
+        env.DB.prepare(
+          "INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at) VALUES (?,?,100,'PHP','SUCCEEDED','mock',?,1,1)",
+        ).bind(`payment-${id}`, customerId, `payment-${id}`),
+        env.DB.prepare(
+          "INSERT INTO grocery_order(id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,created_at,committed_at,order_number) VALUES (?,?,NULL,'INSTANT','{}','DELIVERED',100,'PHP',?,1,?,?)",
+        ).bind(id, customerId, `payment-${id}`, Date.now(), `FM-${id}`),
+        env.DB.prepare(
+          "INSERT INTO fulfillment_record(id,order_id,location_id,status,updated_at) VALUES (?,?,?,'COMPLETED',1)",
+        ).bind(`fulfillment-${id}`, id, locationId),
+        env.DB.prepare(
+          "INSERT OR IGNORE INTO delivery_job(id,order_id,fulfillment_mode,location_id,zone_id,status,context_resolution_status,address_snapshot_json,version,created_at,updated_at) VALUES (?,?,'INSTANT',?,'zone-cebu-city-core','DELIVERED','RESOLVED','{}',1,1,1)",
+        ).bind(`job-${id}`, id, locationId),
+        env.DB.prepare(
+          "UPDATE delivery_job SET status='DELIVERED',delivered_at=1 WHERE order_id=?",
+        ).bind(id),
+        env.DB.prepare(
+          "INSERT INTO order_issue(id,order_id,customer_id,category,status,details,version,idempotency_key,created_at,updated_at) VALUES (?,?,?,'OTHER','SUBMITTED','Customer needs help',1,?,?,?)",
+        ).bind(`issue-${id}`, id, customerId, `issue-${id}`, Date.now(), Date.now()),
+      ]);
+      await enqueueNotification(env.DB, {
+        type: "DELIVERED",
+        aggregateType: "DELIVERY",
+        aggregateId: id,
+        customerId,
+        recipient: "synthetic@example.com",
+        templateData: { orderNumber: `FM-${id}` },
+        scheduledAt: Date.now(),
+        idempotencyKey: `delivered-${id}`,
+      });
+      return id;
+    }
+    const localOrder = await order("location-cebu-central");
+    const otherOrder = await order(otherLocation);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','ORDER',?,?,100,'PHP','SUCCEEDED',?,1,1)",
+      ).bind(`intent-${localOrder}`, localOrder, `customer-${localOrder}`, `intent-${localOrder}`),
+      env.DB.prepare(
+        "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,1)",
+      ).bind(
+        `reaction-${localOrder}`,
+        `intent-${localOrder}`,
+        `reaction-${localOrder}`,
+        localOrder,
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,100,'PHP','ESCALATED',?,?,?)",
+      ).bind(
+        `refund-${localOrder}`,
+        `intent-${localOrder}`,
+        `refund-${localOrder}`,
+        Date.now(),
+        Date.now(),
+      ),
+    ]);
+    const cookie = await seedStaff({
+      capabilities: ["fulfillment.read", "delivery.read", "orders.read", "payments.read"],
+      scope: "location",
+    });
+    const request = {
+      headers: { cookie },
+      requestId: crypto.randomUUID(),
+      selectedScope: {
+        kind: "LOCATION" as const,
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      },
+      timezone: "Asia/Manila",
+    };
+    const local = await core.getAdminOverview(request);
+    if (!local.ok) throw new Error("Missing local overview");
+    expect(local.value.notifications.map((item) => item.orderId)).toEqual([localOrder, localOrder]);
+    expect(local.value.notifications.some((item) => item.label.includes("problem"))).toBe(false);
+    expect(local.value.notifications.map((item) => item.href)).toEqual(
+      expect.arrayContaining([
+        `/admin/fulfillment?orderId=${localOrder}`,
+        `/admin/delivery?orderId=${localOrder}`,
+      ]),
+    );
+    expect(
+      await core.getAdminOverview({ ...request, selectedScope: { kind: "GLOBAL" } }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await core.listFulfillmentQueue({
+        ...request,
+        locationId: "location-cebu-central",
+        orderId: otherOrder,
+      }),
+    ).toMatchObject({ ok: true, value: { items: [] } });
+    expect(
+      await core.listDeliveryOperations({
+        ...request,
+        locationId: otherLocation,
+        orderId: otherOrder,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await core.listFulfillmentQueue({
+        ...request,
+        locationId: "location-cebu-central",
+        orderId: localOrder,
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { items: [{ orderId: localOrder, status: "COMPLETED", allowedActions: [] }] },
+    });
+    expect(
+      await core.listDeliveryOperations({
+        ...request,
+        locationId: "location-cebu-central",
+        orderId: localOrder,
+      }),
+    ).toMatchObject({ ok: true, value: { items: [{ orderId: localOrder, status: "DELIVERED" }] } });
+    const adminCookie = await seedStaff({
+      capabilities: ["orders.read", "payments.read"],
+      scope: "global",
+    });
+    const global = await core.getAdminOverview({
+      ...request,
+      headers: { cookie: adminCookie },
+      selectedScope: { kind: "GLOBAL" },
+    });
+    if (!global.ok) throw new Error("Missing global overview");
+    expect(
+      global.value.notifications
+        .filter((item) => item.label.includes("problem"))
+        .map((item) => item.orderId)
+        .sort(),
+    ).toEqual([localOrder, otherOrder].sort());
+    expect(
+      global.value.notifications.every(
+        (item) =>
+          item.href.startsWith("/admin/orders/") ||
+          item.href.startsWith("/admin/issues/") ||
+          item.href.startsWith("/admin/payments/"),
+      ),
+    ).toBe(true);
+    expect(
+      global.value.notifications.find((item) => item.label === "Refund needs attention"),
+    ).toMatchObject({ orderId: localOrder, href: `/admin/payments/intent-${localOrder}` });
+    await env.DB.prepare(
+      "DELETE FROM role_permission WHERE role_id IN (SELECT sr.role_id FROM staff_role sr JOIN staff_scope scope ON scope.staff_id=sr.staff_id WHERE scope.scope_kind='location')",
+    ).run();
+    expect(await core.getAdminOverview(request)).toMatchObject({
+      ok: true,
+      value: { notifications: [] },
     });
   });
 });
