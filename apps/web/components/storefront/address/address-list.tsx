@@ -7,6 +7,8 @@ export type AddressListProps = Readonly<{
   selectedAddressId?: string;
   onSelect: (addressId: string) => void;
   onCorrect: (address: CustomerAddressView) => void;
+  defaultAddressId?: string | null;
+  onManage?: (action: "SET_DEFAULT" | "REMOVE", address: CustomerAddressView) => void;
 }>;
 
 function displayAddress(address: CustomerAddressView): string {
@@ -26,6 +28,8 @@ export function AddressList({
   selectedAddressId,
   onSelect,
   onCorrect,
+  defaultAddressId,
+  onManage,
 }: AddressListProps) {
   if (addresses.length === 0)
     return (
@@ -58,6 +62,9 @@ export function AddressList({
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2 font-semibold text-slate-950">
                   {address.label}
+                  {address.id === defaultAddressId ? (
+                    <span className="text-xs font-normal">Default address</span>
+                  ) : null}
                   <span
                     role="status"
                     className={
@@ -82,6 +89,28 @@ export function AddressList({
             >
               {available ? "Edit address" : "Correct address"}
             </button>
+            {onManage ? (
+              <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                {address.id !== defaultAddressId ? (
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => onManage("SET_DEFAULT", address)}
+                    aria-label={`Use ${address.label} as default`}
+                  >
+                    Use as default
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => onManage("REMOVE", address)}
+                  aria-label={`Remove ${address.label} address`}
+                >
+                  Remove address
+                </button>
+              </div>
+            ) : null}
           </div>
         );
       })}

@@ -29,7 +29,7 @@ import {
 
 const profileScope = "admin.customers.profile";
 const noteScope = "admin.customers.support-note";
-const profileInput = customerProfileUpdateSchema.extend({
+const profileInput = customerProfileUpdateSchema.omit({ accountPhone: true }).extend({
   customerId: z.string().trim().min(1).max(200),
   reason: z.string().trim().min(1).max(500),
 });
@@ -123,7 +123,7 @@ export async function updateAdminCustomerProfile(
   if (target.version !== command.expectedVersion)
     return failure("STALE_VERSION", "Customer changed; refresh before editing", request.requestId);
   const value: CustomerProfileView = {
-    customerId: target.customerId,
+    ...target,
     preferredLanguage: command.preferredLanguage,
     promotionalEmails: command.promotionalEmails,
     version: target.version + 1,

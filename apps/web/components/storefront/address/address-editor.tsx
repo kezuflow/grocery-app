@@ -53,6 +53,7 @@ export type AddressEditorProps = Readonly<{
   onServiceabilityConfirmed?: (selection: ServiceabilitySelection) => void;
   purpose?: "save" | "serviceability";
   initialAddress?: CustomerAddressView;
+  defaultPhone?: string;
   publicAccessToken?: string;
   mapAdapter?: MapAdapter;
   fetchImpl?: typeof fetch;
@@ -172,6 +173,7 @@ export function AddressEditor({
   onServiceabilityConfirmed,
   purpose = "save",
   initialAddress,
+  defaultPhone,
   publicAccessToken,
   mapAdapter,
   fetchImpl = fetch,
@@ -183,7 +185,7 @@ export function AddressEditor({
   const [searchError, setSearchError] = useState("");
   const [label, setLabel] = useState(initialAddress?.label ?? "");
   const [recipient, setRecipient] = useState(initialAddress?.recipient ?? "");
-  const [phone, setPhone] = useState(initialAddress?.phone ?? "");
+  const [phone, setPhone] = useState(initialAddress?.phone ?? defaultPhone ?? "");
   const [components, setComponents] = useState(initialAddress?.components ?? emptyComponents);
   const [componentsSource, setComponentsSource] = useState<AddressComponentsSource>(
     initialAddress ? "SAVED_ADDRESS" : "FIRST_PARTY",

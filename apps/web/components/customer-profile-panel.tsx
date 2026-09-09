@@ -4,12 +4,15 @@ import type { CustomerProfileView } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { authClient } from "../lib/auth/auth-client";
 
 const resultSchema = z.discriminatedUnion("ok", [
   z.object({
     ok: z.literal(true),
     value: z.object({
       customerId: z.string(),
+      accountPhone: z.string().nullable(),
+      defaultAddressId: z.string().nullable(),
       preferredLanguage: z.string().nullable(),
       promotionalEmails: z.boolean(),
       version: z.number().int().positive(),
@@ -20,6 +23,7 @@ const resultSchema = z.discriminatedUnion("ok", [
 export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView }) {
   const [profile, setProfile] = useState(initial);
   const [language, setLanguage] = useState(initial.preferredLanguage ?? "");
+  const [phone, setPhone] = useState(initial.accountPhone ?? "");
   const [promotions, setPromotions] = useState(initial.promotionalEmails);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -31,6 +35,7 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
     pending.current ??= {
       key: crypto.randomUUID(),
       body: JSON.stringify({
+        accountPhone: phone.trim() || null,
         preferredLanguage: language.trim() || null,
         promotionalEmails: promotions,
         expectedVersion: profile.version,
@@ -47,6 +52,7 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
       const result = resultSchema.parse(await response.json());
       if (result.ok) {
         setProfile(result.value);
+        setPhone(result.value.accountPhone ?? "");
         setLanguage(result.value.preferredLanguage ?? "");
         setPromotions(result.value.promotionalEmails);
         setMessage("Preferences saved.");
@@ -70,6 +76,22 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
       }}
     >
       <fieldset disabled={busy || uncertain} className="space-y-5">
+        <div className="space-y-2">
+          <label htmlFor="account-phone">Account phone</label>
+          <Input
+            id="account-phone"
+            type="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            maxLength={40}
+            aria-describedby="account-phone-help"
+          />
+          <p id="account-phone-help" className="text-sm">
+            Used as the default phone for a new delivery address. Each address can use a different
+            recipient phone.
+          </p>
+        </div>
         <div className="space-y-2">
           <label htmlFor="preferred-language">Preferred language</label>
           <Input
@@ -106,6 +128,58 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
           Reload preferences
         </a>
       ) : null}
+    </form>
+  );
+}
+
+/** Better Auth owns the account name and session; Customers never copies it. */
+export function CustomerNamePanel() {
+  const { data, isPending, refetch } = authClient.useSession();
+  const [name, setName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  if (!data?.user) return null;
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const next = (name ?? data.user.name).trim();
+        if (!next || busy) return;
+        setBusy(true);
+        setMessage("");
+        try {
+          const result = await authClient.updateUser({ name: next });
+          if (result.error) setMessage("Your name could not be saved. Please try again.");
+          else {
+            await refetch();
+            setName(null);
+            setMessage("Name saved.");
+          }
+        } catch {
+          setMessage("Saving your name could not be confirmed. Please try again.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label className="block" htmlFor="account-name">
+        Your name
+      </label>
+      <Input
+        id="account-name"
+        autoComplete="name"
+        required
+        maxLength={100}
+        value={name ?? data.user.name}
+        disabled={busy || isPending}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <p className="text-sm">Sign-in email: {data.user.email}</p>
+      <Button type="submit" disabled={busy || isPending}>
+        {busy ? "Saving name…" : "Save name"}
+      </Button>
+      {message ? <p role="status">{message}</p> : null}
     </form>
   );
 }

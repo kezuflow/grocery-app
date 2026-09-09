@@ -179,6 +179,21 @@ function successfulFetch(options?: {
       );
     if (path === "/api/commerce/address")
       return Promise.resolve(addressesResponse(options?.addresses ?? [home, office]));
+    if (path === "/api/commerce/profile")
+      return Promise.resolve(
+        json({
+          ok: true,
+          value: {
+            customerId: "customer",
+            accountPhone: null,
+            defaultAddressId: null,
+            preferredLanguage: null,
+            promotionalEmails: false,
+            version: 1,
+          },
+          requestId: "profile",
+        }),
+      );
     if (path === "/api/commerce/checkout")
       return Promise.resolve(
         json({ ok: true, value: { eligible: true, failures: [] }, requestId: "eligible" }),

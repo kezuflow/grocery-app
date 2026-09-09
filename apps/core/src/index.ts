@@ -50,6 +50,7 @@ import {
   cancelAdminDeliveryCycle,
 } from "./admin/application/delivery-cycle-administration";
 import { readCustomerProfile, updateMyCustomerProfile } from "./customer/profile";
+import { manageMyCustomerAddress } from "./customer/manage-address";
 import {
   getAdminCustomerProfile,
   updateAdminCustomerProfile,
@@ -1568,6 +1569,23 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       command,
     );
   }
+  async manageMyCustomerAddress(
+    input: import("@freshmarkets/contracts").ManageCustomerAddressRequest,
+  ) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const { headers: _headers, requestId: _requestId, ...command } = input;
+    return manageMyCustomerAddress(
+      {
+        database: this.env.DB,
+        session: (request) => this.context.session(request),
+        now: () => this.context.now(),
+      },
+      validation.data,
+      command,
+    );
+  }
   async acceptCustomerInvitation(
     input: import("@freshmarkets/contracts").AcceptCustomerInvitationRequest,
   ) {
@@ -2179,7 +2197,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        geocoder: buildGeocoderPort(this.env),
+        geocoder: this.geocoderPort,
       },
       input,
     );
@@ -2221,7 +2239,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        geocoder: buildGeocoderPort(this.env),
+        geocoder: this.geocoderPort,
       },
       input,
     );
@@ -2802,7 +2820,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const startedAt = Date.now();
     try {
-      const candidates = await buildGeocoderPort(this.env).search(validation.data);
+      const candidates = await this.geocoderPort.search(validation.data);
       log("info", "geocoder.search", {
         requestId: input.requestId,
         operation: "forward_search",
@@ -2828,7 +2846,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const startedAt = Date.now();
     try {
-      const candidate = await buildGeocoderPort(this.env).reverseTemporary(validation.data);
+      const candidate = await this.geocoderPort.reverseTemporary(validation.data);
       log("info", "geocoder.reverse", {
         requestId: input.requestId,
         operation: "temporary_reverse",
@@ -2879,7 +2897,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     try {
-      return await createCustomerAddress(this.env.DB, buildGeocoderPort(this.env), {
+      return await createCustomerAddress(this.env.DB, this.geocoderPort, {
         ...input,
         customerId: customer.value.customerId,
       });
@@ -2911,7 +2929,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     try {
-      return await updateCustomerAddress(this.env.DB, buildGeocoderPort(this.env), {
+      return await updateCustomerAddress(this.env.DB, this.geocoderPort, {
         ...input,
         customerId: customer.value.customerId,
       });

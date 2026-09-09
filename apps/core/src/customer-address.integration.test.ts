@@ -12,6 +12,7 @@ import {
   updateCustomerAddress as updateCustomerAddressCommand,
 } from "./customer/addresses";
 import type { GeocoderPort } from "./geography/ports/geocoder";
+import { manageMyCustomerAddress } from "./customer/manage-address";
 
 const core = exports.default as unknown as CoreServiceBinding;
 const password = "correct-horse-battery-staple";
@@ -1181,5 +1182,240 @@ describe("Phase 4B customer addresses", () => {
       .bind(orderId)
       .first<{ address_snapshot_json: string }>();
     expect(storedOrder?.address_snapshot_json).toBe(snapshot);
+    const profile = await core.getMyCustomerProfile(user.request());
+    if (!profile.ok) throw new Error("Profile unavailable");
+    const listed = await core.listCustomerAddresses(user.request());
+    if (!listed.ok) throw new Error("Addresses unavailable");
+    const current = listed.value.find((address) => address.id === created.value.id)!;
+    const command = {
+      ...user.request(),
+      action: "SET_DEFAULT" as const,
+      addressId: current.id,
+      expectedAddressVersion: current.version,
+      expectedVersion: profile.value.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const savedDefault = await core.manageMyCustomerAddress(command);
+    expect(savedDefault).toMatchObject({
+      ok: true,
+      value: { profile: { defaultAddressId: current.id } },
+    });
+    if (!savedDefault.ok) throw new Error("Default address failed");
+    const removed = await core.manageMyCustomerAddress({
+      ...command,
+      action: "REMOVE",
+      expectedVersion: savedDefault.value.profile.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(removed).toMatchObject({
+      ok: true,
+      value: { status: "disabled", profile: { defaultAddressId: null } },
+    });
+    expect(await core.manageMyCustomerAddress(command)).toEqual(savedDefault);
+    expect(
+      await env.DB.prepare("SELECT status FROM customer_address WHERE id=?")
+        .bind(current.id)
+        .first(),
+    ).toEqual({ status: "disabled" });
+    expect(
+      await env.DB.prepare("SELECT address_snapshot_json FROM grocery_order WHERE id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ address_snapshot_json: snapshot });
+    expect(await core.listCustomerAddresses(user.request())).toMatchObject({ ok: true, value: [] });
   });
+});
+
+describe("customer account phone and address management", () => {
+  async function setup() {
+    const user = await account();
+    const created = await createAddress(user.request());
+    if (!created.ok) throw new Error("Address setup failed");
+    const profile = await core.getMyCustomerProfile(user.request());
+    if (!profile.ok) throw new Error("Profile setup failed");
+    return {
+      user,
+      address: created.value,
+      profile: profile.value,
+      command: {
+        ...user.request(),
+        action: "SET_DEFAULT" as const,
+        addressId: created.value.id,
+        expectedAddressVersion: created.value.version,
+        expectedVersion: profile.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    };
+  }
+  it("normalizes account phone without rewriting existing delivery contacts, and preserves it on retained preference commands", async () => {
+    const { user, address, profile } = await setup();
+    const command = {
+      ...user.request(),
+      accountPhone: "0917 123 4567",
+      preferredLanguage: null,
+      promotionalEmails: false,
+      expectedVersion: profile.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const updated = await core.updateMyCustomerProfile(command);
+    expect(updated).toMatchObject({
+      ok: true,
+      value: { accountPhone: "+639171234567", defaultAddressId: null },
+    });
+    expect(await core.updateMyCustomerProfile(command)).toEqual(updated);
+    expect(
+      await core.updateMyCustomerProfile({
+        ...command,
+        accountPhone: "123",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    if (!updated.ok) throw new Error("Phone update failed");
+    const { accountPhone: _phone, ...retained } = command;
+    expect(
+      await core.updateMyCustomerProfile({
+        ...retained,
+        expectedVersion: updated.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { accountPhone: "+639171234567" } });
+    const listed = await core.listCustomerAddresses(user.request());
+    expect(listed).toMatchObject({ ok: true, value: [{ id: address.id, phone: address.phone }] });
+  });
+  it("isolates owners and gives competing default/remove commands one winner", async () => {
+    const first = await setup(),
+      second = await setup();
+    expect(
+      await core.manageMyCustomerAddress({ ...first.command, addressId: second.address.id }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    const outcomes = await Promise.all([
+      core.manageMyCustomerAddress(first.command),
+      core.manageMyCustomerAddress({
+        ...first.command,
+        action: "REMOVE",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+    expect(await core.getMyCustomerProfile(second.user.request())).toMatchObject({
+      ok: true,
+      value: { version: second.profile.version, defaultAddressId: null },
+    });
+  });
+  it("rolls back the default, deactivation and receipt when the required address write is suppressed", async () => {
+    const { address, command, user, profile } = await setup();
+    const remove = { ...command, action: "REMOVE" as const };
+    await env.DB.exec(
+      `CREATE TRIGGER ca76_suppress_remove BEFORE UPDATE ON customer_address WHEN OLD.id='${address.id}' AND NEW.status='disabled' BEGIN SELECT RAISE(IGNORE); END`,
+    );
+    try {
+      expect(await core.manageMyCustomerAddress(remove)).toMatchObject({
+        ok: false,
+        error: { code: "CONFLICT" },
+      });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ca76_suppress_remove");
+    }
+    expect(await core.getMyCustomerProfile(user.request())).toMatchObject({
+      ok: true,
+      value: { version: profile.version, defaultAddressId: null },
+    });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM customer_address WHERE id=?")
+        .bind(address.id)
+        .first(),
+    ).toEqual({ status: "active", version: address.version });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS count FROM idempotency_records WHERE scope='customer.address.manage' AND idempotency_key=?",
+      )
+        .bind(`${user.userId}:${command.idempotencyKey}`)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(await core.manageMyCustomerAddress(remove)).toMatchObject({
+      ok: true,
+      value: { status: "disabled" },
+    });
+  });
+  it("rejects a disabled principal even with an existing successful receipt", async () => {
+    const { command, user, profile } = await setup();
+    const update = {
+      ...user.request(),
+      accountPhone: "+639171234567",
+      preferredLanguage: null,
+      promotionalEmails: false,
+      expectedVersion: profile.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const result = await core.updateMyCustomerProfile(update);
+    if (!result.ok) throw new Error("Profile setup failed");
+    const addressCommand = { ...command, expectedVersion: result.value.version };
+    expect(await core.manageMyCustomerAddress(addressCommand)).toMatchObject({ ok: true });
+    await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?")
+      .bind(user.userId)
+      .run();
+    expect(await core.manageMyCustomerAddress(addressCommand)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    expect(await core.updateMyCustomerProfile(update)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+  });
+  it.each(["address", "principal"] as const)(
+    "rechecks the %s at the complete write boundary",
+    async (kind) => {
+      const { command, user, address } = await setup();
+      const database = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (kind === "address")
+                await env.DB.prepare("UPDATE customer_address SET version=version+1 WHERE id=?")
+                  .bind(address.id)
+                  .run();
+              else
+                await env.DB.prepare(
+                  "UPDATE customer_principal SET status='disabled' WHERE auth_user_id=?",
+                )
+                  .bind(user.userId)
+                  .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const { headers: _headers, requestId: _requestId, ...input } = command;
+      expect(
+        await manageMyCustomerAddress(
+          {
+            database,
+            session: async () => ({
+              id: user.userId,
+              name: "Synthetic",
+              email: "synthetic@example.com",
+              emailVerified: true,
+            }),
+            now: Date.now,
+          },
+          user.request(),
+          input,
+        ),
+      ).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT default_address_id FROM customer WHERE auth_user_id=?")
+          .bind(user.userId)
+          .first(),
+      ).toEqual({ default_address_id: null });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS count FROM idempotency_records WHERE scope='customer.address.manage' AND idempotency_key=?",
+        )
+          .bind(`${user.userId}:${command.idempotencyKey}`)
+          .first(),
+      ).toEqual({ count: 0 });
+    },
+  );
 });

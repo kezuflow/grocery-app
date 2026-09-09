@@ -15,6 +15,8 @@ const profileResult = z.discriminatedUnion("ok", [
     ok: z.literal(true),
     value: z.object({
       customerId: z.string(),
+      accountPhone: z.string().nullable(),
+      defaultAddressId: z.string().nullable(),
       preferredLanguage: z.string().nullable(),
       promotionalEmails: z.boolean(),
       version: z.number().int().positive(),

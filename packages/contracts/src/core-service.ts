@@ -181,6 +181,7 @@ export const coreServiceMethodNames = [
   "appendCustomerSupportNote",
   "getMyCustomerProfile",
   "updateMyCustomerProfile",
+  "manageMyCustomerAddress",
   "listCustomerInvitations",
   "inviteCustomer",
   "getMyCustomerInvitation",

@@ -8,22 +8,33 @@ import { z } from "@freshmarkets/validation";
 import { auditEventStatement } from "../audit/application/append-audit-event";
 import { findIdempotencyRecord, requestHash } from "../idempotency";
 import type { SessionUser } from "./principal";
+import { normalizePhilippineMobile } from "./domain/customer-phone";
 
 export const customerProfileSchema = z.object({
   customerId: z.string().min(1),
+  accountPhone: z.string().nullable().default(null),
+  defaultAddressId: z.string().nullable().default(null),
   preferredLanguage: z.string().trim().min(1).max(80).nullable(),
   promotionalEmails: z.boolean(),
   version: z.number().int().positive(),
 });
 export const customerProfileUpdateSchema = z
   .object({
+    accountPhone: z
+      .string()
+      .trim()
+      .max(40)
+      .transform(normalizePhilippineMobile)
+      .refine((value) => value !== null, "Enter a valid Philippine mobile number")
+      .nullable()
+      .optional(),
     preferredLanguage: z.string().trim().min(1).max(80).nullable(),
     promotionalEmails: z.boolean(),
     expectedVersion: z.number().int().positive(),
     idempotencyKey: z.string().trim().min(1).max(200),
   })
   .strict();
-type ProfilePorts = {
+export type ProfilePorts = {
   database: D1Database;
   session: (request: AuthenticatedRequest) => Promise<SessionUser | null>;
   now: () => number;
@@ -37,10 +48,14 @@ export async function readCustomerProfile(
   customerId: string,
 ): Promise<CustomerProfileView | null> {
   const row = await db
-    .prepare("SELECT id,preferred_language,promotional_emails,version FROM customer WHERE id=?")
+    .prepare(
+      "SELECT id,account_phone,default_address_id,preferred_language,promotional_emails,version FROM customer WHERE id=?",
+    )
     .bind(customerId)
     .first<{
       id: string;
+      account_phone: string | null;
+      default_address_id: string | null;
       preferred_language: string | null;
       promotional_emails: number;
       version: number;
@@ -48,6 +63,8 @@ export async function readCustomerProfile(
   return row
     ? {
         customerId: row.id,
+        accountPhone: row.account_phone,
+        defaultAddressId: row.default_address_id,
         preferredLanguage: row.preferred_language,
         promotionalEmails: row.promotional_emails === 1,
         version: row.version,
@@ -75,6 +92,7 @@ export async function updateMyCustomerProfile(
   const db = ports.database;
   const key = `${user.id}:${command.idempotencyKey}`;
   const hash = await requestHash({
+    ...(command.accountPhone !== undefined ? { accountPhone: command.accountPhone } : {}),
     preferredLanguage: command.preferredLanguage,
     promotionalEmails: command.promotionalEmails,
     expectedVersion: command.expectedVersion,
@@ -100,20 +118,25 @@ export async function updateMyCustomerProfile(
       ? { ok: true, value: receipt.data, requestId: request.requestId }
       : failure("INTERNAL_ERROR", "Saved preferences result is unavailable", request.requestId);
   }
-  const previous = await replay();
-  if (previous) return previous;
   const target = await db
     .prepare(
-      "SELECT c.id,c.version FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.auth_user_id=? AND c.status='active' AND cp.status='active'",
+      "SELECT c.id,c.version,c.account_phone,c.default_address_id FROM customer c JOIN customer_principal cp ON cp.id=c.principal_id AND cp.auth_user_id=c.auth_user_id WHERE c.auth_user_id=? AND c.status='active' AND cp.status='active'",
     )
     .bind(user.id)
-    .first<{ id: string; version: number }>();
+    .first<{
+      id: string;
+      version: number;
+      account_phone: string | null;
+      default_address_id: string | null;
+    }>();
   if (!target)
     return failure(
       "FORBIDDEN",
       "Load an active customer profile before updating preferences",
       request.requestId,
     );
+  const previous = await replay();
+  if (previous) return previous;
   if (target.version !== command.expectedVersion)
     return failure(
       "STALE_VERSION",
@@ -123,6 +146,8 @@ export async function updateMyCustomerProfile(
   const now = ports.now();
   const result: CustomerProfileView = {
     customerId: target.id,
+    accountPhone: command.accountPhone === undefined ? target.account_phone : command.accountPhone,
+    defaultAddressId: target.default_address_id,
     preferredLanguage: command.preferredLanguage,
     promotionalEmails: command.promotionalEmails,
     version: target.version + 1,
@@ -137,9 +162,10 @@ export async function updateMyCustomerProfile(
       required(db),
       db
         .prepare(
-          "UPDATE customer SET preferred_language=?,promotional_emails=?,version=version+1,updated_at=? WHERE id=? AND auth_user_id=? AND version=? AND status='active' AND EXISTS(SELECT 1 FROM customer_principal cp WHERE cp.id=customer.principal_id AND cp.auth_user_id=customer.auth_user_id AND cp.status='active')",
+          "UPDATE customer SET account_phone=?,preferred_language=?,promotional_emails=?,version=version+1,updated_at=? WHERE id=? AND auth_user_id=? AND version=? AND status='active' AND EXISTS(SELECT 1 FROM customer_principal cp WHERE cp.id=customer.principal_id AND cp.auth_user_id=customer.auth_user_id AND cp.status='active')",
         )
         .bind(
+          result.accountPhone,
           command.preferredLanguage,
           command.promotionalEmails ? 1 : 0,
           now,

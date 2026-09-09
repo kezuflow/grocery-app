@@ -5,6 +5,7 @@ import type {
   CartView,
   CheckoutQuoteView,
   CustomerAddressView,
+  CustomerProfileView,
   FulfillmentOptionView,
   PaymentActionView,
   RpcResult,
@@ -23,6 +24,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     [],
   );
   const [addresses, setAddresses] = useState<ReadonlyArray<CustomerAddressView>>([]);
+  const [profile, setProfile] = useState<CustomerProfileView | null>(null);
   const [addressLoadState, setAddressLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -78,19 +80,26 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
     const generation = ++addressLoadGeneration.current;
     setAddressLoadState("loading");
     try {
-      const response = await fetch("/api/commerce/address", {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
+      const [response, profileResponse] = await Promise.all(
+        ["/api/commerce/address", "/api/commerce/profile"].map((url) =>
+          fetch(url, { credentials: "same-origin", cache: "no-store" }),
+        ),
+      );
+      if (!response || !profileResponse) throw new Error("Address account reads unavailable");
       const result = (await response.json()) as RpcResult<ReadonlyArray<CustomerAddressView>>;
+      const profileResult = (await profileResponse.json()) as RpcResult<CustomerProfileView>;
       if (generation !== addressLoadGeneration.current) return;
       if (!response.ok || !result.ok) {
         setAddressLoadState("error");
         return;
       }
       setAddresses(result.value);
+      setProfile(profileResult.ok ? profileResult.value : null);
       setAddressLoadState("ready");
-      const requestedAddressId = preferredAddressId ?? selectedAddressId.current;
+      const requestedAddressId =
+        preferredAddressId ??
+        (selectedAddressId.current ||
+          (profileResult.ok ? profileResult.value.defaultAddressId : null));
       const confirmed = result.value.find((address) => address.id === requestedAddressId);
       setCurrentAddress(confirmed?.serviceable === true ? confirmed.id : "");
       if (!(await invalidatePendingQuote())) return;
@@ -411,6 +420,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                 ) : (
                   <AddressList
                     addresses={addresses}
+                    defaultAddressId={profile?.defaultAddressId}
                     selectedAddressId={addressId}
                     onSelect={selectAddress}
                     onCorrect={(address) => {
@@ -435,6 +445,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                       key={editingAddress?.id ?? "checkout-new-address"}
                       publicAccessToken={publicAccessToken}
                       initialAddress={editingAddress}
+                      defaultPhone={profile?.accountPhone ?? undefined}
                       onConfirmed={async (confirmedAddressId) => {
                         if (!(await invalidatePendingQuote())) return;
                         await loadAddresses(confirmedAddressId);

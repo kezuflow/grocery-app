@@ -29,6 +29,12 @@ function apply(database, selected) {
 }
 
 function assertFinalSchema(database) {
+  const customerColumns = database
+    .prepare("PRAGMA table_info(customer)")
+    .all()
+    .map((column) => column.name);
+  for (const column of ["account_phone", "default_address_id"])
+    assert.ok(customerColumns.includes(column));
   assert.ok(
     database
       .prepare("PRAGMA table_info(checkout_quote)")
@@ -397,6 +403,15 @@ apply(
   migrations.filter((migration) => migration.name > "0021_instant_mode.sql"),
 );
 assertFinalSchema(populated);
+assert.deepEqual(
+  {
+    ...populated
+      .prepare("SELECT account_phone,default_address_id FROM customer WHERE id='upgrade-customer'")
+      .get(),
+  },
+  { account_phone: null, default_address_id: null },
+  "retained customers receive no invented phone/default address",
+);
 assert.equal(
   populated.prepare("SELECT cart_version FROM checkout_quote WHERE id='upgrade-quote'").get()
     .cart_version,
