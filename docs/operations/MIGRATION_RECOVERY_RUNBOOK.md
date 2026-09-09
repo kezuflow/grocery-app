@@ -2,7 +2,7 @@
 
 ## Choose the lifecycle first
 
-FreshMarkets is pre-launch. A better schema may replace or squash the development baseline under [CODING_STANDARDS.md](../architecture/CODING_STANDARDS.md#pre-launch-schema-and-interface-policy). This runbook does not require preserving disposable fixtures or an obsolete migration chain.
+FreshMarkets is pre-launch. A better schema may replace or squash the development baseline under [ENGINEERING.md](../architecture/ENGINEERING.md#pre-launch-schema-and-interface-policy). This runbook does not require preserving disposable fixtures or an obsolete migration chain.
 
 For a disposable local environment, identify its exact database/persistence directory, update the baseline and all consumers/seeds/verifiers, then recreate only that environment through its reviewed setup workflow. Verify clean initialization and relevant Worker/D1 tests. Editing an already-applied migration does not upgrade its database.
 
@@ -23,7 +23,7 @@ pnpm --filter @freshmarkets/core build
 ```
 
 Apply migrations through the reviewed Core deployment process. The local
-verifier exercises SQLite schemas and selected upgrades; it is neither a production backup nor proof of Worker/D1 runtime integration. See [TESTING.md](../architecture/TESTING.md).
+verifier exercises SQLite schemas and selected upgrades; it is neither a production backup nor proof of Worker/D1 runtime integration. See [ENGINEERING.md](../architecture/ENGINEERING.md#choose-checks-by-risk).
 
 ## Recovery
 

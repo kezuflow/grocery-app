@@ -1,10 +1,10 @@
 # Conceptual D1 Data Model
 
-The owner-authorized 2026-09-07 commerce alignment is the active target. Both modes are pay-as-you-go without membership; Lalamove prices both modes; Scheduled alone permits emergency manual delivery; Global owns exact-location price writes. See [Phase 0 design decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for ownership, capabilities, profiles/closure, warehouse transit, cycle goods, execution attempts, publication and the retained-baseline strategy. Implementation and migration descriptions below are evidence of the previous baseline where explicitly labeled historical, not acceptance of the target.
+Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
 
 ## Purpose and Conventions
 
-This document is authoritative for the implementation-ready conceptual relational model and persistence ownership; business meaning comes from `DOMAIN_MODEL.md` and lifecycle vocabulary from `STATE_MACHINES.md`. This is a conceptual model, not a frozen implementation. FreshMarkets is pre-launch: better schema designs and migration-baseline revisions are permitted under `CODING_STANDARDS.md`, with repositories, contracts, seeds, generators, and tests updated together. Existing tables or migration numbers are not a reason to preserve a worse model.
+This document is authoritative for the implementation-ready conceptual relational model and persistence ownership; business meaning comes from `PRODUCT.md` and lifecycle vocabulary from `STATE_MACHINES.md`. This is a conceptual model, not a frozen implementation. FreshMarkets is pre-launch: better schema designs and migration-baseline revisions are permitted under `ENGINEERING.md`, with repositories, contracts, seeds, generators, and tests updated together. Existing tables or migration numbers are not a reason to preserve a worse model.
 
 Conventions:
 
@@ -18,6 +18,8 @@ Conventions:
 - JSON snapshots are versioned application data, not an excuse to omit queryable foreign keys.
 
 Scheduled commerce has no operational capacity key or allocation. Instant coordination uses location inventory-pool holds/reservations rather than a synthetic cycle. The canonical retail-price scope is exact SKU × fulfillment location × price type; Market remains currency/context, never fallback authority. Historical launch migrations may be narrower or contain retired capacity/fee/fleet data, and their treatment follows the pre-launch/retained-deployment lifecycle policy. Retained commercial evidence must remain truthful, but disposable compatibility schema need not be kept solely because it exists.
+
+PRODUCT's approved follow-up decisions supersede conflicting baseline shapes below. Actual local size counts and bulk receipt describe the same goods; their eventual storage must not derive piece counts from approximate grams or credit both representations as independent inventory. Product-sale quantity, fixed amount per selling unit, overlap prevention, eligible-cancellation restoration and ordinary-stock depletion need atomic records and immutable paid allocations. Shipping uses recorded grams per selling option and the complete-order 20,000 g limit, without packaging allowance or fit fields. New/unique/repeat customer reports use the approved purchase-based definitions. These are implementation obligations, not assertions that current tables implement them.
 
 ## Better Auth-Owned Tables
 
@@ -66,7 +68,7 @@ Location address JSON stores validated structured fields plus protected `confirm
 - `initial_administrator_setup(id singleton PK, auth_user_id FK, staff_id FK, role_id FK, capability_codes_json, completed_at)` records immutable one-use installation setup evidence. Migration 0078 creates only this empty table and integrity triggers, preserving every prior row and grant. Core owns matching verified-email eligibility and existing-Global-access rejection; the database enforces singleton identity, valid evidence and restricted references.
 - legacy `riders(...)` rows remain read-only compatibility evidence until retention/migration safety permits removal; they grant no active delivery authority.
 - `roles(id PK, code UNIQUE, name, description, status ACTIVE|ARCHIVED, version)`
-- `capabilities(id PK, code UNIQUE, description)` seeded/configured from the closed capability vocabulary in `DOMAIN_MODEL.md`, including customer, order, catalog, inventory, promotion, membership, payment/refund, fulfillment, delivery, procurement, analytics, and staff read/manage capabilities.
+- `capabilities(id PK, code UNIQUE, description)` seeded/configured from the closed capability vocabulary in `PRODUCT.md`, including customer, order, catalog, inventory, promotion, membership, payment/refund, fulfillment, delivery, procurement, analytics, and staff read/manage capabilities.
 - `role_capabilities(role_id FK, capability_id FK, PRIMARY KEY(role_id, capability_id))`
 - `staff_role_assignments(id PK, staff_id FK, role_id FK, organization_id FK NULL, market_id FK NULL, location_id FK NULL, created_at)`
 
@@ -154,7 +156,7 @@ The retained-baseline implementation adds `delivery_cycle_schedule` (one timezon
 - `delivery_cycle_zones(cycle_id FK, zone_id FK, location_id FK, status, version, PRIMARY KEY(cycle_id, zone_id, location_id))` records eligibility/operational participation only and contains no capacity.
 - `delivery_provider_quotations(id PK, checkout_attempt_id FK NULL, delivery_job_id FK NULL, provider, provider_service, provider_quotation_id, amount_minor, currency, quoted_at, expires_at NULL, scheduled_pickup_at NULL, origin_snapshot_json, destination_snapshot_json, capability_snapshot_json, request_hash, status, created_at)` with exactly one checkout-attempt or dispatch owner.
 
-Lalamove quotations are the checkout delivery-price authority in both modes. No customer courier selection is persisted. Actual external/manual cost is separate and nullable; unknown cost/variance is never zero. Legacy fee/capacity structures do not participate in new commerce.
+Lalamove quotations are the checkout delivery-price authority in both modes. The approved selected courier/service must be bound to accepted quotation/Order evidence under PRODUCT GD-D03; do not invent a new persisted representation without updating the owning contracts and command path. Actual external/manual cost is separate and nullable; unknown cost/variance is never zero. Legacy fee/capacity structures do not participate in new commerce.
 
 ## Cart and Checkout Attempts
 
@@ -317,46 +319,6 @@ The one-to-one store sender/pickup profile does not duplicate
 idempotency key. No placeholder sender identity is backfilled: each store must be configured with
 factual operational data before provider booking becomes available.
 
-### Historical internal-dispatch compatibility record
-
-The following map/batch/Rider paragraphs record already-applied internal-dispatch behavior only. They are not the target active model and no new write path may depend on them.
-
-Delivery map reads retain every authorized open `delivery_job` in its exact
-location/mode/cycle context. A null `delivery_stop.latitude`/`longitude` pair is
-projected as a null coordinate rather than omitted or synthesized; it produces
-no map marker and fails assignment selection closed with
-`MISSING_COORDINATE`.
-
-The map and eligible-Rider reads use bounded, opaque, context-bound keyset
-pagination. Delivery pages order by immutable `delivery_job.id`; Rider pages
-order by immutable `rider_identity.id`, never mutable `display_name`. Each
-cursor is also bound to a Core-computed digest of the complete bounded filtered
-projection. The delivery digest covers job, reciprocal stop, referenced batch,
-and projected Rider evidence; the eligible-Rider digest covers every active
-Rider identity/version plus its projected open batch and delivery counts. Core
-recomputes this evidence around each page and returns `STALE_VERSION` when it
-changes rather than claiming a D1 snapshot across calls. `totalCount`, explicit
-completion, and the delivery source watermark supply independent completeness
-and freshness checks. Eligible Rider workload counts are set-based grouped
-aggregates over open batches and deliveries joined by canonical Rider ID for
-both revision calculation and page projection. Web follows pages within fixed
-call/page/item ceilings, rejects oversized physical arrays before entry
-traversal, rejects malformed or non-monotonic evidence, and only sorts the
-complete Rider result by `(display_name, id)` for presentation. This bounded
-fail-closed design may require an Admin refresh under concurrent mutation or
-exceptionally large contexts. Rider `preferred_location_id` remains descriptive
-data and is not an assignment authorization predicate.
-
-Migration `0043_delivery_batches_and_map_stops.sql` is owned by the Delivery
-implementation phase and is not created by the contract phase. It must converge
-historical batches/stops onto the canonical rows above, permit null cycle only
-for `INSTANT`, materialize immutable stop coordinates and manual sequence, add
-canonical Rider/version/timestamp/event support, and backfill exactly one stop
-per legacy job. Any SQLite rebuild copies rows before replacement and preserves
-historical address/contact/instruction snapshots, proof JSON/files, events, and
-applied migration history. Active-context and Rider/open-batch indexes may be
-added, but neither a batch nor a Rider becomes the owner of Order state.
-
 ## Audit and Operational Reliability
 
 `notification_outbox` is the transactional D1 notification-intent store. It snapshots the recipient and bounded versioned template facts, uses one stable idempotency key per domain fact/type/recipient, and tracks Queue publication, availability, conditional lease, bounded attempts, last controlled error, and terminal/dead-letter state. `notification_attempt` is append-only attempt evidence. Queue payloads contain only the outbox identity. The consumer handles each message independently, explicitly acknowledges or retries it, and records idempotent send evidence; scheduled redrive repairs unpublished or expired-lease rows. Neither table owns or mutates Order, Payment, Membership, Fulfillment, or Delivery truth.
@@ -427,15 +389,17 @@ Customer-facing Order detail remains a purpose-built projection over immutable O
 
 ## Engineering guardrails for schema changes
 
-Follow [CODING_STANDARDS.md](CODING_STANDARDS.md#pre-launch-schema-and-interface-policy) and [TESTING.md](TESTING.md). Design keys, foreign keys, uniqueness, state checks, and indexes around real ownership, invariants, and read/write paths. Use queryable relational fields for constrained/filterable facts and bounded versioned JSON for immutable snapshots or intentionally flexible metadata. Avoid duplicate authoritative balances/states.
+Follow [ENGINEERING.md](ENGINEERING.md#pre-launch-schema-and-interface-policy) and [ENGINEERING.md](ENGINEERING.md#choose-checks-by-risk). Design keys, foreign keys, uniqueness, state checks, and indexes around real ownership, invariants, and read/write paths. Use queryable relational fields for constrained/filterable facts and bounded versioned JSON for immutable snapshots or intentionally flexible metadata. Avoid duplicate authoritative balances/states.
 
 Rebuild or squash a disposable pre-launch baseline when useful; preserve upgrade paths only for retained supported deployments. Validate initialization from empty, referential integrity, meaningful constraints, realistic multi-record fixtures, and Worker/D1 commands. A zero-row conditional write is not a failed SQL statement: every dependent effect must remain guarded, and a rejected command must leave business state unchanged. A schema revision must update the migration verifiers instead of removing checks that expose real integrity failures.
 
 ## Commerce Alignment Storage Additions
 
 - `inventory_transfer`: source warehouse, destination, state/version, creator, dispatch instant and command identity. Immutable lines identify pool and dispatched quantity.
-- `inventory_transfer_line`: immutable transfer/pool identity, product-name and GRAM/PIECE unit snapshots, positive planned/dispatched quantity, and cumulative accepted quantity constrained to the line total. Pool identity is unique within a transfer. The root pins source/destination and creation evidence; dispatch time is immutable once recorded. Root version protects competing lifecycle commands. Drafts do not reserve or deduct stock.
-- `inventory_transfer_receipt`: immutable transfer/line acceptance, actor, reason, timestamp and unique command/effect identity. Its composite foreign key requires the line to belong to that transfer; destination follows the immutable root. Only positive accepted quantities credit destination stock. Outstanding dispatched quantity is line total minus accepted quantity, with no duplicate transit balance. These tables and additive transfer permissions begin at migration 0087; retained rows, row identities and existing grants remain intact. Required later discrepancy/disposition evidence accounts separately for reported damage/shortage and Global-approved losses/verified returns; it must not be represented as accepted stock.
+- `inventory_transfer_line`: immutable transfer/pool identity, product-name and GRAM/PIECE unit snapshots, positive planned/dispatched quantity, and cumulative accepted, lost and verified-returned quantities constrained to the line total. Current observed damaged and missing quantities classify only the remaining outstanding amount. Pool identity is unique within a transfer. The root pins source/destination and creation evidence; dispatch time is immutable once recorded. Root version protects competing lifecycle commands. Drafts do not reserve or deduct stock.
+- `inventory_transfer_receipt`: immutable transfer/line acceptance, actor, reason, timestamp and unique command/effect identity. Its composite foreign key requires the line to belong to that transfer; destination follows the immutable root. Only positive accepted quantities credit destination stock. Outstanding dispatched quantity is line total minus accepted, lost and verified-returned quantities, with no duplicate transit balance. These tables and additive transfer permissions begin at migration 0087. That new pre-launch migration was expanded before any retained/shared deployment used it; retained 0086 rows, row identities and grants remain intact. Previously created disposable 0087 databases require recreation to use the revised schema. The checking and resolution evidence below separately accounts for reported damage/shortage and Global-approved losses/verified returns; it is never represented as accepted destination stock.
+- `inventory_transfer_check`: append-only checked-line evidence with incremental acceptance and the remaining damaged/missing observations, actor, reason, timestamp and unique effect identity. The line's current observations are not cumulative losses or another stock balance. Zero acceptance may record or correct observations, including clearing a recovered shortage; it creates no accepted-receipt or stock-ledger credit.
+- `inventory_transfer_resolution`: append-only line/category, loss or verified-return outcome, positive quantity, inspection confirmation, actor, reason, timestamp and unique effect identity. Verified sellable returns credit only the immutable source warehouse. Lost and returned counters consume transit once; root `RESOLVED` distinguishes closure through dispositions from full destination acceptance. Global distribution reports derive physical central/site stock, reserved, held, outstanding transit and its damaged/missing subsets per canonical product pool. Summaries never own another physical balance.
 - `cycle_goods_balance`: composite cycle/location/pool identity, cumulative `received_base`, `packed_base`, `surplus_released_base`, `disposed_base` and version. Available goods equal received minus the three consumed/disposed counters. Integer conservation prevents negative availability; this is never an Instant stock source.
 - `cycle_goods_movement`: immutable positive receipt, packing, disposition or inspected-surplus quantity with a unique per-effect identity. Receipt evidence references one accepted receiving event with matching cycle/location/pool/quantity. Packing evidence references one Order and has one effect per Order/pool, including committed additions. Surplus release and physical ledger credit share one guarded batch.
 - `receiving_record.legacy_accepted_base`: immutable accepted quantity at the allocation-tracking upgrade. Retained physical balances, stock ledger and receipt events are preserved; upgrade creates no inferred cycle balance. Historical quantities need reviewed reconciliation before they can support new allocation consumption. New receipts only create cycle goods.

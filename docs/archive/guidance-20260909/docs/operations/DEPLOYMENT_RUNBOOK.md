@@ -11,7 +11,7 @@
 
 ## Local verification
 
-Use [ENGINEERING.md](../architecture/ENGINEERING.md#choose-checks-by-risk) for the full risk-based matrix. The commands below cover deployment-specific checks; also run `pnpm check` and the relevant browser/provider acceptance before an implementation release. Test discovery, build/dry-run output, and readiness configuration do not prove an end-to-end customer journey. A Markdown-only task does not require deployment or provider activation.
+Use [TESTING.md](../architecture/TESTING.md) for the full risk-based matrix. The commands below cover deployment-specific checks; also run `pnpm check` and the relevant browser/provider acceptance before an implementation release. Test discovery, build/dry-run output, and readiness configuration do not prove an end-to-end customer journey. A Markdown-only task does not require deployment or provider activation.
 
 ```text
 pnpm naming:check
@@ -34,7 +34,8 @@ requires the Web/Core stack started with `pnpm dev:stack`.
 The local probe treats `/health` as liveness and `/ready` as dependency
 readiness. A release cannot receive traffic unless `/ready` reports ready for
 runtime configuration, D1, and the configured Payments adapter. The response
-must expose only the provider code, its canonical capabilities, and required one-time payment readiness—never a secret, origin credential, or provider payload.
+must expose only the provider code, its canonical capabilities, and renewal
+initiation state—never a secret, origin credential, or provider payload.
 
 ## Edge security controls
 
@@ -50,7 +51,7 @@ production independently:
   rule for reset initiation than for ordinary authenticated reads.
 - Rate-limit address search by session and client network, with a burst ceiling
   below the upstream provider quota. Do not cache or log precise query strings.
-- Rate-limit checkout quote and payment
+- Rate-limit checkout quote, recurring-authorization initiation, and payment
   initiation by authenticated principal plus client network. Edge controls do
   not replace Core idempotency, expected aggregate versions, or entitlement
   checks.

@@ -1,12 +1,6 @@
 # FreshMarkets System Architecture
 
-The owner-authorized 2026-09-07 commerce alignment is the active target. Both modes are pay-as-you-go without membership; Lalamove prices both modes; Scheduled alone permits emergency manual delivery; Global owns exact-location price writes. See [Phase 0 design decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for ownership, capabilities, profiles/closure, warehouse transit, cycle goods, execution attempts, publication and the retained-baseline strategy. Implementation and migration descriptions below are evidence of the previous baseline where explicitly labeled historical, not acceptance of the target.
-
-Engineering implementation follows [CODING_STANDARDS.md](CODING_STANDARDS.md) and [TESTING.md](TESTING.md). They govern code quality, write atomicity, validation, verification, and pre-launch schema flexibility without changing the bounded contexts or product policy below.
-
-## Status and Authority
-
-This document is authoritative for the approved runtime, repository, bounded-context ownership, integration boundaries, and layering architecture. `DOMAIN_MODEL.md` owns business meaning and invariants, `STATE_MACHINES.md` owns lifecycle vocabulary and transitions, `DATA_MODEL.md` owns conceptual persistence, and `API_CONTRACTS.md` owns application boundary semantics. Product scope and sequencing are authoritative only in `PRODUCT_SCOPE.md` and `IMPLEMENTATION_PLAN.md`. Status reports, remediation notes, READMEs, code, and migrations do not override these decisions.
+Runtime and context ownership guide. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
 
 ## System Shape
 
@@ -71,7 +65,7 @@ All application bounded contexts below are authoritative modules inside `apps/co
 | Inventory                          | Integer location inventory positions, expiring Instant checkout holds, committed Instant reservations, warehouse transfers/transit/receipts, and append-only movements                                                                                             | Scheduled preorder eligibility/demand, unit/SKU definitions, procurement approval, and fulfillment workflow state                                         |
 | Procurement and Receiving          | Exact paid Scheduled demand aggregation, purchasing, cycle-allocated receipt goods/discrepancy state, inspected surplus release, and supply exceptions                                                                                                                          | Scheduled stock/incoming/safety-buffer netting and direct unexplained inventory mutation                                                                    |
 | Fulfillment                        | The separate versioned global `OPEN`/`PAUSED` selling state and `INSTANT`/`SCHEDULED` mode, mode-derived supply policy after location resolution, plus picking, shortage, packing, and handoff state                            | Per-location mode selection, configurable sourcing mode, Order financial truth, and delivery execution                                                     |
-| External Delivery                  | Delivery jobs, normalized progress/exceptions, typed provider capabilities, Lalamove quotations in both modes, Scheduled-only manual fallback and execution-attempt/pickup timing, quotation/booking/reconciliation, and provider dispatch observations | Raw order-state mutation, payment/refund policy, internal fleet/Rider/batch execution, customer selection of Scheduled provider, and provider vocabulary outside adapters |
+| External Delivery                  | Delivery jobs, normalized progress/exceptions, typed provider capabilities, Lalamove quotations in both modes, Scheduled-only manual fallback and execution-attempt/pickup timing, quotation/booking/reconciliation, and provider dispatch observations | Raw order-state mutation, payment/refund policy, internal fleet/Rider/batch execution, provider vocabulary outside adapters |
 | Notifications                      | Transactional D1 outbox, Queue publication/consumption, idempotent message delivery attempts, bounded retry, dead-letter evidence, and recovery scheduling                                                                      | Owning or mutating any business aggregate state; notifications communicate authoritative state and never decide it                                         |
 | Audit and Reliability              | Durable audit history, command idempotency, outbox/inbox processing metadata, and operational exceptions                                                                                                                      | Owning another context's business state                                                                                                                    |
 | Analytics and Reporting            | Derived operational/business projections, canonical versioned metric definitions, aggregation, and reporting read models                                                                                                      | Authoritative Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state                                                   |
@@ -84,47 +78,9 @@ Core owns the `PRODUCT_MEDIA` R2 binding and canonical `product_media` attachmen
 
 Product and promotion publication uses Core-authorized opaque media/version reads through a same-origin Web adapter. Reuse `PRODUCT_MEDIA` with distinct namespaces. D1 publication metadata is authoritative; failed R2 attachment/deletion requires durable cleanup. Bundled produce assets are migration inputs/placeholders, not the publication authority.
 
-## Recommended Repository Structure
+## Repository placement
 
-```text
-apps/
-  web/
-    app/
-    components/
-    lib/core-client/
-    lib/auth/
-    lib/ui/
-    public/
-    vite.config.ts
-    wrangler.jsonc
-  core/
-    src/
-      entrypoint/
-      application/
-        commands/
-        queries/
-        policies/
-      domain/
-      infrastructure/
-        d1/
-        r2/
-        queues/
-        integrations/
-      read-models/
-    migrations/
-    wrangler.jsonc
-packages/
-  contracts/
-  validation/
-  domain-shared/
-  config/
-  test-utils/
-docs/
-```
-
-Core domain modules remain under `apps/core` unless sharing provides a concrete deployment-independent benefit. Likely shared code is limited to RPC contracts, validation schemas, identifiers, money/units/time value objects, configuration, and test utilities.
-
-`REMEDIATION_DECISIONS.md` records earlier implementation choices. Apply the current pre-launch schema/interface policy in `CODING_STANDARDS.md`: improve or remove obsolete representations with their consumers rather than retaining them indefinitely. Preserve upgrade and deployment compatibility only for baselines/data that actually require it.
+Core domains remain under `apps/core`. Share contracts, validators and deployment-independent value objects only when consumed across deployments. Preserve the actual module boundaries; a proposed directory tree does not mandate moves or new packages.
 
 ## Web to Core Boundary
 
@@ -211,9 +167,7 @@ Core RPC transport is composed from bounded adapters under `apps/core/src/entryp
 `CoreRpcContext` creates and caches the authoritative auth, database, runtime, Payments registry,
 and route-distance dependencies; adapters validate transport input, resolve application context,
 and delegate once to the owning command/query. `CoreEntrypoint` preserves the exact Service Binding
-method surface and Worker lifecycle. The landed Admin and Maps transport groups remain pinned in
-the composition root until their independent workstreams authorize a mechanical move; they may
-not be used as precedent for adding new business logic there.
+method surface and Worker lifecycle. Existing transport composition is not precedent for adding business logic to the entrypoint. Move a group only as part of a concrete authorized boundary change.
 
 Within one Admin RPC, Core resolves Better Auth session identity and Application IAM into one
 immutable internal access context. That context includes the active Staff identity already read
@@ -264,7 +218,7 @@ Cloudflare Cron Triggers are the approved time-driven execution mechanism. They 
 
 ## vinext Compatibility Policy
 
-The The current release may rely on App Router, React Server Components, client components, route handlers, server actions used as thin adapters, middleware for coarse presentation behavior, navigation/headers APIs, metadata, request-time images, and selected static/ISR output.
+The current release may rely on App Router, React Server Components, client components, route handlers, server actions used as thin adapters, middleware for coarse presentation behavior, navigation/headers APIs, metadata, request-time images, and selected static/ISR output.
 
 Before implementation, run a compatibility spike and `vinext check`. Explicitly test nested layouts, loading/error boundaries, cookies, headers, redirects, streaming, Service Binding access, auth route proxying, OAuth redirects, and production Worker builds.
 
@@ -312,16 +266,26 @@ flows verify the nonce policy while deployed HTTPS environments alone receive HS
 
 ## Current Release Versus Future Scaling
 
-The current release uses two Workers, one D1 database, one active Cebu fulfillment location, one versioned global selling state, one versioned global fulfillment mode, D1 coordination for Instant inventory holds, provider-priced external delivery, and a provider-neutral payment integration boundary. `SCHEDULED` initially supports `WEEKLY` cadence, but cadence is configuration rather than a fulfillment mode and carries no capacity. The schema and domain remain multi-location; every new checkout observes the same selling state and mode while exact-location availability, manual retail price, Instant stock, store pickup profile, readiness, and immutable Order snapshots remain independent.
+The current release uses two Workers, one D1 database, one initial Cebu fulfillment location, one versioned global selling state, one versioned global fulfillment mode, D1 coordination for Instant inventory holds, provider-priced external delivery, and a provider-neutral payment integration boundary. `SCHEDULED` initially supports `WEEKLY` cadence, but cadence is configuration rather than a fulfillment mode and carries no capacity. The schema and domain remain multi-location; every new checkout observes the same selling state and mode while exact-location availability, manual retail price, Instant stock, store pickup profile, readiness, and immutable Order snapshots remain independent.
 
 Future scaling options include additional locations and markets, D1 read replication sessions for read-heavy operations, Workflows for long-running orchestration, richer analytics stores, and selective module extraction. Extraction requires a demonstrated independent scaling, security, deployment, or ownership need and must preserve typed contracts and business invariants.
 
-## Customer launch Runtime Completion
+## Customer runtime requirements
 
-The customer transaction spine is selling OPEN -> authenticated enabled Customer -> confirmed address -> FreshMarkets promise/window with Lalamove quotation -> immutable accepted Quote -> provider-confirmed payment -> atomic Order commitment -> fulfillment and delivery follow-up. Instant uses holds/reservations; Scheduled uses exact paid demand and cycle goods. Web is a thin adapter. Customer courier selection is absent and accepted fees never change with actual execution cost.
+The customer transaction spine is selling OPEN -> authenticated enabled Customer -> confirmed address -> FreshMarkets promise/window with Lalamove quotation -> immutable accepted Quote -> provider-confirmed payment -> atomic Order commitment -> fulfillment and delivery follow-up. Instant uses holds/reservations; Scheduled uses exact paid demand and cycle goods. Web is a thin adapter. The approved available-courier choice is documented in PRODUCT; accepted fees never change with actual execution cost.
 
 Transactional customer messages use a D1 `notification_outbox` plus Cloudflare Queues. Domain commitment and outbox intent are atomic; publication and idempotent sending are recoverable, per-message acknowledged/retried, bounded, and dead-letter visible. The infrastructure port uses Cloudflare's native Send Email binding with both text and HTML content and preserves stable provider failure codes. Delivery failure cannot roll back or alter the source business transition; a configured, onboarded sender remains a deployment gate and missing configuration fails closed.
 
 Historical Service Fee, Scheduled-capacity, volume-unit, Rider/batch/internal-fleet, route-priced delivery, and mock-payment records may remain physically readable for migration safety and immutable committed history. They are not active runtime authorities, readiness inputs, or permission surfaces.
 
 Order commitment atomically persists notification intent and invoice-readiness evidence with the Order. Invoice readiness is an internal tax/accounting seam, not issuance: Core records buyer and exact financial snapshots but neither computes unapproved tax nor invents an invoice identifier. Official issuance requires approved seller, tax, serial, and retention policy.
+
+## Provider technical requirements
+
+Extracted from the former Provider Decisions source; account capabilities and wire behavior must be reverified against official documentation before a provider change or activation. Lalamove v3 uses Worker fetch/Web Crypto HMAC-SHA256 over the exact documented timestamp/method/path/body, returned stop IDs and required contact/instructions, integer money parsing and quarantine of ambiguous writes. Core secrets never reach Web. The internal BAG/BOX and unverified item/dimension/special-request metadata are not sent. No COD, purchase service, channel attribution or route-optimization option is enabled. Accepted customer charge and actual courier payable remain separate. The 20 kg packed-order/fit requirement in PRODUCT is a new product constraint, not permission to invent a Lalamove payload field.
+
+The closed provider registry contains only verified adapters; Lalamove is first and GrabExpress remains unavailable until account/region/service acceptance. Do not infer capability from a marketing service label or a source-controlled key. Preserve exact booking intent and provider-event identity; late observations cannot overwrite current attempts. Activation requires authenticated Cebu service discovery, credentials/funded account, pickup/contact/weight readiness, registered webhook and actual sandbox evidence. See the focused [Lalamove runbook](../operations/LALAMOVE_SETUP_RUNBOOK.md).
+
+PayMongo owns one-time payments/refunds and verified canonical financial observations. Core selects it only with configured credentials, test keys outside production and live keys in production. Web receives only the matching public key; tokenized card data never crosses Core/Web server code. Verify exact raw-body signatures in the appropriate test/live mode, retain verified event/hash/type/signature-time/attempt/outcome evidence, reject unauthenticated events, and keep payloads/secrets outside ordinary DTOs/logs. Preserve successful observations through failed downstream commitment and retry the same bounded application reaction. Active subscriptions/plans/renewal/retry jobs are retired, not deployment prerequisites. See the [PayMongo runbook](../operations/PAYMONGO_SETUP_RUNBOOK.md).
+
+Authentication email uses Core's EMAIL send-email binding/port and configured AUTH_EMAIL_FROM, with no production default. Missing sender/binding fails closed; isolated fake bindings prove only local behavior. Domain onboarding and real sender provisioning require separate environment authorization. [Authentication email runbook](../operations/AUTH_EMAIL_SETUP_RUNBOOK.md) owns those steps.

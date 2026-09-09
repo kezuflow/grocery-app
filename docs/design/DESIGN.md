@@ -1,0 +1,86 @@
+# FreshMarkets Design
+
+Follow [PRODUCT.md](../product/PRODUCT.md) and the protected discussion it indexes. These presentation rules were extracted from existing design documents; they constrain agreed workflows and do not authorize new screens or a redesign. [ENGINEERING.md](../architecture/ENGINEERING.md) owns contracts, safeguards and verification. Archived proposals do not add scope.
+
+## Ordinary Admin work
+
+Use ordinary Create/Save actions, named products/locations/people and readable quantities. Keep IDs, expected versions, idempotency identities, storage observation and retry machinery internal. After an uncertain response, preserve the original intent behind the same action and prevent conflicting replacement. Do not optimistically show a financial or operational commitment before Core confirms it. Keep useful payment/refund diagnostics and actual business discrepancies visible.
+
+Administrator work covers the agreed products/images/selling sizes/exact-location prices, promotions, customers, Orders/reports/refunds, fulfillment locations and explicit selling/mode/schedule controls, staff access and business-wide reporting. Operations staff sees only assigned-location Orders, stock, preparation/packing, delivery/handover and approved reports. Core supplies authorized navigation, scope options and legal actions; changing a filter never adds access. The current Admin selector offers Global and authorized locations; Market remains an internal scope layer. Global price writes require `prices.manage`; local prices are read-only.
+
+Normal preparation is a paid-order list, Start preparing, an ordered-quantity checklist, general Report a problem and Ready for pickup after packing. Instant courier booking starts automatically at checked-items/final-packing readiness. Scheduled retains its supported future-booking action and credible ready time. Finding, assigned, picked up and delivered are distinct from preparation. Manual delivery is Scheduled-only with its approved contact/reason/handover/result/cost evidence.
+
+Customer reports have one order-level entry and administrator handling; affected-item selection is optional. Daily manual review is the operating practice, not a new scheduler or resolution guarantee. Keep reports separate from refund approval. Use one administrator Problems list linked to Orders, with New / Being handled / Resolved, contact details and a short resolution note. The approved delivery-week view gathers dates/cutoff, offered products, paid Orders, purchase quantities and receiving/preparation progress. Supplier contact remains manual. These ordinary screens do not require a broader exception-management console. Existing operational and financial safeguards are retained internally.
+
+## Products, promotions and stock
+
+- Add/Edit Product includes ordinary Images with previews, up to five active photos, main-image selection, rearrangement, replacement/removal, alt text and normal progress/errors. Five are not mandatory. Customer detail shows all available photos. Cleanup is internal.
+- Product identity/category/selling size and current exact-location price are distinct. Weight portions share exact gram stock; whole named-size pieces/packs use actual local counts. Approximate per-option grams are description/shipment evidence, never an exact stock conversion. Use the approved names and contents, not internal pool/ledger vocabulary.
+- The promotion form uses named targets, controlled amounts/dates/limits and an honest preview. Display regular and sale prices; apply the approved one-sale-per-item/full-price-grocery-code/delivery rule. Explain remaining sale allowance and full-item eligibility without splitting quantities automatically. Support percentage or fixed amount off each selling unit. Prevent overlapping product sales for the same option/location. Apply PRODUCT's remaining-sale quantity and eligible-cancellation restoration rules; stock changes do not require an operator to repair promotion counters.
+- The location stock list shows physical, held/reserved and available quantities with Add stock and Remove stock, a removal reason and dated actor history. Order movements happen automatically. Scheduled received goods remain allocated to paid demand and are not entered again as Instant stock.
+- Receiving uses one linked form for sent/received quantities and actual size counts, retaining differences and avoiding a second Add stock step. Direct supplier receiving supports the first Scheduled location; those goods remain assigned to paid weekly Orders.
+- Warehouse transfers are an explicitly approved supplement. Global drafts/dispatches from named warehouses/products/destinations; destination checks accepted and remaining damaged/missing quantities. Drafts have no stock effect. Show sent, accepted and outstanding evidence separately. Global may record a reasoned loss or confirm a physically received, inspected sellable return. Fully accounted dispositions say Resolved, not Received. Global distribution separates central/site physical, reserved, held, transit and damaged/missing subsets without another authoritative balance. Keep unknown retries behind the same action. The one-site Scheduled launch does not require daily transfer work.
+
+## Admin visual foundation
+
+Use existing shadcn/ui primitives: buttons, inputs, selects, checkboxes/radio/switches, dialogs/sheets, menus/popovers/tooltips, tabs/breadcrumb/sidebar, table, skeleton/alert/badge, calendar/command/form and installed toast primitives. Preserve their accessible behavior. Custom compositions need a real repeated or domain-specific purpose; an old component inventory is not a build list.
+
+Retain the current Admin visual system when changing an agreed screen:
+
+- Isolate tokens beneath `.fm-admin`; do not change storefront tokens. Persisted light/dark appearance, a neutral canvas, controlled orange accent and fixed five-step orange chart palette remain. Semantic success/warning/danger/information keep their meaning. No arbitrary font/radius/theme settings are required.
+- Desktop rail uses the existing 64px layout/66px fixed shell and 256px expansion. Collapsed `12px 4px` padding keeps the 32px icon axis aligned with expanded 8px container/group padding. The preference persists. Rail/labels transition together over 200ms linear, controls over 150ms; the content inset is 8px beside the collapsed rail. Preserve the restrained rounded frame/shadow.
+- The full-height rail has the compact mark; expanded rail shows the lowercase wordmark and navigation search. Parent rows toggle children together; the most-specific route is active and opens its parent. Collapsed entries have accessible right tooltips and click menus for children, not hover-only flyouts.
+- The 56px header begins with the rail toggle and explicit scope selector, followed by useful environment/marketplace/cycle/notification/appearance/staff controls. Appearance stays between notifications and staff. Mobile shows mark/wordmark and a Sheet at the `md` breakpoint and below; no truncated bottom Admin navigation.
+- Use 24px desktop gutters, thin neutral borders, restrained shadows, compact headers and 12–14px supporting text. Reserve color for meaningful status/decisions. No demo revenue, celebratory, review or visit-source modules without an approved authoritative read model.
+
+The public Shadcn UI Kit dashboard is a geometry/interaction reference only. FreshMarkets owns its code, copy, data and assets; no proprietary source/assets/demo values become implementation or fallback data.
+
+## Lists, details, forms and reports
+
+Lists show title, scope/date/cycle context where relevant, one primary action, useful search/status/date filters, result count and bounded pagination. Use stable server-side sort/cursors, URL filters/tabs, clear-all and visible active filters. Product Filters and Columns controls share a toolbar; safe bulk selection replaces that toolbar with count/action/cancel. Bulk actions require real domain semantics and show preflight scope and explicit partial outcomes. No raw-table completeness requirement.
+
+Rows emphasize identity, meaningful status/deadline, scope and next action. Secondary fields move to detail or responsive expansion. Row links/action menus are keyboard accessible. Preserve breadcrumbs back to the filtered list and the most-specific route; resource-ID details are contextual, not permanent navigation. Sticky headers/action bars may support long work.
+
+Details show human-readable identity, scope, status, legal next action and relevant items/financial/timeline/delivery/history sections. Irreversible commands show exact target/amount/quantity and consequence, with a reason only where the owning policy requires one. Ordinary product/media saves do not gain operational confirmation/reason steps. Group forms by business concept, with labels/help, validation, unsaved-change handling and scope/effective-time impact where relevant.
+
+Initial read-heavy data comes from a vinext Server Component through the Core binding as a plain DTO. Browser APIs handle later pages/refreshes/commands; avoid a server-to-mounted-client-to-local-API waterfall. Browser-stored scope/price context is advisory. Core owns all access and totals.
+
+Overview answers the approved work questions: new paid Orders, preparation, packed pickup, deliveries, administrator-handled problems and refund attention. Show active mode and Scheduled cutoff/date/purchase quantities when relevant. Link each section to authorized underlying records. Reports cover Orders, received/refunded money separately, products/selling sizes sold, discounts, accepted-versus-actual delivery cost, new customers, unique purchasing customers and repeat customers/orders. Use PRODUCT's approved definitions; recurring-order analytics means repeat purchases. Definitions/date basis/currency/units/freshness must be explicit; denied, unavailable and unknown cost are never zero.
+
+Accessible Recharts compositions use a title, definition/freshness context, semantic status, labels/descriptions and a textual value summary. No chart is the sole way to obtain an operational value. A metric name or archived formula does not approve an additional report.
+
+## Marketplace journey
+
+Use mature grocery-commerce patterns inspired by DoorDash, with FreshMarkets branding and fixed selling choices. No restaurant assumptions, hub selection, copied logos/assets/screens, arbitrary weights, freely edited paid Orders or invented delivery ETA.
+
+Primary customer surfaces are Home, search/categories, product detail, cart, checkout, account/address book, Order history/status and support. Browse/search/cart are public; sign-in carries the cart into authenticated checkout. First visit asks Where should we deliver? using address/map pin and optional device location. Skip permits general browsing; local prices/availability/cart additions require a resolved location. Checkout confirms full address, recipient/phone and serviceability. Never assume device-location consent or default a customer into a fabricated local-stock context.
+
+Use strong search, shallow category context, fixed variant labels, horizontal category/product rails on mobile and clear empty/no-result recovery. Preserve useful query/filter state in URLs. Cards prioritize image/alt, name, variant, current price/eligible sale, availability and Add; the Add/quantity stepper keeps a stable footprint. Staff packing instructions and raw stock/ledger data stay private.
+
+Product detail shows ordinary customer details, the available image gallery, fixed variant selector, current price, unit/quantity explanation and honest availability. Unavailable variants offer useful alternatives or address review. Cart keeps editable quantities, current prices, discounts and delivery context, with stale/unavailable/allowance/weight feedback when Core has evidence. There is no general minimum-spend progress or price-lock countdown. Cart alone holds neither price nor stock.
+
+The Deliver to control opens a modal without losing browsing context: address search -> centered draggable pin -> confirm coordinate -> reverse-fill structured fields -> Core polygon resolution. Search selection recenters; pin changes must not overwrite recipient/instructions. Capture structured address, recipient/phone, unit/building/landmark/gate/delivery guidance; the pin determines serviceability. Preserve provider component provenance/finalization through the owning adapters.
+
+Present the single global Instant promise or Scheduled date/window, available verified courier choice and accepted fee. One available provider needs no additional choice step. Hide pickup planning/manual fallback internals; no hub selector. Show paused/closed-hours/unserviceable/missing-quote/cutoff/weight states distinctly. Calculate total grams from quantity times recorded grams per selling option, including paid additions, and block totals above 20,000 g before payment. No separate packaging allowance or size/fit settings. Actual operating times and preparation/delivery estimates are factual inputs.
+
+Checkout makes authentication, confirmed address, promise/window/provider fee, items/discounts/total, payment handoff and commitment clear. Revalidate Core terms immediately before payment; changed terms require explicit review/acceptance. Handle pending, failed, lost response, duplicate submission, expired quotation and recoverable outcomes honestly. Requested payment choices stay visibly disabled until verified provider mapping and explicit code enablement; no runtime toggle system. Application-accessible fake-payment success remains excluded.
+
+Order detail uses immutable number/date/items/financial/address/promise snapshots and a customer-safe timeline. Preserve separate paid additions, eligible cancellation/refund progress, Report a problem, buy again and support actions. No provider payloads/internal notes/live-driver map; payment initiation or a browser return is not Order success. Customer emails communicate material recorded events, with scoped staff dashboard notices; no extra SMS/push channel or every-packing-step email.
+
+## Storefront visual language
+
+Retain the existing original storefront visual language; archived reference research is evidence, not a redesign mandate. Desktop uses a sticky white wordmark/search/address/cart header, a narrow navigation rail and right-side cart sheet that preserves browsing. Home flow is address/service context, search, categories, restrained promotion modules, product/seasonal rails. Mobile has a compact sticky header, full-screen search, horizontal rails, two-column product grids where media remains clear, Home/Shop/Orders/Account navigation and tall/full-screen cart with sticky checkout. Touch targets are at least 44px.
+
+Storefront CSS variables retain the sourced baseline: background `#FFFFFF`, soft surface `#F7F8F3`, lime `#B7F34A`, dark brand `#1F3D24`, text `#191919`, muted `#6B6B67`, border `#E8E9E3`, success `#238636`, danger `#D92D20`. Existing tokens, not repeated literals, own these values; Admin remains independent.
+
+Use the licensed self-hosted Helvena family for storefront: Regular body, Medium secondary controls, Semibold navigation/product names, Bold headings, Black major promotions. Sourced typography tokens are display 40/44 900, h1 32/42 800, h2 24/32 700, h3 18/28 600, body 16/26 400, body-sm 14/22 400, caption 12/18 500, micro 11/16 600; letter spacing 0. Spacing uses 4/8/12/16/24/32/40/48px; radii 4px controls, 8px product/promo framing, 12px sheets/dialogs. Shadows signal overlay elevation, not a box around every product.
+
+Functional icons use Lucide with accessible labels/tooltips. Category illustration is a separate original FreshMarkets asset boundary; Core owns category taxonomy. Use stable-dimension placeholders where needed, never reference screenshots/artwork as production assets.
+
+## States, accessibility and verification
+
+Every changed surface needs appropriate loading skeleton, empty/filtered-empty, denied, unavailable, error with safe request reference, stale/conflict, pending and terminal-result states. Labels/icons supplement color. Preserve row identity/actions when tables become cards or scroll; tablet/mobile keep actions reachable. Use semantic headings/tables/labels/error associations, visible focus, keyboard menus/dialogs, focus return, live status announcements, contrast and reduced-motion behavior.
+
+Prefer server reads and explicit public cache/revalidation policies. Personalized eligibility/prices/Orders are not incorrectly cached. Request-time image optimization and relied-on vinext features need actual compatibility evidence; do not assume Cache Components/PPR/undocumented Next semantics.
+
+Use focused interaction/permission/replay/failure checks and actual desktop/mobile browser evidence for changed journeys. The inherited Admin release archetype viewports are 1440x1200, 1024x1366 and 390x844; these do not invalidate the separately recorded 1280/390 transfer tests. Preserve all earlier acceptance gaps. Consult ENGINEERING for the complete phase gate. Reference review records the observed pattern, grocery adaptation and rationale, not copied branding or new product scope.

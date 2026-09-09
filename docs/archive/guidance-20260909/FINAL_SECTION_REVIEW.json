@@ -1,0 +1,1286 @@
+[
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "FreshMarkets Domain Model",
+    "normalizedSectionSha256": "fd980d246b0c8a4b9a0f5ce54c2aea6a847f43326c9e2ada728eeb09dd699eb6",
+    "destination": [
+      "AGENTS.md",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Authority is routed once; dated target claims are historical evidence, not acceptance."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Purpose",
+    "normalizedSectionSha256": "ff67711918b222eedb1f25c090b324f002580a9616b9fea2607f4e1d4f8497fe",
+    "destination": [
+      "AGENTS.md",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Authority is routed once; dated target claims are historical evidence, not acceptance."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Organization",
+    "normalizedSectionSha256": "96e94e808145fd09d726859adc99d1b9bfab25129eb69ce030e2180846bf8c10",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#organization-markets-and-geography",
+      "docs/architecture/API_CONTRACTS.md#2026-09-07-setup-and-operations-contract-requirements",
+      "docs/architecture/STATE_MACHINES.md#global-commerce-configuration",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Explicit organization/market/location, purpose, capability, readiness, hours, version and committed-work preservation retained. GD-D15 supersedes all-history completion; initial single-site launch needs no daily warehouse operation."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Market",
+    "normalizedSectionSha256": "89b3fcc858a5c85bebc2730b6e500c5bb9d85feca5bc783a4092bdf354e403ce",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#organization-markets-and-geography",
+      "docs/architecture/API_CONTRACTS.md#2026-09-07-setup-and-operations-contract-requirements",
+      "docs/architecture/STATE_MACHINES.md#global-commerce-configuration",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Explicit organization/market/location, purpose, capability, readiness, hours, version and committed-work preservation retained. GD-D15 supersedes all-history completion; initial single-site launch needs no daily warehouse operation."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "FulfillmentLocation",
+    "normalizedSectionSha256": "0cbd899ed03465a2be66e03de5af9ae64727c8ae8916a59f60db6eb9d3b75cd1",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#organization-markets-and-geography",
+      "docs/architecture/API_CONTRACTS.md#2026-09-07-setup-and-operations-contract-requirements",
+      "docs/architecture/STATE_MACHINES.md#global-commerce-configuration",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Explicit organization/market/location, purpose, capability, readiness, hours, version and committed-work preservation retained. GD-D15 supersedes all-history completion; initial single-site launch needs no daily warehouse operation."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "ServiceArea and DeliveryZone",
+    "normalizedSectionSha256": "3bdd7d92ee6d8ad4db626188dc1d6abfa9141284f6f606e7a33e1d8717cfea8b",
+    "destination": [
+      "docs/architecture/API_CONTRACTS.md#serviceability",
+      "docs/architecture/API_CONTRACTS.md#global-service-area-publication-and-routing",
+      "docs/architecture/DATA_MODEL.md#customers-and-addresses"
+    ],
+    "disposition": "Coordinate/provenance/finalization, versioned publication, zone participation and exact Haversine whole-order ownership retained; descriptive address text and stock never choose ownership."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "DeliveryCycle",
+    "normalizedSectionSha256": "644405011adf47d811ac516c4e95a4d395ecac34c07fffef6f79d3791482f4e4",
+    "destination": [
+      "docs/architecture/STATE_MACHINES.md#delivery-cycle",
+      "docs/architecture/API_CONTRACTS.md#2026-09-07-setup-and-operations-contract-requirements",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Timing/cadence/window freeze, cutoff, no capacity and immutable snapshots retained. Approved weekly view organizes these independent states with ordinary actions."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "AuthenticationIdentity",
+    "normalizedSectionSha256": "aff39d02a413b61024555db05af800f37e4965e6e3944e53ffcc8be402e5a942",
+    "destination": [
+      "docs/architecture/ARCHITECTURE.md#authentication-architecture",
+      "docs/architecture/API_CONTRACTS.md#authentication-boundary",
+      "docs/architecture/API_CONTRACTS.md#initial-administrator-setup",
+      "docs/architecture/DATA_MODEL.md#customers-and-addresses",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Identity/customer/staff separation, verified invitation acceptance, one-use setup, capabilities/scopes, mandatory transactional notices, address provenance and immutable paid history retained. GD-D01 supersedes preference-only profile restriction; no irreversible erasure policy invented."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Customer",
+    "normalizedSectionSha256": "e2dbaf3f6f3b0ac68f22eb725b5c19a3e2268b593db9d5a7f628d3eebade8fdc",
+    "destination": [
+      "docs/architecture/ARCHITECTURE.md#authentication-architecture",
+      "docs/architecture/API_CONTRACTS.md#authentication-boundary",
+      "docs/architecture/API_CONTRACTS.md#initial-administrator-setup",
+      "docs/architecture/DATA_MODEL.md#customers-and-addresses",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Identity/customer/staff separation, verified invitation acceptance, one-use setup, capabilities/scopes, mandatory transactional notices, address provenance and immutable paid history retained. GD-D01 supersedes preference-only profile restriction; no irreversible erasure policy invented."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "CustomerAddress",
+    "normalizedSectionSha256": "b40edd21d3430f8e1fcb4d85518d117b9fa8797728b0cfdd1ce0a8c74ee80ddf",
+    "destination": [
+      "docs/architecture/ARCHITECTURE.md#authentication-architecture",
+      "docs/architecture/API_CONTRACTS.md#authentication-boundary",
+      "docs/architecture/API_CONTRACTS.md#initial-administrator-setup",
+      "docs/architecture/DATA_MODEL.md#customers-and-addresses",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Identity/customer/staff separation, verified invitation acceptance, one-use setup, capabilities/scopes, mandatory transactional notices, address provenance and immutable paid history retained. GD-D01 supersedes preference-only profile restriction; no irreversible erasure policy invented."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Staff",
+    "normalizedSectionSha256": "bc09c0cdbf266f5dd2483e10afe65e172548c59ad7e352a8a83fa7c8a10f78cf",
+    "destination": [
+      "docs/architecture/ARCHITECTURE.md#authentication-architecture",
+      "docs/architecture/API_CONTRACTS.md#authentication-boundary",
+      "docs/architecture/API_CONTRACTS.md#initial-administrator-setup",
+      "docs/architecture/DATA_MODEL.md#customers-and-addresses",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Identity/customer/staff separation, verified invitation acceptance, one-use setup, capabilities/scopes, mandatory transactional notices, address provenance and immutable paid history retained. GD-D01 supersedes preference-only profile restriction; no irreversible erasure policy invented."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Role, Permission, and Scope",
+    "normalizedSectionSha256": "a97eb06f7fa66e069d02d2afad659361c96597b22134519347b5faef4ee49693",
+    "destination": [
+      "docs/architecture/ARCHITECTURE.md#authentication-architecture",
+      "docs/architecture/API_CONTRACTS.md#authentication-boundary",
+      "docs/architecture/API_CONTRACTS.md#initial-administrator-setup",
+      "docs/architecture/DATA_MODEL.md#customers-and-addresses",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Identity/customer/staff separation, verified invitation acceptance, one-use setup, capabilities/scopes, mandatory transactional notices, address provenance and immutable paid history retained. GD-D01 supersedes preference-only profile restriction; no irreversible erasure policy invented."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Historical Rider identity",
+    "normalizedSectionSha256": "0c1ffd8057a5550f4662358d55b281b96bdea4b8d26095a4f7fb77502b5162cc",
+    "destination": [
+      "docs/product/PRODUCT.md#scope-boundaries-and-open-context",
+      "docs/architecture/DATA_MODEL.md#retired-subscription-storage"
+    ],
+    "disposition": "No active rider/membership authority; retained evidence and migration safeguards remain."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Retired Membership",
+    "normalizedSectionSha256": "5da52992768f4ffc7f757c518f440c890ddf1aa7fed4aa7aeb0ebaebc481d9b6",
+    "destination": [
+      "docs/product/PRODUCT.md#scope-boundaries-and-open-context",
+      "docs/architecture/DATA_MODEL.md#retired-subscription-storage"
+    ],
+    "disposition": "No active rider/membership authority; retained evidence and migration safeguards remain."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Category",
+    "normalizedSectionSha256": "09775cec89d173130e103cbbb04f5ab0583c2602fd390df26c9ec20758d597f0",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#catalog-units-and-prices",
+      "docs/architecture/API_CONTRACTS.md#catalog-and-inventory-services-contract-details",
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#products-promotions-and-stock"
+    ],
+    "disposition": "Global taxonomy/catalog, exact local price, activation separate from stock, integer/rational same-dimension units, shipping snapshots and historical inactive volume retained. GD-D17 actual size counts supersede blanket shared count-pool representation; GD-D21 supersedes default-site browsing. New images and grams-limit acceptance remains open."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Product",
+    "normalizedSectionSha256": "89ba37dc34f2ec511f38d21b8cfa5fc5ed61f4be53b3b118402bdb255d1e6c17",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#catalog-units-and-prices",
+      "docs/architecture/API_CONTRACTS.md#catalog-and-inventory-services-contract-details",
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#products-promotions-and-stock"
+    ],
+    "disposition": "Global taxonomy/catalog, exact local price, activation separate from stock, integer/rational same-dimension units, shipping snapshots and historical inactive volume retained. GD-D17 actual size counts supersede blanket shared count-pool representation; GD-D21 supersedes default-site browsing. New images and grams-limit acceptance remains open."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "SKU / SellableVariant",
+    "normalizedSectionSha256": "466a63599219f74544216fc915b3800b168c3e1d7a594ac1c4806cff8b4d0dfe",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#catalog-units-and-prices",
+      "docs/architecture/API_CONTRACTS.md#catalog-and-inventory-services-contract-details",
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#products-promotions-and-stock"
+    ],
+    "disposition": "Global taxonomy/catalog, exact local price, activation separate from stock, integer/rational same-dimension units, shipping snapshots and historical inactive volume retained. GD-D17 actual size counts supersede blanket shared count-pool representation; GD-D21 supersedes default-site browsing. New images and grams-limit acceptance remains open."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "BaseInventoryUnit",
+    "normalizedSectionSha256": "c76974f35fdcc4fb64033960b7f35c74238acfbf882811f8734f4b4baa100508",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#catalog-units-and-prices",
+      "docs/architecture/API_CONTRACTS.md#catalog-and-inventory-services-contract-details",
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#products-promotions-and-stock"
+    ],
+    "disposition": "Global taxonomy/catalog, exact local price, activation separate from stock, integer/rational same-dimension units, shipping snapshots and historical inactive volume retained. GD-D17 actual size counts supersede blanket shared count-pool representation; GD-D21 supersedes default-site browsing. New images and grams-limit acceptance remains open."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "LocationAvailability",
+    "normalizedSectionSha256": "41395349fe3fabd31e0155b799af7f3cb2faff6ad1c16594da6e2a95f69018f5",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#catalog-units-and-prices",
+      "docs/architecture/API_CONTRACTS.md#catalog-and-inventory-services-contract-details",
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#products-promotions-and-stock"
+    ],
+    "disposition": "Global taxonomy/catalog, exact local price, activation separate from stock, integer/rational same-dimension units, shipping snapshots and historical inactive volume retained. GD-D17 actual size counts supersede blanket shared count-pool representation; GD-D21 supersedes default-site browsing. New images and grams-limit acceptance remains open."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Price",
+    "normalizedSectionSha256": "b18d0bf64e2c657fff39f11f4fd0adb3e85e9cf143efafedfacc102093661412",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#catalog-units-and-prices",
+      "docs/architecture/API_CONTRACTS.md#catalog-and-inventory-services-contract-details",
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#products-promotions-and-stock"
+    ],
+    "disposition": "Global taxonomy/catalog, exact local price, activation separate from stock, integer/rational same-dimension units, shipping snapshots and historical inactive volume retained. GD-D17 actual size counts supersede blanket shared count-pool representation; GD-D21 supersedes default-site browsing. New images and grams-limit acceptance remains open."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Cart",
+    "normalizedSectionSha256": "741db713f7d8b9f4f85a9d622f1182d13fdafdc0ecf8a02a6ee38465b16b5ea1",
+    "destination": [
+      "docs/architecture/API_CONTRACTS.md#cart",
+      "docs/design/DESIGN.md#marketplace-journey"
+    ],
+    "disposition": "One active authenticated cart and concurrent creation/replay, removable unavailable lines, no silent zero/price guarantee/stock hold retained. Guest-cart carryover is an approved implementation gap."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Checkout",
+    "normalizedSectionSha256": "7b077e208f2ebc6dfb7af9d7e4efe7c1259540611501db7a4dcdd759851b68f9",
+    "destination": [
+      "docs/architecture/API_CONTRACTS.md#checkout-payment-and-order-commitment",
+      "docs/architecture/API_CONTRACTS.md#customer-orders-and-amendments",
+      "docs/architecture/STATE_MACHINES.md#payment-attempt",
+      "docs/architecture/STATE_MACHINES.md#refund",
+      "docs/architecture/DATA_MODEL.md#orders-and-amendments"
+    ],
+    "disposition": "Canonical success, immutable explicit components/snapshots, additive payment history, durable continuation/recovery, full write guards, refund-budget claims and failed-commitment cleanup retained. GD-D08 removes general minimum; GD-D03 allows verified courier choice; no fee or false success introduced."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Order",
+    "normalizedSectionSha256": "978a3249ac64400116ac7f7d2cfa4835c4a22f1f8963e6df5654a8072fa17e55",
+    "destination": [
+      "docs/architecture/API_CONTRACTS.md#checkout-payment-and-order-commitment",
+      "docs/architecture/API_CONTRACTS.md#customer-orders-and-amendments",
+      "docs/architecture/STATE_MACHINES.md#payment-attempt",
+      "docs/architecture/STATE_MACHINES.md#refund",
+      "docs/architecture/DATA_MODEL.md#orders-and-amendments"
+    ],
+    "disposition": "Canonical success, immutable explicit components/snapshots, additive payment history, durable continuation/recovery, full write guards, refund-budget claims and failed-commitment cleanup retained. GD-D08 removes general minimum; GD-D03 allows verified courier choice; no fee or false success introduced."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "OrderAmendment",
+    "normalizedSectionSha256": "9d1e55f342f494795c075fc6c5d3b3835d3f1d207d5ecd1288f6791c37db9ca1",
+    "destination": [
+      "docs/architecture/API_CONTRACTS.md#checkout-payment-and-order-commitment",
+      "docs/architecture/API_CONTRACTS.md#customer-orders-and-amendments",
+      "docs/architecture/STATE_MACHINES.md#payment-attempt",
+      "docs/architecture/STATE_MACHINES.md#refund",
+      "docs/architecture/DATA_MODEL.md#orders-and-amendments"
+    ],
+    "disposition": "Canonical success, immutable explicit components/snapshots, additive payment history, durable continuation/recovery, full write guards, refund-budget claims and failed-commitment cleanup retained. GD-D08 removes general minimum; GD-D03 allows verified courier choice; no fee or false success introduced."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Payment and Refund",
+    "normalizedSectionSha256": "a386177a7c2440ac5d15e96e7c063f104ecf4bff15e23f6b2ccdfcc7650f9ab9",
+    "destination": [
+      "docs/architecture/API_CONTRACTS.md#checkout-payment-and-order-commitment",
+      "docs/architecture/API_CONTRACTS.md#customer-orders-and-amendments",
+      "docs/architecture/STATE_MACHINES.md#payment-attempt",
+      "docs/architecture/STATE_MACHINES.md#refund",
+      "docs/architecture/DATA_MODEL.md#orders-and-amendments"
+    ],
+    "disposition": "Canonical success, immutable explicit components/snapshots, additive payment history, durable continuation/recovery, full write guards, refund-budget claims and failed-commitment cleanup retained. GD-D08 removes general minimum; GD-D03 allows verified courier choice; no fee or false success introduced."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Promotion",
+    "normalizedSectionSha256": "07e19e6baf1e3d1ce8d8ffede7457a19d8d73ef7e4d4bd1805ace72d7682802a",
+    "destination": [
+      "docs/product/PRODUCT.md",
+      "docs/architecture/API_CONTRACTS.md#current-promotion-command-integrity-2026-09-09",
+      "docs/architecture/DATA_MODEL.md#promotions",
+      "docs/architecture/ENGINEERING.md#policy-versus-storage-integrity"
+    ],
+    "disposition": "Closed benefit/rule schemas, exact component allocation, immutable history, read-only preview, atomic limits and Core policy ownership retained. GD-D06/07 replace blanket stacking and duplicate first-order choice. Owner approves no overlapping sales, fixed amount per selling unit, depletion and eligible-cancellation restoration."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Mode-Derived Supply",
+    "normalizedSectionSha256": "826dbafa6960ee4ea92edc0a2800a03c3f1a8507ea179f5f981ca6c369173c93",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "LocationInventory",
+    "normalizedSectionSha256": "798fdaaae78de67b6efd92c44094cb4313d3cd1fcc3d1bf3f24e6a7dca39c3ed",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "InventoryReservation",
+    "normalizedSectionSha256": "04fb218454bcfd97792cf095b5faf84a0c7d4847646c0638fe2206e754a76c53",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "InventoryHold",
+    "normalizedSectionSha256": "cd3166d0fca6595297811755953e4c9c3fde584d975c03da0f2da412a4007bf6",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "CommittedProcurementDemand",
+    "normalizedSectionSha256": "004e3a4569242324f46ab53835d3e781c47103d4a6a2b9bf7244876a4a156469",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Procurement",
+    "normalizedSectionSha256": "9bfc180b537543bcda987cb0acbe7995fdda684ad6b88d6a9f7a30e39a261ef3",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Receiving",
+    "normalizedSectionSha256": "702e6e9007d4b24130af7f56ebe1fb06073e7a7d709013b5d1fc0774ef24b87f",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#inventory-and-committed-demand",
+      "docs/architecture/DATA_MODEL.md#procurement-and-receiving",
+      "docs/architecture/STATE_MACHINES.md#procurement",
+      "docs/architecture/STATE_MACHINES.md#receiving",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Exact paid demand without stock/incoming/buffer/capacity netting; holds/reservations/ledger, separate cycle goods and inspected exactly-once surplus retained. Actual local counts need coherent nonduplicating receipt storage; no invented weight-to-count conversion."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "OperationalException",
+    "normalizedSectionSha256": "cee86567b4dbc3aa773c6280bd7da8451fad3dfde87bcc1b17bac3cd14c78d2e",
+    "destination": [
+      "docs/product/PRODUCT.md",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md#g-scheduled-cycles-purchasing-and-receiving"
+    ],
+    "disposition": "Required shortage/discrepancy/refund/stock safety remains CA-4/5/7 acceptance. General Report a problem and approved receipt/transfer controls replace extra operator workspaces. Old possible resolutions do not authorize substitution or a new policy."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "OrderCancellation",
+    "normalizedSectionSha256": "b593446390ab5bff6962c07a40afb2b8255cb26b035f1ec41500b234c714bd6e",
+    "destination": [
+      "docs/architecture/STATE_MACHINES.md#cancellation-effects-by-stage",
+      "docs/architecture/API_CONTRACTS.md#customer-orders-and-amendments"
+    ],
+    "disposition": "Instant acceptance lock, Scheduled cutoff despite preparation, original plus additions, actual documented allowed courier cost only, coordinated PayMongo refunds, success-only completion and global reviewed exception refunds retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "ProvisionalTransactionSummary",
+    "normalizedSectionSha256": "8282ee8591d50f990032182749f7ceb709fc3c8b21eab758729b0ffe7414a490",
+    "destination": [
+      "docs/architecture/DATA_MODEL.md#audit-and-operational-reliability",
+      "docs/architecture/API_CONTRACTS.md#customer-orders-and-amendments",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Ownership-scoped immutable summary, provisional BIR wording, no invented seller/tax/serial/retention facts, and no substitution engine retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Fulfillment",
+    "normalizedSectionSha256": "20c375716659e4e80e29d3f12dd254bba3c634cb7621d403146e15387cbc360f",
+    "destination": [
+      "docs/architecture/STATE_MACHINES.md#fulfillment",
+      "docs/architecture/STATE_MACHINES.md#external-delivery-provider-dispatch",
+      "docs/architecture/API_CONTRACTS.md#external-delivery-provider-boundary",
+      "docs/architecture/DATA_MODEL.md#fulfillment-and-delivery",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Readiness/packing/handover, one active or unknown attempt, attempt-specific references, immutable current/old observations, exact pickup/destination/contact, protected payloads, optional provider item omission, no COD, unknown recovery and delivered-event proof retained. GD-D03/10 replace no-choice/manual Instant booking; grams-only limit supersedes packing/fit inputs."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "DeliveryJob",
+    "normalizedSectionSha256": "5c27398f41f94719e610cb5405d027bd15c8fc31066191989f4bf3ad3d66920c",
+    "destination": [
+      "docs/architecture/STATE_MACHINES.md#fulfillment",
+      "docs/architecture/STATE_MACHINES.md#external-delivery-provider-dispatch",
+      "docs/architecture/API_CONTRACTS.md#external-delivery-provider-boundary",
+      "docs/architecture/DATA_MODEL.md#fulfillment-and-delivery",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Readiness/packing/handover, one active or unknown attempt, attempt-specific references, immutable current/old observations, exact pickup/destination/contact, protected payloads, optional provider item omission, no COD, unknown recovery and delivered-event proof retained. GD-D03/10 replace no-choice/manual Instant booking; grams-only limit supersedes packing/fit inputs."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "DeliveryProviderDispatch",
+    "normalizedSectionSha256": "9b1932a4aa892490287c5bdef601f289b6575813aa8e1bec4178085db5db3a72",
+    "destination": [
+      "docs/architecture/STATE_MACHINES.md#fulfillment",
+      "docs/architecture/STATE_MACHINES.md#external-delivery-provider-dispatch",
+      "docs/architecture/API_CONTRACTS.md#external-delivery-provider-boundary",
+      "docs/architecture/DATA_MODEL.md#fulfillment-and-delivery",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Readiness/packing/handover, one active or unknown attempt, attempt-specific references, immutable current/old observations, exact pickup/destination/contact, protected payloads, optional provider item omission, no COD, unknown recovery and delivered-event proof retained. GD-D03/10 replace no-choice/manual Instant booking; grams-only limit supersedes packing/fit inputs."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "AdminApplication",
+    "normalizedSectionSha256": "49def8843aa1305267fc202749d9d28d73db782638ee1a1d808d51180140a097",
+    "destination": [
+      "docs/design/DESIGN.md",
+      "docs/architecture/API_CONTRACTS.md#admin-foundation-audit-and-application-iam",
+      "docs/architecture/ARCHITECTURE.md#read-and-write-architecture"
+    ],
+    "disposition": "Purpose-built scoped UI/reads, legal Core actions, invitation/access/privacy safeguards and no raw auth-table authority retained. Historical broad inventories are not a mandate to expose unapproved screens; ordinary approved Problems/weekly/receiving flows apply."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Analytics and MetricDefinition",
+    "normalizedSectionSha256": "0f5b49a600d708423e3d7d83b06d38edc9d19f094bd4e3b0a64394f7c84cc98f",
+    "destination": [
+      "docs/product/PRODUCT.md#approved-report-definitions",
+      "docs/architecture/API_CONTRACTS.md#analytics-queries",
+      "docs/architecture/DATA_MODEL.md#pagination-and-read-models",
+      "docs/architecture/ARCHITECTURE.md#bounded-context-ownership"
+    ],
+    "disposition": "Derived read-only ownership, one approved version, immutable superseded definitions, exact dimensions and null/unavailable behavior retained. Owner-approved report dates and first-purchase new-customer meaning supersede old formulas. Additional historical metrics and accounting-dependent publication remain outside current report scope."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Audit Event",
+    "normalizedSectionSha256": "a82916156db150a092cd091d1f7db37d4d68a38edffa1dec342ecb3888aa6bc3",
+    "destination": [
+      "docs/architecture/ENGINEERING.md",
+      "docs/architecture/API_CONTRACTS.md",
+      "docs/architecture/STATE_MACHINES.md",
+      "docs/architecture/DATA_MODEL.md",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Audit separate from diagnostics/event sourcing; retained identity, commerce, exact quantities, current-version client commands, event-identity provider commands, immutable paid additions/reorder, notifications and invoice independence consolidated in owners. Retired membership audit actions grant no new authority; courier/minimum/count changes explicitly supersede old duplicates."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "section": "Cross-Domain Invariants",
+    "normalizedSectionSha256": "824211fcf118c19b5acc5d58df8dc690d052bc24876a259edc816ce10233d342",
+    "destination": [
+      "docs/architecture/ENGINEERING.md",
+      "docs/architecture/API_CONTRACTS.md",
+      "docs/architecture/STATE_MACHINES.md",
+      "docs/architecture/DATA_MODEL.md",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Audit separate from diagnostics/event sourcing; retained identity, commerce, exact quantities, current-version client commands, event-identity provider commands, immutable paid additions/reorder, notifications and invoice independence consolidated in owners. Retired membership audit actions grant no new authority; courier/minimum/count changes explicitly supersede old duplicates."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "FreshMarkets Admin Design",
+    "normalizedSectionSha256": "63a3f747c38e58b90f95fff1ec50719c40417d20b9a5990789c2ae1f2f416542",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Purpose",
+    "normalizedSectionSha256": "1f13c5340c5409a91c081b66cbc4171229cb4de65f1513f0e7c05010ff03d10f",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Primitive Foundation",
+    "normalizedSectionSha256": "d49f125a6f94e6d316dfa6959dcfd6c5a6691e9f30e98d238fa4a9da2c7e7e3a",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Reference Adaptation and Admin Theme",
+    "normalizedSectionSha256": "39113c5dac7f79b4f269894cb044a1217bb6bdd3505fb638240fcff9f6a8461e",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Information Architecture",
+    "normalizedSectionSha256": "d01a201ab64f2e31ea8ef05b93a4e4b6425a8748b8a51196d5bb19bebfc99cd3",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Global Shell",
+    "normalizedSectionSha256": "7bd7ff278cf87d69a20ac7e6a3a1ff68cd160d77605e68e25e8ccce57b7ae7a2",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Overview",
+    "normalizedSectionSha256": "2788c0e1ae154b86c22ca0eac9c79f19a30344a8c8a1ca18587186d2cc7899c1",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Commerce Configuration",
+    "normalizedSectionSha256": "aa624957bb9eb9175ae84600275b0686151396e715c1a038d02264a0c5b21a48",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Required screen inventory",
+    "normalizedSectionSha256": "a2947d9bc3e259de95aec27c980f0ad4cb12d49e83c4a28e66786fd8441fba17",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Operational list/queue",
+    "normalizedSectionSha256": "2cd2e9e0ead72474f48cf7ae62d20ab4446e7b3721fb94a454d015ed5cde63f2",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Detail workspace",
+    "normalizedSectionSha256": "070bd599559a50d1eddf825bf0fc081cf38b2f9fa019bbbd2a08108f845cd70e",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Configuration form",
+    "normalizedSectionSha256": "07191d044ca60386e7f99d964b346102dcfd280da1cbefb690e1c9bdda9b1fdc",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Exception queue",
+    "normalizedSectionSha256": "17836676d4f73a7183fbcda34ec78d4129fc76c99e1d8209cbf14d497847f1b3",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Density and Visual Hierarchy",
+    "normalizedSectionSha256": "e0aa4f4dc20060cc7379404d0dbc6cc08955147e3b48864f571224792b9d8f08",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Tables and Filtering",
+    "normalizedSectionSha256": "06fa8cba24e117772728aaf7bbadda811c4f4aa7f177abdd30673c823a6200d0",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "States",
+    "normalizedSectionSha256": "63b29f01aad4a9ac125a0585724d0116d187fcec1def4fb00a4982aa987df050",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Responsive Behavior",
+    "normalizedSectionSha256": "c1952d2b8139f68e64a4bd6fc860a644b95ff3a905aad86bb0426c29a856cd9b",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Accessibility and Safety",
+    "normalizedSectionSha256": "9cfd532f1b1f8c3569f7a9c94926b8f296e1b029b6f5b4744869da98565b9b04",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Domain Workspace Purposes",
+    "normalizedSectionSha256": "7d48beddf3515f29307d9dc1359556f27130e0e3ea8119516a7ebd4cdfd18850",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Phase-0 Proposal",
+    "normalizedSectionSha256": "5645566607c0579ec1bb309d4a12d9481d5cfe00a23bace07007cac9f2f31f8f",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/admin/DESIGN.md",
+    "section": "Commerce Alignment Workspaces",
+    "normalizedSectionSha256": "7728923d628151e9811d84306ce0da9689671470c652fda9a7889e68223619ad",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "FreshMarkets Admin Component Guidance",
+    "normalizedSectionSha256": "445dc5cfca94dd6abc956cbd65acc9c9def1b747dc2d055e59796d687491e59b",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Layer 1: shadcn/ui primitives",
+    "normalizedSectionSha256": "a2473a00ebdff93ebc5cbd838d790a7a645db5dd9db30c0c97698714e274f546",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Layer 2: shared admin compositions",
+    "normalizedSectionSha256": "1c43c3d11e8a19984a4598ddec9dcbbd352069f922d46f710429ba831fd8b592",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Layer 3: domain compositions",
+    "normalizedSectionSha256": "0b29233dfdcab758de6972e6edf83e98011dcdce27d69514dfaa22670738cbac",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Tables",
+    "normalizedSectionSha256": "be8506c560e78e30e82d041ae7cce38036f38bb90597749f10d056ec014ce874",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Forms and Commands",
+    "normalizedSectionSha256": "3f69d5087a28a9410f3122432aad72083a5f4737429d7f705ca0394002008c10",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Status Components",
+    "normalizedSectionSha256": "315294bfdbd3fc53a67e4b6ba6de68e874c9df4c75ea9e96f718345f25d8aee2",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Exception Components",
+    "normalizedSectionSha256": "1762e301dd88f70d3a59a639cb01222c417dbd14f62ee68fc28439a82368f5ff",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Responsive and Accessibility Rules",
+    "normalizedSectionSha256": "3ea41552679fac1a6a17e36928af6d51c2f9970938fc169023264315dffcc874",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/admin/COMPONENTS.md",
+    "section": "Testing Expectations",
+    "normalizedSectionSha256": "815d60cb4718a9730dd6e24b7d40e33096dccc4a2d15cc46acbf2807cd38f7e5",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "FreshMarkets Marketplace Design",
+    "normalizedSectionSha256": "091582d4803e5e38a8f09f22532355d86b550c37b26f54e7ef1b7fa699159db5",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Product Position",
+    "normalizedSectionSha256": "f85c2c1397635ec0b8cf47ccebb0264c9804d0d65b61f66fcb1261d99803a370",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Core Principles",
+    "normalizedSectionSha256": "da772fbdcde11963d5c0b38fa9064a4cf903b013aa5819443888059bb6817c7c",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Information Architecture",
+    "normalizedSectionSha256": "faa094a90a093254659060ddd4793f58194dd28330f3453288d664ef9f6110d4",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Discovery and Home",
+    "normalizedSectionSha256": "bce9f8c824e11c0e06ba55bc060331f2e252713259917e47cfee0460554c3b6d",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Search and Categories",
+    "normalizedSectionSha256": "462c83c80225576e38661c66e9ed5e0e1a67ef999f5eb02ad81e32448eb72507",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Product Cards",
+    "normalizedSectionSha256": "c56d2e162e54f70a4b92bb74702069584d6cf2377e09d325ca533f4b058cd134",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Product Detail",
+    "normalizedSectionSha256": "878633f425dcb81a7ce79173971b9e1332d9856dbe011546a0906b1008b883ce",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Authentication",
+    "normalizedSectionSha256": "a97742f06418210ef9d165fe5a5fe47dd44d84956e9415a0accaf02633f7305c",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Cart",
+    "normalizedSectionSha256": "6b12829184c4420a1f3c49e34cbe555df0fe6db35d0805b485b5a79afa0f2a8c",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Address and Serviceability",
+    "normalizedSectionSha256": "30fddbe1cef3186b2a923724e77bdd0d61106ec3213405c82cc4c761a18ca7bb",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Fulfillment Selection",
+    "normalizedSectionSha256": "a840e77ab24bfa3346ca0be04517c483295cbe74983c06b4a211862da8016d0b",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Checkout",
+    "normalizedSectionSha256": "3f9468315e731833ea88087d4c3bea11c83b1de173de10de75598131b5601168",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Order History and Status",
+    "normalizedSectionSha256": "5028561d9f2711560377f4c72dd0a871cf3cb0fa44f403b84e094d92806b1e97",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Responsive and Mobile Behavior",
+    "normalizedSectionSha256": "316a5ee54e3f04c8dda77a88c4d9b181479ad76abcb4a9605e8163fb5cec788f",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Performance and vinext Guidance",
+    "normalizedSectionSha256": "b7a64d3d24cabef5e25914af8dd9c84e3fae9d46a5e2a0f82bae97883edac993",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/marketplace/DESIGN.md",
+    "section": "Phase-0 Research And Proposal",
+    "normalizedSectionSha256": "3d38e0e8b6b6e8076d02a44b852165a79e9348a4940628b7596c20728d584836",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "How References Are Used",
+    "normalizedSectionSha256": "a0ac50f720490390d62b5bdeb84816c9739a4134096b9a8d03aaf96318b5d054",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "Primary Reference: Mature On-Demand Commerce Patterns",
+    "normalizedSectionSha256": "b9cd11205a2a8d927e5e7c72fa27b30d6cc3b6e593a7823174dd29d5a190cb14",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "Grocery Commerce Patterns to Study",
+    "normalizedSectionSha256": "d23386df1600c1a49a2cdf98d0b1b3d2e8193dd9a1739f13c7d27a7046a73463",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "Visual and Interaction Principles",
+    "normalizedSectionSha256": "fc2c479ef074c5d6e8ab5c9b3eba894bdeb3ea62ebe34b9e9483d62983c7cbe5",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "Brand Boundary",
+    "normalizedSectionSha256": "d00ade4c837aa1f892e308a70f12a8076fdbb70121059cbf43f9cfe916776c97",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "Evidence and Review",
+    "normalizedSectionSha256": "5aa35071cd5cbf898606d665a5f63ce05cb2fceee1150cdbc56f958d115400e7",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/REFERENCES.md",
+    "section": "Mobbin Research Log (2026-08-25)",
+    "normalizedSectionSha256": "f0a9f48df95622f1e808e9fa6d0219d46836e1575db74f542a93ba6eedaa3de8",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Status And Scope",
+    "normalizedSectionSha256": "b1282a540b400da66808ddc768ff6721a179405601e3a58a43952409b51138b2",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Research Method And Selected References",
+    "normalizedSectionSha256": "191088e1aa76ef6901de51c7b59036684d70a1d42bd76372a642f1aa7d6f0f8e",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Web screens",
+    "normalizedSectionSha256": "2bed9f33f2bdc9fbafcfca8143d4952e7a9b673af8893c4b0f04d51376afd4a0",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Web flows",
+    "normalizedSectionSha256": "8d288cb86282bac6046df39fcfbac88650d8e0240387a6131c6715f337377e2b",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Mobile screens",
+    "normalizedSectionSha256": "7f36de074b75d7b4c382a4dda4191a2a8a6dafbe674772fc668ceb7956391c19",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Patterns To Adopt And Reject",
+    "normalizedSectionSha256": "42269ee6fa52ecea6af32852c249e0ac3b25f943a924c827276a01067d04fd90",
+    "destination": [
+      "docs/design/DESIGN.md#marketplace-journey",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/product/PRODUCT.md"
+    ],
+    "disposition": "Current grocery discovery/auth/cart/address/checkout/Order and Admin ownership principles retained. GD-D01-21 supersede old membership/minimum/default-location/courier/stacking restrictions; old reference branding/screens/assets and additional feature proposals stay archived. Required technical acceptance is not removed."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Information Architecture",
+    "normalizedSectionSha256": "d613665a0951643b372b21b66637189020d8065f398353bfc0946b9d1ea86a46",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Desktop Shell",
+    "normalizedSectionSha256": "ec2769c5449d56ae61b2f34b083b39df16bf65a2f3ff46bc7c4d776137615162",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Mobile Shell",
+    "normalizedSectionSha256": "4220ac1e2a651b8d30e0231fcefcc33c402b3dde10c8a6aa3d390f842c12c2af",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Shared Visual Tokens",
+    "normalizedSectionSha256": "9c5988161802d986b8ca6d4c6286592ac03777daaf9eee37863ce5dbcb7a6768",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Iconography And Merchandise Illustration",
+    "normalizedSectionSha256": "8219e5fc6967a75cededa7fd708df9f88b1169e6c2a00dd832801a876c4a6d7a",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Interaction And Component Inventory",
+    "normalizedSectionSha256": "7e6fa7351aebff461fee6f001bcbab8e914cf9a18085541b4985b9dd21f7c75a",
+    "destination": [
+      "docs/design/DESIGN.md#lists-details-forms-and-reports",
+      "docs/design/DESIGN.md#ordinary-admin-work",
+      "docs/design/DESIGN.md#products-promotions-and-stock",
+      "docs/architecture/ENGINEERING.md"
+    ],
+    "disposition": "Typed scoped rows, server pagination/sort/filter state, meaningful status/action/result, no false optimistic success and internal replay/transaction safeguards retained. Component names are examples, not a build checklist. Owner-approved Problems/weekly/receiving/transfer screens replace broad recovery/shortage workspaces; metrics follow Product definitions."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "States And Accessibility",
+    "normalizedSectionSha256": "ade108565d38aa3f829de5f6484b2bf243437f7381ba7708e372b03c35328e63",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/architecture/ENGINEERING.md#web-performance-and-accessibility"
+    ],
+    "disposition": "Loading/empty/error/denied/conflict states, keyboard/focus/semantic/color alternatives, mobile action access, vinext verification, browser viewport and owning command failure acceptance retained."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Proposed Implementation Sequence",
+    "normalizedSectionSha256": "b3c61ba181b2495a82d92c55529473dc6c0126a25f1ccc1c68cc1996865fa5c3",
+    "destination": [
+      "docs/design/DESIGN.md#states-accessibility-and-verification",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Research/reference evidence preserved in archive; no repeated research, mandatory historical approval sequence or old feature inventory. Retained visual/reference boundaries and actual browser evidence requirements remain in Design."
+  },
+  {
+    "source": "docs/design/marketplace/STOREFRONT_DESIGN.md",
+    "section": "Approved Decisions",
+    "normalizedSectionSha256": "e2df0295470518d09dcf86d28e15852b6c5613e3e85e699aa90fb28b802ade39",
+    "destination": [
+      "docs/design/DESIGN.md#admin-visual-foundation",
+      "docs/design/DESIGN.md#storefront-visual-language"
+    ],
+    "disposition": "Current shell geometry, independent tokens, shadcn primitive behavior, Helvena/spacing/radius/icon/touch baseline retained; superseded brand experiments and speculative configuration are not implementation mandates."
+  }
+]

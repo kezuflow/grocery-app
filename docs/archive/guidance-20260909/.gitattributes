@@ -1,0 +1,2 @@
+# Preserve captured source bytes, including original line endings, in Git.
+* -text whitespace=cr-at-eol

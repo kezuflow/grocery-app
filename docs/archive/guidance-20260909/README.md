@@ -1,0 +1,63 @@
+# FreshMarkets
+
+## Engineering guide
+
+Start with [AGENTS.md](AGENTS.md), [coding standards](docs/architecture/CODING_STANDARDS.md), [testing](docs/architecture/TESTING.md), and [Git workflow](TRUNK.md). The engineering standards apply to all repository work; dated plans/reports do not override them. Business decisions remain in the canonical documents routed by AGENTS.md.
+
+FreshMarkets is pre-launch: improve schema/interfaces when appropriate instead of preserving unnecessary legacy structure. Coordinate consumers, seeds, migration tooling, and tests; follow the documented disposable/retained-environment policy. A standards change alone does not redesign the database.
+
+FreshMarkets is a pnpm monorepo targeting Cloudflare Workers.
+
+> **Non-authoritative README.** This file is setup guidance and contains historical phase summaries that may lag implementation. Architecture and scope are defined only by the canonical set named in `AGENTS.md`; current implementation state is described in `docs/product/IMPLEMENTATION_STATUS.md`.
+
+## Phase 0 deployments
+
+- `apps/web`: vinext presentation Worker.
+- `apps/core`: authoritative modular-monolith Worker.
+- `packages/contracts`: typed Web/Core application boundary.
+
+This Phase 0 summary is historical and must not be read as current implementation status.
+
+## Setup and validation
+
+```sh
+pnpm install
+pnpm check
+```
+
+Generate binding types after changing Wrangler configuration:
+
+```sh
+pnpm --filter @freshmarkets/core types
+pnpm --filter @freshmarkets/web types
+```
+
+## Local development
+
+Run the vinext Web Worker and its Core auxiliary Worker together in one Vite runtime:
+
+```sh
+pnpm dev
+```
+
+Web is available at `http://localhost:3000`. Keeping both Workers in the same local
+runtime preserves the `CORE` RPC binding across vinext program reloads. Browser-facing
+Better Auth routes remain under Web at `http://localhost:3000/api/auth/*`. Use
+`pnpm dev:core` only when working on Core in isolation. Both commands use Core's
+existing local state under `apps/core/.wrangler/state`.
+
+For the production-built Web Worker plus Core in one Cloudflare local runtime, first build Web, then run the multi-config Wrangler smoke stack:
+
+```sh
+pnpm --filter @freshmarkets/web build
+pnpm dev:stack
+```
+
+The combined stack also uses `http://localhost:3000` as its public origin.
+
+Open `http://localhost:3000/api/core-health` to verify
+`Web -> CORE Service Binding -> Core`.
+
+The Core D1 `database_id` is an explicit development placeholder. Replace it with environment-specific provisioned IDs before remote deployment; do not commit secrets to Wrangler configuration.
+
+The Phase 0 compatibility date is pinned to `2026-08-22`, the newest date supported by the installed local `workerd` runtime. Update it deliberately when the Workers/Vitest runtime is upgraded and rerun the full validation suite.

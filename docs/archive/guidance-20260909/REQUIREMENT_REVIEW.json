@@ -1,0 +1,506 @@
+[
+  {
+    "source": "docs/architecture/CODING_STANDARDS.md",
+    "changedBlock": 0,
+    "sha256": "958f37aa1caadd30858c90b2f72c5b7361ca97d47e29fb022afb8ecf44b2cfc5",
+    "disposition": "Routing now AGENTS/ENGINEERING; no acceptance implied."
+  },
+  {
+    "source": "docs/architecture/CODING_STANDARDS.md",
+    "changedBlock": 1,
+    "sha256": "08ad64ae672faf140e48976b62b85222dab3ba34109e2fbaf0e777793d0a57ea",
+    "disposition": "Changed-scope limit retained in ENGINEERING introduction and AGENTS execution."
+  },
+  {
+    "source": "docs/architecture/CODING_STANDARDS.md",
+    "changedBlock": 2,
+    "sha256": "cb2319025a0e595363236da0f8c65afbcde35131e400d94a21a63340291f4665",
+    "disposition": "Static-check limitations retained in ENGINEERING Existing commands and limits; review/runtime requirements retained."
+  },
+  {
+    "source": "docs/architecture/CODING_STANDARDS.md",
+    "changedBlock": 3,
+    "sha256": "44ab4fd0b073555ab991773263af8174694a115b8af771f2922599b0c21085c6",
+    "disposition": "Execution routed to AGENTS; model-specific harness prose retired, no weaker acceptance."
+  },
+  {
+    "source": "docs/architecture/CODING_STANDARDS.md",
+    "changedBlock": 4,
+    "sha256": "3feb9e46bcc02bed83a842709b8d979c4388d340dbac79ff42ea363334812202",
+    "disposition": "AGENTS Start/execute/recover and ENGINEERING dependency/diff requirements retain every working-method safeguard."
+  },
+  {
+    "source": "docs/architecture/CODING_STANDARDS.md",
+    "changedBlock": 5,
+    "sha256": "bbcf3ceb5afe52ae86c418622a9a84c07d603f263b572d9c32c8a85f1cd3a672",
+    "disposition": "Same dependency/verification paragraph; renamed internal guide link."
+  },
+  {
+    "source": "docs/architecture/TESTING.md",
+    "changedBlock": 0,
+    "sha256": "ce26e67def70251a27c037276efe9be09819dccc1ebef927d300231b45cee980",
+    "disposition": "Introduction consolidated into ENGINEERING; complete verification body retained."
+  },
+  {
+    "source": "docs/architecture/NAMING_CONVENTIONS.md",
+    "changedBlock": 0,
+    "sha256": "e021dfac8197325399a6aa27b5d8088276020f90bd0f0a1fdde396bae8679f48",
+    "disposition": "Routing and structural-check limits retained in ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/NAMING_CONVENTIONS.md",
+    "changedBlock": 1,
+    "sha256": "14b03b52dbd67b31071ec51254cc695e0eb091d6f0b8f4f7fef917250f6dcbc3",
+    "disposition": "Naming command/table and naming sections retained; TypeScript/lint own identifier correctness."
+  },
+  {
+    "source": "docs/architecture/NAMING_CONVENTIONS.md",
+    "changedBlock": 2,
+    "sha256": "ce1d2a6fb50deb5dd063c3331211b3dcd0146c5cb18d219e049e2a70e800f578",
+    "disposition": "Naming scope, error semantics and local-only hooks retained; no checker changed."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 0,
+    "sha256": "0286e287de37b96afc1b0b7b3a6c2a6163cf68ddd3a47f1a77d3719c5b33bea3",
+    "disposition": "Business authority moved to PRODUCT decision map; no acceptance implied."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 1,
+    "sha256": "960f878043d0fc768ea12911d072750ce899cf7b44bc365c306fdec99475e3f4",
+    "disposition": "Engineering routed to ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 2,
+    "sha256": "c3da03070e84afbc10a1be82c7c8dd23ebf9b08dad9c05cad2a365867da23046",
+    "disposition": "AGENTS subject ownership table replaces old canonical router."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 3,
+    "sha256": "08374ac55e85207c20dcb31e17cc14859ac8f594d04b4099e3674273e75495fe",
+    "disposition": "Full context table retained; obsolete ban on Scheduled courier choice superseded GD-D03."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 4,
+    "sha256": "2a8f9be39c0c18b54c34e1c58b750196ac82483cc7d62dfe4e220b6491005387",
+    "disposition": "Proposed directory layout retired; actual module placement/layer/contract boundaries retained."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 5,
+    "sha256": "06741b99d8686c78e09480f48d0553da964aa14bddf006f2f430f1010d167ed2",
+    "disposition": "Repository placement preserves Core domain location and justified shared value objects."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 6,
+    "sha256": "eb7dd6981194640441f143f40ef835b51b29e3c7f448dfa7628602ecf57cae15",
+    "disposition": "Pre-launch/retained compatibility policy retained in ENGINEERING; obsolete decision record archived."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 7,
+    "sha256": "fb3bd44d94983048bf2a72d7bffa2a5479bfb21b30f2e2e9d1e372a49dd7edff",
+    "disposition": "Transport context/method/auth safeguards retained; arbitrary pinned-workstream procedural restriction retired."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 8,
+    "sha256": "17fdd5d1bf09b7da6fc6793826e7fd85a9d2ec16e2de1cb2d50ca1070a49bc35",
+    "disposition": "Typo corrected only."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 9,
+    "sha256": "f286f16b695e4360267250ada36aa45b70222884b038ee5302b23ba60c5ff36f",
+    "disposition": "Initial single location clarified without changing multi-location support."
+  },
+  {
+    "source": "docs/architecture/ARCHITECTURE.md",
+    "changedBlock": 10,
+    "sha256": "cad69150e01096995b7e7a77b2f5822616115283b882d3579815815d956fb25e",
+    "disposition": "GD-D03 available-courier choice replaces obsolete prohibition; all commitment/fee safeguards retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 0,
+    "sha256": "0286e287de37b96afc1b0b7b3a6c2a6163cf68ddd3a47f1a77d3719c5b33bea3",
+    "disposition": "PRODUCT owns business authority; source archived."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 1,
+    "sha256": "739cf5a41aed47b169495d2794730dfb999267e327b05c1746d96c218a14aaa9",
+    "disposition": "AGENTS owns subject routing."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 2,
+    "sha256": "1d9be2791c8bda1a89311a3a043930dbd1e86ce231c268212fb1d22d181e78b2",
+    "disposition": "GD-D15 mode-switch correction; preserve paid work without requiring all historical work finished."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 3,
+    "sha256": "060525fc9342b2e9fb3a66ca3ca937877f0d1acad1eabee4d6ead76ebcbcbefe",
+    "disposition": "GD-D01 approved profile/contact intent; field ownership design remains explicit gap."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 4,
+    "sha256": "4471fbaad9bd5b1fa3f77c5f3a40623e39a4b9a6c201be3679a231815bab3f95",
+    "disposition": "GD-D21 first-visit location selection supersedes provisional default-location browsing."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 5,
+    "sha256": "3a5a719eaf1a42af569e5086ad01048da54046df3e3e9d85fbe51a3ca65a8caa",
+    "disposition": "GD-D17 locally sorted actual counts; exact weight pools and no double credit retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 6,
+    "sha256": "9b5f7acee8e5eb794457218e9d15f8da28bc619f5a005fcf602bc496fdbe211d",
+    "disposition": "GD-D01 guest cart intent; authenticated idempotent one-active-cart rules retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 7,
+    "sha256": "6267416ce9932d05ade2277d93df4ba63cfa9a8d116aa15368d1707ab7cc41a1",
+    "disposition": "GD-D08 no checkout minimum; every other eligibility safeguard retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 8,
+    "sha256": "8fceca6240ef3d974eb4dece474b1399945b3979cc8f803db3add72cea5d17ed",
+    "disposition": "GD-D03 available-courier choice; fixed accepted charge/unknown cost retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 9,
+    "sha256": "1ecfb2a86ce1346db2768066c94a31c0ea1935909856bda21c7dda4ed7b7cbd6",
+    "disposition": "GD-D08 no general minimum; promotion-only spending conditions retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 10,
+    "sha256": "d3de91032beee4b6d9c5837d6290cc9e236111476110ab1f6adc332075b4b7ab",
+    "disposition": "GD-D06–07 revised stacking; Core usage/atomic claims and no schema policy engine retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 11,
+    "sha256": "78fc9730d0dd88bfffb911bcd09c3658045221bc5ac46827555cc077bf4c3cc3",
+    "disposition": "GD-D06 first-order/new-customer presentation deduplication; closed schemas and other parameters retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 12,
+    "sha256": "b7e6fe1f1dac162cc359e1d1431bad5724323b45b8383be73d75cbf471347fa9",
+    "disposition": "GD-D06/07 item-sale/full-price-code stack; owner now approves preventing overlapping sales for the same option/location. Component separation and atomic limit claims retained; see FINAL_SECTION_REVIEW.json."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 13,
+    "sha256": "bff277629e432933a72812e14451b21d088e95d9eb334d598d12438dfc761fc3",
+    "disposition": "GD-D06 full-price merchandise code basis; delivery/tax component separation retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 14,
+    "sha256": "0e9744b630d33677f37dac704eb631c6d22ce9198c0e01a657d6d625a0ce62cc",
+    "disposition": "GD-D09–11 ordinary problem handling; existing shortage/refund/stock acceptance retained in CA-5–7, no new workspace."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 15,
+    "sha256": "d4927138348b400c112babdfecd79a50508e21b886615d5aefe9e945e3157efd",
+    "disposition": "GD-D10 automatic Instant booking at same readiness boundary; packed handover and Scheduled readiness retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 16,
+    "sha256": "d7f518749eebe2370723d4db125224e22f9b1093e11f7d55cdc85e8dc07443a1",
+    "disposition": "Active subscription modification retired; immutable audit fields and all other categories retained."
+  },
+  {
+    "source": "docs/architecture/DOMAIN_MODEL.md",
+    "changedBlock": 17,
+    "sha256": "58beb3cc8341e32fd0bdc134608e18c6b69f7816e5613d91fbd9e14684559dd4",
+    "disposition": "Cross-domain summary duplicates owning sections in PRODUCT/ARCHITECTURE/ENGINEERING/technical references; courier/minimum/count exceptions explicitly reconciled."
+  },
+  {
+    "source": "docs/architecture/STATE_MACHINES.md",
+    "changedBlock": 0,
+    "sha256": "0286e287de37b96afc1b0b7b3a6c2a6163cf68ddd3a47f1a77d3719c5b33bea3",
+    "disposition": "Routing/business summary consolidated."
+  },
+  {
+    "source": "docs/architecture/STATE_MACHINES.md",
+    "changedBlock": 1,
+    "sha256": "2045e16d475736c1fd1bb0971fe6627c6b47c0c2c500c7e9760093324f68e38b",
+    "disposition": "ENGINEERING retains complete transition/evidence requirements."
+  },
+  {
+    "source": "docs/architecture/STATE_MACHINES.md",
+    "changedBlock": 2,
+    "sha256": "8370a46596f5d551f5cde389f6b3e5459508f1cd522f700996ee625e7835d7d0",
+    "disposition": "GD-D15 mode-switch correction; actual conflict and snapshot safeguards retained."
+  },
+  {
+    "source": "docs/architecture/STATE_MACHINES.md",
+    "changedBlock": 3,
+    "sha256": "c798213350067df1df07daff74c83e3ddbc03faf3a056c6f911ebf1320a5a53f",
+    "disposition": "GD-D03/GD-D10 courier choice and automatic Instant booking; unchanged readiness/one-attempt safeguards."
+  },
+  {
+    "source": "docs/architecture/STATE_MACHINES.md",
+    "changedBlock": 4,
+    "sha256": "46e29b0124a66aa5d5ef2b2eafaf659a7b75f84c7ce55c5c23721c402d395adc",
+    "disposition": "GD-D11 administrator handling; issue/notification/financial separation retained."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 0,
+    "sha256": "0286e287de37b96afc1b0b7b3a6c2a6163cf68ddd3a47f1a77d3719c5b33bea3",
+    "disposition": "Routing/business summary consolidated."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 1,
+    "sha256": "6b6b4f18040c6582240f083e6afbd8772b12116f4e69bedd237b6eefaf2f646a",
+    "disposition": "GD-D03 accepted courier/service needs coherent implementation, no invented storage shape."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 2,
+    "sha256": "233c445794de8720568ba35502cd4940b7a64385829301646c5a8d4eb03790fc",
+    "disposition": "Explicit historical internal fleet section archived; no active fleet authorized."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 3,
+    "sha256": "9a83f29819675b02b147c2fa7d3da9f96c0d3b2ee0ff1b64df1efdc7e4b06e5b",
+    "disposition": "Historical fleet-map projection archived; current delivery missing-coordinate failure remains in active API."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 4,
+    "sha256": "81703dfc66fd9a5c845ad425b78fc922326c4aa0bb41b470ffd157ac9138bd87",
+    "disposition": "Historical fleet cursor requirements archived; active external projection bounds/freshness retained."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 5,
+    "sha256": "1ea1dd332dc5ffa433badc8434de39482a5be32ae679ada4fa15a634c5f6d5db",
+    "disposition": "Historical migration 0043 remains intact; ENGINEERING retains every supported-baseline copy/upgrade constraint."
+  },
+  {
+    "source": "docs/architecture/DATA_MODEL.md",
+    "changedBlock": 6,
+    "sha256": "94ab5061a1ce37c8632e9c97565dbe6eccfec221515689a5b2ec961a2f4c57fc",
+    "disposition": "Schema safety paragraph retained with renamed guide links."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 0,
+    "sha256": "bc162217630ffca99c12b592ee9e63ecf2fd60040e023ab0f2f97713dc0861ac",
+    "disposition": "Boundary validation and compatibility retained in ENGINEERING and contract principles."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 1,
+    "sha256": "2f24efcdd33442745edbbfd5eb425a570129d4960f108fe8a2da6a1133657bea",
+    "disposition": "GD-D08 retired minimum error from target vocabulary; actual code remains an implementation gap."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 2,
+    "sha256": "cb2b9a1c120f2aaa4eeae0512b399bcb4c5228605befce9d7bd7173c79e7b4cd",
+    "disposition": "GD-D21 first-visit resolved-location browsing; DTO privacy/exact-price safeguards retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 3,
+    "sha256": "25dcc44288c00f9db1a603afc6676191e21bdd32283e0da039d39d9d9f48fde6",
+    "disposition": "GD-D21 provisional browsing removed; query predicates/keyset bounds retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 4,
+    "sha256": "9a833b9c45155b7de730c90a5b4d77eef741640da610d08c96577199f4794e4e",
+    "disposition": "GD-D03 opaque available-courier option; no hub or private quotation leakage."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 5,
+    "sha256": "70aced4c3d97b562eedc75ca05f7b074613b9c93df7d3a1bd9d1969b7f5012ca",
+    "disposition": "GD-D15 all-history completion not required; current authority/readiness/receipt transaction retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 6,
+    "sha256": "557daea6a91295f967089c00d18a5a6b3e254d0abb366ead86bf2d7fca2a9d42",
+    "disposition": "GD-D06–08 revised promotion/minimum target; all other current eligibility requirements retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 7,
+    "sha256": "2f03206b5af17923f9073f752be5763796c5fe5c6c19a44063d18678f922a112",
+    "disposition": "GD-D08 target minimum error removed; every financial unknown/recovery error retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 8,
+    "sha256": "7332e69d45c7a95a65761b03069b97e3926817c8e2787dce4572c6e333bb5a2c",
+    "disposition": "Only optional affected-item signature changed (GD-D11); cancellation projection text unchanged."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 9,
+    "sha256": "177d4da24e6bfce06dbff0ee35f5b81ddcb46bdf797dcf30e2c92c599d137de1",
+    "disposition": "GD-D11 optional item selection; ownership/bounds/replay/no financial side-effect safeguards retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 10,
+    "sha256": "750eac74434eb030e6563e038c3efc2d54c7805518d25d3ad8b0403a422fcab5",
+    "disposition": "Membership destinations retired; all Core scope/navigation/audit contracts retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 11,
+    "sha256": "48aef71409328714a5ee7f7327e1fb2c6c59a889c7f733d21e090986ad7c0734",
+    "disposition": "Acceptance no longer falsely deferred; whole transaction guard clarified; remaining role/invitation/session requirements retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 12,
+    "sha256": "64ad743cc74f342cf3a91b45bea8583679e2944c86e23270d12c1f029d703d1f",
+    "disposition": "Retired subscription display removed; current preference-only DTO identified as baseline and profile gap; all customer/privacy transaction guards retained."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 13,
+    "sha256": "d878d3337d4f3a9f903f518dfe7360bf278f7722f1d1496625b8d797b9387262",
+    "disposition": "Five benefit types/floor preview replace stale two-benefit/ceil/membership instructions; lifecycle/grant/replay/audit remain."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 14,
+    "sha256": "84b7544098ba423de7930908c5cf32051ea2b055c732dc9c5be5915ad87c0249",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 15,
+    "sha256": "ac23fdd9928e05a3fa7ba81765e0602f8b7422b859904434f2843267e74e3522",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 16,
+    "sha256": "4894d20d270d2db834b3d8267f3a7077ef95c79f78c090c17bf6c4dfca957007",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 17,
+    "sha256": "7e5a6d309637da9f12e146412f65665c7e971c6a8a3190275bed9d865a7f4341",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 18,
+    "sha256": "28b5f6c233194d7ec96165db82bee6cd0d5daeb60e158b30064d1861b7448064",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 19,
+    "sha256": "c4ceec3bc11d6b2c16919b75457ca3a7a09327e698826773cb2ab8745cc0c779",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 20,
+    "sha256": "90583955eabbc08ba99ff43a0295f4aa864dfc5bf6c120073c9e23bf4ed9b735",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 21,
+    "sha256": "b3c8842f27e42bd3c462a41e3bac945cce29820713697b9b85b04dc7e12b5a7c",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 22,
+    "sha256": "bfa130b0f01347d8bee74efd34f2662b6d126b94c5c70d0a56666d16a5aac6aa",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 23,
+    "sha256": "c4f06f7d7fa0a7b9ff7dde314f66b0e1e281f1b618b38bb8641a93a55314e488",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 24,
+    "sha256": "1d9b8b1be42299ac5b0f9dcd1fd4e64b6b251bd19080740d775e96fb13f4721a",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 25,
+    "sha256": "7d1c534dbf7c1e2861559fa02c6ab6242186f47fd04d596d83f254f34d84605b",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 26,
+    "sha256": "3ae21f98d7f0992f89a638fb818cfb94ae87392f015d9a1a7c875b7332a1be6c",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 27,
+    "sha256": "f520ae3e04fcc08f591f530e5cc45397eab4305cc40bf09ed62363bba942715a",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 28,
+    "sha256": "515cbc0ce5101e138fca238104911e8e511c64a4d2910b2b65fd2de7a6902ec0",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 29,
+    "sha256": "6bc9ce30ebbe5f816850f1b1e414f5cb46afad397a13184134663f8503b3b596",
+    "disposition": "Explicit historical fleet/map/batch/Rider surface archived. Current external Delivery operations remain; no fleet reimplementation/permission is authorized. General bounds, scope, immutable coordinates and complete transaction safeguards remain in active external API and ENGINEERING."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 30,
+    "sha256": "5731a4700f70f7dec4785f32535dcc4435796679cc340f4d80317316c433e867",
+    "disposition": "Contract verification retained; courier-choice assertion superseded GD-D03."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 31,
+    "sha256": "7c0a33aba4cc67c74bbca002c1d3aa12e796c38734d1109b54b7ea560dc61c2c",
+    "disposition": "Setup contract requirements retained; GD-D01 profile intent and scope clarified."
+  },
+  {
+    "source": "docs/architecture/API_CONTRACTS.md",
+    "changedBlock": 32,
+    "sha256": "5b2b4cea1717ebdc7aab76293c12f11fcc5008ff5ad767cbf444186f1330d57a",
+    "disposition": "Obsolete authority link and courier-removal instruction replaced; membership/local-price retirement retained."
+  }
+]

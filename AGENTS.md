@@ -1,132 +1,42 @@
 # FreshMarkets Agent Instructions
 
-This file is the enforcement and documentation router for this repository. The canonical set is `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/STATE_MACHINES.md`, `docs/architecture/DATA_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, `docs/product/PRODUCT_SCOPE.md`, and `docs/product/IMPLEMENTATION_PLAN.md`. `IMPLEMENTATION_STATUS.md`, phase reviews, remediation notes, READMEs, code, and migration history describe implementation or historical compatibility; they do not override the canonical set. Read the relevant canonical documents before changing a domain or product surface.
+## Authority and reading route
 
-## Engineering Standards and Agent Conduct
+Follow the current owner request. Read this router, the active checkpoint, and only the guide/reference sections needed for the affected behavior. Do not restart completed work from an old report or load all archived plans by default.
 
-- Follow [AGENT_WORKFLOW.md](docs/architecture/AGENT_WORKFLOW.md) for task execution, focused context loading, evidence, and recovery after an interrupted task. Repository Codex defaults select GPT-6 Astra with Medium effort; explicit owner/session choices prevail. Quality requirements do not depend on the model that authored a file.
-- Read [CODING_STANDARDS.md](docs/architecture/CODING_STANDARDS.md) for implementation rules, [TESTING.md](docs/architecture/TESTING.md) for verification, and [NAMING_CONVENTIONS.md](docs/architecture/NAMING_CONVENTIONS.md) for naming. These are authoritative engineering guides routed by this file and apply across the repository, including work resumed from dated plans.
-- Ground changes in the actual call path and owning context. Inspect the working tree first, preserve unrelated work, and complete the authorized task without unrelated refactors or phase expansion.
-- Use the owner's current instructions when older documents disagree. Resolve ordinary technical choices independently; flag material business-policy uncertainty instead of inventing a rule. A coding-standards update does not adopt a separate product plan.
-- Prefer cohesive modules, clear names, explicit commands, and a small number of useful abstractions. Do not add speculative frameworks or split files merely to meet arbitrary line-count limits.
-- Validate untrusted inputs as `unknown`; use precise contracts and narrowing. Do not silence defects with `any`, double assertions, broad suppressions, swallowed errors, placeholder success, or weakened tests/checks.
-- Validate authorization, scope, state, and mutable preconditions at the Core write boundary. A rejected command must not leave partial business effects or an idempotency-success result.
-- Keep changeable eligibility and workflow policy in owning Core commands, not permanent cross-table triggers or method-specific lifecycle checks. Database constraints protect structural integrity, immutable evidence and concurrency. Follow the enforcement boundary in `CODING_STANDARDS.md`; removing a schema policy gate never authorizes a feature or replaces atomic command validation.
-- Guard the complete transaction, not just its first statement. A zero-row conditional D1 update does not fail a batch; detecting it after other writes committed is too late. Distinct effects within one command need distinct stable idempotency identities.
-- Await critical state changes. External side effects require durable intent, explicit unknown-outcome recovery, bounded retries, and provider-event deduplication; never treat a timeout as proof of failure or an inbox insert as proof of application.
-- Keep credentials, bearer URLs, provider payloads, and private contact/address snapshots out of logs in every environment. Use the existing redacting telemetry boundary and test-only integration fakes.
-- Test observable behavior and meaningful failures at the layer that owns them. Include real Worker/D1 evidence for transaction claims and a reachable end-to-end command path for changed critical workflows. Do not claim browser/provider acceptance from unit tests or test discovery.
-- Review the final diff and report actual checks, limitations, and remaining risks. Never mark application work complete from a Markdown change alone.
+The active guidance has five owners:
 
-## Schema Lifecycle — Pre-launch
+| Guide | Owns |
+| --- | --- |
+| [AGENTS.md](AGENTS.md) | Task execution, authority and reading route. |
+| [PRODUCT.md](docs/product/PRODUCT.md) | Business meaning, approved decisions, exclusions and unresolved policy details. |
+| [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | Two-Worker architecture, context ownership, trust boundaries and runtime integrations. |
+| [ENGINEERING.md](docs/architecture/ENGINEERING.md) | Coding, transactions/recovery, security, schema lifecycle, naming, verification and Git. |
+| [DESIGN.md](docs/design/DESIGN.md) | Admin and marketplace presentation, components, accessibility and reference use. |
 
-FreshMarkets has not launched. The owner permits better schema designs: within authorized implementation, revise tables, constraints, relationships, interfaces, and migration baselines when that simplifies the model. Do not preserve accidental pre-launch design solely because migrations already exist, and do not ask again merely to perform a routine schema improvement.
+Focused technical specifications remain authoritative for their subjects: [API_CONTRACTS.md](docs/architecture/API_CONTRACTS.md) for Web/Core/provider semantics, [STATE_MACHINES.md](docs/architecture/STATE_MACHINES.md) for transitions, and [DATA_MODEL.md](docs/architecture/DATA_MODEL.md) for persisted facts and integrity. Read the affected sections when changing those boundaries; shared contracts never import storage types. Operational runbooks are used for the particular environment/provider operation, not as a second product policy.
 
-Keep code, contracts, seeds, generators, migration verifiers, and tests consistent, and prove clean database creation. Identify which environments are disposable before resetting them; changing an applied migration file does not upgrade an existing database. Preserve retained/shared data or provide a tested upgrade path. Once production or another retained deployment requires compatibility, use forward migrations for that supported baseline. Full rules: [pre-launch schema and interface policy](docs/architecture/CODING_STANDARDS.md#pre-launch-schema-and-interface-policy).
+The protected [Simplification Discussion](docs/product/SIMPLIFICATION_DISCUSSION.md) is the owner's record of agreed product decisions. PRODUCT maps its approved changes and subsequent owner supplements against the technical baseline. Preserve the distinction between agreement, authorization to implement, and actual acceptance. Apply the owner's explicit follow-up approvals recorded in PRODUCT; other proposals and unprovided operational values are not approved rules. Source records, supersessions and preserved requirements are indexed in [the guidance audit](docs/operations/GUIDANCE_REBUILD_AUDIT.md); archives, old phase reports, READMEs, migration history and redirect stubs do not add active authority.
 
-## Mandatory Architecture
+## Start, execute and recover
 
-- Maintain one monorepo with `apps/web` and `apps/core` as the initial deployments.
-- `apps/web` uses vinext and runs on Cloudflare Workers. Validate every relied-on Next.js feature against vinext before adoption.
-- `apps/core` is the authoritative Cloudflare Worker and an internal modular monolith.
-- Web calls Core through Cloudflare Service Bindings using shared typed contracts. Web must not directly access authoritative D1 data or duplicate Core business logic.
-- Core owns the application bounded contexts, commands, queries, authorization, business storage, and provider adapters enumerated in `ARCHITECTURE.md`. Each state has exactly one owning bounded context even though all contexts deploy together in Core.
-- Do not introduce public HTTP APIs, CORS, microservices, Durable Objects, Workflows, or KV without a documented need. Provider webhooks are a narrow public-HTTP exception. Cloudflare Queues are approved only for notification-outbox delivery and its dead-letter path; critical commerce state never moves to a Queue.
-- Preserve the layer direction: UI -> application command/query -> domain policy/service -> repository -> storage/integration.
-- Use purpose-built DTOs and read models. Raw database/ORM rows are not public RPC or UI contracts.
-- Model meaningful writes as explicit commands with legal transitions, never arbitrary field updates.
+1. Resolve the requested outcome, active plan **path and phase title**, stable task ID and observable acceptance criteria. Inspect branch/HEAD, status, tracked/untracked changes and the actual caller-to-write path before editing. Compare the checkpoint with code and evidence; preserve unrelated and unfinished work.
+2. For commerce continuation, use [COMMERCE_ALIGNMENT_E2E_PLAN.md](docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md), [the continuation boundaries](docs/operations/COMMERCE_ALIGNMENT_CONTINUATION_PLAN.md) and [the active checkpoint](docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md). Earlier acceptance gaps remain open even when a later slice passes. One implementation slice is active; continue authorized slices in dependency order without routine approval pauses. Do not use subagents for this task.
+3. Complete the smallest cohesive change across the required Core/contracts/storage/Web boundaries. Justify abstractions and operator steps against concrete requirements. Follow UI -> application command/query -> domain policy -> repository/integration. Core owns all business writes and current authorization/scope; Web renders typed decisions. Do not create another business authority or an operational recovery panel for ordinary CRUD.
+4. Revalidate mutable prerequisites and the complete transaction, including distinct per-effect identities, ledger/audit/outbox and immutable success receipt. A zero-row D1 update does not abort a batch. Rejected commands leave no partial business effects or success result. Provider timeouts are unknown outcomes; durable intent, deduplication and bounded recovery remain internal safeguards.
+5. Select checks by risk in ENGINEERING. Phase completion requires the aggregate plus relevant executed Worker/D1/browser/provider acceptance. Do not weaken checks, swallow errors, introduce fake success, or claim application behavior from documentation, mocks or discovery. A passing local fake is not actual provider acceptance.
+6. Review each diff, stage only verified intended work, commit directly to `main`, and run `git push origin main`. No feature branches/PRs unless explicitly requested; worktrees only protect local state. Commit/push authority does not authorize deployment, real provider transactions, outbound messages or destructive data operations.
 
-## Authentication and Authorization
+Use current session model/settings choices. Do not change personal settings or delegate without explicit authorization. Resolve ordinary implementation choices independently; identify material business-policy or external-input blockers while continuing independent authorized work.
 
-- Better Auth runs authoritatively in `apps/core` using Cloudflare D1.
-- Better Auth owns only authentication users/identities, credentials and linked accounts, sessions, email verification, password reset, OAuth, and other authentication infrastructure required by its configured plugins.
-- Customer profiles, addresses, staff identities, roles, permissions, and location scopes are application-owned domains linked to the Better Auth user ID.
-- Authentication answers who the user is. Core authorization answers what the user may do.
-- Web provides the browser auth experience and proxies auth routes/callbacks to Core while preserving cookies, `Set-Cookie`, callback URLs, host/origin, OAuth redirects, and CSRF protections. Web must not become a second auth authority.
-- Verify Better Auth, vinext, Cloudflare Workers, Google OAuth, persistent cookies, and Service Binding behavior with integration tests before relying on them.
+## Checkpoint and completion evidence
 
-## Locked Business Invariants
+Update the one active checkpoint after meaningful milestones, failures and owner corrections, and before handoff. Replace stale current-state/next-action text; preserve useful old evidence in history. Record:
 
-- Both `INSTANT` and `SCHEDULED` are authenticated pay-as-you-go commerce without membership. Remove active subscription enrollment, trials, membership prices, recurring billing, membership eligibility, navigation, notifications, and jobs. The owner reports no live subscriptions; preserve only evidence actually required by retained environments.
-- New commerce has no FreshMarkets Service Fee and never passes PayMongo processing cost to the customer. Historical committed Orders retain immutable Service Fee snapshots only for accounting, rendering, cancellation, and refund accuracy.
-- Promotions owns controlled merchandise and delivery benefits; Payments owns provider interactions and canonical financial state. Better Auth owns neither.
-- Paid order commitment requires a provider-confirmed canonical Payments outcome. Provider captured/success states map to canonical `SUCCEEDED`; browser return state or payment initiation is never sufficient.
-- Paid orders are locked and cannot be freely mutated after commitment.
-- Customer cancellation is one coordinated Order operation. Instant permits cancellation until staff accepts the paid Order (`COMMITTED -> FULFILLMENT_PENDING`); Scheduled permits cancellation strictly before its snapshotted cutoff, regardless of earlier preparation, refunds the original payment plus every committed paid addition, and never permits an addition to be canceled independently. New commerce never retains a fabricated FreshMarkets fee. A customer-caused cancellation may retain only an actual documented non-refundable courier charge allowed by the approved stage policy. FreshMarkets-caused cancellation refunds the full remaining applicable set. Eligible customer cancellation automatically initiates the coordinated PayMongo refunds; only provider confirmation establishes refund success. Post-delivery exception refunds require staff review, global `refunds.manage`, a reason and immutable audit evidence; authorized staff confirms approved refunds in the FreshMarkets dashboard and Core submits them through PayMongo, then verifies/synchronizes the provider result without reopening customer cancellation.
-- Global selling state is exactly `OPEN` or `PAUSED` and is separate from the global fulfillment mode. `PAUSED` blocks new fulfillment options, Quotes, and payment initiation, but never blocks provider-event reconciliation, exactly-once commitment of a payment already started, committed-Order reads/operations, refunds, or delivery work.
-- Customer fulfillment mode is exactly `INSTANT` or `SCHEDULED`. One versioned global configuration selects exactly one active mode for all new commerce; `WEEKLY` is the initial Scheduled cadence, never a fulfillment mode. A mode switch is legal only while selling is paused, invalidates uncommitted commerce, and never rewrites a committed Order's fulfillment snapshot.
-- Sourcing mode is not configurable domain state. `INSTANT` uses exact-location physical stock and holds/reservations. `SCHEDULED` is exact-demand preorder commerce: it uses cycles/windows and cutoff, records paid demand exactly, and uses no stock check, stock deduction, incoming-stock netting, safety buffer, forecast, or order/cycle capacity.
-- Scheduled delivery-cycle cutoff is the operational/procurement commitment boundary for `SCHEDULED`. `INSTANT` checkout must not be forced through delivery-cycle semantics and instead uses current location inventory, an expiring checkout hold/reservation, and mode-specific fulfillment promises.
-- Post-payment additions use an additive amendment/supplemental transaction with independent price and payment history.
-- Global owns catalog, categories, variants, media, and all exact-location price writes. Price writes require global scope and `prices.manage`; local staff may read prices and manage authorized local selling activation, never change prices. Physical inventory remains location-specific.
-- A physical central warehouse distributes Product-pool stock through Global dispatch, tracked transit, and destination-authorized accepted receipts. Deduction and transit creation are atomic; only accepted quantities credit destination inventory. Holds and reservations protect source stock. Losses and verified returns require explicit audited resolution.
-- Scheduled receiving creates cycle/destination-allocated goods, separate from Instant inventory. Packing consumes that allocation; only an explicit inspected-surplus release may credit physical stock exactly once. Spoilage never becomes sellable stock.
-- Active catalog authoring and new commerce use integer canonical base units `GRAM` or `PIECE` and controlled sell units within `MASS` or `COUNT`; packaged liquids are pieces. Historical `VOLUME`, `MILLILITER`, and `LITER` data remains inactive compatibility history. Cross-dimension conversion and floating-point authoritative quantities are forbidden.
-- Sellable variants are persisted configuration and consume a SKU-specific integer quantity from a shared product inventory pool; variants do not own independent physical stock. Pack, bunch, tray, and similar labels never define global conversions.
-- Authoritative final retail price is manually set for a sellable SKU at one exact fulfillment location. Market/global fallback and automatic global markup engines are forbidden; missing or invalid exact-location price is unavailable, never silently zero.
-- Instant inventory reservation and Scheduled exact committed purchase demand are separate concepts; Scheduled demand is never netted against physical inventory.
-- Historical orders snapshot product, SKU/unit and base consumption, prices and explicit monetary components, discounts/promotions, address, fulfillment mode/location/zone/promise, and Scheduled cycle/window identifiers where applicable.
-- Promotions owns one controlled benefit/rule system for order and delivery discounts. Current-release stacking permits at most one merchandise/order benefit plus one delivery benefit. Membership benefits and membership eligibility rules are retired; arbitrary executable promotion scripting is forbidden.
-- Core authoritatively validates selling state, coordinates, serviceability polygons, delivery zone, the one global fulfillment mode, resolved location/promise, Instant inventory or Scheduled cycle/window/cutoff, cart, exact-location SKU prices, promotions/stacking, minimum order, provider quotation evidence, and payment readiness. Overlapping eligible geofences resolve to the closest dispatch origin by exact Haversine distance with stable location-ID tie-break; route/driving-time providers never select the owning location.
-- Lalamove supplies checkout pricing in both modes. Customers accept FreshMarkets' promise and a Scheduled window where applicable; they choose neither courier nor hub. Preserve the accepted customer charge and separately record actual courier/manual cost and variance; unknown cost is unavailable, never zero.
-- Lalamove is default execution. Emergency manual delivery is permitted only for Scheduled, with reason, person's name/phone, assignment, packed handover, completion/failure, and actual cost where known. One active attempt spans external/manual methods; unknown create/cancel outcomes block replacement. Rider accounts, fleets, batches, routes, and driver maps remain excluded.
-- Preparation start coordinates the Order cancellation lock. Instant booking requires all items picked/checked and final packing started; Scheduled future booking requires received/checked goods and a credible ready time. Handover requires completed packing. Searching, assignment, pickup, and delivery are independent facts; conflicting provider pickup evidence creates an exception, never fabricated packing. Courier cancellation never directly cancels the grocery Order.
-- Every store location owns its courier pickup profile and authoritative coordinates. Customer delivery phone is required; provider email is optional. Provider adapters expose typed verified capabilities, never a general rules engine.
-- Each sold SKU preserves shipping grams per sold unit. The full paid Order, including committed additions, is internally `BAG` below 10,000 grams and `BOX` at or above 10,000 grams; that classification is not sent to Lalamove unless later official documentation requires it.
-- Customers buy from FreshMarkets and never select a fulfillment hub.
-- Preserve multi-market and multi-location support even while the the current release operates one Cebu location.
-- Maintain independent state machines for cycle, order, payment, refund, procurement, receiving, fulfillment, and delivery.
-- Client/application/admin lifecycle commands require stable idempotency keys and expected aggregate versions where concurrent mutation is possible. Provider events never invent or accept client `expectedVersion` values; they use unique `(provider, providerEventId)` inbox identity, handler-side compare-and-swap protection, and safe retry/reconciliation.
-- Admin uses purpose-built Core commands/read models and capability-based IAM, never raw tables, Better Auth user rows as Customer records, or a global `isAdmin` authority.
-- Analytics is a derived read-side concern inside the Core modular monolith for the current release. Every published named metric requires one versioned canonical definition; Analytics never owns Customer, Order, Payment, Membership, Promotion, Inventory, Fulfillment, or Delivery state.
-- Customer transaction documents remain provisional until official accounting policy is implemented; they must say `NOT AN OFFICIAL BIR INVOICE` and must not invent seller, taxpayer, serial, or tax facts.
+- request, active ID, exact plan path/phase and acceptance criteria;
+- observed branch/HEAD, relevant partial files and preservation/environment boundaries;
+- implemented behavior separately from local, browser and actual provider acceptance;
+- exact verification commands/results and tested revision or working-tree scope;
+- unresolved obligations/blockers and one concrete next action.
 
-## Design Rules
-
-- Product image administration is ordinary CRUD: upload/preview/replace/remove, primary image, ordering and alt text with normal progress/errors. Do not introduce image-recovery panels, storage-observation/discard commands or cleanup work for catalog operators. Keep storage failure handling internal. The owner authorized the reviewed workflow simplifications on 2026-09-09: ordinary CRUD uses normal Create/Save actions and named choices; internal transaction safeguards do not become operator recovery workspaces. Keep detailed financial diagnostics.
-- Admin generic primitives come from shadcn/ui. Build custom components only for meaningful operational compositions.
-- Admin screens optimize scanning, decisions, queues, exceptions, and repeated actions; do not expose raw CRUD tables as the information architecture.
-- Marketplace UX follows `docs/design/marketplace/DESIGN.md`: mature grocery-commerce patterns inspired by DoorDash, without copying branding or restaurant assumptions.
-- Keep interfaces responsive, accessible, and explicit about loading, empty, error, unavailable, cutoff, and permission states.
-
-## Documentation Router
-
-- The latest saved commerce realignment and full frontend-to-backend checklist is [COMMERCE_ALIGNMENT_E2E_PLAN.md](docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md). It records owner decisions and pending implementation work. Before implementing that realignment, reconcile the canonical business documents in its Phase 0; do not mistake the saved plan or older completion reports for implemented behavior.
-
-- Any architecture or Cloudflare change: read `docs/architecture/ARCHITECTURE.md` and `docs/architecture/API_CONTRACTS.md`.
-- Authentication/session change: read `docs/architecture/ARCHITECTURE.md`, the identity sections of `docs/architecture/DOMAIN_MODEL.md`, `docs/architecture/API_CONTRACTS.md`, and `docs/architecture/DATA_MODEL.md`.
-- Checkout, orders, payments, subscriptions, or delivery cycles: read `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`.
-- Catalog, units, SKUs, pricing, fulfillment modes, or promotions: read `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`; read `STATE_MACHINES.md` when lifecycle or commitment behavior changes.
-- Inventory, procurement, receiving, fulfillment, or delivery: read `DOMAIN_MODEL.md`, `STATE_MACHINES.md`, and `DATA_MODEL.md`.
-- Product scope or sequencing change: read `docs/product/PRODUCT_SCOPE.md` and `docs/product/IMPLEMENTATION_PLAN.md`.
-- Admin or Analytics change: read the Admin/Analytics sections of `DOMAIN_MODEL.md`, `API_CONTRACTS.md`, and `DATA_MODEL.md`, plus `docs/design/admin/DESIGN.md` and `docs/design/admin/COMPONENTS.md` for Admin UI.
-- Marketplace UI change: read `docs/design/marketplace/DESIGN.md` and `docs/design/marketplace/REFERENCES.md`.
-
-## Repository Workflow
-
-- Trunk-based development: this is a single-developer repository; commit directly to `main` and push with `git push origin main`. Full policy: `TRUNK.md`.
-- Do not create feature branches, push branches, or open PRs unless the owner explicitly requests an exception.
-- The `.githooks/pre-push` guard rejects pushes of any branch other than `main`; bypass only with `--no-verify` for an owner-approved exception.
-- Convention checks run locally on every commit (`commit-msg` message convention, `pre-commit` naming) and every push (`pre-push` naming plus commit-message range). There are no GitHub Actions checks.
-- Use separate git worktrees only to protect uncommitted local state, never as a parallel branch strategy; land their commits on `main` promptly.
-
-## Repository and Testing Conventions
-
-- Follow `docs/architecture/NAMING_CONVENTIONS.md`; run `pnpm naming:check` before committing repository structure, packages, migrations, routes, or source files.
-- Keep domain code in `apps/core` unless code is genuinely shared across deployments. Do not fragment packages by noun.
-- Shared contracts must not depend on D1 schemas or infrastructure types.
-- Store money as integer minor units, quantities as integer base units, timestamps as UTC instants, and operational timezone as explicit market data (`Asia/Manila` initially).
-- Keep every schema change reproducible through the migration baseline. Pre-launch redesign/rebasing is allowed under the Schema Lifecycle policy; retained deployments require tested forward upgrades. Application behavior must never rely on manual database edits.
-- Tests must scale with risk and cover domain invariants, legal/illegal transitions, authorization and location scopes, snapshots, idempotency/replay, webhook verification, Queue duplicate/retry/DLQ behavior, and concurrent Instant inventory mutations.
-- Select iteration checks by risk using `TESTING.md`. Implementation-phase completion requires the aggregate checks plus relevant Worker/browser/provider acceptance. Markdown-only changes require document/convention verification, not an unrelated application test suite.
-- Update canonical documentation in the same change when an approved architecture, contract, state, data, scope, or design decision changes.
-- Update `IMPLEMENTATION_STATUS.md` and READMEs only as descriptive, non-authoritative records after the canonical documents agree.
-
-## Phase Execution Rules
-
-- Resolve the active plan by path and phase title before using a phase number; different dated plans reuse numbers. A checkpoint preserves progress and evidence, never changes canonical policy or authorizes another phase.
-- Before every implementation phase, read this file, the engineering guides, `docs/product/IMPLEMENTATION_PLAN.md`, and every relevant canonical architecture/product/design document named by this router.
-- Implement only the authorized phase. Do not silently begin a later phase or change locked business rules because another implementation is easier.
-- If implementation exposes a documentation gap, update the canonical document. Report any material business-rule change instead of assuming it.
-- Before completion, compare work against that phase's acceptance criteria and fix relevant type, lint, test, build, and runtime-validation failures.
-- The final report must state completed work, relevant file/module and schema/RPC changes, actual validation, deviations/risks, and remaining work. Scale detail to the task; do not imply a documentation-only task implemented application behavior.
+Never store credentials, bearer URLs, customer contacts/addresses or raw provider payloads in checkpoints or logs. Use the redacting telemetry boundary. A checkpoint preserves evidence and work, not new authority. At completion report changes, actual checks/limits, completed task IDs and remaining work at a named counting level. Update the owning specifications when an approved rule or interface changes; do not maintain duplicate policy in historical plans.

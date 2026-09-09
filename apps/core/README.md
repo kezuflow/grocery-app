@@ -2,9 +2,9 @@
 
 ## Engineering guidance
 
-Follow [AGENTS.md](../../AGENTS.md), [coding standards](../../docs/architecture/CODING_STANDARDS.md), and [testing guidance](../../docs/architecture/TESTING.md). Core owns commands, domain policy, authorization, persistence, and integration adapters. Guard entire write units, keep per-effect idempotency identities distinct, and test rejection/concurrency outcomes against Worker/D1 behavior.
+Follow [AGENTS.md](../../AGENTS.md), [coding standards](../../docs/architecture/ENGINEERING.md), and [testing guidance](../../docs/architecture/ENGINEERING.md#choose-checks-by-risk). Core owns commands, domain policy, authorization, persistence, and integration adapters. Guard entire write units, keep per-effect idempotency identities distinct, and test rejection/concurrency outcomes against Worker/D1 behavior.
 
-Schema redesign and migration rebasing are allowed before launch under the [lifecycle policy](../../docs/architecture/CODING_STANDARDS.md#pre-launch-schema-and-interface-policy). Reconcile generators, fixtures, contracts, and consumers in the same change; do not preserve old schema only because a historical phase used it.
+Schema redesign and migration rebasing are allowed before launch under the [lifecycle policy](../../docs/architecture/ENGINEERING.md#pre-launch-schema-and-interface-policy). Reconcile generators, fixtures, contracts, and consumers in the same change; do not preserve old schema only because a historical phase used it.
 
 > **Non-authoritative README.** This file is operational/setup guidance and includes historical phase notes. It does not define architecture, domain ownership, lifecycle, or current implementation status; use the canonical set named in `AGENTS.md` and `docs/product/IMPLEMENTATION_STATUS.md`.
 

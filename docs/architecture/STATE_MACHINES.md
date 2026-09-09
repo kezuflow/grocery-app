@@ -1,8 +1,6 @@
 # FreshMarkets State Machines
 
-The owner-authorized 2026-09-07 commerce alignment is the active target. Both modes are pay-as-you-go without membership; Lalamove prices both modes; Scheduled alone permits emergency manual delivery; Global owns exact-location price writes. See [Phase 0 design decisions](COMMERCE_ALIGNMENT_DECISIONS.md) for ownership, capabilities, profiles/closure, warehouse transit, cycle goods, execution attempts, publication and the retained-baseline strategy. Implementation and migration descriptions below are evidence of the previous baseline where explicitly labeled historical, not acceptance of the target.
-
-Engineering enforcement follows [CODING_STANDARDS.md](CODING_STANDARDS.md#commands-state-and-authorization) and [TESTING.md](TESTING.md). Test reachable command paths, rejected-command atomicity, duplicate/reordered events, and cross-context effects; a transition table alone is not proof that implementation obeys it.
+Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
 
 ## Enforcement Rules
 
@@ -30,7 +28,7 @@ Subscription, trial and recurring-billing lifecycles are not active release work
 
 ## Delivery Cycle
 
-DeliveryCycle exists only for `SCHEDULED`; `WEEKLY` is a configured cadence. Global mode switching is an explicit versioned configuration command, not a DeliveryCycle state transition. Operators first pause selling, resolve committed work, activate the new mode, verify location readiness, and reopen. The switch invalidates uncommitted commerce and never advances or rewrites existing Orders.
+DeliveryCycle exists only for `SCHEDULED`; `WEEKLY` is a configured cadence. Global mode switching is an explicit versioned configuration command, not a DeliveryCycle state transition. Operators pause selling, preserve and review committed work, activate the new mode, verify readiness, and reopen. Completion of every historical Order is not a prerequisite. The switch invalidates uncommitted commerce and never advances or rewrites existing Orders.
 
 ```text
 DRAFT -> SCHEDULED -> OPEN -> CUTOFF_REACHED
@@ -189,7 +187,7 @@ Delivery Batch, Delivery Stop sequencing, Rider assignment, internal route previ
 
 ## External Delivery Provider Dispatch
 
-Lalamove prices and normally executes both modes. Customers select no courier. Instant booking is legal after all items are picked/checked and final packing starts. Scheduled future booking requires received/checked goods and a credible ready time. Normal handover requires `PACKED`; conflicting provider pickup evidence is retained and escalated.
+Lalamove prices and normally executes both modes. Customers may choose an available verified courier. Instant automatically starts booking when all items are picked/checked and final packing starts; the durable intent and one-attempt safeguards still apply. Scheduled future booking requires received/checked goods and a credible ready time. Normal handover requires `PACKED`; conflicting provider pickup evidence is retained and escalated.
 
 One active/uncertain execution attempt is allowed per job. Scheduled manual fallback requires definite prior-attempt closure and reason/name/phone. Instant manual delivery is rejected in Core. Searching is distinct from rider assignment; refresh, webhook and inbox recovery share one normalized applying path. Provider cancellation never cancels a grocery Order.
 
@@ -256,10 +254,16 @@ InvoiceReadiness: PENDING_TAX_CONFIGURATION -> READY_FOR_ISSUANCE -> ISSUED
 
 Notification publication and sending are separate persisted facts. A send lease and its required attempt record commit before contacting the provider. Definite pre-send rejection may return to PENDING with bounded backoff, at most five sends. An unknown send outcome stops automatic delivery with `FAILED` / `SEND_OUTCOME_UNKNOWN`; it is not proof that the recipient was not contacted. Expired in-flight attempts, including the fifth attempt, cannot produce a replacement send. A late known result may complete that same attempt atomically. `SENT` records provider acceptance, not verified inbox delivery.
 
-Issue submission is customer-owned, typed, idempotent, and version-safe; staff handling is a separate Admin authority and does not imply a financial action. Customer projection collapses `CLAIMED` and `INVESTIGATING` to `IN_REVIEW` while preserving `SUBMITTED`, `RESOLVED`, and `ESCALATED`. Notification Queue retries never replay the source transition; each message is handled independently with conditional D1 leasing, idempotent send evidence, explicit acknowledgement/retry, bounded backoff, and dead-letter visibility. Invoice readiness advances only when the required approved accounting evidence exists; `ISSUED` additionally requires an immutable identifier, issue instant, seller snapshot, and tax breakdown.
+Issue submission is customer-owned, typed, idempotent, and version-safe; handling by administrators is a separate capability-based authority and does not imply a financial action. Customer projection collapses `CLAIMED` and `INVESTIGATING` to `IN_REVIEW` while preserving `SUBMITTED`, `RESOLVED`, and `ESCALATED`. Notification Queue retries never replay the source transition; each message is handled independently with conditional D1 leasing, idempotent send evidence, explicit acknowledgement/retry, bounded backoff, and dead-letter visibility. Invoice readiness advances only when the required approved accounting evidence exists; `ISSUED` additionally requires an immutable identifier, issue instant, seller snapshot, and tax breakdown.
+
+The approved administrator Problems list presents New / Being handled / Resolved with contact details and a short resolution note. Reconcile the internal issue vocabulary above with those ordinary actions without treating Resolved as refund or delivery success; retained escalation evidence remains truthful. The weekly view and receiving form similarly organize independently owned cycle, purchasing, receiving and fulfillment states rather than merging their authority.
 
 The existing `OrderAmendment` lifecycle applies only to additive paid additions. A customer may draft one active amendment for a committed Scheduled Order before cutoff. Its dedicated `ORDER_AMENDMENT` Payment must reach canonical `SUCCEEDED` before the amendment commits. Failed/expired payment fails the amendment; duplicate provider reactions replay safely.
 
 ## Warehouse Transfer
 
-`DRAFT -> IN_TRANSIT -> PARTIALLY_RECEIVED -> RECEIVED`; a full first receipt may move directly from `IN_TRANSIT` to `RECEIVED`. `DRAFT -> CANCELED` has no stock effects. Dispatched shortages/damage require explicit discrepancy resolution; no deletion reverses dispatch. Dispatch deducts available source stock and creates transit atomically. Receipt credits accepted destination quantities exactly once. Resolution separately records losses or verified returns, then closes all transit.
+`DRAFT -> IN_TRANSIT -> PARTIALLY_RECEIVED -> RECEIVED`; a full first receipt may move directly from `IN_TRANSIT` to `RECEIVED`. `DRAFT -> CANCELED` has no stock effects. Dispatch deducts available source stock and creates transit atomically. Checked receipt credits only newly accepted destination quantities and records the remaining observed damaged/missing quantities. These observations classify outstanding transit and never deduct it or create sellable stock. Rechecking recovered goods may reduce reported damage/shortage and accept them in the same versioned receipt; preserve immutable checking history.
+
+Global resolution records a positive quantity from unclassified, damaged or missing outstanding goods as either a documented loss or a verified physical return. A return credits warehouse sellable stock only after explicit confirmation that the goods were physically received there and inspected as sellable. Damaged/uninspected goods are not eligible for that credit. The selected outstanding category, cumulative loss/return, optional source stock credit, immutable resolution/ledger/audit and command result change atomically. Resolution cannot consume accepted goods or another disposition. No deletion reverses dispatch.
+
+A dispatched transfer stays `IN_TRANSIT` while none has been accepted, or `PARTIALLY_RECEIVED` while acceptance is partial and outstanding goods remain. Once every line is fully accounted, the terminal state is `RECEIVED` only when all dispatched goods were accepted at the destination; otherwise it is `RESOLVED` (one or more losses/returns). Both terminal states have zero outstanding transit and no further receipt/resolution action. Reporting/checking may retain the current active state while advancing the aggregate version.

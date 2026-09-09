@@ -2,7 +2,7 @@
 
 ## Current schema lifecycle
 
-The repository is pre-launch. [AGENTS.md](../../../AGENTS.md) and the [schema lifecycle policy](../../../docs/architecture/CODING_STANDARDS.md#pre-launch-schema-and-interface-policy) permit schema redesign and migration rewriting/squashing when that improves the model. Update repositories, contracts, generators, seeds, verifiers, and tests together; prove clean initialization and document which disposable databases must be recreated.
+The repository is pre-launch. [AGENTS.md](../../../AGENTS.md) and the [schema lifecycle policy](../../../docs/architecture/ENGINEERING.md#pre-launch-schema-and-interface-policy) permit schema redesign and migration rewriting/squashing when that improves the model. Update repositories, contracts, generators, seeds, verifiers, and tests together; prove clean initialization and document which disposable databases must be recreated.
 
 An edited applied file does not upgrade an existing database. Retained/shared data requires a tested upgrade or explicitly authorized reset. After a supported production baseline exists, preserve its applied history and use forward upgrades. Historical phase descriptions below record how the current chain was built; they do not impose permanent pre-launch compatibility.
 

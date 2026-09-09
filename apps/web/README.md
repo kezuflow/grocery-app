@@ -2,7 +2,7 @@
 
 ## Engineering guidance
 
-Follow [AGENTS.md](../../AGENTS.md), [coding standards](../../docs/architecture/CODING_STANDARDS.md), and [testing guidance](../../docs/architecture/TESTING.md). Web is presentation over typed Core Service Bindings. Reuse shared DTOs/structural validation, keep business authorization in Core, and verify loading, error, permission, conflict, keyboard, and focus behavior for changed interactions.
+Follow [AGENTS.md](../../AGENTS.md), [coding standards](../../docs/architecture/ENGINEERING.md), and [testing guidance](../../docs/architecture/ENGINEERING.md#choose-checks-by-risk). Web is presentation over typed Core Service Bindings. Reuse shared DTOs/structural validation, keep business authorization in Core, and verify loading, error, permission, conflict, keyboard, and focus behavior for changed interactions.
 
 Use server reads for initial read-heavy pages, keep client state non-authoritative, and verify relied-on framework behavior against the installed vinext runtime. Do not silently introduce a second Core API or business implementation in route handlers.
 
