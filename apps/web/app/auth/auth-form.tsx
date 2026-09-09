@@ -10,6 +10,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setStatus("");
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
@@ -18,24 +19,29 @@ export function AuthForm({ mode }: { mode: Mode }) {
       mode === "register"
         ? { name: data.name, email: data.email, password: data.password }
         : { email: data.email, redirectTo: "/auth/reset-password" };
-    const response = await fetch(`/api/auth/${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json().catch(() => null)) as {
-      message?: string;
-      error?: string;
-    } | null;
-    setBusy(false);
-    setStatus(
-      response.ok
-        ? mode === "forgot"
-          ? "Reset instructions requested."
-          : "Request completed."
-        : (payload?.message ?? payload?.error ?? "Request failed."),
-    );
+    try {
+      const response = await fetch(`/api/auth/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        error?: string;
+      } | null;
+      setStatus(
+        response.ok
+          ? mode === "forgot"
+            ? "Reset instructions requested."
+            : "Request completed."
+          : (payload?.message ?? payload?.error ?? "Request failed."),
+      );
+    } catch {
+      setStatus("Your request could not be confirmed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

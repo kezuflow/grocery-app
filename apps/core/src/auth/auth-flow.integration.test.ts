@@ -162,7 +162,7 @@ describe("core auth flow", () => {
     expect(sessionBody?.session ?? null).toBeNull();
   });
 
-  it("routes password reset through the injected delivery without logging the url", async () => {
+  it("resets credentials once through the injected delivery without logging the bearer link", async () => {
     const logs = captureLogs();
     const sent: Sent = [];
     const auth = createAuthWithCapture(sent);
@@ -189,9 +189,35 @@ describe("core auth flow", () => {
     expect(forgot.status).toBeLessThan(400);
     expect(sent.at(-1)?.kind).toBe("reset");
     expect(sent.at(-1)?.url).toContain("/reset-password");
+    await env.DB.prepare("UPDATE user SET email_verified=1 WHERE email=?").bind(email).run();
+    const landing = await auth.handler(new Request(sent.at(-1)!.url));
+    expect(landing.status).toBe(302);
+    const token = new URL(landing.headers.get("location")!, baseUrl).searchParams.get("token");
+    expect(Boolean(token)).toBe(true);
+    const reset = () =>
+      auth.handler(
+        new Request(`${baseUrl}/api/auth/reset-password`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: baseUrl },
+          body: JSON.stringify({ token, newPassword: "new-correct-horse-battery-staple" }),
+        }),
+      );
+    expect((await reset()).status).toBe(200);
+    expect((await reset()).status).toBeGreaterThanOrEqual(400);
+    const signIn = (password: string) =>
+      auth.handler(
+        new Request(`${baseUrl}/api/auth/sign-in/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: baseUrl },
+          body: JSON.stringify({ email, password }),
+        }),
+      );
+    expect((await signIn("correct-horse-battery-staple")).status).toBe(401);
+    expect((await signIn("new-correct-horse-battery-staple")).status).toBe(200);
     const logText = logs.flat().join(" ");
     expect(logText).not.toContain(sent.at(-1)!.url);
     expect(logText).not.toContain(email);
+    expect(logText).not.toContain(token);
   });
 
   it("enables the google provider only when both credentials exist", async () => {

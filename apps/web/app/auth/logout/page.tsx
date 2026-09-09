@@ -4,13 +4,27 @@ import { useState } from "react";
 
 export default function LogoutPage() {
   const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [complete, setComplete] = useState(false);
 
   async function logout() {
-    const response = await fetch("/api/auth/sign-out", {
-      method: "POST",
-      credentials: "include",
-    });
-    setStatus(response.ok ? "You are signed out." : "Unable to sign out.");
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/auth/sign-out", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Sign out failed");
+      setComplete(true);
+      setStatus("You are signed out.");
+    } catch {
+      setStatus("Sign out could not be confirmed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -19,9 +33,10 @@ export default function LogoutPage() {
       <button
         type="button"
         onClick={logout}
+        disabled={busy || complete}
         className="w-fit rounded bg-slate-950 px-4 py-2 text-sm font-medium text-white"
       >
-        Sign out
+        {busy ? "Signing out…" : "Sign out"}
       </button>
       {status ? (
         <p role="status" className="text-sm text-slate-600">

@@ -89,7 +89,7 @@ Every numbered criterion is preserved in the archived Product Scope. This table 
 | 21 | CA-3 R2 publication; CA-3.3 closes local GD-D05 five-image CRUD/gallery acceptance. |
 | 22 | CA-7 current-state reorder. |
 | 23 | CA-7 issue intake without refund authority; GD-D11 order-level/admin handling. |
-| 24 | CA-0–2 / CA-7 closure with retained history; irreversible erasure policy open. |
+| 24 | Existing staff closure retains history. Owner deferred the customer-facing closure option on 2026-09-10; preserve its approved intent outside current release acceptance. Irreversible erasure remains unapproved. |
 | 25 | CA-7 invoice-readiness immutable seam; official issuance externally gated. |
 | 26 | CA-1 / CA-7 current quote/payment revalidation and explicit acceptance. |
 | 27 | CA-6 / CA-7 immutable charge and actual cost; no-courier rule superseded GD-D03. |

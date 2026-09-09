@@ -108,6 +108,8 @@ The boundary stays `Web -> typed Service Binding -> Core application command/que
 
 ### E. Customer and staff journeys
 
+Owner correction, 2026-09-10: the customer-facing account-closure option is deferred (PRODUCT). Existing staff closure/review and retained history remain; customer self-service closure is not required for this release. Contact FreshMarkets uses the owner-supplied support address.
+
 - Verify registration/login, Google OAuth where configured, email verification/reset, persistent cookies, logout, and disabled-principal enforcement through Web and Core.
 - Complete initial Global administrator bootstrap as documented setup, then staff invitation acceptance, activation, roles and location scopes. Invitation expiry/replay and wrong-identity acceptance must be handled.
 - Global customer administration supports list/detail, invitation/provisioning linked to real auth identity, updates only to approved application-owned profile/support fields, and disabling/closure. Better Auth remains the credential/session authority; recipients and delivery phone remain address-owned.

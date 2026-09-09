@@ -4,6 +4,8 @@ The owner identifies SIMPLIFICATION_DISCUSSION.md as the product authority. This
 
 ## Decision reconciliation
 
+Owner supplement, 2026-09-10: customer-facing account-closure requests are deferred from the current release. The agreed intent remains recorded in SIMPLIFICATION_DISCUSSION; do not add the option or count it as an active completion requirement. Existing staff closure/review and indefinite record-retention safeguards remain intact. The owner supplied `support@freshmarkets.ph` for Contact FreshMarkets; publishing its contact link does not authorize sending email.
+
 The decision map below names approved changes to the older baseline and the remaining implementation boundaries. Do not recover the superseded business rule from archived documents or infer missing technical policy from the discussion. Continue work that conforms to the discussion. Before adding a feature beyond it, discuss that feature with the owner. Before changing an approved workflow, design and verify its affected contracts, storage and safeguards. An open implementation/design gap is not permission to invent an answer.
 
 | ID / decision source | Approved product intent | Implementation boundary / unresolved details |

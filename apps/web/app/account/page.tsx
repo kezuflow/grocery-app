@@ -21,6 +21,15 @@ export default function AccountPage() {
         <Link href="/orders" className="font-medium underline">
           Order history
         </Link>
+        <Link href="/auth/forgot-password" className="font-medium underline">
+          Reset your password
+        </Link>
+        <Link href="/auth/logout" className="font-medium underline">
+          Sign out
+        </Link>
+        <a href="mailto:support@freshmarkets.ph" className="font-medium underline">
+          Contact FreshMarkets
+        </a>
       </div>
     </StorefrontShell>
   );
