@@ -35,7 +35,7 @@ Lalamove quotation remains a checkout dependency even when a Scheduled order may
 
 ## 2. What exists and what needs completion
 
-These observations come from the code/document review and targeted contract inspection. Recheck them at phase start; an implemented primitive is not a completed business journey.
+This section preserves the 2026-09-07 starting assessment, not current implementation status. Use the active checkpoint's evidence and remaining obligations; do not restart these original gaps from this table. An implemented primitive is not a completed business journey.
 
 Repository handoff update, 2026-09-07: staff invitation creation now saves explicit roles/scopes, and verified invitees have Core acceptance commands plus a Web review/acceptance page. This is partial Phase 2 implementation; complete setup/onboarding and browser acceptance remain open. The schema/policy remediation and staff work are being saved together on main so the next task can inspect one complete source baseline. Recheck actual commands and the latest implementation status rather than assuming any phase is accepted.
 
@@ -82,7 +82,7 @@ The boundary stays `Web -> typed Service Binding -> Core application command/que
 - Complete public image delivery through a same-origin Web media adapter backed by a Core-authorized published-media read. Anonymous customers can see published catalog/campaign images; draft/inactive media and private provider evidence remain protected. Use opaque media identity/version, bounded caching, ETags, and explicit invalidation on replacement/deactivation.
 - Make home, search/category, product detail and cart consume Core's canonical R2 media. Replace bundled-image authority; migrate needed development images or use explicit placeholders during the pre-launch reset. Do not require shipping a new frontend build for each upload.
 - D1 owns attachment/publication metadata. Handle failed metadata attachment, failed object cleanup, replacement races, and retry internally without orphaned active records or fabricated success. Catalog operators only use ordinary image actions; they do not manage storage or cleanup.
-- Complete promotion create/preview/activate/deactivate, dates, targets, usage limits, merchandise benefits and delivery discounts with the existing one-merchandise-plus-one-delivery stacking policy. Images do not make an expired/ineligible campaign applicable.
+- Complete promotion create/preview/activate/deactivate, dates, targets, usage limits, merchandise benefits and delivery discounts under PRODUCT GD-D06–07: one sale per item, one grocery code on eligible full-price items, and one delivery benefit. Images do not make an expired/ineligible campaign applicable.
 
 **Acceptance:** Upload a new product image and promotion image in Admin; a fresh anonymous storefront renders them without a rebuild. Replace/remove/deactivate them and observe the correct public result. Reject oversized, disguised, unauthorized, and wrong-owner uploads; verify storage/metadata recovery on failure.
 
@@ -114,7 +114,7 @@ Owner correction, 2026-09-10: the customer-facing account-closure option is defe
 - Complete initial Global administrator bootstrap as documented setup, then staff invitation acceptance, activation, roles and location scopes. Invitation expiry/replay and wrong-identity acceptance must be handled.
 - Global customer administration supports list/detail, invitation/provisioning linked to real auth identity, updates only to approved application-owned profile/support fields, and disabling/closure. Better Auth remains the credential/session authority; recipients and delivery phone remain address-owned.
 - Customer account/address book supports add/edit/deactivate saved addresses, structured instructions, phone and pin confirmation. Referenced order snapshots are not rewritten.
-- Customer deletion means controlled closure/anonymization where allowed, not cascading deletion of orders/payments/audit evidence. Define the actual permitted profile fields and retention-sensitive closure policy during Phase 0; do not invent legal retention facts.
+- Preserve existing staff closure/review without cascading deletion of orders/payments/audit evidence. Customer self-service closure is owner-deferred; records are retained indefinitely under PRODUCT. Irreversible anonymization and official accounting details remain separate decisions/inputs.
 - Remove membership gates and active subscription/trial/billing navigation, commands/jobs, checkout errors, notifications, and promotional eligibility. Retain only compatibility actually required by retained environments under the pre-launch policy.
 
 **Acceptance:** A newly registered customer with no subscription completes either mode. A newly invited local operator can handle their site and cannot access Global pricing, another site's work, or raw auth records.
@@ -167,7 +167,7 @@ Owner correction, 2026-09-10: the customer-facing account-closure option is defe
 
 ## 4. Audit defects to resolve before completion
 
-These remain open until reproduced and fixed with regression evidence. The earlier review used targeted in-memory probes; re-run in the relevant Worker/D1 integration harness for acceptance.
+These original findings require Worker/D1 regression evidence, not just the earlier in-memory probes. The active checkpoint maps each finding to executed acceptance and preserves any remaining limits; this list is not a second current-state ledger.
 
 | Finding                                                                                                 | Required repair and regression                                                                                                 |
 | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -223,7 +223,7 @@ Every phase includes the UI/Core/contract/storage tests for the capability it co
 
 | Phase                                          | Deliverable and exit condition                                                                                                                                                                                                                                                                                                            |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0 — Canonical reconciliation and schema design | Align AGENTS, architecture/domain/states/data/contracts/scope with the agreed decisions, map real implementation gaps, define profile/closure fields and proposed capabilities, and choose a coherent pre-launch baseline/reset or retained-data upgrade strategy. Do not build atop obsolete membership/external-only/local-price rules. |
+| 0 — Canonical reconciliation and schema design | Align AGENTS, architecture/domain/states/data/contracts/scope with the agreed decisions, map real implementation gaps, record approved profile fields, deferred self-service closure and explicit capabilities, and choose a coherent pre-launch baseline/reset or retained-data upgrade strategy. Do not build atop obsolete membership/external-only/local-price rules. |
 | 1 — Commerce correctness                       | Reproduce and fix payment, commitment, ledger, hold, cancellation, receiving atomicity and provider projection defects; ensure paid operations have durable recovery.                                                                                                                                                                     |
 | 2 — Setup and access                           | Global/staff/customer onboarding and scoped access; location create/address/coordinates/capabilities/geofence/readiness; cycle/window authoring. New operational setup is usable without SQL.                                                                                                                                             |
 | 3 — Catalog, images, promotions and pricing    | End-to-end R2 product/campaign publication, complete Global catalog and price authoring, local activation/read-only prices, promotion authoring/checkout application.                                                                                                                                                                     |

@@ -1,4 +1,4 @@
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, StrictMode, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- the bundled jsdom test runtime does not publish declarations.
@@ -90,6 +90,26 @@ function response(addresses: ReadonlyArray<CustomerAddressView>): Response {
   return Response.json({ ok: true, value: addresses, requestId: crypto.randomUUID() });
 }
 
+function addressAndProfileReads(addressRead: () => Promise<Response>) {
+  return vi.fn((url: string) =>
+    url === "/api/commerce/address"
+      ? addressRead()
+      : Promise.resolve(
+          Response.json({
+            ok: true,
+            value: {
+              customerId: "customer-1",
+              accountPhone: null,
+              defaultAddressId: null,
+              preferredLanguage: null,
+              promotionalEmails: false,
+              version: 1,
+            },
+          }),
+        ),
+  );
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((next) => {
@@ -134,11 +154,11 @@ describe("AddressBookClient", () => {
   });
 
   it("opens a serviceable saved address in the versioned editor and refreshes after save", async () => {
-    const fetchMock = vi
+    const addressRead = vi
       .fn()
       .mockResolvedValueOnce(response([baseAddress]))
       .mockResolvedValueOnce(response([{ ...baseAddress, recipient: "Bea Santos", version: 3 }]));
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", addressAndProfileReads(addressRead));
 
     act(() => root.render(<AddressBookClient />));
     await flush();
@@ -149,23 +169,31 @@ describe("AddressBookClient", () => {
     click(container, "Complete address save");
     await flush();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(addressRead).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Bea Santos");
     expect(container.textContent).toContain("Delivery address saved and refreshed");
   });
 
-  it("ignores an older initial address response that resolves after a post-save refresh", async () => {
+  it("ignores a superseded mount response that arrives after the saved-address refresh", async () => {
     const initial = deferred<Response>();
     const refreshed = deferred<Response>();
-    const fetchMock = vi
+    const addressRead = vi
       .fn()
       .mockReturnValueOnce(initial.promise)
+      .mockResolvedValueOnce(response([baseAddress]))
       .mockReturnValueOnce(refreshed.promise);
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", addressAndProfileReads(addressRead));
 
-    act(() => root.render(<AddressBookClient />));
+    act(() =>
+      root.render(
+        <StrictMode>
+          <AddressBookClient />
+        </StrictMode>,
+      ),
+    );
+    await flush();
     click(container, "Complete address save");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(addressRead).toHaveBeenCalledTimes(3);
 
     refreshed.resolve(response([{ ...baseAddress, id: "address-new", label: "Current" }]));
     await flush();

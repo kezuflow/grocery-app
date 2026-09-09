@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import type { AdminOverviewView, RpcResult } from "@freshmarkets/contracts";
 import { expect, test } from "./admin-authenticated-fixture";
 
 const viewports = [
@@ -7,17 +8,7 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ] as const;
 
-let stackUp = false;
-test.beforeAll(async ({ request }) => {
-  try {
-    stackUp = (await request.get("/")).status() < 500;
-  } catch {
-    stackUp = false;
-  }
-});
-test.beforeEach(async () => {
-  test.skip(!stackUp, "Local stack is not running; start web+core to execute visual regression.");
-});
+test.describe.configure({ timeout: 180000 });
 
 function json(value: unknown) {
   return { contentType: "application/json", body: JSON.stringify(value) };
@@ -33,6 +24,7 @@ async function installDeterministicReads(page: Page) {
       generatedAt: "2026-08-31T08:00:00.000Z",
       selectedScope: { kind: "GLOBAL" },
       timezone: "Asia/Manila",
+      notifications: [],
       cards: [
         {
           code: "OPEN_ORDERS",
@@ -42,7 +34,7 @@ async function installDeterministicReads(page: Page) {
           href: "/admin/orders",
         },
         {
-          code: "PAYMENT_ACTION",
+          code: "ACTION_REQUIRED_PAYMENTS",
           label: "Payments requiring action",
           value: 3,
           unavailableReason: null,
@@ -118,7 +110,7 @@ async function installDeterministicReads(page: Page) {
       },
       deniedSections: [],
     },
-  };
+  } satisfies RpcResult<AdminOverviewView>;
   await page.route("**/api/admin/bootstrap?**", async (route) => {
     const response = await route.fetch();
     const payload = (await response.json()) as {
@@ -228,13 +220,13 @@ async function installDeterministicReads(page: Page) {
             approvedAt: "2026-08-01T00:00:00.000Z",
           },
           {
-            code: "aov",
+            code: "refund_amount",
             version: 1,
-            displayName: "Average order value",
+            displayName: "Money refunded",
             category: "FINANCE",
-            formulaDescription: "Unavailable until accounting policy is approved.",
+            formulaDescription: "Successful refunds by first confirmation date.",
             availability: "UNAVAILABLE",
-            unavailableReason: "ACCOUNTING_POLICY_UNRESOLVED",
+            unavailableReason: "Retained refund confirmation dates are unavailable.",
             dimensions: ["currency"],
             freshness: null,
             approvedAt: null,
@@ -270,11 +262,11 @@ async function installDeterministicReads(page: Page) {
               dimensions: [],
             },
             {
-              metricCode: "aov",
+              metricCode: "refund_amount",
               definitionVersion: 1,
               availability: "UNAVAILABLE",
               value: null,
-              unavailableReason: "ACCOUNTING_POLICY_UNRESOLVED",
+              unavailableReason: "Retained refund confirmation dates are unavailable.",
               dimensions: [{ key: "currency", value: "PHP" }],
             },
           ],
@@ -312,23 +304,6 @@ async function installDeterministicReads(page: Page) {
       }),
     ),
   );
-  await page.route("**/api/admin/commerce-configuration/membership-price", (route) =>
-    route.fulfill(
-      json({
-        ok: true,
-        requestId: "visual-price",
-        value: {
-          priceVersionId: "price-v7",
-          offerId: "membership-global",
-          amountMinor: 29_900,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 7,
-        },
-      }),
-    ),
-  );
   await page.route("**/api/admin/commerce-configuration", (route) =>
     route.fulfill(
       json({
@@ -356,6 +331,13 @@ async function capture(
   await page.goto(route);
   await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
   await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0);
+  if (route === "/admin/analytics") {
+    // Temporal's date source is independent of Playwright's Date clock.
+    await page.getByLabel("From", { exact: true }).fill("2026-08-01");
+    await page.getByLabel("Through", { exact: true }).fill("2026-08-31");
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(page.getByText("2026-08-01 through 2026-08-31", { exact: false })).toBeVisible();
+  }
   if (readyText) await expect(page.getByText(readyText, { exact: true }).first()).toBeVisible();
   if (name.endsWith("-mobile.png")) {
     const overflow = await page.evaluate(() => ({
@@ -416,12 +398,6 @@ for (const viewport of viewports) {
       "/admin/settings/fulfillment-mode",
       "Fulfillment mode",
       `settings-${viewport.name}.png`,
-    );
-    await capture(
-      adminPage,
-      "/admin/commerce-configuration",
-      "Membership pricing",
-      `commerce-configuration-${viewport.name}.png`,
     );
   });
 }

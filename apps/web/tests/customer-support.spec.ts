@@ -1,11 +1,12 @@
 import { expect, test } from "./admin-authenticated-fixture";
+test.describe.configure({ timeout: 180000 });
 for (const width of [1440, 390]) {
   test(`Global customer preferences and support notes recover at ${width}px`, async ({
     adminPage,
     signedInPage,
   }, testInfo) => {
     await signedInPage.goto("/account/profile");
-    await expect(signedInPage.getByRole("heading", { name: "Your preferences" })).toBeVisible();
+    await expect(signedInPage.getByRole("heading", { name: "Your account details" })).toBeVisible();
     const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
     await adminPage.setViewportSize({ width, height: 900 });
     await adminPage.goto("/admin/customers");

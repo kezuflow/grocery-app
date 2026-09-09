@@ -1,9 +1,14 @@
 import { test, expect } from "./admin-authenticated-fixture";
-test("Global creates a customer site through operating hours, pickup, service area and readiness", async ({
+test.describe.configure({ timeout: 240000 });
+test("Global creates a ready site and a customer confirms delivery there", async ({
   adminPage: page,
+  page: customer,
 }, testInfo) => {
-  test.setTimeout(180000);
   const name = `Customer site ${crypto.randomUUID().slice(0, 8)}`;
+  const coordinate = {
+    latitude: 10.445 + Math.random() / 1000,
+    longitude: 123.975 + Math.random() / 1000,
+  };
   await page.setViewportSize({ width: 390, height: 950 });
   await page.goto("/admin/locations");
   await page.getByRole("button", { name: "Add location", exact: true }).click();
@@ -17,8 +22,8 @@ test("Global creates a customer site through operating hours, pickup, service ar
     ["Address line 1", "Test dispatch road"],
     ["City", "Cebu"],
     ["Region", "Cebu"],
-    ["Confirmed latitude", "10.32"],
-    ["Confirmed longitude", "123.91"],
+    ["Confirmed latitude", String(coordinate.latitude)],
+    ["Confirmed longitude", String(coordinate.longitude)],
     ["Reason for this change", "Set up customer dispatch site"],
   ]) {
     await page.getByLabel(field, { exact: true }).fill(value);
@@ -84,10 +89,10 @@ test("Global creates a customer site through operating hours, pickup, service ar
   for (const label of ["Service area boundary", "Zone 1 boundary"]) {
     const boundary = page.getByRole("group", { name: label, exact: true });
     for (const [latitude, longitude] of [
-      [10.2, 123.8],
-      [10.2, 124],
-      [10.5, 124],
-      [10.5, 123.8],
+      [10.44, 123.97],
+      [10.44, 123.99],
+      [10.46, 123.99],
+      [10.46, 123.97],
     ]) {
       await page.getByLabel(`${label} latitude`, { exact: true }).fill(String(latitude));
       await page.getByLabel(`${label} longitude`, { exact: true }).fill(String(longitude));
@@ -107,6 +112,9 @@ test("Global creates a customer site through operating hours, pickup, service ar
   await expect(page.getByRole("status")).toContainText("Service area published");
   await page.goto("/admin/locations");
   await page.getByRole("link", { name: `Fulfillment readiness for ${name}`, exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/locations\/[^/]+\/fulfillment$/);
+  const locationId = new URL(page.url()).pathname.split("/")[3];
+  expect(locationId).toBeTruthy();
   await page.getByRole("checkbox", { name: "Ready to dispatch customer orders" }).check();
   await page.getByLabel("Instant delivery promise (minutes)", { exact: true }).fill("60");
   await page
@@ -125,4 +133,61 @@ test("Global creates a customer site through operating hours, pickup, service ar
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
   await page.screenshot({ path: testInfo.outputPath("customer-site-ready.png"), fullPage: true });
+
+  await page.goto("/admin/locations/service-areas");
+  await page.getByLabel("Preview latitude", { exact: true }).fill(String(coordinate.latitude));
+  await page.getByLabel("Preview longitude", { exact: true }).fill(String(coordinate.longitude));
+  await page.getByRole("button", { name: "Preview routing", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(name);
+
+  // Only transient search is synthetic. Confirmation and routing use the actual
+  // Core commands with the test-only permanent geocoder transport.
+  const candidate = {
+    candidateKey: "synthetic-new-site-entrance",
+    displayAddress: "Test new-site entrance, Cebu",
+    coordinate,
+    components: {
+      addressLine1: "Test new-site entrance",
+      addressLine2: null,
+      barangay: null,
+      city: "Cebu",
+      region: "Cebu",
+      postalCode: null,
+      countryCode: "PH",
+    },
+    accuracy: "rooftop",
+  };
+  await customer.route("**/api/commerce/address-search", (route) =>
+    route.fulfill({
+      json: { ok: true, value: [candidate], requestId: "synthetic-geocoder" },
+    }),
+  );
+  await customer.setViewportSize({ width: 390, height: 950 });
+  await customer.goto("/");
+  const dialog = customer.getByRole("dialog", { name: "Choose delivery address", exact: true });
+  await dialog.getByRole("textbox", { name: /^Search for an address/ }).fill("Test new-site");
+  await dialog.getByRole("button", { name: candidate.displayAddress, exact: true }).click();
+  await expect(dialog.getByText("Delivery is available", { exact: true })).toBeVisible();
+  let confirmation: unknown;
+  await customer.route("**/api/commerce/browsing-location", async (route) => {
+    const response = await route.fetch();
+    confirmation = await response.json();
+    await route.fulfill({ response });
+  });
+  await dialog.getByRole("button", { name: "Deliver here", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(confirmation).toMatchObject({
+    ok: true,
+    value: {
+      coordinate: candidate.coordinate,
+      serviceability: { serviceable: true, fulfillmentLocation: { id: locationId, name } },
+    },
+  });
+  await expect(
+    customer.getByRole("button", { name: "Choose delivery address", exact: true }),
+  ).toContainText("Confirmed delivery entrance");
+  await customer.screenshot({
+    path: testInfo.outputPath("customer-site-selected.png"),
+    fullPage: true,
+  });
 });

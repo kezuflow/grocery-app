@@ -209,7 +209,7 @@ export function CartDrawer() {
                       }
                     : undefined
                 }
-                note="Minimum order, availability, and delivery are confirmed at checkout."
+                note="Availability and delivery are confirmed at checkout."
                 disabled={cart?.checkoutBlocked}
               />
             </div>

@@ -95,9 +95,7 @@ export function OrderSummary({
 
       <div className="mt-4 flex gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
         <Info className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]" aria-hidden="true" />
-        <span>
-          {note ?? "Minimum order, availability, and delivery are confirmed at checkout."}
-        </span>
+        <span>{note ?? "Availability and delivery are confirmed at checkout."}</span>
       </div>
 
       {actionHref ? (

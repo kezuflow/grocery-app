@@ -377,8 +377,8 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
               <div className="mt-6 rounded-[var(--fm-radius-surface)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] p-5">
                 <p className="font-semibold">Sign in to continue with this saved cart.</p>
                 <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                  Your items stay saved while you sign in. The current minimum order is checked by
-                  Core.
+                  Your items stay saved while you sign in. Review current availability and delivery
+                  before payment.
                 </p>
                 <Link
                   href="/auth/login?returnTo=/checkout"
@@ -548,7 +548,7 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
               actionHref={guest ? "/auth/login?returnTo=/checkout" : undefined}
               onAction={pendingQuote ? confirmPayment : undefined}
               disabled={guest ? false : !pendingQuote}
-              note="Minimum order, availability, serviceability, and delivery fees are confirmed by Core."
+              note="Availability, delivery coverage and fees are confirmed at checkout."
             />
           </div>
         </div>

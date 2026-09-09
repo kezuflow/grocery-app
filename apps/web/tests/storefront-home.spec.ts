@@ -1,32 +1,35 @@
 import { expect, test } from "@playwright/test";
 
-/**
- * Storefront marketplace flows against a provisioned local stack. Skips when
- * the stack is unreachable so repository verification stays environment-safe.
- * Anonymous interactions assert the authentication boundary: browsing is
- * public, cart mutation requires a signed-in customer.
- */
-let stackUp = false;
-test.beforeAll(async ({ request }) => {
-  try {
-    const response = await request.get("/");
-    stackUp = response.status() < 500;
-  } catch {
-    stackUp = false;
-  }
+// These catalog tests start with a previously selected synthetic location.
+// first-visit-cart.spec.ts executes the actual first-visit confirmation/carryover.
+test.beforeEach(async ({ page, baseURL }) => {
+  if (!baseURL) throw new Error("A local application URL is required");
+  const coordinate = { latitude: 10.32, longitude: 123.9 };
+  await page.context().addCookies([
+    {
+      name: "freshmarkets_browse_point_v2",
+      value: encodeURIComponent(JSON.stringify(coordinate)),
+      url: baseURL,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.addInitScript(
+    (point) =>
+      localStorage.setItem(
+        "freshmarkets.delivery-location.v2",
+        JSON.stringify({ displayAddress: "Synthetic selected location", coordinate: point }),
+      ),
+    coordinate,
+  );
 });
-test.beforeEach(async () => {
-  test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
-});
-
-test("the marketplace home server-renders categories, rails, and membership context", async ({
+test("the marketplace home server-renders categories and prices for the selected location", async ({
   page,
 }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Shop fresh, live well" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Daily Deals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fruits", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fresh this week" })).toHaveCount(0);
-  await expect(page.getByText("Membership eligibility is checked at checkout.")).toBeVisible();
+  await expect(page.getByText("Membership eligibility is checked at checkout.")).toHaveCount(0);
   // Cards stay concise: product identity and the selected starting price.
   const strawberryCard = page
     .getByRole("article")
@@ -36,69 +39,31 @@ test("the marketplace home server-renders categories, rails, and membership cont
   await expect(strawberryCard.getByText("₱179.00")).toBeVisible();
 });
 
-test("the membership offer returns after a full page refresh", async ({ page }) => {
-  await page.route("**/api/membership", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        value: {
-          offer: {
-            offerId: "membership-monthly",
-            code: "MEMBERSHIP_MONTHLY",
-            name: "FreshMarkets Membership",
-            amountMinor: 29_900,
-            currency: "PHP",
-            billingInterval: "CALENDAR_MONTH",
-          },
-          subscription: null,
-          introductoryTrial: {
-            status: "AVAILABLE",
-            eligible: true,
-            duration: "CALENDAR_MONTH",
-          },
-          recurringAuthorization: { status: "REQUIRED", ready: false },
-          actions: {
-            startTrial: {
-              available: true,
-              disabledReason: null,
-            },
-            beginPaidEnrollment: { available: true, disabledReason: null },
-            pause: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-            resume: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-            cancelImmediately: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-            cancelAtPeriodEnd: { available: false, disabledReason: "SUBSCRIPTION_REQUIRED" },
-          },
-        },
-        requestId: "membership-offer",
-      }),
-    }),
-  );
+test("membership offers stay absent after a full page refresh", async ({ page }) => {
+  const membershipRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/membership"))
+      membershipRequests.push(request.method());
+  });
   await page.goto("/");
-  await page.waitForLoadState("networkidle");
-  const offer = page.getByRole("complementary", { name: "FreshMarkets membership offer" });
-
-  await expect(offer).toBeVisible();
-  await page.getByRole("button", { name: "Dismiss membership offer" }).click();
-  await expect(offer).toBeHidden();
-
+  await expect(page.getByRole("heading", { name: "Fruits", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "FreshMarkets membership offer" }),
+  ).toHaveCount(0);
   await page.reload();
-  await page.waitForLoadState("networkidle");
-  await expect(offer).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fruits", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "FreshMarkets membership offer" }),
+  ).toHaveCount(0);
+  expect(membershipRequests).toEqual([]);
 });
-
-test("daily deals advances with gallery controls", async ({ page }) => {
+test("a category rail advances with its browse controls", async ({ page }) => {
   await page.goto("/");
-  const gallery = page.getByTestId("daily-deals-gallery");
-  const before = await gallery.evaluate((element) => element.scrollLeft);
-
-  await page.getByRole("button", { name: "Next deal" }).click();
-  await expect
-    .poll(() => gallery.evaluate((element) => element.scrollLeft))
-    .toBeGreaterThan(before);
+  const previous = page.getByRole("button", { name: "Previous Fruits products", exact: true });
+  await expect(previous).toBeDisabled();
+  await page.getByRole("button", { name: "Next Fruits products", exact: true }).click();
+  await expect(previous).toBeEnabled();
 });
-
 test("category navigation filters the catalog server-side", async ({ page }) => {
   await page.goto("/?category=fruits");
   await expect(page.getByRole("heading", { name: "Fruits", level: 2 })).toBeVisible();
@@ -130,37 +95,37 @@ test("a product card opens the quick-view dialog with fixed variants", async ({ 
 test("anonymous add-to-cart saves the item and offers sign-in without redirecting", async ({
   page,
 }) => {
-  await page.goto("/");
-  const addButton = page.getByRole("button", { name: "Add Baguio Strawberries to cart" }).first();
+  await page.goto("/?q=red%20onion");
+  const addButton = page.getByRole("button", { name: "Add Red onion to cart" }).first();
   await addButton.click();
   await expect(
-    page.getByRole("status").filter({ hasText: "Baguio Strawberries added to your cart" }),
+    page.getByRole("status").filter({ hasText: "Red onion added to your cart" }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Cart, 1 item" })).toBeVisible();
   // Browsing context is preserved.
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/?q=red%20onion");
 });
 
 test("guest cart remains visible and asks for sign-in before checkout", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Add Baguio Strawberries to cart" }).first().click();
+  await page.goto("/?q=red%20onion");
+  await page.getByRole("button", { name: "Add Red onion to cart" }).first().click();
   await page.getByRole("link", { name: "Cart, 1 item" }).click();
   const drawer = page.getByRole("dialog", { name: "Shopping cart" });
   await expect(drawer.getByRole("heading", { name: "Your cart" })).toBeVisible();
-  await expect(drawer.getByText("Baguio Strawberries", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Red onion", { exact: true })).toBeVisible();
   await expect(drawer.getByText("Sign in to checkout")).toBeVisible();
-  await expect(drawer.getByText(/minimum order.*confirmed at checkout/i)).toBeVisible();
+  await expect(drawer.getByText(/minimum order/i)).toHaveCount(0);
 });
 
 test("guest cart survives client navigation after an anonymous add", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Add Baguio Strawberries to cart" }).first().click();
+  await page.goto("/?q=red%20onion");
+  await page.getByRole("button", { name: "Add Red onion to cart" }).first().click();
   await expect(page.getByRole("link", { name: "Cart, 1 item" })).toBeVisible();
   await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "Cart" })).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Cart items" }).getByText("Baguio Strawberries"),
+    page.getByRole("region", { name: "Cart items" }).getByText("Red onion"),
   ).toBeVisible();
 });
 
@@ -172,8 +137,9 @@ test("an empty signed-out cart does not show a load error", async ({ page }) => 
 test("home uses a DoorDash-style discovery hierarchy", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("storefront-category-strip")).toBeVisible();
-  await expect(page.getByTestId("storefront-promo-banner")).toBeVisible();
-  await expect(page.getByTestId("storefront-membership-strip")).toBeVisible();
+  // Published campaign images are covered by promotion-media.spec.ts; an empty campaign list has no banner.
+  await expect(page.getByRole("heading", { name: "Fruits", exact: true })).toBeVisible();
+  await expect(page.getByTestId("storefront-membership-strip")).toHaveCount(0);
   await expect(
     page.getByTestId("storefront-category-strip").getByText("All groceries"),
   ).toBeVisible();
@@ -188,6 +154,7 @@ test("empty cart uses the shared storefront summary and recovery state", async (
 
 test("checkout uses Core-routed delivery options and a shared order summary", async ({ page }) => {
   await page.goto("/checkout");
+  await expect(page.getByText(/minimum order/i)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Delivery details" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Promotion codes" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Delivery option" })).toBeVisible();
@@ -236,9 +203,10 @@ test("an assembled chili pack leads with its contents note and no ops instructio
   await expect(page.getByText(/Approximately 10–15 chili peppers per pack/).first()).toBeVisible();
   await expect(page.getByText("Pack 100 g per bag.")).toHaveCount(0);
   const image = page.getByRole("img", { name: /Siling Labuyo/ }).first();
-  await expect
-    .poll(async () => image.evaluate((element) => (element as HTMLImageElement).naturalWidth))
-    .toBeGreaterThan(0);
+  // This catalog fixture has no published R2 image; its accessible fallback is
+  // a leaf placeholder, not an HTML image with naturalWidth. Publication has dedicated E2E coverage.
+  await expect(image).toBeVisible();
+  await expect(image.locator("svg")).toBeVisible();
 });
 
 test("weight-sold staples keep their fixed gram variants", async ({ page }) => {

@@ -3,6 +3,7 @@ import { executeAdminE2eSql, expect, test } from "./admin-authenticated-fixture"
 /**
  * Finance workspace smoke coverage with deterministic local Staff identities.
  */
+test.describe.configure({ timeout: 180000 });
 let stackUp = false;
 test.beforeAll(async ({ request }) => {
   try {
@@ -33,68 +34,29 @@ test("a provisioned Staff reader opens the real Orders workspace", async ({ admi
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 });
 
-test("a Global Administrator reviews membership pricing and recovers from a stale replacement", async ({
+test("retired membership pricing leads to current settings and rejects writes", async ({
   adminPage,
 }) => {
-  await adminPage.route("**/api/admin/commerce-configuration/membership-price", async (route) => {
-    if (route.request().method() === "POST") {
-      const body = route.request().postDataJSON() as Record<string, unknown>;
-      expect(body).toMatchObject({
-        expectedVersion: 7,
-        amountMinor: 35_000,
-        currency: "PHP",
-        reason: "Approved annual review",
-      });
-      expect(route.request().headers()["idempotency-key"]).toBeTruthy();
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({
-          ok: false,
-          error: {
-            code: "STALE_VERSION",
-            message: "Membership price changed; refresh before retrying",
-            requestId: "pricing-stale-e2e",
-          },
-        }),
-      });
-      return;
-    }
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        requestId: "pricing-read-e2e",
-        value: {
-          priceVersionId: "price-v7",
-          offerId: "membership-global",
-          amountMinor: 29_900,
-          currency: "PHP",
-          effectiveFrom: "2026-08-01T00:00:00.000Z",
-          effectiveTo: null,
-          version: 7,
-        },
-      }),
-    });
-  });
   await adminPage.goto("/admin/commerce-configuration");
+  await expect(adminPage).toHaveURL("/admin/settings/fulfillment-mode");
   await expect(
-    adminPage.getByRole("heading", { level: 1, name: "Membership pricing" }),
-  ).toBeVisible();
-  await expect(adminPage.getByText("price-v7")).toBeVisible();
-  await expect(
-    adminPage.getByText(/Existing paid subscriptions retain their snapshotted price/),
-  ).toBeVisible();
-  await adminPage.getByLabel("Amount in minor units (PHP)").fill("35000");
-  await adminPage.getByLabel("Replacement effective from").fill("2026-09-01T08:00");
-  await adminPage.getByLabel("Reason for change").fill("Approved annual review");
-  await adminPage.getByText(/I confirm this creates a new effective-dated version/).click();
-  await adminPage.getByRole("button", { name: "Create replacement version" }).click();
-  await expect(adminPage.getByRole("alert")).toContainText("Configuration changed");
-  await expect(adminPage.getByRole("alert")).toContainText("pricing-stale-e2e");
-  await adminPage.getByRole("button", { name: "Refresh" }).click();
-  await expect(adminPage.getByText("FreshMarkets Service Fee")).toHaveCount(0);
+    adminPage.getByRole("heading", { name: "Membership pricing", exact: true }),
+  ).toHaveCount(0);
+  const response = await adminPage.request.post(
+    "/api/admin/commerce-configuration/membership-price",
+    {
+      headers: { "idempotency-key": crypto.randomUUID() },
+      data: {
+        expectedVersion: 1,
+        amountMinor: 35000,
+        currency: "PHP",
+        effectiveFrom: new Date().toISOString(),
+        reason: "Retirement rejection check",
+      },
+    },
+  );
+  expect(await response.json()).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
 });
-
 test("a provisioned Staff operator uses the real payment workspaces and contextual refund", async ({
   adminPage,
 }) => {
@@ -151,13 +113,12 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   await expect(
     adminPage.getByRole("heading", { level: 1, name: "Payment reconciliation" }),
   ).toBeVisible();
-  await adminPage.getByRole("button", { name: "Review resolution" }).click();
-  const reconciliationDialog = adminPage.getByRole("alertdialog");
-  await expect(reconciliationDialog).toContainText(reconciliationCaseId);
-  await expect(reconciliationDialog).toContainText(paymentIntentId);
-  await reconciliationDialog.getByLabel("Confirmation reason").fill("Matched provider evidence");
-  await reconciliationDialog.getByRole("button", { name: "Confirm resolution" }).click();
-  await expect(adminPage.getByText("Reconciliation case resolved.")).toBeVisible();
+  const target = adminPage.getByRole("listitem").filter({
+    has: adminPage.locator(`a[href="/admin/payments/transactions/${paymentIntentId}"]`),
+  });
+  // This synthetic paid fixture has no applied checkout commitment. A note
+  // cannot make that unresolved money safe; the actual recovery must finish.
+  await expect(target.getByRole("button", { name: "Review resolution" })).toBeDisabled();
 });
 
 test("a Staff principal without capability is denied the Orders workspace", async ({

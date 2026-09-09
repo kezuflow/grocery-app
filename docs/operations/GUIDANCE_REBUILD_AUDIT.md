@@ -44,19 +44,19 @@ Material supersessions: available-courier choice, no general checkout minimum, p
 
 ### Approved changes still requiring acceptance
 
-These are additional acceptance obligations against the changed product target, not reasons to restart previously completed slices. Inspect current code, preserve previous evidence and implement only the actual gap in each owning phase.
+These are acceptance obligations against the changed product target, not reasons to restart previously completed slices. The following mappings include locally accepted work; actual provider and release acceptance remain separate. The single checkpoint owns current status and remaining work.
 
 | Decision IDs | Owning phase and observable acceptance |
 | --- | --- |
-| GD-D01, GD-D21 | Phase 7: anonymous cart survives sign-in; approved customer/contact/address operations and first-visit location flow work without a default fabricated location. |
-| GD-D03, GD-D10 | Phases 6–7: available verified courier selection, automatic Instant booking at readiness, complete-order grams limit including additions, and honest disabled payment choices; actual provider activation remains separate. |
+| GD-D01, GD-D21 | CA-7.2–8 locally verify anonymous cart/sign-in carryover, paid Cart conversion, first-visit permanent location confirmation, account/contact/recovery and address CRUD/default/exact retry. Customer self-service closure is owner-deferred. Actual geocoder and email/OAuth acceptance remain separate. |
+| GD-D03, GD-D10 | Phases 6–7 local Worker and Instant/Scheduled browser journeys verify available courier selection, automatic Instant booking at readiness, full-order grams including additions and disabled unactivated payment choices. Actual provider/account capabilities and activation remain separate. |
 | GD-D05 | CA-3.3 locally verified: Add/Edit Product supports up to five images, replacement, and detail/quick-view galleries; cleanup stays internal. Aggregate, Worker/D1 and two-width browser evidence is in the active checkpoint/history; release acceptance remains separate. |
 | GD-D06–07 | CA-3.4 locally verified: selected-item percentage/fixed-unit sales, full-price grocery-code stacking, separate delivery benefit, overlap rejection, complete-line sale allowance and atomic depletion/cancellation restoration. Aggregate, Worker/D1 and desktop/mobile paid-sale/cancellation evidence is in the active checkpoint/history; actual provider and release acceptance remain separate. |
-| GD-D08 | Commerce-correctness follow-up / Phase 7: a small eligible nonempty cart is not blocked by a general minimum; promotion conditions remain separate. |
+| GD-D08 | Core small-basket decision/Instant-quote/Scheduled-commitment tests and the local Instant paid journey verify no general minimum. CA-7.9 removes remaining contrary Cart/Checkout copy. Promotion spending conditions remain separate. |
 | GD-D11, GD-D13 | Phase 7 Problems handling is locally verified with separate refund approval. CA-7.1 locally verifies 15 approved reports against owning records, scoped access, confirmation/event dates and preserved history; aggregate, Worker/D1 and desktop/mobile evidence is in the execution history. Actual provider/release acceptance remains separate. |
-| GD-D14 | Phase 5: weekly view shows dates, offerings, paid Orders, exact purchasing and receiving/preparation progress with manual supplier contact. |
-| GD-D15 | Phase 7: initial single-site Scheduled flow and normal paused changeover to counted Instant stock preserve outstanding paid goods and history. |
-| GD-D17–18 | Phase 4 follow-up / Phase 5: linked sent/received evidence and actual local size counts account for the same goods once; no guessed weight-to-piece conversion or second ordinary stock credit. |
+| GD-D14 | CA-5.1–9 locally verify dates, offerings, paid Orders/additions, exact purchasing and receiving/preparation progress with manual supplier contact. The final connected journey uses signed test-provider payment events, not seeded financial success. |
+| GD-D15 | CA-5.9 / CA-7.9 locally verify single-site Scheduled purchase/receipt/dispatch and paused changeover to Instant with outstanding paid Scheduled goods. Both browser widths preserve paid terms and complete those goods after the switch; CA-4.3 / CA-5.3 supply the actual-count stock path. Actual launch configuration remains external. |
+| GD-D17–18 | CA-4.2–3 and CA-5.2–4 locally verify linked sent/received evidence, losses/inspected returns, actual local size counts, and inspected cycle surplus. The same goods are accounted once without guessed weight-to-piece conversion or second ordinary stock credit. |
 
 All other GD-D rows retain their owning commerce acceptance through the source-plan and former-scope mappings below. Documentation approval does not close any row's application gap.
 
@@ -72,14 +72,14 @@ Every numbered criterion is preserved in the archived Product Scope. This table 
 | 4 | CA-1 / CA-7 eligibility; below-minimum rejection superseded by GD-D08. |
 | 5 | CA-1 / CA-7 signed canonical payment and exactly-once commitment. |
 | 6 | CA-3 / CA-7 immutable paid history. |
-| 7 | CA-1 / CA-4 / CA-5 separate Instant stock and Scheduled demand; GD-D17 sorted-count design gap. |
+| 7 | CA-1 / CA-4 / CA-5 separate Instant stock and Scheduled demand; GD-D17 actual-count acceptance above. |
 | 8 | CA-5 exact paid purchasing, no netting/capacity. |
 | 9 | CA-4.2 / CA-5 exception safety; GD-D09 no extra normal shortage workspace. |
 | 10 | CA-5 / CA-6 lifecycle and scope. |
 | 11 | CA-6 / CA-7 provider observations/recovery, no fleet. |
 | 12 | CA-5–7 purpose-built scoped operational reads. |
 | 13 | CA-0–2 / CA-7 selling/mode/snapshots; GD-D15 no all-history completion prerequisite. |
-| 14 | CA-3 / CA-4 exact units retained; GD-D17 local counted packs require coherent new design. |
+| 14 | CA-3 / CA-4 exact units retained; GD-D17 local counted packs accepted through CA-4.3 / CA-5.3. |
 | 15 | CA-3 / CA-7 exact prices/components and no new fees. |
 | 16 | CA-3 / CA-7 promotion integrity retained; blanket one-merchandise rule superseded GD-D06–07. |
 | 17 | CA-0–2 / CA-7 IAM/metrics ownership and definitions. |
@@ -130,9 +130,11 @@ The archived implementation plan is the original 0–14 numbering, distinct from
 | 14 promotions/analytics/later | CA-3/7 promotion/metric reconciliation and scope; CA-4 ledger; Engineering schema preservation. Later candidates are not automatically authorized. |
 | Cross-phase definition of done | Engineering/Architecture: closed fail-closed environment configuration, both-app contracts, current command guards and provider-event identity, clean/retained migrations, UI states, logs and owning-spec updates. |
 
-All current commerce plan sections A-I, its audit-defect rows, eight phase-table rows and five final journeys remain present. Current task IDs CA-0-2, CA-3.1, CA-3.2/a-d, CA-4.1, CA-4.2, CA-4, CA-5, CA-6 and CA-7 retain their evidence/status in the checkpoint. At the major-phase counting level, four commerce blocks (4–7) remain, plus earlier CA-0–2 acceptance and the explicitly mapped product-change follow-ups above. GD-1 does not reduce those application obligations.
+All commerce plan sections A-I, its audit-defect rows, eight phase-table rows and five final journeys remain present. Task IDs retain their evidence/status in the checkpoint. GD-1 itself did not reduce application obligations; subsequent verified implementation does. Current remaining-work counts belong only in the active checkpoint.
 
-## Verification and preserved unfinished work
+## Original GD-1 verification and preserved unfinished work
+
+The following is evidence from the GD-1 commit, not a description of current partial files or test status.
 
 Working-tree verification passed using `verify-guidance.py` in the checkpoint's preservation-artifact directory: 27 archived originals match their SHA-256 values; all 16 unfinished application files match; the protected discussion and encoding-damaged status match their saved bytes; config remains locally deleted. Active Markdown links/anchors, the 113 section-review hashes/destinations, all 21 decision rows, eight phase rows, five journeys and pre-existing CA IDs passed. Documented root/workspace command names were checked against manifests. The first command scan mistook prose about pnpm versions/monorepo for commands; the checker was corrected to inspect command syntax and workspace scripts without changing valid documentation.
 

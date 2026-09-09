@@ -1019,9 +1019,8 @@ export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness
  * domain behavior lives beside its context, never here.
  */
 export class CoreEntrypoint extends WorkerEntrypoint<Env> {
-  protected get geocoderPort(): GeocoderPort {
-    return buildGeocoderPort(this.env);
-  }
+  // Instance functions stay internal to Worker RPC; prototype getters are exposed.
+  protected createGeocoderPort = (): GeocoderPort => buildGeocoderPort(this.env);
   private readonly rpcContext = createCoreRpcContext(
     this.env as Env & AuthEnvironment,
     systemClock,
@@ -2197,7 +2196,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        geocoder: this.geocoderPort,
+        geocoder: this.createGeocoderPort(),
       },
       input,
     );
@@ -2239,7 +2238,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       {
         auth: createAuth(this.env as Env & AuthEnvironment),
         db: this.env.DB,
-        geocoder: this.geocoderPort,
+        geocoder: this.createGeocoderPort(),
       },
       input,
     );
@@ -2820,7 +2819,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const startedAt = Date.now();
     try {
-      const candidates = await this.geocoderPort.search(validation.data);
+      const candidates = await this.createGeocoderPort().search(validation.data);
       log("info", "geocoder.search", {
         requestId: input.requestId,
         operation: "forward_search",
@@ -2846,7 +2845,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     const startedAt = Date.now();
     try {
-      const candidate = await this.geocoderPort.reverseTemporary(validation.data);
+      const candidate = await this.createGeocoderPort().reverseTemporary(validation.data);
       log("info", "geocoder.reverse", {
         requestId: input.requestId,
         operation: "temporary_reverse",
@@ -2871,7 +2870,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return confirmBrowsingLocation(
-      { db: this.env.DB, geocoder: this.geocoderPort },
+      { db: this.env.DB, geocoder: this.createGeocoderPort() },
       validation.data,
     );
   }
@@ -2897,7 +2896,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     try {
-      return await createCustomerAddress(this.env.DB, this.geocoderPort, {
+      return await createCustomerAddress(this.env.DB, this.createGeocoderPort(), {
         ...input,
         customerId: customer.value.customerId,
       });
@@ -2929,7 +2928,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const customer = await this.context.resolveAuthenticatedCustomer(input);
     if (!customer.ok) return customer;
     try {
-      return await updateCustomerAddress(this.env.DB, this.geocoderPort, {
+      return await updateCustomerAddress(this.env.DB, this.createGeocoderPort(), {
         ...input,
         customerId: customer.value.customerId,
       });

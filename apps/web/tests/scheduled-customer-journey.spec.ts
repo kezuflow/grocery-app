@@ -19,6 +19,7 @@ const locationId = "location-cebu-central",
   marketId = "market-metro-cebu",
   skuId = "sku-red-onion-500g";
 const reason = "Synthetic Scheduled customer journey";
+test.describe.configure({ timeout: 300000 });
 
 for (const width of [1440, 390]) {
   test(`Scheduled checkout, paid addition, packing and manual delivery at ${width}px`, async ({
@@ -371,6 +372,43 @@ for (const width of [1440, 390]) {
             .parse(await read(page, `/api/commerce/orders/${canceledOrderId}`)).cancellation.status,
       )
       .toBe("REFUNDS_PROCESSING");
+    // Normal changeover must preserve outstanding paid Scheduled goods. Keep
+    // new selling paused in Instant while completing this existing cycle below.
+    const paidSnapshot = z.object({
+      status: z.string(),
+      version: z.number(),
+      financial: z.unknown(),
+      items: z.array(z.unknown()),
+      payments: z.array(z.unknown()),
+      amendments: z.array(z.unknown()),
+      fulfillment: z.object({ mode: z.literal("SCHEDULED"), cycleId: z.string() }).passthrough(),
+    });
+    const beforeChangeover = paidSnapshot.parse(
+      await read(page, `/api/commerce/orders/${orderId}`),
+    );
+    config = configSchema.parse(await read(admin, "/api/admin/commerce-configuration"));
+    await post(admin, "/api/admin/commerce-configuration", {
+      action: "PAUSE",
+      expectedVersion: config.version,
+      reason: "Synthetic normal changeover with an outstanding Scheduled order",
+    });
+    config = configSchema.parse(await read(admin, "/api/admin/commerce-configuration"));
+    await post(admin, "/api/admin/commerce-configuration", {
+      action: "SWITCH_MODE",
+      fulfillmentMode: "INSTANT",
+      cadence: null,
+      expectedVersion: config.version,
+      reason: "Synthetic normal changeover with an outstanding Scheduled order",
+    });
+    expect(
+      configSchema.parse(await read(admin, "/api/admin/commerce-configuration")),
+    ).toMatchObject({
+      sellingState: "PAUSED",
+      fulfillmentMode: "INSTANT",
+    });
+    expect(paidSnapshot.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
+      beforeChangeover,
+    );
     await expect
       .poll(() => Date.now() >= cutoff, { timeout: 125000, intervals: [1000] })
       .toBe(true);

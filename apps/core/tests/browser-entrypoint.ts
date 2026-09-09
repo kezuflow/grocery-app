@@ -8,7 +8,7 @@ export { BrowserEntrypoint as CoreEntrypoint };
 /** Test-only clock trigger: run the real scheduler at wall-clock time, never mutate fixtures. */
 export default class BrowserEntrypoint extends ProductionCoreEntrypoint {
   /** Local provider transport only; production validation/application still run. */
-  protected override get geocoderPort(): GeocoderPort {
+  protected override createGeocoderPort = (): GeocoderPort => {
     if (String(this.env.ENVIRONMENT) !== "test")
       throw new Error("Test provider requires test mode");
     return new MapboxGeocoder("synthetic-geocoder-token", async (input) => {
@@ -44,7 +44,7 @@ export default class BrowserEntrypoint extends ProductionCoreEntrypoint {
         ],
       });
     });
-  }
+  };
   override async fetch(request: Request): Promise<Response> {
     // Exercise the production signature/inbox/application boundary with synthetic
     // credentials, never the developer's local provider account secrets.
