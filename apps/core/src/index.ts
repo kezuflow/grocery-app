@@ -2950,6 +2950,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   ) {
     return this.paymentsRpc.createAmendmentPaymentIntent(input);
   }
+  async resolveInventoryTransfer(
+    input: import("@freshmarkets/contracts").ResolveInventoryTransferRequest,
+  ) {
+    return this.inventoryTransfersRpc.resolveInventoryTransfer(input);
+  }
+  async listInventoryDistribution(
+    input: import("@freshmarkets/contracts").InventoryDistributionRequest,
+  ) {
+    return this.inventoryTransfersRpc.listInventoryDistribution(input);
+  }
   async listInventoryTransfers(
     input: import("@freshmarkets/contracts").InventoryTransferListRequest,
   ) {

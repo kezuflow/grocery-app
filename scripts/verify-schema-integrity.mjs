@@ -213,7 +213,13 @@ assert.deepEqual(
     .map((row) => row.code),
   ["transfers.manage", "transfers.read"],
 );
-for (const table of ["inventory_transfer", "inventory_transfer_line", "inventory_transfer_receipt"])
+for (const table of [
+  "inventory_transfer",
+  "inventory_transfer_line",
+  "inventory_transfer_receipt",
+  "inventory_transfer_check",
+  "inventory_transfer_resolution",
+])
   assert.equal(database.prepare(`SELECT count(*) count FROM ${quote(table)}`).get().count, 0);
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 assert.equal(

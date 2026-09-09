@@ -5,6 +5,8 @@ import type {
   InventoryTransferView,
   InventoryTransferOptions,
   InventoryTransferStatus,
+  InventoryTransferLineView,
+  InventoryDistributionPage,
   RpcResult,
 } from "@freshmarkets/contracts";
 import {
@@ -15,9 +17,13 @@ import {
   inventoryTransferListSchema,
   inventoryTransferOptionsSchema,
   inventoryTransferResultSchema,
+  resolveInventoryTransferSchema,
+  inventoryDistributionSchema,
+  inventoryDistributionPageSchema,
 } from "@freshmarkets/validation";
 import { requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { readInventoryDistribution } from "../infrastructure/distribution-read-model";
 import { createTransferRepository } from "../infrastructure/transfer-repository";
 
 /** One authenticated Inventory operation; browser identity and authority never enter the payload. */
@@ -184,10 +190,27 @@ export function inventoryTransfers(
         if (received.acceptedBase > line.outstandingBase)
           return fail("VALIDATION_FAILED", "Accepted quantity exceeds outstanding transit");
       }
-      const accepted = new Map(receipt.data.lines.map((line) => [line.lineId, line.acceptedBase]));
-      status = lines.every((line) => (accepted.get(line.lineId) ?? 0) === line.outstandingBase)
-        ? "RECEIVED"
-        : "PARTIALLY_RECEIVED";
+      const accepted = new Map(receipt.data.lines.map((line) => [line.lineId, line]));
+      for (const line of lines) {
+        const received = accepted.get(line.lineId);
+        if (!received) continue;
+        const remaining = line.outstandingBase - received.acceptedBase;
+        if (
+          (received.damagedBase ?? line.damagedBase) +
+            (received.shortageBase ?? line.shortageBase) >
+          remaining
+        )
+          return fail(
+            "VALIDATION_FAILED",
+            "Remaining damaged and missing quantities exceed outstanding goods after acceptance",
+          );
+      }
+      status = accountedStatus(
+        lines.map((line) => ({
+          ...line,
+          acceptedBase: line.acceptedBase + (accepted.get(line.lineId)?.acceptedBase ?? 0),
+        })),
+      );
       for (const received of receipt.data.lines) {
         const line = byId.get(received.lineId);
         if (!line) return invalid();
@@ -200,6 +223,8 @@ export function inventoryTransfers(
             reason: request.reason,
             line,
             acceptedBase: received.acceptedBase,
+            damagedBase: received.damagedBase ?? line.damagedBase,
+            shortageBase: received.shortageBase ?? line.shortageBase,
             effectKey: `transfer:receive:${idempotencyKey}:${line.lineId}`,
           }),
         );
@@ -272,6 +297,108 @@ export function inventoryTransfers(
         ],
       });
     },
+    async resolve(input: unknown): Promise<RpcResult<InventoryTransferResult>> {
+      const parsed = resolveInventoryTransferSchema.safeParse(input);
+      if (!parsed.success)
+        return fail(
+          "VALIDATION_FAILED",
+          "Check the quantity/category and confirm physical receipt and sellable inspection for a return",
+        );
+      if (!(await repository.hasAuthority(actorUserId, "transfers.manage")))
+        return fail(
+          "FORBIDDEN",
+          "Global transfer management is required to resolve a loss or return",
+        );
+      const request = parsed.data,
+        { idempotencyKey, ...payload } = request,
+        hash = await requestHash({ ...payload, actorUserId });
+      const previous = await replay("inventory.transfer.resolve", idempotencyKey, hash);
+      if (previous) return previous;
+      const transfer = await repository.read(request.transferId);
+      if (!transfer) return fail("NOT_FOUND", "Transfer not found");
+      if (transfer.version !== request.expectedVersion)
+        return fail("STALE_VERSION", "Transfer changed; refresh before resolving");
+      if (transfer.status !== "IN_TRANSIT" && transfer.status !== "PARTIALLY_RECEIVED")
+        return fail("ILLEGAL_TRANSITION", "Only outstanding dispatched goods can be resolved");
+      const lines = await repository.lines(transfer.transferId),
+        line = lines.find((line) => line.lineId === request.lineId);
+      if (!line) return fail("VALIDATION_FAILED", "Select a line belonging to this transfer");
+      const available =
+        request.category === "DAMAGED"
+          ? line.damagedBase
+          : request.category === "MISSING"
+            ? line.shortageBase
+            : line.outstandingBase - line.damagedBase - line.shortageBase;
+      if (request.quantityBase > available)
+        return fail(
+          "VALIDATION_FAILED",
+          "Resolution quantity exceeds the selected outstanding category",
+        );
+      const status = accountedStatus(
+        lines.map((item) =>
+          item.lineId === line.lineId
+            ? {
+                ...item,
+                lostBase: item.lostBase + (request.outcome === "LOSS" ? request.quantityBase : 0),
+                returnedBase:
+                  item.returnedBase +
+                  (request.outcome === "VERIFIED_RETURN" ? request.quantityBase : 0),
+              }
+            : item,
+        ),
+      );
+      return commit({
+        action: "resolve",
+        key: idempotencyKey,
+        hash,
+        scopeLocationId: null,
+        reason: request.reason,
+        result: { transferId: transfer.transferId, status, version: transfer.version + 1 },
+        effects: [
+          ...repository.transitionStatements(
+            transfer.transferId,
+            transfer.status,
+            transfer.version,
+            status,
+            now,
+          ),
+          ...repository.resolveLineStatements({
+            transferId: transfer.transferId,
+            sourceLocationId: transfer.sourceLocationId,
+            destinationLocationId: transfer.destinationLocationId,
+            actorUserId,
+            now,
+            reason: request.reason,
+            effectKey: `transfer:resolve:${idempotencyKey}:${line.lineId}`,
+            line,
+            quantityBase: request.quantityBase,
+            category: request.category,
+            outcome: request.outcome,
+            inspectionConfirmed: request.inspectionConfirmed === true,
+          }),
+        ],
+      });
+    },
+    async distribution(input: unknown): Promise<RpcResult<InventoryDistributionPage>> {
+      const parsed = inventoryDistributionSchema.safeParse(input);
+      if (!parsed.success) return invalid();
+      if (!(await repository.hasAuthority(actorUserId, "transfers.read")))
+        return fail("FORBIDDEN", "Global transfer read capability is required");
+      const rows = await readInventoryDistribution(db, {
+        ...parsed.data,
+        limit: (parsed.data.limit ?? 25) + 1,
+      });
+      const limit = parsed.data.limit ?? 25,
+        items = rows.slice(0, limit),
+        last = items.at(-1);
+      const result = inventoryDistributionPageSchema.safeParse({
+        items,
+        nextCursor: rows.length > limit && last ? last.inventoryPoolId : null,
+      });
+      if (!result.success)
+        return fail("CONFLICT", "Inventory totals are outside the supported whole-unit range");
+      return success(result.data);
+    },
     dispatch: (input: unknown) => command(input, "dispatch"),
     receive: (input: unknown) => command(input, "receive"),
     cancel: (input: unknown) => command(input, "cancel"),
@@ -295,17 +422,20 @@ export function inventoryTransfers(
           "transfers.manage",
           transfer.destinationLocationId,
         );
+      const active = transfer.status === "IN_TRANSIT" || transfer.status === "PARTIALLY_RECEIVED";
       const allowedActions: InventoryTransferView["allowedActions"] =
         transfer.status === "DRAFT" && global
           ? ["DISPATCH", "CANCEL"]
-          : (transfer.status === "IN_TRANSIT" || transfer.status === "PARTIALLY_RECEIVED") &&
-              receiver
-            ? ["RECEIVE"]
-            : [];
+          : [
+              ...(active && receiver ? ["RECEIVE" as const] : []),
+              ...(active && global ? ["RESOLVE" as const] : []),
+            ];
       return success({
         ...transfer,
         lines: await repository.lines(transferId),
         receipts: await repository.receipts(transferId),
+        checks: await repository.checks(transferId),
+        resolutions: await repository.resolutions(transferId),
         allowedActions,
       });
     },
@@ -353,4 +483,14 @@ export function inventoryTransfers(
       );
     },
   };
+}
+
+function accountedStatus(lines: readonly InventoryTransferLineView[]): InventoryTransferStatus {
+  if (
+    lines.every(
+      (line) => line.quantityBase - line.acceptedBase - line.lostBase - line.returnedBase === 0,
+    )
+  )
+    return lines.every((line) => line.acceptedBase === line.quantityBase) ? "RECEIVED" : "RESOLVED";
+  return lines.some((line) => line.acceptedBase > 0) ? "PARTIALLY_RECEIVED" : "IN_TRANSIT";
 }

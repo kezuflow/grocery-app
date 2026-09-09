@@ -497,4 +497,276 @@ describe("Warehouse transfers through authenticated Core and real D1", () => {
         .first(),
     ).toEqual({ count: 2, identities: 2 });
   });
+  it("separates checked damage and shortage, then accounts for loss and a verified return", async () => {
+    const f = await fixture(),
+      draft = await f.create(20000, f.second);
+    const distribution = async () =>
+      value(
+        await exports.default.listInventoryDistribution({
+          ...f.meta,
+          query: "Red onion",
+          limit: 100,
+        }),
+      ).items.find((item) => item.inventoryPoolId === pool);
+    const before = await distribution();
+    if (!before) throw new Error("Missing distribution");
+    value(await exports.default.dispatchInventoryTransfer(f.command(draft.transferId, 1)));
+    const line = (await f.details(draft.transferId)).lines[0];
+    if (!line) throw new Error("Missing line");
+    const check = {
+      ...f.command(draft.transferId, 2),
+      lines: [{ lineId: line.lineId, acceptedBase: 15000, damagedBase: 3000, shortageBase: 2000 }],
+    };
+    const checked = await exports.default.receiveInventoryTransfer(check);
+    expect(value(checked)).toMatchObject({ status: "PARTIALLY_RECEIVED", version: 3 });
+    const during = await distribution();
+    expect(during).toMatchObject({
+      centralBase: before.centralBase - 20000,
+      localBase: before.localBase + 15000,
+      physicalBase: before.physicalBase - 5000,
+      transitBase: before.transitBase + 5000,
+      damagedBase: before.damagedBase + 3000,
+      shortageBase: before.shortageBase + 2000,
+    });
+    const loss = {
+      ...f.command(draft.transferId, 3),
+      lineId: line.lineId,
+      quantityBase: 2000,
+      category: "MISSING" as const,
+      outcome: "LOSS" as const,
+    };
+    expect(value(await exports.default.resolveInventoryTransfer(loss))).toMatchObject({
+      version: 4,
+      status: "PARTIALLY_RECEIVED",
+    });
+    const returned = {
+      ...f.command(draft.transferId, 4),
+      lineId: line.lineId,
+      quantityBase: 3000,
+      category: "DAMAGED" as const,
+      outcome: "VERIFIED_RETURN" as const,
+      inspectionConfirmed: true,
+    };
+    const resolved = await exports.default.resolveInventoryTransfer(returned);
+    expect(value(resolved)).toMatchObject({ status: "RESOLVED", version: 5 });
+    expect(await exports.default.resolveInventoryTransfer(returned)).toEqual(resolved);
+    expect(await exports.default.receiveInventoryTransfer(check)).toEqual(checked);
+    expect(await stock(f.warehouse)).toBe(83000);
+    expect(await stock(f.second)).toBe(15000);
+    expect(await f.details(draft.transferId)).toMatchObject({
+      status: "RESOLVED",
+      allowedActions: [],
+      lines: [
+        {
+          acceptedBase: 15000,
+          damagedBase: 0,
+          shortageBase: 0,
+          lostBase: 2000,
+          returnedBase: 3000,
+          outstandingBase: 0,
+        },
+      ],
+    });
+    expect(await distribution()).toMatchObject({
+      centralBase: before.centralBase - 17000,
+      localBase: before.localBase + 15000,
+      physicalBase: before.physicalBase - 2000,
+      transitBase: before.transitBase,
+      damagedBase: before.damagedBase,
+      shortageBase: before.shortageBase,
+    });
+    expect(
+      await exports.default.resolveInventoryTransfer({ ...returned, quantityBase: 1 }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+  it("records observations without stock credit and accepts recovered missing goods in a later check", async () => {
+    const f = await fixture(),
+      draft = await f.create(20000, f.second);
+    value(await exports.default.dispatchInventoryTransfer(f.command(draft.transferId, 1)));
+    const initial = await f.details(draft.transferId),
+      line = initial.lines[0];
+    if (!line) throw new Error("Missing line");
+    expect(
+      value(
+        await exports.default.receiveInventoryTransfer({
+          ...f.command(draft.transferId, 2),
+          lines: [{ lineId: line.lineId, acceptedBase: 0, damagedBase: 4000, shortageBase: 16000 }],
+        }),
+      ),
+    ).toMatchObject({ status: "IN_TRANSIT", version: 3 });
+    expect(await stock(f.second)).toBe(0);
+    expect(await f.details(draft.transferId)).toMatchObject({
+      dispatchedAt: initial.dispatchedAt,
+      receipts: [],
+      checks: [{ acceptedBase: 0, damagedBase: 4000, shortageBase: 16000 }],
+    });
+    expect(
+      await exports.default.receiveInventoryTransfer({
+        ...f.command(draft.transferId, 3),
+        lines: [{ lineId: line.lineId, acceptedBase: 1 }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    value(
+      await exports.default.receiveInventoryTransfer({
+        ...f.command(draft.transferId, 3),
+        lines: [{ lineId: line.lineId, acceptedBase: 20000, damagedBase: 0, shortageBase: 0 }],
+      }),
+    );
+    expect(await f.details(draft.transferId)).toMatchObject({
+      status: "RECEIVED",
+      lines: [
+        { acceptedBase: 20000, damagedBase: 0, shortageBase: 0, lostBase: 0, returnedBase: 0 },
+      ],
+      resolutions: [],
+    });
+    expect(await stock(f.second)).toBe(20000);
+    await expect(
+      env.DB.prepare("UPDATE inventory_transfer_check SET damaged_base=0 WHERE transfer_id=?")
+        .bind(draft.transferId)
+        .run(),
+    ).rejects.toThrow("immutable");
+  });
+  it("requires Global authority, current version, available category and verified sellable inspection", async () => {
+    const f = await fixture(),
+      draft = await f.create(20000, destination);
+    value(await exports.default.dispatchInventoryTransfer(f.command(draft.transferId, 1)));
+    const line = (await f.details(draft.transferId)).lines[0];
+    if (!line) throw new Error("Missing line");
+    const resolution = {
+      ...f.command(draft.transferId, 2),
+      lineId: line.lineId,
+      quantityBase: 20000,
+      category: "UNCLASSIFIED" as const,
+      outcome: "VERIFIED_RETURN" as const,
+    };
+    expect(await exports.default.resolveInventoryTransfer(resolution)).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    expect(
+      await exports.default.resolveInventoryTransfer({
+        ...resolution,
+        inspectionConfirmed: true,
+        expectedVersion: 1,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(
+      await exports.default.resolveInventoryTransfer({
+        ...resolution,
+        inspectionConfirmed: true,
+        category: "MISSING",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await env.DB.prepare(
+      "UPDATE staff_scope SET scope_kind='location',location_id=? WHERE staff_id=?",
+    )
+      .bind(destination, f.manager.id)
+      .run();
+    expect(
+      await exports.default.resolveInventoryTransfer({ ...resolution, inspectionConfirmed: true }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(await exports.default.listInventoryDistribution(f.meta)).toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN" },
+    });
+    expect(await stock(f.warehouse)).toBe(80000);
+  });
+  it.each([
+    ["inventory_transfer", "UPDATE", "LOSS"],
+    ["inventory_transfer_line", "UPDATE", "LOSS"],
+    ["inventory_transfer_resolution", "INSERT", "LOSS"],
+    ["audit_event", "INSERT", "LOSS"],
+    ["idempotency_records", "INSERT", "LOSS"],
+    ["inventory_balance", "INSERT", "VERIFIED_RETURN"],
+    ["inventory_ledger_entries", "INSERT", "VERIFIED_RETURN"],
+  ] as const)("rolls back %s %s failure during %s resolution", async (table, event, outcome) => {
+    const f = await fixture(),
+      draft = await f.create(20000, f.second);
+    value(await exports.default.dispatchInventoryTransfer(f.command(draft.transferId, 1)));
+    const line = (await f.details(draft.transferId)).lines[0];
+    if (!line) throw new Error("Missing line");
+    const request = {
+      ...f.command(draft.transferId, 2),
+      lineId: line.lineId,
+      quantityBase: 20000,
+      category: "UNCLASSIFIED" as const,
+      outcome,
+      inspectionConfirmed: true,
+    };
+    await env.DB.prepare(
+      `CREATE TRIGGER transfer_test_skip BEFORE ${event} ON ${table} BEGIN SELECT RAISE(IGNORE); END`,
+    ).run();
+    try {
+      expect(await exports.default.resolveInventoryTransfer(request)).toMatchObject({
+        ok: false,
+        error: { code: "CONFLICT" },
+      });
+      expect(await stock(f.warehouse)).toBe(80000);
+      expect(await f.details(draft.transferId)).toMatchObject({
+        version: 2,
+        status: "IN_TRANSIT",
+        resolutions: [],
+        lines: [{ lostBase: 0, returnedBase: 0, outstandingBase: 20000 }],
+      });
+      expect(
+        await env.DB.prepare("SELECT 1 FROM idempotency_records WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toBeNull();
+    } finally {
+      await env.DB.prepare("DROP TRIGGER transfer_test_skip").run();
+    }
+  });
+  it("rolls acceptance back if its checking evidence is skipped", async () => {
+    const f = await fixture(),
+      draft = await f.create(20000, f.second);
+    value(await exports.default.dispatchInventoryTransfer(f.command(draft.transferId, 1)));
+    const line = (await f.details(draft.transferId)).lines[0];
+    if (!line) throw new Error("Missing line");
+    await env.DB.prepare(
+      "CREATE TRIGGER transfer_test_skip BEFORE INSERT ON inventory_transfer_check BEGIN SELECT RAISE(IGNORE); END",
+    ).run();
+    try {
+      expect(
+        await exports.default.receiveInventoryTransfer({
+          ...f.command(draft.transferId, 2),
+          lines: [{ lineId: line.lineId, acceptedBase: 10000, damagedBase: 5000 }],
+        }),
+      ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(await stock(f.second)).toBe(0);
+      expect(await f.details(draft.transferId)).toMatchObject({
+        version: 2,
+        status: "IN_TRANSIT",
+        checks: [],
+        receipts: [],
+        lines: [{ acceptedBase: 0, damagedBase: 0 }],
+      });
+    } finally {
+      await env.DB.prepare("DROP TRIGGER transfer_test_skip").run();
+    }
+  });
+  it("allows only one competing full acceptance or physical return", async () => {
+    const f = await fixture(),
+      draft = await f.create(20000, f.second);
+    value(await exports.default.dispatchInventoryTransfer(f.command(draft.transferId, 1)));
+    const line = (await f.details(draft.transferId)).lines[0];
+    if (!line) throw new Error("Missing line");
+    const results = await Promise.all([
+      exports.default.receiveInventoryTransfer({
+        ...f.command(draft.transferId, 2),
+        lines: [{ lineId: line.lineId, acceptedBase: 20000 }],
+      }),
+      exports.default.resolveInventoryTransfer({
+        ...f.command(draft.transferId, 2),
+        lineId: line.lineId,
+        quantityBase: 20000,
+        category: "UNCLASSIFIED",
+        outcome: "VERIFIED_RETURN",
+        inspectionConfirmed: true,
+      }),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect((await stock(f.warehouse)) + (await stock(f.second))).toBe(100000);
+    expect((await f.details(draft.transferId)).lines[0]?.outstandingBase).toBe(0);
+  });
 });

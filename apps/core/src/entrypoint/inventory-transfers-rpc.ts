@@ -6,6 +6,23 @@ import { rpcFailure } from "./validation-errors";
 
 export function createInventoryTransfersRpc(context: CoreRpcContext): InventoryTransfersService {
   return {
+    async resolveInventoryTransfer({ headers, requestId, ...payload }) {
+      const actor = await context.access.session({ headers, requestId });
+      if (!actor) return rpcFailure("UNAUTHENTICATED", "Authentication is required", requestId);
+      return inventoryTransfers(context.env.DB, actor.id, requestId, context.access.now()).resolve(
+        payload,
+      );
+    },
+    async listInventoryDistribution({ headers, requestId, ...payload }) {
+      const actor = await context.access.session({ headers, requestId });
+      if (!actor) return rpcFailure("UNAUTHENTICATED", "Authentication is required", requestId);
+      return inventoryTransfers(
+        context.env.DB,
+        actor.id,
+        requestId,
+        context.access.now(),
+      ).distribution(payload);
+    },
     async listInventoryTransfers({ headers, requestId, ...payload }) {
       const actor = await context.access.session({ headers, requestId });
       if (!actor) return rpcFailure("UNAUTHENTICATED", "Authentication is required", requestId);

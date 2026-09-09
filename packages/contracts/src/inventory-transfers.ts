@@ -6,8 +6,9 @@ export type InventoryTransferStatus =
   | "IN_TRANSIT"
   | "PARTIALLY_RECEIVED"
   | "RECEIVED"
+  | "RESOLVED"
   | "CANCELED";
-export type InventoryTransferAction = "DISPATCH" | "RECEIVE" | "CANCEL";
+export type InventoryTransferAction = "DISPATCH" | "RECEIVE" | "CANCEL" | "RESOLVE";
 export type InventoryTransferSummary = {
   transferId: string;
   sourceLocationId: string;
@@ -28,11 +29,33 @@ export type InventoryTransferLineView = {
   quantityBase: number;
   acceptedBase: number;
   outstandingBase: number;
+  damagedBase: number;
+  shortageBase: number;
+  lostBase: number;
+  returnedBase: number;
 };
 export type InventoryTransferView = InventoryTransferSummary & {
   reason: string;
   lines: ReadonlyArray<InventoryTransferLineView>;
   allowedActions: ReadonlyArray<InventoryTransferAction>;
+  checks: ReadonlyArray<{
+    checkId: string;
+    lineId: string;
+    acceptedBase: number;
+    damagedBase: number;
+    shortageBase: number;
+    reason: string;
+    checkedAt: number;
+  }>;
+  resolutions: ReadonlyArray<{
+    resolutionId: string;
+    lineId: string;
+    quantityBase: number;
+    category: InventoryTransferCategory;
+    outcome: InventoryTransferOutcome;
+    reason: string;
+    resolvedAt: number;
+  }>;
   receipts: ReadonlyArray<{
     receiptId: string;
     lineId: string;
@@ -89,9 +112,50 @@ export type InventoryTransferCommandRequest = InventoryTransferReadRequest & {
   idempotencyKey: string;
 };
 export type ReceiveInventoryTransferRequest = InventoryTransferCommandRequest & {
-  lines: ReadonlyArray<{ lineId: string; acceptedBase: number }>;
+  lines: ReadonlyArray<{
+    lineId: string;
+    acceptedBase: number;
+    damagedBase?: number;
+    shortageBase?: number;
+  }>;
+};
+export type InventoryTransferCategory = "UNCLASSIFIED" | "DAMAGED" | "MISSING";
+export type InventoryTransferOutcome = "LOSS" | "VERIFIED_RETURN";
+export type ResolveInventoryTransferRequest = InventoryTransferCommandRequest & {
+  lineId: string;
+  quantityBase: number;
+  category: InventoryTransferCategory;
+  outcome: InventoryTransferOutcome;
+  inspectionConfirmed?: boolean;
+};
+export type InventoryDistributionRequest = AuthenticatedRequest & {
+  query?: string;
+  cursor?: string;
+  limit?: number;
+};
+export type InventoryDistributionPage = {
+  items: ReadonlyArray<{
+    inventoryPoolId: string;
+    productName: string;
+    baseUnit: "GRAM" | "PIECE";
+    centralBase: number;
+    localBase: number;
+    physicalBase: number;
+    reservedBase: number;
+    heldBase: number;
+    transitBase: number;
+    damagedBase: number;
+    shortageBase: number;
+  }>;
+  nextCursor: string | null;
 };
 export interface InventoryTransfersService {
+  resolveInventoryTransfer(
+    input: ResolveInventoryTransferRequest,
+  ): Promise<RpcResult<InventoryTransferResult>>;
+  listInventoryDistribution(
+    input: InventoryDistributionRequest,
+  ): Promise<RpcResult<InventoryDistributionPage>>;
   listInventoryTransfers(
     input: InventoryTransferListRequest,
   ): Promise<RpcResult<InventoryTransferPage>>;

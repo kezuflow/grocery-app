@@ -9,6 +9,7 @@ export const inventoryTransferStatusSchema = z.enum([
   "IN_TRANSIT",
   "PARTIALLY_RECEIVED",
   "RECEIVED",
+  "RESOLVED",
   "CANCELED",
 ]);
 export const inventoryTransferListSchema = z
@@ -56,7 +57,23 @@ export const inventoryTransferCommandSchema = z
 export const receiveInventoryTransferSchema = inventoryTransferCommandSchema
   .extend({
     lines: z
-      .array(z.object({ lineId: identifierSchema, acceptedBase: positive }).strict())
+      .array(
+        z
+          .object({
+            lineId: identifierSchema,
+            acceptedBase: quantity,
+            damagedBase: quantity.optional(),
+            shortageBase: quantity.optional(),
+          })
+          .strict()
+          .refine(
+            (line) =>
+              line.acceptedBase > 0 ||
+              line.damagedBase !== undefined ||
+              line.shortageBase !== undefined,
+            "Record acceptance or a checked observation",
+          ),
+      )
       .min(1)
       .max(50),
   })
@@ -88,7 +105,29 @@ export const inventoryTransferPageSchema = z.object({
 });
 export const inventoryTransferViewSchema = summary.extend({
   reason: z.string(),
-  allowedActions: z.array(z.enum(["DISPATCH", "RECEIVE", "CANCEL"])),
+  checks: z.array(
+    z.object({
+      checkId: identifierSchema,
+      lineId: identifierSchema,
+      acceptedBase: quantity,
+      damagedBase: quantity,
+      shortageBase: quantity,
+      reason: z.string(),
+      checkedAt: quantity,
+    }),
+  ),
+  resolutions: z.array(
+    z.object({
+      resolutionId: identifierSchema,
+      lineId: identifierSchema,
+      quantityBase: positive,
+      category: z.enum(["UNCLASSIFIED", "DAMAGED", "MISSING"]),
+      outcome: z.enum(["LOSS", "VERIFIED_RETURN"]),
+      reason: z.string(),
+      resolvedAt: quantity,
+    }),
+  ),
+  allowedActions: z.array(z.enum(["DISPATCH", "RECEIVE", "CANCEL", "RESOLVE"])),
   lines: z.array(
     z.object({
       lineId: identifierSchema,
@@ -98,6 +137,10 @@ export const inventoryTransferViewSchema = summary.extend({
       quantityBase: positive,
       acceptedBase: quantity,
       outstandingBase: quantity,
+      damagedBase: quantity,
+      shortageBase: quantity,
+      lostBase: quantity,
+      returnedBase: quantity,
     }),
   ),
   receipts: z.array(
@@ -125,4 +168,42 @@ export const inventoryTransferOptionsViewSchema = z.object({
     }),
   ),
   moreProducts: z.boolean(),
+});
+
+export const resolveInventoryTransferSchema = inventoryTransferCommandSchema
+  .extend({
+    lineId: identifierSchema,
+    quantityBase: positive,
+    category: z.enum(["UNCLASSIFIED", "DAMAGED", "MISSING"]),
+    outcome: z.enum(["LOSS", "VERIFIED_RETURN"]),
+    inspectionConfirmed: z.boolean().optional(),
+  })
+  .refine(
+    (input) => input.outcome !== "VERIFIED_RETURN" || input.inspectionConfirmed === true,
+    "Confirm physical receipt and sellable inspection before crediting the warehouse",
+  );
+export const inventoryDistributionSchema = z
+  .object({
+    query: z.string().trim().max(100).optional(),
+    cursor: identifierSchema.optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  })
+  .strict();
+export const inventoryDistributionPageSchema = z.object({
+  items: z.array(
+    z.object({
+      inventoryPoolId: identifierSchema,
+      productName: z.string(),
+      baseUnit: z.enum(["GRAM", "PIECE"]),
+      centralBase: quantity,
+      localBase: quantity,
+      physicalBase: quantity,
+      reservedBase: quantity,
+      heldBase: quantity,
+      transitBase: quantity,
+      damagedBase: quantity,
+      shortageBase: quantity,
+    }),
+  ),
+  nextCursor: z.string().nullable(),
 });

@@ -13,6 +13,8 @@ import type {
   InventoryTransferView,
 } from "@freshmarkets/contracts";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
+import { InventoryDistribution } from "./inventory-distribution";
+import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -78,6 +80,7 @@ export function InventoryTransfersPage() {
         title="Warehouse transfers"
         description="Dispatch physical stock from the central warehouse. Destinations credit only goods they have checked and accepted."
       />
+      {scopeKey === "global" ? <InventoryDistribution key={reload} /> : null}
       {!scopeKey ? (
         <p>Select a Global or location scope to view transfers.</p>
       ) : (
@@ -90,13 +93,19 @@ export function InventoryTransfersPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {["ALL", "DRAFT", "IN_TRANSIT", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELED"].map(
-                    (status) => (
-                      <SelectItem key={status} value={status}>
-                        {statusLabel(status)}
-                      </SelectItem>
-                    ),
-                  )}
+                  {[
+                    "ALL",
+                    "DRAFT",
+                    "IN_TRANSIT",
+                    "PARTIALLY_RECEIVED",
+                    "RECEIVED",
+                    "RESOLVED",
+                    "CANCELED",
+                  ].map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {statusLabel(status)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -387,6 +396,14 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
     [reload, setReload] = useState(0);
   const [quantities, setQuantities] = useState<Record<string, string>>({}),
     [reason, setReason] = useState("");
+  const [observations, setObservations] = useState<
+    Record<string, { damaged?: string; missing?: string }>
+  >({});
+  const [resolutionLine, setResolutionLine] = useState(""),
+    [resolutionQuantity, setResolutionQuantity] = useState("");
+  const [resolutionCategory, setResolutionCategory] = useState("UNCLASSIFIED"),
+    [resolutionOutcome, setResolutionOutcome] = useState("LOSS");
+  const [inspectionConfirmed, setInspectionConfirmed] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const command = useAdminCommand();
   useEffect(() => {
@@ -415,11 +432,29 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
     const body = {
       expectedVersion: transfer.version,
       reason,
+      ...(action === "RESOLVE"
+        ? {
+            lineId: resolutionLine,
+            quantityBase: Number(resolutionQuantity),
+            category: resolutionCategory,
+            outcome: resolutionOutcome,
+            inspectionConfirmed,
+          }
+        : {}),
       ...(action === "RECEIVE"
         ? {
-            lines: Object.entries(quantities)
-              .filter(([, quantity]) => Number(quantity) > 0)
-              .map(([lineId, quantity]) => ({ lineId, acceptedBase: Number(quantity) })),
+            lines: transfer.lines
+              .filter(
+                (line) =>
+                  Number(quantities[line.lineId] ?? 0) > 0 ||
+                  observations[line.lineId] !== undefined,
+              )
+              .map((line) => ({
+                lineId: line.lineId,
+                acceptedBase: Number(quantities[line.lineId] ?? 0),
+                damagedBase: Number(observations[line.lineId]?.damaged ?? line.damagedBase),
+                shortageBase: Number(observations[line.lineId]?.missing ?? line.shortageBase),
+              })),
           }
         : {}),
     };
@@ -432,6 +467,9 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
         ));
     if (done) {
       setQuantities({});
+      setObservations({});
+      setResolutionQuantity("");
+      setInspectionConfirmed(false);
       setReason("");
       setPendingAction(null);
       setReload((value) => value + 1);
@@ -444,7 +482,7 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
       </Link>
       <PageHeader
         title="Transfer details"
-        description="Check goods before accepting them. Quantities entered here credit the destination's physical inventory."
+        description="Record checked goods and remaining damage or shortages. Only accepted quantities credit destination stock."
       />
       {error ? (
         <p role="alert">{error}</p>
@@ -459,51 +497,89 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
             <p className="capitalize">{statusLabel(transfer.status)}</p>
             <p>{transfer.reason}</p>
           </div>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Planned quantity</TableHead>
-                  <TableHead>Accepted</TableHead>
-                  <TableHead>In transit</TableHead>
-                  {transfer.allowedActions.includes("RECEIVE") ? (
-                    <TableHead>Accept now</TableHead>
-                  ) : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transfer.lines.map((line) => (
-                  <TableRow key={line.lineId}>
-                    <TableCell>{line.productName}</TableCell>
-                    <TableCell>{units(line.quantityBase, line.baseUnit)}</TableCell>
-                    <TableCell>{units(line.acceptedBase, line.baseUnit)}</TableCell>
-                    <TableCell>{units(line.outstandingBase, line.baseUnit)}</TableCell>
-                    {transfer.allowedActions.includes("RECEIVE") ? (
-                      <TableCell>
-                        <Input
-                          className="w-36"
-                          type="number"
-                          min="0"
-                          max={line.outstandingBase}
-                          step="1"
-                          disabled={command.busy || command.uncertain || line.outstandingBase === 0}
-                          aria-label={`Accept ${line.productName} (${line.baseUnit === "GRAM" ? "grams" : "pieces"})`}
-                          value={quantities[line.lineId] ?? ""}
-                          onChange={(event) =>
-                            setQuantities((current) => ({
-                              ...current,
-                              [line.lineId]: event.target.value,
-                            }))
-                          }
-                        />
-                      </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <section className="space-y-4" aria-label="Transfer quantities">
+            {transfer.lines.map((line) => (
+              <article key={line.lineId} className="space-y-4 rounded-lg border p-4">
+                <h3 className="font-semibold">{line.productName}</h3>
+                <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                  {[
+                    ["Sent / planned", line.quantityBase],
+                    ["Accepted", line.acceptedBase],
+                    ["In transit", line.outstandingBase],
+                    ["Damaged (non-sellable)", line.damagedBase],
+                    ["Missing", line.shortageBase],
+                    ["Recorded loss", line.lostBase],
+                    ["Returned to warehouse", line.returnedBase],
+                  ].map(([label, amount]) => (
+                    <div key={label}>
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className="font-medium">
+                        {typeof amount === "number" ? units(amount, line.baseUnit) : amount}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                {transfer.allowedActions.includes("RECEIVE") && line.outstandingBase > 0 ? (
+                  <fieldset
+                    disabled={command.busy || command.uncertain}
+                    className="grid gap-3 border-t pt-3 sm:grid-cols-3"
+                  >
+                    <label className="space-y-1 text-sm">
+                      Accept now ({line.baseUnit === "GRAM" ? "grams" : "pieces"})
+                      <Input
+                        type="number"
+                        min="0"
+                        max={line.outstandingBase}
+                        step="1"
+                        aria-label={`Accept ${line.productName} (${line.baseUnit === "GRAM" ? "grams" : "pieces"})`}
+                        value={quantities[line.lineId] ?? ""}
+                        onChange={(event) =>
+                          setQuantities((current) => ({
+                            ...current,
+                            [line.lineId]: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      Damaged remaining
+                      <Input
+                        type="number"
+                        min="0"
+                        max={line.outstandingBase}
+                        step="1"
+                        aria-label={`Damaged remaining for ${line.productName}`}
+                        value={observations[line.lineId]?.damaged ?? String(line.damagedBase)}
+                        onChange={(event) =>
+                          setObservations((current) => ({
+                            ...current,
+                            [line.lineId]: { ...current[line.lineId], damaged: event.target.value },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      Missing remaining
+                      <Input
+                        type="number"
+                        min="0"
+                        max={line.outstandingBase}
+                        step="1"
+                        aria-label={`Missing remaining for ${line.productName}`}
+                        value={observations[line.lineId]?.missing ?? String(line.shortageBase)}
+                        onChange={(event) =>
+                          setObservations((current) => ({
+                            ...current,
+                            [line.lineId]: { ...current[line.lineId], missing: event.target.value },
+                          }))
+                        }
+                      />
+                    </label>
+                  </fieldset>
+                ) : null}
+              </article>
+            ))}
+          </section>
           {transfer.allowedActions.length ? (
             <div className="space-y-3 rounded-lg border p-4">
               {transfer.status === "DRAFT" ? (
@@ -512,7 +588,11 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
                   transit.
                 </p>
               ) : (
-                <p>Accept only checked, sellable quantities. Unaccepted goods remain in transit.</p>
+                <p>
+                  Accept only checked, sellable goods. Enter damaged and missing quantities still
+                  remaining after this receipt. Both remain part of transit until accepted, lost or
+                  returned.
+                </p>
               )}
               <Label htmlFor="receipt-reason">Reason for action</Label>
               <Input
@@ -523,27 +603,149 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
                 onChange={(event) => setReason(event.target.value)}
               />
               <div className="flex flex-wrap gap-2">
-                {transfer.allowedActions.map((action) => (
-                  <Button
-                    key={action}
-                    variant={action === "CANCEL" ? "outline" : "default"}
-                    disabled={command.busy || (command.uncertain && pendingAction !== action)}
-                    onClick={() => void act(action)}
-                  >
-                    {command.busy && pendingAction === action
-                      ? "Saving…"
-                      : action === "DISPATCH"
-                        ? "Dispatch transfer"
-                        : action === "RECEIVE"
-                          ? "Accept checked goods"
-                          : "Cancel draft"}
-                  </Button>
-                ))}
+                {transfer.allowedActions
+                  .filter((action) => action !== "RESOLVE")
+                  .map((action) => (
+                    <Button
+                      key={action}
+                      variant={action === "CANCEL" ? "outline" : "default"}
+                      disabled={command.busy || (command.uncertain && pendingAction !== action)}
+                      onClick={() => void act(action)}
+                    >
+                      {command.busy && pendingAction === action
+                        ? "Saving…"
+                        : action === "DISPATCH"
+                          ? "Dispatch transfer"
+                          : action === "RECEIVE"
+                            ? "Record checked goods"
+                            : "Cancel draft"}
+                    </Button>
+                  ))}
               </div>
             </div>
           ) : (
             <p>No transfer action is available for your authority and the current state.</p>
           )}
+          {transfer.allowedActions.includes("RESOLVE") ? (
+            <section
+              className="space-y-4 rounded-lg border p-4"
+              aria-label="Global transfer resolution"
+            >
+              <h2 className="font-semibold">Resolve outstanding goods</h2>
+              <p className="text-sm">
+                Record a documented loss or confirm a physical, sellable return to{" "}
+                {transfer.sourceLocationName}. This uses the reason for action above.
+              </p>
+              <fieldset
+                disabled={command.busy || command.uncertain}
+                className="grid gap-3 sm:grid-cols-2"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="resolution-product">Product to resolve</Label>
+                  <Select
+                    disabled={command.busy || command.uncertain}
+                    value={resolutionLine}
+                    onValueChange={(value) => {
+                      setResolutionLine(value);
+                      setResolutionQuantity("");
+                    }}
+                  >
+                    <SelectTrigger id="resolution-product">
+                      <SelectValue placeholder="Select product" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {transfer.lines
+                        .filter((line) => line.outstandingBase > 0)
+                        .map((line) => (
+                          <SelectItem key={line.lineId} value={line.lineId}>
+                            {line.productName}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="resolution-category">Outstanding goods</Label>
+                  <Select
+                    disabled={command.busy || command.uncertain}
+                    value={resolutionCategory}
+                    onValueChange={setResolutionCategory}
+                  >
+                    <SelectTrigger id="resolution-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UNCLASSIFIED">Other outstanding goods</SelectItem>
+                      <SelectItem value="DAMAGED">Reported damaged goods</SelectItem>
+                      <SelectItem value="MISSING">Reported missing goods</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="resolution-outcome">Resolution</Label>
+                  <Select
+                    disabled={command.busy || command.uncertain}
+                    value={resolutionOutcome}
+                    onValueChange={(value) => {
+                      setResolutionOutcome(value);
+                      setInspectionConfirmed(false);
+                    }}
+                  >
+                    <SelectTrigger id="resolution-outcome">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOSS">Record loss</SelectItem>
+                      <SelectItem value="VERIFIED_RETURN">Verify sellable return</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="resolution-quantity">
+                    Quantity (
+                    {transfer.lines.find((line) => line.lineId === resolutionLine)?.baseUnit ===
+                    "PIECE"
+                      ? "pieces"
+                      : "grams"}
+                    )
+                  </Label>
+                  <Input
+                    id="resolution-quantity"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={resolutionQuantity}
+                    onChange={(event) => setResolutionQuantity(event.target.value)}
+                  />
+                </div>
+                {resolutionOutcome === "VERIFIED_RETURN" ? (
+                  <div className="flex items-start gap-2 sm:col-span-2">
+                    <Checkbox
+                      id="return-inspection"
+                      checked={inspectionConfirmed}
+                      onCheckedChange={(value) => setInspectionConfirmed(value === true)}
+                    />
+                    <Label htmlFor="return-inspection">
+                      Physically received at the warehouse and inspected as sellable
+                    </Label>
+                  </div>
+                ) : null}
+              </fieldset>
+              <Button
+                disabled={
+                  command.busy ||
+                  (command.uncertain && pendingAction !== "RESOLVE") ||
+                  (!command.uncertain &&
+                    (!resolutionLine ||
+                      !resolutionQuantity ||
+                      (resolutionOutcome === "VERIFIED_RETURN" && !inspectionConfirmed)))
+                }
+                onClick={() => void act("RESOLVE")}
+              >
+                {command.busy && pendingAction === "RESOLVE" ? "Saving…" : "Save resolution"}
+              </Button>
+            </section>
+          ) : null}
           {command.notice ? <p role="status">{command.notice}</p> : null}
           <Button
             variant="outline"
@@ -552,19 +754,37 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
           >
             Refresh transfer
           </Button>
-          {transfer.receipts.length ? (
+          {transfer.checks.length ? (
             <section className="space-y-2">
-              <h2 className="font-semibold">Latest accepted receipts (up to 100)</h2>
-              {transfer.receipts.map((receipt) => {
-                const line = transfer.lines.find((line) => line.lineId === receipt.lineId);
+              <h2 className="font-semibold">Latest checks (up to 100)</h2>
+              {transfer.checks.map((check) => {
+                const line = transfer.lines.find((line) => line.lineId === check.lineId);
                 return (
-                  <p key={receipt.receiptId}>
-                    {new Date(receipt.receivedAt).toLocaleString("en-PH", {
+                  <p key={check.checkId} className="text-sm">
+                    {new Date(check.checkedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}{" "}
+                    · {line?.productName} ·{" "}
+                    {line ? units(check.acceptedBase, line.baseUnit) : check.acceptedBase} accepted;
+                    damaged remaining {check.damagedBase}, missing remaining {check.shortageBase} ·{" "}
+                    {check.reason}
+                  </p>
+                );
+              })}
+            </section>
+          ) : null}
+          {transfer.resolutions.length ? (
+            <section className="space-y-2">
+              <h2 className="font-semibold">Latest resolutions (up to 100)</h2>
+              {transfer.resolutions.map((resolution) => {
+                const line = transfer.lines.find((line) => line.lineId === resolution.lineId);
+                return (
+                  <p key={resolution.resolutionId} className="text-sm">
+                    {new Date(resolution.resolvedAt).toLocaleString("en-PH", {
                       timeZone: "Asia/Manila",
                     })}{" "}
                     · {line?.productName} ·{" "}
-                    {line ? units(receipt.acceptedBase, line.baseUnit) : receipt.acceptedBase} ·{" "}
-                    {receipt.reason}
+                    {resolution.outcome === "LOSS" ? "Loss" : "Verified sellable return"}:{" "}
+                    {line ? units(resolution.quantityBase, line.baseUnit) : resolution.quantityBase}{" "}
+                    · {resolution.reason}
                   </p>
                 );
               })}

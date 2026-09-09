@@ -3,6 +3,8 @@ import type {
   InventoryTransferLineView,
   InventoryTransferStatus,
   InventoryTransferOptions,
+  InventoryTransferView,
+  ResolveInventoryTransferRequest,
 } from "@freshmarkets/contracts";
 
 export type TransferRecord = InventoryTransferSummary & { reason: string };
@@ -101,7 +103,8 @@ export function createTransferRepository(db: D1Database) {
       const result = await db
         .prepare(`SELECT line.id lineId,inventory_pool_id inventoryPoolId,product_name productName,
         base_unit baseUnit,quantity_base quantityBase,accepted_base acceptedBase,
-        CASE WHEN transfer.status IN ('IN_TRANSIT','PARTIALLY_RECEIVED') THEN quantity_base-accepted_base ELSE 0 END outstandingBase
+        CASE WHEN transfer.status IN ('IN_TRANSIT','PARTIALLY_RECEIVED') THEN quantity_base-accepted_base-lost_base-returned_base ELSE 0 END outstandingBase,
+        damaged_base damagedBase,shortage_base shortageBase,lost_base lostBase,returned_base returnedBase
         FROM inventory_transfer_line line JOIN inventory_transfer transfer ON transfer.id=line.transfer_id WHERE transfer_id=? ORDER BY line.id`)
         .bind(transferId)
         .all<InventoryTransferLineView>();
@@ -241,7 +244,7 @@ export function createTransferRepository(db: D1Database) {
       return [
         db
           .prepare(`UPDATE inventory_transfer SET status=?,version=version+1,
-        dispatched_at=CASE WHEN ?='IN_TRANSIT' THEN ? ELSE dispatched_at END WHERE id=? AND status=? AND version=?`)
+        dispatched_at=CASE WHEN ?='IN_TRANSIT' AND status='DRAFT' THEN ? ELSE dispatched_at END WHERE id=? AND status=? AND version=?`)
           .bind(after, after, now, transferId, before, expectedVersion),
         required(),
       ];
@@ -290,51 +293,37 @@ export function createTransferRepository(db: D1Database) {
       effectKey: string;
       line: InventoryTransferLineView;
       acceptedBase: number;
+      damagedBase: number;
+      shortageBase: number;
     }): D1PreparedStatement[] {
       const line = input.line;
-      return [
+      const statements = [
         db
-          .prepare(`UPDATE inventory_transfer_line SET accepted_base=accepted_base+? WHERE id=? AND transfer_id=?
-          AND accepted_base=? AND quantity_base-accepted_base>=?`)
+          .prepare(`UPDATE inventory_transfer_line SET accepted_base=accepted_base+?,damaged_base=?,shortage_base=?
+          WHERE id=? AND transfer_id=? AND accepted_base=? AND damaged_base=? AND shortage_base=? AND lost_base=? AND returned_base=?`)
           .bind(
             input.acceptedBase,
+            input.damagedBase,
+            input.shortageBase,
             line.lineId,
             input.transferId,
             line.acceptedBase,
-            input.acceptedBase,
+            line.damagedBase,
+            line.shortageBase,
+            line.lostBase,
+            line.returnedBase,
           ),
         required(),
         db
-          .prepare(`INSERT INTO inventory_balance(location_id,inventory_pool_id,on_hand,reserved,version) VALUES (?,?,?,0,1)
-          ON CONFLICT(location_id,inventory_pool_id) DO UPDATE SET on_hand=on_hand+excluded.on_hand,version=version+1
-          WHERE on_hand<=9007199254740991-excluded.on_hand AND version<9007199254740991`)
-          .bind(input.destinationLocationId, line.inventoryPoolId, input.acceptedBase),
-        required(),
-        db
-          .prepare(
-            `INSERT INTO inventory_transfer_receipt(id,transfer_id,line_id,accepted_base,received_by,reason,received_at,effect_key) VALUES (?,?,?,?,?,?,?,?)`,
-          )
+          .prepare(`INSERT INTO inventory_transfer_check(id,transfer_id,line_id,accepted_base,damaged_base,shortage_base,checked_by,reason,checked_at,effect_key)
+          VALUES (?,?,?,?,?,?,?,?,?,?)`)
           .bind(
             crypto.randomUUID(),
             input.transferId,
             line.lineId,
             input.acceptedBase,
-            input.actorUserId,
-            input.reason,
-            input.now,
-            input.effectKey,
-          ),
-        required(),
-        db
-          .prepare(`INSERT INTO inventory_ledger_entries(id,inventory_pool_id,location_id,movement_type,quantity_delta_base,reservation_delta_base,
-          reference_type,reference_id,actor_type,actor_id,reason_code,metadata_json,created_at,idempotency_key)
-          VALUES (?,?,?,'TRANSFER_RECEIPT',?,0,'inventory_transfer',?,'STAFF',?,?,'{}',?,?)`)
-          .bind(
-            crypto.randomUUID(),
-            line.inventoryPoolId,
-            input.destinationLocationId,
-            input.acceptedBase,
-            input.transferId,
+            input.damagedBase,
+            input.shortageBase,
             input.actorUserId,
             input.reason,
             input.now,
@@ -342,6 +331,170 @@ export function createTransferRepository(db: D1Database) {
           ),
         required(),
       ];
+      if (input.acceptedBase > 0)
+        statements.push(
+          ...creditStockStatements(
+            db,
+            input.destinationLocationId,
+            line.inventoryPoolId,
+            input.acceptedBase,
+          ),
+          db
+            .prepare(
+              `INSERT INTO inventory_transfer_receipt(id,transfer_id,line_id,accepted_base,received_by,reason,received_at,effect_key) VALUES (?,?,?,?,?,?,?,?)`,
+            )
+            .bind(
+              crypto.randomUUID(),
+              input.transferId,
+              line.lineId,
+              input.acceptedBase,
+              input.actorUserId,
+              input.reason,
+              input.now,
+              input.effectKey,
+            ),
+          required(),
+          db
+            .prepare(`INSERT INTO inventory_ledger_entries(id,inventory_pool_id,location_id,movement_type,quantity_delta_base,reservation_delta_base,
+          reference_type,reference_id,actor_type,actor_id,reason_code,metadata_json,created_at,idempotency_key)
+          VALUES (?,?,?,'TRANSFER_RECEIPT',?,0,'inventory_transfer',?,'STAFF',?,?,'{}',?,?)`)
+            .bind(
+              crypto.randomUUID(),
+              line.inventoryPoolId,
+              input.destinationLocationId,
+              input.acceptedBase,
+              input.transferId,
+              input.actorUserId,
+              input.reason,
+              input.now,
+              input.effectKey,
+            ),
+          required(),
+        );
+      return statements;
+    },
+    resolveLineStatements(input: {
+      transferId: string;
+      sourceLocationId: string;
+      destinationLocationId: string;
+      actorUserId: string;
+      now: number;
+      reason: string;
+      effectKey: string;
+      line: InventoryTransferLineView;
+      quantityBase: number;
+      category: ResolveInventoryTransferRequest["category"];
+      outcome: ResolveInventoryTransferRequest["outcome"];
+      inspectionConfirmed: boolean;
+    }): D1PreparedStatement[] {
+      const line = input.line;
+      const statements = [
+        db
+          .prepare(`UPDATE inventory_transfer_line SET
+          lost_base=lost_base+CASE WHEN ?='LOSS' THEN ? ELSE 0 END,
+          returned_base=returned_base+CASE WHEN ?='VERIFIED_RETURN' THEN ? ELSE 0 END,
+          damaged_base=damaged_base-CASE WHEN ?='DAMAGED' THEN ? ELSE 0 END,
+          shortage_base=shortage_base-CASE WHEN ?='MISSING' THEN ? ELSE 0 END
+          WHERE id=? AND transfer_id=? AND accepted_base=? AND damaged_base=? AND shortage_base=? AND lost_base=? AND returned_base=?
+          AND ?<=CASE ? WHEN 'DAMAGED' THEN damaged_base WHEN 'MISSING' THEN shortage_base ELSE quantity_base-accepted_base-lost_base-returned_base-damaged_base-shortage_base END`)
+          .bind(
+            input.outcome,
+            input.quantityBase,
+            input.outcome,
+            input.quantityBase,
+            input.category,
+            input.quantityBase,
+            input.category,
+            input.quantityBase,
+            line.lineId,
+            input.transferId,
+            line.acceptedBase,
+            line.damagedBase,
+            line.shortageBase,
+            line.lostBase,
+            line.returnedBase,
+            input.quantityBase,
+            input.category,
+          ),
+        required(),
+        db
+          .prepare(`INSERT INTO inventory_transfer_resolution(id,transfer_id,line_id,quantity_base,category,outcome,inspection_confirmed,resolved_by,reason,resolved_at,effect_key)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+          .bind(
+            crypto.randomUUID(),
+            input.transferId,
+            line.lineId,
+            input.quantityBase,
+            input.category,
+            input.outcome,
+            input.inspectionConfirmed ? 1 : 0,
+            input.actorUserId,
+            input.reason,
+            input.now,
+            input.effectKey,
+          ),
+        required(),
+      ];
+      if (input.outcome === "VERIFIED_RETURN")
+        statements.push(
+          ...creditStockStatements(
+            db,
+            input.sourceLocationId,
+            line.inventoryPoolId,
+            input.quantityBase,
+          ),
+          db
+            .prepare(`INSERT INTO inventory_ledger_entries(id,inventory_pool_id,location_id,movement_type,quantity_delta_base,reservation_delta_base,
+          reference_type,reference_id,actor_type,actor_id,reason_code,metadata_json,created_at,idempotency_key)
+          VALUES (?,?,?,'TRANSFER_RETURN',?,0,'inventory_transfer',?,'STAFF',?,?,'{}',?,?)`)
+            .bind(
+              crypto.randomUUID(),
+              line.inventoryPoolId,
+              input.sourceLocationId,
+              input.quantityBase,
+              input.transferId,
+              input.actorUserId,
+              input.reason,
+              input.now,
+              input.effectKey,
+            ),
+          required(),
+        );
+      return statements;
+    },
+    async checks(transferId: string) {
+      return (
+        await db
+          .prepare(`SELECT id checkId,line_id lineId,accepted_base acceptedBase,damaged_base damagedBase,shortage_base shortageBase,reason,checked_at checkedAt
+        FROM inventory_transfer_check WHERE transfer_id=? ORDER BY checked_at DESC,id DESC LIMIT 100`)
+          .bind(transferId)
+          .all<InventoryTransferView["checks"][number]>()
+      ).results;
+    },
+    async resolutions(transferId: string) {
+      return (
+        await db
+          .prepare(`SELECT id resolutionId,line_id lineId,quantity_base quantityBase,category,outcome,reason,resolved_at resolvedAt
+        FROM inventory_transfer_resolution WHERE transfer_id=? ORDER BY resolved_at DESC,id DESC LIMIT 100`)
+          .bind(transferId)
+          .all<InventoryTransferView["resolutions"][number]>()
+      ).results;
     },
   };
+}
+
+function creditStockStatements(
+  db: D1Database,
+  locationId: string,
+  inventoryPoolId: string,
+  quantityBase: number,
+): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(`INSERT INTO inventory_balance(location_id,inventory_pool_id,on_hand,reserved,version) VALUES (?,?,?,0,1)
+    ON CONFLICT(location_id,inventory_pool_id) DO UPDATE SET on_hand=on_hand+excluded.on_hand,version=version+1
+    WHERE on_hand<=9007199254740991-excluded.on_hand AND version<9007199254740991`)
+      .bind(locationId, inventoryPoolId, quantityBase),
+    requiredTransferEffect(db),
+  ];
 }

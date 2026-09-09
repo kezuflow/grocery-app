@@ -315,6 +315,8 @@ export const coreServiceMethodNames = [
   "listCustomerOrderIssues",
   "createOrderAmendment",
   "createAmendmentPaymentIntent",
+  "resolveInventoryTransfer",
+  "listInventoryDistribution",
   "listInventoryTransfers",
   "getInventoryTransfer",
   "getInventoryTransferOptions",
