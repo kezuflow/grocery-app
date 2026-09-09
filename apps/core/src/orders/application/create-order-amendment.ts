@@ -8,8 +8,14 @@ import { requestHash } from "../../idempotency";
 import { amendmentEligibility } from "../domain/amendment";
 import {
   resolveLineShippingWeightGrams,
+  totalShippingWeightGrams,
+  MAX_ORDER_WEIGHT_GRAMS,
   type CanonicalBaseUnitCode,
 } from "../../fulfillment/domain/delivery-package";
+import {
+  readOrderDeliveryWeight,
+  orderDeliveryWeightGuard,
+} from "../../fulfillment/application/order-delivery-weight";
 
 export type CreateOrderAmendmentCommand = {
   customerId: string;
@@ -239,10 +245,36 @@ export async function createOrderAmendment(
       lineTotalMinor: addition.quantity * price.amount_minor,
     });
   }
+  const addedWeight = totalShippingWeightGrams(lines.map((line) => line.shippingWeightGrams));
+  if (addedWeight === null)
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Delivery weight is unavailable for one or more items",
+      command.requestId,
+    );
+  const weightInput = {
+    orderId: command.orderId,
+    additionalWeightGrams: addedWeight,
+    includePaymentClaims: true,
+  };
+  const weight = await readOrderDeliveryWeight(database, weightInput);
+  if (!weight.known)
+    return failure(
+      "CONFIGURATION_ERROR",
+      "Delivery weight is unavailable for this order",
+      command.requestId,
+    );
+  if (weight.grams > MAX_ORDER_WEIGHT_GRAMS)
+    return failure(
+      "VALIDATION_FAILED",
+      "An order including additions cannot exceed 20 kg",
+      command.requestId,
+    );
   const totalMinor = lines.reduce((sum, line) => sum + line.lineTotalMinor, 0);
   const amendmentId = crypto.randomUUID();
   try {
     await database.batch([
+      orderDeliveryWeightGuard(database, weightInput),
       database
         .prepare(
           "INSERT INTO idempotency_records (scope,idempotency_key,request_hash,result_type,result_reference,status,created_at,updated_at) VALUES ('orders.createAmendment',?,?,'paid_order_amendment',?,'PROCESSING',?,?)",

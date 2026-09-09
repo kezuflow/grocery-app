@@ -582,7 +582,7 @@ describe("instant checkout quotes", () => {
     ).toEqual({ count: 0 });
   });
 
-  it("quotes 100 Scheduled units without consulting physical stock or legacy capacity", async () => {
+  it("quotes 20 kg of Scheduled goods without consulting physical stock or legacy capacity", async () => {
     const now = Date.now();
     await env.DB.batch([
       env.DB.prepare(
@@ -595,7 +595,7 @@ describe("instant checkout quotes", () => {
         "UPDATE inventory_pool SET base_unit_id='unit-gram' WHERE id='pool-red-onion'",
       ),
     ]);
-    const basket = await seedBasket({ onHand: 0, quantity: 100 });
+    const basket = await seedBasket({ onHand: 0, quantity: 40 });
     const result = await createCheckoutQuote(
       env.DB,
       {
@@ -610,11 +610,30 @@ describe("instant checkout quotes", () => {
       value: {
         lines: [
           expect.objectContaining({
-            quantity: 100,
-            baseQuantity: 50_000,
-            shippingWeightGrams: 50_000,
+            quantity: 40,
+            baseQuantity: 20_000,
+            shippingWeightGrams: 20_000,
           }),
         ],
+      },
+    });
+    await env.DB.prepare("UPDATE cart_item SET quantity=41 WHERE cart_id=?")
+      .bind(basket.cartId)
+      .run();
+    expect(
+      await createCheckoutQuote(
+        env.DB,
+        {
+          ...command(basket.customerId, basket.cartId, basket.addressId),
+          deliveryCycleId: "cycle-next-cebu",
+        },
+        quoteDependencies,
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "An order including additions cannot exceed 20 kg",
       },
     });
     await env.DB.prepare(

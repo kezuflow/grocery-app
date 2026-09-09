@@ -1,3 +1,7 @@
+import {
+  totalShippingWeightGrams,
+  MAX_ORDER_WEIGHT_GRAMS,
+} from "../../fulfillment/domain/delivery-package";
 import { operatingScheduleGuard } from "../../geography/application/operating-schedule-guard";
 import {
   createCheckoutRepository,
@@ -157,10 +161,17 @@ export async function createInstantQuote(
     });
   }
 
-  if (command.deliveryPartner && lines.some((line) => line.shippingWeightGrams === null))
+  const orderWeight = totalShippingWeightGrams(lines.map((line) => line.shippingWeightGrams));
+  if (orderWeight === null)
     return failure(
       "CONFIGURATION_ERROR",
       "Delivery weight is unavailable for one or more items",
+      command.requestId,
+    );
+  if (orderWeight > MAX_ORDER_WEIGHT_GRAMS)
+    return failure(
+      "VALIDATION_FAILED",
+      "An order including additions cannot exceed 20 kg",
       command.requestId,
     );
   if (!command.deliveryPartner)

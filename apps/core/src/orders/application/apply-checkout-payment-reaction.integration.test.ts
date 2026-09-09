@@ -212,6 +212,41 @@ function paymentCommandForQuote(
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("rejects a retained overweight quote before creating payment intent", async () => {
+    const fixture = await seededCheckout();
+    const quote = await createCheckoutQuote(
+      env.DB,
+      {
+        ...fixture,
+        cartVersion: 3,
+        deliveryCycleId: "cycle-next-cebu",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      },
+      quoteDependencies,
+    );
+    if (!quote.ok) throw new Error(quote.error.message);
+    await env.DB.prepare(
+      "UPDATE checkout_quote SET lines_json=json_set(lines_json,'$[0].shippingWeightGrams',20001) WHERE id=?",
+    )
+      .bind(quote.value.quoteId)
+      .run();
+    expect(
+      await createCheckoutPaymentIntent(
+        env.DB,
+        new ProviderRegistry("test", [createMockPaymentProvider()]),
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommandForQuote(fixture.customerId, quote.value),
+        quoteDependencies.deliveryProviders,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await env.DB.prepare("SELECT id FROM payment_intent WHERE customer_id=?")
+        .bind(fixture.customerId)
+        .first(),
+    ).toBeNull();
+  });
   it("carries an operator-created window through payment, recovery and the customer order without stock", async () => {
     const staff = await locationManager();
     await env.DB.prepare(

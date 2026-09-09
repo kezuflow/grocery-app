@@ -1,5 +1,6 @@
 import { isSufficientForCommitment } from "../../payments/domain/payment";
 import type { PaymentDomainState } from "../../payments/domain/payment";
+import { orderDeliveryWeightGuard } from "../../fulfillment/application/order-delivery-weight";
 
 export type ApplyAmendmentPaymentReactionInput = {
   reactionId: string;
@@ -100,6 +101,11 @@ export async function applyAmendmentPaymentReaction(
     .then((result) => result.results);
 
   const statements: D1PreparedStatement[] = [
+    orderDeliveryWeightGuard(database, {
+      orderId: amendment.order_id,
+      candidateAmendmentId: amendment.id,
+      includePaymentClaims: false,
+    }),
     database
       .prepare(
         `UPDATE paid_order_amendment SET status='COMMITTED',version=version+1,committed_at=?,updated_at=?

@@ -43,6 +43,9 @@ describe("delivery package policy", () => {
   it("uses one bag below 10 kg and one box from 10 kg", () => {
     expect(deliveryPackageKind(9_999)).toBe("BAG");
     expect(deliveryPackageKind(10_000)).toBe("BOX");
+    expect(deliveryPackageKind(20_000)).toBe("BOX");
+    expect(deliveryPackageKind(20_001)).toBeNull();
+    expect(deliveryPackageForLineWeights([19_000, 1_001])).toBeNull();
     expect(deliveryPackageKind(0)).toBeNull();
     expect(totalShippingWeightGrams([5_000, 4_999])).toBe(9_999);
     expect(totalShippingWeightGrams([5_000, null])).toBeNull();

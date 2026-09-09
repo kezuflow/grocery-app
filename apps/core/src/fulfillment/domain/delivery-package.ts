@@ -3,6 +3,7 @@ export type CanonicalBaseUnitCode = "GRAM" | "MILLILITER" | "PIECE";
 export type DeliveryPackageKind = "BAG" | "BOX";
 
 export const BOX_MINIMUM_WEIGHT_GRAMS = 10_000;
+export const MAX_ORDER_WEIGHT_GRAMS = 20_000;
 
 function positiveSafeInteger(value: number | null): value is number {
   return value !== null && Number.isSafeInteger(value) && value > 0;
@@ -41,7 +42,8 @@ export function totalShippingWeightGrams(lineWeights: readonly (number | null)[]
 
 /** Exactly 10 kg starts a box; anything lighter is one bag. */
 export function deliveryPackageKind(totalWeightGrams: number): DeliveryPackageKind | null {
-  if (!positiveSafeInteger(totalWeightGrams)) return null;
+  if (!positiveSafeInteger(totalWeightGrams) || totalWeightGrams > MAX_ORDER_WEIGHT_GRAMS)
+    return null;
   return totalWeightGrams >= BOX_MINIMUM_WEIGHT_GRAMS ? "BOX" : "BAG";
 }
 

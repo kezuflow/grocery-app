@@ -5,6 +5,8 @@ import type {
 } from "@freshmarkets/contracts";
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { createPayment } from "./create-payment";
+import { readOrderDeliveryWeight } from "../../fulfillment/application/order-delivery-weight";
+import { MAX_ORDER_WEIGHT_GRAMS } from "../../fulfillment/domain/delivery-package";
 
 export async function createAmendmentPaymentIntent(
   database: D1Database,
@@ -14,13 +16,14 @@ export async function createAmendmentPaymentIntent(
 ): Promise<RpcResult<PaymentActionView>> {
   const amendment = await database
     .prepare(
-      `SELECT a.id,a.status,a.version,a.currency,a.total_minor AS totalMinor,a.payment_intent_id AS paymentIntentId
+      `SELECT a.id,a.order_id AS orderId,a.status,a.version,a.currency,a.total_minor AS totalMinor,a.payment_intent_id AS paymentIntentId
        FROM paid_order_amendment a JOIN grocery_order o ON o.id=a.order_id
        WHERE a.id=? AND o.customer_id=?`,
     )
     .bind(command.amendmentId, command.customerId)
     .first<{
       id: string;
+      orderId: string;
       status: string;
       version: number;
       currency: string;
@@ -83,6 +86,22 @@ export async function createAmendmentPaymentIntent(
       },
     };
 
+  const weight = await readOrderDeliveryWeight(database, {
+    orderId: amendment.orderId,
+    candidateAmendmentId: amendment.id,
+    includePaymentClaims: true,
+  });
+  if (!weight.known || weight.grams > MAX_ORDER_WEIGHT_GRAMS)
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: weight.known
+          ? "An order including additions cannot exceed 20 kg"
+          : "Delivery weight is unavailable for this order",
+        requestId: command.requestId,
+      },
+    };
   const payment = await createPayment(database, registry, {
     purpose: "ORDER_AMENDMENT",
     amendmentVersion: command.expectedAmendmentVersion,

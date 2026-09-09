@@ -1,3 +1,7 @@
+import {
+  totalShippingWeightGrams,
+  MAX_ORDER_WEIGHT_GRAMS,
+} from "../../fulfillment/domain/delivery-package";
 import { isSufficientForCommitment } from "../../payments/domain/payment";
 import { scheduledWindowSnapshotSchema } from "../../commerce/application/scheduled-window";
 import { createInvoiceReadinessStatement } from "./create-invoice-readiness";
@@ -76,6 +80,9 @@ export async function applyCheckoutPaymentReaction(
   if (!payment) return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
   const instant = quote.fulfillmentMode === "INSTANT";
 
+  const weight = totalShippingWeightGrams(quote.lines.map((line) => line.shippingWeightGrams));
+  if (weight === null || weight > MAX_ORDER_WEIGHT_GRAMS)
+    return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
   const promotionClaims = await database
     .prepare(
       `SELECT id, promotion_id, price_component, benefit_type, amount_minor,
