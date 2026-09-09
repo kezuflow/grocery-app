@@ -36,6 +36,7 @@ export type ScheduledWeekView = {
     timezone: string;
     orderOpensAt: number;
     cutoffAt: number;
+    purchaseBlockedReason: string | null;
     procurementAt: number | null;
     preparationAt: number | null;
     pickupAt: number | null;

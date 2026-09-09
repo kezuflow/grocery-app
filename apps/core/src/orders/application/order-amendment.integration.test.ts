@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
+import { seedTestCycle } from "../../test-commerce-fixtures";
+import { hasUnresolvedScheduledCommitment } from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 import { requestRefund } from "../../payments/application/request-refund";
 import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
 import { redrivePaymentReactions } from "../../payments/application/redrive-payment-reactions";
@@ -17,7 +19,7 @@ import { ProviderRegistry } from "../../payments/infrastructure/providers/provid
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
 
 let counter = 0;
-async function committedOrder() {
+async function committedOrder(cycleIdOverride?: string) {
   const n = ++counter;
   const customerId = `cust-amd-${n}-${crypto.randomUUID().slice(0, 8)}`;
   const now = Date.now();
@@ -79,9 +81,11 @@ async function committedOrder() {
   const orderId = crypto.randomUUID();
   const intentId = crypto.randomUUID();
   const reactionId = crypto.randomUUID();
-  const cycleId = (await env.DB.prepare(
-    "SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1",
-  ).first<{ id: string }>())!.id;
+  const cycleId =
+    cycleIdOverride ??
+    (await env.DB.prepare("SELECT id FROM delivery_cycle WHERE status='OPEN' LIMIT 1").first<{
+      id: string;
+    }>())!.id;
   await env.DB.prepare(
     "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, 16000, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
   )
@@ -113,6 +117,186 @@ async function committedOrder() {
 }
 
 describe("paid-order amendments", () => {
+  it.each(["cutoff", "cancellation", "version", "missing-link"] as const)(
+    "rejects %s at payment admission without an intent or provider submission",
+    async (kind) => {
+      const cycleId = crypto.randomUUID();
+      await seedTestCycle(env.DB, cycleId);
+      const f = await committedOrder(cycleId);
+      const addition = await createOrderAmendment(env.DB, {
+        customerId: f.customerId,
+        orderId: f.orderId,
+        expectedOrderVersion: 5,
+        additions: [{ skuId: f.skuId, quantity: 2 }],
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      });
+      if (!addition.ok) throw new Error(addition.error.message);
+      const provider = createMockPaymentProvider();
+      let submissions = 0,
+        reached = false;
+      const registry = new ProviderRegistry("test", [
+        {
+          ...provider,
+          createPayment: async (...args: Parameters<typeof provider.createPayment>) => {
+            submissions++;
+            return provider.createPayment(...args);
+          },
+        },
+      ]);
+      const db = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              reached = true;
+              if (kind === "cutoff")
+                await target
+                  .prepare(
+                    "UPDATE delivery_cycle SET cutoff_at=CAST(unixepoch('subsec')*1000 AS INTEGER) WHERE id=?",
+                  )
+                  .bind(cycleId)
+                  .run();
+              if (kind === "cancellation")
+                await target
+                  .prepare("UPDATE grocery_order SET status='CANCELLATION_REQUESTED' WHERE id=?")
+                  .bind(f.orderId)
+                  .run();
+              if (kind === "version")
+                await target
+                  .prepare("UPDATE paid_order_amendment SET version=version+1 WHERE id=?")
+                  .bind(addition.value.amendmentId)
+                  .run();
+              if (kind === "missing-link")
+                await target
+                  .prepare(
+                    "CREATE TRIGGER ignore_addition_payment_link BEFORE UPDATE OF payment_intent_id ON paid_order_amendment BEGIN SELECT RAISE(IGNORE); END",
+                  )
+                  .run();
+              try {
+                return await target.batch(statements);
+              } finally {
+                if (kind === "missing-link")
+                  await target.prepare("DROP TRIGGER ignore_addition_payment_link").run();
+              }
+            };
+          const value = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const idempotencyKey = crypto.randomUUID();
+      expect(
+        await createAmendmentPaymentIntent(db, registry, "mock", {
+          customerId: f.customerId,
+          amendmentId: addition.value.amendmentId,
+          expectedAmendmentVersion: addition.value.version,
+          expectedCurrency: "PHP",
+          expectedTotalMinor: addition.value.financial.totalMinor,
+          returnUrl: "https://app.example/orders",
+          idempotencyKey,
+          requestId: crypto.randomUUID(),
+          headers: {},
+        }),
+      ).toMatchObject({ ok: false });
+      expect(reached).toBe(true);
+      expect(submissions).toBe(0);
+      expect(
+        await env.DB.prepare("SELECT id FROM payment_intent WHERE idempotency_key=?")
+          .bind(idempotencyKey)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT payment_intent_id FROM paid_order_amendment WHERE id=?")
+          .bind(addition.value.amendmentId)
+          .first(),
+      ).toEqual({ payment_intent_id: null });
+    },
+  );
+  it("commits an already-started addition after cycle cutoff exactly once and clears purchase blocking", async () => {
+    const cycleId = crypto.randomUUID();
+    await seedTestCycle(env.DB, cycleId);
+    const f = await committedOrder(cycleId);
+    const addition = await createOrderAmendment(env.DB, {
+      customerId: f.customerId,
+      orderId: f.orderId,
+      expectedOrderVersion: 5,
+      additions: [{ skuId: f.skuId, quantity: 2 }],
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    });
+    if (!addition.ok) throw new Error(addition.error.message);
+    const provider = createMockPaymentProvider(),
+      registry = new ProviderRegistry("test", [provider]);
+    const command = {
+      customerId: f.customerId,
+      amendmentId: addition.value.amendmentId,
+      expectedAmendmentVersion: addition.value.version,
+      expectedCurrency: "PHP",
+      expectedTotalMinor: addition.value.financial.totalMinor,
+      returnUrl: "https://app.example/orders",
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+      headers: {},
+    };
+    const payment = await createAmendmentPaymentIntent(env.DB, registry, "mock", command);
+    if (!payment.ok) throw new Error(payment.error.message);
+    await env.DB.prepare("UPDATE delivery_cycle SET status='CUTOFF_REACHED',cutoff_at=? WHERE id=?")
+      .bind(Date.now() - 1, cycleId)
+      .run();
+    expect(await hasUnresolvedScheduledCommitment(env.DB, cycleId)).toBe(true);
+    expect(await createAmendmentPaymentIntent(env.DB, registry, "mock", command)).toEqual(payment);
+    const lateKey = crypto.randomUUID();
+    expect(
+      await createAmendmentPaymentIntent(env.DB, registry, "mock", {
+        ...command,
+        idempotencyKey: lateKey,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT id FROM payment_intent WHERE idempotency_key=?")
+        .bind(lateKey)
+        .first(),
+    ).toBeNull();
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    if (!attempt) throw new Error("Missing attempt");
+    setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+    await reconcilePayment(env.DB, registry, {
+      paymentIntentId: payment.value.paymentIntentId,
+      idempotencyKey: crypto.randomUUID(),
+      actorId: "test",
+      requestId: crypto.randomUUID(),
+    });
+    const reaction = await env.DB.prepare(
+      "SELECT id FROM payment_reaction WHERE payment_intent_id=?",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ id: string }>();
+    if (!reaction) throw new Error("Missing reaction");
+    const reactionCommand = {
+      reactionId: reaction.id,
+      paymentIntentId: payment.value.paymentIntentId,
+      amendmentId: addition.value.amendmentId,
+      canonicalPaymentState: "SUCCEEDED" as const,
+    };
+    expect(await applyAmendmentPaymentReaction(env.DB, reactionCommand)).toMatchObject({
+      applied: true,
+    });
+    expect(await applyAmendmentPaymentReaction(env.DB, reactionCommand)).toEqual({
+      applied: true,
+      reason: "ALREADY_APPLIED",
+    });
+    expect(await hasUnresolvedScheduledCommitment(env.DB, cycleId)).toBe(false);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n,SUM(quantity_base_total) grams FROM committed_demand WHERE delivery_cycle_id=?",
+      )
+        .bind(cycleId)
+        .first(),
+    ).toEqual({ n: 1, grams: 1000 });
+  });
   it("closes a fully refunded uncommitted addition without changing the original Order or demand", async () => {
     const f = await committedOrder();
     const addition = await createOrderAmendment(env.DB, {

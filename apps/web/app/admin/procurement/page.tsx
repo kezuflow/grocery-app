@@ -89,6 +89,11 @@ export default function ProcurementPage() {
     })();
     return () => controller.abort();
   }, [locationId, cycleId, cycleCursor, section, cursor, reload]);
+  useEffect(() => {
+    if (!view?.week?.purchaseBlockedReason || error) return;
+    const timer = setTimeout(() => setReload((value) => value + 1), 5000);
+    return () => clearTimeout(timer);
+  }, [view, error]);
   const date = (value: number | null) =>
     value === null
       ? "Not set"
@@ -196,6 +201,11 @@ export default function ProcurementPage() {
                   </p>
                 ))}
               </section>
+              {view.week.purchaseBlockedReason ? (
+                <p role="status" className="rounded-lg border p-3 text-sm">
+                  {view.week.purchaseBlockedReason}
+                </p>
+              ) : null}
               <nav aria-label="Delivery week sections" className="flex flex-wrap gap-2">
                 {(Object.keys(sectionNames) as Array<keyof typeof sectionNames>).map((kind) => (
                   <Button

@@ -107,7 +107,9 @@ export async function applyAmendmentPaymentReaction(
           (SELECT 1 FROM grocery_order o JOIN order_fulfillment_snapshot f ON f.order_id=o.id
            JOIN delivery_cycle c ON c.id=f.cycle_id
            WHERE o.id=paid_order_amendment.order_id AND o.status='COMMITTED'
-             AND f.fulfillment_mode='SCHEDULED' AND f.cutoff_at>? AND c.status='OPEN')
+             AND f.fulfillment_mode='SCHEDULED'
+             AND f.cutoff_at>(SELECT created_at FROM payment_intent WHERE id=paid_order_amendment.payment_intent_id)
+             AND c.status NOT IN ('DRAFT','SCHEDULED','CANCELED','CLOSED'))
           AND EXISTS (SELECT 1 FROM payment_intent pi WHERE pi.id=paid_order_amendment.payment_intent_id
             AND pi.status='SUCCEEDED' AND pi.version=? AND pi.purpose='ORDER_AMENDMENT' AND pi.subject_type='paid_order_amendment' AND pi.subject_id=paid_order_amendment.id
             AND pi.customer_id=(SELECT customer_id FROM grocery_order WHERE id=paid_order_amendment.order_id)
@@ -121,7 +123,6 @@ export async function applyAmendmentPaymentReaction(
         now,
         input.amendmentId,
         amendment.version,
-        now,
         amendment.payment_version,
         input.reactionId,
       ),

@@ -4,6 +4,10 @@ import type {
   ScheduledWeekView,
   ScheduledDemandItem,
 } from "@freshmarkets/contracts";
+import {
+  hasUnresolvedScheduledCommitment,
+  scheduledPurchasePendingMessage,
+} from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 import { scheduledWeekQuerySchema, scheduledWeekViewSchema } from "@freshmarkets/validation";
 import {
   resolveOperationsAdministrationAccess,
@@ -78,7 +82,13 @@ export async function getAdminScheduledWeek(
       .all<{ name: string; startsAt: number; endsAt: number }>(),
   ]);
   if (!schedule) return fail("NOT_FOUND", "Delivery week schedule is unavailable");
-  result.week = { ...selected, ...schedule, windows: windows.results };
+  const purchasePending = await hasUnresolvedScheduledCommitment(deps.db, query.cycleId);
+  result.week = {
+    ...selected,
+    ...schedule,
+    windows: windows.results,
+    purchaseBlockedReason: purchasePending ? scheduledPurchasePendingMessage : null,
+  };
   const now = Date.now();
   if (query.section === "DEMAND") {
     const manage = await resolveOperationsAdministrationAccess(
@@ -106,6 +116,7 @@ export async function getAdminScheduledWeek(
       items: rows.results.slice(0, 50).map((row) => ({
         ...row,
         canConfirmPurchase:
+          !purchasePending &&
           manage.ok &&
           selected.cutoffAt <= now &&
           !["DRAFT", "SCHEDULED", "CLOSED", "CANCELED"].includes(selected.status) &&

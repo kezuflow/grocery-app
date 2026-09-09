@@ -22,6 +22,8 @@ export type CreatePaymentCommand = {
   requestId: string;
   /** Trusted checkout command evidence; never accepted from a client payload. */
   checkoutVersion?: number;
+  /** Trusted addition version captured by its owning command. */
+  amendmentVersion?: number;
 };
 
 export type CreatedPaymentAction = {
@@ -213,13 +215,46 @@ export async function createPayment(
             command.currency,
           ),
       );
-    await database.batch([...guards, insertIntent]);
+    if (command.purpose === "ORDER_AMENDMENT")
+      guards.push(
+        database
+          .prepare(`INSERT INTO commitment_abort(id) SELECT -39 WHERE NOT EXISTS (
+        SELECT 1 FROM paid_order_amendment a JOIN grocery_order o ON o.id=a.order_id
+        JOIN order_fulfillment_snapshot f ON f.order_id=o.id JOIN delivery_cycle c ON c.id=f.cycle_id
+        WHERE a.id=? AND o.customer_id=? AND a.status='PENDING_PAYMENT' AND a.payment_intent_id IS NULL
+          AND a.currency=? AND a.total_minor=? AND a.version=COALESCE(?,a.version)
+          AND o.status='COMMITTED' AND f.fulfillment_mode='SCHEDULED'
+          AND f.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
+          AND c.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER) AND c.status='OPEN'
+      )`)
+          .bind(
+            command.subjectId,
+            command.customerId,
+            command.currency,
+            command.amountMinor,
+            command.amendmentVersion ?? null,
+          ),
+      );
+    const linkAddition =
+      command.purpose === "ORDER_AMENDMENT"
+        ? [
+            database
+              .prepare(
+                "UPDATE paid_order_amendment SET payment_intent_id=?,updated_at=? WHERE id=? AND status='PENDING_PAYMENT' AND payment_intent_id IS NULL",
+              )
+              .bind(intentId, now, command.subjectId),
+            database.prepare("INSERT INTO commitment_abort(id) SELECT -39 WHERE changes()!=1"),
+          ]
+        : [];
+    await database.batch([...guards, insertIntent, ...linkAddition]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/commitment_abort|CHECK constraint failed: id = 0/.test(message))
       return failure(
-        "PRICE_CHANGED",
-        "Checkout routing changed; accept a new quote",
+        command.purpose === "ORDER_AMENDMENT" ? "ILLEGAL_TRANSITION" : "PRICE_CHANGED",
+        command.purpose === "ORDER_AMENDMENT"
+          ? "This addition is no longer available for payment"
+          : "Checkout routing changed; accept a new quote",
         command.requestId,
       );
     if (message.includes("UNIQUE constraint failed")) {

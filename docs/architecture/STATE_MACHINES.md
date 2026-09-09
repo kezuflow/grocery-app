@@ -43,7 +43,7 @@ Commands include `ScheduleCycle`, `OpenCycle`, `ReachCycleCutoff`, `BeginProcure
 
 Rules:
 
-- Customer Orders/amendments enter only while the cycle is `OPEN` and current time is before cutoff. A cycle has no order, customer, zone, seat, or other capacity.
+- New customer Orders/amendments and their payment initiation enter only while the cycle is `OPEN` and current time is before cutoff. Already-started payments may commit after cutoff; addition commitment requires its recorded payment start before the Order's immutable cutoff, the original Order still eligible and no conflicting refund. Purchasing waits until these original/addition outcomes are accounted for. A cycle has no order, customer, zone, seat, or other capacity.
 - Reaching cutoff prevents normal procurement-affecting customer modifications.
 - Time-based advancement is still an explicit idempotent command invoked by a request or scheduled trigger.
 - Draft save and `DRAFT -> SCHEDULED` require Global fulfillment authority, the reviewed version, complete ordered timing and eligible destination participation. Every required relation, audit and original command receipt shares the guarded transaction. Published schedules are not editable through draft save. `SCHEDULED -> OPEN` occurs no earlier than `order_opens_at`; `OPEN -> CUTOFF_REACHED` occurs at cutoff, each with stable transition identity and atomic audit/receipt. After scheduler downtime, opening followed by cutoff remains safe because checkout independently enforces the opening/cutoff interval.

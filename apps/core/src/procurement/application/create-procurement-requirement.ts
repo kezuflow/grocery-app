@@ -1,3 +1,8 @@
+import {
+  hasUnresolvedScheduledCommitment,
+  unresolvedScheduledCommitmentSql,
+  scheduledPurchasePendingMessage,
+} from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 import type {
   ProcurementCommandRequest,
   ProcurementRequirementView,
@@ -150,6 +155,8 @@ async function executeProcurementCommand(
     )
     .bind(command.skuId, command.inventoryPoolId)
     .first();
+  if (purchasing && (await hasUnresolvedScheduledCommitment(database, command.deliveryCycleId)))
+    return failure("CONFLICT", scheduledPurchasePendingMessage, command.requestId);
   if (!sku)
     return failure(
       "VALIDATION_FAILED",
@@ -298,6 +305,13 @@ async function executeProcurementCommand(
       )
       .bind(...demandBindings, totals.count, totals.units, totals.quantity, totals.grams),
   );
+  if (purchasing)
+    statements.push(
+      database
+        .prepare(`INSERT INTO commitment_abort(id) SELECT -38 WHERE EXISTS (
+    SELECT 1 FROM delivery_cycle scheduled_cycle WHERE scheduled_cycle.id=? AND ${unresolvedScheduledCommitmentSql})`)
+        .bind(command.deliveryCycleId),
+    );
   if (run)
     statements.push(
       database

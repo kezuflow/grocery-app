@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
+import { seedTestCycle } from "../../test-commerce-fixtures";
 import { openDueDeliveryCycles } from "../../commerce/application/open-due-delivery-cycles";
 import { getCustomerOrderDetail } from "./get-customer-order-detail";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
@@ -14,6 +15,7 @@ import {
   setMockObservedState,
 } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
+import { hasUnresolvedScheduledCommitment } from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 
 const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
@@ -129,10 +131,11 @@ async function seededCheckout(
 async function createQuote(
   fixture: Awaited<ReturnType<typeof seededCheckout>>,
   promotionCodes?: readonly string[],
+  cycleId = "cycle-next-cebu",
 ) {
-  const cycles = await env.DB.prepare(
-    "SELECT id FROM delivery_cycle WHERE id='cycle-next-cebu' AND status='OPEN'",
-  ).all<{ id: string }>();
+  const cycles = await env.DB.prepare("SELECT id FROM delivery_cycle WHERE id=? AND status='OPEN'")
+    .bind(cycleId)
+    .all<{ id: string }>();
   expect(cycles.results.length).toBeGreaterThan(0);
   const mode = await env.DB.prepare(
     "SELECT fulfillment_mode mode FROM global_commerce_configuration WHERE id='global'",
@@ -753,9 +756,22 @@ describe("order commitment from canonical payment reactions", () => {
     expect(quote.ok).toBe(true);
   });
 
-  it("commits paid Scheduled demand without subscription or stock and replays once", async () => {
+  it("commits late paid Scheduled demand before purchasing without subscription or stock and replays once", async () => {
     const fixture = await seededCheckout({ onHand: 0 });
-    const quote = await createQuote(fixture);
+    const cycleId = crypto.randomUUID();
+    await seedTestCycle(env.DB, cycleId);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO delivery_cycle_zone(cycle_id,zone_id,location_id,status,version,created_at,updated_at) VALUES (?,'zone-cebu-city-core','location-cebu-central','ACTIVE',1,1,1)",
+      ).bind(cycleId),
+      env.DB.prepare(
+        "INSERT INTO delivery_cycle_schedule SELECT ?,timezone,procurement_at,preparation_at,pickup_at,created_at,updated_at FROM delivery_cycle_schedule WHERE cycle_id='cycle-next-cebu'",
+      ).bind(cycleId),
+      env.DB.prepare(
+        "INSERT INTO delivery_cycle_window SELECT id || ?,?,name,starts_at,ends_at,created_at FROM delivery_cycle_window WHERE cycle_id='cycle-next-cebu'",
+      ).bind(cycleId, cycleId),
+    ]);
+    const quote = await createQuote(fixture, undefined, cycleId);
     if (!quote.ok) throw new Error(JSON.stringify(quote.error));
     const provider = createMockPaymentProvider();
     const registry = new ProviderRegistry("test", [provider]);
@@ -772,6 +788,10 @@ describe("order commitment from canonical payment reactions", () => {
     const payment = await startPayment();
     if (!payment.ok) throw new Error(payment.error.message);
     expect(await startPayment()).toEqual(payment);
+    await env.DB.prepare("UPDATE delivery_cycle SET cutoff_at=?,status='CUTOFF_REACHED' WHERE id=?")
+      .bind(Date.now() - 1, cycleId)
+      .run();
+    expect(await hasUnresolvedScheduledCommitment(env.DB, cycleId)).toBe(true);
     await env.DB.batch([
       env.DB.prepare(
         "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'",
@@ -828,6 +848,30 @@ describe("order commitment from canonical payment reactions", () => {
         canonicalPaymentState: "SUCCEEDED",
       }),
     ).toEqual({ applied: true, reason: "ALREADY_APPLIED", orderId: outcome.orderId });
+    expect(await hasUnresolvedScheduledCommitment(env.DB, cycleId)).toBe(false);
+    const manager = await locationManager("location");
+    await env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='procurement.manage'",
+    )
+      .bind(manager.id)
+      .run();
+    const purchase = await exports.default.confirmAdminProcurementPurchase({
+      headers: manager.headers,
+      cycleId,
+      locationId: "location-cebu-central",
+      inventoryPoolId: fixture.poolId,
+      skuId: fixture.skuId,
+      expectedVersion: 0,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+      reason: "Purchase confirmed late demand",
+      expectedQuantityBase: 2000,
+      expectedQuantitySellable: 4,
+    });
+    expect(purchase).toMatchObject({
+      ok: true,
+      value: { requiredQuantityBase: 2000, committedQuantitySellable: 4, status: "ORDERED" },
+    });
     expect(
       await env.DB.prepare("SELECT COUNT(*) count FROM subscription WHERE customer_id=?")
         .bind(fixture.customerId)

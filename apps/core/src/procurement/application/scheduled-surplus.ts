@@ -17,6 +17,7 @@ import {
 } from "../../admin/application/operations-administration-access";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { unresolvedScheduledCommitmentSql } from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 
 // Correlated to the cycle balance b. Unpacked paid demand remains allocated even when its
 // fulfillment record is missing or in exception. Packing movements are immutable evidence.
@@ -27,19 +28,7 @@ const outstanding = `(SELECT COALESCE(SUM(d.quantity),0) FROM committed_demand d
 const unused = `(b.received_base-b.packed_base-b.surplus_released_base-b.disposed_base-${outstanding})`;
 // A paid commitment can arrive after cutoff. Keep goods allocated until its owning
 // Payments operation is committed or definitively closed; an expired browser quote is insufficient.
-const unresolved = `EXISTS(SELECT 1 FROM payment_intent payment WHERE (
- (payment.subject_type='checkout_quote' AND EXISTS(SELECT 1 FROM checkout_quote q WHERE q.id=payment.subject_id AND q.delivery_cycle_id=b.cycle_id)
-  AND NOT EXISTS(SELECT 1 FROM order_payment_reaction link WHERE link.payment_intent_id=payment.id))
- OR (payment.subject_type='paid_order_amendment' AND EXISTS(SELECT 1 FROM paid_order_amendment a JOIN grocery_order o ON o.id=a.order_id
-   WHERE a.id=payment.subject_id AND o.cycle_id=b.cycle_id AND a.status<>'COMMITTED'))
- ) AND (
- payment.status NOT IN ('FAILED','EXPIRED','REFUNDED')
- OR EXISTS(SELECT 1 FROM payment_attempt attempt WHERE attempt.payment_intent_id=payment.id AND attempt.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED') AND payment.status<>'REFUNDED')
- OR EXISTS(SELECT 1 FROM payment_creation_observation creation WHERE creation.payment_intent_id=payment.id AND creation.applied_at IS NULL)
- OR EXISTS(SELECT 1 FROM payment_reaction reaction WHERE reaction.payment_intent_id=payment.id AND reaction.status IN ('PENDING','ESCALATED'))
- OR EXISTS(SELECT 1 FROM payment_provider_event_inbox inbox JOIN payment_attempt attempt ON attempt.provider=inbox.provider AND attempt.provider_reference=inbox.provider_reference
-   WHERE attempt.payment_intent_id=payment.id AND inbox.processing_status IN ('RECEIVED','RETRY_REQUIRED','RECONCILIATION_REQUIRED'))
- ))`;
+const unresolved = `EXISTS(SELECT 1 FROM delivery_cycle scheduled_cycle WHERE scheduled_cycle.id=b.cycle_id AND ${unresolvedScheduledCommitmentSql})`;
 const blocked = `CASE WHEN c.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER) THEN 'Ordering has not closed for this week.'
  WHEN ${unresolved} THEN 'Payments for this week still need reconciliation.' ELSE NULL END`;
 

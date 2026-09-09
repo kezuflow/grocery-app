@@ -19,6 +19,7 @@ export const scheduledWeekViewSchema = z.object({
       timezone: z.string(),
       orderOpensAt: integer,
       cutoffAt: integer,
+      purchaseBlockedReason: z.string().nullable(),
       procurementAt: integer.nullable(),
       preparationAt: integer.nullable(),
       pickupAt: integer.nullable(),

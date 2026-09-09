@@ -1,6 +1,7 @@
 import { z } from "@freshmarkets/validation";
 import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
 // Synthetic committed-payment/cycle history is a fixture seam, not provider or no-SQL checkout acceptance.
+// Pending/failure history below is a fixture seam; signed provider closure is tested in Core.
 // Week reads, purchase confirmation, replay and receiving use the real Web/Core/D1 path.
 for (const width of [1440, 390])
   test(`Delivery week purchase to receiving at ${width}px`, async ({
@@ -27,6 +28,10 @@ for (const width of [1440, 390])
       VALUES ('i-${id}','o-${id}','sku-red-onion-500g','Red onion','500 g','GRAM',2,10000,20000,1000,'GRAM',1000);
     INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at)
       VALUES ('d-${id}','o-${id}','${id}','location-cebu-central','pool-red-onion',1000,'OPEN','EXACT_PAID_LINE','i-${id}','sku-red-onion-500g',2,1000,'GRAM',1000,${now});
+    INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at)
+      VALUES ('pending-${id}','ORDER_AMENDMENT','paid_order_amendment','pending-${id}','c-${id}',100,'PHP','PROCESSING','pending-${id}',${now},${now});
+    INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at)
+      VALUES ('pending-${id}','o-${id}','PENDING_PAYMENT','PHP',100,'pending-${id}','pending-${id}',${now},${now});
   `);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/admin/procurement");
@@ -36,6 +41,24 @@ for (const width of [1440, 390])
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
     const demand = page.getByRole("article").filter({ hasText: "Red onion" });
     await expect(demand).toContainText("2 sold units · 1,000 g");
+    const pending = page.getByText("Payments for this week are still being confirmed.", {
+      exact: false,
+    });
+    await expect(pending).toBeVisible();
+    await expect(demand.getByRole("button", { name: "Confirm purchase", exact: true })).toHaveCount(
+      0,
+    );
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-week-pending-${width}.png`),
+      fullPage: true,
+    });
+    executeAdminE2eSql(
+      `UPDATE payment_intent SET status='FAILED',version=version+1 WHERE id='pending-${id}'`,
+    );
+    await expect(pending).toHaveCount(0, { timeout: 15000 });
+    await expect(
+      demand.getByRole("button", { name: "Confirm purchase", exact: true }),
+    ).toBeVisible();
     const attempts: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/procurement/purchase", async (route) => {
       attempts.push({

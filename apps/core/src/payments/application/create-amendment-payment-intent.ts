@@ -85,6 +85,7 @@ export async function createAmendmentPaymentIntent(
 
   const payment = await createPayment(database, registry, {
     purpose: "ORDER_AMENDMENT",
+    amendmentVersion: command.expectedAmendmentVersion,
     subjectType: "paid_order_amendment",
     subjectId: amendment.id,
     customerId: command.customerId,

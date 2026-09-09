@@ -8,7 +8,75 @@ import {
   confirmAdminProcurementPurchase,
 } from "../../admin/application/operations-commands";
 import { createProcurementRequirement } from "./create-procurement-requirement";
+import { ingestProviderEvent } from "../../payments/application/ingest-provider-event";
+import {
+  createMockPaymentProvider,
+  mockSignatureFor,
+} from "../../payments/infrastructure/providers/mock-payment-provider";
+import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
 const core = exports.default;
+async function pendingPayment(cycleId: string, kind: "original" | "addition") {
+  const id = crypto.randomUUID();
+  if (kind === "original") {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer_address(id,customer_id,label,recipient,phone,address_json,latitude,longitude,created_at,updated_at) VALUES (?,?,'Test','Test','09000000000','{}',10,123,1,1)",
+      ).bind(id, cycleId),
+      env.DB.prepare(
+        "INSERT INTO checkout_quote(id,attempt_id,customer_id,cart_id,address_id,delivery_cycle_id,fulfillment_mode,currency,subtotal_minor,total_minor,lines_json,status,expires_at,idempotency_key,created_at,updated_at) VALUES (?,?,?,?,?,?,'SCHEDULED','PHP',100,100,'[]','EXPIRED',1,?,1,1)",
+      ).bind(id, id, cycleId, id, id, cycleId, id),
+    ]);
+  }
+  await env.DB.prepare(
+    "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,?,?,?,100,'PHP','PROCESSING',?,1,1)",
+  )
+    .bind(
+      id,
+      kind === "original" ? "GROCERY_CHECKOUT" : "ORDER_AMENDMENT",
+      kind === "original" ? "checkout_quote" : "paid_order_amendment",
+      id,
+      cycleId,
+      id,
+    )
+    .run();
+  if (kind === "addition")
+    await env.DB.prepare(
+      "INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at) VALUES (?,?,'PENDING_PAYMENT','PHP',100,?,?,1,1)",
+    )
+      .bind(id, cycleId, id, id)
+      .run();
+  await env.DB.prepare(
+    "INSERT INTO payment_attempt(id,customer_id,payment_intent_id,amount_minor,currency,status,provider,provider_reference,idempotency_key,created_at,updated_at) VALUES (?,?,?,100,'PHP','PROCESSING','mock',?,?,1,1)",
+  )
+    .bind(id, cycleId, id, id, id)
+    .run();
+  return id;
+}
+
+async function failPayment(reference: string) {
+  const rawBody = JSON.stringify({
+    eventId: crypto.randomUUID(),
+    reference,
+    vendorState: "failed",
+    amountMinor: 100,
+    currency: "PHP",
+  });
+  const headers = new Headers({
+    "x-mock-signature": await mockSignatureFor(rawBody),
+    "x-mock-timestamp": String(Date.now()),
+  });
+  const result = await ingestProviderEvent(
+    env.DB,
+    new ProviderRegistry("test", [createMockPaymentProvider()]),
+    "mock",
+    headers,
+    rawBody,
+  );
+  expect(result.ok).toBe(true);
+  expect(
+    await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(reference).first(),
+  ).toEqual({ status: "FAILED" });
+}
 async function fixture(cutoff = Date.now() - 1000) {
   const manager = await locationManager("location"),
     id = crypto.randomUUID();
@@ -73,6 +141,46 @@ async function noEffects(cycleId: string, key: string) {
   ).toBeNull();
 }
 describe("procurement command transaction and recovery", () => {
+  it.each(["original", "addition"] as const)(
+    "waits for a started %s payment despite browser expiry, then purchases after provider-confirmed failure",
+    async (kind) => {
+      const { id, request } = await fixture();
+      const paymentId = await pendingPayment(id, kind);
+      expect(await core.confirmAdminProcurementPurchase(request)).toMatchObject({
+        ok: false,
+        error: { code: "CONFLICT" },
+      });
+      await noEffects(id, request.idempotencyKey);
+      await failPayment(paymentId);
+      const result = await core.confirmAdminProcurementPurchase(request);
+      expect(result).toMatchObject({ ok: true, value: { requiredQuantityBase: 500 } });
+      expect(await core.confirmAdminProcurementPurchase(request)).toEqual(result);
+    },
+  );
+  it.each(["original", "addition"] as const)(
+    "rolls back purchase when unresolved %s evidence appears at the batch boundary",
+    async (kind) => {
+      const { id, request } = await fixture();
+      let reached = false;
+      const database = new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              reached = true;
+              await pendingPayment(id, kind);
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect(
+        await confirmAdminProcurementPurchase({ db: database, auth: createAuth(env) }, request),
+      ).toMatchObject({ ok: false });
+      expect(reached).toBe(true);
+      await noEffects(id, request.idempotencyKey);
+    },
+  );
   it("keeps the legacy RPC operational for committed Scheduled demand after a global mode switch", async () => {
     const { request, id } = await fixture();
     await env.DB.prepare(
