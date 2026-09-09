@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { ScheduledWeekView, ScheduledDemandItem } from "@freshmarkets/contracts";
 import { z, scheduledWeekViewSchema } from "@freshmarkets/validation";
 import { Button } from "../../../components/ui/button";
@@ -34,6 +35,11 @@ export default function ProcurementPage() {
   const { locationId, label } = useAdminLocation();
   const { state } = useAdminContext();
   const global = state.phase === "ready" && state.selectedScope?.kind === "GLOBAL";
+  const search = useSearchParams();
+  const linkedCycleId = search.get("cycleId") ?? "";
+  const linkedRequirementId = search.get("requirementId") ?? "";
+  const linkedLocationId = search.get("locationId") ?? "";
+  const [requirementId, setRequirementId] = useState("");
   const [cycleId, setCycleId] = useState("");
   const [cycleCursor, setCycleCursor] = useState("");
   const [cycles, setCycles] = useState<ScheduledWeekView["cycles"]>([]);
@@ -51,13 +57,15 @@ export default function ProcurementPage() {
   const [note, setNote] = useState("");
   const command = useAdminCommand();
   useEffect(() => {
-    setCycleId("");
+    const linked = locationId === linkedLocationId && !!linkedCycleId && !!linkedRequirementId;
+    setCycleId(linked ? linkedCycleId : "");
+    setRequirementId(linked ? linkedRequirementId : "");
     setCycleCursor("");
     setCycles([]);
     setCursor("");
     setPrevious([]);
-    setSection("DEMAND");
-  }, [locationId, global]);
+    setSection(linked ? "ORDERS" : "DEMAND");
+  }, [locationId, global, linkedCycleId, linkedRequirementId, linkedLocationId]);
   useEffect(() => {
     setView(null);
     setError(null);
@@ -68,6 +76,8 @@ export default function ProcurementPage() {
     if (cycleId) params.set("cycleId", cycleId);
     if (cycleCursor) params.set("cycleCursor", cycleCursor);
     if (cursor) params.set("cursor", cursor);
+    if (requirementId && section === "ORDERS" && !global)
+      params.set("requirementId", requirementId);
     void (async () => {
       try {
         const response = await fetch(`/api/admin/procurement/week?${params}`, {
@@ -93,7 +103,7 @@ export default function ProcurementPage() {
       }
     })();
     return () => controller.abort();
-  }, [locationId, global, cycleId, cycleCursor, section, cursor, reload]);
+  }, [locationId, global, cycleId, cycleCursor, section, cursor, requirementId, reload]);
   useEffect(() => {
     if (!view?.week?.purchaseBlockedReason || error) return;
     const timer = setTimeout(() => setReload((value) => value + 1), 5000);
@@ -157,6 +167,7 @@ export default function ProcurementPage() {
               disabled={command.busy || command.uncertain}
               onChange={(event) => {
                 setCycleId(event.target.value);
+                setRequirementId("");
                 resetPage();
               }}
             >
@@ -233,6 +244,28 @@ export default function ProcurementPage() {
               </nav>
               <section className="space-y-3" aria-label={sectionNames[view.page.kind]}>
                 <h2 className="text-lg font-semibold">{sectionNames[view.page.kind]}</h2>
+                {view.page.kind === "ORDERS" && view.page.requirement ? (
+                  <div className="space-y-2">
+                    <p>
+                      Affected orders: {view.page.requirement.productName} ·{" "}
+                      {view.page.requirement.variantName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      If replacement goods cannot be sourced, an authorized Global administrator can
+                      open an Order and cancel it with a reason. Refund progress is separate from
+                      quantities still owed.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setRequirementId("");
+                        resetPage();
+                      }}
+                    >
+                      Show all orders
+                    </Button>
+                  </div>
+                ) : null}
                 {view.page.kind === "DEMAND" ? (
                   <>
                     <p className="text-sm text-muted-foreground">
@@ -325,6 +358,25 @@ export default function ProcurementPage() {
                         <span>
                           {plain(order.status)} · Preparation:{" "}
                           {order.preparationStatus ? plain(order.preparationStatus) : "not started"}
+                          {order.openQuantityBase !== null &&
+                          view.page.kind === "ORDERS" &&
+                          view.page.requirement ? (
+                            <span className="block">
+                              {order.openQuantityBase === 0
+                                ? "Quantity released by cancellation"
+                                : `Order quantity: ${amount(order.openQuantityBase, view.page.requirement.baseUnit)}`}
+                            </span>
+                          ) : null}
+                          {order.cancellationStatus ? (
+                            <span className="block">
+                              Cancellation:{" "}
+                              {order.cancellationStatus === "COMPLETED"
+                                ? "refunds confirmed"
+                                : order.cancellationStatus === "EXCEPTION"
+                                  ? "refund needs attention"
+                                  : "refunds pending"}
+                            </span>
+                          ) : null}
                         </span>
                       </article>
                     ))

@@ -6,6 +6,7 @@ export const scheduledWeekQuerySchema = z.object({
   locationId: identifierSchema.optional(),
   cycleId: identifierSchema.optional(),
   cycleCursor: identifierSchema.optional(),
+  requirementId: identifierSchema.optional(),
   section: z.enum(["DEMAND", "ORDERS", "OFFERS"]).default("DEMAND"),
   cursor: cursorSchema.optional(),
 });
@@ -60,12 +61,22 @@ export const scheduledWeekViewSchema = z.object({
     z.object({
       kind: z.literal("ORDERS"),
       denied: z.boolean(),
+      requirement: z
+        .object({
+          id: identifierSchema,
+          productName: z.string(),
+          variantName: z.string(),
+          baseUnit: z.string(),
+        })
+        .nullable(),
       nextCursor: identifierSchema.nullable(),
       items: z.array(
         z.object({
           orderId: identifierSchema,
           status: z.string(),
           preparationStatus: z.string().nullable(),
+          openQuantityBase: integer.nullable(),
+          cancellationStatus: z.string().nullable(),
         }),
       ),
     }),

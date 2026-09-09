@@ -169,6 +169,22 @@ for (const width of [1440, 390])
     await row.getByRole("button", { name: "Record line", exact: true }).click();
     await expect(row).toContainText("700 / 100");
     await expect(row).toContainText("Missing: 200");
+    await row.getByRole("link", { name: "Review affected orders", exact: true }).click();
+    await expect(
+      page.getByText("Affected orders: Red onion · 500 g", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("article")).toHaveCount(1);
+    await expect(page.getByRole("article")).toContainText("Order quantity: 1,000 g");
+    await expect(page.getByRole("link", { name: "View order 1", exact: true })).toHaveAttribute(
+      "href",
+      `/admin/orders/o-${id}`,
+    );
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-shortage-orders-${width}.png`),
+      fullPage: true,
+    });
+    await page.getByRole("link", { name: "Receiving", exact: true }).click();
+    await expect(row).toContainText("Missing: 200");
     const replacements: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/receiving/record-line", async (route) => {
       replacements.push({

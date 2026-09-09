@@ -5,6 +5,7 @@ export type ScheduledWeekRequest = AuthenticatedRequest & {
   locationId?: string;
   cycleId?: string;
   cycleCursor?: string;
+  requirementId?: string;
   section?: "DEMAND" | "ORDERS" | "OFFERS";
   cursor?: string;
 };
@@ -52,7 +53,19 @@ export type ScheduledWeekView = {
     | {
         kind: "ORDERS";
         denied: boolean;
-        items: readonly { orderId: string; status: string; preparationStatus: string | null }[];
+        requirement: {
+          id: string;
+          productName: string;
+          variantName: string;
+          baseUnit: string;
+        } | null;
+        items: readonly {
+          orderId: string;
+          status: string;
+          preparationStatus: string | null;
+          openQuantityBase: number | null;
+          cancellationStatus: string | null;
+        }[];
         nextCursor: string | null;
       }
     | {

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   appErrorCodes,
   receivingRecordStates,
@@ -327,6 +328,12 @@ export default function ReceivingPage() {
                             <p className="text-sm">
                               Still needed: {item.expectedBase - item.acceptedBase}. Contact your
                               supplier, then record the inspected replacement goods here.
+                              <Link
+                                className="mt-2 block underline"
+                                href={`/admin/procurement?cycleId=${encodeURIComponent(item.cycleId)}&locationId=${encodeURIComponent(item.locationId)}&requirementId=${encodeURIComponent(item.requirementId)}`}
+                              >
+                                Review affected orders
+                              </Link>
                             </p>
                           ) : null}
                           {(item.legacyAcceptedBase ?? 0) > 0 ? (
