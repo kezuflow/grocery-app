@@ -7,6 +7,7 @@ import { requestRefund } from "../../payments/application/request-refund";
 import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
 import { redrivePaymentReactions } from "../../payments/application/redrive-payment-reactions";
 import { createOrderAmendment } from "./create-order-amendment";
+import { listOrderAdditionOptions } from "./list-order-addition-options";
 import { applyAmendmentPaymentReaction } from "./apply-amendment-payment-reaction";
 import { createAmendmentPaymentIntent } from "../../payments/application/create-amendment-payment-intent";
 import { reconcilePayment } from "../../payments/application/reconcile-payment";
@@ -117,6 +118,64 @@ async function committedOrder(cycleIdOverride?: string) {
 }
 
 describe("paid-order amendments", () => {
+  it("offers named exact-location additions without checking physical stock, and hides unowned Orders", async () => {
+    const order = await committedOrder();
+    await env.DB.prepare(
+      "UPDATE inventory_balance SET on_hand=0 WHERE inventory_pool_id=(SELECT p.inventory_pool_id FROM product p JOIN sku s ON s.product_id=p.id WHERE s.id=?)",
+    )
+      .bind(order.skuId)
+      .run();
+    const input = { ...order, query: "Amd Product", requestId: crypto.randomUUID() };
+    expect(await listOrderAdditionOptions(env.DB, input)).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          {
+            skuId: order.skuId,
+            productName: "Amd Product",
+            variantName: "Amd 500g",
+            priceMinor: 8000,
+            currency: "PHP",
+          },
+        ],
+        hasMore: false,
+      },
+    });
+    expect(
+      await listOrderAdditionOptions(env.DB, { ...input, customerId: "another-customer" }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    await env.DB.prepare(
+      "UPDATE sku_location_availability SET availability_status='UNAVAILABLE' WHERE sku_id=? AND location_id='location-cebu-central'",
+    )
+      .bind(order.skuId)
+      .run();
+    expect(await listOrderAdditionOptions(env.DB, input)).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
+  });
+  it("bounds addition search and excludes expired exact-location prices", async () => {
+    const order = await committedOrder();
+    const input = { ...order, query: "Amd Product", requestId: crypto.randomUUID() };
+    await env.DB.prepare(
+      "UPDATE price_version SET valid_to=? WHERE sku_id=? AND location_id='location-cebu-central'",
+    )
+      .bind(Date.now() - 1, order.skuId)
+      .run();
+    expect(await listOrderAdditionOptions(env.DB, input)).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
+    const all = await listOrderAdditionOptions(env.DB, { ...input, query: "" });
+    expect(all.ok).toBe(true);
+    if (all.ok) {
+      expect(all.value.items.length).toBeLessThanOrEqual(25);
+      expect(all.value.hasMore).toBe(true);
+    }
+    expect(
+      await listOrderAdditionOptions(env.DB, { ...input, query: "' OR 1=1 --" }),
+    ).toMatchObject({ ok: true, value: { items: [] } });
+  });
   it.each(["cutoff", "cancellation", "version", "missing-link"] as const)(
     "rejects %s at payment admission without an intent or provider submission",
     async (kind) => {

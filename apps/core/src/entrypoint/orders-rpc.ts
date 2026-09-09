@@ -9,6 +9,7 @@ import type {
   SubmitCustomerOrderIssueRequest,
   AppErrorCode,
   OrderCancellationView,
+  OrderAdditionOptionsRequest,
 } from "@freshmarkets/contracts";
 import {
   idempotencyKeySchema,
@@ -23,6 +24,7 @@ import { reorderOrder } from "../orders/application/reorder-order";
 import { listCustomerOrderIssues } from "../orders/application/list-customer-order-issues";
 import { submitCustomerOrderIssue } from "../orders/application/submit-customer-order-issue";
 import { createOrderAmendment } from "../orders/application/create-order-amendment";
+import { listOrderAdditionOptions } from "../orders/application/list-order-addition-options";
 import { requestOrderCancellation } from "../orders/application/cancel-order";
 import { requestRefund } from "../payments/application/request-refund";
 import { getProvisionalTransactionSummary } from "../orders/application/get-provisional-transaction-summary";
@@ -31,6 +33,18 @@ import { validationFailure } from "./validation-errors";
 
 export function createOrdersRpc(context: CoreRpcContext) {
   return {
+    async listOrderAdditionOptions(input: OrderAdditionOptionsRequest) {
+      const validation = authenticatedRequestSchema
+        .extend({ orderId: identifierSchema, query: z.string().trim().max(100).optional() })
+        .safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return listOrderAdditionOptions(context.env.DB, {
+        ...validation.data,
+        customerId: customer.value.customerId,
+      });
+    },
     async listCustomerOrders(input: ListCustomerOrdersRequest) {
       const validation = authenticatedRequestSchema
         .extend({

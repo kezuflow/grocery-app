@@ -2988,6 +2988,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.ordersRpc.createOrderAmendment(input);
   }
 
+  async listOrderAdditionOptions(
+    input: import("@freshmarkets/contracts").OrderAdditionOptionsRequest,
+  ) {
+    return this.ordersRpc.listOrderAdditionOptions(input);
+  }
+
   async createAmendmentPaymentIntent(
     input: import("@freshmarkets/contracts").AmendmentPaymentIntentRequest,
   ) {

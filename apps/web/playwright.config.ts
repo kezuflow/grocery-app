@@ -4,6 +4,11 @@ const managedStack = process.env.E2E_START_STACK === "1";
 const e2eStateName = process.env.E2E_STATE_NAME ?? "e2e-state";
 if (!/^e2e-[a-z0-9-]+$/.test(e2eStateName)) throw new Error("Invalid E2E_STATE_NAME");
 const managedPort = 3100;
+// Only this opt-in test ingress exposes the local Core webhook alongside Web.
+const providerGateway =
+  process.env.E2E_PROVIDER_GATEWAY === "1"
+    ? "-c apps/web/tests/wrangler.provider-gateway.jsonc "
+    : "";
 const baseURL = managedStack
   ? `http://localhost:${managedPort}`
   : (process.env.APP_BASE_URL ?? "http://localhost:3000");
@@ -36,7 +41,7 @@ export default defineConfig({
   snapshotPathTemplate: "{testDir}/visual-baselines/{arg}{ext}",
   webServer: managedStack
     ? {
-        command: `pnpm --filter @freshmarkets/web build && node apps/web/tests/prepare-admin-e2e-state.mjs && pnpm --filter @freshmarkets/core exec wrangler d1 migrations apply DB --local --persist-to .wrangler/${e2eStateName} && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js dev -c apps/web/dist/server/wrangler.json -c apps/core/wrangler.e2e.jsonc --persist-to apps/core/.wrangler/${e2eStateName} --port ${managedPort}`,
+        command: `pnpm --filter @freshmarkets/web build && node apps/web/tests/prepare-admin-e2e-state.mjs && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js d1 migrations apply DB --config apps/core/wrangler.e2e.jsonc --local --persist-to apps/core/.wrangler/${e2eStateName} && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js dev ${providerGateway}-c apps/web/dist/server/wrangler.json -c apps/core/wrangler.e2e.jsonc --persist-to apps/core/.wrangler/${e2eStateName} --port ${managedPort}`,
         cwd: "../..",
         env: { ...process.env, E2E_AUTHENTICATED: "1" },
         port: managedPort,

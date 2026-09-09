@@ -22,6 +22,20 @@ const schema = z.object({
     .max(50),
 });
 
+export async function GET(request: Request, context: { params: Promise<{ "order-id": string }> }) {
+  const meta = webRequestContext(request);
+  const { "order-id": orderId } = await context.params;
+  return jsonWithRequestId(
+    await coreClient(env.CORE).listOrderAdditionOptions({
+      requestId: meta.requestId,
+      headers: meta.coreHeaders,
+      orderId,
+      query: new URL(request.url).searchParams.get("query") ?? undefined,
+    }),
+    meta.requestId,
+  );
+}
+
 export async function POST(request: Request, context: { params: Promise<{ "order-id": string }> }) {
   const meta = webRequestContext(request);
   const parsed = await readBoundedJson(request, schema, { maxBytes: 16 * 1024 });

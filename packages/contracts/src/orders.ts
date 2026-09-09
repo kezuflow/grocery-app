@@ -295,6 +295,21 @@ export type CreateOrderAmendmentRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type OrderAdditionOptionsRequest = AuthenticatedRequest & {
+  orderId: string;
+  query?: string;
+};
+export type OrderAdditionOptionsView = {
+  items: readonly {
+    skuId: string;
+    productName: string;
+    variantName: string;
+    priceMinor: number;
+    currency: string;
+  }[];
+  hasMore: boolean;
+};
+
 export type AdminOrderCommandRequest = AuthenticatedRequest & {
   orderId: string;
   action: "CANCEL" | "REFUND";
@@ -304,6 +319,9 @@ export type AdminOrderCommandRequest = AuthenticatedRequest & {
 };
 
 export type OrdersService = {
+  listOrderAdditionOptions(
+    request: OrderAdditionOptionsRequest,
+  ): Promise<RpcResult<OrderAdditionOptionsView>>;
   listCustomerOrders(request: ListCustomerOrdersRequest): Promise<RpcResult<CustomerOrdersPage>>;
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,

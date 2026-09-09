@@ -9,5 +9,10 @@
     "skipLibCheck": true,
     "types": ["node", "@cloudflare/vitest-pool-workers/types"]
   },
-  "include": ["src", "vitest.config.ts", "src/worker-configuration.d.ts"]
+  "include": [
+    "src",
+    "tests/browser-entrypoint.ts",
+    "vitest.config.ts",
+    "src/worker-configuration.d.ts"
+  ]
 }
