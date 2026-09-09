@@ -38,7 +38,7 @@ export function ExternalDeliveryBooking({
   fulfillmentMode: FulfillmentMode;
   delivery: OrderedDeliveryItem;
   disabled: boolean;
-  readiness: AdminDeliveryOperationView["scheduledPickup"];
+  readiness: AdminDeliveryOperationView["courierPickup"];
   fetchImpl?: FetchLike;
   onBooked: (message: string) => void;
 }) {
@@ -110,10 +110,14 @@ export function ExternalDeliveryBooking({
   return (
     <section className="space-y-3 rounded border border-[var(--fm-border)] bg-white p-3">
       <div>
-        <h3 className="font-semibold">External courier</h3>
+        <h3 className="font-semibold">
+          {delivery.status === "FAILED" || delivery.status === "RETRY_SCHEDULED"
+            ? "Retry courier"
+            : "External courier"}
+        </h3>
         <p className="text-xs text-[var(--fm-text-muted)]">
           {fulfillmentMode === "INSTANT"
-            ? "Core enforces the delivery partner selected by the customer at checkout."
+            ? "Request the courier the customer chose at checkout."
             : "Set pickup for when packing will be ready, within the customer’s delivery window. Request a driver now once packing is complete."}
         </p>
       </div>

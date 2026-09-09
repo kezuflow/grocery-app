@@ -1,10 +1,11 @@
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { manualDeliveryActions } from "../domain/manual-delivery";
 import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
+import { preHandoverRetrySql } from "./pre-handover-retry";
 
 type DispatchRow = {
   manualActions: AdminDeliveryOperationView["manualActions"];
-  scheduledPickup: AdminDeliveryOperationView["scheduledPickup"];
+  courierPickup: AdminDeliveryOperationView["courierPickup"];
   manualDelivery: AdminDeliveryOperationView["manualDelivery"];
   jobId: string;
   orderId: string;
@@ -23,7 +24,7 @@ type DispatchRow = {
   externalVersion: number | null;
 };
 
-function scheduledPickupDecision(row: {
+function courierPickupDecision(row: {
   fulfillment_mode: string;
   status: string;
   can_manage: number;
@@ -33,13 +34,26 @@ function scheduledPickupDecision(row: {
   pickup_deadline: number | null;
   fulfillment_status: string;
   order_status: string;
-}): AdminDeliveryOperationView["scheduledPickup"] {
-  if (row.fulfillment_mode !== "SCHEDULED") return { allowedKinds: [], unavailableReason: null };
+  retry_ready: number;
+  promised_at: number | null;
+}): AdminDeliveryOperationView["courierPickup"] {
   if (!row.can_manage)
     return { allowedKinds: [], unavailableReason: "Delivery management access is required." };
+  if (row.fulfillment_mode === "INSTANT")
+    return {
+      allowedKinds:
+        row.retry_ready &&
+        row.promised_at !== null &&
+        row.promised_at > Date.now() &&
+        ["PACKING", "PACKED"].includes(row.fulfillment_status) &&
+        ["FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(row.order_status)
+          ? ["IMMEDIATE"]
+          : [],
+      unavailableReason: null,
+    };
   if (
     row.pending_cancel ||
-    !["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.status) ||
+    (!["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.status) && !row.retry_ready) ||
     (row.external_status !== null &&
       !["CANCELED", "RETURNED", "FAILED"].includes(row.external_status))
   )
@@ -103,7 +117,8 @@ export async function listDeliveryDispatch(
               dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
               dispatch.version AS external_version,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
               dispatch.manual_reason,dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
-              o.status AS order_status,f.status AS fulfillment_status,
+              o.status AS order_status,f.status AS fulfillment_status,d.promised_at,
+              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${preHandoverRetrySql}) AS retry_ready,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${scheduledDeliveryGoodsReadySql}) AS scheduled_goods_ready,
               (SELECT COALESCE(delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
                 LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
@@ -129,6 +144,8 @@ export async function listDeliveryDispatch(
       final_payable_minor: number | null;
       delivery_currency: string | null;
       order_status: string;
+      retry_ready: number;
+      promised_at: number | null;
       fulfillment_status: string;
       pending_cancel: number;
       can_manage: number;
@@ -151,7 +168,7 @@ export async function listDeliveryDispatch(
       external_version: number | null;
     }>();
   return rows.results.map((r) => ({
-    scheduledPickup: scheduledPickupDecision(r),
+    courierPickup: courierPickupDecision(r),
     manualActions: r.can_manage
       ? manualDeliveryActions({
           mode: r.fulfillment_mode,

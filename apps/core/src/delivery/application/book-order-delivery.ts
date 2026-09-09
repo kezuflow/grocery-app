@@ -11,6 +11,7 @@ import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resol
 import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 import { requestProviderDelivery, type ProviderDispatchView } from "./request-provider-delivery";
 import type { DeliveryProvider } from "../ports/delivery-provider";
+import { preHandoverRetrySql } from "./pre-handover-retry";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -292,8 +293,21 @@ export async function bookOrderDelivery(
       "Delivery job changed; refresh before booking",
       request.requestId,
     );
+  const retry = row.job_status === "FAILED" && actorUserId !== null;
   if (
-    !["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.job_status) ||
+    retry &&
+    !(await deps.db
+      .prepare(`SELECT 1 FROM delivery_job job WHERE job.id=? AND ${preHandoverRetrySql}`)
+      .bind(row.job_id)
+      .first())
+  )
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Resolve the previous attempt and confirm custody before retrying",
+      request.requestId,
+    );
+  if (
+    (!["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.job_status) && !retry) ||
     row.batch_id !== null ||
     row.rider_id !== null
   )
@@ -422,6 +436,7 @@ export async function bookOrderDelivery(
     requestId: request.requestId,
     deliveryJobId: request.jobId,
     expectedDeliveryJobVersion: request.expectedVersion,
+    retry,
     clientIdempotencyKey: request.idempotencyKey,
     now: deps.now,
     actorAuthUserId: actorUserId ?? undefined,

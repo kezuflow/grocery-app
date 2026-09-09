@@ -296,22 +296,6 @@ async function execute(
   if (input.action === "OPEN" && current.selling_state !== "PAUSED")
     return failure("ILLEGAL_TRANSITION", "Selling is already open", input.requestId);
 
-  if (input.action === "SWITCH_MODE" && targetMode !== current.fulfillment_mode) {
-    const unresolved = await database
-      .prepare(
-        `SELECT COUNT(*) count FROM grocery_order
-          WHERE fulfillment_mode<>? AND status NOT IN ('DELIVERED','CANCELED','REFUNDED','EXPIRED')`,
-      )
-      .bind(targetMode)
-      .first<{ count: number }>();
-    if ((unresolved?.count ?? 0) > 0)
-      return failure(
-        "CONFIGURATION_ERROR",
-        "Resolve or explicitly protect committed work in the current mode before switching",
-        input.requestId,
-      );
-  }
-
   const nextMode =
     input.action === "SWITCH_MODE" && targetMode ? targetMode : current.fulfillment_mode;
   const nextCadence = input.action === "SWITCH_MODE" ? targetCadence : current.cadence;
@@ -406,11 +390,6 @@ async function execute(
   }
   if (input.action === "SWITCH_MODE" && targetMode !== current.fulfillment_mode) {
     statements.push(
-      database
-        .prepare(`INSERT INTO commitment_abort(id) SELECT -25 WHERE EXISTS (
-        SELECT 1 FROM grocery_order WHERE fulfillment_mode<>?
-          AND status NOT IN ('DELIVERED','CANCELED','REFUNDED','EXPIRED'))`)
-        .bind(targetMode),
       database
         .prepare(
           `UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=?

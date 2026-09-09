@@ -1,4 +1,5 @@
 import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
+import { expireUnsubmittedBookings } from "../../delivery/application/expire-unsubmitted-bookings";
 import { manageManualDelivery } from "../../delivery/application/manage-manual-delivery";
 import { listAdminDeliveryOperations } from "./operations-reads";
 import { env } from "cloudflare:test";
@@ -319,6 +320,311 @@ async function receiveScheduledTestGoods(delivery: { orderId: string }, now: num
 }
 
 describe("external delivery request", () => {
+  it("recovers an interrupted unsubmitted booking without losing audit or calling the provider twice", async () => {
+    const admittedAt = Date.now() - 300001;
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(admittedAt);
+    await receiveScheduledTestGoods(delivery, admittedAt);
+    const provider = createMockDeliveryProvider();
+    const create = vi.spyOn(provider, "create");
+    const request = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      jobId: delivery.jobId,
+      expectedVersion: 1,
+      providerCode: "lalamove" as const,
+      pickup: { kind: "SCHEDULED" as const, pickupAt: new Date(admittedAt + 600000).toISOString() },
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await env.DB.exec(
+      "CREATE TRIGGER interrupt_provider_claim BEFORE UPDATE ON delivery_provider_dispatch WHEN NEW.status='CREATING' BEGIN SELECT RAISE(ABORT,'interrupted before submit'); END",
+    );
+    try {
+      await expect(
+        requestExternalDelivery(
+          { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => admittedAt },
+          request,
+        ),
+      ).rejects.toThrow("interrupted before submit");
+    } finally {
+      await env.DB.exec("DROP TRIGGER interrupt_provider_claim");
+    }
+    expect(create).not.toHaveBeenCalled();
+    const saved = await env.DB.prepare(
+      "SELECT id,status,version FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+    )
+      .bind(delivery.jobId)
+      .first<{ id: string; status: string; version: number }>();
+    expect(saved?.status).toBe("PENDING");
+    if (!saved) throw new Error("Missing saved intent");
+    expect(await expireUnsubmittedBookings(env.DB, admittedAt + 299999)).toBe(0);
+    await env.DB.exec(
+      "CREATE TRIGGER omit_expiry_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.UNSUBMITTED_BOOKING_EXPIRED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      await expect(expireUnsubmittedBookings(env.DB, admittedAt + 300000)).rejects.toThrow();
+      expect(
+        await env.DB.prepare("SELECT id,status,version FROM delivery_provider_dispatch WHERE id=?")
+          .bind(saved.id)
+          .first(),
+      ).toEqual(saved);
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "PROCESSING" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_expiry_audit");
+    }
+    const closed = await Promise.all([
+      expireUnsubmittedBookings(env.DB, admittedAt + 300000),
+      expireUnsubmittedBookings(env.DB, admittedAt + 300000),
+    ]);
+    expect(closed.reduce((sum, count) => sum + count, 0)).toBe(1);
+    expect(await expireUnsubmittedBookings(env.DB, admittedAt + 300001)).toBe(0);
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='DELIVERY.UNSUBMITTED_BOOKING_EXPIRED'",
+      )
+        .bind(saved.id)
+        .first(),
+    ).toEqual({ n: 1 });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "FULFILLMENT_PENDING" });
+    const job = await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+      .bind(delivery.jobId)
+      .first<{ status: string; version: number }>();
+    if (!job) throw new Error("Missing job");
+    expect(job.status).toBe("FAILED");
+    expect(
+      await requestExternalDelivery(
+        { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: Date.now },
+        { ...request, expectedVersion: job.version, idempotencyKey: crypto.randomUUID() },
+      ),
+    ).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it.each(["CREATING", "OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED", "ACTIVE"])(
+    "never expires a %s attempt that may have reached the provider",
+    async (status) => {
+      const now = Date.now();
+      const delivery = await seedActiveDispatch(now - 600000);
+      await env.DB.prepare(
+        "UPDATE delivery_provider_dispatch SET status=?,provider_delivery_id=NULL WHERE id=?",
+      )
+        .bind(status, delivery.dispatchId)
+        .run();
+      expect(await expireUnsubmittedBookings(env.DB, now)).toBe(0);
+      expect(
+        await env.DB.prepare("SELECT status FROM delivery_provider_dispatch WHERE id=?")
+          .bind(delivery.dispatchId)
+          .first(),
+      ).toEqual({ status });
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "retries a closed %s courier attempt atomically and preserves its history",
+    async (mode) => {
+      const now = Date.now();
+      const deps = dependencies(["delivery.read", "delivery.manage"]);
+      await upsertLocationDeliveryProfile(deps, profileRequest(0));
+      const delivery = await seedScheduledDelivery(now, mode);
+      await env.DB.prepare("UPDATE delivery_job SET promised_at=? WHERE id=?")
+        .bind(now + 3600000, delivery.jobId)
+        .run();
+      if (mode === "SCHEDULED") await receiveScheduledTestGoods(delivery, now);
+      else {
+        for (const [index, action] of (
+          ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+        ).entries()) {
+          expect(
+            await advanceFulfillment(
+              env.DB,
+              {
+                headers: {},
+                requestId: crypto.randomUUID(),
+                orderId: delivery.orderId,
+                action,
+                expectedVersion: index + 1,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              { authorize: async () => true },
+            ),
+          ).toMatchObject({ ok: true });
+        }
+      }
+      const provider = createMockDeliveryProvider(() => now);
+      const create = vi.spyOn(provider, "create");
+      const bookingDeps = {
+        ...deps,
+        provider,
+        configuredServiceType: "MOTORCYCLE",
+        now: () => now,
+      };
+      const request = {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: delivery.jobId,
+        expectedVersion: 1,
+        providerCode: "lalamove" as const,
+        pickup:
+          mode === "SCHEDULED"
+            ? { kind: "SCHEDULED" as const, pickupAt: new Date(now + 600000).toISOString() }
+            : { kind: "IMMEDIATE" as const },
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const first = await requestExternalDelivery(bookingDeps, request);
+      if (!first.ok) throw new Error(first.error.message);
+      expect(
+        await cancelExternalDelivery(bookingDeps, {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+          dispatchId: first.value.dispatchId,
+          expectedVersion: first.value.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true, value: { status: "CANCELED" } });
+      const job = await env.DB.prepare(
+        "SELECT status,version,promised_at FROM delivery_job WHERE id=?",
+      )
+        .bind(delivery.jobId)
+        .first<{ status: string; version: number; promised_at: number }>();
+      if (!job) throw new Error("Missing job");
+      expect(job.status).toBe("FAILED");
+      const retry = {
+        ...request,
+        expectedVersion: job.version,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      expect(
+        await requestExternalDelivery({ ...bookingDeps, now: () => now + 2 * 86400000 }, retry),
+      ).toMatchObject({ ok: false });
+      expect(create).toHaveBeenCalledTimes(1);
+      const queue = await listAdminDeliveryOperations(deps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+      });
+      expect(
+        queue.ok &&
+          queue.value.items.find((item) => item.jobId === delivery.jobId)?.courierPickup
+            .allowedKinds,
+      ).toContain(mode === "SCHEDULED" ? "SCHEDULED" : "IMMEDIATE");
+      await env.DB.exec(
+        "CREATE TRIGGER omit_retry_stop BEFORE UPDATE ON delivery_stop WHEN NEW.status='RETRY_SCHEDULED' BEGIN SELECT RAISE(IGNORE); END",
+      );
+      try {
+        expect(await requestExternalDelivery(bookingDeps, retry)).toMatchObject({ ok: false });
+        expect(create).toHaveBeenCalledTimes(1);
+        expect(
+          await env.DB.prepare("SELECT status,version,promised_at FROM delivery_job WHERE id=?")
+            .bind(delivery.jobId)
+            .first(),
+        ).toEqual(job);
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+          )
+            .bind(delivery.jobId)
+            .first(),
+        ).toEqual({ n: 1 });
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) n FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=? AND status='SUCCEEDED'",
+          )
+            .bind(retry.idempotencyKey)
+            .first(),
+        ).toEqual({ n: 0 });
+      } finally {
+        await env.DB.exec("DROP TRIGGER omit_retry_stop");
+      }
+      const attempts = [
+        { ...retry, idempotencyKey: crypto.randomUUID() },
+        { ...retry, idempotencyKey: crypto.randomUUID() },
+      ];
+      const results = await Promise.all(
+        attempts.map((attempt) => requestExternalDelivery(bookingDeps, attempt)),
+      );
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      const winner = results[0].ok ? 0 : 1;
+      expect(await requestExternalDelivery(bookingDeps, attempts[winner])).toEqual(results[winner]);
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(create.mock.calls[0]?.[0].merchantOrderId).not.toEqual(
+        create.mock.calls[1]?.[0].merchantOrderId,
+      );
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT status,attempt_sequence FROM delivery_provider_dispatch WHERE delivery_job_id=? ORDER BY attempt_sequence",
+          )
+            .bind(delivery.jobId)
+            .all()
+        ).results,
+      ).toEqual([
+        { status: "CANCELED", attempt_sequence: 1 },
+        { status: "ACTIVE", attempt_sequence: 2 },
+      ]);
+      expect(
+        await env.DB.prepare("SELECT status,promised_at FROM delivery_job WHERE id=?")
+          .bind(delivery.jobId)
+          .first(),
+      ).toEqual({ status: "RETRY_SCHEDULED", promised_at: job.promised_at });
+      const successful = results[winner];
+      if (!successful.ok) throw new Error("Missing successful retry");
+      expect(
+        await cancelExternalDelivery(bookingDeps, {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+          dispatchId: successful.value.dispatchId,
+          expectedVersion: successful.value.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+      const current = await env.DB.prepare("SELECT version FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first<{ version: number }>();
+      if (!current) throw new Error("Missing retry job");
+      create.mockResolvedValueOnce({
+        ok: false,
+        error: { code: "TIMEOUT", retryable: false, outcomeUnknown: true },
+      });
+      const unknown = {
+        ...request,
+        expectedVersion: current.version,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      expect(await requestExternalDelivery(bookingDeps, unknown)).toMatchObject({ ok: false });
+      const blockedQueue = await listAdminDeliveryOperations(deps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+      });
+      expect(
+        blockedQueue.ok && blockedQueue.value.items.find((item) => item.jobId === delivery.jobId),
+      ).toMatchObject({ courierPickup: { allowedKinds: [] }, manualActions: [] });
+      expect(
+        await requestExternalDelivery(bookingDeps, {
+          ...unknown,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: false });
+      expect(create).toHaveBeenCalledTimes(3);
+    },
+  );
+
   it("keeps automatic booking uncertain when its required audit is omitted", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);

@@ -12,6 +12,7 @@ import { createCheckoutQuote } from "../../checkout/application/create-checkout-
 import { createCheckoutPaymentIntent } from "../../payments/application/create-checkout-payment-intent";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import type { PaymentProviderRegistry } from "../../payments/ports/provider-registry";
+import { seedTestInstantOrder } from "../../test-commerce-fixtures";
 
 const routeDistance = buildRouteDistancePort({
   ENVIRONMENT: "test",
@@ -162,6 +163,49 @@ describe("global commerce configuration", () => {
       value: { sellingState: "OPEN", fulfillmentMode: "INSTANT", version: 4 },
     });
   });
+
+  it.each(["SCHEDULED", "INSTANT"] as const)(
+    "switches new commerce while retaining a committed %s Order",
+    async (mode) => {
+      const id = `retained-mode-${crypto.randomUUID()}`;
+      await seedTestInstantOrder(env.DB, id);
+      await env.DB.prepare(
+        "UPDATE grocery_order SET status='COMMITTED',fulfillment_mode=?,cycle_id=? WHERE id=?",
+      )
+        .bind(mode, mode === "SCHEDULED" ? "cycle-next-cebu" : null, id)
+        .run();
+      await env.DB.prepare(
+        "UPDATE global_commerce_configuration SET fulfillment_mode=?,cadence=? WHERE id='global'",
+      )
+        .bind(mode, mode === "SCHEDULED" ? "WEEKLY" : null)
+        .run();
+      const orderBefore = await env.DB.prepare(
+        "SELECT fulfillment_mode,cycle_id,status,total_minor,payment_id,version FROM grocery_order WHERE id=?",
+      )
+        .bind(id)
+        .first();
+      expect(await pauseSelling(env.DB, command(1))).toMatchObject({ ok: true });
+      const target = mode === "SCHEDULED" ? "INSTANT" : "SCHEDULED";
+      const request = {
+        ...command(2),
+        fulfillmentMode: target,
+        cadence: target === "SCHEDULED" ? ("WEEKLY" as const) : null,
+      } as const;
+      const switched = await activateGlobalFulfillmentMode(env.DB, request);
+      expect(switched).toMatchObject({
+        ok: true,
+        value: { fulfillmentMode: target, sellingState: "PAUSED", version: 3 },
+      });
+      expect(await activateGlobalFulfillmentMode(env.DB, request)).toEqual(switched);
+      expect(
+        await env.DB.prepare(
+          "SELECT fulfillment_mode,cycle_id,status,total_minor,payment_id,version FROM grocery_order WHERE id=?",
+        )
+          .bind(id)
+          .first(),
+      ).toEqual(orderBefore);
+    },
+  );
 
   it("returns the exact original result on replay and rejects changed reuse", async () => {
     const attempt = command(1, "exact-replay");

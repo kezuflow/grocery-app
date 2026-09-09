@@ -324,6 +324,20 @@ for (const width of [1440, 390]) {
     await expect(admin.getByRole("row").filter({ hasText: orderId })).toContainText(
       "Finding rider",
     );
+    const courierRow = admin.getByRole("row").filter({ hasText: orderId });
+    admin.once("dialog", (dialog) => dialog.accept());
+    await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(courierRow).toContainText("CANCELED");
+    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
+    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
+    await expect(courierRow).toContainText("Finding rider");
+    const retried = await delivery();
+    expect(retried.externalDispatch?.dispatchId).not.toBe(booked.externalDispatch?.dispatchId);
+    expect(retried.externalDispatch?.status).toBe("ACTIVE");
+    expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
+    expect((await delivery()).externalDispatch?.dispatchId).toBe(
+      retried.externalDispatch?.dispatchId,
+    );
     await admin.screenshot({
       path: testInfo.outputPath(`instant-auto-booking-${width}.png`),
       fullPage: true,

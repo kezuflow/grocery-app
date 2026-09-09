@@ -142,7 +142,10 @@ export function ExternalDeliveryQueue() {
                       <TableCell className="min-w-72">
                         {item.externalDispatch ? (
                           <div className="flex flex-wrap gap-2">
-                            {!item.externalDispatch.providerDeliveryId ? (
+                            {!item.externalDispatch.providerDeliveryId &&
+                            ["CREATING", "OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED"].includes(
+                              item.externalDispatch.status,
+                            ) ? (
                               <label className="w-full text-xs">
                                 Lalamove order number for recovery
                                 <Input
@@ -158,13 +161,18 @@ export function ExternalDeliveryQueue() {
                                 />
                               </label>
                             ) : null}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void mutate(item.externalDispatch!, "refresh")}
-                            >
-                              Refresh provider
-                            </Button>
+                            {item.externalDispatch.providerDeliveryId ||
+                            ["CREATING", "OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED"].includes(
+                              item.externalDispatch.status,
+                            ) ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void mutate(item.externalDispatch!, "refresh")}
+                              >
+                                Refresh provider
+                              </Button>
+                            ) : null}
                             {item.externalDispatch.status === "ACTIVE" ? (
                               <Button
                                 size="sm"
@@ -190,13 +198,31 @@ export function ExternalDeliveryQueue() {
                               version: item.version,
                             }}
                             disabled={false}
-                            readiness={item.scheduledPickup}
+                            readiness={item.courierPickup}
                             onBooked={(notice) => {
                               setMessage(notice);
                               void load();
                             }}
                           />
                         )}
+                        {(item.externalDispatch || item.manualDelivery) &&
+                        item.courierPickup.allowedKinds.length > 0 ? (
+                          <ExternalDeliveryBooking
+                            locationId={item.locationId}
+                            fulfillmentMode={item.fulfillmentMode}
+                            delivery={{
+                              jobId: item.jobId,
+                              status: item.status,
+                              version: item.version,
+                            }}
+                            disabled={false}
+                            readiness={item.courierPickup}
+                            onBooked={(notice) => {
+                              setMessage(notice);
+                              void load();
+                            }}
+                          />
+                        ) : null}
                         <ManualDeliveryControls item={item} onChanged={() => void load()} />
                       </TableCell>
                     </TableRow>

@@ -426,6 +426,14 @@ for (const width of [1440, 390]) {
     admin.once("dialog", (dialog) => dialog.accept());
     await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(courierRow).toContainText("CANCELED");
+    await courierRow.getByRole("radio", { name: "Schedule pickup", exact: true }).check();
+    await courierRow.getByLabel("Pickup time", { exact: true }).fill(pickupInput);
+    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
+    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
+    await expect(courierRow).toContainText("Finding rider");
+    admin.once("dialog", (dialog) => dialog.accept());
+    await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(courierRow).toContainText("CANCELED");
     await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
     await courierRow
       .getByLabel("Person delivering", { exact: true })
@@ -535,5 +543,35 @@ for (const width of [1440, 390]) {
         .object({ status: z.literal("DELIVERED") })
         .parse(await read(page, `/api/commerce/orders/${orderId}`)).status,
     ).toBe("DELIVERED");
+    // In the combined run, retain and operate the earlier Instant orders after switching.
+    const retained = z
+      .object({
+        items: z.array(
+          z.object({
+            orderId: z.string(),
+            fulfillmentMode: z.string(),
+            externalDispatch: z.object({ status: z.string() }).nullable(),
+          }),
+        ),
+      })
+      .parse(await read(admin, `/api/admin/delivery?locationId=${locationId}`))
+      .items.find(
+        (item) => item.fulfillmentMode === "INSTANT" && item.externalDispatch?.status === "ACTIVE",
+      );
+    if (retained) {
+      const retainedRow = admin.getByRole("row").filter({ hasText: retained.orderId });
+      admin.once("dialog", (dialog) => dialog.accept());
+      await retainedRow.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(retainedRow).toContainText("CANCELED");
+      await retainedRow
+        .getByRole("button", { name: "Review Lalamove booking", exact: true })
+        .click();
+      await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
+      await expect(retainedRow).toContainText("Finding rider");
+      await testInfo.attach("retained-instant-after-mode-switch", {
+        body: "Earlier Instant order remained eligible for its selected courier while new commerce was Scheduled.",
+        contentType: "text/plain",
+      });
+    }
   });
 }

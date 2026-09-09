@@ -1,6 +1,7 @@
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
 import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
+import { preHandoverRetrySql } from "./pre-handover-retry";
 
 type DispatchStatus =
   | "PENDING"
@@ -107,6 +108,8 @@ export async function requestProviderDelivery(
     deliveryJobId: string;
     /** Optional atomic eligibility claim used by operator dispatch commands. */
     expectedDeliveryJobVersion?: number;
+    /** Explicit operator replacement after definite closure; never an automatic retry. */
+    retry?: boolean;
     clientIdempotencyKey?: string;
     actorAuthUserId?: string;
     now?: () => number;
@@ -131,7 +134,7 @@ export async function requestProviderDelivery(
   if (scheduledPickupAt !== null && !Number.isFinite(scheduledPickupAt))
     return failure("VALIDATION_FAILED", "A valid pickup time is required", command.requestId);
 
-  await database
+  const admission = database
     .prepare(
       `INSERT OR IGNORE INTO delivery_provider_dispatch
        (id, delivery_job_id, provider, merchant_order_id, request_hash,
@@ -147,7 +150,8 @@ export async function requestProviderDelivery(
            AND pending.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')
        ) AND (
          ? IS NULL OR (
-           job.version=? AND job.status IN ('UNASSIGNED','RETRY_SCHEDULED')
+           job.version=? AND (job.status IN ('UNASSIGNED','RETRY_SCHEDULED') OR (?=1 AND ${preHandoverRetrySql}))
+           AND (?=0 OR (job.promised_at IS NOT NULL AND job.promised_at>=? OR job.fulfillment_mode='SCHEDULED'))
            AND job.batch_id IS NULL AND job.rider_id IS NULL
            AND (job.fulfillment_mode!='INSTANT' OR EXISTS (
              SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
@@ -182,6 +186,9 @@ export async function requestProviderDelivery(
       command.deliveryJobId,
       command.expectedDeliveryJobVersion ?? null,
       command.expectedDeliveryJobVersion ?? null,
+      command.retry ? 1 : 0,
+      command.retry ? 1 : 0,
+      now,
       scheduledPickupAt,
       scheduledPickupAt,
       now,
@@ -190,8 +197,38 @@ export async function requestProviderDelivery(
       now,
       command.actorAuthUserId ?? null,
       command.actorAuthUserId ?? null,
-    )
-    .run();
+    );
+  if (command.retry) {
+    // The new durable attempt and retry state are admitted together before any provider call.
+    const guard = () =>
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()<>1");
+    try {
+      await database.batch([
+        admission,
+        guard(),
+        database
+          .prepare(
+            "UPDATE delivery_job SET status='RETRY_SCHEDULED',version=version+1,updated_at=? WHERE id=? AND version=? AND status='FAILED'",
+          )
+          .bind(now, command.deliveryJobId, command.expectedDeliveryJobVersion ?? null),
+        guard(),
+        database
+          .prepare(
+            "UPDATE delivery_stop SET status='RETRY_SCHEDULED',version=version+1,updated_at=? WHERE delivery_job_id=? AND status='FAILED'",
+          )
+          .bind(now, command.deliveryJobId),
+        guard(),
+      ]);
+    } catch (error) {
+      if (!(error instanceof Error) || !/constraint failed|DELIVERY_ATTEMPT_/i.test(error.message))
+        throw error;
+      return failure(
+        "DELIVERY_DISPATCH_UNAVAILABLE",
+        "Delivery changed or another attempt is active; refresh before retrying",
+        command.requestId,
+      );
+    }
+  } else await admission.run();
 
   const current = await readDispatch(database, dispatchId);
   if (!current)

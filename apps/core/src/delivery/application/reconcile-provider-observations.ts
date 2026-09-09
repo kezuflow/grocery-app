@@ -1,5 +1,6 @@
 import { applyProviderObservation } from "./apply-provider-observation";
 import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
+import { expireUnsubmittedBookings } from "./expire-unsubmitted-bookings";
 
 function status(value: string): ProviderDeliveryStatus | null {
   switch (value) {
@@ -27,6 +28,7 @@ function object(value: unknown): Record<string, unknown> | null {
 
 /** Local evidence replay only: never creates, cancels, or rebooks a courier. */
 export async function reconcileProviderObservations(database: D1Database, now: number) {
+  await expireUnsubmittedBookings(database, now);
   // A lost read response is safe to retry. Never reclaim an uncertain mutation.
   await database.batch([
     database

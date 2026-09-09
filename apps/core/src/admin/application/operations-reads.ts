@@ -282,7 +282,7 @@ export async function listAdminDeliveryOperations(
         : null,
     manualDelivery: row.manualDelivery,
     manualActions: row.manualActions,
-    scheduledPickup: row.scheduledPickup,
+    courierPickup: row.courierPickup,
     deliveredAtIso: row.deliveredAtIso,
     version: row.version,
   }));
