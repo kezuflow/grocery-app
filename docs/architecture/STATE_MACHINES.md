@@ -197,6 +197,8 @@ One active/uncertain execution attempt is allowed per job. Scheduled manual fall
 
 Manual assignment creates an ACTIVE attempt and ASSIGNED job. Handover keeps the attempt ACTIVE, records its handover time, and atomically advances packed fulfillment to HANDED_OFF, the job/stop to EN_ROUTE and the ready Order to OUT_FOR_DELIVERY. Completion requires that custody evidence and advances the attempt/fulfillment to COMPLETED and job/stop/Order to DELIVERED. Failure closes the attempt as FAILED and records a reason plus known cost or null; job/stop become FAILED while fulfillment/Order custody remains unchanged. Recovery does not follow automatically. Generic fulfillment handover/completion is unavailable while the manual attempt is ACTIVE.
 
+A failed delivery is not a refund decision or proof of customer fault. Customer-caused missed delivery is not automatically refundable; staff review attempt/contact evidence and unclear responsibility remains under review. Existing FreshMarkets/courier-fault remedies remain applicable. Neither dispatch, a courier failure report, nor declined/unavailable redelivery automatically cancels or refunds the Order. Returned groceries require physical inspection before an agreed retry of the same Order; they never automatically become available stock. Preserve original payment, promise and custody history. No extra redelivery charge is automatic; any proposed charge needs prior customer agreement. PRODUCT's failed-delivery supplement owns this policy.
+
 ```text
 PENDING -> CREATING -> ACTIVE -> COMPLETED
                     -> FAILED

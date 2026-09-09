@@ -76,3 +76,11 @@ Every report uses the selected period and explicit market timezone, current auth
 ## Explicit owner supplement — transfer controls
 
 On 2026-09-09 the owner answered “Include the transfer controls” after reviewing the concrete scope: destination damage/missing-quantity observations and Global controls to record a documented loss or an inspected physical return. These controls are approved in addition to the discussion's sent/received history. CA-4.2 keeps their complete transaction, scope, audit, replay and conservation acceptance. This does not approve unrelated supplier, quality, fleet or recovery workspaces.
+
+## Explicit owner supplement — failed delivery and refunds
+
+On 2026-09-09 the owner approved contacting the customer after a failed pickup/delivery attempt, inspecting groceries physically returned to the facility, and retrying the same Order when the goods remain suitable and the customer agrees. Returned groceries are never automatically credited to available stock; damaged/spoiled goods stay separate from sellable stock. Pre-pickup provider retry and Scheduled-only manual fallback remain approved after definite prior-attempt closure.
+
+The owner then clarified and approved: **customer-caused missed deliveries are not automatically refundable**. A courier failure report alone does not establish customer fault. Staff review delivery-attempt/contact evidence; unclear responsibility remains under review. Merely leaving the facility does not end FreshMarkets responsibility. FreshMarkets/courier-caused failures retain applicable replacement/refund handling and the existing FreshMarkets-caused cancellation rules. This is not a blanket denial of refunds after dispatch.
+
+Disclose the missed-delivery condition before payment. No automatic additional charge is authorized; any proposed redelivery charge requires the customer's agreement first. Keep the original paid Order and charge history, actual delivery costs, return inspection, customer agreement and any subsequent refund as distinct facts. The approved clarification supersedes automatic cancellation/refund solely because redelivery was declined or unavailable; classify responsibility and apply the relevant policy first. Legal consumer remedies remain applicable.

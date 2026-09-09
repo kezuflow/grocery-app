@@ -109,6 +109,12 @@ export function CheckoutTotalReview({
           <dd className="tabular-nums">{money(quote.totalMinor, quote.currency)}</dd>
         </div>
       </dl>
+      <p className="mt-5 text-sm text-[var(--fm-text-muted)]">
+        Please be available to receive your delivery. If a delivery is missed because you cannot
+        receive it, a refund is not automatic. We review what happened, including any courier or
+        FreshMarkets fault. Any extra redelivery charge requires your agreement first. Your rights
+        for faulty goods or delivery remain unchanged.
+      </p>
       <button
         type="button"
         onClick={onAccept}

@@ -243,6 +243,9 @@ for (const width of [1440, 390]) {
         .object({ totalMinor: z.number(), merchandiseSubtotalMinor: z.number() })
         .parse(await value(await quoteResponse));
       expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100);
+      await page.getByRole("region", { name: "Order total review" }).screenshot({
+        path: testInfo.outputPath(`checkout-delivery-policy-${width}.png`),
+      });
       await page
         .getByRole("button", { name: "Accept total and continue to payment", exact: true })
         .click();
