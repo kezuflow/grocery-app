@@ -9,6 +9,7 @@ import {
   type OperationsAdministrationDeps,
 } from "../../admin/application/operations-administration-access";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { deliveryNotificationStatements } from "../../notifications/application/delivery-notifications";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { manualDeliveryActions } from "../domain/manual-delivery";
 
@@ -326,6 +327,19 @@ export async function manageManualDelivery(
       guard(),
     );
   }
+  if (command.action !== "ASSIGN")
+    statements.push(
+      ...deliveryNotificationStatements(
+        db,
+        dispatchId,
+        command.action === "HAND_OVER"
+          ? "OUT_FOR_DELIVERY"
+          : command.action === "COMPLETE"
+            ? "DELIVERED"
+            : "DELIVERY_FAILED",
+        now,
+      ),
+    );
   statements.push(
     auditEventStatement(db, {
       actorUserId: access.value.authUserId,

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
+import { executeAdminE2eSql } from "./admin-authenticated-fixture";
 
 /** Both paid journeys exercise the production signed inbox with the local fake provider. */
 export async function completeLocalCourierDelivery(
@@ -39,8 +40,9 @@ export async function completeLocalCourierDelivery(
     return item;
   }
   await page.goto(`/orders/${orderId}`);
-  const providerDeliveryId = (await delivery()).externalDispatch?.providerDeliveryId;
-  if (!providerDeliveryId) throw new Error("Missing booked provider delivery identity");
+  const attempt = (await delivery()).externalDispatch;
+  const providerDeliveryId = attempt?.providerDeliveryId;
+  if (!providerDeliveryId || !attempt) throw new Error("Missing booked provider delivery identity");
   const callbackPath = "/webhooks/delivery/lalamove";
   for (const [index, status] of (["ON_GOING", "PICKED_UP", "COMPLETED"] as const).entries()) {
     const timestamp = String(Date.now() + index);
@@ -96,4 +98,10 @@ export async function completeLocalCourierDelivery(
       ).toBeVisible();
     }
   }
+  const dispatchIdSql = `'${attempt.dispatchId.replaceAll("'", "''")}'`;
+  // Read-only on success: fail the disposable DB assertion if either transition lost its intent.
+  executeAdminE2eSql(`INSERT INTO commitment_abort(id) SELECT -39 WHERE
+    (SELECT COUNT(*) FROM notification_outbox WHERE idempotency_key IN (
+      'delivery:' || ${dispatchIdSql} || ':OUT_FOR_DELIVERY',
+      'delivery:' || ${dispatchIdSql} || ':DELIVERED') AND status='PENDING') <> 2;`);
 }

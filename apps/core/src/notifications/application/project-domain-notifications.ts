@@ -10,6 +10,7 @@ type Fact = {
   reference: string;
   scheduledAt: number;
   identity: string;
+  legacyIdentity?: string;
 };
 
 export async function projectDomainNotifications(
@@ -20,7 +21,9 @@ export async function projectDomainNotifications(
   const orders = await database
     .prepare(
       `SELECT o.id,o.customer_id customerId,u.email,o.order_number orderNumber,o.committed_at,
-            o.fulfillment_mode,ofs.cutoff_at,d.status deliveryStatus,d.updated_at deliveryUpdatedAt
+            o.fulfillment_mode,ofs.cutoff_at,d.status deliveryStatus,d.updated_at deliveryUpdatedAt,
+            (SELECT attempt.id FROM delivery_provider_dispatch attempt WHERE attempt.delivery_job_id=d.id
+             ORDER BY attempt.attempt_sequence DESC LIMIT 1) dispatchId
      FROM grocery_order o JOIN customer c ON c.id=o.customer_id JOIN user u ON u.id=c.auth_user_id
      LEFT JOIN order_fulfillment_snapshot ofs ON ofs.order_id=o.id
      LEFT JOIN delivery_job d ON d.order_id=o.id WHERE o.committed_at IS NOT NULL`,
@@ -35,6 +38,7 @@ export async function projectDomainNotifications(
       cutoff_at: number | null;
       deliveryStatus: string | null;
       deliveryUpdatedAt: number | null;
+      dispatchId: string | null;
     }>();
   for (const order of orders.results) {
     facts.push({
@@ -58,14 +62,13 @@ export async function projectDomainNotifications(
         scheduledAt: Math.max(now, order.cutoff_at - 24 * 60 * 60_000),
         identity: `cutoff-reminder:${order.id}:${order.cutoff_at}`,
       });
-    const deliveryType =
-      order.deliveryStatus === "DISPATCHED"
-        ? "OUT_FOR_DELIVERY"
-        : order.deliveryStatus === "DELIVERED"
-          ? "DELIVERED"
-          : ["FAILED", "DELIVERY_FAILED"].includes(order.deliveryStatus ?? "")
-            ? "DELIVERY_FAILED"
-            : null;
+    const deliveryType = ["EN_ROUTE", "DISPATCHED"].includes(order.deliveryStatus ?? "")
+      ? "OUT_FOR_DELIVERY"
+      : order.deliveryStatus === "DELIVERED"
+        ? "DELIVERED"
+        : ["FAILED", "DELIVERY_FAILED"].includes(order.deliveryStatus ?? "")
+          ? "DELIVERY_FAILED"
+          : null;
     if (deliveryType && order.deliveryUpdatedAt)
       facts.push({
         type: deliveryType,
@@ -75,7 +78,10 @@ export async function projectDomainNotifications(
         recipient: order.email,
         reference: order.orderNumber ?? order.id,
         scheduledAt: order.deliveryUpdatedAt,
-        identity: `delivery:${order.id}:${deliveryType}:${order.deliveryUpdatedAt}`,
+        identity: order.dispatchId
+          ? `delivery:${order.dispatchId}:${deliveryType}`
+          : `delivery:${order.id}:${deliveryType}:${order.deliveryUpdatedAt}`,
+        legacyIdentity: `delivery:${order.id}:${deliveryType}:${order.deliveryUpdatedAt}`,
       });
   }
   const payments = await database
@@ -116,9 +122,10 @@ export async function projectDomainNotifications(
   let inserted = 0;
   for (const fact of facts) {
     const before = await database
-      .prepare("SELECT 1 found FROM notification_outbox WHERE idempotency_key=?")
-      .bind(fact.identity)
+      .prepare("SELECT 1 found FROM notification_outbox WHERE idempotency_key IN (?,?)")
+      .bind(fact.identity, fact.legacyIdentity ?? fact.identity)
       .first();
+    if (before) continue;
     const result = await enqueueNotification(database, {
       type: fact.type,
       aggregateType: fact.aggregateType,

@@ -2,6 +2,8 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { handleLalamoveWebhook } from "./lalamove-webhook";
 import { reconcileProviderObservations } from "../application/reconcile-provider-observations";
+import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
+import { deliverNotificationById } from "../../notifications/application/deliver-notifications";
 
 const credentials = {
   DELIVERY_PROVIDERS: "lalamove",
@@ -57,6 +59,9 @@ async function request(value: ReturnType<typeof payload>, suppliedSignature?: st
 async function seedDispatch(suffix = "1", providerId = "1900000000000000001") {
   await env.DB.batch([
     env.DB.prepare(
+      "INSERT INTO user(id,name,email,email_verified,created_at,updated_at) VALUES (?,'Synthetic customer',?,1,1,1)",
+    ).bind(`webhook-auth-${suffix}`, `webhook-${suffix}@example.com`),
+    env.DB.prepare(
       "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',1,1)",
     ).bind(`webhook-customer-${suffix}`, `webhook-auth-${suffix}`),
     env.DB.prepare(
@@ -102,6 +107,102 @@ async function seedDispatch(suffix = "1", providerId = "1900000000000000001") {
 }
 
 describe("Lalamove tracking webhook", () => {
+  it("retains an unavailable-recipient notice without losing the verified pickup or attempting a send", async () => {
+    await seedDispatch("no-recipient", "1900000000000000021");
+    await env.DB.prepare("DELETE FROM user WHERE id='webhook-auth-no-recipient'").run();
+    const event = payload({ eventId: "no-recipient-pickup" });
+    event.data.order.orderId = "1900000000000000021";
+    expect(
+      (await handleLalamoveWebhook(env.DB, credentials, await request(event), crypto.randomUUID()))
+        .status,
+    ).toBe(200);
+    const notice = await env.DB.prepare(
+      "SELECT id,status,last_error_code FROM notification_outbox WHERE aggregate_id='order-lalamove-webhook-no-recipient'",
+    ).first<{ id: string; status: string; last_error_code: string }>();
+    expect(notice).toMatchObject({ status: "FAILED", last_error_code: "RECIPIENT_UNAVAILABLE" });
+    if (!notice) throw new Error("Missing retained notification intent");
+    let sends = 0;
+    await deliverNotificationById(
+      env.DB,
+      {
+        async send() {
+          sends++;
+          return { ok: true };
+        },
+      },
+      notice.id,
+      Date.now(),
+    );
+    expect(sends).toBe(0);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM grocery_order WHERE id='order-lalamove-webhook-no-recipient'",
+      ).first(),
+    ).toEqual({ status: "OUT_FOR_DELIVERY" });
+  });
+  it("commits pickup and completion notices before projection, with rollback and duplicate-safe recovery", async () => {
+    await seedDispatch("notices", "1900000000000000020");
+    const pickup = payload({ eventId: "notices-pickup", status: "PICKED_UP" });
+    pickup.data.order.orderId = "1900000000000000020";
+    const send = async (event: ReturnType<typeof payload>) =>
+      handleLalamoveWebhook(env.DB, credentials, await request(event), crypto.randomUUID());
+    const notices = () =>
+      env.DB.prepare(
+        "SELECT id,event_type,status,scheduled_at FROM notification_outbox WHERE aggregate_id='order-lalamove-webhook-notices' ORDER BY scheduled_at,event_type",
+      ).all<{ id: string; event_type: string; status: string; scheduled_at: number }>();
+    await env.DB.exec(
+      "CREATE TRIGGER omit_delivery_notice BEFORE INSERT ON notification_outbox WHEN NEW.event_type='OUT_FOR_DELIVERY' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect((await send(pickup)).status).toBe(202);
+      expect((await notices()).results).toEqual([]);
+      expect(
+        await env.DB.prepare(
+          "SELECT status FROM grocery_order WHERE id='order-lalamove-webhook-notices'",
+        ).first(),
+      ).toEqual({ status: "FULFILLMENT_READY" });
+      expect(
+        await env.DB.prepare(
+          "SELECT processing_status FROM delivery_provider_event_inbox WHERE provider_event_id='notices-pickup'",
+        ).first(),
+      ).toEqual({ processing_status: "RECONCILIATION_REQUIRED" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_delivery_notice");
+    }
+    expect((await send(pickup)).status).toBe(200);
+    expect((await send(pickup)).status).toBe(200);
+    const completed = payload({
+      eventId: "notices-completed",
+      status: "COMPLETED",
+      updatedAt: "2026-09-04T02:00:00Z",
+    });
+    completed.data.order.orderId = pickup.data.order.orderId;
+    expect((await send(completed)).status).toBe(200);
+    const before = (await notices()).results;
+    expect(before.map((row) => [row.event_type, row.status])).toEqual([
+      ["OUT_FOR_DELIVERY", "PENDING"],
+      ["DELIVERED", "PENDING"],
+    ]);
+    await projectDomainNotifications(env.DB, Date.now());
+    expect((await notices()).results).toEqual(before);
+    let sends = 0;
+    for (const notice of before) {
+      const port = {
+        async send() {
+          sends++;
+          return { ok: true as const };
+        },
+      };
+      await deliverNotificationById(env.DB, port, notice.id, Date.now());
+      await deliverNotificationById(env.DB, port, notice.id, Date.now());
+    }
+    expect(sends).toBe(2);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM grocery_order WHERE id='order-lalamove-webhook-notices'",
+      ).first(),
+    ).toEqual({ status: "DELIVERED" });
+  });
   it("bounds background retries and preserves unresolved early pickup evidence", async () => {
     await seedDispatch("bounded", "1900000000000000008");
     await env.DB.prepare(

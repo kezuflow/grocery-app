@@ -1650,6 +1650,11 @@ describe("Scheduled manual delivery", () => {
   it("saves one assignment under concurrent replay, enforces custody, and returns frozen receipts after completion", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const delivery = await seedScheduledDelivery(Date.now());
+    await env.DB.prepare(
+      "INSERT INTO user(id,name,email,email_verified,created_at,updated_at) SELECT c.auth_user_id,'Synthetic customer',c.id || '@example.com',1,1,1 FROM customer c JOIN grocery_order o ON o.customer_id=c.id WHERE o.id=?",
+    )
+      .bind(delivery.orderId)
+      .run();
     const request = assign(delivery.jobId);
     const [assigned, duplicate] = await Promise.all([
       manageManualDelivery(deps, request),
@@ -1705,6 +1710,26 @@ describe("Scheduled manual delivery", () => {
         { authorize: async () => true },
       ),
     ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    await env.DB.exec(
+      "CREATE TRIGGER omit_manual_notice BEFORE INSERT ON notification_outbox WHEN NEW.event_type='OUT_FOR_DELIVERY' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await manageManualDelivery(deps, { ...base, action: "HAND_OVER" })).toMatchObject({
+        ok: false,
+      });
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual({ status: "FULFILLMENT_READY" });
+      expect(
+        await env.DB.prepare("SELECT handed_over_at FROM delivery_provider_dispatch WHERE id=?")
+          .bind(assigned.value.dispatchId)
+          .first(),
+      ).toEqual({ handed_over_at: null });
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_manual_notice");
+    }
     const handedOver = await manageManualDelivery(deps, { ...base, action: "HAND_OVER" });
     expect(handedOver).toMatchObject({ ok: true, value: { version: 2 } });
     const completed = await manageManualDelivery(deps, {
@@ -1742,6 +1767,15 @@ describe("Scheduled manual delivery", () => {
         .bind(assigned.value.dispatchId)
         .first(),
     ).toEqual({ n: 3 });
+    const notices = await env.DB.prepare(
+      "SELECT event_type,status FROM notification_outbox WHERE aggregate_id=? ORDER BY event_type",
+    )
+      .bind(delivery.orderId)
+      .all();
+    expect(notices.results).toEqual([
+      { event_type: "DELIVERED", status: "PENDING" },
+      { event_type: "OUT_FOR_DELIVERY", status: "PENDING" },
+    ]);
   });
 
   it("rolls back every assignment effect when its audit is omitted, and revalidates current permission", async () => {

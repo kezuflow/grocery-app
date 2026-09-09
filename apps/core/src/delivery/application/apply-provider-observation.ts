@@ -1,5 +1,6 @@
 import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
 import { completeProviderCommandStatements } from "../infrastructure/provider-command-repository";
+import { deliveryNotificationStatements } from "../../notifications/application/delivery-notifications";
 
 export type ProviderObservation = Readonly<{
   dispatchId: string;
@@ -258,6 +259,19 @@ export async function applyProviderObservation(
     WHERE id=(SELECT job.order_id FROM delivery_provider_dispatch dispatch JOIN delivery_job job ON job.id=dispatch.delivery_job_id WHERE dispatch.id=?)
       AND status IN ('FULFILLMENT_READY','OUT_FOR_DELIVERY') AND status!=?`)
         .bind(orderStatus, dispatch.id, orderStatus),
+    );
+  if (normalized === "EN_ROUTE" || normalized === "DELIVERED" || normalized === "FAILED")
+    statements.push(
+      ...deliveryNotificationStatements(
+        database,
+        dispatch.id,
+        normalized === "EN_ROUTE"
+          ? "OUT_FOR_DELIVERY"
+          : normalized === "DELIVERED"
+            ? "DELIVERED"
+            : "DELIVERY_FAILED",
+        observation.observedAt,
+      ),
     );
   statements.push(...completion);
   if (options.inboxId) statements.push(inboxApplied());
