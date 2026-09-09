@@ -421,6 +421,30 @@ for (const width of [1440, 390]) {
       await courierFulfillment.getByRole("button", { name, exact: true }).click();
     await expect(courierFulfillment).toContainText("PACKED");
     await admin.goto("/admin/delivery");
+    // Real booking/cancellation commands with the explicit local fake provider.
+    // Definite pre-handover closure must expose the same ordinary manual action.
+    admin.once("dialog", (dialog) => dialog.accept());
+    await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(courierRow).toContainText("CANCELED");
+    await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await courierRow
+      .getByLabel("Person delivering", { exact: true })
+      .fill("Synthetic fallback helper");
+    await courierRow
+      .getByLabel("Phone including country code", { exact: true })
+      .fill("+639171110002");
+    await courierRow
+      .getByLabel("Reason for manual delivery", { exact: true })
+      .fill("Courier canceled before pickup");
+    await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await expect(courierRow).toContainText("Manual · Synthetic fallback helper");
+    await expect(
+      courierRow.getByRole("button", { name: "Hand over packed order", exact: true }),
+    ).toBeVisible();
+    await admin.screenshot({
+      path: testInfo.outputPath(`scheduled-canceled-courier-fallback-${width}.png`),
+      fullPage: true,
+    });
     const manualRow = admin.getByRole("row").filter({ hasText: orderId });
     await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
     await manualRow

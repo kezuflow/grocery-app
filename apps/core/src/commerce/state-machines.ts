@@ -72,7 +72,7 @@ export const deliveryJobTransitions: StateMap = {
   ASSIGNED: ["EN_ROUTE"],
   EN_ROUTE: ["ARRIVED"],
   ARRIVED: ["DELIVERED", "FAILED"],
-  FAILED: ["RETRY_SCHEDULED", "ESCALATED", "CANCELED"],
+  FAILED: ["RETRY_SCHEDULED", "ASSIGNED", "ESCALATED", "CANCELED"],
   RETRY_SCHEDULED: ["ASSIGNED"],
 };
 export const deliveryTransitions = deliveryJobTransitions;

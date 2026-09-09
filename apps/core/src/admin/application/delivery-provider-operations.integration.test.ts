@@ -1227,6 +1227,67 @@ describe("Scheduled manual delivery", () => {
     };
   }
 
+  it("allows one manual fallback after confirmed courier cancellation before handover", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    const delivery = await seedActiveDispatch(now);
+    const provider = createMockDeliveryProvider(() => now);
+    expect(await manageManualDelivery(deps, assign(delivery.jobId))).toMatchObject({ ok: false });
+    const canceled = await cancelExternalDelivery(
+      { ...deps, provider, now: () => now },
+      {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        dispatchId: delivery.dispatchId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    );
+    expect(canceled).toMatchObject({ ok: true, value: { status: "CANCELED" } });
+    const job = await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+      .bind(delivery.jobId)
+      .first<{ status: string; version: number }>();
+    expect(job?.status).toBe("FAILED");
+    if (!job) throw new Error("Missing delivery job");
+    const queue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+    });
+    expect(
+      queue.ok && queue.value.items.find((item) => item.jobId === delivery.jobId),
+    ).toMatchObject({ manualActions: ["ASSIGN"] });
+    const request = { ...assign(delivery.jobId), expectedVersion: job.version };
+    const competingRequest = { ...request, idempotencyKey: crypto.randomUUID() };
+    const results = await Promise.all([
+      manageManualDelivery(deps, request),
+      manageManualDelivery(deps, competingRequest),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const winner = results[0].ok ? 0 : 1;
+    expect(await manageManualDelivery(deps, winner === 0 ? request : competingRequest)).toEqual(
+      results[winner],
+    );
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT method,status,attempt_sequence FROM delivery_provider_dispatch WHERE delivery_job_id=? ORDER BY attempt_sequence",
+        )
+          .bind(delivery.jobId)
+          .all()
+      ).results,
+    ).toEqual([
+      { method: "EXTERNAL", status: "CANCELED", attempt_sequence: 1 },
+      { method: "MANUAL", status: "ACTIVE", attempt_sequence: 2 },
+    ]);
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED" });
+  });
+
   it("rejects Instant, unresolved courier work, invalid contact, and missing capability without a receipt", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const instant = await seedScheduledDelivery(Date.now(), "INSTANT");

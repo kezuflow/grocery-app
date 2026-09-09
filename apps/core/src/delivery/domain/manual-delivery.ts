@@ -12,7 +12,13 @@ export function manualDeliveryActions(facts: {
   if (facts.mode !== "SCHEDULED" || facts.pendingCancellation) return [];
   const attempt = facts.attempt;
   if (!attempt || ["CANCELED", "RETURNED", "FAILED"].includes(attempt.status)) {
-    return ["UNASSIGNED", "RETRY_SCHEDULED"].includes(facts.jobStatus) &&
+    const closedBeforeHandover =
+      attempt !== null &&
+      ["CANCELED", "FAILED"].includes(attempt.status) &&
+      attempt.handedOverAt === null;
+    return (!attempt || closedBeforeHandover) &&
+      (["UNASSIGNED", "RETRY_SCHEDULED"].includes(facts.jobStatus) ||
+        (facts.jobStatus === "FAILED" && closedBeforeHandover)) &&
       ["COMMITTED", "FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(facts.orderStatus) &&
       ["NOT_STARTED", "PICKING", "READY_TO_PACK", "PACKING", "PACKED"].includes(
         facts.fulfillmentStatus,

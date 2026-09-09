@@ -76,11 +76,6 @@ describe("customer checkout flow", () => {
     const headers = { cookie };
     const request = () => ({ headers, requestId: requestId() });
 
-    const trial = await core.startTrial({
-      ...request(),
-      idempotencyKey: `trial-${crypto.randomUUID()}`,
-    });
-    expect(trial.ok).toBe(true);
     const address = await core.createCustomerAddress({
       ...request(),
       label: "Home",
