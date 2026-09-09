@@ -1,8 +1,10 @@
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { manualDeliveryActions } from "../domain/manual-delivery";
+import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 
 type DispatchRow = {
   manualActions: AdminDeliveryOperationView["manualActions"];
+  scheduledPickup: AdminDeliveryOperationView["scheduledPickup"];
   manualDelivery: AdminDeliveryOperationView["manualDelivery"];
   jobId: string;
   orderId: string;
@@ -20,6 +22,52 @@ type DispatchRow = {
   externalTrackingUrl: string | null;
   externalVersion: number | null;
 };
+
+function scheduledPickupDecision(row: {
+  fulfillment_mode: string;
+  status: string;
+  can_manage: number;
+  pending_cancel: number;
+  external_status: string | null;
+  scheduled_goods_ready: number;
+  pickup_deadline: number | null;
+  fulfillment_status: string;
+  order_status: string;
+}): AdminDeliveryOperationView["scheduledPickup"] {
+  if (row.fulfillment_mode !== "SCHEDULED") return { allowedKinds: [], unavailableReason: null };
+  if (!row.can_manage)
+    return { allowedKinds: [], unavailableReason: "Delivery management access is required." };
+  if (
+    row.pending_cancel ||
+    !["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.status) ||
+    (row.external_status !== null &&
+      !["CANCELED", "RETURNED", "FAILED"].includes(row.external_status))
+  )
+    return {
+      allowedKinds: [],
+      unavailableReason: "Resolve the current delivery attempt before booking another.",
+    };
+  if (!["COMMITTED", "FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(row.order_status))
+    return {
+      allowedKinds: [],
+      unavailableReason: "This order is no longer awaiting preparation or delivery.",
+    };
+  if (!row.scheduled_goods_ready)
+    return {
+      allowedKinds: [],
+      unavailableReason:
+        "Start preparation and check that the purchased goods have been received before booking pickup.",
+    };
+  if (row.pickup_deadline === null || row.pickup_deadline <= Date.now())
+    return {
+      allowedKinds: [],
+      unavailableReason: "The committed delivery window is unavailable or has passed.",
+    };
+  return {
+    allowedKinds: row.fulfillment_status === "PACKED" ? ["IMMEDIATE", "SCHEDULED"] : ["SCHEDULED"],
+    unavailableReason: null,
+  };
+}
 
 /**
  * Location-scoped delivery dispatch board joined to the fulfillment record
@@ -56,6 +104,9 @@ export async function listDeliveryDispatch(
               dispatch.version AS external_version,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
               dispatch.manual_reason,dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
               o.status AS order_status,f.status AS fulfillment_status,
+              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${scheduledDeliveryGoodsReadySql}) AS scheduled_goods_ready,
+              (SELECT COALESCE(delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
+                LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
               EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch p ON p.id=c.dispatch_id
                 WHERE p.delivery_job_id=d.id AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')) AS pending_cancel,
               EXISTS (SELECT 1 FROM staff_identity s JOIN staff_role sr ON sr.staff_id=s.id JOIN role_permission rp ON rp.role_id=sr.role_id
@@ -81,6 +132,8 @@ export async function listDeliveryDispatch(
       fulfillment_status: string;
       pending_cancel: number;
       can_manage: number;
+      scheduled_goods_ready: number;
+      pickup_deadline: number | null;
       job_id: string;
       order_id: string;
       status: string;
@@ -98,6 +151,7 @@ export async function listDeliveryDispatch(
       external_version: number | null;
     }>();
   return rows.results.map((r) => ({
+    scheduledPickup: scheduledPickupDecision(r),
     manualActions: r.can_manage
       ? manualDeliveryActions({
           mode: r.fulfillment_mode,

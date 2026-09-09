@@ -8,6 +8,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { claimCommandIdempotency, requestHash } from "../../idempotency";
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
+import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 import { requestProviderDelivery, type ProviderDispatchView } from "./request-provider-delivery";
 import type { DeliveryProvider } from "../ports/delivery-provider";
 
@@ -231,7 +232,7 @@ export async function bookOrderDelivery(
       `SELECT job.id AS job_id, job.order_id, job.version AS job_version,
               job.status AS job_status, job.fulfillment_mode, job.location_id,
               job.cycle_id, job.batch_id, job.rider_id, job.promised_at,
-              snapshot.delivery_date, snapshot.delivery_execution_snapshot_json,
+              COALESCE(delivery_window.ends_at,snapshot.delivery_date) AS delivery_date, snapshot.delivery_execution_snapshot_json,
               orders.currency, orders.total_minor,
               stop.latitude, stop.longitude, stop.address_snapshot_json,
               stop.contact_snapshot_json, stop.instructions_snapshot,
@@ -243,6 +244,7 @@ export async function bookOrderDelivery(
        FROM delivery_job job
        JOIN grocery_order orders ON orders.id=job.order_id
        JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=orders.id
+       LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=orders.id
        JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        JOIN fulfillment_location location ON location.id=job.location_id
        LEFT JOIN fulfillment_location_delivery_profile profile ON profile.location_id=location.id
@@ -268,6 +270,19 @@ export async function bookOrderDelivery(
       return failure(
         "ILLEGAL_TRANSITION",
         "Check all items and start final packing before booking",
+        request.requestId,
+      );
+  }
+  if (row.fulfillment_mode === "SCHEDULED") {
+    const ready = await deps.db
+      .prepare(`SELECT 1 FROM delivery_job job WHERE job.id=? AND ${scheduledDeliveryGoodsReadySql}
+      AND (?='SCHEDULED' OR EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=job.order_id AND status='PACKED'))`)
+      .bind(row.job_id, request.pickup.kind)
+      .first();
+    if (!ready)
+      return failure(
+        "ILLEGAL_TRANSITION",
+        "Start preparation and check received goods before scheduling pickup; an immediate pickup requires packing to be complete",
         request.requestId,
       );
   }

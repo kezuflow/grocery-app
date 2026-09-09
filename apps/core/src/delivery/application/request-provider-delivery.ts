@@ -1,5 +1,6 @@
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
+import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 
 type DispatchStatus =
   | "PENDING"
@@ -123,7 +124,12 @@ export async function requestProviderDelivery(
     ]),
   );
   const dispatchId = `dispatch:${provider.code}:${attemptIdentity}`;
-  const now = Date.now();
+  const now = command.now?.() ?? Date.now();
+  const scheduledPickupAt = command.request.schedule
+    ? Date.parse(command.request.schedule.pickupFrom)
+    : null;
+  if (scheduledPickupAt !== null && !Number.isFinite(scheduledPickupAt))
+    return failure("VALIDATION_FAILED", "A valid pickup time is required", command.requestId);
 
   await database
     .prepare(
@@ -149,6 +155,10 @@ export async function requestProviderDelivery(
                AND grocery.status IN ('FULFILLMENT_PENDING','FULFILLMENT_READY')
                AND fulfillment.status IN ('PACKING','PACKED')
            ))
+           AND (job.fulfillment_mode!='SCHEDULED' OR (${scheduledDeliveryGoodsReadySql}
+             AND ((? IS NOT NULL AND ?>?) OR (? IS NULL AND EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=job.order_id AND status='PACKED')))
+             AND COALESCE(?,?) <= (SELECT COALESCE(delivery_window.ends_at,snapshot.delivery_date)
+               FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
          )
        ) AND (? IS NULL OR EXISTS (
          SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
@@ -172,6 +182,12 @@ export async function requestProviderDelivery(
       command.deliveryJobId,
       command.expectedDeliveryJobVersion ?? null,
       command.expectedDeliveryJobVersion ?? null,
+      scheduledPickupAt,
+      scheduledPickupAt,
+      now,
+      scheduledPickupAt,
+      scheduledPickupAt,
+      now,
       command.actorAuthUserId ?? null,
       command.actorAuthUserId ?? null,
     )

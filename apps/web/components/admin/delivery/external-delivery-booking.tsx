@@ -1,6 +1,10 @@
 "use client";
 
-import type { ExternalDeliveryDispatchView, RpcResult } from "@freshmarkets/contracts";
+import type {
+  AdminDeliveryOperationView,
+  ExternalDeliveryDispatchView,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -26,6 +30,7 @@ export function ExternalDeliveryBooking({
   fulfillmentMode,
   delivery,
   disabled,
+  readiness,
   fetchImpl = fetch,
   onBooked,
 }: {
@@ -33,10 +38,13 @@ export function ExternalDeliveryBooking({
   fulfillmentMode: FulfillmentMode;
   delivery: OrderedDeliveryItem;
   disabled: boolean;
+  readiness: AdminDeliveryOperationView["scheduledPickup"];
   fetchImpl?: FetchLike;
   onBooked: (message: string) => void;
 }) {
-  const [pickupKind, setPickupKind] = useState<"IMMEDIATE" | "SCHEDULED">("IMMEDIATE");
+  const [pickupKind, setPickupKind] = useState<"IMMEDIATE" | "SCHEDULED">(
+    readiness.allowedKinds[0] ?? "SCHEDULED",
+  );
   const [pickupAt, setPickupAt] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [pending, setPending] = useState(false);
@@ -45,14 +53,19 @@ export function ExternalDeliveryBooking({
 
   useEffect(() => {
     key.current = crypto.randomUUID();
-    setPickupKind("IMMEDIATE");
+    setPickupKind(readiness.allowedKinds[0] ?? "SCHEDULED");
     setPickupAt("");
     setReviewing(false);
     setMessage(null);
-  }, [delivery.jobId, delivery.version]);
+  }, [delivery.jobId, delivery.version, readiness.allowedKinds[0]]);
 
   async function book() {
-    if (pending || (pickupKind === "SCHEDULED" && !pickupAt)) return;
+    if (
+      pending ||
+      !readiness.allowedKinds.includes(pickupKind) ||
+      (pickupKind === "SCHEDULED" && !pickupAt)
+    )
+      return;
     setPending(true);
     setMessage(null);
     const payload = {
@@ -93,6 +106,7 @@ export function ExternalDeliveryBooking({
     }
   }
 
+  if (readiness.unavailableReason) return <p className="text-sm">{readiness.unavailableReason}</p>;
   return (
     <section className="space-y-3 rounded border border-[var(--fm-border)] bg-white p-3">
       <div>
@@ -100,7 +114,7 @@ export function ExternalDeliveryBooking({
         <p className="text-xs text-[var(--fm-text-muted)]">
           {fulfillmentMode === "INSTANT"
             ? "Core enforces the delivery partner selected by the customer at checkout."
-            : "Use Lalamove now or set a pickup time within the customer’s committed delivery window."}
+            : "Set pickup for when packing will be ready, within the customer’s delivery window. Request a driver now once packing is complete."}
         </p>
       </div>
       {fulfillmentMode === "SCHEDULED" ? (
@@ -111,7 +125,7 @@ export function ExternalDeliveryBooking({
               type="radio"
               name={`pickup-${delivery.jobId}`}
               checked={pickupKind === "IMMEDIATE"}
-              disabled={disabled || pending}
+              disabled={disabled || pending || !readiness.allowedKinds.includes("IMMEDIATE")}
               onChange={() => setPickupKind("IMMEDIATE")}
             />
             Request a driver now
@@ -121,7 +135,7 @@ export function ExternalDeliveryBooking({
               type="radio"
               name={`pickup-${delivery.jobId}`}
               checked={pickupKind === "SCHEDULED"}
-              disabled={disabled || pending}
+              disabled={disabled || pending || !readiness.allowedKinds.includes("SCHEDULED")}
               onChange={() => setPickupKind("SCHEDULED")}
             />
             Schedule pickup
@@ -146,7 +160,12 @@ export function ExternalDeliveryBooking({
         type="button"
         variant="outline"
         className="min-h-11 w-full"
-        disabled={disabled || pending || (pickupKind === "SCHEDULED" && !pickupAt)}
+        disabled={
+          disabled ||
+          pending ||
+          !readiness.allowedKinds.includes(pickupKind) ||
+          (pickupKind === "SCHEDULED" && !pickupAt)
+        }
         onClick={() => setReviewing(true)}
       >
         Review Lalamove booking
@@ -155,8 +174,7 @@ export function ExternalDeliveryBooking({
         <AlertDialogContent>
           <AlertDialogTitle>Confirm Lalamove booking</AlertDialogTitle>
           <AlertDialogDescription>
-            This asks Lalamove to create a paid courier order from this store for delivery job{" "}
-            {delivery.jobId}.
+            Book Lalamove to collect this order from the store.
             {pickupKind === "SCHEDULED" && pickupAt
               ? ` Pickup: ${new Date(pickupAt).toLocaleString("en-PH")}.`
               : " Pickup: as soon as possible."}

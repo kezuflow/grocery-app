@@ -118,6 +118,10 @@ export type AdminDeliveryOperationView = {
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
   manualActions: ReadonlyArray<ManualDeliveryAction>;
+  scheduledPickup: {
+    allowedKinds: ReadonlyArray<"IMMEDIATE" | "SCHEDULED">;
+    unavailableReason: string | null;
+  };
   manualDelivery: {
     dispatchId: string;
     personName: string;

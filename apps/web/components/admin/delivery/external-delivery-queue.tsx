@@ -190,6 +190,7 @@ export function ExternalDeliveryQueue() {
                               version: item.version,
                             }}
                             disabled={false}
+                            readiness={item.scheduledPickup}
                             onBooked={(notice) => {
                               setMessage(notice);
                               void load();

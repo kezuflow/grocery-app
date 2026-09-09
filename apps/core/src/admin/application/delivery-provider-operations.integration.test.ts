@@ -266,6 +266,58 @@ async function seedActiveDispatch(now: number) {
   return { ...delivery, dispatchId };
 }
 
+async function receiveScheduledTestGoods(delivery: { orderId: string }, now: number) {
+  // This provider projection test uses seeded paid-order evidence; receive its goods
+  // through commands before packing. It does not establish payment acceptance.
+  const receiptId = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at) SELECT ?,order_id,'cycle-next-cebu',?,'pool-red-onion',base_quantity,'OPEN','EXACT_PAID_LINE',id,sku_id,quantity,base_quantity,'GRAM',1000,? FROM order_item WHERE order_id=?",
+    ).bind(crypto.randomUUID(), LOCATION, now, delivery.orderId),
+    env.DB.prepare(
+      "INSERT INTO procurement_requirement(id,delivery_cycle_id,location_id,inventory_pool_id,required_quantity,status,version) VALUES (?,'cycle-next-cebu',?,'pool-red-onion',1000,'ORDERED',1)",
+    ).bind(receiptId, LOCATION),
+    env.DB.prepare(
+      "INSERT INTO receiving_record(id,procurement_requirement_id,expected_quantity,accepted_quantity,rejected_quantity,status,version) VALUES (?,?,1000,0,0,'NOT_STARTED',1)",
+    ).bind(receiptId, receiptId),
+  ]);
+  expect(
+    await startReceiving(env.DB, {
+      requirementId: receiptId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      actorId: "test",
+      requestId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await recordReceivedLine(env.DB, {
+      receivingRecordId: receiptId,
+      acceptedDeltaBase: 1000,
+      rejectedDeltaBase: 0,
+      reason: "Inspected goods",
+      expectedVersion: 2,
+      idempotencyKey: crypto.randomUUID(),
+      actorId: "test",
+      requestId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await advanceFulfillment(
+      env.DB,
+      {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        orderId: delivery.orderId,
+        action: "START_PICKING",
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      },
+      { authorize: async () => true },
+    ),
+  ).toMatchObject({ ok: true });
+}
+
 describe("external delivery request", () => {
   it("keeps automatic booking uncertain when its required audit is omitted", async () => {
     const now = Date.now();
@@ -482,6 +534,7 @@ describe("external delivery request", () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
     const delivery = await seedScheduledDelivery(now);
+    await receiveScheduledTestGoods(delivery, now);
     const provider = createMockDeliveryProvider();
     provider.create = vi.fn(async () => ({
       ok: false as const,
@@ -499,7 +552,7 @@ describe("external delivery request", () => {
       jobId: delivery.jobId,
       expectedVersion: 1,
       providerCode: "lalamove" as const,
-      pickup: { kind: "IMMEDIATE" as const },
+      pickup: { kind: "SCHEDULED" as const, pickupAt: new Date(now + 60_000).toISOString() },
       idempotencyKey: crypto.randomUUID(),
     };
     const dependenciesWithProvider = {
@@ -762,6 +815,7 @@ describe("external delivery request", () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
     const delivery = await seedScheduledDelivery(now);
+    await receiveScheduledTestGoods(delivery, now);
     const create = vi.fn<DeliveryProvider["create"]>(async (request) => ({
       ok: true,
       value: {
@@ -816,7 +870,7 @@ describe("external delivery request", () => {
       jobId: delivery.jobId,
       expectedVersion: 1,
       providerCode: "lalamove" as const,
-      pickup: { kind: "IMMEDIATE" as const },
+      pickup: { kind: "SCHEDULED" as const, pickupAt: new Date(now + 60_000).toISOString() },
       idempotencyKey: bookingKey,
     };
     const result = await requestExternalDelivery(
@@ -844,7 +898,7 @@ describe("external delivery request", () => {
         coordinate: { latitude: 10.33, longitude: 123.91 },
         instructions: { buildingUnit: "Unit 2", landmark: "Blue gate" },
       },
-      schedule: null,
+      schedule: { pickupFrom: new Date(now + 60_000).toISOString() },
     });
     if (!result.ok) return;
     const early = await refreshExternalDelivery(
@@ -863,7 +917,7 @@ describe("external delivery request", () => {
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
         .bind(delivery.orderId)
         .first(),
-    ).toEqual({ status: "COMMITTED" });
+    ).toEqual({ status: "FULFILLMENT_PENDING" });
     expect(
       await env.DB.prepare(
         "SELECT last_error_code FROM delivery_provider_event_inbox WHERE dispatch_id=? AND processing_status='RECONCILIATION_REQUIRED'",
@@ -871,43 +925,8 @@ describe("external delivery request", () => {
         .bind(result.value.dispatchId)
         .first(),
     ).toEqual({ last_error_code: "DELIVERY_PACKING_NOT_COMPLETE" });
-    // This provider projection test uses seeded paid-order evidence; receive its goods
-    // through commands before packing. It does not establish payment acceptance.
-    const receiptId = crypto.randomUUID();
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at) SELECT ?,order_id,'cycle-next-cebu',?,'pool-red-onion',base_quantity,'OPEN','EXACT_PAID_LINE',id,sku_id,quantity,base_quantity,'GRAM',1000,? FROM order_item WHERE order_id=?",
-      ).bind(crypto.randomUUID(), LOCATION, now, delivery.orderId),
-      env.DB.prepare(
-        "INSERT INTO procurement_requirement(id,delivery_cycle_id,location_id,inventory_pool_id,required_quantity,status,version) VALUES (?,'cycle-next-cebu',?,'pool-red-onion',1000,'ORDERED',1)",
-      ).bind(receiptId, LOCATION),
-      env.DB.prepare(
-        "INSERT INTO receiving_record(id,procurement_requirement_id,expected_quantity,accepted_quantity,rejected_quantity,status,version) VALUES (?,?,1000,0,0,'NOT_STARTED',1)",
-      ).bind(receiptId, receiptId),
-    ]);
-    expect(
-      await startReceiving(env.DB, {
-        requirementId: receiptId,
-        expectedVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-        actorId: "test",
-        requestId: crypto.randomUUID(),
-      }),
-    ).toMatchObject({ ok: true });
-    expect(
-      await recordReceivedLine(env.DB, {
-        receivingRecordId: receiptId,
-        acceptedDeltaBase: 1000,
-        rejectedDeltaBase: 0,
-        reason: "Inspected goods",
-        expectedVersion: 2,
-        idempotencyKey: crypto.randomUUID(),
-        actorId: "test",
-        requestId: crypto.randomUUID(),
-      }),
-    ).toMatchObject({ ok: true });
     for (const [index, action] of (
-      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
+      ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
     ).entries()) {
       expect(
         await advanceFulfillment(
@@ -917,7 +936,7 @@ describe("external delivery request", () => {
             headers: {},
             orderId: delivery.orderId,
             action,
-            expectedVersion: index + 1,
+            expectedVersion: index + 2,
             idempotencyKey: crypto.randomUUID(),
           },
           { authorize: async () => true },
@@ -1020,6 +1039,176 @@ describe("external delivery request", () => {
     });
     expect(create).toHaveBeenCalledOnce();
   });
+});
+
+describe("Scheduled booking readiness", () => {
+  it("rejects immediate pickup before packing and future pickup without available received goods", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(now);
+    await receiveScheduledTestGoods(delivery, now);
+    const provider = createMockDeliveryProvider();
+    const create = vi.spyOn(provider, "create");
+    const booking = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      jobId: delivery.jobId,
+      expectedVersion: 1,
+      providerCode: "lalamove" as const,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const bookingDeps = { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now };
+    expect(
+      await requestExternalDelivery(bookingDeps, { ...booking, pickup: { kind: "IMMEDIATE" } }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    const balance = await env.DB.prepare(
+      "SELECT disposed_base FROM cycle_goods_balance WHERE cycle_id='cycle-next-cebu' AND location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION)
+      .first<{ disposed_base: number }>();
+    if (!balance) throw new Error("Missing received-goods fixture");
+    await env.DB.prepare(
+      "UPDATE cycle_goods_balance SET disposed_base=received_base-packed_base-surplus_released_base WHERE cycle_id='cycle-next-cebu' AND location_id=? AND inventory_pool_id='pool-red-onion'",
+    )
+      .bind(LOCATION)
+      .run();
+    try {
+      expect(
+        await requestExternalDelivery(bookingDeps, {
+          ...booking,
+          pickup: { kind: "SCHEDULED", pickupAt: new Date(now + 60_000).toISOString() },
+        }),
+      ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE cycle_goods_balance SET disposed_base=? WHERE cycle_id='cycle-next-cebu' AND location_id=? AND inventory_pool_id='pool-red-onion'",
+      )
+        .bind(balance.disposed_base, LOCATION)
+        .run();
+    }
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+        .bind(booking.idempotencyKey)
+        .first(),
+    ).toBeNull();
+    for (const [index, action] of (
+      ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
+    ).entries())
+      expect(
+        await advanceFulfillment(
+          env.DB,
+          {
+            headers: {},
+            requestId: crypto.randomUUID(),
+            orderId: delivery.orderId,
+            action,
+            expectedVersion: index + 2,
+            idempotencyKey: crypto.randomUUID(),
+          },
+          { authorize: async () => true },
+        ),
+      ).toMatchObject({ ok: true });
+    expect(
+      await requestExternalDelivery(bookingDeps, { ...booking, pickup: { kind: "IMMEDIATE" } }),
+    ).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it.each(["shortage", "expired pickup"] as const)(
+    "rechecks %s at admission without submitting or saving success",
+    async (change) => {
+      const now = Date.now();
+      const deps = dependencies(["delivery.read", "delivery.manage"]);
+      await upsertLocationDeliveryProfile(deps, profileRequest(0));
+      const delivery = await seedScheduledDelivery(now);
+      await receiveScheduledTestGoods(delivery, now);
+      const provider = createMockDeliveryProvider();
+      const create = vi.spyOn(provider, "create");
+      const key = crypto.randomUUID();
+      // Simulate a concurrent preparation change after the read and before admission.
+      const db = new Proxy(env.DB, {
+        get(database, member) {
+          if (member === "prepare")
+            return (sql: string) => {
+              const statement = database.prepare(sql);
+              if (
+                change !== "shortage" ||
+                !sql.includes("INSERT OR IGNORE INTO idempotency_records")
+              )
+                return statement;
+              const wrap = (prepared: D1PreparedStatement): D1PreparedStatement =>
+                new Proxy(prepared, {
+                  get(target, method) {
+                    if (method === "bind")
+                      return (...values: unknown[]) => wrap(target.bind(...values));
+                    if (method === "run")
+                      return async () => {
+                        const result = await target.run();
+                        await database
+                          .prepare(
+                            "UPDATE fulfillment_record SET status='SHORTED',version=version+1 WHERE order_id=?",
+                          )
+                          .bind(delivery.orderId)
+                          .run();
+                        return result;
+                      };
+                    const value: unknown = Reflect.get(target, method);
+                    return typeof value === "function" ? value.bind(target) : value;
+                  },
+                });
+              return wrap(statement);
+            };
+          const value: unknown = Reflect.get(database, member);
+          return typeof value === "function" ? value.bind(database) : value;
+        },
+      });
+      let clockCalls = 0;
+      expect(
+        await requestExternalDelivery(
+          {
+            ...deps,
+            db,
+            provider,
+            configuredServiceType: "MOTORCYCLE",
+            now: () => (change === "expired pickup" && ++clockCalls > 1 ? now + 120_000 : now),
+          },
+          {
+            headers: {},
+            requestId: crypto.randomUUID(),
+            locationId: LOCATION,
+            jobId: delivery.jobId,
+            expectedVersion: 1,
+            providerCode: "lalamove",
+            idempotencyKey: key,
+            pickup: { kind: "SCHEDULED", pickupAt: new Date(now + 60_000).toISOString() },
+          },
+        ),
+      ).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+      expect(create).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+        )
+          .bind(delivery.jobId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+          .bind(key)
+          .first(),
+      ).toEqual({ status: "FAILED" });
+    },
+  );
 });
 
 describe("Scheduled manual delivery", () => {
