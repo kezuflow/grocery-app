@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { APIResponse, Page } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
 import { test, expect } from "./admin-authenticated-fixture";
+import { completeLocalCourierDelivery } from "./signed-delivery-events";
 
 async function value(response: Pick<APIResponse, "ok" | "json">): Promise<unknown> {
   const data: unknown = await response.json();
@@ -451,6 +452,22 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     await admin.screenshot({
       path: testInfo.outputPath(`scheduled-canceled-courier-fallback-${width}.png`),
+      fullPage: true,
+    });
+    // The helper becomes unavailable before handover; the packed order can use a courier again.
+    await courierRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
+    await courierRow
+      .getByLabel("What went wrong", { exact: true })
+      .fill("Helper unavailable before pickup; groceries remain packed at the facility");
+    await courierRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
+    await expect(courierRow).toContainText("FAILED");
+    await courierRow.getByRole("radio", { name: "Request a driver now", exact: true }).check();
+    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
+    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
+    await expect(courierRow).toContainText("Finding rider");
+    await completeLocalCourierDelivery(admin, page, courierOrderId, locationId);
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-courier-delivered-${width}.png`),
       fullPage: true,
     });
     const manualRow = admin.getByRole("row").filter({ hasText: orderId });

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { APIResponse, Page } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
 import { test, expect } from "./admin-authenticated-fixture";
+import { completeLocalCourierDelivery } from "./signed-delivery-events";
 
 async function value(response: Pick<APIResponse, "ok" | "json">): Promise<unknown> {
   const data: unknown = await response.json();
@@ -285,7 +286,12 @@ for (const width of [1440, 390]) {
           status: z.string(),
           version: z.number(),
           externalDispatch: z
-            .object({ dispatchId: z.string(), status: z.string(), version: z.number() })
+            .object({
+              dispatchId: z.string(),
+              status: z.string(),
+              version: z.number(),
+              providerDeliveryId: z.string().nullable(),
+            })
             .nullable(),
         }),
       ),
@@ -375,6 +381,11 @@ for (const width of [1440, 390]) {
     );
     await admin.screenshot({
       path: testInfo.outputPath(`instant-auto-booking-${width}.png`),
+      fullPage: true,
+    });
+    await completeLocalCourierDelivery(admin, page, orderId, locationId);
+    await page.screenshot({
+      path: testInfo.outputPath(`instant-delivered-${width}.png`),
       fullPage: true,
     });
   });
