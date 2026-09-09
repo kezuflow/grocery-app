@@ -140,6 +140,141 @@ async function noEffects(cycleId: string, key: string) {
     await env.DB.prepare("SELECT id FROM audit_event WHERE idempotency_key=?").bind(key).first(),
   ).toBeNull();
 }
+async function destinationDemand(
+  cycleId: string,
+  locationId: string,
+  units: number,
+  status = "OPEN",
+) {
+  const id = crypto.randomUUID(),
+    quantity = units * 500;
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at) VALUES (?,?,100,'PHP','SUCCEEDED','mock',?,1,1)",
+    ).bind(id, cycleId, id),
+    env.DB.prepare(
+      "INSERT INTO grocery_order(id,customer_id,payment_id,cycle_id,fulfillment_mode,status,total_minor,currency,address_snapshot_json,created_at) VALUES (?,?,?,?,'SCHEDULED','COMMITTED',100,'PHP','{}',1)",
+    ).bind(id, cycleId, id, cycleId),
+    env.DB.prepare(
+      "INSERT INTO order_item(id,order_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,unit_price_minor,line_total_minor,base_quantity,base_unit_code_snapshot,shipping_weight_grams) VALUES (?,?,'sku-red-onion-500g','Red onion','500 g','GRAM',?,100,100,?,'GRAM',?)",
+    ).bind(id, id, units, quantity, quantity),
+    env.DB.prepare(
+      "INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at) VALUES (?,?,?,?,'pool-red-onion',?,?,'EXACT_PAID_LINE',?,'sku-red-onion-500g',?,?,'GRAM',?,1)",
+    ).bind(id, id, cycleId, locationId, quantity, status, id, units, quantity, quantity),
+  ]);
+}
+
+it("consolidates destinations only for Global readers and keeps purchase writes destination-specific", async () => {
+  const { id, manager, request } = await fixture();
+  const global = await locationManager("global");
+  const destinationId = `destination-${id}`;
+  await env.DB.prepare(
+    "INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at) VALUES (?,'market-metro-cebu',?,'Second destination','FULFILLMENT_CENTER',10,123,'active',1,1)",
+  )
+    .bind(destinationId, destinationId)
+    .run();
+  for (const staffId of [manager.id, global.id])
+    await env.DB.prepare(
+      "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='procurement.read'",
+    )
+      .bind(staffId)
+      .run();
+  await destinationDemand(id, destinationId, 3);
+  await destinationDemand(id, destinationId, 7, "CANCELED");
+  const query = { headers: global.headers, requestId: crypto.randomUUID(), cycleId: id };
+  const result = await core.getAdminScheduledWeek(query);
+  if (!result.ok || result.value.page.kind !== "DEMAND")
+    throw new Error("Missing consolidated demand");
+  expect(result.value.page.items).toHaveLength(2);
+  expect(
+    result.value.page.items.map((row) => [
+      row.locationId,
+      row.quantityBase,
+      row.totalQuantityBase,
+      row.canConfirmPurchase,
+    ]),
+  ).toEqual([
+    [destinationId, 1500, 2000, false],
+    ["location-cebu-central", 500, 2000, false],
+  ]);
+  const local = await core.getAdminScheduledWeek({
+    ...query,
+    headers: manager.headers,
+    locationId: request.locationId,
+  });
+  expect(local).toMatchObject({
+    ok: true,
+    value: {
+      page: {
+        items: [{ locationId: request.locationId, quantityBase: 500, totalQuantityBase: 500 }],
+      },
+    },
+  });
+  expect(await core.getAdminScheduledWeek({ ...query, headers: manager.headers })).toMatchObject({
+    ok: false,
+    error: { code: "FORBIDDEN" },
+  });
+  expect(
+    await core.getAdminScheduledWeek({
+      ...query,
+      headers: manager.headers,
+      locationId: destinationId,
+    }),
+  ).toMatchObject({ ok: false });
+  await env.DB.prepare(
+    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='procurement.manage'",
+  )
+    .bind(global.id)
+    .run();
+  expect(
+    await core.confirmAdminProcurementPurchase({ ...request, headers: global.headers }),
+  ).toMatchObject({ ok: true });
+  const after = await core.getAdminScheduledWeek(query);
+  if (!after.ok || after.value.page.kind !== "DEMAND")
+    throw new Error("Missing purchased projection");
+  expect(
+    after.value.page.items.map((row) => [row.locationId, row.status, row.totalQuantityBase]),
+  ).toEqual([
+    [destinationId, "NOT_PURCHASED", 2000],
+    ["location-cebu-central", "ORDERED", 2000],
+  ]);
+});
+
+it("keeps full SKU totals across bounded destination pages without duplicate or missing rows", async () => {
+  const { id } = await fixture();
+  const global = await locationManager("global");
+  await env.DB.prepare(
+    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='procurement.read'",
+  )
+    .bind(global.id)
+    .run();
+  for (let index = 0; index < 50; index++) {
+    const locationId = `page-${id}-${index}`;
+    await env.DB.prepare(
+      "INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at) VALUES (?,'market-metro-cebu',?,?,'FULFILLMENT_CENTER',10,123,'active',1,1)",
+    )
+      .bind(locationId, locationId, `Destination ${index}`)
+      .run();
+    await destinationDemand(id, locationId, 1);
+  }
+  const query = { headers: global.headers, requestId: crypto.randomUUID(), cycleId: id };
+  const first = await core.getAdminScheduledWeek(query);
+  if (!first.ok || first.value.page.kind !== "DEMAND" || !first.value.page.nextCursor)
+    throw new Error("Missing destination page");
+  expect(first.value.page.items).toHaveLength(50);
+  const second = await core.getAdminScheduledWeek({
+    ...query,
+    cursor: first.value.page.nextCursor,
+  });
+  if (!second.ok || second.value.page.kind !== "DEMAND") throw new Error("Missing final page");
+  expect(second.value.page.items).toHaveLength(1);
+  expect(second.value.page.nextCursor).toBeNull();
+  const rows = [...first.value.page.items, ...second.value.page.items];
+  expect(new Set(rows.map((row) => row.locationId)).size).toBe(51);
+  expect(
+    rows.every((row) => row.totalQuantityBase === 25500 && row.totalQuantitySellable === 51),
+  ).toBe(true);
+});
 describe("procurement command transaction and recovery", () => {
   it.each(["original", "addition"] as const)(
     "waits for a started %s payment despite browser expiry, then purchases after provider-confirmed failure",

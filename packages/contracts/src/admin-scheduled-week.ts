@@ -1,13 +1,18 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { RpcResult } from "./common";
 export type ScheduledWeekRequest = AuthenticatedRequest & {
-  locationId: string;
+  /** Omit only for the Global consolidated purchase view. */
+  locationId?: string;
   cycleId?: string;
   cycleCursor?: string;
   section?: "DEMAND" | "ORDERS" | "OFFERS";
   cursor?: string;
 };
 export type ScheduledDemandItem = {
+  locationId: string;
+  locationName: string;
+  totalQuantityBase: number;
+  totalQuantitySellable: number;
   skuId: string;
   inventoryPoolId: string;
   productName: string;

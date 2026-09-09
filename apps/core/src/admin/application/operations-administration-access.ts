@@ -28,11 +28,11 @@ export type OperationsAdministrationAccessOptions = {
   concealOutOfScopeLocation?: boolean;
 };
 
-/** Global fulfillment configuration requires both capability and global scope. */
-export async function resolveGlobalFulfillmentAdministrationAccess(
+/** Global operations require both the named capability and global scope. */
+export async function resolveGlobalOperationsAdministrationAccess(
   deps: OperationsAdministrationDeps,
   request: AuthenticatedRequest,
-  capability: "fulfillment.read" | "fulfillment.manage",
+  capability: "fulfillment.read" | "fulfillment.manage" | "procurement.read" | "procurement.manage",
 ): Promise<RpcResult<OperationsAdministrationAccess>> {
   const database = drizzle(deps.db, { schema: iamSchema });
   const context = await applicationContextForRequest(

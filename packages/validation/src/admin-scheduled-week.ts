@@ -1,12 +1,13 @@
 import { z } from "zod";
 const identifierSchema = z.string().trim().min(1).max(200);
 const integer = z.number().int().safe().nonnegative();
+const cursorSchema = z.string().trim().min(1).max(4096);
 export const scheduledWeekQuerySchema = z.object({
-  locationId: identifierSchema,
+  locationId: identifierSchema.optional(),
   cycleId: identifierSchema.optional(),
   cycleCursor: identifierSchema.optional(),
   section: z.enum(["DEMAND", "ORDERS", "OFFERS"]).default("DEMAND"),
-  cursor: identifierSchema.optional(),
+  cursor: cursorSchema.optional(),
 });
 export const scheduledWeekViewSchema = z.object({
   cycles: z.array(z.object({ cycleId: identifierSchema, name: z.string(), status: z.string() })),
@@ -29,9 +30,13 @@ export const scheduledWeekViewSchema = z.object({
   page: z.discriminatedUnion("kind", [
     z.object({
       kind: z.literal("DEMAND"),
-      nextCursor: identifierSchema.nullable(),
+      nextCursor: cursorSchema.nullable(),
       items: z.array(
         z.object({
+          locationId: identifierSchema,
+          locationName: z.string(),
+          totalQuantityBase: integer,
+          totalQuantitySellable: integer,
           skuId: identifierSchema,
           inventoryPoolId: identifierSchema,
           productName: z.string(),

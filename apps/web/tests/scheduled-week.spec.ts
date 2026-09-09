@@ -32,9 +32,24 @@ for (const width of [1440, 390])
       VALUES ('pending-${id}','ORDER_AMENDMENT','paid_order_amendment','pending-${id}','c-${id}',100,'PHP','PROCESSING','pending-${id}',${now},${now});
     INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at)
       VALUES ('pending-${id}','o-${id}','PENDING_PAYMENT','PHP',100,'pending-${id}','pending-${id}',${now},${now});
+    INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at)
+      VALUES ('destination-${id}','market-metro-cebu','destination-${id}','Second destination','FULFILLMENT_CENTER',10,123,'active',${now},${now});
+    INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at)
+      VALUES ('p2-${id}','c-${id}',30000,'PHP','SUCCEEDED','mock','p2-${id}',${now},${now});
+    INSERT INTO grocery_order(id,customer_id,payment_id,cycle_id,fulfillment_mode,status,total_minor,currency,address_snapshot_json,created_at)
+      VALUES ('o2-${id}','c-${id}','p2-${id}','${id}','SCHEDULED','COMMITTED',30000,'PHP','{}',${now});
+    INSERT INTO order_item(id,order_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,unit_price_minor,line_total_minor,base_quantity,base_unit_code_snapshot,shipping_weight_grams)
+      VALUES ('i2-${id}','o2-${id}','sku-red-onion-500g','Red onion','500 g','GRAM',3,10000,30000,1500,'GRAM',1500);
+    INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,shipping_weight_grams,committed_at)
+      VALUES ('d2-${id}','o2-${id}','${id}','destination-${id}','pool-red-onion',1500,'OPEN','EXACT_PAID_LINE','i2-${id}','sku-red-onion-500g',3,1500,'GRAM',1500,${now});
   `);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/admin/procurement");
+    await page.getByRole("combobox", { name: "Active admin scope" }).click();
+    await page.getByRole("option", { name: "Global", exact: true }).click();
+    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await expect(page.getByRole("article")).toHaveCount(2);
+    await expect(page.getByText("All destinations: 5 sold units · 2,500 g")).toHaveCount(2);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
@@ -59,6 +74,29 @@ for (const width of [1440, 390])
     await expect(
       demand.getByRole("button", { name: "Confirm purchase", exact: true }),
     ).toBeVisible();
+    await page.getByRole("combobox", { name: "Active admin scope" }).click();
+    await page.getByRole("option", { name: "Global", exact: true }).click();
+    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    const secondDestination = page.getByRole("article").filter({ hasText: "Second destination" });
+    await secondDestination.getByRole("button", { name: "Confirm purchase", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Second destination");
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm purchase", exact: true })
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(secondDestination).toContainText("ordered");
+    await expect(page.getByRole("article").filter({ hasText: "Central Cebu" })).toContainText(
+      "not purchased",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-week-global-${width}.png`),
+      fullPage: true,
+    });
+    await page.getByRole("combobox", { name: "Active admin scope" }).click();
+    await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
+    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await expect(demand).toHaveCount(1);
     const attempts: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/procurement/purchase", async (route) => {
       attempts.push({

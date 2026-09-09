@@ -11,6 +11,7 @@ import {
 import { scheduledWeekQuerySchema, scheduledWeekViewSchema } from "@freshmarkets/validation";
 import {
   resolveOperationsAdministrationAccess,
+  resolveGlobalOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
 
@@ -26,22 +27,31 @@ export async function getAdminScheduledWeek(
   });
   if (!parsed.success) return fail("VALIDATION_FAILED", "Select a location and delivery week");
   const query = parsed.data;
-  const permitted = await resolveOperationsAdministrationAccess(
-    deps,
-    input,
-    "procurement.read",
-    query.locationId,
-    { concealOutOfScopeLocation: true },
-  );
+  const permitted = query.locationId
+    ? await resolveOperationsAdministrationAccess(
+        deps,
+        input,
+        "procurement.read",
+        query.locationId,
+        { concealOutOfScopeLocation: true },
+      )
+    : await resolveGlobalOperationsAdministrationAccess(deps, input, "procurement.read");
   if (!permitted.ok) return permitted;
-  const locationCycles = `FROM delivery_cycle c JOIN fulfillment_location l ON l.market_id=c.market_id AND l.id=?
+  if (!query.locationId && query.section !== "DEMAND")
+    return fail("VALIDATION_FAILED", "Choose a location to review its Orders or offered products");
+  const locationBindings = query.locationId ? [query.locationId] : [];
+  const locationCycles = query.locationId
+    ? `FROM delivery_cycle c JOIN fulfillment_location l ON l.market_id=c.market_id AND l.id=?
     WHERE (EXISTS(SELECT 1 FROM delivery_cycle_zone z WHERE z.cycle_id=c.id AND z.location_id=l.id)
-      OR EXISTS(SELECT 1 FROM committed_demand d WHERE d.delivery_cycle_id=c.id AND d.location_id=l.id))`;
+      OR EXISTS(SELECT 1 FROM committed_demand d WHERE d.delivery_cycle_id=c.id AND d.location_id=l.id))`
+    : `FROM delivery_cycle c WHERE (
+        EXISTS(SELECT 1 FROM delivery_cycle_zone z WHERE z.cycle_id=c.id)
+        OR EXISTS(SELECT 1 FROM committed_demand d WHERE d.delivery_cycle_id=c.id))`;
   const cycles = await deps.db
     .prepare(
       `SELECT c.id cycleId,c.name,c.status ${locationCycles} AND c.id>? ORDER BY c.id LIMIT 21`,
     )
-    .bind(query.locationId, query.cycleCursor ?? "")
+    .bind(...locationBindings, query.cycleCursor ?? "")
     .all<ScheduledWeekView["cycles"][number]>();
   const result: ScheduledWeekView = {
     cycles: cycles.results.slice(0, 20),
@@ -54,7 +64,7 @@ export async function getAdminScheduledWeek(
     .prepare(
       `SELECT c.id cycleId,c.name,c.status,c.order_opens_at orderOpensAt,c.cutoff_at cutoffAt ${locationCycles} AND c.id=?`,
     )
-    .bind(query.locationId, query.cycleId)
+    .bind(...locationBindings, query.cycleId)
     .first<{
       cycleId: string;
       name: string;
@@ -91,29 +101,42 @@ export async function getAdminScheduledWeek(
   };
   const now = Date.now();
   if (query.section === "DEMAND") {
-    const manage = await resolveOperationsAdministrationAccess(
-      deps,
-      input,
-      "procurement.manage",
-      query.locationId,
-    );
+    const manage = query.locationId
+      ? await resolveOperationsAdministrationAccess(
+          deps,
+          input,
+          "procurement.manage",
+          query.locationId,
+        )
+      : await resolveGlobalOperationsAdministrationAccess(deps, input, "procurement.manage");
     const rows = await deps.db
       .prepare(`WITH demand AS (
-      SELECT sku_id,inventory_pool_id,SUM(quantity_sellable) quantitySellable,SUM(quantity_base_total) quantityBase,SUM(shipping_weight_grams) shippingGrams,MIN(base_unit_code) baseUnit
-      FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE' GROUP BY sku_id,inventory_pool_id
-    ) SELECT d.sku_id skuId,d.inventory_pool_id inventoryPoolId,p.name productName,s.name variantName,d.quantitySellable,d.quantityBase,d.shippingGrams,d.baseUnit,
+      SELECT sku_id,inventory_pool_id,location_id,SUM(quantity_sellable) quantitySellable,SUM(quantity_base_total) quantityBase,SUM(shipping_weight_grams) shippingGrams,MIN(base_unit_code) baseUnit
+      FROM committed_demand WHERE delivery_cycle_id=? AND (? IS NULL OR location_id=?) AND status='OPEN' AND demand_basis='EXACT_PAID_LINE' GROUP BY sku_id,inventory_pool_id,location_id
+    ), totals AS (SELECT demand.*,
+      SUM(quantitySellable) OVER (PARTITION BY sku_id,inventory_pool_id) totalQuantitySellable,
+      SUM(quantityBase) OVER (PARTITION BY sku_id,inventory_pool_id) totalQuantityBase FROM demand)
+    SELECT d.sku_id skuId,d.inventory_pool_id inventoryPoolId,p.name productName,s.name variantName,d.quantitySellable,d.quantityBase,d.shippingGrams,d.baseUnit,
+      d.location_id locationId,location.name locationName,d.totalQuantityBase,d.totalQuantitySellable,json_array(d.sku_id,d.inventory_pool_id,d.location_id) rowCursor,
       pr.id requirementId,COALESCE(pr.version,0) requirementVersion,COALESCE(pr.status,'NOT_PURCHASED') status,
       COALESCE(rr.accepted_quantity,0) acceptedBase,COALESCE(rr.rejected_quantity,0) rejectedBase,COALESCE(rr.shortage_base,0) shortageBase,COALESCE(rr.replacement_base,0) replacementBase,rr.status receivingStatus
-      FROM demand d JOIN sku s ON s.id=d.sku_id JOIN product p ON p.id=s.product_id
-      LEFT JOIN procurement_run run ON run.delivery_cycle_id=? AND run.destination_location_id=?
+      FROM totals d JOIN sku s ON s.id=d.sku_id JOIN product p ON p.id=s.product_id
+      JOIN fulfillment_location location ON location.id=d.location_id
+      LEFT JOIN procurement_run run ON run.delivery_cycle_id=? AND run.destination_location_id=d.location_id
       LEFT JOIN procurement_requirement pr ON pr.procurement_run_id=run.id AND pr.sku_id=d.sku_id
       LEFT JOIN receiving_record rr ON rr.procurement_requirement_id=pr.id
-      WHERE d.sku_id>? ORDER BY d.sku_id LIMIT 51`)
-      .bind(query.cycleId, query.locationId, query.cycleId, query.locationId, query.cursor ?? "")
-      .all<Omit<ScheduledDemandItem, "canConfirmPurchase">>();
+      WHERE json_array(d.sku_id,d.inventory_pool_id,d.location_id)>? ORDER BY json_array(d.sku_id,d.inventory_pool_id,d.location_id) LIMIT 51`)
+      .bind(
+        query.cycleId,
+        query.locationId ?? null,
+        query.locationId ?? null,
+        query.cycleId,
+        query.cursor ?? "",
+      )
+      .all<Omit<ScheduledDemandItem, "canConfirmPurchase"> & { rowCursor: string }>();
     result.page = {
       kind: "DEMAND",
-      items: rows.results.slice(0, 50).map((row) => ({
+      items: rows.results.slice(0, 50).map(({ rowCursor: _rowCursor, ...row }) => ({
         ...row,
         canConfirmPurchase:
           !purchasePending &&
@@ -122,9 +145,9 @@ export async function getAdminScheduledWeek(
           !["DRAFT", "SCHEDULED", "CLOSED", "CANCELED"].includes(selected.status) &&
           ["NOT_PURCHASED", "AGGREGATED"].includes(row.status),
       })),
-      nextCursor: rows.results.length > 50 ? (rows.results[49]?.skuId ?? null) : null,
+      nextCursor: rows.results.length > 50 ? (rows.results[49]?.rowCursor ?? null) : null,
     };
-  } else if (query.section === "ORDERS") {
+  } else if (query.section === "ORDERS" && query.locationId) {
     const access = await resolveOperationsAdministrationAccess(
       deps,
       input,

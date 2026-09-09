@@ -25,7 +25,7 @@ import {
 import { getGlobalCommerceConfiguration } from "../../commerce/application/global-commerce-configuration";
 import { listProcurementQueue } from "../../procurement/application/list-procurement-queue";
 import {
-  resolveGlobalFulfillmentAdministrationAccess,
+  resolveGlobalOperationsAdministrationAccess,
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
@@ -78,7 +78,7 @@ export async function getAdminGlobalCommerceConfiguration(
   deps: OperationsAdministrationDeps,
   request: AuthenticatedRequest,
 ): Promise<RpcResult<GlobalCommerceConfigurationView>> {
-  const access = await resolveGlobalFulfillmentAdministrationAccess(
+  const access = await resolveGlobalOperationsAdministrationAccess(
     deps,
     request,
     "fulfillment.read",

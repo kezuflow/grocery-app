@@ -15,6 +15,7 @@ import {
 import { PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
+import { useAdminContext } from "../admin-context-provider";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
 
 const responseSchema = z.discriminatedUnion("ok", [
@@ -31,6 +32,8 @@ const amount = (quantity: number, unit: string) =>
   `${quantity.toLocaleString("en-PH")} ${unit === "GRAM" ? "g" : "pieces/packs"}`;
 export default function ProcurementPage() {
   const { locationId, label } = useAdminLocation();
+  const { state } = useAdminContext();
+  const global = state.phase === "ready" && state.selectedScope?.kind === "GLOBAL";
   const [cycleId, setCycleId] = useState("");
   const [cycleCursor, setCycleCursor] = useState("");
   const [cycles, setCycles] = useState<ScheduledWeekView["cycles"]>([]);
@@ -53,13 +56,15 @@ export default function ProcurementPage() {
     setCycles([]);
     setCursor("");
     setPrevious([]);
-  }, [locationId]);
+    setSection("DEMAND");
+  }, [locationId, global]);
   useEffect(() => {
     setView(null);
     setError(null);
-    if (!locationId) return;
+    if (!locationId && !global) return;
     const controller = new AbortController();
-    const params = new URLSearchParams({ locationId, section });
+    const params = new URLSearchParams({ section: global ? "DEMAND" : section });
+    if (locationId) params.set("locationId", locationId);
     if (cycleId) params.set("cycleId", cycleId);
     if (cycleCursor) params.set("cycleCursor", cycleCursor);
     if (cursor) params.set("cursor", cursor);
@@ -88,7 +93,7 @@ export default function ProcurementPage() {
       }
     })();
     return () => controller.abort();
-  }, [locationId, cycleId, cycleCursor, section, cursor, reload]);
+  }, [locationId, global, cycleId, cycleCursor, section, cursor, reload]);
   useEffect(() => {
     if (!view?.week?.purchaseBlockedReason || error) return;
     const timer = setTimeout(() => setReload((value) => value + 1), 5000);
@@ -110,7 +115,11 @@ export default function ProcurementPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title="Delivery week"
-        description={`Dates, paid orders, purchases and receiving · ${label}`}
+        description={
+          global
+            ? "Purchase quantities across destinations"
+            : `Dates, paid orders, purchases and receiving · ${label}`
+        }
       />
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline">
@@ -131,7 +140,7 @@ export default function ProcurementPage() {
           <Link href="/admin/fulfillment">Preparation</Link>
         </Button>
       </div>
-      {!locationId ? (
+      {!locationId && !global ? (
         <AdminPageState
           state="permission-empty"
           title="Select a permitted location"
@@ -207,18 +216,20 @@ export default function ProcurementPage() {
                 </p>
               ) : null}
               <nav aria-label="Delivery week sections" className="flex flex-wrap gap-2">
-                {(Object.keys(sectionNames) as Array<keyof typeof sectionNames>).map((kind) => (
-                  <Button
-                    key={kind}
-                    variant={section === kind ? "default" : "outline"}
-                    onClick={() => {
-                      setSection(kind);
-                      resetPage();
-                    }}
-                  >
-                    {sectionNames[kind]}
-                  </Button>
-                ))}
+                {(Object.keys(sectionNames) as Array<keyof typeof sectionNames>)
+                  .filter((kind) => !global || kind === "DEMAND")
+                  .map((kind) => (
+                    <Button
+                      key={kind}
+                      variant={section === kind ? "default" : "outline"}
+                      onClick={() => {
+                        setSection(kind);
+                        resetPage();
+                      }}
+                    >
+                      {sectionNames[kind]}
+                    </Button>
+                  ))}
               </nav>
               <section className="space-y-3" aria-label={sectionNames[view.page.kind]}>
                 <h2 className="text-lg font-semibold">{sectionNames[view.page.kind]}</h2>
@@ -234,13 +245,21 @@ export default function ProcurementPage() {
                     ) : (
                       view.page.items.map((item) => (
                         <article
-                          key={item.skuId}
+                          key={JSON.stringify([item.skuId, item.inventoryPoolId, item.locationId])}
                           className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto]"
                         >
                           <div>
                             <h3 className="font-semibold">
                               {item.productName} · {item.variantName}
                             </h3>
+                            {global ? (
+                              <p className="text-sm">
+                                All destinations:{" "}
+                                {item.totalQuantitySellable.toLocaleString("en-PH")} sold units ·{" "}
+                                {amount(item.totalQuantityBase, item.baseUnit)}
+                              </p>
+                            ) : null}
+                            <p className="mt-2 font-medium">{item.locationName}</p>
                             <p>
                               {item.quantitySellable.toLocaleString("en-PH")} sold units ·{" "}
                               {amount(item.quantityBase, item.baseUnit)}
@@ -276,7 +295,7 @@ export default function ProcurementPage() {
                               disabled={command.busy || command.uncertain}
                               onClick={() => {
                                 setNote("");
-                                setPurchase({ item, locationId, cycleId });
+                                setPurchase({ item, locationId: item.locationId, cycleId });
                               }}
                             >
                               Confirm purchase
@@ -391,7 +410,7 @@ export default function ProcurementPage() {
                   const saved = command.uncertain
                     ? await command.retry()
                     : await command.run(
-                        `purchase:${purchase.cycleId}:${purchase.item.skuId}`,
+                        `purchase:${purchase.cycleId}:${purchase.locationId}:${purchase.item.skuId}`,
                         "/api/admin/procurement/purchase",
                         {
                           locationId: purchase.locationId,
@@ -414,6 +433,7 @@ export default function ProcurementPage() {
               <p className="font-semibold">
                 {purchase.item.productName} · {purchase.item.variantName}
               </p>
+              <p>{purchase.item.locationName}</p>
               <p>
                 {purchase.item.quantitySellable} sold units ·{" "}
                 {amount(purchase.item.quantityBase, purchase.item.baseUnit)}

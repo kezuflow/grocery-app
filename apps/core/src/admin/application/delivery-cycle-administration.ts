@@ -21,7 +21,7 @@ import { requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { validateDeliveryCycleSchedule } from "../../commerce/delivery-cycle-schedule";
 import {
-  resolveGlobalFulfillmentAdministrationAccess as access,
+  resolveGlobalOperationsAdministrationAccess as access,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
 

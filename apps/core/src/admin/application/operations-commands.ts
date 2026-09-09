@@ -32,7 +32,7 @@ import {
   pauseSelling,
 } from "../../commerce/application/global-commerce-configuration";
 import {
-  resolveGlobalFulfillmentAdministrationAccess,
+  resolveGlobalOperationsAdministrationAccess,
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
@@ -104,7 +104,7 @@ async function runCommerceConfigurationCommand(
       }
   >,
 ): Promise<RpcResult<GlobalCommerceConfigurationView>> {
-  const permitted = await resolveGlobalFulfillmentAdministrationAccess(
+  const permitted = await resolveGlobalOperationsAdministrationAccess(
     deps,
     request,
     "fulfillment.manage",
