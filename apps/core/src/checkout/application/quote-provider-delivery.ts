@@ -168,7 +168,7 @@ export async function quoteProviderDelivery(
          FROM cart_item item
          JOIN sku ON sku.id=item.sku_id
          JOIN product ON product.id=sku.product_id
-         JOIN inventory_pool pool ON pool.id=product.inventory_pool_id
+         JOIN inventory_pool pool ON pool.id=COALESCE(sku.stock_pool_id,product.inventory_pool_id)
          JOIN unit ON unit.id=pool.base_unit_id
          WHERE item.cart_id=?`,
       )

@@ -113,7 +113,7 @@ export async function createProcurementRequirement(
     );
   const sku = await database
     .prepare(
-      "SELECT 1 found FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=? AND p.inventory_pool_id=?",
+      "SELECT 1 found FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=? AND COALESCE(s.stock_pool_id,p.inventory_pool_id)=?",
     )
     .bind(command.skuId, command.inventoryPoolId)
     .first();
@@ -246,7 +246,7 @@ export async function createProcurementRequirement(
       ),
     database
       .prepare(
-        "INSERT INTO commitment_abort(id) SELECT -38 WHERE NOT EXISTS (SELECT 1 FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=? AND p.inventory_pool_id=?)",
+        "INSERT INTO commitment_abort(id) SELECT -38 WHERE NOT EXISTS (SELECT 1 FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=? AND COALESCE(s.stock_pool_id,p.inventory_pool_id)=?)",
       )
       .bind(command.skuId, command.inventoryPoolId),
     database

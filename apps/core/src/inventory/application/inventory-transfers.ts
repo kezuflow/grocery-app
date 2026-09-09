@@ -1,3 +1,4 @@
+import { stockSortingStatements } from "../infrastructure/stock-sorting-repository";
 import type {
   AppErrorCode,
   InventoryTransferResult,
@@ -228,6 +229,32 @@ export function inventoryTransfers(
             effectKey: `transfer:receive:${idempotencyKey}:${line.lineId}`,
           }),
         );
+        if (received.sizeCounts) {
+          if (received.acceptedBase === 0)
+            return fail("VALIDATION_FAILED", "Count only newly accepted goods in this receipt");
+          const product = await db
+            .prepare("SELECT id FROM product WHERE inventory_pool_id=?")
+            .bind(line.inventoryPoolId)
+            .first<{ id: string }>();
+          if (!product) return invalid();
+          const sorting = await stockSortingStatements(db, {
+            productId: product.id,
+            locationId: transfer.destinationLocationId,
+            quantityGrams: received.acceptedBase,
+            sizeCounts: received.sizeCounts,
+            actorUserId,
+            reason: request.reason,
+            now,
+            effectKey: `transfer:sort:${idempotencyKey}:${line.lineId}`,
+            receiptEffectKey: `transfer:receive:${idempotencyKey}:${line.lineId}`,
+          });
+          if (!sorting)
+            return fail(
+              "VALIDATION_FAILED",
+              "Select actual sizes belonging to this counted product",
+            );
+          effects.push(...sorting.statements);
+        }
       }
     } else status = "CANCELED";
     effects.unshift(
@@ -430,9 +457,33 @@ export function inventoryTransfers(
               ...(active && receiver ? ["RECEIVE" as const] : []),
               ...(active && global ? ["RESOLVE" as const] : []),
             ];
+      const sizeOptions = await db
+        .prepare(`SELECT l.id lineId,s.id skuId,s.name FROM inventory_transfer_line l
+        JOIN product p ON p.inventory_pool_id=l.inventory_pool_id JOIN sku s ON s.product_id=p.id
+        WHERE l.transfer_id=? AND p.stock_tracking='COUNTED_SIZES' AND s.stock_pool_id IS NOT NULL AND s.status='active' ORDER BY s.sort_order,s.id`)
+        .bind(transferId)
+        .all<{ lineId: string; skuId: string; name: string }>();
+      const sorting = await db
+        .prepare(`SELECT so.id sortId,r.line_id lineId,so.quantity_grams quantityGrams,o.sku_name skuName,o.quantity_pieces quantity
+        FROM inventory_sort so JOIN inventory_transfer_receipt r ON r.id=so.transfer_receipt_id
+        JOIN inventory_sort_output o ON o.sort_id=so.id WHERE r.transfer_id=? ORDER BY so.created_at DESC,so.id,o.sku_id LIMIT 500`)
+        .bind(transferId)
+        .all<{
+          sortId: string;
+          lineId: string;
+          quantityGrams: number;
+          skuName: string;
+          quantity: number;
+        }>();
       return success({
         ...transfer,
-        lines: await repository.lines(transferId),
+        sorting: sorting.results,
+        lines: (await repository.lines(transferId)).map((line) => ({
+          ...line,
+          sizeOptions: sizeOptions.results
+            .filter((size) => size.lineId === line.lineId)
+            .map(({ skuId, name }) => ({ skuId, name })),
+        })),
         receipts: await repository.receipts(transferId),
         checks: await repository.checks(transferId),
         resolutions: await repository.resolutions(transferId),

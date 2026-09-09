@@ -26,6 +26,11 @@ export function createInventoryRepository(database: D1Database) {
       now: number,
     ): D1PreparedStatement[] {
       return [
+        database
+          .prepare(
+            "INSERT INTO commitment_abort(id) SELECT -39 WHERE ?>0 AND EXISTS(SELECT 1 FROM sku WHERE stock_pool_id=?)",
+          )
+          .bind(command.deltaBase, command.inventoryPoolId),
         // The insert candidate must itself be structurally valid before SQLite resolves a conflict.
         // The conditional update uses the original signed delta and current holds/reservations.
         database

@@ -572,6 +572,8 @@ export async function listAdminProducts(
 }
 
 type SkuRow = {
+  stockPoolId?: string | null;
+  availableBase?: number | null;
   skuId: string;
   code: string;
   name: string;
@@ -646,7 +648,7 @@ export async function getAdminProduct(
     .prepare(
       `SELECT p.id AS productId, p.category_id AS categoryId, p.slug, p.name, p.description,
               c.code AS categoryCode, c.name AS categoryName, p.status, p.version,
-              ip.id AS inventoryPoolId, u.id AS baseUnitId,
+              ip.id AS inventoryPoolId, p.stock_tracking AS stockTracking, u.id AS baseUnitId,
               u.canonical_base_code AS baseUnitCode, u.symbol AS baseUnitSymbol
        FROM product p JOIN category c ON c.id = p.category_id
        JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
@@ -665,6 +667,7 @@ export async function getAdminProduct(
       status: "active" | "inactive";
       version: number;
       inventoryPoolId: string;
+      stockTracking: "SHARED" | "COUNTED_SIZES";
       baseUnitId: string;
       baseUnitCode: "GRAM" | "MILLILITER" | "PIECE";
       baseUnitSymbol: string;
@@ -679,7 +682,9 @@ export async function getAdminProduct(
   const now = Date.now();
   const skus = await deps.db
     .prepare(
-      `SELECT s.id AS skuId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
+      `SELECT s.id AS skuId, s.stock_pool_id AS stockPoolId,
+              CASE WHEN ? IS NULL THEN NULL ELSE COALESCE((SELECT b.on_hand-b.reserved-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=b.inventory_pool_id AND h.location_id=b.location_id AND h.status='HELD'),0) FROM inventory_balance b WHERE b.inventory_pool_id=COALESCE(s.stock_pool_id,?) AND b.location_id=?),0) END availableBase,
+              s.code, s.name, s.merchandising_label AS merchandisingLabel,
               u.symbol AS unitSymbol, s.sell_quantity AS sellQuantity,
               s.consumption_base_quantity AS consumptionBaseQuantity,
               s.estimated_shipping_weight_grams AS estimatedShippingWeightGrams,
@@ -703,7 +708,17 @@ export async function getAdminProduct(
        WHERE s.product_id = ?
        ORDER BY s.sort_order, s.code`,
     )
-    .bind(marketId, locationId, now, now, locationId ?? "", request.productId)
+    .bind(
+      locationId,
+      product.inventoryPoolId,
+      locationId,
+      marketId,
+      locationId,
+      now,
+      now,
+      locationId ?? "",
+      request.productId,
+    )
     .all<SkuRow>();
 
   const [details, media, audits, manage, inventoryPosition] = await Promise.all([
@@ -761,6 +776,7 @@ export async function getAdminProduct(
       media: media.results.map((item) => ({ ...item, isPrimary: item.isPrimary === 1 })),
       inventoryPool: {
         inventoryPoolId: product.inventoryPoolId,
+        stockTracking: product.stockTracking,
         baseUnitId: product.baseUnitId,
         baseUnitCode: product.baseUnitCode,
         baseUnitSymbol: product.baseUnitSymbol,
@@ -829,20 +845,25 @@ export async function listAdminInventory(
   const clauses = ["1=1"];
   const binds: unknown[] = [request.locationId];
   if (cursor) {
-    clauses.push("(p.id > ?)");
+    clauses.push("(ip.id > ?)");
     binds.push(cursor.id);
   }
   const rows = await deps.db
     .prepare(
-      `WITH target AS (SELECT ? locationId) SELECT target.locationId, ip.id AS inventoryPoolId,
-              p.id AS productId, p.name AS productName, u.symbol AS baseUnitSymbol,
+      `WITH target AS (SELECT ? locationId), pools AS (
+          SELECT p.id productId,p.name productName,p.inventory_pool_id poolId,NULL skuId,
+            CASE WHEN p.stock_tracking='COUNTED_SIZES' THEN 'BULK' ELSE 'SHARED' END stockKind FROM product p
+          UNION ALL SELECT p.id,p.name||' — '||s.name,s.stock_pool_id,s.id,'COUNTED_SIZE'
+            FROM sku s JOIN product p ON p.id=s.product_id WHERE s.stock_pool_id IS NOT NULL
+        ) SELECT target.locationId, ip.id AS inventoryPoolId,
+              p.productId, p.productName,p.skuId,p.stockKind, u.symbol AS baseUnitSymbol,
               COALESCE(ib.on_hand,0) AS onHandBase, COALESCE(ib.reserved,0) AS reservedBase, COALESCE(ib.version,0) version,
               COALESCE((SELECT SUM(quantity) FROM checkout_inventory_holds hold WHERE hold.location_id=target.locationId AND hold.inventory_pool_id=ip.id AND hold.status='HELD'),0) heldBase
-       FROM product p JOIN inventory_pool ip ON ip.id=p.inventory_pool_id CROSS JOIN target
+       FROM pools p JOIN inventory_pool ip ON ip.id=p.poolId CROSS JOIN target
        LEFT JOIN inventory_balance ib ON ib.inventory_pool_id=ip.id AND ib.location_id=target.locationId
        JOIN unit u ON u.id = ip.base_unit_id
        WHERE ${clauses.join(" AND ")}
-       ORDER BY p.id LIMIT ?`,
+       ORDER BY ip.id LIMIT ?`,
     )
     .bind(...binds, limit + 1)
     .all<AdminInventoryItem & { locationId: string; heldBase: number }>();
@@ -852,6 +873,8 @@ export async function listAdminInventory(
     inventoryPoolId: row.inventoryPoolId,
     productId: row.productId,
     productName: row.productName,
+    skuId: row.skuId,
+    stockKind: row.stockKind,
     baseUnitSymbol: row.baseUnitSymbol,
     onHandBase: row.onHandBase,
     reservedBase: row.reservedBase,
@@ -861,7 +884,7 @@ export async function listAdminInventory(
   }));
   const nextCursor =
     hasMore && items.length > 0
-      ? encodeStaffCursor({ createdAt: 0, id: items[items.length - 1]!.productId })
+      ? encodeStaffCursor({ createdAt: 0, id: items[items.length - 1]!.inventoryPoolId })
       : null;
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
 }
@@ -957,7 +980,7 @@ export async function readSkuSummary(
   const now = Date.now();
   const row = await deps.db
     .prepare(
-      `SELECT s.id AS skuId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
+      `SELECT s.id AS skuId, s.stock_pool_id AS stockPoolId, s.code, s.name, s.merchandising_label AS merchandisingLabel,
               u.symbol AS unitSymbol, s.sell_quantity AS sellQuantity,
               s.consumption_base_quantity AS consumptionBaseQuantity,
               s.estimated_shipping_weight_grams AS estimatedShippingWeightGrams,

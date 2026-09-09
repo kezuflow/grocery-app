@@ -1,3 +1,4 @@
+import { sortInventoryStock } from "../inventory/application/sort-inventory-stock";
 import type { InventoryTransfersService } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { inventoryTransfers } from "../inventory/application/inventory-transfers";
@@ -6,6 +7,11 @@ import { rpcFailure } from "./validation-errors";
 
 export function createInventoryTransfersRpc(context: CoreRpcContext): InventoryTransfersService {
   return {
+    async sortInventoryStock({ headers, requestId, ...payload }) {
+      const actor = await context.access.session({ headers, requestId });
+      if (!actor) return rpcFailure("UNAUTHENTICATED", "Authentication is required", requestId);
+      return sortInventoryStock(context.env.DB, actor.id, requestId, context.access.now(), payload);
+    },
     async resolveInventoryTransfer({ headers, requestId, ...payload }) {
       const actor = await context.access.session({ headers, requestId });
       if (!actor) return rpcFailure("UNAUTHENTICATED", "Authentication is required", requestId);

@@ -1,4 +1,5 @@
 "use client";
+import { InventoryCountForm } from "../../../components/admin/inventory-count-form";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appErrorCodes } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
@@ -348,7 +349,12 @@ export default function InventoryPage() {
                         className="grid grid-cols-2 gap-3 p-4 sm:table-row sm:p-0 [&>td]:min-w-0 [&>td]:p-0 sm:[&>td]:px-4 sm:[&>td]:py-3"
                       >
                         <TableCell className="col-span-2 whitespace-normal font-medium">
-                          {item.productName}
+                          <span>{item.productName}</span>
+                          {item.stockKind === "BULK" ? (
+                            <span className="block text-xs text-muted-foreground">
+                              Bulk goods awaiting size counts
+                            </span>
+                          ) : null}
                         </TableCell>
                         <TableCell className="text-xs">
                           <span className="block text-[var(--fm-text-muted)] sm:hidden">
@@ -386,26 +392,34 @@ export default function InventoryPage() {
                         </TableCell>
                         <TableCell className="col-span-2">
                           <span className="flex flex-wrap items-center gap-2">
-                            <Button
-                              size="sm"
-                              disabled={adjustmentIntent.pending || unresolved !== null}
-                              onClick={() => {
-                                const quantity = Number(adjustQuantity[item.inventoryPoolId]);
-                                if (!Number.isSafeInteger(quantity) || quantity <= 0) {
-                                  setNotice("Enter a whole-number quantity greater than zero.");
-                                  return;
-                                }
-                                setConfirming({
-                                  poolId: item.inventoryPoolId,
-                                  productName: item.productName,
-                                  baseUnitSymbol: item.baseUnitSymbol,
-                                  version: item.version,
-                                  movement: "ADD",
-                                });
-                              }}
-                            >
-                              Add stock
-                            </Button>
+                            {item.stockKind !== "COUNTED_SIZE" ? (
+                              <Button
+                                size="sm"
+                                disabled={adjustmentIntent.pending || unresolved !== null}
+                                onClick={() => {
+                                  const quantity = Number(adjustQuantity[item.inventoryPoolId]);
+                                  if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+                                    setNotice("Enter a whole-number quantity greater than zero.");
+                                    return;
+                                  }
+                                  setConfirming({
+                                    poolId: item.inventoryPoolId,
+                                    productName: item.productName,
+                                    baseUnitSymbol: item.baseUnitSymbol,
+                                    version: item.version,
+                                    movement: "ADD",
+                                  });
+                                }}
+                              >
+                                Add stock
+                              </Button>
+                            ) : null}
+                            {item.stockKind === "BULK" && !unresolved ? (
+                              <InventoryCountForm
+                                item={item}
+                                onSaved={() => load(locationId, pagination.cursor)}
+                              />
+                            ) : null}
                             <Button
                               size="sm"
                               variant="outline"

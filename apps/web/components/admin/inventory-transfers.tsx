@@ -396,6 +396,7 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
     [reload, setReload] = useState(0);
   const [quantities, setQuantities] = useState<Record<string, string>>({}),
     [reason, setReason] = useState("");
+  const [sizeCounts, setSizeCounts] = useState<Record<string, string>>({});
   const [observations, setObservations] = useState<
     Record<string, { damaged?: string; missing?: string }>
   >({});
@@ -452,6 +453,16 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
               .map((line) => ({
                 lineId: line.lineId,
                 acceptedBase: Number(quantities[line.lineId] ?? 0),
+                ...((line.sizeOptions ?? []).some((size) => Number(sizeCounts[size.skuId] ?? 0) > 0)
+                  ? {
+                      sizeCounts: (line.sizeOptions ?? [])
+                        .filter((size) => Number(sizeCounts[size.skuId] ?? 0) > 0)
+                        .map((size) => ({
+                          skuId: size.skuId,
+                          quantity: Number(sizeCounts[size.skuId]),
+                        })),
+                    }
+                  : {}),
                 damagedBase: Number(observations[line.lineId]?.damaged ?? line.damagedBase),
                 shortageBase: Number(observations[line.lineId]?.missing ?? line.shortageBase),
               })),
@@ -467,6 +478,7 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
         ));
     if (done) {
       setQuantities({});
+      setSizeCounts({});
       setObservations({});
       setResolutionQuantity("");
       setInspectionConfirmed(false);
@@ -575,6 +587,40 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
                         }
                       />
                     </label>
+                  </fieldset>
+                ) : null}
+                {transfer.allowedActions.includes("RECEIVE") &&
+                line.outstandingBase > 0 &&
+                !!line.sizeOptions?.length ? (
+                  <fieldset
+                    disabled={command.busy || command.uncertain}
+                    className="space-y-3 border-t pt-3"
+                  >
+                    <legend>Actual size counts for this receipt</legend>
+                    <p className="text-sm text-muted-foreground">
+                      Count the pieces or packs in the grams accepted now. Leave blank if they will
+                      be counted later. These are the same goods; do not add stock again.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {line.sizeOptions.map((size) => (
+                        <label key={size.skuId} className="space-y-1 text-sm">
+                          {size.name}
+                          <Input
+                            aria-label={`Count ${size.name} for ${line.productName}`}
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={sizeCounts[size.skuId] ?? ""}
+                            onChange={(event) =>
+                              setSizeCounts((current) => ({
+                                ...current,
+                                [size.skuId]: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
                   </fieldset>
                 ) : null}
               </article>
@@ -754,6 +800,17 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
           >
             Refresh transfer
           </Button>
+          {transfer.sorting?.length ? (
+            <section className="space-y-2">
+              <h2 className="font-semibold">Actual received size counts</h2>
+              {transfer.sorting.map((item, index) => (
+                <p key={`${item.sortId}:${index}`} className="text-sm">
+                  {item.quantityGrams.toLocaleString("en-PH")} g receipt · {item.skuName}:{" "}
+                  {item.quantity} pieces/packs
+                </p>
+              ))}
+            </section>
+          ) : null}
           {transfer.checks.length ? (
             <section className="space-y-2">
               <h2 className="font-semibold">Latest checks (up to 100)</h2>

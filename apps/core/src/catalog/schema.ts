@@ -74,6 +74,9 @@ export const product = sqliteTable(
     categoryId: text("category_id")
       .notNull()
       .references(() => category.id, { onDelete: "restrict" }),
+    stockTracking: text("stock_tracking", { enum: ["SHARED", "COUNTED_SIZES"] })
+      .notNull()
+      .default("SHARED"),
     inventoryPoolId: text("inventory_pool_id")
       .notNull()
       .references(() => inventoryPool.id, { onDelete: "restrict" }),
@@ -104,6 +107,7 @@ export const sku = sqliteTable(
     sellableUnitId: text("sellable_unit_id")
       .notNull()
       .references(() => unit.id, { onDelete: "restrict" }),
+    stockPoolId: text("stock_pool_id").references(() => inventoryPool.id, { onDelete: "restrict" }),
     consumptionBaseQuantity: integer("consumption_base_quantity").notNull(),
     estimatedShippingWeightGrams: integer("estimated_shipping_weight_grams"),
     merchandisingLabel: text("merchandising_label"),
@@ -116,6 +120,7 @@ export const sku = sqliteTable(
   },
   (table) => ({
     codeUnique: uniqueIndex("sku_code_unique").on(table.code),
+    stockPoolUnique: uniqueIndex("sku_stock_pool_unique").on(table.stockPoolId),
     productIndex: index("sku_product_status_idx").on(
       table.productId,
       table.status,

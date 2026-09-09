@@ -72,8 +72,24 @@ export async function createAdminProduct(
   const request = parsed.data,
     access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
   if (!access.ok) return access;
-  const { categoryId, slug, name, description, customerDetails, inventoryBaseUnitId } = request;
-  const canonical = { categoryId, slug, name, description, customerDetails, inventoryBaseUnitId };
+  const {
+    categoryId,
+    slug,
+    name,
+    description,
+    customerDetails,
+    inventoryBaseUnitId,
+    stockTracking,
+  } = request;
+  const canonical = {
+    categoryId,
+    slug,
+    name,
+    description,
+    customerDetails,
+    inventoryBaseUnitId,
+    ...(stockTracking === "COUNTED_SIZES" ? { stockTracking } : {}),
+  };
   const command = {
     scope: "admin.catalog.product.create",
     key: request.idempotencyKey,
@@ -85,8 +101,9 @@ export async function createAdminProduct(
   const eligible = await deps.db
     .prepare(`SELECT 1 found FROM category c JOIN unit u ON u.id=? WHERE c.id=? AND c.status='active' AND u.status='active'
     AND ((u.code='GRAM' AND u.dimension='MASS') OR (u.code='PIECE' AND u.dimension='COUNT'))
-    AND u.code=u.canonical_base_code AND u.conversion_numerator=1 AND u.conversion_denominator=1`)
-    .bind(inventoryBaseUnitId, categoryId)
+    AND u.code=u.canonical_base_code AND u.conversion_numerator=1 AND u.conversion_denominator=1
+    AND (?='SHARED' OR u.code='GRAM')`)
+    .bind(inventoryBaseUnitId, categoryId, stockTracking)
     .first();
   if (!eligible)
     return failure(
@@ -107,8 +124,9 @@ export async function createAdminProduct(
         .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
       SELECT 1 FROM category c JOIN unit u ON u.id=? WHERE c.id=? AND c.status='active' AND u.status='active'
       AND ((u.code='GRAM' AND u.dimension='MASS') OR (u.code='PIECE' AND u.dimension='COUNT'))
-      AND u.code=u.canonical_base_code AND u.conversion_numerator=1 AND u.conversion_denominator=1)`)
-        .bind(inventoryBaseUnitId, categoryId),
+      AND u.code=u.canonical_base_code AND u.conversion_numerator=1 AND u.conversion_denominator=1
+    AND (?='SHARED' OR u.code='GRAM'))`)
+        .bind(inventoryBaseUnitId, categoryId, stockTracking),
       deps.db
         .prepare(
           "INSERT INTO inventory_pool(id,base_unit_id,sourcing_mode,canonical_sourcing_mode,created_at,updated_at) VALUES (?,?,'STOCKED','STOCKED',?,?)",
@@ -117,9 +135,9 @@ export async function createAdminProduct(
       required(deps.db),
       deps.db
         .prepare(
-          "INSERT INTO product(id,category_id,inventory_pool_id,slug,name,description,status,version,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',1,?,?)",
+          "INSERT INTO product(id,category_id,inventory_pool_id,slug,name,description,status,version,created_at,updated_at,stock_tracking) VALUES (?,?,?,?,?,?,'active',1,?,?,?)",
         )
-        .bind(id, categoryId, poolId, slug, name, description, now, now),
+        .bind(id, categoryId, poolId, slug, name, description, now, now, stockTracking),
       required(deps.db),
       ...customerDetails.flatMap((detail) => [
         deps.db

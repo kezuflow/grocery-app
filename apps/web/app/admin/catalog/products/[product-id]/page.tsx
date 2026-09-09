@@ -71,6 +71,7 @@ export default function ProductDetailPage({
     name: "",
     unitId: "",
     sellQuantity: "",
+    sellingLabel: "Piece",
     estimatedShippingWeightGrams: "",
   });
   const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
@@ -212,6 +213,8 @@ export default function ProductDetailPage({
 
   const { product, units } = state;
   const from = searchParams.get("from");
+  const countedSizes = product.inventoryPool.stockTracking === "COUNTED_SIZES";
+  const variantBaseUnitCode = countedSizes ? "PIECE" : product.inventoryPool.baseUnitCode;
   const canManageProduct = product.allowedActions.includes("UPDATE");
   const canManageLocation =
     product.scope.kind === "LOCATION" &&
@@ -237,7 +240,7 @@ export default function ProductDetailPage({
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
         title={product.name}
-        description={`${product.categoryName} · ${product.skus.length} sell variant${product.skus.length === 1 ? "" : "s"} · shared ${product.inventoryPool.baseUnitCode} inventory`}
+        description={`${product.categoryName} · ${product.skus.length} sell variant${product.skus.length === 1 ? "" : "s"} · ${countedSizes ? "actual counted sizes" : `shared ${product.inventoryPool.baseUnitCode} inventory`}`}
         action={
           <span className="flex items-center gap-2">
             <StatusBadge tone={product.status === "active" ? "success" : "neutral"}>
@@ -490,13 +493,14 @@ export default function ProductDetailPage({
                   newSku.code.trim() === "" ||
                   newSku.name.trim() === "" ||
                   !unit ||
-                  !Number.isSafeInteger(Number(newSku.sellQuantity)) ||
-                  Number(newSku.sellQuantity) < 1
+                  !Number.isSafeInteger(Number(countedSizes ? 1 : newSku.sellQuantity)) ||
+                  Number(countedSizes ? 1 : newSku.sellQuantity) < 1
                 ) {
                   setNotice("SKU code, display name, unit, and amount are required.");
                   return;
                 }
-                const convertedNumerator = Number(newSku.sellQuantity) * unit.conversionNumerator;
+                const convertedNumerator =
+                  Number(countedSizes ? 1 : newSku.sellQuantity) * unit.conversionNumerator;
                 if (
                   !Number.isSafeInteger(convertedNumerator) ||
                   convertedNumerator % unit.conversionDenominator !== 0
@@ -505,11 +509,11 @@ export default function ProductDetailPage({
                   return;
                 }
                 const estimatedShippingWeightGrams =
-                  product.inventoryPool.baseUnitCode === "GRAM"
+                  variantBaseUnitCode === "GRAM"
                     ? null
                     : Number(newSku.estimatedShippingWeightGrams);
                 if (
-                  product.inventoryPool.baseUnitCode !== "GRAM" &&
+                  variantBaseUnitCode !== "GRAM" &&
                   (typeof estimatedShippingWeightGrams !== "number" ||
                     !Number.isSafeInteger(estimatedShippingWeightGrams) ||
                     estimatedShippingWeightGrams < 1)
@@ -522,7 +526,8 @@ export default function ProductDetailPage({
                   code: newSku.code.trim().toUpperCase(),
                   name: newSku.name.trim(),
                   sellableUnitId: unit.unitId,
-                  sellQuantity: Number(newSku.sellQuantity),
+                  sellQuantity: Number(countedSizes ? 1 : newSku.sellQuantity),
+                  ...(countedSizes ? { merchandisingLabel: newSku.sellingLabel } : {}),
                   consumptionBaseQuantity: convertedNumerator / unit.conversionDenominator,
                   ...(estimatedShippingWeightGrams === null
                     ? {}
@@ -551,7 +556,7 @@ export default function ProductDetailPage({
                     onChange={(event) => setNewSku({ ...newSku, code: event.target.value })}
                   />
                 </label>
-                {product.inventoryPool.baseUnitCode !== "GRAM" ? (
+                {variantBaseUnitCode !== "GRAM" ? (
                   <label className="grid gap-1 text-sm font-medium">
                     Shipping weight (g)
                     <span className="text-xs font-normal text-[var(--fm-text-muted)]">
@@ -596,42 +601,66 @@ export default function ProductDetailPage({
                   <select
                     aria-label="Unit"
                     disabled={commandIntent.pending}
-                    value={newSku.unitId}
-                    onChange={(event) => setNewSku({ ...newSku, unitId: event.target.value })}
+                    value={
+                      countedSizes ? (newSku.unitId ? newSku.sellingLabel : "") : newSku.unitId
+                    }
+                    onChange={(event) =>
+                      setNewSku(
+                        countedSizes
+                          ? {
+                              ...newSku,
+                              unitId: event.target.value
+                                ? (units.find((unit) => unit.code === "PIECE")?.unitId ?? "")
+                                : "",
+                              sellingLabel: event.target.value,
+                            }
+                          : { ...newSku, unitId: event.target.value },
+                      )
+                    }
                     className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
                   >
                     <option value="">Select unit</option>
-                    {units
-                      .filter(
-                        (unit) =>
-                          unit.status === "active" &&
-                          unit.canonicalBaseCode === product.inventoryPool.baseUnitCode &&
-                          unit.dimension !== "VOLUME",
-                      )
-                      .map((unit) => (
-                        <option key={unit.unitId} value={unit.unitId}>
-                          {unit.displayName}
-                        </option>
-                      ))}
+                    {countedSizes
+                      ? ["Piece", "Pack"].map((label) => (
+                          <option key={label} value={label}>
+                            {label}
+                          </option>
+                        ))
+                      : units
+                          .filter(
+                            (unit) =>
+                              unit.status === "active" &&
+                              unit.canonicalBaseCode === variantBaseUnitCode &&
+                              unit.dimension !== "VOLUME",
+                          )
+                          .map((unit) => (
+                            <option key={unit.unitId} value={unit.unitId}>
+                              {unit.displayName}
+                            </option>
+                          ))}
                   </select>
                 </label>
-                <label className="grid gap-1 text-sm font-medium">
-                  Amount
-                  <span className="text-xs font-normal text-[var(--fm-text-muted)]">
-                    Number in this unit
-                  </span>
-                  <Input
-                    aria-label="Amount"
-                    disabled={commandIntent.pending}
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    step={1}
-                    placeholder="250"
-                    value={newSku.sellQuantity}
-                    onChange={(event) => setNewSku({ ...newSku, sellQuantity: event.target.value })}
-                  />
-                </label>
+                {!countedSizes ? (
+                  <label className="grid gap-1 text-sm font-medium">
+                    Amount
+                    <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                      Number in this unit
+                    </span>
+                    <Input
+                      aria-label="Amount"
+                      disabled={commandIntent.pending}
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      placeholder="250"
+                      value={newSku.sellQuantity}
+                      onChange={(event) =>
+                        setNewSku({ ...newSku, sellQuantity: event.target.value })
+                      }
+                    />
+                  </label>
+                ) : null}
                 <Button
                   type="submit"
                   size="sm"
@@ -681,10 +710,10 @@ export default function ProductDetailPage({
                     </TableCell>
                     <TableCell>
                       {sku.consumptionBaseQuantity.toLocaleString()}{" "}
-                      {product.inventoryPool.baseUnitSymbol}
+                      {countedSizes ? "pieces/packs" : product.inventoryPool.baseUnitSymbol}
                     </TableCell>
                     <TableCell>
-                      {product.inventoryPool.baseUnitCode === "GRAM"
+                      {variantBaseUnitCode === "GRAM"
                         ? `${sku.consumptionBaseQuantity.toLocaleString()} g`
                         : sku.estimatedShippingWeightGrams === null
                           ? "Not configured"
@@ -699,7 +728,7 @@ export default function ProductDetailPage({
                       <TableCell>
                         <SkuVariantEditor
                           sku={sku}
-                          baseUnitCode={product.inventoryPool.baseUnitCode}
+                          baseUnitCode={variantBaseUnitCode}
                           disabled={commandIntent.pending}
                           onSaved={() => {
                             setNotice("Variant saved.");
@@ -739,13 +768,13 @@ export default function ProductDetailPage({
                         {product.inventoryPool.position ? (
                           <StatusBadge
                             tone={
-                              product.inventoryPool.position.availableBase >=
+                              (sku.availableBase ?? product.inventoryPool.position.availableBase) >=
                               sku.consumptionBaseQuantity
                                 ? "success"
                                 : "neutral"
                             }
                           >
-                            {product.inventoryPool.position.availableBase >=
+                            {(sku.availableBase ?? product.inventoryPool.position.availableBase) >=
                             sku.consumptionBaseQuantity
                               ? "In stock"
                               : "Insufficient stock"}

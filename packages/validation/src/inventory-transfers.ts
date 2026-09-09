@@ -4,6 +4,16 @@ const idempotencyKeySchema = identifierSchema;
 
 const quantity = z.number().int().safe().nonnegative();
 const positive = quantity.positive();
+export const inventorySizeCountsSchema = z
+  .array(
+    z.object({ skuId: identifierSchema, quantity: z.number().int().safe().positive() }).strict(),
+  )
+  .min(1)
+  .max(50)
+  .refine(
+    (items) => new Set(items.map((item) => item.skuId)).size === items.length,
+    "Each size must appear once",
+  );
 export const inventoryTransferStatusSchema = z.enum([
   "DRAFT",
   "IN_TRANSIT",
@@ -62,6 +72,7 @@ export const receiveInventoryTransferSchema = inventoryTransferCommandSchema
           .object({
             lineId: identifierSchema,
             acceptedBase: quantity,
+            sizeCounts: inventorySizeCountsSchema.optional(),
             damagedBase: quantity.optional(),
             shortageBase: quantity.optional(),
           })
@@ -104,6 +115,17 @@ export const inventoryTransferPageSchema = z.object({
   canCreate: z.boolean(),
 });
 export const inventoryTransferViewSchema = summary.extend({
+  sorting: z
+    .array(
+      z.object({
+        sortId: identifierSchema,
+        lineId: identifierSchema,
+        quantityGrams: positive,
+        skuName: z.string(),
+        quantity: positive,
+      }),
+    )
+    .optional(),
   reason: z.string(),
   checks: z.array(
     z.object({
@@ -131,6 +153,7 @@ export const inventoryTransferViewSchema = summary.extend({
   lines: z.array(
     z.object({
       lineId: identifierSchema,
+      sizeOptions: z.array(z.object({ skuId: identifierSchema, name: z.string() })).optional(),
       inventoryPoolId: identifierSchema,
       productName: z.string(),
       baseUnit: z.enum(["GRAM", "PIECE"]),
@@ -207,3 +230,16 @@ export const inventoryDistributionPageSchema = z.object({
   ),
   nextCursor: z.string().nullable(),
 });
+
+export const sortInventoryStockSchema = z
+  .object({
+    locationId: identifierSchema,
+    productId: identifierSchema,
+    quantityGrams: z.number().int().safe().positive(),
+    sizeCounts: inventorySizeCountsSchema,
+    expectedVersion: z.number().int().safe().nonnegative(),
+    reason: z.string().trim().min(1).max(500),
+    idempotencyKey: idempotencyKeySchema,
+  })
+  .strict();
+export const inventorySortResultSchema = z.object({ sortId: identifierSchema });

@@ -155,9 +155,9 @@ export async function createCheckoutQuote(
       `SELECT ci.sku_id, ci.quantity, s.name AS variant_name, s.sellable_unit_id AS unit,
               s.consumption_base_quantity, s.estimated_shipping_weight_grams,
               bu.canonical_base_code AS base_unit_code,
-              p.id AS product_id, p.name AS product_name, p.category_id, p.inventory_pool_id
+              p.id AS product_id, p.name AS product_name, p.category_id, COALESCE(s.stock_pool_id,p.inventory_pool_id) AS inventory_pool_id
        FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
-       JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+       JOIN inventory_pool ip ON ip.id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
        JOIN unit bu ON bu.id=ip.base_unit_id
        WHERE ci.cart_id=? AND s.status='active' AND p.status='active'`,
     )

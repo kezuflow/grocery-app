@@ -298,6 +298,8 @@ type SkuRow = {
   merchandising_label: string | null;
   sell_quantity: number;
   consumption_base_quantity: number;
+  stock_pool_id: string | null;
+  estimated_shipping_weight_grams: number | null;
 };
 
 type PriceRow = { sku_id: string; amount_minor: number; currency: string; version: number };
@@ -345,7 +347,7 @@ async function hydrateProducts(
     rawAll<SkuRow>(
       database,
       `SELECT s.id, s.product_id, s.code, s.name, u.symbol AS symbol, u.code AS unit_code,
-                s.merchandising_label, s.sell_quantity, s.consumption_base_quantity
+                s.merchandising_label, s.sell_quantity, s.consumption_base_quantity,s.stock_pool_id,s.estimated_shipping_weight_grams
          FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
          WHERE s.status = 'active' AND s.product_id IN (${idList})
          ORDER BY s.product_id ASC, s.sort_order ASC, s.id ASC`,
@@ -383,13 +385,13 @@ async function hydrateProducts(
         )
       : Promise.resolve([]),
     context
-      ? rawAll<{ product_id: string; available_base: number }>(
+      ? rawAll<{ sku_id: string; available_base: number }>(
           database,
-          `SELECT p.id product_id,COALESCE(b.on_hand-b.reserved,0) available_base
-         FROM product p LEFT JOIN inventory_balance b
-           ON b.inventory_pool_id=p.inventory_pool_id AND b.location_id=?
+          `SELECT s.id sku_id,COALESCE(b.on_hand-b.reserved,0)-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND h.location_id=? AND h.status='HELD'),0) available_base
+         FROM product p JOIN sku s ON s.product_id=p.id LEFT JOIN inventory_balance b
+           ON b.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND b.location_id=?
          WHERE p.id IN (${idList})`,
-          [context.locationId, ...ids],
+          [context.locationId, context.locationId, ...ids],
         )
       : Promise.resolve([]),
     context
@@ -430,9 +432,7 @@ async function hydrateProducts(
     skusByProduct.set(sku.product_id, bucket);
   }
   const availableSkuIds = new Set(availabilityRows.map((row) => row.sku_id));
-  const inventoryByProduct = new Map(
-    inventoryRows.map((row) => [row.product_id, row.available_base]),
-  );
+  const inventoryBySku = new Map(inventoryRows.map((row) => [row.sku_id, row.available_base]));
   const activeMode = modeRow?.activeMode ?? "SCHEDULED";
   const modeAvailable = modeRow?.modeAvailable === 1;
   const detailsByProduct = new Map<string, CatalogDetail[]>();
@@ -464,7 +464,7 @@ async function hydrateProducts(
             : !modeAvailable
               ? "OUT_OF_STOCK"
               : activeMode === "INSTANT" &&
-                  (inventoryByProduct.get(row.productId) ?? 0) < sku.consumption_base_quantity
+                  (inventoryBySku.get(sku.id) ?? 0) < sku.consumption_base_quantity
                 ? "OUT_OF_STOCK"
                 : "AVAILABLE";
         return {
@@ -477,7 +477,12 @@ async function hydrateProducts(
           unit: sku.symbol,
           consumptionBaseQuantity: sku.consumption_base_quantity,
           contentsNote:
-            sku.merchandising_label !== null ? (customerNotesBySku.get(sku.id) ?? null) : null,
+            sku.stock_pool_id && sku.estimated_shipping_weight_grams
+              ? (customerNotesBySku.get(sku.id) ??
+                `Approx. ${sku.estimated_shipping_weight_grams.toLocaleString("en-PH")} g per ${sku.merchandising_label?.toLowerCase() || "piece"}`)
+              : sku.merchandising_label !== null
+                ? (customerNotesBySku.get(sku.id) ?? null)
+                : null,
           priceMinor: price?.amount_minor ?? null,
           currency: price?.currency ?? null,
           priceVersion: price?.version ?? null,

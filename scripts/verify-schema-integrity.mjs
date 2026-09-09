@@ -194,7 +194,7 @@ const beforeTransfers = database
   });
 apply(
   database,
-  migrations.filter((name) => name >= "0087_"),
+  migrations.filter((name) => name >= "0087_" && name < "0088_"),
 );
 for (const snapshot of beforeTransfers) {
   const rows = database.prepare(snapshot.query).all();
@@ -221,6 +221,37 @@ for (const table of [
   "inventory_transfer_resolution",
 ])
   assert.equal(database.prepare(`SELECT count(*) count FROM ${quote(table)}`).get().count, 0);
+const beforeCounts = database
+  .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+  .all()
+  .map(({ name }) => {
+    const columns = database
+      .prepare(`PRAGMA table_info(${quote(name)})`)
+      .all()
+      .map((row) => quote(row.name));
+    const query = `SELECT rowid,${columns.join(",")} FROM ${quote(name)} ORDER BY rowid`;
+    return { name, query, rows: database.prepare(query).all() };
+  });
+apply(
+  database,
+  migrations.filter((name) => name >= "0088_"),
+);
+for (const snapshot of beforeCounts)
+  assert.deepEqual(
+    database.prepare(snapshot.query).all(),
+    snapshot.rows,
+    `${snapshot.name}: count upgrade preserves every existing column and row`,
+  );
+assert.equal(
+  database.prepare("SELECT COUNT(*) count FROM product WHERE stock_tracking<>'SHARED'").get().count,
+  0,
+);
+assert.equal(
+  database.prepare("SELECT COUNT(*) count FROM sku WHERE stock_pool_id IS NOT NULL").get().count,
+  0,
+);
+for (const table of ["inventory_sort", "inventory_sort_output"])
+  assert.equal(database.prepare(`SELECT COUNT(*) count FROM ${quote(table)}`).get().count, 0);
 assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
 assert.equal(
   database

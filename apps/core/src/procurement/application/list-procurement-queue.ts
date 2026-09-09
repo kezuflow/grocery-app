@@ -59,7 +59,8 @@ export async function listProcurementQueue(
        JOIN delivery_cycle cycle ON cycle.id=pr.delivery_cycle_id
        JOIN inventory_pool pool ON pool.id=pr.inventory_pool_id
        JOIN unit ON unit.id=pool.base_unit_id
-       LEFT JOIN product ON product.inventory_pool_id=pool.id
+       LEFT JOIN sku ON sku.id=pr.sku_id
+       LEFT JOIN product ON product.id=sku.product_id OR (pr.sku_id IS NULL AND product.inventory_pool_id=pool.id)
        WHERE ${clauses.join(" AND ")} ORDER BY pr.id DESC LIMIT ?`,
     )
     .bind(...binds, limit)

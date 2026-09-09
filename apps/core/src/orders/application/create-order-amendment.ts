@@ -186,7 +186,7 @@ export async function createOrderAmendment(
                 s.estimated_shipping_weight_grams estimatedShippingWeightGrams,
                 bu.canonical_base_code baseUnitCode, p.name productName
          FROM sku s JOIN product p ON p.id=s.product_id
-         JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+         JOIN inventory_pool ip ON ip.id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
          JOIN unit bu ON bu.id=ip.base_unit_id
          JOIN sku_location_availability sla ON sla.sku_id=s.id AND sla.location_id=?
          WHERE s.id=? AND s.status='active' AND p.status='active' AND sla.availability_status='AVAILABLE'`,

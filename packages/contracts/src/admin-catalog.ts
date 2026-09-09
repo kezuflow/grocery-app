@@ -107,6 +107,8 @@ export type AdminProductPage = {
 };
 
 export type AdminCatalogSkuSummary = {
+  stockPoolId?: string | null;
+  availableBase?: number | null;
   skuId: string;
   code: string;
   name: string;
@@ -166,6 +168,7 @@ export type AdminProductMediaMimeType = (typeof adminProductMediaMimeTypes)[numb
 export const adminProductMediaMaxBytes = 5 * 1024 * 1024;
 
 export type AdminProductInventoryPoolView = {
+  stockTracking?: "SHARED" | "COUNTED_SIZES";
   inventoryPoolId: string;
   baseUnitId: string;
   baseUnitCode: CanonicalBaseUnitCode;
@@ -182,6 +185,8 @@ export type AdminProductInventoryPosition = {
 };
 
 export type AdminInventoryItem = {
+  stockKind?: "SHARED" | "BULK" | "COUNTED_SIZE";
+  skuId?: string | null;
   locationId: string;
   inventoryPoolId: string;
   productId: string;
@@ -298,6 +303,7 @@ export type AdminProductCreateRequest = AuthenticatedRequest & {
   description: string | null;
   customerDetails: ReadonlyArray<AdminProductCustomerDetailInput>;
   inventoryBaseUnitId: string;
+  stockTracking?: "SHARED" | "COUNTED_SIZES";
   idempotencyKey: string;
 };
 

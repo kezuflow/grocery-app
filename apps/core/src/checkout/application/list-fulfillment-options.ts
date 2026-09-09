@@ -134,8 +134,8 @@ export async function listFulfillmentOptions(
       const unavailable = await database
         .prepare(
           `SELECT 1 found FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
-         LEFT JOIN inventory_balance b ON b.location_id=? AND b.inventory_pool_id=p.inventory_pool_id
-         WHERE ci.cart_id=? AND (COALESCE(b.on_hand-b.reserved,0)-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.location_id=? AND h.inventory_pool_id=p.inventory_pool_id AND h.status='HELD'),0) < ci.quantity*s.consumption_base_quantity) LIMIT 1`,
+         LEFT JOIN inventory_balance b ON b.location_id=? AND b.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
+         WHERE ci.cart_id=? AND (COALESCE(b.on_hand-b.reserved,0)-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.location_id=? AND h.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND h.status='HELD'),0) < ci.quantity*s.consumption_base_quantity) LIMIT 1`,
         )
         .bind(candidate.locationId, query.cartId, candidate.locationId)
         .first();
@@ -147,7 +147,7 @@ export async function listFulfillmentOptions(
              FROM cart_item ci
              JOIN sku s ON s.id=ci.sku_id
              JOIN product p ON p.id=s.product_id
-             JOIN inventory_pool ip ON ip.id=p.inventory_pool_id
+             JOIN inventory_pool ip ON ip.id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
              JOIN unit bu ON bu.id=ip.base_unit_id
              WHERE ci.cart_id=? AND bu.canonical_base_code<>'GRAM'
                AND s.estimated_shipping_weight_grams IS NULL

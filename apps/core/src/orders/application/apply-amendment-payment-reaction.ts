@@ -82,7 +82,7 @@ export async function applyAmendmentPaymentReaction(
   const lines = await database
     .prepare(
       `SELECT l.id,l.sku_id,l.quantity,l.base_quantity,l.base_unit_code_snapshot,
-              l.shipping_weight_grams,p.inventory_pool_id AS pool_id
+              l.shipping_weight_grams,COALESCE(s.stock_pool_id,p.inventory_pool_id) AS pool_id
        FROM paid_order_amendment_line l JOIN sku s ON s.id=l.sku_id
        JOIN product p ON p.id=s.product_id
        WHERE l.amendment_id=?`,

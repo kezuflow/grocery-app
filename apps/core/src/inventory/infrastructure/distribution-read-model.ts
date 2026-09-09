@@ -7,8 +7,8 @@ export async function readInventoryDistribution(
 ) {
   const result = await db
     .prepare(`WITH selected AS (
-    SELECT pool.id inventoryPoolId,p.name productName,u.canonical_base_code baseUnit
-    FROM inventory_pool pool JOIN product p ON p.inventory_pool_id=pool.id JOIN unit u ON u.id=pool.base_unit_id
+    SELECT pool.id inventoryPoolId,p.name||CASE WHEN s.id IS NULL THEN '' ELSE ' — '||s.name END productName,u.canonical_base_code baseUnit
+    FROM inventory_pool pool LEFT JOIN sku s ON s.stock_pool_id=pool.id JOIN product p ON p.inventory_pool_id=pool.id OR p.id=s.product_id JOIN unit u ON u.id=pool.base_unit_id
     WHERE u.canonical_base_code IN ('GRAM','PIECE') AND instr(lower(p.name),lower(?))>0 AND pool.id>?
     ORDER BY pool.id LIMIT ?
   ) SELECT selected.*,

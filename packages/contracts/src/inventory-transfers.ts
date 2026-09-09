@@ -23,6 +23,7 @@ export type InventoryTransferSummary = {
 };
 export type InventoryTransferLineView = {
   lineId: string;
+  sizeOptions?: ReadonlyArray<{ skuId: string; name: string }>;
   inventoryPoolId: string;
   productName: string;
   baseUnit: "GRAM" | "PIECE";
@@ -36,6 +37,13 @@ export type InventoryTransferLineView = {
 };
 export type InventoryTransferView = InventoryTransferSummary & {
   reason: string;
+  sorting?: ReadonlyArray<{
+    sortId: string;
+    lineId: string;
+    quantityGrams: number;
+    skuName: string;
+    quantity: number;
+  }>;
   lines: ReadonlyArray<InventoryTransferLineView>;
   allowedActions: ReadonlyArray<InventoryTransferAction>;
   checks: ReadonlyArray<{
@@ -115,6 +123,7 @@ export type ReceiveInventoryTransferRequest = InventoryTransferCommandRequest & 
   lines: ReadonlyArray<{
     lineId: string;
     acceptedBase: number;
+    sizeCounts?: ReadonlyArray<{ skuId: string; quantity: number }>;
     damagedBase?: number;
     shortageBase?: number;
   }>;
@@ -149,7 +158,17 @@ export type InventoryDistributionPage = {
   }>;
   nextCursor: string | null;
 };
+export type SortInventoryStockRequest = AuthenticatedRequest & {
+  locationId: string;
+  productId: string;
+  quantityGrams: number;
+  sizeCounts: ReadonlyArray<{ skuId: string; quantity: number }>;
+  expectedVersion: number;
+  reason: string;
+  idempotencyKey: string;
+};
 export interface InventoryTransfersService {
+  sortInventoryStock(request: SortInventoryStockRequest): Promise<RpcResult<{ sortId: string }>>;
   resolveInventoryTransfer(
     input: ResolveInventoryTransferRequest,
   ): Promise<RpcResult<InventoryTransferResult>>;

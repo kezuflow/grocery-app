@@ -34,9 +34,10 @@ export const adminProductCreateBodySchema = z.object({
     .transform((value) => value || null),
   customerDetails: details,
   inventoryBaseUnitId: id,
+  stockTracking: z.enum(["SHARED", "COUNTED_SIZES"]).default("SHARED"),
 });
 export const adminProductUpdateBodySchema = adminProductCreateBodySchema
-  .omit({ inventoryBaseUnitId: true })
+  .omit({ inventoryBaseUnitId: true, stockTracking: true })
   .extend({ expectedVersion: z.number().int().safe().positive() });
 export const adminProductStatusBodySchema = z.object({
   status: z.enum(["active", "inactive"]),
@@ -121,6 +122,8 @@ export const adminUnitSummarySchema = z.object({
   version: integer.positive(),
 });
 export const adminCatalogSkuSummarySchema = z.object({
+  stockPoolId: id.nullable().optional(),
+  availableBase: z.number().int().safe().nonnegative().nullable().optional(),
   skuId: id,
   code: z.string(),
   name: z.string(),
@@ -145,6 +148,7 @@ export const adminProductDetailSchema = adminProductSummarySchema.omit({ skuCoun
   customerDetails: z.array(adminProductCustomerDetailSchema.extend({ detailId: id })),
   media: z.array(adminProductMediaViewSchema),
   inventoryPool: z.object({
+    stockTracking: z.enum(["SHARED", "COUNTED_SIZES"]).optional(),
     inventoryPoolId: id,
     baseUnitId: id,
     baseUnitCode: baseCode,

@@ -86,13 +86,13 @@ export async function revalidateCheckoutQuote(
       .first<ProviderCheckoutAddress & { delivery_zone_code: string | null }>(),
     database
       .prepare(
-        `SELECT ci.sku_id, ci.quantity, p.id AS product_id, p.category_id, p.inventory_pool_id,
+        `SELECT ci.sku_id, ci.quantity, p.id AS product_id, p.category_id, COALESCE(s.stock_pool_id,p.inventory_pool_id) AS inventory_pool_id,
                 s.consumption_base_quantity,s.estimated_shipping_weight_grams,
                 unit.canonical_base_code AS base_unit_code
          FROM cart_item ci
          JOIN sku s ON s.id=ci.sku_id
          JOIN product p ON p.id=s.product_id
-         JOIN inventory_pool pool ON pool.id=p.inventory_pool_id
+         JOIN inventory_pool pool ON pool.id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
          JOIN unit ON unit.id=pool.base_unit_id
          WHERE ci.cart_id=? AND s.status='active' AND p.status='active' ORDER BY ci.sku_id`,
       )

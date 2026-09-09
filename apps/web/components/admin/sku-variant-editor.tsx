@@ -106,7 +106,8 @@ export function SkuVariantEditor({
           <DialogTitle>Edit variant</DialogTitle>
           <DialogDescription>
             {sku.name} consumes {sku.consumptionBaseQuantity.toLocaleString()}{" "}
-            {baseUnitCode.toLowerCase()} from the shared product inventory.
+            {baseUnitCode.toLowerCase()} from{" "}
+            {sku.stockPoolId ? "this size’s counted stock" : "the shared product inventory"}.
           </DialogDescription>
         </div>
         <form className="space-y-4" onSubmit={(event) => void save(event)}>

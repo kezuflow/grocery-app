@@ -67,7 +67,7 @@ function skuReceipt(
 ) {
   return db
     .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(
-    SELECT json_object('skuId',s.id,'code',s.code,'name',s.name,'merchandisingLabel',s.merchandising_label,
+    SELECT json_object('skuId',s.id,'stockPoolId',s.stock_pool_id,'code',s.code,'name',s.name,'merchandisingLabel',s.merchandising_label,
       'unitSymbol',u.symbol,'sellQuantity',s.sell_quantity,'consumptionBaseQuantity',s.consumption_base_quantity,
       'estimatedShippingWeightGrams',s.estimated_shipping_weight_grams,'status',s.status,'sortOrder',s.sort_order,'version',s.version,
       'priceMinor',pv.amount_minor,'currency',pv.currency,'priceVersion',pv.version,
@@ -174,7 +174,7 @@ export async function createAdminUnit(
 
 /** Shared eligibility is checked again within the SKU insert transaction. */
 const variantEligibility = `SELECT 1 FROM product p JOIN inventory_pool pool ON pool.id=p.inventory_pool_id
-  JOIN unit base ON base.id=pool.base_unit_id JOIN unit sell ON sell.id=?
+  JOIN unit base ON base.id=CASE WHEN p.stock_tracking='COUNTED_SIZES' THEN (SELECT id FROM unit WHERE code='PIECE') ELSE pool.base_unit_id END JOIN unit sell ON sell.id=?
   WHERE p.id=? AND p.status='active' AND base.status='active' AND sell.status='active'
   AND ((base.code='GRAM' AND base.dimension='MASS') OR (base.code='PIECE' AND base.dimension='COUNT'))
   AND base.code=base.canonical_base_code AND base.conversion_numerator=1 AND base.conversion_denominator=1
@@ -182,6 +182,7 @@ const variantEligibility = `SELECT 1 FROM product p JOIN inventory_pool pool ON 
   AND ?*sell.conversion_numerator<=9007199254740991
   AND (?*sell.conversion_numerator)%sell.conversion_denominator=0
   AND (?*sell.conversion_numerator)/sell.conversion_denominator=?
+  AND (p.stock_tracking='SHARED' OR (sell.code='PIECE' AND ?=1))
   AND ((base.code='GRAM' AND ? IS NULL) OR (base.code='PIECE' AND ?>0))`;
 export async function createAdminSku(
   deps: CatalogAdministrationDeps,
@@ -210,14 +211,19 @@ export async function createAdminSku(
   const command = await identity("admin.catalog.sku.create", request, body);
   const prior = await catalogCommandReceipt(deps.db, command, adminCatalogSkuSummarySchema);
   if (prior) return prior;
-  if (!(await deps.db.prepare("SELECT id FROM product WHERE id=?").bind(productId).first()))
-    return failure("NOT_FOUND", "Product not found", request.requestId);
+  const product = await deps.db
+    .prepare("SELECT stock_tracking stockTracking FROM product WHERE id=?")
+    .bind(productId)
+    .first<{ stockTracking: "SHARED" | "COUNTED_SIZES" }>();
+  if (!product) return failure("NOT_FOUND", "Product not found", request.requestId);
+  const stockPoolId = product.stockTracking === "COUNTED_SIZES" ? crypto.randomUUID() : null;
   const binds = [
     sellableUnitId,
     productId,
     sellQuantity,
     sellQuantity,
     sellQuantity,
+    consumptionBaseQuantity,
     consumptionBaseQuantity,
     estimatedShippingWeightGrams,
     estimatedShippingWeightGrams,
@@ -247,8 +253,23 @@ export async function createAdminSku(
         )
         .bind(...binds),
       deps.db
-        .prepare(`INSERT INTO sku(id,product_id,code,name,sellable_unit_id,sell_quantity,consumption_base_quantity,estimated_shipping_weight_grams,status,sort_order,merchandising_label,version,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,'active',?,?,1,?,?)`)
+        .prepare(
+          "INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (SELECT 1 FROM product WHERE id=? AND stock_tracking=?)",
+        )
+        .bind(productId, product.stockTracking),
+      ...(stockPoolId
+        ? [
+            deps.db
+              .prepare(
+                "INSERT INTO inventory_pool(id,base_unit_id,sourcing_mode,canonical_sourcing_mode,created_at,updated_at) VALUES (?,?,'STOCKED','STOCKED',?,?)",
+              )
+              .bind(stockPoolId, sellableUnitId, now, now),
+            required(deps.db),
+          ]
+        : []),
+      deps.db
+        .prepare(`INSERT INTO sku(id,product_id,code,name,sellable_unit_id,sell_quantity,consumption_base_quantity,estimated_shipping_weight_grams,status,sort_order,merchandising_label,version,created_at,updated_at,stock_pool_id)
+      VALUES (?,?,?,?,?,?,?,?,'active',?,?,1,?,?,?)`)
         .bind(
           id,
           productId,
@@ -262,6 +283,7 @@ export async function createAdminSku(
           merchandisingLabel,
           now,
           now,
+          stockPoolId,
         ),
       required(deps.db),
       auditEventStatement(deps.db, {
@@ -318,7 +340,7 @@ export async function updateAdminSku(
     effects.push(
       deps.db
         .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
-      SELECT 1 FROM sku s JOIN product p ON p.id=s.product_id JOIN inventory_pool pool ON pool.id=p.inventory_pool_id
+      SELECT 1 FROM sku s JOIN product p ON p.id=s.product_id JOIN inventory_pool pool ON pool.id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
       JOIN unit base ON base.id=pool.base_unit_id WHERE s.id=? AND base.code='PIECE' AND base.dimension='COUNT')`)
         .bind(skuId),
     );

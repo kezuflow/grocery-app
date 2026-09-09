@@ -93,6 +93,18 @@ export async function adjustInventory(
       .first())
   )
     return failure("NOT_FOUND", "Inventory location or product pool not found", command.requestId);
+  if (
+    command.deltaBase > 0 &&
+    (await database
+      .prepare("SELECT 1 FROM sku WHERE stock_pool_id=?")
+      .bind(command.inventoryPoolId)
+      .first())
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Receive and count the bulk goods to add this size; do not add the same goods twice",
+      command.requestId,
+    );
   const repository = createInventoryRepository(database),
     before = await repository.readBalance(command.locationId, command.inventoryPoolId);
   if ((before?.version ?? 0) !== command.expectedVersion)

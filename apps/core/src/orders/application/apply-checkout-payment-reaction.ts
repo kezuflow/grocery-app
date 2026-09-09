@@ -148,7 +148,7 @@ export async function applyCheckoutPaymentReaction(
   for (const line of quote.lines) {
     const skuPool = await database
       .prepare(
-        "SELECT p.inventory_pool_id AS pool_id FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=?",
+        "SELECT COALESCE(s.stock_pool_id,p.inventory_pool_id) AS pool_id FROM sku s JOIN product p ON p.id=s.product_id WHERE s.id=?",
       )
       .bind(line.skuId)
       .first<{ pool_id: string }>();

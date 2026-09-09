@@ -206,6 +206,7 @@ export default function NewProductPage() {
             name: submitted.name,
             description: submitted.description,
             inventoryBaseUnitId: submitted.inventoryBaseUnitId,
+            stockTracking: submitted.stockTracking ?? "SHARED",
             customerDetails,
           },
           idempotencyKey,

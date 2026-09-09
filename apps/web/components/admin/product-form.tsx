@@ -34,6 +34,7 @@ export type ProductFormValue = {
   description: string | null;
   categoryId: string;
   inventoryBaseUnitId?: string;
+  stockTracking?: "SHARED" | "COUNTED_SIZES";
   status?: "active" | "inactive";
   statusReason?: string;
   customerDetails: AdminProductCustomerDetailInput[];
@@ -85,11 +86,12 @@ export function ProductForm({
     });
   }
   const baseUnit = units?.find((unit) => unit.unitId === value.inventoryBaseUnitId);
+  const countedSizes = value.stockTracking === "COUNTED_SIZES";
   const sellableUnits = (units ?? []).filter(
     (unit) =>
       unit.status === "active" &&
       unit.dimension !== "VOLUME" &&
-      (!baseUnit || unit.dimension === baseUnit.dimension),
+      (countedSizes ? unit.code === "PIECE" : !baseUnit || unit.dimension === baseUnit.dimension),
   );
   return (
     <form id={formId} onSubmit={onSubmit}>
@@ -288,50 +290,82 @@ export function ProductForm({
                           <span>Sell unit</span>
                           <select
                             className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
-                            value={variant.sellableUnitId}
+                            value={
+                              countedSizes
+                                ? variant.sellableUnitId
+                                  ? variant.merchandisingLabel || "Piece"
+                                  : ""
+                                : variant.sellableUnitId
+                            }
                             required
                             onChange={(event) =>
-                              updateVariant(variant.id, { sellableUnitId: event.target.value })
+                              updateVariant(
+                                variant.id,
+                                countedSizes
+                                  ? {
+                                      sellableUnitId: event.target.value
+                                        ? (sellableUnits[0]?.unitId ?? "")
+                                        : "",
+                                      merchandisingLabel: event.target.value,
+                                      sellQuantity: "1",
+                                    }
+                                  : { sellableUnitId: event.target.value },
+                              )
                             }
                           >
                             <option value="">Select a unit</option>
-                            {sellableUnits.map((unit) => (
-                              <option key={unit.unitId} value={unit.unitId}>
-                                {unit.displayName} ({unit.code})
-                              </option>
-                            ))}
+                            {countedSizes
+                              ? ["Piece", "Pack"].map((label) => (
+                                  <option key={label} value={label}>
+                                    {label}
+                                  </option>
+                                ))
+                              : sellableUnits.map((unit) => (
+                                  <option key={unit.unitId} value={unit.unitId}>
+                                    {unit.displayName} ({unit.code})
+                                  </option>
+                                ))}
                           </select>
                         </label>
-                        <label className="grid gap-1 text-sm font-medium">
-                          <span>Quantity</span>
-                          <Input
-                            value={variant.sellQuantity}
-                            type="number"
-                            min={1}
-                            step={1}
-                            placeholder="250"
-                            required
-                            onChange={(event) =>
-                              updateVariant(variant.id, { sellQuantity: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label className="grid gap-1 text-sm font-medium sm:col-span-2">
-                          <span>Merchandising label (optional)</span>
-                          <Input
-                            value={variant.merchandisingLabel}
-                            placeholder="Best value"
-                            maxLength={60}
-                            onChange={(event) =>
-                              updateVariant(variant.id, {
-                                merchandisingLabel: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        {baseUnit && baseUnit.canonicalBaseCode !== "GRAM" ? (
+                        {!countedSizes ? (
+                          <label className="grid gap-1 text-sm font-medium">
+                            <span>Quantity</span>
+                            <Input
+                              value={variant.sellQuantity}
+                              type="number"
+                              min={1}
+                              max={countedSizes ? 1 : undefined}
+                              step={1}
+                              placeholder={countedSizes ? "1" : "250"}
+                              required
+                              onChange={(event) =>
+                                updateVariant(variant.id, { sellQuantity: event.target.value })
+                              }
+                            />
+                          </label>
+                        ) : null}
+                        {!countedSizes ? (
                           <label className="grid gap-1 text-sm font-medium sm:col-span-2">
-                            <span>Estimated shipping weight per sold unit (grams)</span>
+                            <span>Merchandising label (optional)</span>
+                            <Input
+                              value={variant.merchandisingLabel}
+                              placeholder="Best value"
+                              maxLength={60}
+                              onChange={(event) =>
+                                updateVariant(variant.id, {
+                                  merchandisingLabel: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        ) : null}
+                        {baseUnit && (countedSizes || baseUnit.canonicalBaseCode !== "GRAM") ? (
+                          <label className="grid gap-1 text-sm font-medium sm:col-span-2">
+                            <span>
+                              {countedSizes
+                                ? "Approximate weight per piece/pack (grams)"
+                                : "Estimated shipping weight per sold unit (grams)"}
+                            </span>
                             <Input
                               value={variant.estimatedShippingWeightGrams ?? ""}
                               type="number"
@@ -347,7 +381,7 @@ export function ProductForm({
                               }
                             />
                             <span className="text-xs font-normal text-[var(--fm-text-muted)]">
-                              Used only to calculate delivery weight for piece or volume inventory.
+                              Used to calculate delivery weight. Stock uses actual counts.
                             </span>
                           </label>
                         ) : null}
@@ -482,32 +516,70 @@ export function ProductForm({
                   </select>
                 </label>
                 {units ? (
-                  <label className="block space-y-1 text-sm font-medium">
-                    <span>Inventory base unit</span>
-                    <select
-                      className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
-                      value={value.inventoryBaseUnitId ?? ""}
-                      required
-                      onChange={(event) =>
-                        onChange({ ...value, inventoryBaseUnitId: event.target.value })
-                      }
-                    >
-                      <option value="">Select a canonical base unit</option>
-                      {units
-                        .filter(
-                          (unit) =>
-                            unit.status === "active" &&
-                            unit.dimension !== "VOLUME" &&
-                            unit.code === unit.canonicalBaseCode &&
-                            unit.conversionNumerator === unit.conversionDenominator,
-                        )
-                        .map((unit) => (
-                          <option key={unit.unitId} value={unit.unitId}>
-                            {unit.displayName} ({unit.code})
-                          </option>
-                        ))}
-                    </select>
-                  </label>
+                  <>
+                    <label className="block space-y-1 text-sm font-medium">
+                      <span>Stock sold by</span>
+                      <select
+                        className="h-10 w-full rounded border bg-white px-3"
+                        value={value.stockTracking ?? "SHARED"}
+                        onChange={(event) =>
+                          onChange({
+                            ...value,
+                            stockTracking:
+                              event.target.value === "COUNTED_SIZES" ? "COUNTED_SIZES" : "SHARED",
+                            inventoryBaseUnitId:
+                              event.target.value === "COUNTED_SIZES"
+                                ? units.find((unit) => unit.code === "GRAM")?.unitId
+                                : value.inventoryBaseUnitId,
+                            variants: value.variants?.map((variant) => ({
+                              ...variant,
+                              sellableUnitId: "",
+                              sellQuantity: event.target.value === "COUNTED_SIZES" ? "1" : "",
+                            })),
+                          })
+                        }
+                      >
+                        <option value="SHARED">Shared weight or identical pieces</option>
+                        <option value="COUNTED_SIZES">
+                          Actual counted sizes (Small, Medium, Large)
+                        </option>
+                      </select>
+                      {countedSizes ? (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          Receive bulk grams and count each size. Each piece or pack has its own
+                          shipping grams.
+                        </p>
+                      ) : null}
+                    </label>
+                    <label className="block space-y-1 text-sm font-medium">
+                      <span>Inventory base unit</span>
+                      <select
+                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+                        value={value.inventoryBaseUnitId ?? ""}
+                        required
+                        onChange={(event) =>
+                          onChange({ ...value, inventoryBaseUnitId: event.target.value })
+                        }
+                      >
+                        <option value="">Select a canonical base unit</option>
+                        {units
+                          .filter(
+                            (unit) =>
+                              unit.status === "active" &&
+                              unit.dimension !== "VOLUME" &&
+                              (countedSizes
+                                ? unit.code === "GRAM"
+                                : unit.code === unit.canonicalBaseCode) &&
+                              unit.conversionNumerator === unit.conversionDenominator,
+                          )
+                          .map((unit) => (
+                            <option key={unit.unitId} value={unit.unitId}>
+                              {unit.displayName} ({unit.code})
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </>
                 ) : null}
                 {value.status ? (
                   <>
