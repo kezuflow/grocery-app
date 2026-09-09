@@ -161,7 +161,7 @@ export async function requestProviderDelivery(
            ))
            AND (job.fulfillment_mode!='SCHEDULED' OR (${scheduledDeliveryGoodsReadySql}
              AND ((? IS NOT NULL AND ?>?) OR (? IS NULL AND EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=job.order_id AND status='PACKED')))
-             AND COALESCE(?,?) <= (SELECT COALESCE(delivery_window.ends_at,snapshot.delivery_date)
+             AND COALESCE(?,?) <= (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
                FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
          )
        ) AND (? IS NULL OR EXISTS (

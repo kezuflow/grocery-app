@@ -233,7 +233,7 @@ export async function bookOrderDelivery(
       `SELECT job.id AS job_id, job.order_id, job.version AS job_version,
               job.status AS job_status, job.fulfillment_mode, job.location_id,
               job.cycle_id, job.batch_id, job.rider_id, job.promised_at,
-              COALESCE(delivery_window.ends_at,snapshot.delivery_date) AS delivery_date, snapshot.delivery_execution_snapshot_json,
+              COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) AS delivery_date, snapshot.delivery_execution_snapshot_json,
               orders.currency, orders.total_minor,
               stop.latitude, stop.longitude, stop.address_snapshot_json,
               stop.contact_snapshot_json, stop.instructions_snapshot,

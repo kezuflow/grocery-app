@@ -113,7 +113,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             </h2>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[var(--fm-text-muted)]">Promise</dt>
+                <dt className="text-[var(--fm-text-muted)]">
+                  {order.fulfillment.agreedDeliveryAt ? "Original promise" : "Promise"}
+                </dt>
                 <dd className="font-semibold">
                   {order.fulfillment.mode === "INSTANT"
                     ? order.fulfillment.promisedAt
@@ -126,6 +128,14 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                         : "Unavailable"}
                 </dd>
               </div>
+              {order.fulfillment.agreedDeliveryAt && (
+                <div>
+                  <dt className="text-[var(--fm-text-muted)]">Agreed delivery time</dt>
+                  <dd className="font-semibold">
+                    By {new Date(order.fulfillment.agreedDeliveryAt).toLocaleString()}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-[var(--fm-text-muted)]">Progress</dt>
                 <dd className="font-semibold">

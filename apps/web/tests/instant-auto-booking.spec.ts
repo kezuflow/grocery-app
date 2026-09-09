@@ -328,6 +328,41 @@ for (const width of [1440, 390]) {
     admin.once("dialog", (dialog) => dialog.accept());
     await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(courierRow).toContainText("CANCELED");
+    await courierRow
+      .getByRole("button", { name: "Record agreed delivery time", exact: true })
+      .click();
+    const agreedDate = new Date(Date.now() + 3 * 3600000);
+    const localTime = new Date(agreedDate.getTime() - agreedDate.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    await courierRow.getByLabel("Deliver by (your local time)").fill(localTime);
+    await courierRow
+      .getByLabel("Customer agreement", { exact: true })
+      .fill("Customer agreed by phone to the later delivery time.");
+    const agreementReply = admin.waitForResponse(
+      (r) => r.url().endsWith("/api/admin/delivery-promises") && r.request().method() === "POST",
+    );
+    await courierRow.getByRole("button", { name: "Save agreed time", exact: true }).click();
+    const savedAgreement = await agreementReply;
+    expect(await savedAgreement.json()).toMatchObject({ ok: true });
+    const originalRequest = savedAgreement.request();
+    expect(
+      await (
+        await admin.request.post("/api/admin/delivery-promises", {
+          data: originalRequest.postData() ?? "",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": originalRequest.headers()["idempotency-key"] ?? "",
+          },
+        })
+      ).json(),
+    ).toMatchObject({ ok: true });
+    await page.goto(`/orders/${orderId}`);
+    await expect(page.getByText("Original promise", { exact: true })).toBeVisible();
+    await expect(page.getByText("Agreed delivery time", { exact: true })).toBeVisible();
+    await page
+      .getByRole("region", { name: "Delivery", exact: true })
+      .screenshot({ path: testInfo.outputPath(`agreed-delivery-time-${width}.png`) });
     await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
     await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
     await expect(courierRow).toContainText("Finding rider");

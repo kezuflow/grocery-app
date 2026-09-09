@@ -118,6 +118,7 @@ export type AdminDeliveryOperationView = {
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   status: string;
   manualActions: ReadonlyArray<ManualDeliveryAction>;
+  canRevisePromise: boolean;
   courierPickup: {
     allowedKinds: ReadonlyArray<"IMMEDIATE" | "SCHEDULED">;
     unavailableReason: string | null;
@@ -191,6 +192,20 @@ export type RequestExternalDeliveryRequest = AdminOperationsLocationRequest & {
   providerCode: "lalamove";
   pickup: { kind: "IMMEDIATE" } | { kind: "SCHEDULED"; pickupAt: string };
   idempotencyKey: string;
+};
+
+export type ReviseDeliveryPromiseRequest = AdminOperationsLocationRequest & {
+  jobId: string;
+  expectedVersion: number;
+  promisedAt: string;
+  agreementNote: string;
+  idempotencyKey: string;
+};
+export type ReviseDeliveryPromiseResult = {
+  revisionId: string;
+  jobId: string;
+  promisedAt: string;
+  version: number;
 };
 
 export type ManualDeliveryAction = "ASSIGN" | "HAND_OVER" | "COMPLETE" | "FAIL";
@@ -406,6 +421,9 @@ export type AdminOperationsService = {
   requestExternalDelivery(
     request: RequestExternalDeliveryRequest,
   ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
+  reviseDeliveryPromise(
+    request: ReviseDeliveryPromiseRequest,
+  ): Promise<RpcResult<ReviseDeliveryPromiseResult>>;
   manageManualDelivery(request: ManualDeliveryRequest): Promise<RpcResult<ManualDeliveryResult>>;
   refreshExternalDelivery(
     request: RefreshExternalDeliveryRequest,

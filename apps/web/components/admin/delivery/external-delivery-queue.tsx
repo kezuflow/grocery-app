@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { ListPageSection, PageHeader, StatusBadge } from "../admin-shell";
 import { useAdminLocation } from "../use-admin-location";
 import { ExternalDeliveryBooking } from "./external-delivery-booking";
+import { DeliveryPromiseForm } from "./delivery-promise-form";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
 
 export function ExternalDeliveryQueue() {
@@ -223,6 +224,7 @@ export function ExternalDeliveryQueue() {
                             }}
                           />
                         ) : null}
+                        <DeliveryPromiseForm item={item} onChanged={() => void load()} />
                         <ManualDeliveryControls item={item} onChanged={() => void load()} />
                       </TableCell>
                     </TableRow>

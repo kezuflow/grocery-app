@@ -1,3 +1,5 @@
+import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
+import { reviseDeliveryPromise } from "../../delivery/application/revise-delivery-promise";
 import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
 import { expireUnsubmittedBookings } from "../../delivery/application/expire-unsubmitted-bookings";
 import { manageManualDelivery } from "../../delivery/application/manage-manual-delivery";
@@ -199,13 +201,14 @@ async function seedScheduledDelivery(now: number, mode: "INSTANT" | "SCHEDULED" 
       `INSERT INTO order_fulfillment_snapshot
        (order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,promised_at,
         fulfillment_mode,sourcing_modes_json,delivery_execution_snapshot_json,created_at)
-       VALUES (?,?,?,'zone-cebu-city-core',?,?,NULL,?,'[]',?,?)`,
+       VALUES (?,?,?,'zone-cebu-city-core',?,?,?,?,'[]',?,?)`,
     ).bind(
       orderId,
       LOCATION,
       mode === "SCHEDULED" ? "cycle-next-cebu" : null,
       mode === "SCHEDULED" ? now + 60_000 : null,
       mode === "SCHEDULED" ? now + 24 * 60 * 60_000 : null,
+      mode === "INSTANT" ? now + 3600000 : null,
       mode,
       JSON.stringify({
         selectedBy: mode === "INSTANT" ? "CUSTOMER" : "OPERATIONS",
@@ -1937,4 +1940,232 @@ describe("Scheduled manual delivery", () => {
         .first(),
     ).toEqual({ n: 0 });
   });
+});
+
+describe("customer-agreed delivery times", () => {
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "preserves the paid %s promise and atomically enables a later retry",
+    async (mode) => {
+      const now = Date.now();
+      const deps = { ...dependencies(["delivery.read", "delivery.manage"]), now: () => now };
+      await upsertLocationDeliveryProfile(deps, profileRequest(0));
+      const delivery = await seedScheduledDelivery(now, mode);
+      await env.DB.prepare("UPDATE delivery_job SET promised_at=? WHERE id=?")
+        .bind(now + 3600000, delivery.jobId)
+        .run();
+      if (mode === "SCHEDULED") await receiveScheduledTestGoods(delivery, now);
+      else
+        for (const [index, action] of (
+          ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+        ).entries()) {
+          expect(
+            await advanceFulfillment(
+              env.DB,
+              {
+                headers: {},
+                requestId: crypto.randomUUID(),
+                orderId: delivery.orderId,
+                action,
+                expectedVersion: index + 1,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              { authorize: async () => true },
+            ),
+          ).toMatchObject({ ok: true });
+        }
+      const provider = createMockDeliveryProvider(() => now);
+      const bookingDeps = { ...deps, provider, configuredServiceType: "MOTORCYCLE" };
+      const booking = {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: delivery.jobId,
+        expectedVersion: 1,
+        providerCode: "lalamove" as const,
+        pickup:
+          mode === "SCHEDULED"
+            ? { kind: "SCHEDULED" as const, pickupAt: new Date(now + 600000).toISOString() }
+            : { kind: "IMMEDIATE" as const },
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const first = await requestExternalDelivery(bookingDeps, booking);
+      if (!first.ok) throw new Error(first.error.message);
+      const agreement = {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: delivery.jobId,
+        expectedVersion: 1,
+        promisedAt: new Date(now + 3 * 86400000).toISOString(),
+        agreementNote: "Customer agreed by phone to the new delivery time",
+        idempotencyKey: crypto.randomUUID(),
+      };
+      expect(await reviseDeliveryPromise(deps, agreement)).toMatchObject({
+        ok: false,
+        error: { code: "ILLEGAL_TRANSITION" },
+      });
+      expect(
+        await cancelExternalDelivery(bookingDeps, {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+          dispatchId: first.value.dispatchId,
+          expectedVersion: first.value.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+      const job = await env.DB.prepare("SELECT version,promised_at FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first<{ version: number; promised_at: number }>();
+      if (!job) throw new Error("Missing delivery");
+      const request = { ...agreement, expectedVersion: job.version };
+      await env.DB.prepare(
+        "INSERT INTO user(id,name,email,email_verified,created_at,updated_at) SELECT c.auth_user_id,'Test customer',c.id || '@example.com',1,?,? FROM customer c JOIN grocery_order o ON o.customer_id=c.id WHERE o.id=?",
+      )
+        .bind(now, now, delivery.orderId)
+        .run();
+      await env.DB.prepare("UPDATE grocery_order SET committed_at=? WHERE id=?")
+        .bind(now, delivery.orderId)
+        .run();
+      await projectDomainNotifications(env.DB, now);
+      const failureNotifications = await env.DB.prepare(
+        "SELECT id FROM notification_outbox WHERE aggregate_id=? AND event_type='DELIVERY_FAILED'",
+      )
+        .bind(delivery.orderId)
+        .all();
+      expect(failureNotifications.results).toHaveLength(1);
+      const original = await env.DB.prepare(
+        "SELECT * FROM order_fulfillment_snapshot WHERE order_id=?",
+      )
+        .bind(delivery.orderId)
+        .first();
+      const paidOrder = await env.DB.prepare("SELECT * FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first();
+      expect(
+        await reviseDeliveryPromise(
+          { ...dependencies(["delivery.read"]), now: () => now },
+          request,
+        ),
+      ).toMatchObject({ ok: false });
+      expect(
+        await reviseDeliveryPromise(deps, { ...request, locationId: "location-manila-central" }),
+      ).toMatchObject({ ok: false });
+      expect(
+        await reviseDeliveryPromise({ ...deps, accessContext: undefined }, request),
+      ).toMatchObject({ ok: false });
+      expect(
+        await reviseDeliveryPromise(deps, { ...request, promisedAt: new Date(now).toISOString() }),
+      ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+      expect(await reviseDeliveryPromise(deps, { ...request, agreementNote: " " })).toMatchObject({
+        ok: false,
+        error: { code: "VALIDATION_FAILED" },
+      });
+      await env.DB.exec(
+        "CREATE TRIGGER omit_agreement_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.PROMISE_REVISED' BEGIN SELECT RAISE(IGNORE); END",
+      );
+      try {
+        expect(await reviseDeliveryPromise(deps, request)).toMatchObject({ ok: false });
+        expect(
+          await env.DB.prepare("SELECT version,promised_at FROM delivery_job WHERE id=?")
+            .bind(delivery.jobId)
+            .first(),
+        ).toEqual(job);
+        expect(
+          await env.DB.prepare("SELECT id FROM delivery_promise_revision WHERE delivery_job_id=?")
+            .bind(delivery.jobId)
+            .first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare(
+            "SELECT 1 FROM idempotency_records WHERE scope='delivery.promiseRevision' AND idempotency_key=?",
+          )
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toBeNull();
+      } finally {
+        await env.DB.exec("DROP TRIGGER omit_agreement_audit");
+      }
+      const requests = [request, { ...request, idempotencyKey: crypto.randomUUID() }];
+      const outcomes = await Promise.all(
+        requests.map((input) => reviseDeliveryPromise(deps, input)),
+      );
+      expect(outcomes.filter((item) => item.ok)).toHaveLength(1);
+      const winner = outcomes.findIndex((item) => item.ok);
+      const winningRequest = requests[winner];
+      const winningResult = outcomes[winner];
+      if (!winningRequest || !winningResult?.ok) throw new Error("Missing agreement winner");
+      expect(
+        await reviseDeliveryPromise({ ...deps, now: () => now + 4 * 86400000 }, winningRequest),
+      ).toEqual(winningResult);
+      expect(
+        await reviseDeliveryPromise(deps, {
+          ...winningRequest,
+          agreementNote: "Changed agreement",
+        }),
+      ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+      expect(
+        await env.DB.prepare("SELECT * FROM order_fulfillment_snapshot WHERE order_id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual(original);
+      expect(
+        await env.DB.prepare("SELECT * FROM grocery_order WHERE id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual(paidOrder);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT COUNT(*) count FROM delivery_promise_revision WHERE delivery_job_id=?",
+          )
+            .bind(delivery.jobId)
+            .first<{ count: number }>()
+        )?.count,
+      ).toBe(1);
+      await expect(
+        env.DB.prepare(
+          "UPDATE delivery_promise_revision SET agreement_note='changed' WHERE delivery_job_id=?",
+        )
+          .bind(delivery.jobId)
+          .run(),
+      ).rejects.toThrow("IMMUTABLE_DELIVERY_AGREEMENT");
+      await expect(
+        env.DB.prepare("DELETE FROM delivery_promise_revision WHERE delivery_job_id=?")
+          .bind(delivery.jobId)
+          .run(),
+      ).rejects.toThrow("IMMUTABLE_DELIVERY_AGREEMENT");
+      await projectDomainNotifications(env.DB, now + 1000);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT id FROM notification_outbox WHERE aggregate_id=? AND event_type='DELIVERY_FAILED'",
+          )
+            .bind(delivery.orderId)
+            .all()
+        ).results,
+      ).toEqual(failureNotifications.results);
+      const later = now + 2 * 86400000;
+      const retried = await requestExternalDelivery(
+        { ...bookingDeps, now: () => later },
+        {
+          ...booking,
+          expectedVersion: winningResult.value.version,
+          pickup:
+            mode === "SCHEDULED"
+              ? { kind: "SCHEDULED", pickupAt: new Date(later + 600000).toISOString() }
+              : { kind: "IMMEDIATE" },
+          idempotencyKey: crypto.randomUUID(),
+        },
+      );
+      expect(retried).toMatchObject({ ok: true });
+      expect(
+        await reviseDeliveryPromise(deps, {
+          ...request,
+          expectedVersion: winningResult.value.version + 1,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: false });
+    },
+  );
 });

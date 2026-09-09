@@ -40,6 +40,18 @@ describe("Core Service Binding conformance", () => {
   it("validates the manual delivery request envelope before resolving its actor", async () => {
     const service = new CoreEntrypoint({} as ExecutionContext, env);
     expect(
+      await service.reviseDeliveryPromise({
+        requestId: "",
+        headers: {},
+        locationId: "location-cebu-central",
+        jobId: "job",
+        expectedVersion: 1,
+        promisedAt: "2026-09-10T00:00:00.000Z",
+        agreementNote: "Customer agreed",
+        idempotencyKey: "agreement",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
       await service.manageManualDelivery({
         requestId: "",
         headers: {},

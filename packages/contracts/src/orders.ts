@@ -110,6 +110,7 @@ export type CustomerOrderDetailView = {
     deliveryDate: string | null;
     deliveryWindow?: { name: string; timezone: string; startsAt: string; endsAt: string } | null;
     promisedAt: string | null;
+    agreedDeliveryAt?: string | null;
     address: {
       label: string | null;
       recipient: string | null;

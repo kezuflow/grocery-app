@@ -5,6 +5,7 @@ import { preHandoverRetrySql } from "./pre-handover-retry";
 
 type DispatchRow = {
   manualActions: AdminDeliveryOperationView["manualActions"];
+  canRevisePromise: boolean;
   courierPickup: AdminDeliveryOperationView["courierPickup"];
   manualDelivery: AdminDeliveryOperationView["manualDelivery"];
   jobId: string;
@@ -120,7 +121,7 @@ export async function listDeliveryDispatch(
               o.status AS order_status,f.status AS fulfillment_status,d.promised_at,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${preHandoverRetrySql}) AS retry_ready,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${scheduledDeliveryGoodsReadySql}) AS scheduled_goods_ready,
-              (SELECT COALESCE(delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
+              (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=d.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
                 LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
               EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch p ON p.id=c.dispatch_id
                 WHERE p.delivery_job_id=d.id AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')) AS pending_cancel,
@@ -169,6 +170,7 @@ export async function listDeliveryDispatch(
     }>();
   return rows.results.map((r) => ({
     courierPickup: courierPickupDecision(r),
+    canRevisePromise: Boolean(r.can_manage && r.retry_ready),
     manualActions: r.can_manage
       ? manualDeliveryActions({
           mode: r.fulfillment_mode,

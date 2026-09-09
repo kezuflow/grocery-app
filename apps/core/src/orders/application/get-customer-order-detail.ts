@@ -167,6 +167,7 @@ export async function getCustomerOrderDetail(
               o.fulfillment_mode AS fulfillmentMode,
               ofs.cycle_id AS cycleId, ofs.cutoff_at AS cutoffAt,
               ofs.delivery_date AS deliveryDate, ofs.promised_at AS promisedAt,
+              (SELECT revision.promised_at FROM delivery_promise_revision revision JOIN delivery_job job ON job.id=revision.delivery_job_id WHERE job.order_id=ofs.order_id ORDER BY revision.job_version DESC LIMIT 1) AS agreedDeliveryAt,
               window.name AS windowName,window.timezone AS windowTimezone,window.starts_at AS windowStartsAt,window.ends_at AS windowEndsAt,
               f.status AS fulfillmentStatus, f.updated_at AS fulfillmentUpdatedAt,
               d.id AS deliveryId, d.status AS deliveryStatus, d.updated_at AS deliveryUpdatedAt,
@@ -205,6 +206,7 @@ export async function getCustomerOrderDetail(
       windowStartsAt: number | null;
       windowEndsAt: number | null;
       promisedAt: number | null;
+      agreedDeliveryAt: number | null;
       fulfillmentStatus: string | null;
       fulfillmentUpdatedAt: number | null;
       deliveryId: string | null;
@@ -537,6 +539,7 @@ export async function getCustomerOrderDetail(
               }
             : null,
         promisedAt: row.fulfillmentMode === "INSTANT" ? iso(row.promisedAt) : null,
+        agreedDeliveryAt: iso(row.agreedDeliveryAt),
         address: safeAddress(row.addressSnapshotJson),
       },
       payments,
