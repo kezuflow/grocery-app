@@ -216,7 +216,7 @@ export async function resolveServiceability(
   if (!validCoordinate(request.latitude, request.longitude))
     return unavailable(request, "INVALID_COORDINATES", now);
 
-  const marketRows = await database
+  const marketQuery = database
     .select()
     .from(geographySchema.market)
     .where(
@@ -226,20 +226,14 @@ export async function resolveServiceability(
       ),
     )
     .limit(1);
-  const market = marketRows[0] ?? null;
-  if (!market)
-    return evaluateServiceability(
-      request,
-      { market: null, serviceAreas: [], deliveryZones: [], candidates: [] },
-      now,
-    );
-
-  const serviceAreas = await database
+  const marketSelection = marketQuery.as("selected_market");
+  const marketIds = database.select({ id: marketSelection.id }).from(marketSelection);
+  const areasQuery = database
     .select()
     .from(geographySchema.serviceArea)
     .where(
       and(
-        eq(geographySchema.serviceArea.marketId, market.id),
+        inArray(geographySchema.serviceArea.marketId, marketIds),
         eq(geographySchema.serviceArea.status, "active"),
         lte(geographySchema.serviceArea.activeFrom, now),
         or(
@@ -249,68 +243,69 @@ export async function resolveServiceability(
       ),
     )
     .orderBy(desc(geographySchema.serviceArea.polygonVersion));
-  const areaIds = serviceAreas.map((area) => area.id);
-  const deliveryZones = areaIds.length
-    ? await database
-        .select()
-        .from(geographySchema.deliveryZone)
-        .where(
-          and(
-            inArray(geographySchema.deliveryZone.serviceAreaId, areaIds),
-            eq(geographySchema.deliveryZone.status, "active"),
-          ),
-        )
-        .orderBy(desc(geographySchema.deliveryZone.polygonVersion))
-    : [];
-  const zoneIds = deliveryZones.map((zone) => zone.id);
-  const assignments = zoneIds.length
-    ? await database
-        .select({
-          zoneId: geographySchema.locationServiceability.zoneId,
-          locationId: geographySchema.fulfillmentLocation.id,
-          code: geographySchema.fulfillmentLocation.code,
-          name: geographySchema.fulfillmentLocation.name,
-          type: geographySchema.fulfillmentLocation.type,
-          latitude: geographySchema.fulfillmentLocation.latitude,
-          longitude: geographySchema.fulfillmentLocation.longitude,
-        })
-        .from(geographySchema.locationServiceability)
-        .innerJoin(
-          geographySchema.fulfillmentLocation,
-          eq(
-            geographySchema.fulfillmentLocation.id,
-            geographySchema.locationServiceability.locationId,
-          ),
-        )
-        .where(
-          and(
-            inArray(geographySchema.locationServiceability.zoneId, zoneIds),
-            eq(geographySchema.locationServiceability.eligible, true),
-            eq(geographySchema.fulfillmentLocation.marketId, market.id),
-            eq(geographySchema.fulfillmentLocation.status, "active"),
-            eq(geographySchema.fulfillmentLocation.purpose, "CUSTOMER_FULFILLMENT"),
-            lte(geographySchema.locationServiceability.validFrom, now),
-            or(
-              isNull(geographySchema.locationServiceability.validTo),
-              gt(geographySchema.locationServiceability.validTo, now),
-            ),
-          ),
-        )
-        .orderBy(asc(geographySchema.fulfillmentLocation.id))
-    : [];
-  const locationIds = [...new Set(assignments.map((candidate) => candidate.locationId))];
-  const capabilities = locationIds.length
-    ? await database
-        .select()
-        .from(geographySchema.locationCapability)
-        .where(
-          and(
-            inArray(geographySchema.locationCapability.locationId, locationIds),
-            eq(geographySchema.locationCapability.enabled, true),
-          ),
-        )
-    : [];
+  const areaSelection = areasQuery.as("selected_areas");
+  const areaIds = database.select({ id: areaSelection.id }).from(areaSelection);
+  const zonesQuery = database
+    .select()
+    .from(geographySchema.deliveryZone)
+    .where(
+      and(
+        inArray(geographySchema.deliveryZone.serviceAreaId, areaIds),
+        eq(geographySchema.deliveryZone.status, "active"),
+      ),
+    )
+    .orderBy(desc(geographySchema.deliveryZone.polygonVersion));
+  const zoneSelection = zonesQuery.as("selected_zones");
+  const zoneIds = database.select({ id: zoneSelection.id }).from(zoneSelection);
+  const assignmentsQuery = database
+    .select({
+      zoneId: geographySchema.locationServiceability.zoneId,
+      locationId: geographySchema.fulfillmentLocation.id,
+      code: geographySchema.fulfillmentLocation.code,
+      name: geographySchema.fulfillmentLocation.name,
+      type: geographySchema.fulfillmentLocation.type,
+      latitude: geographySchema.fulfillmentLocation.latitude,
+      longitude: geographySchema.fulfillmentLocation.longitude,
+    })
+    .from(geographySchema.locationServiceability)
+    .innerJoin(
+      geographySchema.fulfillmentLocation,
+      eq(geographySchema.fulfillmentLocation.id, geographySchema.locationServiceability.locationId),
+    )
+    .where(
+      and(
+        inArray(geographySchema.locationServiceability.zoneId, zoneIds),
+        eq(geographySchema.locationServiceability.eligible, true),
+        inArray(geographySchema.fulfillmentLocation.marketId, marketIds),
+        eq(geographySchema.fulfillmentLocation.status, "active"),
+        eq(geographySchema.fulfillmentLocation.purpose, "CUSTOMER_FULFILLMENT"),
+        lte(geographySchema.locationServiceability.validFrom, now),
+        or(
+          isNull(geographySchema.locationServiceability.validTo),
+          gt(geographySchema.locationServiceability.validTo, now),
+        ),
+      ),
+    )
+    .orderBy(asc(geographySchema.fulfillmentLocation.id));
+  const assignmentSelection = assignmentsQuery.as("selected_assignments");
+  const locationIds = database
+    .select({ id: assignmentSelection.locationId })
+    .from(assignmentSelection);
+  const capabilitiesQuery = database
+    .select()
+    .from(geographySchema.locationCapability)
+    .where(
+      and(
+        inArray(geographySchema.locationCapability.locationId, locationIds),
+        eq(geographySchema.locationCapability.enabled, true),
+      ),
+    );
 
+  // Keep current geography authoritative without five serial D1 round trips.
+  const [marketRows, serviceAreas, deliveryZones, assignments, capabilities] = await database.batch(
+    [marketQuery, areasQuery, zonesQuery, assignmentsQuery, capabilitiesQuery],
+  );
+  const market = marketRows[0] ?? null;
   return evaluateServiceability(
     request,
     {

@@ -17,16 +17,7 @@ import { readPublicProductSalePrices } from "../promotions/application/product-s
  * row-mapping to keep pagination, windowed rails, and hydration as explicit
  * purpose-built SQL.
  */
-interface CatalogRawStatement {
-  bind(...values: unknown[]): {
-    all<T>(): Promise<{ results?: T[] }>;
-    first<T>(): Promise<T | null>;
-  };
-}
-interface CatalogRawDatabase {
-  prepare(query: string): CatalogRawStatement;
-}
-type Database = CatalogRawDatabase;
+type Database = Pick<D1Database, "prepare" | "batch">;
 
 /** Seed identifiers remain fixtures, not pricing or routing fallbacks. */
 export const MARKET_METRO_CEBU = "market-metro-cebu";
@@ -212,7 +203,7 @@ type ProductListRow = {
   categorySortOrder: number;
 };
 
-async function selectProductRows(
+function prepareProductRows(
   database: Database,
   options: {
     nowMs: number;
@@ -224,7 +215,7 @@ async function selectProductRows(
     limit?: number;
     slug?: string;
   },
-): Promise<ProductListRow[]> {
+): D1PreparedStatement {
   const conditions: string[] = [`p.status = 'active'`, `c.status = 'active'`];
   const parameters: Array<string | number> = [];
 
@@ -283,9 +274,15 @@ async function selectProductRows(
     ORDER BY c.sort_order ASC, p.name ASC, p.id ASC
     LIMIT ?`;
 
-  const rows = await rawAll<ProductListRow>(database, statement, parameters);
   void hasCursor;
-  return rows;
+  return database.prepare(statement).bind(...parameters);
+}
+
+async function selectProductRows(
+  database: Database,
+  options: Parameters<typeof prepareProductRows>[1],
+) {
+  return (await prepareProductRows(database, options).all<ProductListRow>()).results;
 }
 
 type SkuRow = {
@@ -321,42 +318,26 @@ async function resolveCommerceContext(
   return row;
 }
 
-/** Expand page rows into full products through five batched queries. */
-async function hydrateProducts(
+function prepareHydration(
   database: Database,
-  rows: ReadonlyArray<ProductListRow>,
+  ids: string[],
+  idList: string,
   context: CommerceContext | null,
   nowMs: number,
-): Promise<Map<string, CatalogProduct>> {
-  const hydrated = new Map<string, CatalogProduct>();
-  if (rows.length === 0) return hydrated;
-
-  const ids = rows.map((row) => row.productId);
-  const idList = sqlPlaceholders(ids.length);
+): Array<D1PreparedStatement | null> {
   const skuIdList = `(SELECT id FROM sku WHERE product_id IN (${idList}))`;
 
-  const [
-    skuRows,
-    priceRows,
-    availabilityRows,
-    inventoryRows,
-    modeRow,
-    productDetailRows,
-    skuDetailRows,
-  ] = await Promise.all([
-    rawAll<SkuRow>(
-      database,
-      `SELECT s.id, s.product_id, s.code, s.name, u.symbol AS symbol, u.code AS unit_code,
+  return [
+    database
+      .prepare(`SELECT s.id, s.product_id, s.code, s.name, u.symbol AS symbol, u.code AS unit_code,
                 s.merchandising_label, s.sell_quantity, s.consumption_base_quantity,s.stock_pool_id,s.estimated_shipping_weight_grams
          FROM sku s JOIN unit u ON u.id = s.sellable_unit_id
          WHERE s.status = 'active' AND s.product_id IN (${idList})
-         ORDER BY s.product_id ASC, s.sort_order ASC, s.id ASC`,
-      ids,
-    ),
+         ORDER BY s.product_id ASC, s.sort_order ASC, s.id ASC`)
+      .bind(...ids),
     context
-      ? rawAll<PriceRow>(
-          database,
-          `WITH ranked_prices AS (
+      ? database
+          .prepare(`WITH ranked_prices AS (
            SELECT pv.sku_id, pv.amount_minor, pv.currency, pv.version,
                   ROW_NUMBER() OVER (
                     PARTITION BY pv.sku_id
@@ -371,29 +352,24 @@ async function hydrateProducts(
              AND (pv.valid_to IS NULL OR pv.valid_to > ${nowMs})
          )
          SELECT sku_id, amount_minor, currency, version
-         FROM ranked_prices WHERE winner_rank = 1`,
-          [...ids, context.marketId, context.locationId],
-        )
-      : Promise.resolve([]),
+         FROM ranked_prices WHERE winner_rank = 1`)
+          .bind(...ids, context.marketId, context.locationId)
+      : null,
     context
-      ? rawAll<{ sku_id: string }>(
-          database,
-          `SELECT DISTINCT sku_id FROM sku_location_availability
+      ? database
+          .prepare(`SELECT DISTINCT sku_id FROM sku_location_availability
          WHERE location_id = ? AND availability_status = 'AVAILABLE'
-           AND sku_id IN ${skuIdList}`,
-          [context.locationId, ...ids],
-        )
-      : Promise.resolve([]),
+           AND sku_id IN ${skuIdList}`)
+          .bind(context.locationId, ...ids)
+      : null,
     context
-      ? rawAll<{ sku_id: string; available_base: number }>(
-          database,
-          `SELECT s.id sku_id,COALESCE(b.on_hand-b.reserved,0)-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND h.location_id=? AND h.status='HELD'),0) available_base
+      ? database
+          .prepare(`SELECT s.id sku_id,COALESCE(b.on_hand-b.reserved,0)-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND h.location_id=? AND h.status='HELD'),0) available_base
          FROM product p JOIN sku s ON s.product_id=p.id LEFT JOIN inventory_balance b
            ON b.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND b.location_id=?
-         WHERE p.id IN (${idList})`,
-          [context.locationId, context.locationId, ...ids],
-        )
-      : Promise.resolve([]),
+         WHERE p.id IN (${idList})`)
+          .bind(context.locationId, context.locationId, ...ids)
+      : null,
     context
       ? database
           .prepare(
@@ -407,23 +383,62 @@ async function hydrateProducts(
              FROM global_commerce_configuration configuration WHERE configuration.id='global'`,
           )
           .bind(context.locationId, context.marketId, nowMs)
-          .first<{ activeMode: "INSTANT" | "SCHEDULED"; modeAvailable: number }>()
-      : Promise.resolve(null),
-    rawAll<{ product_id: string; label: string; value: string; sortOrder: number }>(
-      database,
-      `SELECT product_id, label, value, sort_order AS sortOrder
+      : null,
+    database
+      .prepare(`SELECT product_id, label, value, sort_order AS sortOrder
          FROM product_detail WHERE product_id IN (${idList})
-         ORDER BY sort_order ASC, label ASC`,
-      ids,
-    ),
-    rawAll<{ sku_id: string; label: string; value: string }>(
-      database,
-      `SELECT sku_id, label, value FROM sku_detail
+         ORDER BY sort_order ASC, label ASC`)
+      .bind(...ids),
+    database
+      .prepare(`SELECT sku_id, label, value FROM sku_detail
          WHERE audience = 'CUSTOMER' AND sku_id IN ${skuIdList}
-         ORDER BY sort_order ASC, label ASC`,
-      ids,
-    ),
-  ]);
+         ORDER BY sort_order ASC, label ASC`)
+      .bind(...ids),
+  ];
+}
+
+/** Expand a bounded page using one D1 batch, followed by applicable sale pricing. */
+async function hydrateProducts(
+  database: Database,
+  rows: ReadonlyArray<ProductListRow>,
+  context: CommerceContext | null,
+  nowMs: number,
+) {
+  if (!rows.length) return new Map<string, CatalogProduct>();
+  const ids = rows.map((row) => row.productId);
+  const statements = prepareHydration(database, ids, sqlPlaceholders(ids.length), context, nowMs);
+  const batch = await database.batch(statements.filter((statement) => statement !== null));
+  return assembleProducts(database, rows, context, nowMs, statements, batch);
+}
+
+async function assembleProducts(
+  database: Database,
+  rows: ReadonlyArray<ProductListRow>,
+  context: CommerceContext | null,
+  nowMs: number,
+  statements: Array<D1PreparedStatement | null>,
+  batch: D1Result[],
+): Promise<Map<string, CatalogProduct>> {
+  const hydrated = new Map<string, CatalogProduct>();
+  let resultIndex = 0;
+  const [
+    skuRows,
+    priceRows,
+    availabilityRows,
+    inventoryRows,
+    modeRows,
+    productDetailRows,
+    skuDetailRows,
+  ] = statements.map((statement) => (statement ? batch[resultIndex++].results : [])) as [
+    SkuRow[],
+    PriceRow[],
+    { sku_id: string }[],
+    { sku_id: string; available_base: number }[],
+    { activeMode: "INSTANT" | "SCHEDULED"; modeAvailable: number }[],
+    { product_id: string; label: string; value: string; sortOrder: number }[],
+    { sku_id: string; label: string; value: string }[],
+  ];
+  const modeRow = modeRows[0] ?? null;
 
   const skusByProduct = new Map<string, SkuRow[]>();
   for (const sku of skuRows) {
@@ -607,23 +622,47 @@ export async function getProduct(
   locationId?: string,
 ): Promise<MarketplaceProductView | null> {
   const nowMs = Date.now();
-  const context = await resolveCommerceContext(database, locationId);
+
   // Detail lookup is not availability-filtered: unknown or inactive slugs are
   // NOT_FOUND, but currently unavailabile products still render honestly.
-  const rows = await selectProductRows(database, { nowMs, slug, limit: 1 });
-  const row = rows[0];
-  if (!row || row.slug !== slug) return null;
-  const hydrated = await hydrateProducts(database, [row], context, nowMs);
-  const product = hydrated.get(row.productId);
-  if (!product) return null;
-  const media = await rawAll<{ mediaId: string; version: number; altText: string }>(
+  const context = await resolveCommerceContext(database, locationId);
+  const statements = prepareHydration(
     database,
-    `SELECT m.id mediaId,m.version,m.alt_text altText FROM product_media m
+    [slug],
+    "SELECT id FROM product WHERE slug=? AND status='active'",
+    context,
+    nowMs,
+  );
+  // Resolve the product, variants, customer notes and gallery in one D1 call.
+  // The subquery scopes every hydration statement without waiting for an ID lookup.
+  const result = await database.batch([
+    prepareProductRows(database, { nowMs, slug, limit: 1 }),
+    ...statements.filter((statement) => statement !== null),
+    database
+      .prepare(`SELECT m.id mediaId,m.version,m.alt_text altText FROM product_media m
       JOIN product p ON p.id=m.product_id AND p.status='active'
       JOIN category c ON c.id=p.category_id AND c.status='active'
-      WHERE m.product_id=? AND m.status='active' ORDER BY m.is_primary DESC,m.sort_order,m.id LIMIT 5`,
-    [product.id],
+      WHERE p.slug=? AND m.status='active' ORDER BY m.is_primary DESC,m.sort_order,m.id LIMIT 5`)
+      .bind(slug),
+  ]);
+  const rows = result[0].results as ProductListRow[];
+  const row = rows[0];
+  if (!row || row.slug !== slug) return null;
+  const hydrated = await assembleProducts(
+    database,
+    [row],
+    context,
+    nowMs,
+    statements,
+    result.slice(1, -1),
   );
+  const product = hydrated.get(row.productId);
+  if (!product) return null;
+  const media = result[result.length - 1].results as {
+    mediaId: string;
+    version: number;
+    altText: string;
+  }[];
   const images = media.flatMap((row) => {
     const image = publishedProductMediaView(JSON.stringify(row));
     return image ? [image] : [];

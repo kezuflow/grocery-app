@@ -24,6 +24,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
       <div className="relative overflow-hidden rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)]">
         <Link
           href={`/products/${product.slug}`}
+          prefetch={false}
           onClick={(event) => {
             event.preventDefault();
             quickView.openProduct(product.slug);
@@ -52,6 +53,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
       </div>
       <Link
         href={`/products/${product.slug}`}
+        prefetch={false}
         onClick={(event) => {
           event.preventDefault();
           quickView.openProduct(product.slug);

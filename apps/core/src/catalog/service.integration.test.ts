@@ -36,6 +36,21 @@ async function eligibleCount(categorySlug?: string): Promise<number> {
 }
 
 describe("catalog read models (integration)", () => {
+  it("loads anonymous product details in one D1 round trip", async () => {
+    const batches: D1PreparedStatement[][] = [];
+    function batch<T>(statements: D1PreparedStatement[]) {
+      batches.push(statements);
+      return env.DB.batch<T>(statements);
+    }
+    const detail = await getProduct({ prepare: env.DB.prepare.bind(env.DB), batch }, "abiu");
+    expect(detail?.product.slug).toBe("abiu");
+    expect(detail?.product.variants.length).toBeGreaterThan(0);
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(5);
+    expect(
+      detail?.product.variants.every((variant) => variant.availability === "LOCATION_REQUIRED"),
+    ).toBe(true);
+  });
   it("keeps general browsing visible without inventing a location, price or stock availability", async () => {
     const detail = await getProduct(db(), "red-onion");
     expect(detail?.product.variants.length).toBeGreaterThan(0);
