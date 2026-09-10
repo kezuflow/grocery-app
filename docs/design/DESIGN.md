@@ -100,3 +100,5 @@ Owner-approved account reference adaptation, 2026-09-10: use DoorDash’s profil
 Owner correction, 2026-09-10: profile details and phone/preferences belong inside one account panel, following https://mobbin.com/flows/9a426026-36b8-4f65-806d-0046a6c1bacc. Label the field Phone and automatically group Philippine mobile input with +63 and spaces while typing. Verification means format validation, explicitly not SMS. Remove Preferred language from this form; retain existing saved language data by sending its unchanged value in the required update field.
 
 Owner correction, 2026-09-10: profile has one Save action for name, phone and promotional preference. Email remains a read-only input. Existing separate service ownership is retained with explicit partial-failure and retry feedback.
+
+Owner correction, 2026-09-10: product cards always show the compact + control, including items already in the cart. Clicking + increments the existing quantity. Quantity steppers remain in the cart.

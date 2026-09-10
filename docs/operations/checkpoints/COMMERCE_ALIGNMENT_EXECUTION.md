@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.36 persistent product-card plus control (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requests normal + on product cards even when already in cart. Main at `1edaac7b`. Removed card stepper rendering; retained cart-cache synchronization so + increments the existing quantity rather than resetting it. Cart controls unchanged. Preserved unrelated work.
+
+Verification: Web typecheck, focused lint/format and hydration regression passed. Test seeds quantity two before hydration, verifies one button and no hydration error, then confirms + sends quantity three and remains one button without extra cart reads. No live cart changes made. CA-7.36 complete. Next action: owner review on localhost; prior Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.35 repair phone save rejection (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `edf7ee5b`. Owner reports single Save rejects phone/preferences. Root cause: removing the language control also omitted preferredLanguage, which both Web and Core still require. Fixed the form to submit the existing profile language while keeping the control hidden; this supersedes CA-7.30’s incorrect omission claim. Single Save and existing retry identities retained.

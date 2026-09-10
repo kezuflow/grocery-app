@@ -5,13 +5,14 @@ import { hydrateRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { CartView } from "@freshmarkets/contracts";
 import { AddToCartButton } from "./add-to-cart-button";
+import { addToCart } from "../../../lib/storefront/cart-client";
 const cache = vi.hoisted(() => ({ view: null as CartView | null }));
 vi.mock("../../../lib/storefront/cart-client", () => ({
   CART_CHANGED_EVENT: "fm:cart-changed",
   cachedCart: () => cache.view,
   quantityForSku: (view: CartView, skuId: string) =>
     view.items.find((item) => item.skuId === skuId)?.quantity ?? 0,
-  addToCart: vi.fn(),
+  addToCart: vi.fn().mockResolvedValue({ ok: true }),
   announceToast: vi.fn(),
 }));
 let root: Root | undefined;
@@ -57,8 +58,13 @@ it("hydrates server Add markup when the header fills the cart cache before the c
     root = hydrateRoot(host, control, { onRecoverableError });
   });
   expect(onRecoverableError).not.toHaveBeenCalled();
-  expect(host.querySelector('[aria-label="Remove one Test fruit"]')).not.toBeNull();
-  expect(host.querySelector('[aria-live="polite"]')?.textContent).toBe("2");
+  expect(host.querySelector('[aria-label="Remove one Test fruit"]')).toBeNull();
+  expect(host.querySelectorAll("button")).toHaveLength(1);
+  await act(async () => {
+    host.querySelector("button")!.click();
+  });
+  expect(addToCart).toHaveBeenCalledWith("sku-fruit", 3, expect.any(Object));
+  expect(host.querySelectorAll("button")).toHaveLength(1);
   expect(fetcher).not.toHaveBeenCalled();
   await act(async () => {
     window.dispatchEvent(new CustomEvent("fm:cart-changed", { detail: { view: null, count: 0 } }));
