@@ -5,6 +5,11 @@ import { z } from "@freshmarkets/validation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { authClient } from "../lib/auth/auth-client";
+import {
+  formatProfilePhone,
+  formatPhoneInput,
+  normalizeProfilePhone,
+} from "../lib/auth/phone-format";
 
 const resultSchema = z.discriminatedUnion("ok", [
   z.object({
@@ -22,8 +27,8 @@ const resultSchema = z.discriminatedUnion("ok", [
 ]);
 export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView }) {
   const [profile, setProfile] = useState(initial);
-  const [language, setLanguage] = useState(initial.preferredLanguage ?? "");
-  const [phone, setPhone] = useState(initial.accountPhone ?? "");
+  const [phone, setPhone] = useState(formatProfilePhone(initial.accountPhone ?? ""));
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [promotions, setPromotions] = useState(initial.promotionalEmails);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -32,11 +37,16 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
   const inFlight = useRef(false);
   async function save() {
     if (inFlight.current) return;
+    const normalizedPhone = phone.trim() ? normalizeProfilePhone(phone) : null;
+    if (!pending.current && phone.trim() && !normalizedPhone) {
+      setPhoneError("Enter a Philippine mobile number, such as +63 917 123 4567.");
+      return;
+    }
+    setPhoneError(null);
     pending.current ??= {
       key: crypto.randomUUID(),
       body: JSON.stringify({
-        accountPhone: phone.trim() || null,
-        preferredLanguage: language.trim() || null,
+        accountPhone: normalizedPhone,
         promotionalEmails: promotions,
         expectedVersion: profile.version,
       }),
@@ -52,8 +62,7 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
       const result = resultSchema.parse(await response.json());
       if (result.ok) {
         setProfile(result.value);
-        setPhone(result.value.accountPhone ?? "");
-        setLanguage(result.value.preferredLanguage ?? "");
+        setPhone(formatProfilePhone(result.value.accountPhone ?? ""));
         setPromotions(result.value.promotionalEmails);
         setMessage("Preferences saved.");
       } else setMessage(result.error.message);
@@ -77,33 +86,33 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
     >
       <fieldset disabled={busy || uncertain} className="space-y-5">
         <div className="space-y-2">
-          <label htmlFor="account-phone">Account phone</label>
+          <label htmlFor="account-phone">Phone</label>
           <Input
             id="account-phone"
             type="tel"
+            inputMode="tel"
+            placeholder="+63 917 123 4567"
             autoComplete="tel"
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onInput={(event) => {
+              setPhone(formatPhoneInput(event.currentTarget.value));
+              setPhoneError(null);
+            }}
+            onBlur={(event) => setPhone(formatProfilePhone(event.currentTarget.value))}
             maxLength={40}
-            aria-describedby="account-phone-help"
+            aria-invalid={!!phoneError}
+            aria-describedby={
+              phoneError ? "account-phone-help account-phone-error" : "account-phone-help"
+            }
           />
+          {phoneError && (
+            <p id="account-phone-error" role="alert" className="text-sm text-red-700">
+              {phoneError}
+            </p>
+          )}
           <p id="account-phone-help" className="text-sm">
             Used as the default phone for a new delivery address. Each address can use a different
             recipient phone.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <label htmlFor="preferred-language">Preferred language</label>
-          <Input
-            id="preferred-language"
-            maxLength={80}
-            value={language}
-            onChange={(event) => setLanguage(event.target.value)}
-            aria-describedby="language-help"
-          />
-          <p id="language-help" className="text-sm">
-            Tell our support team your preferred language, such as English or Cebuano. This does not
-            change the website language.
           </p>
         </div>
         <label className="flex items-start gap-3">

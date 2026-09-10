@@ -32,13 +32,7 @@ export default async function CustomerProfilePage() {
               </header>
               <div className="fm-account-form">
                 <CustomerNamePanel />
-              </div>
-            </section>
-            <section className="fm-account-panel">
-              <header>
-                <h2>Contact and preferences</h2>
-              </header>
-              <div className="fm-account-form">
+                <div className="my-6 border-t border-[var(--fm-border)]" />
                 <CustomerProfilePanel initial={result.value} />
               </div>
             </section>

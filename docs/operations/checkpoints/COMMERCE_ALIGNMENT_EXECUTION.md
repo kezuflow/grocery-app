@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.30 unified profile and phone formatting (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `57c9ceb5`. Owner supplied exact DoorDash updating-profile flow, requested one panel and Phone formatting, clarified no SMS, then requested live spacing and removal of Preferred language. Preserve unrelated dirty state.
+
+Mobbin MCP returned the exact supplied flow. Combined existing name and customer forms inside one account panel, retained their independent save boundaries, renamed Account phone to Phone, added partial-input +63 grouping, normalization and inline format errors. Removed language control and omitted language from updates to preserve saved values. Core already validates Philippine mobile values; no Core/auth/SMS changes.
+
+Verification: Web typecheck, focused formatting/lint and 16 phone-format tests passed; a React DOM input-event test passed for live formatting and language removal. In-app browser confirmed one panel and language removal. Automated browser fill repeatedly produced an empty input, so browser typing acceptance remains inconclusive despite the passing React input test; test edits discarded by reload, no saved profile writes. CA-7.30 implementation complete; next action: owner verifies typing on localhost, with browser automation input behavior unresolved. Earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.29 account reference adaptation (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requested Mobbin MCP search for DoorDash profile and Saved Stores and adaptation to account surfaces. Main at `f53357b2`; preserve unrelated dirty state. Searched and inspected DoorDash profile/manage-account flow and populated/empty Saved Stores screens. Acceptance: apply reference presentation to existing account/profile surfaces with working destinations and retained forms.
