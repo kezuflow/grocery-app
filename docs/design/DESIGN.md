@@ -69,6 +69,8 @@ Order detail uses immutable number/date/items/financial/address/promise snapshot
 
 ## Storefront visual language
 
+Product quick view opens immediately on selection, showing the already-loaded product name/photo while current detail options load. Loading remains dismissible and announces progress; prices, variants and Add are shown only after the current response arrives. Failed requests show a visible error, and late aborted responses cannot reopen dismissed dialogs.
+
 Owner addition, 2026-09-10: Pantry and Meat & Seafood join Retail as enabled sidebar entries with availability pages until their catalogs are supplied. The subsequent owner correction enables Health and Alcohol with the same named availability pages. Produce shortcuts remain excluded from the sidebar.
 
 Owner sidebar expansion, 2026-09-10: the final owner correction keeps only Retail, Health and Alcohol alongside the original Home, All groceries and Deals navigation. Produce categories remain in the existing catalog category strip. Health and Alcohol were initially disabled; the later owner correction above enables their availability-page links. Retail opens an availability page while it has no supplied catalog. These are navigation entries, not new D1 taxonomy or inventory. The rail scrolls to keep Orders and Account reachable on shorter desktops.

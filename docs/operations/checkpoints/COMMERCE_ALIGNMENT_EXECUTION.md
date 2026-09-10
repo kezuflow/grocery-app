@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.20 product-click latency (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner reports Abiu clicks lagging. Observed `main` at `7926cd18`; preserve unrelated changes. Acceptance: product selection opens feedback before awaiting remote details; closing/loading/error/race states remain correct. No browser skills/tools used.
+
+Found `ProductQuickView` called showModal only after its detail fetch completed. Three command-line requests to localhost `/api/catalog/product?slug=abiu` returned 200/ok in 1110, 1463 and 1312ms against the shared remote Core resources. This was an invisible wait despite the component containing loading UI. Moved dialog opening ahead of the fetch, renders already-loaded name/photo during loading, adds loading close/status, validates HTTP/RPC success, and ignores late aborted responses. No caching of product prices/availability, business writes or API changes; the measured detail latency itself is unchanged.
+
+Three jsdom regression tests pass: immediate open while fetch pending, visible request failure and no reopen after aborted completion. Initial harness failed because jsdom lacks native dialog methods; explicit test-only shims fixed it. Web typecheck passed. Web build passed with existing notices; focused lint, formatting, naming and diff checks passed. CA-7.20 interaction fix complete; remaining release action is authorized Web deployment, with actual browser acceptance excluded by owner preference. Next action: deploy when authorized; investigate Core/D1 query round trips separately if detail completion remains slow. Earlier obligations remain below.
+
 ## Latest owner request — CA-7.19 image caching (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requests caching all images. Acceptance: successful public Product/promotion image reads reuse cached bytes; version changes select a new key; expiry revalidates Core; missing/error responses are not cached; static image assets have cache headers. Observed `main` at `bcb5731e`; preserve unrelated deployment/checkpoint changes and deletions. No browser skills/tools used.

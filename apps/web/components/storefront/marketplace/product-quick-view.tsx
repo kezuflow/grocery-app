@@ -46,20 +46,23 @@ export function ProductQuickView({
       return;
     }
     const controller = new AbortController();
+    setView(null);
     setLoading(true);
+    if (dialog && !dialog.open) dialog.showModal();
     void fetch(`/api/catalog/product?slug=${encodeURIComponent(slug)}`, {
       signal: controller.signal,
     })
-      .then(
-        (response) => response.json() as Promise<{ ok?: boolean; value?: MarketplaceProductView }>,
-      )
+      .then((response) => {
+        if (!response.ok) throw new Error("PRODUCT_LOAD_FAILED");
+        return response.json() as Promise<{ ok?: boolean; value?: MarketplaceProductView }>;
+      })
       .then((result) => {
-        const next = result.value ?? null;
+        if (controller.signal.aborted) return;
+        const next = result.ok ? (result.value ?? null) : null;
         setView(next);
         const presentation = next ? toPresentationProduct(next.product) : null;
         setVariantId(presentation?.defaultVariant?.id ?? next?.product.variants[0]?.id ?? "");
         setQuantity(1);
-        if (dialog && !dialog.open) dialog.showModal();
       })
       .catch(() => {
         if (!controller.signal.aborted) setView(null);
@@ -71,6 +74,7 @@ export function ProductQuickView({
   }, [slug]);
 
   const presentation = view ? toPresentationProduct(view.product) : null;
+  const preview = products.find((product) => product.slug === slug);
   const variants = presentation?.variants ?? [];
   const selected = variants.find((variant) => variant.id === variantId) ?? null;
   const recommendations = (
@@ -133,12 +137,31 @@ export function ProductQuickView({
     >
       {loading ? (
         <div
-          className="space-y-4 rounded-[var(--fm-radius-dialog)] bg-white p-6"
+          className="relative space-y-4 rounded-[var(--fm-radius-overlay)] bg-white p-6"
           aria-label="Loading product"
+          aria-busy="true"
         >
-          <div className="h-64 animate-pulse rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-muted)]" />
-          <div className="h-6 w-2/3 animate-pulse rounded bg-[var(--fm-surface-muted)]" />
-          <div className="h-10 w-full animate-pulse rounded bg-[var(--fm-surface-muted)]" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close product details"
+            className="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-white hover:bg-[var(--fm-hover)]"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
+          {preview ? (
+            <>
+              <div className="mx-auto max-w-64">
+                <ProductMedia media={preview.media} name={preview.name} />
+              </div>
+              <h2 className="text-2xl font-semibold">{preview.name}</h2>
+            </>
+          ) : (
+            <div className="h-64 animate-pulse rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-muted)]" />
+          )}
+          <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+            Loading current options and availability…
+          </p>
         </div>
       ) : !presentation ? (
         <div role="alert" className="rounded-[var(--fm-radius-dialog)] bg-white p-8 text-center">
