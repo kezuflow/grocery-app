@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.18 enable department availability pages (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner enables Health and Alcohol links to availability pages like Retail/Pantry. Acceptance: both sidebar entries navigate to named unavailable-yet pages with return to groceries. Observed `main` at `9360b9cc`; preserve unrelated deployment/checkpoint changes and deletions. This supersedes prior disabled-department instructions.
+
+Implemented links and two availability pages; no catalog writes or deployments. Web typecheck, two focused navigation tests, focused lint, naming and diff checks passed. Web build passed with existing notices. Before the latest owner correction, browser checks verified Health and Alcohol pages and both enabled sidebar links at 1280x850. Owner then instructed: stop using browser skills. No browser tools were used after that instruction; honor this preference for subsequent work.
+
+CA-7.18 source scope complete. Remaining release action at this request level: authorized Web deployment. Next action: deploy verified navigation when authorized, using non-browser verification. Earlier obligations remain below.
+
 ## Latest owner request — CA-7.17 Pantry and Meat & Seafood (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner adds Pantry and Meat & Seafood to the sidebar. Acceptance: both entries open named availability pages like Retail; Health/Alcohol remain disabled and produce shortcuts remain excluded. Observed `main` at `7e585ba8`; preserve unrelated deployment/checkpoint edits and deletions.
