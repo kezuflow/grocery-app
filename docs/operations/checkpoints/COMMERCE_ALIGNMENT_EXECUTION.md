@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.19 image caching (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requests caching all images. Acceptance: successful public Product/promotion image reads reuse cached bytes; version changes select a new key; expiry revalidates Core; missing/error responses are not cached; static image assets have cache headers. Observed `main` at `bcb5731e`; preserve unrelated deployment/checkpoint changes and deletions. No browser skills/tools used.
+
+Implemented a named Cloudflare Cache API cache for anonymous versioned media, five-minute browser/edge freshness, Age preservation, ETag list/weak/wildcard handling and origin fallback on cache failures. Product/promotion routes use it only after version validation. Errors retain no-store. Core publication is checked on misses/expiry; removal or promotion expiry can leave cached bytes visible up to five minutes, replacing the former every-request publication policy as part of this owner caching request. Version replacement has a distinct URL. Static category-icons/illustrations/produce/promos use one-day revalidating Workers Assets headers. Vite intentionally keeps static development files no-cache. No private/admin media policy changed; caching is populated on demand, not a preload of every image.
+
+Evidence: nine focused helper/Product/promotion tests passed, including reuse, conditional requests, version isolation, expiry/removal and cache failures. Web typecheck, architecture/readiness guards and focused lint passed. Web build passed with existing notices. Command-line localhost media checks: first request 200/38830 bytes in 747ms, second cached 200 in 43ms, conditional request 304/zero bytes in 33ms, max-age=300 and Age observed. Built Wrangler preview on port 3013 parsed four header rules; category SVG, produce WebP and promotion PNG each returned 200/max-age=86400. Vite static responses remained no-cache as expected. These are local runtime checks, not deployed Cloudflare edge acceptance; no deployment or live business writes performed.
+
+CA-7.19 implementation complete. Remaining at this request level: authorized Web deployment and deployed edge-cache verification. Next action: deploy the verified Web change when authorized, then verify repeated image requests by HTTP. Earlier obligations remain below.
+
 ## Latest owner request — CA-7.18 enable department availability pages (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner enables Health and Alcohol links to availability pages like Retail/Pantry. Acceptance: both sidebar entries navigate to named unavailable-yet pages with return to groceries. Observed `main` at `9360b9cc`; preserve unrelated deployment/checkpoint changes and deletions. This supersedes prior disabled-department instructions.

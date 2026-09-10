@@ -2,6 +2,8 @@
 
 Runtime and context ownership guide. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
 
+Owner image-cache update (2026-09-10): Web caches successful anonymous versioned Product/promotion images for five minutes in browsers and a named Cloudflare Cache API cache. Core validates publication on each cache miss; version changes select a new URL. Removal/expiry may remain visible from cache for up to five minutes. Cache failures fall back to Core; errors are never stored. Static image directories use a one-day revalidating browser policy via Workers Assets `_headers`; Vite's static development server retains its development no-cache behavior.
+
 ## System Shape
 
 FreshMarkets is a single monorepo with two initial Cloudflare Worker deployments:

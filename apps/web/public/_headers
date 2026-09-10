@@ -1,0 +1,8 @@
+/category-icons/*
+  Cache-Control: public, max-age=86400, must-revalidate
+/illustrations/*
+  Cache-Control: public, max-age=86400, must-revalidate
+/produce/*
+  Cache-Control: public, max-age=86400, must-revalidate
+/promos/*
+  Cache-Control: public, max-age=86400, must-revalidate

@@ -4,7 +4,7 @@ vi.mock("cloudflare:workers", () => ({ env: { CORE: core } }));
 import { GET } from "@/app/media/promotions/[media-id]/[version]/route";
 const context = { params: Promise.resolve({ "media-id": "image-1", version: "1" }) };
 beforeEach(() => core.getPublishedPromotionMedia.mockReset());
-it("revalidates publication through Core before honoring an ETag", async () => {
+it("checks Core on cache misses before honoring an ETag", async () => {
   core.getPublishedPromotionMedia.mockResolvedValue({
     ok: true,
     requestId: "r",
@@ -15,7 +15,7 @@ it("revalidates publication through Core before honoring an ETag", async () => {
   });
   const cached = await GET(request, context);
   expect(cached.status).toBe(304);
-  expect(cached.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+  expect(cached.headers.get("cache-control")).toBe("public, max-age=300, must-revalidate");
   expect(cached.headers.get("x-content-type-options")).toBe("nosniff");
   core.getPublishedPromotionMedia.mockResolvedValue({ ok: false, error: { code: "NOT_FOUND" } });
   const removed = await GET(request, context);

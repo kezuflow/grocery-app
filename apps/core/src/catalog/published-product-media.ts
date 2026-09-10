@@ -37,7 +37,7 @@ export function publishedProductMediaView(raw: string | null): CatalogMedia | nu
   }
 }
 
-/** Publication is checked on every read, including conditional requests at Web. */
+/** Publication is checked on every Core read; Web may reuse public bytes for five minutes. */
 export async function getPublishedProductMedia(
   db: D1Database,
   bucket: R2Bucket,
