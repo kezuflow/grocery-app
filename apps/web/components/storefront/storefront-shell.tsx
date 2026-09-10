@@ -55,13 +55,6 @@ export function StorefrontHeader() {
           </div>
         </form>
         <DeliveryAddressDialog />
-        <Link
-          href="/account"
-          className="hidden rounded-[var(--fm-radius-control)] p-2 hover:bg-[var(--fm-hover)] sm:inline-flex"
-          aria-label="Account"
-        >
-          <UserRound className="size-5" aria-hidden="true" />
-        </Link>
         <CartIndicator />
       </div>
       <div className="border-t border-[var(--fm-border)] px-4 py-2 md:hidden">

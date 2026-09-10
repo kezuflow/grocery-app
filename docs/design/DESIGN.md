@@ -69,6 +69,8 @@ Order detail uses immutable number/date/items/financial/address/promise snapshot
 
 ## Storefront visual language
 
+Owner correction, 2026-09-10: Account remains in the desktop sidebar and mobile bottom navigation; remove the duplicate account icon beside the header cart. Mobbin's [DoorDash web Account flow](https://mobbin.com/flows/fbfed5fc-e0f2-499a-ab01-530425a50e64) shows the sidebar entry opening an account menu and settings. This reference supports the entry placement only; it does not authorize additional account features or copying DoorDash assets.
+
 Retain the existing original storefront visual language; archived reference research is evidence, not a redesign mandate. Desktop uses a sticky white wordmark/search/address/cart header, a narrow navigation rail and right-side cart sheet that preserves browsing. Home flow is address/service context, search, categories, restrained promotion modules, product/seasonal rails. Mobile has a compact sticky header, full-screen search, horizontal rails, two-column product grids where media remains clear, Home/Shop/Orders/Account navigation and tall/full-screen cart with sticky checkout. Touch targets are at least 44px.
 
 Storefront CSS variables retain the sourced baseline: background `#FFFFFF`, soft surface `#F7F8F3`, lime `#B7F34A`, dark brand `#1F3D24`, text `#191919`, muted `#6B6B67`, border `#E8E9E3`, success `#238636`, danger `#D92D20`. Existing tokens, not repeated literals, own these values; Admin remains independent.
