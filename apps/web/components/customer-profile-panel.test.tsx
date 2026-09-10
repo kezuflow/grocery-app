@@ -6,7 +6,7 @@ import { CustomerProfilePanel } from "./customer-profile-panel";
 vi.mock("../lib/auth/auth-client", () => ({ authClient: {} }));
 it("formats typing without a save and removes the language control", async () => {
   const host = document.createElement("div");
-  document.body.append(host);
+  document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () =>
     root.render(
