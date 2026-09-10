@@ -30,9 +30,8 @@ export default async function CustomerProfilePage() {
                 <h2>Account details</h2>
                 <Link href="/auth/forgot-password">Reset password</Link>
               </header>
-              <div className="fm-account-form">
+              <div className="fm-account-form fm-profile-columns">
                 <CustomerNamePanel />
-                <div className="my-6 border-t border-[var(--fm-border)]" />
                 <CustomerProfilePanel initial={result.value} />
               </div>
             </section>

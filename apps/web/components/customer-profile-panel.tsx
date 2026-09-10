@@ -86,7 +86,7 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
     >
       <fieldset disabled={busy || uncertain} className="space-y-5">
         <div className="space-y-2">
-          <label htmlFor="account-phone">Phone</label>
+          <label htmlFor="account-phone">Phone Number</label>
           <Input
             id="account-phone"
             type="tel"
@@ -172,19 +172,31 @@ export function CustomerNamePanel() {
         }
       }}
     >
-      <label className="block" htmlFor="account-name">
-        Your name
-      </label>
-      <Input
-        id="account-name"
-        autoComplete="name"
-        required
-        maxLength={100}
-        value={name ?? data.user.name}
-        disabled={busy || isPending}
-        onChange={(event) => setName(event.target.value)}
-      />
-      <p className="text-sm">Sign-in email: {data.user.email}</p>
+      <div className="space-y-2">
+        <label htmlFor="account-name">Name</label>
+        <Input
+          id="account-name"
+          autoComplete="name"
+          required
+          maxLength={100}
+          value={name ?? data.user.name}
+          disabled={busy || isPending}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="account-email" className="block">
+          Email
+        </label>
+        <Input
+          id="account-email"
+          type="email"
+          autoComplete="email"
+          value={data.user.email}
+          readOnly
+          aria-readonly="true"
+        />
+      </div>
       <Button type="submit" disabled={busy || isPending}>
         {busy ? "Saving name…" : "Save name"}
       </Button>

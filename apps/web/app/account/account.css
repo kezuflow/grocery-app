@@ -155,3 +155,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+.fm-profile-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  align-items: start;
+}
+.fm-profile-columns fieldset {
+  grid-template-columns: 1fr;
+}
+.fm-profile-columns input[readonly] {
+  color: var(--fm-text-muted);
+  cursor: default;
+}
+@media (max-width: 640px) {
+  .fm-profile-columns {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}

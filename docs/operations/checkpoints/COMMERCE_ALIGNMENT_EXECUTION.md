@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.31 profile field arrangement (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `db5f14bf`. Owner requests Name and Phone Number side by side with a read-only Email input below Name. Renamed labels, added labeled read-only email from the auth session and arranged the existing independent forms in two columns with a mobile stack. No profile writes or auth changes. Preserved unrelated working-tree state.
+
+Verification: Web typecheck and focused formatting/lint passed. In-app DOM geometry confirmed Name/Phone Number aligned, Email below Name, and email readOnly true; no field values recorded. CA-7.31 complete. Next action: owner review on localhost; earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.30 unified profile and phone formatting (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `57c9ceb5`. Owner supplied exact DoorDash updating-profile flow, requested one panel and Phone formatting, clarified no SMS, then requested live spacing and removal of Preferred language. Preserve unrelated dirty state.
