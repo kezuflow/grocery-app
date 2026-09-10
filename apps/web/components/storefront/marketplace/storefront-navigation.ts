@@ -1,4 +1,6 @@
 import {
+  CookingPot,
+  Fish,
   ClipboardList,
   HeartPulse,
   Home,
@@ -27,6 +29,8 @@ export const storefrontNavigation: ReadonlyArray<StorefrontNavigationItem> = [
     tone: "groceries",
   },
   { label: "Retail", href: "/retail", icon: ShoppingBag, tone: "retail" },
+  { label: "Pantry", href: "/pantry", icon: CookingPot, tone: "pantry" },
+  { label: "Meat & Seafood", href: "/meat-seafood", icon: Fish, tone: "meat-seafood" },
   { label: "Health", disabled: true, icon: HeartPulse, tone: "health" },
   { label: "Alcohol", disabled: true, icon: Wine, tone: "alcohol" },
   { label: "Deals", href: "/#daily-deals", icon: Tag, tone: "deals" },

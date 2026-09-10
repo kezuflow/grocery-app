@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.17 Pantry and Meat & Seafood (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner adds Pantry and Meat & Seafood to the sidebar. Acceptance: both entries open named availability pages like Retail; Health/Alcohol remain disabled and produce shortcuts remain excluded. Observed `main` at `7e585ba8`; preserve unrelated deployment/checkpoint edits and deletions.
+
+Implemented the two sidebar links/icons and availability pages with return to groceries; no catalog writes, auth changes or deployments. Web typecheck, two focused navigation tests and focused lint passed. Browser verified Pantry and sidebar navigation to Meat & Seafood at 1280x850; both destinations render the intended availability state. Web build, naming and diff checks passed with existing build notices. CA-7.17 source scope complete; remaining release action is authorized Web deployment. Catalog stocking is not part of this navigation request. Next action: deploy verified navigation when authorized; earlier obligations remain below.
+
 ## Latest owner request — CA-7.16 sidebar categories (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner initially requested produce shortcuts, then explicitly removed them: only Retail, Health and Alcohol are added to the original sidebar. Acceptance: no produce shortcuts in the sidebar; Health/Alcohol have no destination and native disabled behavior; Retail has an honest availability destination. This is the current request; earlier remaining obligations are preserved below.

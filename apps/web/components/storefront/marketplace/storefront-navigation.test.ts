@@ -12,6 +12,8 @@ describe("storefront navigation metadata", () => {
       "Home",
       "All groceries",
       "Retail",
+      "Pantry",
+      "Meat & Seafood",
       "Health",
       "Alcohol",
       "Deals",
