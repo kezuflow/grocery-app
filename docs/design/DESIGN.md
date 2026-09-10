@@ -85,6 +85,8 @@ Use the licensed self-hosted Helvena family for storefront: Regular body, Medium
 
 Functional icons use Lucide with accessible labels/tooltips. Category illustration is a separate original FreshMarkets asset boundary; Core owns category taxonomy. Use stable-dimension placeholders where needed, never reference screenshots/artwork as production assets.
 
+Owner-approved login direction, 2026-09-10: adapt the supplied Tana sign-in reference as a centered, shadow-free rounded card with FreshMarkets branding and heading above it. Keep email and password together, followed by the primary sign-in action, OR divider, outlined Google sign-in, recovery and registration links. Use existing auth behavior and storefront tokens; do not add unsupported providers or an email-first step.
+
 ## States, accessibility and verification
 
 Every changed surface needs appropriate loading skeleton, empty/filtered-empty, denied, unavailable, error with safe request reference, stale/conflict, pending and terminal-result states. Labels/icons supplement color. Preserve row identity/actions when tables become cards or scroll; tablet/mobile keep actions reachable. Use semantic headings/tables/labels/error associations, visible focus, keyboard menus/dialogs, focus return, live status announcements, contrast and reduced-motion behavior.

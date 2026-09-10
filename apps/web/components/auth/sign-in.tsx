@@ -38,6 +38,7 @@ export type SignInProps = {
   className?: string;
   socialLayout?: SocialLayout;
   socialPosition?: "top" | "bottom";
+  hideTitle?: boolean;
 };
 
 /**
@@ -48,7 +49,12 @@ export type SignInProps = {
  * @param socialPosition - Position of social provider buttons; `"top"` or `"bottom"`. Defaults to `"bottom"`.
  * @returns The rendered sign-in UI as a JSX element
  */
-export function SignIn({ className, socialLayout, socialPosition = "bottom" }: SignInProps) {
+export function SignIn({
+  className,
+  socialLayout,
+  socialPosition = "bottom",
+  hideTitle = false,
+}: SignInProps) {
   const {
     authClient,
     basePaths,
@@ -121,9 +127,11 @@ export function SignIn({ className, socialLayout, socialPosition = "bottom" }: S
   return (
     <Card className={cn("w-full max-w-sm", className)}>
       <AuthPrompts view="signIn" />
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold">{localization.auth.signIn}</CardTitle>
-      </CardHeader>
+      {!hideTitle && (
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">{localization.auth.signIn}</CardTitle>
+        </CardHeader>
+      )}
 
       <CardContent>
         <div className="flex flex-col gap-6">

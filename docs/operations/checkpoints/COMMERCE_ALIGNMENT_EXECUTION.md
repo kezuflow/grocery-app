@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.28 branded login presentation (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner approved the supplied Tana reference with email/password together. Main at `2fee2c7b`; preserved unrelated config, generated types, archived-document deletions and checkpoint edits. Acceptance: centered branded login card, existing Google and email/password flow, responsive width and accessible controls.
+
+Added a page-scoped responsive layout, FreshMarkets home wordmark, external h1, shadow-free rounded card, larger controls and existing recovery/registration links. SignIn supports hiding its internal title for this page; other consumers keep their existing title. Updated DESIGN with the approved direction. No provider/backend change.
+
+Verification: Web typecheck, focused oxfmt/oxlint passed. In-app browser refresh showed the new heading and all auth controls, a 448px card without shadow or horizontal overflow at 1220px, and retained email/current-password autocomplete. Password visibility toggled. One submit entered pending and returned to the login form; no successful authentication or required-field validation acceptance claimed. Mobile media rules inspected but no emulated mobile browser evidence. CA-7.28 presentation complete; next action: owner review on localhost and complete a real sign-in if desired. Earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.27 local Google OAuth secret loading (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner supplied local Google credentials and requested continuation of setup. Main at `93b071c9`; preserve unrelated staging configuration, generated types and checkpoint edits. Acceptance: local auth initiation loads supplied credentials and constructs the localhost callback; full Google login remains separate provider acceptance.

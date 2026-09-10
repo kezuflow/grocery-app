@@ -1,6 +1,8 @@
 import { FreshMarketsAuthProvider } from "../../../components/auth/freshmarkets-auth-provider";
 import { SignIn } from "../../../components/auth/sign-in";
 import { resolveAuthRedirectPath } from "../../../lib/auth/redirect";
+import Link from "next/link";
+import "./login.css";
 
 export default async function LoginPage({
   searchParams,
@@ -14,10 +16,23 @@ export default async function LoginPage({
   const redirectTo = resolveAuthRedirectPath(params.redirectTo ?? params.returnTo);
 
   return (
-    <main className="fm-storefront flex min-h-screen items-center justify-center bg-[var(--fm-surface-soft)] px-4 py-10">
-      <FreshMarketsAuthProvider redirectTo={redirectTo}>
-        <SignIn socialLayout="vertical" socialPosition="bottom" />
-      </FreshMarketsAuthProvider>
+    <main className="fm-storefront fm-login-page">
+      <div className="fm-login-content">
+        <header className="fm-login-heading">
+          <Link href="/" className="fm-login-brand" aria-label="FreshMarkets home">
+            FreshMarkets<span aria-hidden="true">.</span>
+          </Link>
+          <h1>Sign in to FreshMarkets</h1>
+        </header>
+        <FreshMarketsAuthProvider redirectTo={redirectTo}>
+          <SignIn
+            className="fm-login-card"
+            hideTitle
+            socialLayout="vertical"
+            socialPosition="bottom"
+          />
+        </FreshMarketsAuthProvider>
+      </div>
     </main>
   );
 }
