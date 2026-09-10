@@ -126,7 +126,7 @@
         {
           "binding": "DB",
           "database_name": "freshmarkets-core-staging",
-          "database_id": "989a3663-0d73-4f58-a58d-012ab02843a5",
+          "database_id": "48aaa957-2be1-4883-9998-5321a49d2825",
           "migrations_dir": "migrations",
         },
       ],

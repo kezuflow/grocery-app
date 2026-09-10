@@ -88,6 +88,8 @@ Web communicates with Core through a Cloudflare Service Binding and typed RPC me
 
 Local vinext development runs Core as a Cloudflare Vite auxiliary Worker so Web and Core share one local runtime and the typed RPC binding remains valid across program reloads. This is a development topology only; Web and Core remain separate deployments.
 
+The owner's default `pnpm dev` connects that local Core to freshmarkets.ph's staging D1, R2 and Email bindings and reads both Workers' staging variables. Browser origin/auth remain localhost with a private local signing secret. Deployed Core alone schedules shared outbox publication and consumes notifications; local dev has no cron or queue bindings. `FRESHMARKETS_DEV_DATA=local` restores isolated local storage. Build and explicitly selected Wrangler environments retain their own configurations. Shared dev writes affect the deployed site's data; provider/OAuth secrets must be supplied locally rather than inferred from remote bindings.
+
 Rules:
 
 - Do not add CORS or public API authentication between Web and Core.
