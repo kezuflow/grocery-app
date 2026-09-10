@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.33 account popup controls (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `796ca3e6`. Removed the profile Back to account link, popup close X and profile chevron. Added existing Staff invitation destination to the popup and matching icons for Reset password, Staff invitation, Help and support, and Sign out. Existing popover dismissal behavior retained. Preserved unrelated work.
+
+Verification: focused oxfmt/oxlint and Web typecheck passed; in-app popup opened and DOM inspection confirmed the four icon-bearing actions and removed controls. No sign-out or outbound action executed. CA-7.33 complete. Next action: owner review on localhost; prior Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.32 single profile Save (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `71019235`. Owner requests one Save button. Combined name, read-only email, phone and promotional preference into one form with one submit action. Name remains owned by Better Auth and contact/preferences by the existing Core command. The UI sequences writes, reports partial failure explicitly, and retains the same contact idempotency key/body on uncertain retries without repeating a confirmed name write. No atomic cross-service guarantee is claimed. Preserved unrelated changes.

@@ -16,9 +16,6 @@ export default async function CustomerProfilePage() {
   return (
     <StorefrontShell>
       <div className="fm-account-page">
-        <Link href="/account" className="fm-account-back">
-          ← Back to account
-        </Link>
         <header className="fm-account-heading">
           <h1>Profile</h1>
           <p>Manage your account details and preferences.</p>

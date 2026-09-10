@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, MapPin, ShoppingBag, UserRound, X } from "lucide-react";
+import {
+  BadgeCheck,
+  Headphones,
+  KeyRound,
+  LogOut,
+  MapPin,
+  ShoppingBag,
+  UserRound,
+} from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { authClient } from "../../../lib/auth/auth-client";
 
@@ -29,16 +37,8 @@ export function AccountPopover({ mobile = false }: { mobile?: boolean }) {
         className="fm-storefront w-80 max-w-[calc(100vw-24px)] overflow-y-auto rounded-[var(--fm-radius-overlay)] border-[var(--fm-border)] bg-white p-0 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
         style={{ maxHeight: "var(--radix-popover-content-available-height)" }}
       >
-        <div className="flex items-center justify-between px-4 pt-2">
+        <div className="px-4 pt-4 pb-2">
           <h2 className="text-base font-bold">Account</h2>
-          <button
-            type="button"
-            aria-label="Close account"
-            onClick={() => setOpen(false)}
-            className="flex size-11 items-center justify-center rounded-full hover:bg-[var(--fm-hover)]"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
         </div>
         {open && <AccountContents onNavigate={() => setOpen(false)} />}
       </PopoverContent>
@@ -85,7 +85,6 @@ function AccountContents({ onNavigate }: { onNavigate: () => void }) {
               {session?.user ? "View profile" : "Sign in or create an account"}
             </span>
           </span>
-          <ChevronRight className="size-4" aria-hidden="true" />
         </Link>
       )}
       <nav
@@ -112,16 +111,23 @@ function AccountContents({ onNavigate }: { onNavigate: () => void }) {
           Account details
         </Link>
         <Link href="/auth/forgot-password" className={row}>
+          <KeyRound className="size-4" aria-hidden="true" />
           Reset password
+        </Link>
+        <Link href="/staff-invitation" className={row}>
+          <BadgeCheck className="size-4" aria-hidden="true" />
+          Staff invitation
         </Link>
         <Link href="/account" className={row}>
           All account options
         </Link>
         <a href="mailto:support@freshmarkets.ph" className={row}>
+          <Headphones className="size-4" aria-hidden="true" />
           Help and support
         </a>
         {!isPending && !error && session?.user && (
           <Link href="/auth/logout" prefetch={false} className={row}>
+            <LogOut className="size-4" aria-hidden="true" />
             Sign out
           </Link>
         )}
