@@ -51,6 +51,31 @@ describe("catalog read models (integration)", () => {
       detail?.product.variants.every((variant) => variant.availability === "LOCATION_REQUIRED"),
     ).toBe(true);
   });
+  it("loads location-aware details with one context query and one hydration batch", async () => {
+    const direct: string[] = [];
+    const batches: D1PreparedStatement[][] = [];
+    function batch<T>(statements: D1PreparedStatement[]) {
+      batches.push(statements);
+      return env.DB.batch<T>(statements);
+    }
+    const detail = await getProduct(
+      {
+        prepare(query) {
+          direct.push(query);
+          return env.DB.prepare(query);
+        },
+        batch,
+      },
+      "red-onion",
+      LOCATION_ID,
+    );
+    expect(detail?.deliveryContext.locationAware).toBe(true);
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(10);
+    expect(direct).toHaveLength(11);
+    expect(direct.filter((query) => query.includes("promotion_product_target"))).toHaveLength(1);
+    expect(detail?.product.variants.length).toBeGreaterThan(0);
+  });
   it("keeps general browsing visible without inventing a location, price or stock availability", async () => {
     const detail = await getProduct(db(), "red-onion");
     expect(detail?.product.variants.length).toBeGreaterThan(0);

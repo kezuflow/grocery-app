@@ -10,6 +10,8 @@ import {
   quantityForSku,
   clearGuestCart,
   cartLoadError,
+  refreshCartForLocation,
+  cachedCart,
 } from "./cart-client";
 
 // Location-command behavior is exercised separately against its real fetch sequence.
@@ -136,7 +138,7 @@ describe("addToCart", () => {
       "fetch",
       vi.fn(async () => response({ ok: true, value: view() })),
     );
-    expect(await addToCart("sku-a", 3)).toEqual({ ok: true, count: 3 });
+    expect(await addToCart("sku-a", 3)).toEqual({ ok: true, view: view(), count: 3 });
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch.mock.calls[0]?.[0].type).toBe(CART_CHANGED_EVENT);
   });
@@ -149,7 +151,7 @@ describe("addToCart", () => {
     );
     expect(
       await addToCart("sku-a", 1, { name: "Avocado", unitPriceMinor: 9450, currency: "PHP" }),
-    ).toEqual({ ok: true, count: 1, requiresSignIn: true });
+    ).toMatchObject({ ok: true, view: { id: "guest-cart" }, count: 1, requiresSignIn: true });
     const first = JSON.parse(saved.get(guestKey)!);
     expect(first.items[0].skuId).toBe("sku-a");
     await addToCart("sku-a", 2, { name: "Avocado", unitPriceMinor: 9450, currency: "PHP" });
@@ -275,4 +277,31 @@ describe("fetchCart", () => {
     expect(await addToCart("sku-a", 0)).toMatchObject({ ok: true, count: 0 });
     expect(saved.has(guestKey)).toBe(false);
   });
+});
+
+it("discards an old location read and serializes the fresh cart behind it", async () => {
+  let finish: (response: Response) => void = () => {};
+  const fetcher = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(response({ ok: true, value: view({ locationId: "location-2" }) }));
+  vi.stubGlobal("fetch", fetcher);
+  const old = fetchCart();
+  await Promise.resolve();
+  const refreshed = refreshCartForLocation();
+  expect(cachedCart()).toBeNull();
+  expect(fetchCart()).toBe(refreshed);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  finish(response({ ok: true, value: view() }));
+  expect(await old).toBeNull();
+  expect((await refreshed)?.locationId).toBe("location-2");
+  expect(cachedCart()?.locationId).toBe("location-2");
+  const published = dispatch.mock.calls.map(([event]) => event.detail.view).filter(Boolean);
+  expect(published).toHaveLength(1);
+  expect(published[0].locationId).toBe("location-2");
 });

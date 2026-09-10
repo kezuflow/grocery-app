@@ -1,3 +1,8 @@
+import { Suspense } from "react";
+import { env } from "cloudflare:workers";
+import { coreClient } from "../../../lib/core-client/core";
+import { readBrowsingLocation } from "../../../lib/storefront/read-browsing-location";
+import { withReadDeadline } from "../../../lib/http/read-deadline";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { ProductView } from "./product-view";
@@ -16,9 +21,29 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           Back to groceries
         </Link>
         <div className="mt-5">
-          <ProductView slug={slug} />
+          <Suspense fallback={<p role="status">Loading product…</p>}>
+            <ProductDetails slug={slug} />
+          </Suspense>
         </div>
       </div>
     </StorefrontShell>
   );
+}
+
+async function ProductDetails({ slug }: { slug: string }) {
+  try {
+    const result = await withReadDeadline(
+      (async () => {
+        const locationId = await readBrowsingLocation();
+        return coreClient(env.CORE).getCatalogProduct({
+          requestId: crypto.randomUUID(),
+          slug,
+          locationId,
+        });
+      })(),
+    );
+    return <ProductView key={slug} view={result.ok ? result.value : null} />;
+  } catch {
+    return <ProductView key={slug} view={null} />;
+  }
 }

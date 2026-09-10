@@ -44,6 +44,7 @@ afterEach(() => {
   document.body.replaceChildren();
   Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
   Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -76,4 +77,20 @@ it("does not reopen a closed dialog when an aborted request completes late", asy
   await render(null);
   await act(async () => resolve(Response.json({ ok: false })));
   expect(document.querySelector("dialog")?.open).toBe(false);
+});
+
+it("ends a hung read and retries only when requested", async () => {
+  vi.useFakeTimers();
+  await render("abiu");
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
+  expect(fetch).toHaveBeenCalledTimes(1);
+  const retry = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Try again",
+  );
+  expect(retry).toBeDefined();
+  await act(async () => retry?.click());
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(document.querySelector('[aria-label="Loading product"]')).not.toBeNull();
+  await act(async () => resolve(Response.json({ ok: false })));
 });

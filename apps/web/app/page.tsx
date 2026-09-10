@@ -1,3 +1,6 @@
+import { RetryReadButton } from "../components/storefront/retry-read-button";
+import { Suspense } from "react";
+import { withReadDeadline } from "../lib/http/read-deadline";
 import { env } from "cloudflare:workers";
 import { coreClient } from "../lib/core-client/core";
 import { StorefrontShell } from "../components/storefront/storefront-shell";
@@ -19,6 +22,7 @@ function CatalogError() {
         <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
           The catalog is temporarily unavailable. Please try again in a moment.
         </p>
+        <RetryReadButton />
       </div>
     </div>
   );
@@ -31,7 +35,7 @@ function CatalogError() {
  * truncated list. Subsequent result pages load progressively through the
  * CatalogResults boundary.
  */
-export default async function MarketplaceHome({
+async function MarketplaceContents({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; category?: string }>;
@@ -42,20 +46,19 @@ export default async function MarketplaceHome({
   const browsing = category === "all" && query === "";
   const requestId = crypto.randomUUID();
   const client = coreClient(env.CORE);
-  const locationId = await readBrowsingLocation();
+  const location = readBrowsingLocation();
 
   if (browsing) {
     const [home, campaigns] = await Promise.all([
-      client.getMarketplaceHome({ requestId, itemsPerRail: 12, locationId }),
+      location.then((locationId) =>
+        client.getMarketplaceHome({ requestId, itemsPerRail: 12, locationId }),
+      ),
       client.listPublishedPromotionCampaigns({ requestId: crypto.randomUUID() }),
     ]);
     if (!home.ok) {
-      return (
-        <StorefrontShell>
-          <CatalogError />
-        </StorefrontShell>
-      );
+      return <CatalogError />;
     }
+    const locationId = await location;
     const rails = home.value.rails.map((rail) => ({
       slug: rail.categorySlug,
       name: rail.title,
@@ -64,8 +67,8 @@ export default async function MarketplaceHome({
     const providerProducts = rails.flatMap((rail) => rail.products);
 
     return (
-      <StorefrontShell>
-        <QuickViewProvider products={providerProducts}>
+      <>
+        <QuickViewProvider key={locationId ?? "anonymous"} products={providerProducts}>
           <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
             <CategoryStrip
               categories={home.value.categories}
@@ -81,10 +84,11 @@ export default async function MarketplaceHome({
                   Offers are temporarily unavailable.
                 </p>
               )}
-              {rails.map((rail) => (
+              {rails.map((rail, index) => (
                 <ProductRail
                   key={rail.slug}
                   title={rail.name}
+                  priority={index === 0}
                   href={`/?category=${rail.slug}`}
                   products={rail.products}
                 />
@@ -92,36 +96,38 @@ export default async function MarketplaceHome({
             </div>
           </div>
         </QuickViewProvider>
-      </StorefrontShell>
+      </>
     );
   }
 
   const [results, categories] = await Promise.all([
-    client.searchCatalog({
-      requestId,
-      query: query || undefined,
-      categorySlug: category === "all" ? undefined : category,
-      limit: PAGE_SIZE,
-      locationId,
-    }),
+    location.then((locationId) =>
+      client.searchCatalog({
+        requestId,
+        query: query || undefined,
+        categorySlug: category === "all" ? undefined : category,
+        limit: PAGE_SIZE,
+        locationId,
+      }),
+    ),
     client.listCategories({ requestId: crypto.randomUUID() }),
   ]);
 
   if (!results.ok) {
-    return (
-      <StorefrontShell>
-        <CatalogError />
-      </StorefrontShell>
-    );
+    return <CatalogError />;
   }
 
+  const locationId = await location;
   const firstPage = toPresentationProducts(results.value.items);
   const categoryLinks = categories.ok ? categories.value.categories : [];
   const activeCategory = categoryLinks.find((entry) => entry.slug === category);
 
   return (
-    <StorefrontShell>
-      <QuickViewProvider products={firstPage}>
+    <>
+      <QuickViewProvider
+        key={`${query}:${category}:${locationId ?? "anonymous"}`}
+        products={firstPage}
+      >
         <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
           <CategoryStrip
             categories={categoryLinks}
@@ -154,6 +160,30 @@ export default async function MarketplaceHome({
           </div>
         </div>
       </QuickViewProvider>
+    </>
+  );
+}
+
+type HomeProps = { searchParams: Promise<{ q?: string; category?: string }> };
+async function CatalogContent(props: HomeProps) {
+  try {
+    return await withReadDeadline(MarketplaceContents(props));
+  } catch {
+    return <CatalogError />;
+  }
+}
+export default function MarketplaceHome(props: HomeProps) {
+  return (
+    <StorefrontShell>
+      <Suspense
+        fallback={
+          <p role="status" className="p-8">
+            Loading groceries…
+          </p>
+        }
+      >
+        <CatalogContent {...props} />
+      </Suspense>
     </StorefrontShell>
   );
 }

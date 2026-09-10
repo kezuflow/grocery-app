@@ -6,8 +6,10 @@ import type { CartView } from "@freshmarkets/contracts";
 import { ProductMedia } from "../product-media";
 import {
   CART_DRAWER_REQUEST_EVENT,
+  CART_CHANGED_EVENT,
   addToCart,
   fetchCart,
+  cartLoadError,
 } from "../../../lib/storefront/cart-client";
 import { OrderSummary } from "./order-summary";
 import { CheckoutAuthDialog } from "./checkout-auth-dialog";
@@ -30,7 +32,7 @@ export function CartDrawer() {
       void fetchCart()
         .then((next) => {
           setCart(next);
-          setError("");
+          setError(cartLoadError());
         })
         .catch(() => setError("Your cart could not be loaded right now."))
         .finally(() => setLoading(false));
@@ -57,10 +59,19 @@ export function CartDrawer() {
       setError(result.message);
       return;
     }
-    const next = await fetchCart();
-    setCart(next);
+    setCart(result.view);
     setError("");
   }
+
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const { view } = (event as CustomEvent<{ view: CartView | null }>).detail;
+      setCart(view);
+      setError(cartLoadError());
+    };
+    window.addEventListener(CART_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(CART_CHANGED_EVENT, changed);
+  }, []);
 
   const guest = cart?.id === "guest-cart";
   const hasItems = Boolean(cart?.items.length);
@@ -110,6 +121,13 @@ export function CartDrawer() {
                 className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-danger-soft)] p-4 text-sm text-[var(--fm-destructive)]"
               >
                 {error}
+                <button
+                  type="button"
+                  className="ml-3 min-h-11 underline"
+                  onClick={() => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT))}
+                >
+                  Retry loading cart
+                </button>
               </div>
             ) : !hasItems ? (
               <div className="flex min-h-64 flex-col items-center justify-center text-center">

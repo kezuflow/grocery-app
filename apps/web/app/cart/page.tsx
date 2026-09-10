@@ -4,6 +4,7 @@ import { ShoppingBasket } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CartView } from "@freshmarkets/contracts";
 import {
+  CART_CHANGED_EVENT,
   addToCart,
   cartCountFromView,
   fetchCart,
@@ -47,8 +48,18 @@ export default function CartPage() {
       return;
     }
     setError("");
-    await load();
+    setCart(result.view);
   }
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const { view } = (event as CustomEvent<{ view: CartView | null }>).detail;
+      setCart(view);
+      setError(cartLoadError());
+    };
+    window.addEventListener(CART_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(CART_CHANGED_EVENT, changed);
+  }, []);
+
   const guest = cart?.id === "guest-cart";
   const count = cart ? cartCountFromView(cart) : 0;
   const canCheckout = Boolean(cart?.items.length) && !cart?.checkoutBlocked;

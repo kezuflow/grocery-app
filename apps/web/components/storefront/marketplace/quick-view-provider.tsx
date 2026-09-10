@@ -1,21 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { PresentationProduct } from "../../../lib/storefront/catalog-presentation";
+import { QuickViewContext } from "./quick-view-context";
 import { ProductQuickView } from "./product-quick-view";
-
-type QuickViewContextValue = {
-  openProduct: (slug: string) => void;
-};
-
-const QuickViewContext = createContext<QuickViewContextValue | null>(null);
-
-export function useQuickView(): QuickViewContextValue {
-  const context = useContext(QuickViewContext);
-  if (!context) throw new Error("useQuickView requires QuickViewProvider");
-  return context;
-}
 
 /**
  * Wraps a marketplace surface with a single lazy product dialog. Receives the

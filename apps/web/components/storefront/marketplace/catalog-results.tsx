@@ -1,5 +1,6 @@
 "use client";
 
+import { readJson } from "../../../lib/http/read-deadline";
 import { useCallback, useState } from "react";
 import type { CatalogProduct, CatalogSearchPage } from "@freshmarkets/contracts";
 import {
@@ -47,10 +48,9 @@ export function CatalogResults({
       if (locationId) params.set("locationId", locationId);
       params.set("cursor", cursor);
       params.set("limit", "24");
-      const response = await fetch(`/api/catalog?${params.toString()}`);
-      const payload = (await response.json()) as
-        | { ok: true; value: CatalogSearchPage }
-        | { ok: false };
+      const payload = await readJson<{ ok: true; value: CatalogSearchPage } | { ok: false }>(
+        `/api/catalog?${params.toString()}`,
+      );
       if (!payload.ok) throw new Error("catalog request failed");
       const converted = toPresentationProducts(
         payload.value.items as ReadonlyArray<CatalogProduct>,

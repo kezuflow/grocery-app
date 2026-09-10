@@ -83,28 +83,34 @@ export async function readProductSaleTargets(
 
 /** Public catalog has no customer or basket facts. Only unconditional sales
  * can be advertised as a price; customer/minimum-purchase offers remain checkout decisions. */
-export async function readPublicProductSalePrices(
-  db: {
-    prepare(query: string): {
-      bind(...values: unknown[]): { all<T>(): Promise<{ results?: T[] }> };
-    };
-  },
+export type PublicProductSaleRow = {
+  skuId: string;
+  promotionId: string;
+  name: string;
+  benefitType: "ORDER_FIXED_DISCOUNT" | "ORDER_PERCENT_DISCOUNT";
+  discountMinor: number | null;
+  percent: number | null;
+  maximumDiscountMinor: number | null;
+  endsAt: number | null;
+  quantityLimit: number | null;
+  remainingQuantity: number | null;
+};
+
+/** A bounded product scope lets catalog batch sales with prices and stock. */
+export function preparePublicProductSales(
+  db: Pick<D1Database, "prepare">,
   input: {
     locationId: string;
-    fulfillmentMode: "INSTANT" | "SCHEDULED";
     at: number;
-    prices: readonly { skuId: string; priceMinor: number }[];
+    scope: { slug: string } | { productIds: readonly string[] };
   },
-): Promise<Map<string, NonNullable<CatalogVariant["sale"]>>> {
-  const prices = new Map(input.prices.map((price) => [price.skuId, price.priceMinor]));
-  const result = new Map<string, NonNullable<CatalogVariant["sale"]>>();
-  if (!prices.size) return result;
-  const rows = await db
+): D1PreparedStatement {
+  return db
     .prepare(`SELECT target.sku_id skuId,p.id promotionId,p.name,p.benefit_type benefitType,p.discount_minor discountMinor,p.percent,
     p.maximum_discount_minor maximumDiscountMinor,p.ends_at endsAt,target.quantity_limit quantityLimit,
     CASE WHEN target.remaining_quantity IS NULL THEN NULL ELSE MAX(0,target.remaining_quantity-${heldProductSaleQuantitySql}) END remainingQuantity
     FROM promotion_product_target target JOIN promotion p ON p.id=target.promotion_id
-    WHERE target.location_id=? AND target.sku_id IN (SELECT value FROM json_each(?))
+    WHERE target.location_id=? AND target.sku_id IN (SELECT s.id FROM sku s JOIN product product ON product.id=s.product_id WHERE ${"slug" in input.scope ? "product.slug=?" : "product.id IN (SELECT value FROM json_each(?))"})
       AND p.status='ACTIVE' AND p.automatic=1 AND p.starts_at<=? AND (p.ends_at IS NULL OR p.ends_at>?)
       AND p.minimum_minor=0 AND p.per_customer_usage_limit IS NULL
       AND NOT EXISTS (SELECT 1 FROM promotion_rule rule WHERE rule.promotion_id=p.id)
@@ -115,24 +121,23 @@ export async function readPublicProductSalePrices(
       null,
       null,
       input.locationId,
-      JSON.stringify([...prices.keys()]),
+      "slug" in input.scope ? input.scope.slug : JSON.stringify(input.scope.productIds),
       input.at,
       input.at,
-    )
-    .all<{
-      skuId: string;
-      promotionId: string;
-      name: string;
-      benefitType: "ORDER_FIXED_DISCOUNT" | "ORDER_PERCENT_DISCOUNT";
-      discountMinor: number | null;
-      percent: number | null;
-      maximumDiscountMinor: number | null;
-      endsAt: number | null;
-      quantityLimit: number | null;
-      remainingQuantity: number | null;
-    }>();
+    );
+}
+
+export function publicProductSalePrices(
+  rows: readonly PublicProductSaleRow[],
+  input: {
+    fulfillmentMode: "INSTANT" | "SCHEDULED";
+    prices: readonly { skuId: string; priceMinor: number }[];
+  },
+): Map<string, NonNullable<CatalogVariant["sale"]>> {
+  const prices = new Map(input.prices.map((price) => [price.skuId, price.priceMinor]));
+  const result = new Map<string, NonNullable<CatalogVariant["sale"]>>();
   const seen = new Set<string>();
-  for (const row of rows.results ?? []) {
+  for (const row of rows) {
     if (seen.has(row.skuId)) {
       result.delete(row.skuId);
       continue;
@@ -150,7 +155,8 @@ export async function readPublicProductSalePrices(
       maximumDiscountMinor: row.maximumDiscountMinor,
     };
     if (!isPromotionBenefitValid(benefit) || !benefit.type.startsWith("ORDER_")) continue;
-    const regularPrice = prices.get(row.skuId)!;
+    const regularPrice = prices.get(row.skuId);
+    if (regularPrice === undefined) continue;
     const discount = calculatePromotionDiscount(
       { benefit },
       { merchandiseSubtotalMinor: regularPrice, deliverySubtotalMinor: 0 },

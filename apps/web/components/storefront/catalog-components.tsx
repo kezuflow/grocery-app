@@ -8,7 +8,7 @@ import type { PresentationProduct } from "../../lib/storefront/catalog-presentat
 import { ProductMedia } from "./product-media";
 export { ProductMedia } from "./product-media";
 import { AddToCartButton } from "./marketplace/add-to-cart-button";
-import { useQuickView } from "./marketplace/quick-view-provider";
+import { useQuickView } from "./marketplace/quick-view-context";
 
 /**
  * Low-chrome product card: media tile, price, name, and a compact add control
@@ -16,7 +16,13 @@ import { useQuickView } from "./marketplace/quick-view-provider";
  * quick view and on the product page. The real href keeps deep links and no-JS
  * navigation working.
  */
-export function ProductCard({ product }: { product: PresentationProduct }) {
+export function ProductCard({
+  product,
+  priority = false,
+}: {
+  product: PresentationProduct;
+  priority?: boolean;
+}) {
   const quickView = useQuickView();
   const variant = product.defaultVariant;
   return (
@@ -32,7 +38,7 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
           aria-label={`${product.name} details`}
           className="block rounded-[var(--fm-radius-surface)] p-[7px] focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:outline-none"
         >
-          <ProductMedia media={product.media} name={product.name} />
+          <ProductMedia media={product.media} name={product.name} priority={priority} />
         </Link>
         {variant?.availability === "AVAILABLE" ? (
           <div className="absolute right-2 bottom-2">
@@ -72,8 +78,8 @@ export function ProductCard({ product }: { product: PresentationProduct }) {
 export function ProductGrid({ products }: { products: ReadonlyArray<PresentationProduct> }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-      {products.map((product) => (
-        <ProductCard key={product.id} product={product} />
+      {products.map((product, index) => (
+        <ProductCard key={product.id} product={product} priority={index < 4} />
       ))}
     </div>
   );
@@ -105,7 +111,9 @@ export function ProductRail({
   subtitle,
   href,
   products,
+  priority = false,
 }: {
+  priority?: boolean;
   title: string;
   subtitle?: string;
   href?: string;
@@ -188,8 +196,8 @@ export function ProductRail({
         ref={railRef}
         className="fm-scrollbar-none grid auto-cols-[144px] grid-flow-col gap-4 overflow-x-auto pb-2"
       >
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+        {products.map((product, index) => (
+          <ProductCard key={product.id} product={product} priority={priority && index < 4} />
         ))}
       </div>
     </section>

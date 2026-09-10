@@ -1,5 +1,6 @@
 "use client";
 
+import { readJson } from "../../../lib/http/read-deadline";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
@@ -34,6 +35,7 @@ export function ProductQuickView({
   const [loading, setLoading] = useState(false);
   const [variantId, setVariantId] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -49,13 +51,12 @@ export function ProductQuickView({
     setView(null);
     setLoading(true);
     if (dialog && !dialog.open) dialog.showModal();
-    void fetch(`/api/catalog/product?slug=${encodeURIComponent(slug)}`, {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("PRODUCT_LOAD_FAILED");
-        return response.json() as Promise<{ ok?: boolean; value?: MarketplaceProductView }>;
-      })
+    void readJson<{ ok?: boolean; value?: MarketplaceProductView }>(
+      `/api/catalog/product?slug=${encodeURIComponent(slug)}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then((result) => {
         if (controller.signal.aborted) return;
         const next = result.ok ? (result.value ?? null) : null;
@@ -71,7 +72,7 @@ export function ProductQuickView({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [slug]);
+  }, [slug, attempt]);
 
   const presentation = view ? toPresentationProduct(view.product) : null;
   const preview = products.find((product) => product.slug === slug);
@@ -169,6 +170,13 @@ export function ProductQuickView({
           <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
             This grocery could not be loaded.
           </p>
+          <button
+            type="button"
+            onClick={() => setAttempt((value) => value + 1)}
+            className="mt-3 min-h-11 px-4 underline"
+          >
+            Try again
+          </button>
           <button
             type="button"
             onClick={onClose}

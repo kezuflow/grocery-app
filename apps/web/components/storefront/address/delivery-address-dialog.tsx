@@ -2,7 +2,8 @@
 
 import { ChevronDown, MapPin, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { refreshCartForLocation } from "../../../lib/storefront/cart-client";
+import { usePathname, useRouter } from "next/navigation";
 import {
   browsingPointFromCookies,
   DELIVERY_LOCATION_REQUEST_EVENT,
@@ -39,6 +40,7 @@ function compactAddress(value: string): string {
 
 export function DeliveryAddressDialog() {
   const pathname = usePathname();
+  const router = useRouter();
   const { mapboxPublicAccessToken } = useStorefrontRuntime();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -72,7 +74,13 @@ export function DeliveryAddressDialog() {
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
+  function dismiss(): void {
+    sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
+    setOpen(false);
+  }
+
   function chooseAddress(next: ServiceabilitySelection): void {
+    const previous = browsingPointFromCookies(document.cookie);
     const browsingLocation = {
       displayAddress: next.displayAddress,
       coordinate: next.coordinate,
@@ -80,8 +88,14 @@ export function DeliveryAddressDialog() {
     localStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify(browsingLocation));
     rememberBrowsingPoint(next.coordinate);
     setSelection(browsingLocation);
-    setOpen(false);
-    window.location.reload();
+    dismiss();
+    if (
+      previous?.latitude !== next.coordinate.latitude ||
+      previous?.longitude !== next.coordinate.longitude
+    ) {
+      void refreshCartForLocation();
+      router.refresh();
+    }
   }
 
   return (
@@ -110,16 +124,13 @@ export function DeliveryAddressDialog() {
         <dialog
           ref={dialogRef}
           aria-label="Choose delivery address"
-          onClose={() => {
-            sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
-            setOpen(false);
-          }}
+          onClose={dismiss}
           onCancel={(event) => {
             event.preventDefault();
-            setOpen(false);
+            dismiss();
           }}
           onClick={(event) => {
-            if (event.target === dialogRef.current) setOpen(false);
+            if (event.target === dialogRef.current) dismiss();
           }}
           className="m-auto w-[calc(100%-1.5rem)] max-w-4xl overflow-visible bg-transparent p-0 shadow-none backdrop:bg-black/45"
         >
@@ -133,7 +144,7 @@ export function DeliveryAddressDialog() {
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={dismiss}
                 aria-label="Close delivery address"
                 className="inline-flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
               >
@@ -143,10 +154,7 @@ export function DeliveryAddressDialog() {
             <div className="p-5 sm:p-6">
               <button
                 type="button"
-                onClick={() => {
-                  sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
-                  setOpen(false);
-                }}
+                onClick={dismiss}
                 className="mb-4 min-h-11 text-sm font-semibold underline"
               >
                 Skip for now — browse groceries

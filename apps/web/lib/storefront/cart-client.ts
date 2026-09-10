@@ -1,4 +1,5 @@
 import type { CartView, CatalogMedia, RpcResult, GuestCartMerge } from "@freshmarkets/contracts";
+import { readJson } from "../http/read-deadline";
 import { z } from "@freshmarkets/validation";
 import { loadCartForLocation, requestDeliveryLocation } from "./load-cart-for-location";
 const cartMediaSchema = z.object({
@@ -28,7 +29,7 @@ export type StorefrontToast = {
 };
 
 export type AddToCartResult =
-  | { ok: true; count: number; requiresSignIn?: boolean }
+  | { ok: true; view: CartView; count: number; requiresSignIn?: boolean }
   | { ok: false; reason: "unauthenticated" | "error"; message: string };
 
 export type GuestCartItem = {
@@ -76,6 +77,7 @@ export function cachedCart(): CartView | null {
 }
 
 function rememberCart(view: CartView): void {
+  if (activeOperationGeneration !== locationGeneration) return;
   cachedCartView = view;
   window.dispatchEvent(
     new CustomEvent(CART_CHANGED_EVENT, {
@@ -198,7 +200,7 @@ async function postCartQuantity(
   metadata?: CartItemMetadata,
 ): Promise<AddToCartResult> {
   if (window.localStorage.getItem(GUEST_MERGE_KEY)) {
-    await fetchCart();
+    await loadCart();
     return {
       ok: false,
       reason: "error",
@@ -207,7 +209,7 @@ async function postCartQuantity(
   }
   if (loadError && guestCartView()) {
     const view = rememberGuestItem(skuId, quantity, metadata);
-    return { ok: true, count: cartCountFromView(view) };
+    return { ok: true, view, count: cartCountFromView(view) };
   }
   let serverView: CartView | null = null;
   if (!serverView) {
@@ -216,7 +218,7 @@ async function postCartQuantity(
       if (loaded.ok) serverView = loaded.value;
       else if (loaded.error?.code === "UNAUTHENTICATED") {
         const view = rememberGuestItem(skuId, quantity, metadata);
-        return { ok: true, count: cartCountFromView(view), requiresSignIn: true };
+        return { ok: true, view, count: cartCountFromView(view), requiresSignIn: true };
       } else {
         if (loaded.error?.code === "DELIVERY_LOCATION_REQUIRED") requestDeliveryLocation();
         return {
@@ -228,6 +230,13 @@ async function postCartQuantity(
     } catch {
       return { ok: false, reason: "error", message: "The cart could not be reached." };
     }
+  }
+  if (activeOperationGeneration !== locationGeneration) {
+    return {
+      ok: false,
+      reason: "error",
+      message: "Delivery location changed. Review your cart before editing.",
+    };
   }
   let result: CartRouteResult;
   try {
@@ -248,12 +257,12 @@ async function postCartQuantity(
   }
   if (result.ok && result.value) {
     rememberCart(result.value);
-    return { ok: true, count: cartCountFromView(result.value) };
+    return { ok: true, view: result.value, count: cartCountFromView(result.value) };
   }
   const code = result.error?.code ?? "ERROR";
   if (code === "UNAUTHENTICATED") {
     const view = rememberGuestItem(skuId, quantity, metadata);
-    return { ok: true, count: cartCountFromView(view), requiresSignIn: true };
+    return { ok: true, view, count: cartCountFromView(view), requiresSignIn: true };
   }
   return {
     ok: false,
@@ -265,7 +274,7 @@ async function postCartQuantity(
 async function mergeGuestCart(serverView: CartView, guestView: CartView): Promise<CartView> {
   const raw = window.localStorage.getItem(GUEST_CART_KEY);
   if (!raw) {
-    const current = (await (await fetch("/api/commerce/cart")).json()) as RpcResult<CartView>;
+    const current = await readJson<RpcResult<CartView>>("/api/commerce/cart");
     if (!current.ok) throw new Error(current.error.message);
     return current.value;
   }
@@ -306,7 +315,7 @@ async function mergeGuestCart(serverView: CartView, guestView: CartView): Promis
       window.localStorage.removeItem(GUEST_MERGE_KEY);
     throw new Error(result.error.message);
   }
-  const current = (await (await fetch("/api/commerce/cart")).json()) as RpcResult<CartView>;
+  const current = await readJson<RpcResult<CartView>>("/api/commerce/cart");
   if (!current.ok) throw new Error(current.error.message);
   if (window.localStorage.getItem(GUEST_CART_KEY) !== command.raw) {
     const changed = guestCartView();
@@ -344,17 +353,58 @@ export function addToCart(
   quantity: number,
   metadata?: CartItemMetadata,
 ): Promise<AddToCartResult> {
-  return postCartQuantity(skuId, quantity, metadata);
+  const requestedGeneration = locationGeneration;
+  return runCartOperation(async () => {
+    if (requestedGeneration !== locationGeneration)
+      return {
+        ok: false,
+        reason: "error",
+        message: "Delivery location changed. Review your cart before editing.",
+      };
+    const result = await postCartQuantity(skuId, quantity, metadata);
+    return result.ok && activeOperationGeneration !== locationGeneration
+      ? { ...result, view: { ...result.view, checkoutBlocked: true } }
+      : result;
+  });
 }
 
 /**
  * Load the current cart. Anonymous visitors resolve to null rather than an
  * error so surfaces can render signed-out states without console noise.
  */
+// Serialize location recovery, guest transfer and quantity commands. A location
+// refresh waits for an uncertain in-flight command instead of racing another one.
+let operations: Promise<void> = Promise.resolve();
+let locationGeneration = 0;
+let activeOperationGeneration = 0;
+function runCartOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = operations.then(() => {
+    activeOperationGeneration = locationGeneration;
+    return operation();
+  });
+  operations = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+let refreshingCart: Promise<CartView | null> | null = null;
+export function refreshCartForLocation(): Promise<CartView | null> {
+  locationGeneration++;
+  loadError = "";
+  cachedCartView = null;
+  window.dispatchEvent(new CustomEvent(CART_CHANGED_EVENT, { detail: { count: 0, view: null } }));
+  const refresh = runCartOperation(loadCart).finally(() => {
+    if (refreshingCart === refresh) refreshingCart = null;
+  });
+  refreshingCart = refresh;
+  return refresh;
+}
 let loadingCart: Promise<CartView | null> | null = null;
 export function fetchCart(): Promise<CartView | null> {
+  if (refreshingCart) return refreshingCart;
   if (!loadingCart)
-    loadingCart = loadCart().finally(() => {
+    loadingCart = runCartOperation(loadCart).finally(() => {
       loadingCart = null;
     });
   return loadingCart;
@@ -363,12 +413,13 @@ async function loadCart(): Promise<CartView | null> {
   loadError = "";
   try {
     const result = await loadCartForLocation();
+    if (activeOperationGeneration !== locationGeneration) return null;
     if (result.ok && result.value) {
       const guest = guestCartView();
       const merged = guest ? await mergeGuestCart(result.value, guest) : result.value;
       const next = merged;
       rememberCart(next);
-      return next;
+      return activeOperationGeneration === locationGeneration ? next : null;
     }
     if (!result.ok && result.error.code !== "UNAUTHENTICATED") loadError = result.error.message;
     const guest = guestCartView();
@@ -391,6 +442,7 @@ async function loadCart(): Promise<CartView | null> {
     cachedCartView = null;
     return null;
   } catch (error) {
+    if (activeOperationGeneration !== locationGeneration) return null;
     loadError =
       error instanceof Error
         ? error.message

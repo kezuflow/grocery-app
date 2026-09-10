@@ -40,8 +40,8 @@ export function AddToCartButton({
 
   useEffect(() => {
     const onCartChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: CartView }>).detail;
-      if (detail?.view) setQuantity(quantityForSku(detail.view, skuId));
+      const detail = (event as CustomEvent<{ view?: CartView | null }>).detail;
+      setQuantity(detail?.view ? quantityForSku(detail.view, skuId) : 0);
     };
     window.addEventListener(CART_CHANGED_EVENT, onCartChanged);
     return () => window.removeEventListener(CART_CHANGED_EVENT, onCartChanged);

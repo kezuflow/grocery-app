@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { RetryReadButton } from "../../../components/storefront/retry-read-button";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
@@ -8,53 +9,10 @@ import { ProductGallery } from "../../../components/storefront/product-gallery";
 import { ProductPrice } from "../../../components/storefront/product-price";
 import { addToCart, announceToast } from "../../../lib/storefront/cart-client";
 
-export function ProductView({ slug }: { slug: string }) {
-  const [view, setView] = useState<MarketplaceProductView | null>(null);
+export function ProductView({ view }: { view: MarketplaceProductView | null }) {
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setStatus("");
-    void fetch(`/api/catalog/product?slug=${encodeURIComponent(slug)}`, {
-      signal: controller.signal,
-    })
-      .then(
-        (response) => response.json() as Promise<{ ok?: boolean; value?: MarketplaceProductView }>,
-      )
-      .then((result) => {
-        const nextView = result.value ?? null;
-        setView(nextView);
-        setSelectedVariantId(
-          nextView?.product.variants.find((variant) => variant.availability === "AVAILABLE")?.id ??
-            nextView?.product.variants[0]?.id ??
-            "",
-        );
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setView(null);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [slug]);
-
-  if (loading) {
-    return (
-      <div className="grid gap-8 md:grid-cols-[1fr_1.1fr]" aria-label="Loading product">
-        <div className="aspect-square animate-pulse rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-muted)]" />
-        <div className="space-y-4 py-4">
-          <div className="h-4 w-24 animate-pulse rounded bg-[var(--fm-surface-muted)]" />
-          <div className="h-10 w-2/3 animate-pulse rounded bg-[var(--fm-surface-muted)]" />
-          <div className="h-16 w-full animate-pulse rounded bg-[var(--fm-surface-muted)]" />
-        </div>
-      </div>
-    );
-  }
 
   if (!view) {
     return (
@@ -63,6 +21,7 @@ export function ProductView({ slug }: { slug: string }) {
         <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
           This grocery could not be loaded.
         </p>
+        <RetryReadButton />
       </div>
     );
   }
@@ -70,7 +29,9 @@ export function ProductView({ slug }: { slug: string }) {
   const product = view.product;
 
   const selectedVariant =
-    product.variants.find((variant) => variant.id === selectedVariantId) ?? product.variants[0];
+    product.variants.find((variant) => variant.id === selectedVariantId) ??
+    product.variants.find((variant) => variant.availability === "AVAILABLE") ??
+    product.variants[0];
   const selectedPrice = selectedVariant?.priceMinor ?? null;
 
   async function add() {

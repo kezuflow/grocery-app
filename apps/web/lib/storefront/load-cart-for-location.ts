@@ -4,6 +4,7 @@ import type {
   ServiceabilityResult,
   CartLocationSelection,
 } from "@freshmarkets/contracts";
+import { readJson } from "../http/read-deadline";
 import { z } from "@freshmarkets/validation";
 import { browsingPointFromCookies, DELIVERY_LOCATION_REQUEST_EVENT } from "./browsing-location";
 
@@ -28,17 +29,15 @@ export async function loadCartForLocation(): Promise<CartResult> {
     },
   };
   if (!point) return missing;
-  const resolution = (await (
-    await fetch("/api/serviceability", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(point),
-    })
-  ).json()) as RpcResult<ServiceabilityResult>;
+  const resolution = await readJson<RpcResult<ServiceabilityResult>>("/api/serviceability", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(point),
+  });
   if (!resolution.ok) return resolution;
   const locationId = resolution.value.fulfillmentLocation?.id;
   if (!resolution.value.serviceable || !locationId) return missing;
-  let cart = (await (await fetch("/api/commerce/cart")).json()) as CartResult;
+  let cart = await readJson<CartResult>("/api/commerce/cart");
   if (!cart.ok && cart.error.code !== "DELIVERY_LOCATION_REQUIRED") return cart;
   for (let attempt = 0; attempt < 2; attempt++) {
     const raw = window.localStorage.getItem(pendingKey);
@@ -78,7 +77,7 @@ export async function loadCartForLocation(): Promise<CartResult> {
       return selected;
     }
     window.localStorage.removeItem(pendingKey);
-    cart = (await (await fetch("/api/commerce/cart")).json()) as CartResult;
+    cart = await readJson<CartResult>("/api/commerce/cart");
     if (!cart.ok) return cart;
     if (cart.value.locationId === locationId) return cart;
   }

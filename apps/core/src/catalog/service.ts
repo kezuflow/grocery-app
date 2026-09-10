@@ -10,7 +10,11 @@ import type {
   MarketplaceProductView,
 } from "@freshmarkets/contracts";
 import { productMediaProjectionSql, publishedProductMediaView } from "./published-product-media";
-import { readPublicProductSalePrices } from "../promotions/application/product-sales";
+import {
+  preparePublicProductSales,
+  publicProductSalePrices,
+  type PublicProductSaleRow,
+} from "../promotions/application/product-sales";
 
 /**
  * Minimal raw D1 surface used by catalog reads; catalog queries bypass ORM
@@ -324,6 +328,7 @@ function prepareHydration(
   idList: string,
   context: CommerceContext | null,
   nowMs: number,
+  scope: { slug: string } | { productIds: readonly string[] } = { productIds: ids },
 ): Array<D1PreparedStatement | null> {
   const skuIdList = `(SELECT id FROM sku WHERE product_id IN (${idList}))`;
 
@@ -394,10 +399,13 @@ function prepareHydration(
          WHERE audience = 'CUSTOMER' AND sku_id IN ${skuIdList}
          ORDER BY sort_order ASC, label ASC`)
       .bind(...ids),
+    context
+      ? preparePublicProductSales(database, { locationId: context.locationId, at: nowMs, scope })
+      : null,
   ];
 }
 
-/** Expand a bounded page using one D1 batch, followed by applicable sale pricing. */
+/** Expand a bounded page using one D1 batch, including applicable sale pricing. */
 async function hydrateProducts(
   database: Database,
   rows: ReadonlyArray<ProductListRow>,
@@ -408,17 +416,15 @@ async function hydrateProducts(
   const ids = rows.map((row) => row.productId);
   const statements = prepareHydration(database, ids, sqlPlaceholders(ids.length), context, nowMs);
   const batch = await database.batch(statements.filter((statement) => statement !== null));
-  return assembleProducts(database, rows, context, nowMs, statements, batch);
+  return assembleProducts(rows, context, statements, batch);
 }
 
-async function assembleProducts(
-  database: Database,
+function assembleProducts(
   rows: ReadonlyArray<ProductListRow>,
   context: CommerceContext | null,
-  nowMs: number,
   statements: Array<D1PreparedStatement | null>,
   batch: D1Result[],
-): Promise<Map<string, CatalogProduct>> {
+): Map<string, CatalogProduct> {
   const hydrated = new Map<string, CatalogProduct>();
   let resultIndex = 0;
   const [
@@ -429,6 +435,7 @@ async function assembleProducts(
     modeRows,
     productDetailRows,
     skuDetailRows,
+    saleRows,
   ] = statements.map((statement) => (statement ? batch[resultIndex++].results : [])) as [
     SkuRow[],
     PriceRow[],
@@ -437,6 +444,7 @@ async function assembleProducts(
     { activeMode: "INSTANT" | "SCHEDULED"; modeAvailable: number }[],
     { product_id: string; label: string; value: string; sortOrder: number }[],
     { sku_id: string; label: string; value: string }[],
+    PublicProductSaleRow[],
   ];
   const modeRow = modeRows[0] ?? null;
 
@@ -452,10 +460,8 @@ async function assembleProducts(
   const modeAvailable = modeRow?.modeAvailable === 1;
   const salePrices =
     context && modeAvailable
-      ? await readPublicProductSalePrices(database, {
-          locationId: context.locationId,
+      ? publicProductSalePrices(saleRows, {
           fulfillmentMode: activeMode,
-          at: nowMs,
           prices: priceRows.map((price) => ({
             skuId: price.sku_id,
             priceMinor: price.amount_minor,
@@ -632,6 +638,7 @@ export async function getProduct(
     "SELECT id FROM product WHERE slug=? AND status='active'",
     context,
     nowMs,
+    { slug },
   );
   // Resolve the product, variants, customer notes and gallery in one D1 call.
   // The subquery scopes every hydration statement without waiting for an ID lookup.
@@ -648,14 +655,7 @@ export async function getProduct(
   const rows = result[0].results as ProductListRow[];
   const row = rows[0];
   if (!row || row.slug !== slug) return null;
-  const hydrated = await assembleProducts(
-    database,
-    [row],
-    context,
-    nowMs,
-    statements,
-    result.slice(1, -1),
-  );
+  const hydrated = assembleProducts([row], context, statements, result.slice(1, -1));
   const product = hydrated.get(row.productId);
   if (!product) return null;
   const media = result[result.length - 1].results as {
@@ -681,13 +681,14 @@ export async function getMarketplaceHome(
   input: { locationId?: string; itemsPerRail?: number },
 ): Promise<MarketplaceHomeView> {
   const nowMs = Date.now();
-  const context = await resolveCommerceContext(database, input.locationId);
+  const [context, categories] = await Promise.all([
+    resolveCommerceContext(database, input.locationId),
+    listCategories(database),
+  ]);
   const itemsPerRail = Math.min(
     Math.max(1, Math.floor(input.itemsPerRail ?? DEFAULT_ITEMS_PER_RAIL)),
     MAX_ITEMS_PER_RAIL,
   );
-
-  const categories = await listCategories(database);
 
   const rows = await rawAll<ProductListRow>(
     database,

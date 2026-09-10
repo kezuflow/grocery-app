@@ -123,3 +123,7 @@ The 18 product-page prefetches describe the older deployed build. CA-7.21's curr
 CA-7.22 investigation is complete: seven code findings and one separate development-runtime follow-up are recorded. Zero application fixes from this investigation are claimed. Existing CA-7.21 batching/prefetch improvements remain separate completed source work; the prior deployment/provider obligations remain open.
 
 Start with image demand reduction and consistent address dismissal, then eliminate the redundant cart/full-product-page reads, profile the remaining location-aware stages, replace the full-document refresh and add bounded read errors. Reproduce and diagnose the dev-runtime failures separately. Acceptance should include in-app cold/warm home loads, close/skip/navigation, remembered-location detail, and authenticated cart tests against disposable data; changes to Core queries need relevant actual Worker/D1 tests. No aggregate test suite was run for this documentation-only investigation.
+
+## Implementation follow-up — CA-7.23
+
+The owner subsequently authorized repairs. All seven findings now have source fixes and local regression evidence in [the active checkpoint](checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md#latest-owner-request--ca-723-storefront-loading-fixes-2026-09-10). The findings above preserve the CA-7.22 baseline, not the current implementation. The separate native-process/remote-binding failure causes remain unproven; deployment and actual provider/customer-flow acceptance were not performed by the repair task.
