@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.32 single profile Save (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `71019235`. Owner requests one Save button. Combined name, read-only email, phone and promotional preference into one form with one submit action. Name remains owned by Better Auth and contact/preferences by the existing Core command. The UI sequences writes, reports partial failure explicitly, and retains the same contact idempotency key/body on uncertain retries without repeating a confirmed name write. No atomic cross-service guarantee is claimed. Preserved unrelated changes.
+
+Verification: Web typecheck, focused formatting/lint, and 18 tests passed, including live phone input and confirmed-name/lost-contact-response retry coverage. In-app DOM confirmed one form, one Save button and read-only email; no live profile write performed. CA-7.32 complete. Next action: owner review and save desired profile changes; prior Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.31 profile field arrangement (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `db5f14bf`. Owner requests Name and Phone Number side by side with a read-only Email input below Name. Renamed labels, added labeled read-only email from the auth session and arranged the existing independent forms in two columns with a mobile stack. No profile writes or auth changes. Preserved unrelated working-tree state.

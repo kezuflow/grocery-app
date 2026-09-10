@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { coreClient } from "@/lib/core-client/core";
-import { CustomerProfilePanel, CustomerNamePanel } from "@/components/customer-profile-panel";
+import { CustomerProfilePanel } from "@/components/customer-profile-panel";
 
 import { StorefrontShell } from "@/components/storefront/storefront-shell";
 import "../account.css";
@@ -30,8 +30,7 @@ export default async function CustomerProfilePage() {
                 <h2>Account details</h2>
                 <Link href="/auth/forgot-password">Reset password</Link>
               </header>
-              <div className="fm-account-form fm-profile-columns">
-                <CustomerNamePanel />
+              <div className="fm-account-form">
                 <CustomerProfilePanel initial={result.value} />
               </div>
             </section>

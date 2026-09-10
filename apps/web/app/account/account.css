@@ -175,3 +175,17 @@
     gap: 24px;
   }
 }
+
+.fm-account-form .fm-profile-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.fm-profile-fields input[readonly] {
+  color: var(--fm-text-muted);
+}
+@media (max-width: 640px) {
+  .fm-account-form .fm-profile-fields {
+    grid-template-columns: 1fr;
+  }
+}
