@@ -395,7 +395,35 @@ textarea {
   color: var(--fm-primary-dark);
 }
 
+.fm-cart-drawer {
+  transform: translateX(100%);
+  transition: transform 240ms ease-out;
+}
+.fm-cart-drawer[open][data-state="open"] {
+  transform: translateX(0);
+}
+.fm-cart-drawer::backdrop {
+  background: rgb(0 0 0 / 35%);
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+.fm-cart-drawer[open][data-state="open"]::backdrop {
+  opacity: 1;
+}
+@starting-style {
+  .fm-cart-drawer[open][data-state="open"] {
+    transform: translateX(100%);
+  }
+  .fm-cart-drawer[open][data-state="open"]::backdrop {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .fm-cart-drawer,
+  .fm-cart-drawer::backdrop {
+    transition: none;
+  }
   *,
   *::before,
   *::after {

@@ -34,6 +34,9 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   document.body.replaceChildren();
+  vi.useRealTimers();
+  document.body.style.cssText = "";
+  document.documentElement.style.cssText = "";
   vi.unstubAllGlobals();
 });
 it("uses the mutation response without repeating coverage and cart reads", async () => {
@@ -88,4 +91,59 @@ it("uses the mutation response without repeating coverage and cart reads", async
     ["/api/commerce/cart", "POST"],
   ]);
   expect(document.body.textContent).toContain("Total 200");
+});
+
+it.each([false, true])(
+  "keeps scroll locked through closing and restores styles (reduced=%s)",
+  async (reduced) => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: reduced }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in" } }),
+      ),
+    );
+    document.body.style.overflow = "auto";
+    document.body.style.paddingRight = "12px";
+    await act(async () => root.render(<CartDrawer />));
+    await act(async () => {
+      window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
+    });
+    const dialog = document.querySelector("dialog");
+    expect(dialog?.open).toBe(true);
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    await act(async () => {
+      dialog?.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    expect(dialog?.open).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
+    await act(async () => vi.advanceTimersByTimeAsync(reduced ? 0 : 240));
+    expect(dialog?.open).toBe(false);
+    expect(document.documentElement.style.overflow).toBe("");
+    expect(document.body.style.overflow).toBe("auto");
+    expect(document.body.style.paddingRight).toBe("12px");
+  },
+);
+it("cancels a pending close when the cart is reopened", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({ ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in" } }),
+    ),
+  );
+  await act(async () => root.render(<CartDrawer />));
+  await act(async () => {
+    window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
+  });
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Close cart"]')?.click(),
+  );
+  await act(async () => {
+    window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(240));
+  expect(document.querySelector("dialog")?.open).toBe(true);
+  expect(document.body.style.overflow).toBe("hidden");
 });

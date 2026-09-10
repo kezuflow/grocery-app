@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.25 cart drawer motion and scrolling (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner approved implementing the proposed right-side cart animation, backdrop, background scroll lock, fixed header/summary and internally scrolling item list. Observed main at `68d15325`; preserved unrelated dirty state and prior checkpoint edits. Acceptance: open/close motion, reduced-motion behavior, scroll restoration and usable cart after reopening. No commerce logic, cart quantities, provider actions or deployment changed.
+
+Implemented a 240ms right-side slide and backdrop fade with CSS starting styles; reduced motion removes the transition/delay. Native dialog remains modal until close animation completes, including Escape/backdrop/button dismissal. Scroll locking preserves/restores root/body inline styles and compensates scrollbar width. The viewport-height drawer clips outer overflow, the item list contains overscroll, and header/summary do not shrink. Reopening cancels a pending close; checkout sign-in opens after cart closure. Updated DESIGN's marketplace guidance.
+
+Validation on this working tree: Web tests passed **449 / 111 files** (`pnpm --filter @freshmarkets/web test`), including four drawer tests for mutation request count, normal/reduced closing scroll restoration and reopen cancellation. Web typecheck, focused oxlint, oxfmt and diff checks passed. In-app localhost showed drawer height equal to the 720px viewport, 0.24s transform transition, hidden root/body/drawer overflow, auto item-list scrolling with contained overscroll, then restored empty inline overflow/padding and focus on the cart trigger after close. Recent browser warning/error log was empty. Browser actions only opened/closed the cart; existing items were preserved. No production build or deployed/long-cart/mobile-device acceptance claimed for this small UI slice.
+
+CA-7.25 implementation and local acceptance complete. Earlier native-runtime crash and commerce/provider acceptance obligations remain open. Concrete next action: include the verified drawer change in the next authorized Web release.
+
 ## Latest owner request — CA-7.24 refresh hydration regression (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner reports repeated localhost hydration errors after the server restart. Observed `main` at `e1b12048`; preserve unrelated dirty files and older checkpoint edits. Acceptance: identify the actual hydration mismatch, preserve saved quantities without extra requests, and verify refreshed in-app behavior. No customer cart mutation, provider confirmation, deployment or subagent used.

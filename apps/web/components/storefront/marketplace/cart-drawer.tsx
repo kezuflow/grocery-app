@@ -24,6 +24,7 @@ export function CartDrawer() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [error, setError] = useState("");
   const [authOpen, setAuthOpen] = useState(false);
+  const checkoutAfterClose = useRef(false);
 
   useEffect(() => {
     const requestOpen = () => {
@@ -43,9 +44,38 @@ export function CartDrawer() {
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog) return;
+    if (!dialog || (!open && !dialog.open)) return;
+    const page = document.documentElement;
+    const body = document.body;
+    const previous = {
+      pageOverflow: page.style.overflow,
+      bodyOverflow: body.style.overflow,
+      padding: body.style.paddingRight,
+    };
+    const scrollbarWidth = window.innerWidth - page.clientWidth;
+    if (scrollbarWidth > 0)
+      body.style.paddingRight = `${parseFloat(getComputedStyle(body).paddingRight) + scrollbarWidth}px`;
+    page.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    const unlock = () => {
+      page.style.overflow = previous.pageOverflow;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.paddingRight = previous.padding;
+    };
     if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
+    const closing = !open
+      ? setTimeout(
+          () => {
+            unlock();
+            dialog.close();
+          },
+          window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 240,
+        )
+      : undefined;
+    return () => {
+      clearTimeout(closing);
+      unlock();
+    };
   }, [open]);
 
   async function update(item: CartView["items"][number], quantity: number) {
@@ -81,14 +111,25 @@ export function CartDrawer() {
       <dialog
         ref={dialogRef}
         aria-label="Shopping cart"
-        onClose={() => setOpen(false)}
+        data-state={open ? "open" : "closed"}
+        onCancel={(event) => {
+          event.preventDefault();
+          setOpen(false);
+        }}
+        onClose={() => {
+          setOpen(false);
+          if (checkoutAfterClose.current) {
+            checkoutAfterClose.current = false;
+            setAuthOpen(true);
+          }
+        }}
         onClick={(event) => {
           if (event.target === dialogRef.current) setOpen(false);
         }}
-        className="m-0 ml-auto h-full max-h-none w-full max-w-md bg-transparent p-0 backdrop:bg-black/35"
+        className="fm-cart-drawer fixed inset-y-0 right-0 m-0 ml-auto h-dvh max-h-dvh w-full max-w-md overflow-hidden border-0 bg-transparent p-0"
       >
         <div className="flex h-full flex-col bg-white shadow-[var(--fm-shadow-overlay)]">
-          <div className="flex items-center justify-between border-b border-[var(--fm-border)] px-5 py-4">
+          <div className="flex shrink-0 items-center justify-between border-b border-[var(--fm-border)] px-5 py-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
                 FreshMarkets
@@ -105,7 +146,7 @@ export function CartDrawer() {
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
             {loading ? (
               <div className="space-y-3" aria-label="Loading cart">
                 {[0, 1, 2].map((item) => (
@@ -214,7 +255,7 @@ export function CartDrawer() {
           </div>
 
           {hasItems ? (
-            <div className="border-t border-[var(--fm-border)] bg-white p-5">
+            <div className="shrink-0 border-t border-[var(--fm-border)] bg-white p-5">
               <OrderSummary
                 cart={cart}
                 actionLabel={guest ? "Sign in to checkout" : "Continue to checkout"}
@@ -222,8 +263,8 @@ export function CartDrawer() {
                 onAction={
                   guest
                     ? () => {
+                        checkoutAfterClose.current = true;
                         setOpen(false);
-                        setAuthOpen(true);
                       }
                     : undefined
                 }
