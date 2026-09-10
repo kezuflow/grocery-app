@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.15 account popup (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**, owner follow-up authorizing the Mobbin DoorDash account popup for FreshMarkets. Acceptance: Account opens a contextual popup on desktop/mobile; existing destinations work; identity/loading/error states are honest; dismissal restores focus. Current task supersedes CA-7.14's next action only.
+
+Observed `main` at `f9845d2e`; preserve unrelated deletions, deployment edits and older checkpoint changes. Inspected Mobbin Account flow `fbfed5fc-e0f2-499a-ab01-530425a50e64` and Account Settings flow `98b9ef46-4a86-4a1f-97b7-b99278c05533` inline screens: sidebar-anchored panel, profile row, grouped links/settings, profile navigation. Adapted to existing FreshMarkets destinations and tokens using the existing Radix Popover primitive. Desktop sidebar/mobile Account now open the popup; no header shortcut restored. Core writes and auth implementations are unchanged.
+
+Verification: four jsdom interaction tests pass for guest open/close/focus, authenticated identity/sign-out link, loading and error/retry; authenticated state uses a test fixture, not a live customer session. Web typecheck and focused lint passed after correcting the test's DOM append method for Worker/DOM typing compatibility. Browser at localhost with shared data: popup inspected at 390x844 and 1280x850; Escape closed it and returned focus to Account; Account details navigated to existing profile route. No live account writes or outbound sends. `pnpm --filter @freshmarkets/web build` passed with existing chunk-size/classification notices; focused formatting, naming and diff checks passed.
+
+CA-7.15 source implementation complete; one remaining release action at this request's level is Web deployment. Concrete next action: deploy the verified popup when authorized. Earlier Google configuration, Farm eggs image and phase/provider obligations remain open.
+
 ## Latest owner request — CA-7.14 shared localhost resources (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**, owner follow-up to use freshmarkets.ph's Wrangler variables/resources for `pnpm dev`. Acceptance: local Web/Core source reloads with the deployed catalog and R2 images; browser auth stays localhost; secrets remain private; deployments and isolated test/build configuration remain unaffected. This supersedes the prior next action for the current task only.
