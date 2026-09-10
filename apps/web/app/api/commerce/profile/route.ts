@@ -1,18 +1,10 @@
 import { env } from "cloudflare:workers";
-import { z } from "@freshmarkets/validation";
+import { customerProfileRequestSchema } from "@/lib/core-client/profile-request";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 import { webRequestId } from "@/lib/http/request-context";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 
-const schema = z
-  .object({
-    accountPhone: z.string().trim().max(40).nullable().optional(),
-    preferredLanguage: z.string().trim().min(1).max(80).nullable(),
-    promotionalEmails: z.boolean(),
-    expectedVersion: z.number().int().positive(),
-  })
-  .strict();
 export async function GET(request: Request) {
   return adminJson(
     await coreClient(env.CORE).getMyCustomerProfile({
@@ -22,7 +14,7 @@ export async function GET(request: Request) {
   );
 }
 export const POST = observeAdminRoute("customer.profile.update", async (request: Request) => {
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const parsed = customerProfileRequestSchema.safeParse(await request.json().catch(() => null));
   const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   if (!parsed.success || !idempotencyKey || idempotencyKey.length > 200)
     return adminJson(

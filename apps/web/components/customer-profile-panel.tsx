@@ -58,6 +58,8 @@ export function CustomerProfilePanel({ initial }: { initial: CustomerProfileView
       nameSaved: nextName === data.user.name,
       body: JSON.stringify({
         accountPhone: normalizedPhone,
+        // Preserve the stored language: it is still required by the update contract.
+        preferredLanguage: profile.preferredLanguage,
         promotionalEmails: promotions,
         expectedVersion: profile.version,
       }),

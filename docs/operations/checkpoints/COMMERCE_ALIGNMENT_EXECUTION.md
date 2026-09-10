@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.35 repair phone save rejection (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `edf7ee5b`. Owner reports single Save rejects phone/preferences. Root cause: removing the language control also omitted preferredLanguage, which both Web and Core still require. Fixed the form to submit the existing profile language while keeping the control hidden; this supersedes CA-7.30’s incorrect omission claim. Single Save and existing retry identities retained.
+
+Moved the unchanged Web request validator into an importable module so the form regression exercises the actual route schema. Four profile component tests passed, including normalized phone and null/non-null preserved language accepted by that validator, plus existing partial-failure retry coverage. Web typecheck and focused lint/format passed. An initial attempt to import the Worker route directly under jsdom failed virtual-module resolution; the validator test resolves this without mocking validation. No real profile write performed; actual persisted acceptance remains for owner Save. CA-7.35 fix complete. Next action: owner retries Save; earlier Phase 7 obligations remain open. Preserved unrelated work.
+
 ## Latest owner request — CA-7.34 account popup links (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `51aea8b6`. Removed All account options from the popup and added a decorative UserRound icon to Account details. Existing profile destination retained. Focused oxfmt/oxlint and diff review passed; no behavior change requiring new tests. Preserved unrelated work. CA-7.34 complete. Next action: owner review on localhost; prior Phase 7 obligations remain open.
