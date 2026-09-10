@@ -775,3 +775,27 @@ describe("AddressEditor", () => {
     act(() => root.unmount());
   });
 });
+
+it("defers the compact map until explicitly requested", async () => {
+  const adapter = new FakeMapAdapter();
+  const fetchImpl = vi.fn();
+  const { container, root } = mount({
+    compact: true,
+    purpose: "serviceability",
+    mapAdapter: adapter,
+    fetchImpl,
+  });
+  try {
+    expect(adapter.initializations).toHaveLength(0);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const chooseMap = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Choose a location on the map"),
+    )!;
+    click(chooseMap);
+    await flush();
+    expect(adapter.initializations).toHaveLength(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+  }
+});

@@ -52,6 +52,7 @@ export type AddressEditorProps = Readonly<{
   onConfirmed?: (addressId: string) => void;
   onServiceabilityConfirmed?: (selection: ServiceabilitySelection) => void;
   purpose?: "save" | "serviceability";
+  compact?: boolean;
   initialAddress?: CustomerAddressView;
   defaultPhone?: string;
   publicAccessToken?: string;
@@ -172,6 +173,7 @@ export function AddressEditor({
   onConfirmed,
   onServiceabilityConfirmed,
   purpose = "save",
+  compact = false,
   initialAddress,
   defaultPhone,
   publicAccessToken,
@@ -179,6 +181,7 @@ export function AddressEditor({
   fetchImpl = fetch,
   geolocation = typeof navigator === "undefined" ? undefined : navigator.geolocation,
 }: AddressEditorProps) {
+  const [showPinMap, setShowPinMap] = useState(false);
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<ReadonlyArray<AddressSearchCandidate>>([]);
   const [searchState, setSearchState] = useState<"idle" | "searching" | "error">("idle");
@@ -567,7 +570,7 @@ export function AddressEditor({
         disabled={purpose === "save" && (saveState === "saving" || saveUncertain)}
       >
         <section aria-labelledby="address-search-heading" className="grid gap-3">
-          <div>
+          <div className={compact ? "sr-only" : undefined}>
             <h2 id="address-search-heading" className="text-lg font-semibold text-slate-950">
               Find the delivery address
             </h2>
@@ -579,7 +582,11 @@ export function AddressEditor({
           <TextField
             id="address-search"
             label="Search for an address"
-            description="Choose a result, then move the map pin to the exact entrance if needed."
+            description={
+              compact
+                ? undefined
+                : "Choose a result, then move the map pin to the exact entrance if needed."
+            }
             autoComplete="street-address"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
@@ -591,6 +598,15 @@ export function AddressEditor({
           >
             Use current location
           </button>
+          {compact && !coordinate && !showPinMap && (
+            <button
+              type="button"
+              onClick={() => setShowPinMap(true)}
+              className="min-h-11 text-left text-sm font-semibold underline"
+            >
+              Choose a location on the map
+            </button>
+          )}
           {locationError ? (
             <p role="alert" className="text-sm text-red-700">
               {locationError}
@@ -623,85 +639,89 @@ export function AddressEditor({
           ) : null}
         </section>
 
-        <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
-          <div>
-            <h2 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
-              Confirm the exact entrance
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              The confirmed pin determines delivery coverage. Drag it when the suggested point is
-              not exact.
-            </p>
-          </div>
-          <MapboxMap
-            publicAccessToken={publicAccessToken}
-            adapter={mapAdapter}
-            initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
-            scene={{
-              draggablePin: {
-                position: coordinate ?? CEBU_CENTER,
-                label: coordinate ? "Confirmed delivery entrance" : "Move pin to delivery entrance",
-              },
-            }}
-            onPinMove={movePin}
-            onMapClick={movePin}
-            ariaLabel="Delivery address pin confirmation map"
-            className="min-h-72 rounded-xl border"
-            fallback={
-              <p className="text-sm text-slate-700">
-                You can still choose a search result or use your current location, then confirm the
-                selected address below.
-              </p>
-            }
-          />
-          {selectedDisplayAddress ? (
-            <p className="text-sm text-slate-700">
-              <span className="font-semibold">Selected address:</span> {selectedDisplayAddress}
-            </p>
-          ) : null}
-          <p role="status" aria-live="polite" className="text-sm text-slate-600">
-            {coordinateAnnouncement}
-          </p>
-          {serviceabilityState === "checking" ? (
-            <p role="status" aria-live="polite" className="text-sm text-slate-600">
-              Checking delivery coverage…
-            </p>
-          ) : null}
-          {serviceabilityState === "error" ? (
-            <p role="alert" className="text-sm text-red-700">
-              Delivery coverage could not be checked. You can retry by selecting the address or pin
-              again.
-            </p>
-          ) : null}
-          {serviceabilityState === "ready" && serviceability ? (
-            <div
-              role="status"
-              aria-live="polite"
-              className={
-                serviceability.serviceable
-                  ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
-                  : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
-              }
-            >
-              <p className="font-semibold">
-                {serviceability.serviceable ? "Delivery is available" : "Delivery is unavailable"}
-              </p>
-              <p>
-                {serviceability.serviceable
-                  ? "Core confirmed this pin is inside the current delivery area."
-                  : purpose === "save"
-                    ? "You may save this address, but it cannot be used at checkout until corrected."
-                    : "Try another address or adjust the pin to check a different entrance."}
+        {(!compact || coordinate || showPinMap) && (
+          <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
+            <div>
+              <h2 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
+                Confirm the exact entrance
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                The confirmed pin determines delivery coverage. Drag it when the suggested point is
+                not exact.
               </p>
             </div>
-          ) : null}
-        </section>
+            <MapboxMap
+              publicAccessToken={publicAccessToken}
+              adapter={mapAdapter}
+              initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
+              scene={{
+                draggablePin: {
+                  position: coordinate ?? CEBU_CENTER,
+                  label: coordinate
+                    ? "Confirmed delivery entrance"
+                    : "Move pin to delivery entrance",
+                },
+              }}
+              onPinMove={movePin}
+              onMapClick={movePin}
+              ariaLabel="Delivery address pin confirmation map"
+              className={compact ? "h-52 rounded-lg border" : "min-h-72 rounded-xl border"}
+              fallback={
+                <p className="text-sm text-slate-700">
+                  You can still choose a search result or use your current location, then confirm
+                  the selected address below.
+                </p>
+              }
+            />
+            {selectedDisplayAddress ? (
+              <p className="text-sm text-slate-700">
+                <span className="font-semibold">Selected address:</span> {selectedDisplayAddress}
+              </p>
+            ) : null}
+            <p role="status" aria-live="polite" className="text-sm text-slate-600">
+              {coordinateAnnouncement}
+            </p>
+            {serviceabilityState === "checking" ? (
+              <p role="status" aria-live="polite" className="text-sm text-slate-600">
+                Checking delivery coverage…
+              </p>
+            ) : null}
+            {serviceabilityState === "error" ? (
+              <p role="alert" className="text-sm text-red-700">
+                Delivery coverage could not be checked. You can retry by selecting the address or
+                pin again.
+              </p>
+            ) : null}
+            {serviceabilityState === "ready" && serviceability ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className={
+                  serviceability.serviceable
+                    ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
+                    : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
+                }
+              >
+                <p className="font-semibold">
+                  {serviceability.serviceable ? "Delivery is available" : "Delivery is unavailable"}
+                </p>
+                <p>
+                  {serviceability.serviceable
+                    ? "This address is inside our current delivery area."
+                    : purpose === "save"
+                      ? "You may save this address, but it cannot be used at checkout until corrected."
+                      : "Try another address or adjust the pin to check a different entrance."}
+                </p>
+              </div>
+            ) : null}
+          </section>
+        )}
 
         {purpose === "serviceability" ? (
           <div className="grid gap-3">
             <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              This browsing location is not a saved checkout address. Core will confirm it again
-              when you check out.
+              This location is not a saved checkout address. Confirm your full delivery address at
+              checkout.
             </p>
             {onServiceabilityConfirmed &&
             serviceability?.serviceable &&

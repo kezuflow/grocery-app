@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.37 delivery dropdown reference (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `45e46f08`. Owner approved adapting the inspected DoorDash address dropdown/editing references. Implemented a 400px viewport-clamped popup beneath Deliver to, compact existing address search, current location and manual-map entry, deferred map mounting, saved-address list and management link. Saved choices initialize the existing editor and still require current coverage/pin confirmation. Native dialog retains dismissal and focus behavior; unchanged points still avoid catalog/cart refresh. Saved addresses read once per opening with abort on close and explicit retry/error/guest states. No new provider or business authority. Preserved unrelated changes.
+
+Verification: focused formatting/lint and Web typecheck passed. AddressEditor/dialog tests passed (24), including deferred map initialization with no requests until needed and prior dismissal/refresh/confirmation coverage. In-app browser showed 400px popup 8px below trigger, no initial map, saved-address list loaded without error; popup closed without modifying an address or browsing location. A copy assertion initially failed and was resolved by preserving the saved-checkout-address distinction in clearer copy. No actual provider mutation or mobile viewport acceptance claimed. CA-7.37 complete. Next action: owner reviews dropdown/search/pin experience; earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.36 persistent product-card plus control (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requests normal + on product cards even when already in cart. Main at `1edaac7b`. Removed card stepper rendering; retained cart-cache synchronization so + increments the existing quantity rather than resetting it. Cart controls unchanged. Preserved unrelated work.

@@ -102,3 +102,5 @@ Owner correction, 2026-09-10: profile details and phone/preferences belong insid
 Owner correction, 2026-09-10: profile has one Save action for name, phone and promotional preference. Email remains a read-only input. Existing separate service ownership is retained with explicit partial-failure and retry feedback.
 
 Owner correction, 2026-09-10: product cards always show the compact + control, including items already in the cart. Clicking + increments the existing quantity. Quantity steppers remain in the cart.
+
+Owner-approved delivery selector, 2026-09-10: adapt DoorDash address editing (https://mobbin.com/flows/e640858f-3163-46db-bff8-95aab8e78adc) and dropdown (https://mobbin.com/screens/95b6a9d2-c577-4fc1-92fc-5e66884414c9) into a compact viewport-clamped popup under Deliver to. Search/current location/manual pin and saved addresses use existing confirmation behavior. Mount the map only after choosing an address or requesting manual pin entry. Saved checkout addresses and the browsing point remain distinct.
