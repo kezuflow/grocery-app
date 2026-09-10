@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.29 account reference adaptation (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requested Mobbin MCP search for DoorDash profile and Saved Stores and adaptation to account surfaces. Main at `f53357b2`; preserve unrelated dirty state. Searched and inspected DoorDash profile/manage-account flow and populated/empty Saved Stores screens. Acceptance: apply reference presentation to existing account/profile surfaces with working destinations and retained forms.
+
+Implemented account shortcut cards, grouped settings with Sign out after Help and support, storefront-wrapped profile panels with password action, and responsive saved-address cards. Existing data reads, writes, retries and fields retained. Owner explicitly clarified to use existing features only and not implement Saved Stores. No saved-store/product capability or navigation was added; delivery addresses remain the existing feature. Updated DESIGN with references and boundary.
+
+Verification: focused oxfmt/oxlint and Web typecheck passed. In-app account displayed four shortcuts and existing settings, profile navigation loaded both actual profile forms within the storefront shell; no horizontal overflow at 1280px. No personal details recorded or profile/address writes performed. Mobile media rules inspected; mobile and address interaction acceptance not executed. CA-7.29 existing-surface presentation complete. Saved Stores is explicitly excluded by the owner. Next action: owner review of the existing account surfaces. Earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.28 branded login presentation (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner approved the supplied Tana reference with email/password together. Main at `2fee2c7b`; preserved unrelated config, generated types, archived-document deletions and checkpoint edits. Acceptance: centered branded login card, existing Google and email/password flow, responsive width and accessible controls.

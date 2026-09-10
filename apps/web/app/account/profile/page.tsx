@@ -4,6 +4,9 @@ import Link from "next/link";
 import { coreClient } from "@/lib/core-client/core";
 import { CustomerProfilePanel, CustomerNamePanel } from "@/components/customer-profile-panel";
 
+import { StorefrontShell } from "@/components/storefront/storefront-shell";
+import "../account.css";
+
 export default async function CustomerProfilePage() {
   const incoming = await headers();
   const result = await coreClient(env.CORE).getMyCustomerProfile({
@@ -11,26 +14,46 @@ export default async function CustomerProfilePage() {
     requestId: crypto.randomUUID(),
   });
   return (
-    <main className="mx-auto max-w-xl space-y-6 px-4 py-12">
-      <h1 className="text-3xl font-semibold">Your account details</h1>
-      {result.ok ? (
-        <>
-          <CustomerNamePanel />
-          <CustomerProfilePanel initial={result.value} />
-        </>
-      ) : (
-        <div role="status">
-          <p>{result.error.message}</p>
-          {result.error.code === "UNAUTHENTICATED" ? (
-            <Link className="underline" href="/auth/login?returnTo=/account/profile">
-              Sign in to your account
-            </Link>
-          ) : null}
-        </div>
-      )}
-      <Link className="block underline" href="/account">
-        Back to account
-      </Link>
-    </main>
+    <StorefrontShell>
+      <div className="fm-account-page">
+        <Link href="/account" className="fm-account-back">
+          ← Back to account
+        </Link>
+        <header className="fm-account-heading">
+          <h1>Profile</h1>
+          <p>Manage your account details and preferences.</p>
+        </header>
+        {result.ok ? (
+          <>
+            <section className="fm-account-panel">
+              <header>
+                <h2>Account details</h2>
+                <Link href="/auth/forgot-password">Reset password</Link>
+              </header>
+              <div className="fm-account-form">
+                <CustomerNamePanel />
+              </div>
+            </section>
+            <section className="fm-account-panel">
+              <header>
+                <h2>Contact and preferences</h2>
+              </header>
+              <div className="fm-account-form">
+                <CustomerProfilePanel initial={result.value} />
+              </div>
+            </section>
+          </>
+        ) : (
+          <div role="status">
+            <p>{result.error.message}</p>
+            {result.error.code === "UNAUTHENTICATED" ? (
+              <Link className="underline" href="/auth/login?returnTo=/account/profile">
+                Sign in to your account
+              </Link>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </StorefrontShell>
   );
 }

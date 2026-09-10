@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import "../account.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CustomerAddressView,
@@ -113,7 +114,7 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
 
   return (
     <StorefrontShell>
-      <div className="min-h-[100dvh] w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+      <div className="fm-account-page fm-account-addresses">
         <Link href="/account" className="text-sm font-semibold underline underline-offset-4">
           Back to account
         </Link>
@@ -123,8 +124,8 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-[-0.03em]">Delivery addresses</h1>
           <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
-            Confirm the exact entrance for each destination. Core checks delivery coverage whenever
-            you save and again at checkout.
+            Save your delivery destinations and confirm the entrance so your groceries reach the
+            right place.
           </p>
 
           <fieldset disabled={busy || uncertain}>

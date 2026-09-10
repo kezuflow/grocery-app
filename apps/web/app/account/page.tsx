@@ -1,35 +1,82 @@
 import Link from "next/link";
+import {
+  ChevronRight,
+  UserRound,
+  MapPin,
+  ShoppingBag,
+  ShoppingCart,
+  KeyRound,
+  Headphones,
+  LogOut,
+  BadgeCheck,
+} from "lucide-react";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
+import "./account.css";
 
+const shortcuts = [
+  {
+    href: "/account/profile",
+    title: "Profile",
+    description: "Your name, contact details and preferences",
+    icon: UserRound,
+  },
+  {
+    href: "/account/addresses",
+    title: "Delivery addresses",
+    description: "Manage your saved delivery destinations",
+    icon: MapPin,
+  },
+  {
+    href: "/orders",
+    title: "Order history",
+    description: "View your grocery orders and their progress",
+    icon: ShoppingBag,
+  },
+  {
+    href: "/cart",
+    title: "Your cart",
+    description: "Pick up where you left off",
+    icon: ShoppingCart,
+  },
+];
+const settings = [
+  { href: "/auth/forgot-password", title: "Reset password", icon: KeyRound },
+  { href: "/staff-invitation", title: "Staff invitation", icon: BadgeCheck },
+  { href: "mailto:support@freshmarkets.ph", title: "Help and support", icon: Headphones },
+  { href: "/auth/logout", title: "Sign out", icon: LogOut },
+];
 export default function AccountPage() {
   return (
     <StorefrontShell>
-      <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-        <h1 className="text-3xl font-semibold">Your account</h1>
-        <Link href="/staff-invitation" className="font-medium underline">
-          Staff invitation
-        </Link>
-        <Link href="/account/profile" className="font-medium underline">
-          Your account details
-        </Link>
-        <Link href="/account/addresses" className="font-medium underline">
-          Delivery addresses
-        </Link>
-        <Link href="/cart" className="font-medium underline">
-          Open cart
-        </Link>
-        <Link href="/orders" className="font-medium underline">
-          Order history
-        </Link>
-        <Link href="/auth/forgot-password" className="font-medium underline">
-          Reset your password
-        </Link>
-        <a href="mailto:support@freshmarkets.ph" className="font-medium underline">
-          Help and support
-        </a>
-        <Link href="/auth/logout" prefetch={false} className="font-medium underline">
-          Sign out
-        </Link>
+      <div className="fm-account-page">
+        <header className="fm-account-heading">
+          <h1>Your account</h1>
+          <p>Everything you need for your next grocery delivery.</p>
+        </header>
+        <nav aria-label="Your account" className="fm-account-grid">
+          {shortcuts.map(({ href, title, description, icon: Icon }) => (
+            <Link key={href} href={href} className="fm-account-tile">
+              <Icon aria-hidden="true" className="fm-account-icon" />
+              <h2>{title}</h2>
+              <p>{description}</p>
+              <ChevronRight aria-hidden="true" className="fm-account-chevron" />
+            </Link>
+          ))}
+        </nav>
+        <section className="fm-account-panel">
+          <header>
+            <h2>Account settings</h2>
+          </header>
+          <nav aria-label="Account settings">
+            {settings.map(({ href, title, icon: Icon }) => (
+              <Link key={href} href={href} prefetch={false} className="fm-account-row">
+                <Icon aria-hidden="true" className="size-5" />
+                <span>{title}</span>
+                <ChevronRight aria-hidden="true" className="ml-auto size-4" />
+              </Link>
+            ))}
+          </nav>
+        </section>
       </div>
     </StorefrontShell>
   );
