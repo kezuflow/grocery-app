@@ -1,5 +1,9 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.26 account sign-out placement (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requests Sign out after Help and support. Main at `c3d075b6`; preserve unrelated state. Account popover already has this order for authenticated sessions. Updated the full account page to label its existing support link Help and support, put the existing Sign out link immediately after it and disable logout-route prefetch. Existing sign-out POST/confirmation flow unchanged; no session was signed out. Focused oxfmt/oxlint and diff review passed; no runtime/authentication acceptance claimed for this label/order change. CA-7.26 complete. Next action: include this verified UI change in the next authorized Web release; earlier obligations remain open.
+
 ## Latest owner request — CA-7.25 cart drawer motion and scrolling (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner approved implementing the proposed right-side cart animation, backdrop, background scroll lock, fixed header/summary and internally scrolling item list. Observed main at `68d15325`; preserved unrelated dirty state and prior checkpoint edits. Acceptance: open/close motion, reduced-motion behavior, scroll restoration and usable cart after reopening. No commerce logic, cart quantities, provider actions or deployment changed.
