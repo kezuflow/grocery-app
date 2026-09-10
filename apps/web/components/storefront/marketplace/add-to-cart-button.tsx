@@ -32,13 +32,14 @@ export function AddToCartButton({
   currency?: string;
   className?: string;
 }) {
-  const [quantity, setQuantity] = useState(() => {
-    const view = cachedCart();
-    return view ? quantityForSku(view, skuId) : 0;
-  });
+  // The header can populate the browser cache before streamed cards hydrate.
+  // Keep the first render identical to SSR, then adopt that cache after hydration.
+  const [quantity, setQuantity] = useState(0);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
+    const view = cachedCart();
+    setQuantity(view ? quantityForSku(view, skuId) : 0);
     const onCartChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ view?: CartView | null }>).detail;
       setQuantity(detail?.view ? quantityForSku(detail.view, skuId) : 0);
