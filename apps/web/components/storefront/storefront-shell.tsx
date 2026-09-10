@@ -84,17 +84,31 @@ export function StorefrontSidebar() {
       <nav aria-label="Storefront navigation" className="space-y-1">
         {storefrontNavigation.map((item) => {
           const Icon = item.icon;
+          if (item.disabled || !item.href)
+            return (
+              <button
+                key={item.label}
+                type="button"
+                disabled
+                title="Not available yet"
+                className="flex min-h-11 w-full cursor-not-allowed items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-left text-sm font-medium text-[var(--fm-text-muted)] opacity-50"
+              >
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                <span>
+                  {item.label}
+                  <span className="sr-only"> — not available yet</span>
+                </span>
+              </button>
+            );
           return (
             <Link
               key={item.label}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]",
-                item.label === "Home" &&
-                  "bg-[var(--fm-surface-soft)] font-semibold text-[var(--fm-primary-dark)]",
+                "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]",
               )}
             >
-              <Icon className="size-4" aria-hidden="true" />
+              <Icon className="size-4 shrink-0" aria-hidden="true" />
               {item.label}
             </Link>
           );
@@ -128,7 +142,7 @@ export function MobileNavigation() {
             href={href}
             className="flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-primary-dark)]"
           >
-            <Icon className="size-4" aria-hidden="true" />
+            <Icon className="size-4 shrink-0" aria-hidden="true" />
             {label}
           </Link>
         ),

@@ -1,8 +1,19 @@
-import { ClipboardList, Home, ShoppingBasket, Tag, UserRound, type LucideIcon } from "lucide-react";
+import {
+  ClipboardList,
+  HeartPulse,
+  Home,
+  ShoppingBag,
+  ShoppingBasket,
+  Tag,
+  UserRound,
+  Wine,
+  type LucideIcon,
+} from "lucide-react";
 
 export type StorefrontNavigationItem = {
   label: string;
-  href: string;
+  href?: string;
+  disabled?: boolean;
   icon: LucideIcon;
   tone: string;
 };
@@ -15,6 +26,9 @@ export const storefrontNavigation: ReadonlyArray<StorefrontNavigationItem> = [
     icon: ShoppingBasket,
     tone: "groceries",
   },
+  { label: "Retail", href: "/retail", icon: ShoppingBag, tone: "retail" },
+  { label: "Health", disabled: true, icon: HeartPulse, tone: "health" },
+  { label: "Alcohol", disabled: true, icon: Wine, tone: "alcohol" },
   { label: "Deals", href: "/#daily-deals", icon: Tag, tone: "deals" },
 ];
 

@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.16 sidebar categories (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner initially requested produce shortcuts, then explicitly removed them: only Retail, Health and Alcohol are added to the original sidebar. Acceptance: no produce shortcuts in the sidebar; Health/Alcohol have no destination and native disabled behavior; Retail has an honest availability destination. This is the current request; earlier remaining obligations are preserved below.
+
+Observed `main` at `ed10b60f`; preserve unrelated deletions, deployment edits and older checkpoint changes. Implemented navigation metadata, disabled sidebar controls, scrollable existing rail and a Retail availability page with return to groceries. Removed the unconditional Home highlight so category pages do not falsely mark Home active. No catalog/schema/business writes or deployment. DESIGN records this owner correction.
+
+Verification: two focused navigation tests passed; Web typecheck and focused lint passed. Initial browser at 1280x850 showed muted native-disabled Health/Alcohol with no href and the Retail availability page. After the owner correction, produce shortcuts were removed and navigation tests/typecheck passed again. Final browser DOM confirmed Home, All groceries, Retail, Health, Alcohol, Deals, Orders and Account only; Health/Alcohol remained disabled. Web build passed with existing notices; naming/lint/diff checks passed. CA-7.16 source work complete; one remaining release action at this request's level is authorized Web deployment. Retail catalog remains unavailable. Next action: deploy verified sidebar when authorized; earlier obligations remain below.
+
 ## Latest owner request — CA-7.15 account popup (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**, owner follow-up authorizing the Mobbin DoorDash account popup for FreshMarkets. Acceptance: Account opens a contextual popup on desktop/mobile; existing destinations work; identity/loading/error states are honest; dismissal restores focus. Current task supersedes CA-7.14's next action only.
