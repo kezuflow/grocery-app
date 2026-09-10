@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.27 local Google OAuth secret loading (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner supplied local Google credentials and requested continuation of setup. Main at `93b071c9`; preserve unrelated staging configuration, generated types and checkpoint edits. Acceptance: local auth initiation loads supplied credentials and constructs the localhost callback; full Google login remains separate provider acceptance.
+
+Both Google keys were present in ignored Core .dev.vars, but local POST /api/auth/sign-in/social returned 404 PROVIDER_NOT_FOUND. Installed Wrangler filters local secrets against secrets.required; the development list omitted Google credentials, BETTER_AUTH_SECRET and AUTH_EMAIL_FROM. Added those names, regenerated binding types and updated the typed health fixture. Actual credential values remain private. Restarted pnpm dev; the same request now returns 200, accounts.google.com, a client ID matching the local file, and callback http://localhost:3000/api/auth/callback/google. No Google consent or account login completed, no deployment or outbound email.
+
+Verification on this working-tree scope: pnpm --filter @freshmarkets/core types passed; pnpm --filter @freshmarkets/core typecheck passed after updating the fixture; pnpm --filter @freshmarkets/core test src/index.test.ts src/auth/auth-flow.integration.test.ts passed (2 files, 8 tests). First isolated type-generation attempt failed due to a temporary-script argument error; corrected generation succeeded. Staged only this config/type change, preserving existing staging edits. CA-7.27 local configuration complete. Next action: owner completes browser Google sign-in to verify Google Console callback registration and credential exchange; prior Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.26 account sign-out placement (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Owner requests Sign out after Help and support. Main at `c3d075b6`; preserve unrelated state. Account popover already has this order for authenticated sessions. Updated the full account page to label its existing support link Help and support, put the existing Sign out link immediately after it and disable logout-route prefetch. Existing sign-out POST/confirmation flow unchanged; no session was signed out. Focused oxfmt/oxlint and diff review passed; no runtime/authentication acceptance claimed for this label/order change. CA-7.26 complete. Next action: include this verified UI change in the next authorized Web release; earlier obligations remain open.

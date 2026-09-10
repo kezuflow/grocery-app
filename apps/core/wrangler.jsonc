@@ -43,7 +43,16 @@
     "ROUTE_DISTANCE_PROVIDER": "mapbox",
   },
   "secrets": {
-    "required": ["MAPBOX_ACCESS_TOKEN", "PAYMONGO_SECRET_KEY", "PAYMONGO_WEBHOOK_SECRET"],
+    // Wrangler only loads declared secret names from .dev.vars.
+    "required": [
+      "BETTER_AUTH_SECRET",
+      "AUTH_EMAIL_FROM",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "MAPBOX_ACCESS_TOKEN",
+      "PAYMONGO_SECRET_KEY",
+      "PAYMONGO_WEBHOOK_SECRET",
+    ],
   },
   // Cloudflare Email Service supplies transactional auth delivery without an
   // API token. AUTH_EMAIL_FROM is deployment configuration and intentionally
