@@ -1,5 +1,9 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.34 account popup links (2026-09-10)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `51aea8b6`. Removed All account options from the popup and added a decorative UserRound icon to Account details. Existing profile destination retained. Focused oxfmt/oxlint and diff review passed; no behavior change requiring new tests. Preserved unrelated work. CA-7.34 complete. Next action: owner review on localhost; prior Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.33 account popup controls (2026-09-10)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `796ca3e6`. Removed the profile Back to account link, popup close X and profile chevron. Added existing Staff invitation destination to the popup and matching icons for Reset password, Staff invitation, Help and support, and Sign out. Existing popover dismissal behavior retained. Preserved unrelated work.

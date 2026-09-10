@@ -108,6 +108,7 @@ function AccountContents({ onNavigate }: { onNavigate: () => void }) {
       >
         <h3 className="px-4 py-2 text-xs font-bold">Account settings</h3>
         <Link href="/account/profile" className={row}>
+          <UserRound className="size-4" aria-hidden="true" />
           Account details
         </Link>
         <Link href="/auth/forgot-password" className={row}>
@@ -117,9 +118,6 @@ function AccountContents({ onNavigate }: { onNavigate: () => void }) {
         <Link href="/staff-invitation" className={row}>
           <BadgeCheck className="size-4" aria-hidden="true" />
           Staff invitation
-        </Link>
-        <Link href="/account" className={row}>
-          All account options
         </Link>
         <a href="mailto:support@freshmarkets.ph" className={row}>
           <Headphones className="size-4" aria-hidden="true" />
