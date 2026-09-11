@@ -1,11 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  manageableBenefitTypes,
-  type ManageableBenefitType,
-  type AdminPromotionPage,
-} from "@freshmarkets/contracts";
+import type { AdminPromotionPage, AdminPromotionSummary } from "@freshmarkets/contracts";
 import {
   Select,
   SelectTrigger,
@@ -29,6 +25,10 @@ import { PageHeader, ListPageSection, StatusBadge } from "../../../components/ad
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
+  PromotionProductTargetsEditor,
+  type SaleTargetSelection,
+} from "@/components/admin/promotion-product-targets-editor";
+import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
@@ -38,13 +38,46 @@ type LoadState =
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready" };
 
-export default function PromotionsPage() {
+type SaleBenefitType = "ORDER_PERCENT_DISCOUNT" | "ORDER_FIXED_DISCOUNT";
+
+const saleBenefitLabels: Record<SaleBenefitType, string> = {
+  ORDER_PERCENT_DISCOUNT: "Percentage off each unit",
+  ORDER_FIXED_DISCOUNT: "Amount off each unit",
+};
+
+function isInventorySale(promotion: AdminPromotionSummary): boolean {
+  return Boolean(promotion.productTargets?.length);
+}
+
+function saleAllowance(promotion: AdminPromotionSummary): string {
+  const targets = promotion.productTargets ?? [];
+  const limited = targets.filter((target) => target.quantityLimit !== null);
+  if (!limited.length) return "Whole stock";
+  const remaining = limited.reduce((sum, target) => sum + (target.remainingQuantity ?? 0), 0);
+  const limit = limited.reduce((sum, target) => sum + (target.quantityLimit ?? 0), 0);
+  return `${limit - remaining}/${limit} pcs`;
+}
+
+function saleTargetsLabel(promotion: AdminPromotionSummary): string {
+  const targets = promotion.productTargets ?? [];
+  if (!targets.length) return "—";
+  const first = targets[0];
+  const head = [first.productName, first.skuName, first.locationName].filter(Boolean).join(" · ");
+  return targets.length > 1 ? `${head} +${targets.length - 1} more` : head;
+}
+
+function saleDiscountLabel(promotion: AdminPromotionSummary): string {
+  if (promotion.benefitType === "ORDER_PERCENT_DISCOUNT") return `${promotion.percent}% off`;
+  return `PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`;
+}
+
+export default function InventorySalesPage() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [page, setPage] = useState<AdminPromotionPage | null>(null);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [benefit, setBenefit] = useState<ManageableBenefitType>("ORDER_FIXED_DISCOUNT");
+  const [benefit, setBenefit] = useState<SaleBenefitType>("ORDER_PERCENT_DISCOUNT");
   const [discount, setDiscount] = useState("");
+  const [productTargets, setProductTargets] = useState<SaleTargetSelection[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const createIntent = useCatalogCommand(adminPromotionSummarySchema);
   const pagination = useAdminPagination();
@@ -62,19 +95,16 @@ export default function PromotionsPage() {
             phase: "error",
             message:
               payload.error.code === "FORBIDDEN"
-                ? "Promotion administration requires the promotions.read capability with a global scope."
+                ? "Inventory sales require the promotions.read capability with a global scope."
                 : payload.error.message,
             requestId: payload.error.requestId,
           });
           return;
         }
-        setPage({
-          ...payload.value,
-          items: payload.value.items.filter((item) => !item.productTargets?.length),
-        });
+        setPage({ ...payload.value, items: payload.value.items.filter(isInventorySale) });
         setState({ phase: "ready" });
       } catch {
-        setState({ phase: "error", message: "Network error loading promotions.", requestId: null });
+        setState({ phase: "error", message: "Network error loading sales.", requestId: null });
       }
     })();
   }, []);
@@ -83,48 +113,62 @@ export default function PromotionsPage() {
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
-    if (code.trim() === "" || name.trim() === "" || Number.isNaN(Number(discount))) {
-      setNotice("A code, name, and numeric discount are required.");
+    if (!productTargets.length) {
+      setNotice("Add at least one selling option to the sale.");
+      return;
+    }
+    if (name.trim() === "" || Number.isNaN(Number(discount))) {
+      setNotice("A sale name and numeric discount are required.");
       return;
     }
     const [whole, fraction = ""] = discount.trim().split(".");
     const amount = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
     if (
-      benefit.endsWith("FIXED_DISCOUNT") &&
+      benefit === "ORDER_FIXED_DISCOUNT" &&
       (!/^\d+(\.\d{1,2})?$/.test(discount.trim()) || !Number.isSafeInteger(amount) || amount < 1)
     ) {
-      setNotice("Enter a positive discount with at most two decimal places.");
+      setNotice("Enter a positive amount off with at most two decimal places.");
       return;
     }
     if (
-      benefit.endsWith("PERCENT_DISCOUNT") &&
+      benefit === "ORDER_PERCENT_DISCOUNT" &&
       (!Number.isInteger(Number(discount)) || Number(discount) < 1 || Number(discount) > 100)
     ) {
       setNotice("Enter a whole percentage from 1 to 100.");
       return;
     }
     try {
+      // Sales are automatic; the code never surfaces to customers, so it is
+      // generated per attempt to satisfy the shared promotion contract.
+      const code = `SALE_${crypto
+        .randomUUID()
+        .replace(/[^A-Z0-9]/gi, "")
+        .slice(0, 8)}`;
       const payload = await createIntent
         .submit("/api/admin/promotions", {
-          code: code.trim().toUpperCase(),
+          code,
           name: name.trim(),
           description: "",
           benefitType: benefit,
-          ...(benefit.endsWith("FIXED_DISCOUNT")
+          ...(benefit === "ORDER_FIXED_DISCOUNT"
             ? { discountMinor: amount }
-            : benefit.endsWith("PERCENT_DISCOUNT")
-              ? { percent: Number(discount) }
-              : {}),
+            : { percent: Number(discount) }),
           minimumMinor: 0,
+          productTargets: productTargets.map(({ skuId, locationId, quantityLimit }) => ({
+            skuId,
+            locationId,
+            quantityLimit,
+          })),
+          automatic: true,
           startsAt: new Date().toISOString(),
         })
         .catch(() => createIntent.retry());
       if (!payload) return;
-      setNotice(payload.ok ? "Promotion created as DRAFT." : payload.error.message);
+      setNotice(payload.ok ? "Sale created as DRAFT." : payload.error.message);
       if (payload.ok) {
-        setCode("");
         setName("");
         setDiscount("");
+        setProductTargets([]);
         pagination.reset();
         load(null);
       }
@@ -138,12 +182,12 @@ export default function PromotionsPage() {
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader
-        title="Promotions"
-        description="Create and manage promo codes customers enter at checkout. Product sales live in Inventory sales."
+        title="Inventory sales"
+        description="Automatic strike-through sale prices on selected products. Promo codes live in Promotions."
       />
 
       {state.phase === "loading" ? (
-        <div className="space-y-3" role="status" aria-label="Loading promotions">
+        <div className="space-y-3" role="status" aria-label="Loading inventory sales">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-12 w-full" />
         </div>
@@ -151,7 +195,7 @@ export default function PromotionsPage() {
 
       {state.phase === "error" ? (
         <Alert variant="destructive">
-          <AlertTitle>Promotions could not be loaded</AlertTitle>
+          <AlertTitle>Inventory sales could not be loaded</AlertTitle>
           <AlertDescription>
             {state.message}
             {state.requestId ? (
@@ -176,22 +220,14 @@ export default function PromotionsPage() {
           ) : null}
 
           <ListPageSection
-            title="Create a promotion"
-            description="Created as DRAFT; activate when ready."
+            title="Create an inventory sale"
+            description="Created as DRAFT; activate when ready. The sale price shows automatically on the storefront."
           >
             <form className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={create}>
               <Input
-                aria-label="Promotion code"
+                aria-label="Sale name"
                 disabled={createIntent.pending || createIntent.uncertain}
-                placeholder="CODE"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                className="sm:w-44"
-              />
-              <Input
-                aria-label="Promotion name"
-                disabled={createIntent.pending || createIntent.uncertain}
-                placeholder="name"
+                placeholder="Sale name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 className="sm:w-56"
@@ -200,59 +236,59 @@ export default function PromotionsPage() {
                 value={benefit}
                 disabled={createIntent.pending || createIntent.uncertain}
                 onValueChange={(value) => {
-                  const choice = manageableBenefitTypes.find((type) => type === value);
-                  if (choice) setBenefit(choice);
+                  const choice =
+                    value === "ORDER_FIXED_DISCOUNT" ? value : "ORDER_PERCENT_DISCOUNT";
+                  setBenefit(choice);
                 }}
               >
-                <SelectTrigger aria-label="Campaign benefit">
+                <SelectTrigger aria-label="Sale discount type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {manageableBenefitTypes.map((type) => (
+                  {(Object.keys(saleBenefitLabels) as SaleBenefitType[]).map((type) => (
                     <SelectItem key={type} value={type}>
-                      {
-                        {
-                          ORDER_FIXED_DISCOUNT: "Merchandise amount off",
-                          ORDER_PERCENT_DISCOUNT: "Merchandise percentage off",
-                          DELIVERY_FEE_WAIVER: "Free delivery",
-                          DELIVERY_PERCENT_DISCOUNT: "Delivery percentage off",
-                          DELIVERY_FIXED_DISCOUNT: "Delivery amount off",
-                        }[type]
-                      }
+                      {saleBenefitLabels[type]}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {benefit !== "DELIVERY_FEE_WAIVER" ? (
-                <Input
-                  aria-label={
-                    benefit.endsWith("PERCENT_DISCOUNT")
-                      ? "Discount percentage"
-                      : "Fixed discount in pesos"
-                  }
-                  disabled={createIntent.pending || createIntent.uncertain}
-                  placeholder={benefit.endsWith("PERCENT_DISCOUNT") ? "percentage" : "discount PHP"}
-                  value={discount}
-                  onChange={(event) => setDiscount(event.target.value)}
-                />
-              ) : null}
+              <Input
+                aria-label={
+                  benefit === "ORDER_PERCENT_DISCOUNT"
+                    ? "Discount percentage"
+                    : "Amount off in pesos"
+                }
+                disabled={createIntent.pending || createIntent.uncertain}
+                placeholder={benefit === "ORDER_PERCENT_DISCOUNT" ? "percentage" : "amount off PHP"}
+                value={discount}
+                onChange={(event) => setDiscount(event.target.value)}
+              />
+              <PromotionProductTargetsEditor
+                enabled
+                onEnabledChange={() => {}}
+                alwaysOn
+                value={productTargets}
+                onChange={setProductTargets}
+                disabled={createIntent.pending || createIntent.uncertain}
+              />
               <Button type="submit" size="sm" disabled={createIntent.pending}>
                 {createIntent.pending ? "Creating…" : "Create draft"}
               </Button>
             </form>
           </ListPageSection>
 
-          <ListPageSection title="Definitions">
+          <ListPageSection title="Sales">
             {page === null || page.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
-                No promotions defined yet.
+                No inventory sales defined yet.
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Sale</TableHead>
+                    <TableHead>Products</TableHead>
+                    <TableHead>Allowance</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Benefit</TableHead>
                     <TableHead>
@@ -263,8 +299,11 @@ export default function PromotionsPage() {
                 <TableBody>
                   {page.items.map((promotion) => (
                     <TableRow key={promotion.promotionId}>
-                      <TableCell className="font-mono text-xs">{promotion.code}</TableCell>
                       <TableCell className="font-medium">{promotion.name}</TableCell>
+                      <TableCell className="max-w-72 truncate text-xs text-[var(--fm-text-muted)]">
+                        {saleTargetsLabel(promotion)}
+                      </TableCell>
+                      <TableCell className="text-xs">{saleAllowance(promotion)}</TableCell>
                       <TableCell>
                         <StatusBadge
                           tone={
@@ -279,11 +318,7 @@ export default function PromotionsPage() {
                         </StatusBadge>
                       </TableCell>
                       <TableCell className="text-xs text-[var(--fm-text-muted)]">
-                        {promotion.benefitType.endsWith("PERCENT_DISCOUNT")
-                          ? `${promotion.percent}% off`
-                          : promotion.benefitType === "DELIVERY_FEE_WAIVER"
-                            ? "Free delivery"
-                            : `PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                        {saleDiscountLabel(promotion)}
                       </TableCell>
                       <TableCell>
                         <Link

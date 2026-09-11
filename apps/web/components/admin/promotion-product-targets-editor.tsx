@@ -29,12 +29,15 @@ export function PromotionProductTargetsEditor({
   value,
   onChange,
   disabled,
+  alwaysOn = false,
 }: {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
   value: readonly SaleTargetSelection[];
   onChange: (value: SaleTargetSelection[]) => void;
   disabled: boolean;
+  /** Inventory sales always target products; skip the enable checkbox. */
+  alwaysOn?: boolean;
 }) {
   const { state } = useAdminContext();
   const locations =
@@ -103,15 +106,17 @@ export function PromotionProductTargetsEditor({
       disabled={disabled}
       className="space-y-3 rounded-lg border p-3 sm:col-span-2 lg:col-span-3"
     >
-      <label className="flex items-center gap-2 text-sm font-medium">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => onEnabledChange(event.target.checked)}
-        />
-        Sale on selected products
-      </label>
-      {enabled ? (
+      {alwaysOn ? null : (
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => onEnabledChange(event.target.checked)}
+          />
+          Sale on selected products
+        </label>
+      )}
+      {alwaysOn || enabled ? (
         <>
           <p className="text-sm text-muted-foreground">
             Discount applies to each selling unit automatically. Choose the option and location. An

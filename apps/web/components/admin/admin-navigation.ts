@@ -6,6 +6,7 @@ import type {
 import {
   BarChart3,
   BadgeDollarSign,
+  BadgePercent,
   Boxes,
   ClipboardList,
   CreditCard,
@@ -34,6 +35,7 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "customers-list",
   "memberships",
   "promotions",
+  "sales",
   "banners",
   "location-products",
   "inventory",
@@ -81,6 +83,7 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   payments: CreditCard,
   "commerce-configuration": BadgeDollarSign,
   promotions: BarChart3,
+  sales: BadgePercent,
   banners: Images,
   analytics: BarChart3,
   staff: Users,

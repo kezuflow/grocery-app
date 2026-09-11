@@ -247,6 +247,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["promotions.read", "promotions.manage"],
   },
   {
+    code: "sales",
+    label: "Inventory sales",
+    href: "/admin/sales",
+    section: "commerce",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["promotions.read", "promotions.manage"],
+  },
+  {
     code: "analytics",
     label: "Analytics",
     href: "/admin/analytics",
