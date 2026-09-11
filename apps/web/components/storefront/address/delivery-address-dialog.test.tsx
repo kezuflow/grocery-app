@@ -143,3 +143,83 @@ it("loads addresses for an authenticated session and handles session expiry", as
   );
   expect(document.body.textContent).toContain("Sign in to see saved addresses");
 });
+
+it.each(["success", "unavailable", "failure", "dismiss"])(
+  "selects a saved address directly (%s)",
+  async (outcome) => {
+    mocks.session.data = { user: { id: "test-user" } };
+    let finish: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          value: [
+            {
+              id: "saved-1",
+              label: "Home",
+              latitude: 10,
+              longitude: 123,
+              components: { addressLine1: "Test street", city: "Test city" },
+            },
+          ],
+        }),
+      )
+      .mockReturnValueOnce(pending);
+    await render();
+    const button = [...document.querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("Home"),
+    );
+    expect(button).toBeDefined();
+    await act(async () => {
+      button?.click();
+      button?.click();
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe("/api/commerce/browsing-location");
+    expect(JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body))).toEqual({
+      coordinate: { latitude: 10, longitude: 123 },
+    });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    if (outcome === "dismiss")
+      await act(async () =>
+        document
+          .querySelector("dialog")
+          ?.dispatchEvent(new Event("cancel", { bubbles: true, cancelable: true })),
+      );
+    await act(async () =>
+      finish(
+        Response.json(
+          outcome === "failure"
+            ? { ok: false }
+            : {
+                ok: true,
+                value: {
+                  coordinate: { latitude: 10, longitude: 123 },
+                  displayAddress: "Test street",
+                  serviceability: { serviceable: outcome !== "unavailable" },
+                },
+              },
+          { status: outcome === "failure" ? 503 : 200 },
+        ),
+      ),
+    );
+    if (outcome === "success") {
+      expect(document.querySelector("dialog")).toBeNull();
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+      expect(mocks.cart).toHaveBeenCalledTimes(1);
+      expect(
+        JSON.parse(localStorage.getItem("freshmarkets.delivery-location.v2") ?? "null")
+          .displayAddress,
+      ).toBe("Test street");
+    } else {
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      expect(localStorage.getItem("freshmarkets.delivery-location.v2")).toBeNull();
+      if (outcome !== "dismiss") expect(document.querySelector('[role="alert"]')).not.toBeNull();
+      else expect(fetchSpy.mock.calls[1]?.[1]?.signal?.aborted).toBe(true);
+    }
+  },
+);

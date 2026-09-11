@@ -47,7 +47,6 @@ export function DeliveryAddressDialog() {
   const { mapboxPublicAccessToken } = useStorefrontRuntime();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [placement, setPlacement] = useState({ top: 72, left: 12 });
-  const [savedAddress, setSavedAddress] = useState<CustomerAddressView>();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [interactive, setInteractive] = useState(false);
@@ -101,7 +100,6 @@ export function DeliveryAddressDialog() {
   function dismiss(): void {
     sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
     setOpen(false);
-    setSavedAddress(undefined);
   }
 
   function chooseAddress(next: ServiceabilitySelection): void {
@@ -173,14 +171,12 @@ export function DeliveryAddressDialog() {
             <h2 className="px-4 pt-4 text-base font-bold">Deliver to</h2>
             <div className="p-4">
               <AddressEditor
-                key={savedAddress?.id ?? "search"}
-                initialAddress={savedAddress}
                 compact
                 purpose="serviceability"
                 publicAccessToken={mapboxPublicAccessToken}
                 onServiceabilityConfirmed={chooseAddress}
               />
-              <SavedDeliveryAddresses onChoose={setSavedAddress} />
+              <SavedDeliveryAddresses onChoose={chooseAddress} />
             </div>
           </section>
         </dialog>
@@ -192,7 +188,7 @@ export function DeliveryAddressDialog() {
 function SavedDeliveryAddresses({
   onChoose,
 }: {
-  onChoose: (address: CustomerAddressView) => void;
+  onChoose: (selection: ServiceabilitySelection) => void;
 }) {
   const { data: session, isPending, error, refetch } = authClient.useSession();
   if (!isPending && !error && session?.user)
@@ -226,8 +222,49 @@ function SavedDeliveryAddresses({
 function AuthenticatedSavedDeliveryAddresses({
   onChoose,
 }: {
-  onChoose: (address: CustomerAddressView) => void;
+  onChoose: (selection: ServiceabilitySelection) => void;
 }) {
+  const [selecting, setSelecting] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState("");
+  const selectionRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => selectionRequest.current?.abort(), []);
+
+  async function selectAddress(address: CustomerAddressView): Promise<void> {
+    if (selectionRequest.current) return;
+    const controller = new AbortController();
+    selectionRequest.current = controller;
+    setSelecting(address.id);
+    setSelectionError("");
+    try {
+      const response = await fetch("/api/commerce/browsing-location", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          coordinate: { latitude: address.latitude, longitude: address.longitude },
+        }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const result = (await response.json()) as RpcResult<ServiceabilitySelection>;
+      if (controller.signal.aborted) return;
+      if (!response.ok || !result.ok) {
+        setSelectionError("Couldn’t select this address. Try again.");
+      } else if (!result.value.serviceability.serviceable) {
+        setSelectionError("Delivery is unavailable here. Choose another address.");
+      } else {
+        onChoose(result.value);
+      }
+    } catch {
+      if (!controller.signal.aborted) setSelectionError("Couldn’t select this address. Try again.");
+    } finally {
+      if (!controller.signal.aborted) {
+        selectionRequest.current = null;
+        setSelecting(null);
+      }
+    }
+  }
+
   const [addresses, setAddresses] = useState<readonly CustomerAddressView[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "guest" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -303,17 +340,26 @@ function AuthenticatedSavedDeliveryAddresses({
       {state === "ready" && !addresses.length && (
         <p className="text-sm text-[var(--fm-text-muted)]">No saved addresses yet.</p>
       )}
+      {selectionError && (
+        <p role="alert" className="text-sm text-red-700">
+          {selectionError}
+        </p>
+      )}
       {state === "ready" &&
         addresses.map((address) => (
           <button
             key={address.id}
             type="button"
-            onClick={() => onChoose(address)}
+            onClick={() => void selectAddress(address)}
+            disabled={selecting !== null}
             className="flex w-full items-start gap-3 rounded-lg px-2 py-3 text-left hover:bg-[var(--fm-hover)]"
           >
             <MapPin className="mt-1 size-4 shrink-0" aria-hidden="true" />
             <span>
-              <span className="block text-sm font-semibold">{address.label}</span>
+              <span className="block text-sm font-semibold">
+                {address.label}
+                {selecting === address.id ? " — Selecting…" : ""}
+              </span>
               <span className="text-xs text-[var(--fm-text-muted)]">
                 {address.components.addressLine1}, {address.components.city}
               </span>

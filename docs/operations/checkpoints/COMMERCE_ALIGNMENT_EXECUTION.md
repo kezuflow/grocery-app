@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.40 direct saved-address selection (2026-09-11)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `2d0576b4`. Owner clarifies that clicking a saved address should apply it. Removed saved-address initialization of the map editor. The saved row now calls the existing browsing-location confirmation endpoint with the stored coordinate, checks current Core serviceability, then applies the confirmed browsing location and closes. Existing unchanged-coordinate refresh suppression remains. Failed/unavailable confirmation preserves the current selection and shows a concise error; in-flight guard prevents duplicate submissions and abort on unmount prevents dismissed responses from applying. No new business API or checkout persistence rule. Preserved unrelated changes.
+
+Verification: focused dialog tests passed (12), including direct success, unavailable coverage, request failure, duplicate-click suppression and abort/discard after dismissal. Web typecheck and focused oxlint/oxfmt passed. Actual provider confirmation and a real browsing-location change were not exercised as an incidental test. CA-7.40 implementation complete. Next action: owner clicks a saved address to review live confirmation; runtime issue CA-7.38 and earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.39 compact address controls (2026-09-11)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `4858d571`. Owner requests Foodpanda references, icon-led search/current location, less copy, removal of X and skip link. Mobbin web search returned other apps; iOS flow https://mobbin.com/flows/eaa5ce64-204d-46cc-84d2-86a84863b223 was inspected visually. Adapted its short icon/text actions; retained FreshMarkets search-first flow and existing capabilities.
