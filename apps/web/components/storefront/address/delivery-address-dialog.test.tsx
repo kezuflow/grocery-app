@@ -7,7 +7,20 @@ import {
   rememberBrowsingPoint,
   BROWSING_LOCATION_COOKIE,
 } from "../../../lib/storefront/browsing-location";
-const mocks = vi.hoisted(() => ({ pathname: "/", refresh: vi.fn(), cart: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  pathname: "/",
+  refresh: vi.fn(),
+  cart: vi.fn(),
+  session: {
+    data: null as { user: { id: string } } | null,
+    isPending: false,
+    error: null as { message: string } | null,
+    refetch: vi.fn(),
+  },
+}));
+vi.mock("../../../lib/auth/auth-client", () => ({
+  authClient: { useSession: () => mocks.session },
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.pathname,
   useRouter: () => ({ refresh: mocks.refresh }),
@@ -43,6 +56,9 @@ let root: Root;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   mocks.pathname = "/";
+  mocks.session.data = null;
+  mocks.session.isPending = false;
+  mocks.session.error = null;
   mocks.refresh.mockClear();
   mocks.cart.mockClear();
   localStorage.clear();
@@ -104,4 +120,35 @@ it.each([true, false])("refreshes only for a changed point (same=%s)", async (sa
   expect(mocks.refresh).toHaveBeenCalledTimes(same ? 0 : 1);
   expect(mocks.cart).toHaveBeenCalledTimes(same ? 0 : 1);
   expect(document.querySelector("dialog")).toBeNull();
+});
+
+it.each(["guest", "pending", "error"])(
+  "does not request private addresses for %s session",
+  async (state) => {
+    mocks.session.isPending = state === "pending";
+    mocks.session.error = state === "error" ? { message: "Unavailable" } : null;
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await render();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain(
+      state === "guest"
+        ? "Sign in to see saved addresses"
+        : state === "pending"
+          ? "Loading saved addresses"
+          : "We couldn’t load your account",
+    );
+  },
+);
+it("loads addresses for an authenticated session and handles session expiry", async () => {
+  mocks.session.data = { user: { id: "test-user" } };
+  const fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response(null, { status: 401 }));
+  await render();
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy).toHaveBeenCalledWith(
+    "/api/commerce/address",
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect(document.body.textContent).toContain("Sign in to see saved addresses");
 });

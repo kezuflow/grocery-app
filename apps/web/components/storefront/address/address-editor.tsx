@@ -582,6 +582,7 @@ export function AddressEditor({
           <TextField
             id="address-search"
             label="Search for an address"
+            placeholder="Enter a street or address"
             description={
               compact
                 ? undefined

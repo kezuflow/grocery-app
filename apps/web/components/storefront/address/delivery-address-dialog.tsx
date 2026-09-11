@@ -4,6 +4,7 @@ import { ChevronDown, MapPin, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import type { CustomerAddressView, RpcResult } from "@freshmarkets/contracts";
 import { useEffect, useRef, useState } from "react";
+import { authClient } from "../../../lib/auth/auth-client";
 import { refreshCartForLocation } from "../../../lib/storefront/cart-client";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -100,6 +101,7 @@ export function DeliveryAddressDialog() {
   function dismiss(): void {
     sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
     setOpen(false);
+    setSavedAddress(undefined);
   }
 
   function chooseAddress(next: ServiceabilitySelection): void {
@@ -211,6 +213,40 @@ function SavedDeliveryAddresses({
 }: {
   onChoose: (address: CustomerAddressView) => void;
 }) {
+  const { data: session, isPending, error, refetch } = authClient.useSession();
+  if (!isPending && !error && session?.user)
+    return <AuthenticatedSavedDeliveryAddresses key={session.user.id} onChoose={onChoose} />;
+  return (
+    <section aria-label="Saved addresses" className="mt-4 border-t border-[var(--fm-border)] pt-3">
+      {isPending ? (
+        <p role="status" className="text-sm">
+          Loading saved addresses…
+        </p>
+      ) : error ? (
+        <div role="alert" className="text-sm">
+          We couldn’t load your account.{" "}
+          <button type="button" className="min-h-11 underline" onClick={() => void refetch()}>
+            Try again
+          </button>
+        </div>
+      ) : (
+        <Link
+          prefetch={false}
+          href="/auth/login?returnTo=/account/addresses"
+          className="inline-flex min-h-11 items-center text-sm underline"
+        >
+          Sign in to see saved addresses
+        </Link>
+      )}
+    </section>
+  );
+}
+
+function AuthenticatedSavedDeliveryAddresses({
+  onChoose,
+}: {
+  onChoose: (address: CustomerAddressView) => void;
+}) {
   const [addresses, setAddresses] = useState<readonly CustomerAddressView[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "guest" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -249,6 +285,7 @@ function SavedDeliveryAddresses({
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Saved addresses</h3>
         <Link
+          prefetch={false}
           href="/account/addresses"
           className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold"
         >
@@ -275,6 +312,7 @@ function SavedDeliveryAddresses({
       )}
       {state === "guest" && (
         <Link
+          prefetch={false}
           href="/auth/login?returnTo=/account/addresses"
           className="inline-flex min-h-11 items-center text-sm underline"
         >
