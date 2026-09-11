@@ -728,7 +728,34 @@ export function AddressEditor({
                   {searchError}
                 </p>
               ) : null}
-              {(!compact || searchExpanded) && candidates.length > 0 ? (
+              {compact ? (
+                <ul
+                  aria-label="Address search results"
+                  className="overflow-hidden rounded-lg border border-[var(--fm-border)]"
+                >
+                  {candidates.map((candidate) => (
+                    <li key={candidate.candidateKey}>
+                      <button
+                        type="button"
+                        onClick={() => chooseCandidate(candidate)}
+                        className="w-full border-b border-[var(--fm-border)] px-4 py-3 text-left text-sm hover:bg-[var(--fm-hover)] focus-visible:outline-2"
+                      >
+                        {candidate.displayAddress}
+                      </button>
+                    </li>
+                  ))}
+                  <li>
+                    <button
+                      type="button"
+                      onClick={useCurrentLocation}
+                      className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                    >
+                      <Navigation aria-hidden="true" className="size-4 shrink-0" />
+                      Use current location
+                    </button>
+                  </li>
+                </ul>
+              ) : candidates.length > 0 ? (
                 <ul aria-label="Address search results" className="divide-y rounded-lg border">
                   {candidates.map((candidate) => (
                     <li key={candidate.candidateKey}>
@@ -742,16 +769,6 @@ export function AddressEditor({
                     </li>
                   ))}
                 </ul>
-              ) : null}
-              {compact ? (
-                <button
-                  type="button"
-                  onClick={useCurrentLocation}
-                  className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
-                >
-                  <Navigation aria-hidden="true" className="size-4 shrink-0" />
-                  Use current location
-                </button>
               ) : null}
             </div>
             {!compact && (
