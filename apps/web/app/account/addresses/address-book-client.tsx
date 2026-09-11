@@ -187,6 +187,7 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
                 <AddressEditor
                   key={editingAddress?.id ?? "new-address"}
                   publicAccessToken={publicAccessToken}
+                  multiStep={!editingAddress}
                   initialAddress={editingAddress}
                   defaultPhone={profile?.accountPhone ?? undefined}
                   onConfirmed={(addressId) => void loadAddresses(addressId)}

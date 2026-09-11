@@ -169,6 +169,63 @@ describe("AddressEditor", () => {
     vi.restoreAllMocks();
   });
 
+  it("validates each wizard step, retains entries on Back and only saves on the final step", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) =>
+      response({
+        ok: true,
+        value:
+          url === "/api/commerce/address-search"
+            ? [candidate]
+            : url === "/api/serviceability"
+              ? serviceable
+              : url === "/api/commerce/address"
+                ? savedAddress
+                : candidate,
+      }),
+    );
+    const confirmed = vi.fn();
+    const { container, root } = mount({ multiStep: true, fetchImpl, onConfirmed: confirmed });
+    const submit = async () => {
+      act(() =>
+        container
+          .querySelector("form")!
+          .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+      await flush();
+    };
+    const writes = () => fetchImpl.mock.calls.filter(([url]) => url === "/api/commerce/address");
+    try {
+      expect(container.textContent).toContain("Step 1 of 3");
+      expect(container.querySelector("#address-details-heading")!.closest("section")!.hidden).toBe(
+        true,
+      );
+      expect(
+        [...container.querySelectorAll("button")].some((b) => b.textContent === "Save address"),
+      ).toBe(false);
+      await submit();
+      expect(container.textContent).toContain("Step 1 of 3");
+      await selectCandidate(container, fetchImpl);
+      await submit();
+      expect(container.textContent).toContain("Step 2 of 3");
+      await submit();
+      expect(container.textContent).toContain("Step 2 of 3");
+      change(input(container, "Address label"), "Home");
+      change(input(container, "Recipient name"), "Test Recipient");
+      change(input(container, "Phone number"), "09171234567");
+      await submit();
+      expect(container.textContent).toContain("Step 3 of 3");
+      expect(writes()).toHaveLength(0);
+      click([...container.querySelectorAll("button")].find((b) => b.textContent === "Back")!);
+      expect(input(container, "Recipient name").value).toBe("Test Recipient");
+      await submit();
+      await submit();
+      expect(writes()).toHaveLength(1);
+      expect(confirmed).toHaveBeenCalledExactlyOnceWith(savedAddress.id);
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+
   it("keeps the exact address write after a lost response and blocks pin changes until retry", async () => {
     const commands: Array<{ key: string | null; body: string }> = [];
     const confirmed = vi.fn();
