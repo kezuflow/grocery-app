@@ -108,3 +108,5 @@ Owner-approved delivery selector, 2026-09-10: adapt DoorDash address editing (ht
 Owner correction, 2026-09-11: the delivery dropdown uses a compact search field with a magnifying-glass icon and accessible label, icon/text current-location and map actions, and concise copy. Remove the X and skip-browsing link; retain Escape/outside dismissal. Show the short checkout-address reminder only after choosing a point. Reference: [Foodpanda address selection](https://mobbin.com/flows/eaa5ce64-204d-46cc-84d2-86a84863b223); adapt existing capabilities only.
 
 Owner correction, 2026-09-11: clicking a saved address in the delivery dropdown applies that coordinate through existing browsing-location confirmation and closes on current serviceability success. Do not require a second map-confirmation click for saved addresses. Failure or unavailable coverage preserves the current choice and shows an inline error.
+
+Owner correction, 2026-09-11: Account popup and account page Sign out actions open a compact confirmation dialog with Cancel and Sign out. Opening or cancelling does not end the session. Confirmation shows pending/error feedback; successful sign-out returns home.

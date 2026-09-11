@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.41 sign-out confirmation (2026-09-11)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `9c10aade`. Owner requests popup confirmation before sign-out. Account popup and account page now open a shared compact dialog with Cancel and Sign out; no sign-out request before confirmation. Existing auth client owns sign-out. Success navigates home with a full load to discard in-memory authenticated state; errors remain visible for retry. In-flight guard prevents duplicate submission and dismissal while pending. Focus starts on Cancel. Preserved unrelated work.
+
+Verification: Web typecheck, focused oxlint/oxfmt and five AccountPopover tests passed. Tests cover open/cancel without sign-out, confirmed failure/retry availability, guest/loading/session-error behavior. Updated obsolete close-button test to Escape. In-app browser visually verified popup, then Cancel closed it without signing out. Actual successful session revocation was not performed. CA-7.41 complete. Next action: owner reviews confirmed sign-out; runtime issue CA-7.38 and earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.40 direct saved-address selection (2026-09-11)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `2d0576b4`. Owner clarifies that clicking a saved address should apply it. Removed saved-address initialization of the map editor. The saved row now calls the existing browsing-location confirmation endpoint with the stored coordinate, checks current Core serviceability, then applies the confirmed browsing location and closes. Existing unchanged-coordinate refresh suppression remains. Failed/unavailable confirmation preserves the current selection and shows a concise error; in-flight guard prevents duplicate submissions and abort on unmount prevents dismissed responses from applying. No new business API or checkout persistence rule. Preserved unrelated changes.

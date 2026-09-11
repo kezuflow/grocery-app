@@ -14,39 +14,59 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { authClient } from "../../../lib/auth/auth-client";
 
+import { SignOutConfirmation } from "./sign-out-confirmation";
+
 export function AccountPopover({ mobile = false }: { mobile?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        className={
-          mobile
-            ? "flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-primary-dark)]"
-            : "flex min-h-11 w-full items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
-        }
-      >
-        <UserRound className="size-4" aria-hidden="true" />
-        Account
-      </PopoverTrigger>
-      <PopoverContent
-        side={mobile ? "top" : "right"}
-        align={mobile ? "end" : "start"}
-        sideOffset={12}
-        collisionPadding={12}
-        aria-label="Account"
-        className="fm-storefront w-80 max-w-[calc(100vw-24px)] overflow-y-auto rounded-[var(--fm-radius-overlay)] border-[var(--fm-border)] bg-white p-0 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
-        style={{ maxHeight: "var(--radix-popover-content-available-height)" }}
-      >
-        <div className="px-4 pt-4 pb-2">
-          <h2 className="text-base font-bold">Account</h2>
-        </div>
-        {open && <AccountContents onNavigate={() => setOpen(false)} />}
-      </PopoverContent>
-    </Popover>
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          className={
+            mobile
+              ? "flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-primary-dark)]"
+              : "flex min-h-11 w-full items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
+          }
+        >
+          <UserRound className="size-4" aria-hidden="true" />
+          Account
+        </PopoverTrigger>
+        <PopoverContent
+          side={mobile ? "top" : "right"}
+          align={mobile ? "end" : "start"}
+          sideOffset={12}
+          collisionPadding={12}
+          aria-label="Account"
+          className="fm-storefront w-80 max-w-[calc(100vw-24px)] overflow-y-auto rounded-[var(--fm-radius-overlay)] border-[var(--fm-border)] bg-white p-0 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+          style={{ maxHeight: "var(--radix-popover-content-available-height)" }}
+        >
+          <div className="px-4 pt-4 pb-2">
+            <h2 className="text-base font-bold">Account</h2>
+          </div>
+          {open && (
+            <AccountContents
+              onNavigate={() => setOpen(false)}
+              onSignOut={() => {
+                setOpen(false);
+                setConfirmSignOut(true);
+              }}
+            />
+          )}
+        </PopoverContent>
+      </Popover>
+      <SignOutConfirmation open={confirmSignOut} onOpenChange={setConfirmSignOut} />
+    </>
   );
 }
 
-function AccountContents({ onNavigate }: { onNavigate: () => void }) {
+function AccountContents({
+  onNavigate,
+  onSignOut,
+}: {
+  onNavigate: () => void;
+  onSignOut: () => void;
+}) {
   const { data: session, isPending, error, refetch } = authClient.useSession();
   const row =
     "flex min-h-11 items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px]";
@@ -124,10 +144,10 @@ function AccountContents({ onNavigate }: { onNavigate: () => void }) {
           Help and support
         </a>
         {!isPending && !error && session?.user && (
-          <Link href="/auth/logout" prefetch={false} className={row}>
+          <button type="button" onClick={onSignOut} className={`${row} w-full text-left`}>
             <LogOut className="size-4" aria-hidden="true" />
             Sign out
-          </Link>
+          </button>
         )}
       </nav>
     </>

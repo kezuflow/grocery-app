@@ -7,11 +7,11 @@ import {
   ShoppingCart,
   KeyRound,
   Headphones,
-  LogOut,
   BadgeCheck,
 } from "lucide-react";
 import { StorefrontShell } from "../../components/storefront/storefront-shell";
 import "./account.css";
+import { SignOutButton } from "../../components/storefront/marketplace/sign-out-confirmation";
 
 const shortcuts = [
   {
@@ -43,7 +43,6 @@ const settings = [
   { href: "/auth/forgot-password", title: "Reset password", icon: KeyRound },
   { href: "/staff-invitation", title: "Staff invitation", icon: BadgeCheck },
   { href: "mailto:support@freshmarkets.ph", title: "Help and support", icon: Headphones },
-  { href: "/auth/logout", title: "Sign out", icon: LogOut },
 ];
 export default function AccountPage() {
   return (
@@ -75,6 +74,7 @@ export default function AccountPage() {
                 <ChevronRight aria-hidden="true" className="ml-auto size-4" />
               </Link>
             ))}
+            <SignOutButton className="fm-account-row w-full text-left" />
           </nav>
         </section>
       </div>
