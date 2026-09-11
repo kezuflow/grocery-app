@@ -728,7 +728,7 @@ export function AddressEditor({
                   {searchError}
                 </p>
               ) : null}
-              {compact ? (
+              {compact && candidates.length > 0 ? (
                 <ul
                   aria-label="Address search results"
                   className="overflow-hidden rounded-lg border border-[var(--fm-border)]"

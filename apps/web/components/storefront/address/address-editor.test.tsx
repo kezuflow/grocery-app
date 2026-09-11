@@ -859,6 +859,7 @@ it("defers the compact map until an address is chosen from the Choose map search
       '[aria-controls="address-search-panel"]',
     )!;
     click(toggle);
+    expect(container.textContent).not.toContain("Use current location");
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
     expect(adapter.initializations).toHaveLength(1);
     expect(container.textContent).not.toContain("Move the pin to your entrance");
