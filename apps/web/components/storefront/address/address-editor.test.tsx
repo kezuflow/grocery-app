@@ -833,27 +833,39 @@ describe("AddressEditor", () => {
   });
 });
 
-it("defers the compact map until explicitly requested", async () => {
+it("defers the compact map until an address is chosen from the Choose map search", async () => {
+  vi.useFakeTimers();
   const adapter = new FakeMapAdapter();
-  const fetchImpl = vi.fn();
+  const fetchImpl = vi.fn((url: string | URL | Request) => {
+    const path = String(url);
+    if (path === "/api/commerce/address-search")
+      return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
+    if (path === "/api/serviceability")
+      return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
+    throw new Error(`Unexpected request ${path}`);
+  }) as unknown as typeof fetch;
   const { container, root } = mount({
     compact: true,
     purpose: "serviceability",
+    compactHeading: "Deliver to",
     mapAdapter: adapter,
     fetchImpl,
   });
   try {
     expect(adapter.initializations).toHaveLength(0);
-    expect(fetchImpl).not.toHaveBeenCalled();
-    const chooseMap = [...container.querySelectorAll("button")].find(
-      (button) => button.getAttribute("aria-label") === "Choose a location on the map",
+    expect(container.textContent).toContain("Choose map");
+    expect(container.textContent).not.toContain("Move the pin to your entrance");
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[aria-controls="address-search-panel"]',
     )!;
-    click(chooseMap);
-    await flush();
+    click(toggle);
+    await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
     expect(adapter.initializations).toHaveLength(1);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Move the pin to your entrance");
+    expect(container.textContent).toContain("Delivery is available");
   } finally {
     act(() => root.unmount());
+    vi.useRealTimers();
   }
 });
 it("expands compact search, focuses its input and cancels search on collapse", async () => {

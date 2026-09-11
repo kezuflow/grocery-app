@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Navigation, MapPin } from "lucide-react";
+import { Navigation, Map, X } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -192,7 +192,6 @@ export function AddressEditor({
   useEffect(() => {
     if (wizard) stepHeadingRef.current?.focus();
   }, [wizard, step]);
-  const [showPinMap, setShowPinMap] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
@@ -654,53 +653,53 @@ export function AddressEditor({
                 editor.
               </p>
             </div>
-            <div className={compact ? "flex min-w-0 items-center gap-2" : undefined}>
-              {compact && compactHeading && (
-                <h2 className="shrink-0 text-base font-bold">{compactHeading}</h2>
-              )}
-              {compact && (
-                <button
-                  type="button"
-                  ref={searchToggleRef}
-                  aria-label="Search for an address"
-                  aria-expanded={searchExpanded}
-                  aria-controls="address-search-panel"
-                  onClick={() => setSearchExpanded((expanded) => !expanded)}
-                  className={`flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--fm-hover)] ${searchExpanded ? "" : "ml-auto"}`}
-                >
-                  <Search aria-hidden="true" className="size-4" />
-                </button>
-              )}
-              <div
-                id="address-search-panel"
-                hidden={compact && !searchExpanded}
-                className="min-w-0 flex-1 [&[hidden]]:hidden"
+            {compact && compactHeading && <h2 className="text-base font-bold">{compactHeading}</h2>}
+            {compact && (
+              <button
+                type="button"
+                ref={searchToggleRef}
+                aria-expanded={searchExpanded}
+                aria-controls="address-search-panel"
+                onClick={() => setSearchExpanded((expanded) => !expanded)}
+                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
               >
-                {compact ? (
-                  <label className="block">
-                    <span className="sr-only">Search for an address</span>
-                    <input
-                      ref={searchInputRef}
-                      id="address-search"
-                      placeholder="Search address"
-                      autoComplete="street-address"
-                      value={query}
-                      onChange={(event) => setQuery(event.currentTarget.value)}
-                      className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
-                    />
-                  </label>
+                {searchExpanded ? (
+                  <X aria-hidden="true" className="size-4 shrink-0" />
                 ) : (
-                  <TextField
+                  <Map aria-hidden="true" className="size-4 shrink-0" />
+                )}
+                {searchExpanded ? "Close search" : "Choose map"}
+              </button>
+            )}
+            <div
+              id="address-search-panel"
+              hidden={compact && !searchExpanded}
+              className="min-w-0 [&[hidden]]:hidden"
+            >
+              {compact ? (
+                <label className="block">
+                  <span className="sr-only">Search for an address</span>
+                  <input
+                    ref={searchInputRef}
                     id="address-search"
-                    label="Search for an address"
-                    placeholder="Enter a street or address"
-                    description="Choose a result, then move the map pin to the exact entrance if needed."
+                    placeholder="Search address"
                     autoComplete="street-address"
                     value={query}
                     onChange={(event) => setQuery(event.currentTarget.value)}
+                    className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
                   />
-                )}
-              </div>
+                </label>
+              ) : (
+                <TextField
+                  id="address-search"
+                  label="Search for an address"
+                  placeholder="Enter a street or address"
+                  description="Choose a result, then move the map pin to the exact entrance if needed."
+                  autoComplete="street-address"
+                  value={query}
+                  onChange={(event) => setQuery(event.currentTarget.value)}
+                />
+              )}
             </div>
             <div hidden={compact && !searchExpanded} className="grid gap-3 [&[hidden]]:hidden">
               {(!compact || searchExpanded) && searchState === "searching" ? (
@@ -728,28 +727,24 @@ export function AddressEditor({
                   ))}
                 </ul>
               ) : null}
+              {compact ? (
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                >
+                  <Navigation aria-hidden="true" className="size-4 shrink-0" />
+                  Use current location
+                </button>
+              ) : null}
             </div>
-            <button
-              type="button"
-              onClick={useCurrentLocation}
-              className={
-                compact
-                  ? "flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
-                  : "w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-              }
-            >
-              {compact && <Navigation aria-hidden="true" className="size-4 shrink-0" />}
-              Use current location
-            </button>
-            {compact && !coordinate && !showPinMap && (
+            {!compact && (
               <button
                 type="button"
-                onClick={() => setShowPinMap(true)}
-                aria-label="Choose a location on the map"
-                className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                onClick={useCurrentLocation}
+                className="w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
               >
-                <MapPin aria-hidden="true" className="size-4 shrink-0" />
-                Choose on map
+                Use current location
               </button>
             )}
             {locationError ? (
@@ -759,18 +754,26 @@ export function AddressEditor({
             ) : null}
           </section>
 
-          {(!compact || coordinate || showPinMap) && (
-            <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
-              <div>
-                <h2 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
-                  {compact ? "Confirm pin" : "Confirm the exact entrance"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  {compact
-                    ? "Move the pin to your entrance."
-                    : "The confirmed pin determines delivery coverage. Drag it when the suggested point is not exact."}
-                </p>
-              </div>
+          {(!compact || coordinate) && (
+            <section
+              aria-labelledby={compact ? undefined : "pin-confirmation-heading"}
+              aria-label={compact ? "Confirm the delivery pin" : undefined}
+              className="grid gap-3"
+            >
+              {!compact && (
+                <div>
+                  <h2
+                    id="pin-confirmation-heading"
+                    className="text-lg font-semibold text-slate-950"
+                  >
+                    Confirm the exact entrance
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    The confirmed pin determines delivery coverage. Drag it when the suggested point
+                    is not exact.
+                  </p>
+                </div>
+              )}
               <MapboxMap
                 publicAccessToken={publicAccessToken}
                 adapter={mapAdapter}
