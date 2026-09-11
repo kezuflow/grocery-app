@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, MapPin, Pencil, X } from "lucide-react";
+import { ChevronDown, MapPin, Pencil } from "lucide-react";
 import Link from "next/link";
 import type { CustomerAddressView, RpcResult } from "@freshmarkets/contracts";
 import { useEffect, useRef, useState } from "react";
@@ -170,19 +170,7 @@ export function DeliveryAddressDialog() {
             style={{ maxHeight: `calc(100dvh - ${placement.top + 12}px)` }}
             className="max-h-[inherit] overflow-y-auto rounded-xl bg-white shadow-[var(--fm-shadow-overlay)]"
           >
-            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--fm-border)] bg-white px-4 py-3">
-              <div>
-                <h2 className="text-base font-bold">Enter your address</h2>
-              </div>
-              <button
-                type="button"
-                onClick={dismiss}
-                aria-label="Close delivery address"
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            </header>
+            <h2 className="px-4 pt-4 text-base font-bold">Deliver to</h2>
             <div className="p-4">
               <AddressEditor
                 key={savedAddress?.id ?? "search"}
@@ -193,13 +181,6 @@ export function DeliveryAddressDialog() {
                 onServiceabilityConfirmed={chooseAddress}
               />
               <SavedDeliveryAddresses onChoose={setSavedAddress} />
-              <button
-                type="button"
-                onClick={dismiss}
-                className="mt-4 min-h-11 text-sm font-semibold underline"
-              >
-                Skip for now — browse groceries
-              </button>
             </div>
           </section>
         </dialog>

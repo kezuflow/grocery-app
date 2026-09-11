@@ -82,29 +82,20 @@ afterEach(() => {
 const render = async () => {
   await act(async () => root.render(<DeliveryAddressDialog />));
 };
-it.each(["close", "escape", "backdrop", "skip"])(
-  "remembers %s dismissal across navigation",
-  async (method) => {
-    await render();
-    const dialog = document.querySelector("dialog");
-    expect(dialog).not.toBeNull();
-    await act(async () => {
-      if (method === "escape")
-        dialog?.dispatchEvent(new Event("cancel", { bubbles: true, cancelable: true }));
-      else if (method === "backdrop") dialog?.click();
-      else if (method === "close")
-        document.querySelector<HTMLButtonElement>('[aria-label="Close delivery address"]')?.click();
-      else
-        [...document.querySelectorAll("button")]
-          .find((button) => button.textContent?.startsWith("Skip for now"))
-          ?.click();
-    });
-    expect(sessionStorage.getItem("freshmarkets.location-prompt-dismissed")).toBe("1");
-    mocks.pathname = "/products/abiu";
-    await render();
-    expect(document.querySelector("dialog")).toBeNull();
-  },
-);
+it.each(["escape", "backdrop"])("remembers %s dismissal across navigation", async (method) => {
+  await render();
+  const dialog = document.querySelector("dialog");
+  expect(dialog).not.toBeNull();
+  await act(async () => {
+    if (method === "escape")
+      dialog?.dispatchEvent(new Event("cancel", { bubbles: true, cancelable: true }));
+    else if (method === "backdrop") dialog?.click();
+  });
+  expect(sessionStorage.getItem("freshmarkets.location-prompt-dismissed")).toBe("1");
+  mocks.pathname = "/products/abiu";
+  await render();
+  expect(document.querySelector("dialog")).toBeNull();
+});
 it.each([true, false])("refreshes only for a changed point (same=%s)", async (same) => {
   if (same) rememberBrowsingPoint({ latitude: 10, longitude: 123 });
   await render();

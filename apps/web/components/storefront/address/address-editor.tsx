@@ -1,5 +1,6 @@
 "use client";
 
+import { Search, Navigation, MapPin } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -564,7 +565,12 @@ export function AddressEditor({
   }
 
   return (
-    <form onSubmit={save} className="grid gap-6" aria-label="Delivery address editor" noValidate>
+    <form
+      onSubmit={save}
+      className={compact ? "grid gap-3" : "grid gap-6"}
+      aria-label="Delivery address editor"
+      noValidate
+    >
       <fieldset
         className="contents"
         disabled={purpose === "save" && (saveState === "saving" || saveUncertain)}
@@ -579,33 +585,58 @@ export function AddressEditor({
               editor.
             </p>
           </div>
-          <TextField
-            id="address-search"
-            label="Search for an address"
-            placeholder="Enter a street or address"
-            description={
-              compact
-                ? undefined
-                : "Choose a result, then move the map pin to the exact entrance if needed."
-            }
-            autoComplete="street-address"
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
+          {compact ? (
+            <label className="relative block">
+              <span className="sr-only">Search for an address</span>
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+              />
+              <input
+                id="address-search"
+                placeholder="Search for an address"
+                autoComplete="street-address"
+                value={query}
+                onChange={(event) => setQuery(event.currentTarget.value)}
+                className="min-h-11 w-full rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-10 pr-3 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+              />
+            </label>
+          ) : (
+            <TextField
+              id="address-search"
+              label="Search for an address"
+              placeholder="Enter a street or address"
+              description={
+                compact
+                  ? undefined
+                  : "Choose a result, then move the map pin to the exact entrance if needed."
+              }
+              autoComplete="street-address"
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+            />
+          )}
           <button
             type="button"
             onClick={useCurrentLocation}
-            className="w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
+            className={
+              compact
+                ? "flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                : "w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
+            }
           >
+            {compact && <Navigation aria-hidden="true" className="size-4 shrink-0" />}
             Use current location
           </button>
           {compact && !coordinate && !showPinMap && (
             <button
               type="button"
               onClick={() => setShowPinMap(true)}
-              className="min-h-11 text-left text-sm font-semibold underline"
+              aria-label="Choose a location on the map"
+              className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
             >
-              Choose a location on the map
+              <MapPin aria-hidden="true" className="size-4 shrink-0" />
+              Choose on map
             </button>
           )}
           {locationError ? (
@@ -644,11 +675,12 @@ export function AddressEditor({
           <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
             <div>
               <h2 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
-                Confirm the exact entrance
+                {compact ? "Confirm pin" : "Confirm the exact entrance"}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                The confirmed pin determines delivery coverage. Drag it when the suggested point is
-                not exact.
+                {compact
+                  ? "Move the pin to your entrance."
+                  : "The confirmed pin determines delivery coverage. Drag it when the suggested point is not exact."}
               </p>
             </div>
             <MapboxMap
@@ -706,7 +738,7 @@ export function AddressEditor({
                 <p className="font-semibold">
                   {serviceability.serviceable ? "Delivery is available" : "Delivery is unavailable"}
                 </p>
-                <p>
+                <p className={compact && serviceability.serviceable ? "sr-only" : undefined}>
                   {serviceability.serviceable
                     ? "This address is inside our current delivery area."
                     : purpose === "save"
@@ -720,10 +752,18 @@ export function AddressEditor({
 
         {purpose === "serviceability" ? (
           <div className="grid gap-3">
-            <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              This location is not a saved checkout address. Confirm your full delivery address at
-              checkout.
-            </p>
+            {compact ? (
+              coordinate && (
+                <p className="text-xs text-[var(--fm-text-muted)]">
+                  Confirm full address at checkout.
+                </p>
+              )
+            ) : (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                This location is not a saved checkout address. Confirm your full delivery address at
+                checkout.
+              </p>
+            )}
             {onServiceabilityConfirmed &&
             serviceability?.serviceable &&
             coordinate &&

@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.39 compact address controls (2026-09-11)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `4858d571`. Owner requests Foodpanda references, icon-led search/current location, less copy, removal of X and skip link. Mobbin web search returned other apps; iOS flow https://mobbin.com/flows/eaa5ce64-204d-46cc-84d2-86a84863b223 was inspected visually. Adapted its short icon/text actions; retained FreshMarkets search-first flow and existing capabilities.
+
+Implemented compact search input with accessible hidden label and Search icon; Navigation icon for current location; MapPin with short map label; reduced pin copy and deferred a short checkout reminder until a coordinate exists. Removed X and Skip for now controls; native Escape/outside dismissal remains. Full account address editor copy remains unchanged. Authentication gating and deferred map loading retained. Preserved unrelated work.
+
+Verification: Web typecheck and focused oxlint/oxfmt passed; 26 editor/dialog tests passed. Removed obsolete close/skip cases and updated map selector to its accessible label after its visible copy changed (initial test failed on old text). In-app browser visually verified compact layout/icons with saved addresses and no X/skip, verified Escape dismisses and reopened for owner review. No address/location write or device-location permission request performed. CA-7.39 complete. Next action: owner review; runtime issue from CA-7.38 and earlier Phase 7 obligations remain open.
+
 ## Latest owner request — CA-7.38 address search and error diagnosis (2026-09-11)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `7ebf07b9`. Acceptance: inspect search versus map entry, eliminate known guest saved-address requests, distinguish 401 from opaque runtime errors. Preserved unrelated working-tree changes.

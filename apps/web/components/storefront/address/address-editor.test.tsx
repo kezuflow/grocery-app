@@ -788,8 +788,8 @@ it("defers the compact map until explicitly requested", async () => {
   try {
     expect(adapter.initializations).toHaveLength(0);
     expect(fetchImpl).not.toHaveBeenCalled();
-    const chooseMap = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Choose a location on the map"),
+    const chooseMap = [...container.querySelectorAll("button")].find(
+      (button) => button.getAttribute("aria-label") === "Choose a location on the map",
     )!;
     click(chooseMap);
     await flush();
